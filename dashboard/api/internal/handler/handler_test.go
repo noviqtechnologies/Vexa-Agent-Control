@@ -29,7 +29,10 @@ type mockStore struct {
 	insertEventFunc       func(ctx context.Context, e *model.RedactedEvent) error
 	insertAlertFunc       func(ctx context.Context, a *model.RedactedAlert) error
 	upsertCredentialFunc  func(ctx context.Context, c *model.SanitizedCredentialMeta) error
-	listRecentAlertsFunc  func(ctx context.Context, limit int) ([]model.RedactedAlert, error)
+	listRecentAlertsFunc    func(ctx context.Context, limit int) ([]model.RedactedAlert, error)
+	getThreatSummaryFunc    func(ctx context.Context, hours int) (*store.ThreatSummary, error)
+	getThreatTimelineFunc   func(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error)
+	getTopThreatPatternsFunc func(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error)
 }
 
 func (m *mockStore) GetFleetStats(ctx context.Context) (*store.FleetStats, error) {
@@ -89,6 +92,27 @@ func (m *mockStore) UpsertCredential(ctx context.Context, c *model.SanitizedCred
 func (m *mockStore) ListRecentAlerts(ctx context.Context, limit int) ([]model.RedactedAlert, error) {
 	if m.listRecentAlertsFunc != nil {
 		return m.listRecentAlertsFunc(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockStore) GetThreatSummary(ctx context.Context, hours int) (*store.ThreatSummary, error) {
+	if m.getThreatSummaryFunc != nil {
+		return m.getThreatSummaryFunc(ctx, hours)
+	}
+	return &store.ThreatSummary{}, nil
+}
+
+func (m *mockStore) GetThreatTimeline(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error) {
+	if m.getThreatTimelineFunc != nil {
+		return m.getThreatTimelineFunc(ctx, hours)
+	}
+	return nil, nil
+}
+
+func (m *mockStore) GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error) {
+	if m.getTopThreatPatternsFunc != nil {
+		return m.getTopThreatPatternsFunc(ctx, hours, limit)
 	}
 	return nil, nil
 }
@@ -566,5 +590,168 @@ func TestQueryInt(t *testing.T) {
 				t.Errorf("queryInt() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+// ── Threat handler tests ──────────────────────────────────────────────────
+
+func TestThreatHandler_GetSummary_Success(t *testing.T) {
+	ms := &mockStore{
+		getThreatSummaryFunc: func(_ context.Context, hours int) (*store.ThreatSummary, error) {
+			return &store.ThreatSummary{
+				DlpTotal:       10,
+				InjectionTotal: 5,
+				SemanticTotal:  3,
+				EventsWithDlp:  8,
+				EventsWithInj:  4,
+				EventsWithSem:  2,
+			}, nil
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/summary?hours=48", nil)
+	rr := httptest.NewRecorder()
+	h.GetSummary(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var s store.ThreatSummary
+	if err := json.NewDecoder(rr.Body).Decode(&s); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if s.DlpTotal != 10 {
+		t.Errorf("dlp_total = %d, want 10", s.DlpTotal)
+	}
+}
+
+func TestThreatHandler_GetSummary_StoreError(t *testing.T) {
+	ms := &mockStore{
+		getThreatSummaryFunc: func(_ context.Context, _ int) (*store.ThreatSummary, error) {
+			return nil, errStore
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/summary", nil)
+	rr := httptest.NewRecorder()
+	h.GetSummary(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestThreatHandler_GetSummary_ClampHours(t *testing.T) {
+	var capturedHours int
+	ms := &mockStore{
+		getThreatSummaryFunc: func(_ context.Context, hours int) (*store.ThreatSummary, error) {
+			capturedHours = hours
+			return &store.ThreatSummary{}, nil
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/summary?hours=9999", nil)
+	rr := httptest.NewRecorder()
+	h.GetSummary(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if capturedHours != 720 {
+		t.Errorf("hours = %d, want 720 (clamped)", capturedHours)
+	}
+}
+
+func TestThreatHandler_GetTimeline_Success(t *testing.T) {
+	ms := &mockStore{
+		getThreatTimelineFunc: func(_ context.Context, _ int) ([]store.ThreatTimelinePoint, error) {
+			return []store.ThreatTimelinePoint{
+				{Hour: "2024-01-01 00:00", Dlp: 3, Injection: 1, Semantic: 0},
+			}, nil
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/timeline", nil)
+	rr := httptest.NewRecorder()
+	h.GetTimeline(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var pts []store.ThreatTimelinePoint
+	if err := json.NewDecoder(rr.Body).Decode(&pts); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(pts) != 1 {
+		t.Errorf("got %d points, want 1", len(pts))
+	}
+}
+
+func TestThreatHandler_GetTimeline_NilSlice(t *testing.T) {
+	h := NewThreatHandler(&mockStore{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/timeline", nil)
+	rr := httptest.NewRecorder()
+	h.GetTimeline(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if body := strings.TrimSpace(rr.Body.String()); body != "[]" {
+		t.Errorf("body = %q, want []", body)
+	}
+}
+
+func TestThreatHandler_GetTopPatterns_Success(t *testing.T) {
+	ms := &mockStore{
+		getTopThreatPatternsFunc: func(_ context.Context, _ int, limit int) ([]store.ThreatPattern, error) {
+			return []store.ThreatPattern{
+				{Type: "dlp", PatternName: "ssn_pattern", Category: "pii", TotalCount: 15, EventCount: 10},
+				{Type: "injection", PatternName: "sql_inject", TotalCount: 5, EventCount: 3},
+			}, nil
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/top-patterns?limit=10", nil)
+	rr := httptest.NewRecorder()
+	h.GetTopPatterns(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var patterns []store.ThreatPattern
+	if err := json.NewDecoder(rr.Body).Decode(&patterns); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(patterns) != 2 {
+		t.Errorf("got %d patterns, want 2", len(patterns))
+	}
+	if patterns[0].PatternName != "ssn_pattern" {
+		t.Errorf("first pattern = %q, want ssn_pattern", patterns[0].PatternName)
+	}
+}
+
+func TestThreatHandler_GetTopPatterns_StoreError(t *testing.T) {
+	ms := &mockStore{
+		getTopThreatPatternsFunc: func(_ context.Context, _ int, _ int) ([]store.ThreatPattern, error) {
+			return nil, errStore
+		},
+	}
+	h := NewThreatHandler(ms)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/threats/top-patterns", nil)
+	rr := httptest.NewRecorder()
+	h.GetTopPatterns(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
 	}
 }

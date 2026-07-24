@@ -23,4 +23,8 @@ type DataStore interface {
 	UpsertCredential(ctx context.Context, c *model.SanitizedCredentialMeta) error
 
 	ListRecentAlerts(ctx context.Context, limit int) ([]model.RedactedAlert, error)
+
+	GetThreatSummary(ctx context.Context, hours int) (*store.ThreatSummary, error)
+	GetThreatTimeline(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error)
+	GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error)
 }

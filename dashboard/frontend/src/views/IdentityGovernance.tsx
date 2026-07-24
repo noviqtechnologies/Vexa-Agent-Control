@@ -31,6 +31,8 @@ const REASON_LABELS: Record<string, string> = {
 export default function IdentityGovernance() {
   const [credentials, setCredentials] = useState<CredentialMeta[]>([])
   const [loading, setLoading] = useState(true)
+  const [rotating, setRotating] = useState<string | null>(null)
+  const [rotateMsg, setRotateMsg] = useState<{ agentId: string; ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     api.listCredentials()
@@ -39,13 +41,27 @@ export default function IdentityGovernance() {
       .finally(() => setLoading(false))
   }, [])
 
+  function handleRotate(agentId: string) {
+    setRotating(agentId)
+    setRotateMsg(null)
+    api.triggerRotation(agentId)
+      .then((result) => {
+        setRotateMsg({ agentId, ok: true, text: `Rotated — new credential ${result.new_credential_id}` })
+        api.listCredentials().then(setCredentials).catch(() => {})
+      })
+      .catch((err) => {
+        setRotateMsg({ agentId, ok: false, text: `Rotation failed: ${err.message}` })
+      })
+      .finally(() => setRotating(null))
+  }
+
   if (loading) return <div className="loading">Loading identity data</div>
 
   return (
     <>
       <div className="page-header">
         <h1>Identity Governance</h1>
-        <p>Agent credentials, scopes, TTLs, and rotation history (read-only)</p>
+        <p>Agent credentials, scopes, TTLs, and rotation history</p>
       </div>
 
       {/* Summary stats */}
@@ -119,6 +135,27 @@ export default function IdentityGovernance() {
                     <span>{formatDate(c.last_rotated_at_ms)}</span>
                   </div>
                 )}
+
+                {/* Rotate button */}
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    className="refresh-btn"
+                    disabled={rotating === c.agent_id}
+                    onClick={() => handleRotate(c.agent_id)}
+                    style={{ width: '100%' }}
+                  >
+                    {rotating === c.agent_id ? 'Rotating...' : 'Rotate Credential'}
+                  </button>
+                  {rotateMsg && rotateMsg.agentId === c.agent_id && (
+                    <div style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: rotateMsg.ok ? 'var(--success)' : 'var(--danger)',
+                    }}>
+                      {rotateMsg.text}
+                    </div>
+                  )}
+                </div>
 
                 {/* Rotation history */}
                 {c.rotation_history.length > 0 && (

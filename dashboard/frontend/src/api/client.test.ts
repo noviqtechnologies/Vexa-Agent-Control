@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { api, subscribeAlerts } from './client'
+import { api, subscribeAlerts, setAuthToken } from './client'
 
 function mockFetch(body: unknown, ok = true, status = 200) {
   return vi.fn().mockResolvedValue({
@@ -21,7 +21,7 @@ describe('api.getFleetOverview', () => {
 
     const result = await api.getFleetOverview()
     expect(result).toEqual(stats)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', { headers: {} })
   })
 
   it('throws on non-ok response', async () => {
@@ -36,14 +36,14 @@ describe('api.listAgents', () => {
     global.fetch = mockFetch([])
 
     await api.listAgents()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=50&offset=0')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=50&offset=0', { headers: {} })
   })
 
   it('passes custom pagination', async () => {
     global.fetch = mockFetch([])
 
     await api.listAgents(10, 20)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=10&offset=20')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=10&offset=20', { headers: {} })
   })
 })
 
@@ -52,14 +52,14 @@ describe('api.getHeatmap', () => {
     global.fetch = mockFetch([])
 
     await api.getHeatmap()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/heatmap?hours=24')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/heatmap?hours=24', { headers: {} })
   })
 
   it('passes custom hours', async () => {
     global.fetch = mockFetch([])
 
     await api.getHeatmap(48)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/heatmap?hours=48')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/heatmap?hours=48', { headers: {} })
   })
 })
 
@@ -68,14 +68,14 @@ describe('api.listCredentials', () => {
     global.fetch = mockFetch([])
 
     await api.listCredentials()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/identity/credentials')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/identity/credentials', { headers: {} })
   })
 
   it('filters by agent_id', async () => {
     global.fetch = mockFetch([])
 
     await api.listCredentials('agent-1')
-    expect(fetch).toHaveBeenCalledWith('/api/v1/identity/credentials?agent_id=agent-1')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/identity/credentials?agent_id=agent-1', { headers: {} })
   })
 })
 
@@ -86,7 +86,7 @@ describe('api.getPolicyStatus', () => {
 
     const result = await api.getPolicyStatus()
     expect(result).toEqual(status)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/policy/status')
+    expect(fetch).toHaveBeenCalledWith('/api/v1/policy/status', { headers: {} })
   })
 })
 
@@ -95,7 +95,34 @@ describe('api.getPolicySuggestions', () => {
     global.fetch = mockFetch([])
 
     await api.getPolicySuggestions()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/policy/suggestions', { method: 'POST' })
+    expect(fetch).toHaveBeenCalledWith('/api/v1/policy/suggestions', { method: 'POST', headers: {} })
+  })
+})
+
+describe('auth token injection', () => {
+  afterEach(() => {
+    setAuthToken(null)
+  })
+
+  it('includes Authorization header when token is set', async () => {
+    setAuthToken('test-jwt-token')
+    global.fetch = mockFetch({ total_agents: 1 })
+
+    await api.getFleetOverview()
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', {
+      headers: { Authorization: 'Bearer test-jwt-token' },
+    })
+  })
+
+  it('clears Authorization header when token is null', async () => {
+    setAuthToken('token')
+    setAuthToken(null)
+    global.fetch = mockFetch({})
+
+    await api.getFleetOverview()
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', {
+      headers: {},
+    })
   })
 })
 

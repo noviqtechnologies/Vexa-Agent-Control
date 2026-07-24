@@ -44,7 +44,9 @@ func main() {
 	fleetH := handler.NewFleetHandler(db)
 	identityH := handler.NewIdentityHandler(db)
 	alertH := handler.NewAlertHandler(db, broker)
+	threatH := handler.NewThreatHandler(db)
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
+	rotationH := handler.NewRotationHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
@@ -80,8 +82,14 @@ func main() {
 		r.Get("/alerts/recent", alertH.ListRecent)
 		r.Get("/alerts/stream", alertH.Stream)
 
+		r.Get("/threats/summary", threatH.GetSummary)
+		r.Get("/threats/timeline", threatH.GetTimeline)
+		r.Get("/threats/top-patterns", threatH.GetTopPatterns)
+
 		r.Get("/policy/status", policyH.GetStatus)
 		r.Post("/policy/suggestions", policyH.GetSuggestions)
+
+		r.Post("/identity/rotate", rotationH.TriggerRotation)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
