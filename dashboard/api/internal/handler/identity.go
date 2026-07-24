@@ -2,15 +2,13 @@ package handler
 
 import (
 	"net/http"
-
-	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/store"
 )
 
 type IdentityHandler struct {
-	store *store.Store
+	store DataStore
 }
 
-func NewIdentityHandler(s *store.Store) *IdentityHandler {
+func NewIdentityHandler(s DataStore) *IdentityHandler {
 	return &IdentityHandler{store: s}
 }
 

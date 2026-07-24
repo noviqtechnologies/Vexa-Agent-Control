@@ -4,15 +4,14 @@ import (
 	"net/http"
 
 	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/sse"
-	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/store"
 )
 
 type AlertHandler struct {
-	store  *store.Store
+	store  DataStore
 	broker *sse.Broker
 }
 
-func NewAlertHandler(s *store.Store, b *sse.Broker) *AlertHandler {
+func NewAlertHandler(s DataStore, b *sse.Broker) *AlertHandler {
 	return &AlertHandler{store: s, broker: b}
 }
 

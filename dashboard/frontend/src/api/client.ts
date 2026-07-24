@@ -79,6 +79,41 @@ export const api = {
     get<CredentialMeta[]>(
       `/identity/credentials${agentId ? `?agent_id=${agentId}` : ''}`
     ),
+  getPolicyStatus: () => get<PolicyStatus>('/policy/status'),
+  getPolicySuggestions: () => post<PolicySuggestion[]>('/policy/suggestions'),
+}
+
+async function post<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`)
+  }
+  return res.json()
+}
+
+// Policy Insights (self-healing)
+export interface ToolStatus {
+  name: string
+  confidence_decay: number
+  last_seen: number
+  stale: boolean
+}
+
+export interface PolicyStatus {
+  enabled: boolean
+  decay_window_days: number
+  tools: ToolStatus[]
+  pending_suggestions: PolicySuggestion[]
+}
+
+export interface PolicySuggestion {
+  tool: string
+  field: string
+  old_value: string
+  new_value: string
+  anomaly_score: number
+  timestamp_ns: number
+  suggested_action: string
 }
 
 // SSE stream for real-time alerts (AC-23.2).

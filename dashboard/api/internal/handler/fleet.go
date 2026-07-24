@@ -10,10 +10,10 @@ import (
 )
 
 type FleetHandler struct {
-	store *store.Store
+	store DataStore
 }
 
-func NewFleetHandler(s *store.Store) *FleetHandler {
+func NewFleetHandler(s DataStore) *FleetHandler {
 	return &FleetHandler{store: s}
 }
 

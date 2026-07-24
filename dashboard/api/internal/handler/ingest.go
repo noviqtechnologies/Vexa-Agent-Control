@@ -7,15 +7,14 @@ import (
 
 	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/sse"
-	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/store"
 )
 
 type IngestHandler struct {
-	store  *store.Store
+	store  DataStore
 	broker *sse.Broker
 }
 
-func NewIngestHandler(s *store.Store, b *sse.Broker) *IngestHandler {
+func NewIngestHandler(s DataStore, b *sse.Broker) *IngestHandler {
 	return &IngestHandler{store: s, broker: b}
 }
 
