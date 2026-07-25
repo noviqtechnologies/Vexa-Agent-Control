@@ -320,6 +320,140 @@ func (s *Store) GetDecisionHeatmap(ctx context.Context, hours int) ([]DecisionBr
 	return breakdown, rows.Err()
 }
 
+// ── Threat Intelligence queries ───────────────────────────────────────────────
+
+type ThreatSummary struct {
+	DlpTotal       int64 `json:"dlp_total"`
+	InjectionTotal int64 `json:"injection_total"`
+	SemanticTotal  int64 `json:"semantic_total"`
+	EventsWithDlp  int64 `json:"events_with_dlp"`
+	EventsWithInj  int64 `json:"events_with_injection"`
+	EventsWithSem  int64 `json:"events_with_semantic"`
+}
+
+func (s *Store) GetThreatSummary(ctx context.Context, hours int) (*ThreatSummary, error) {
+	var ts ThreatSummary
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE(SUM(jsonb_array_length(dlp_findings)), 0),
+			COALESCE(SUM(jsonb_array_length(injection_findings)), 0),
+			COALESCE(SUM(jsonb_array_length(semantic_findings)), 0),
+			COUNT(*) FILTER (WHERE jsonb_array_length(dlp_findings) > 0),
+			COUNT(*) FILTER (WHERE jsonb_array_length(injection_findings) > 0),
+			COUNT(*) FILTER (WHERE jsonb_array_length(semantic_findings) > 0)
+		FROM telemetry_events
+		WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+	`, hours).Scan(
+		&ts.DlpTotal, &ts.InjectionTotal, &ts.SemanticTotal,
+		&ts.EventsWithDlp, &ts.EventsWithInj, &ts.EventsWithSem,
+	)
+	return &ts, err
+}
+
+type ThreatTimelinePoint struct {
+	Hour      string `json:"hour"`
+	Dlp       int64  `json:"dlp"`
+	Injection int64  `json:"injection"`
+	Semantic  int64  `json:"semantic"`
+}
+
+func (s *Store) GetThreatTimeline(ctx context.Context, hours int) ([]ThreatTimelinePoint, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			to_char(to_timestamp(timestamp_ms / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:00') AS hour,
+			COALESCE(SUM(jsonb_array_length(dlp_findings)), 0),
+			COALESCE(SUM(jsonb_array_length(injection_findings)), 0),
+			COALESCE(SUM(jsonb_array_length(semantic_findings)), 0)
+		FROM telemetry_events
+		WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		GROUP BY hour
+		ORDER BY hour
+	`, hours)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []ThreatTimelinePoint
+	for rows.Next() {
+		var p ThreatTimelinePoint
+		if err := rows.Scan(&p.Hour, &p.Dlp, &p.Injection, &p.Semantic); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
+}
+
+type ThreatPattern struct {
+	Type        string `json:"type"`
+	PatternName string `json:"pattern_name"`
+	Category    string `json:"category,omitempty"`
+	TotalCount  int64  `json:"total_count"`
+	EventCount  int64  `json:"event_count"`
+}
+
+func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]ThreatPattern, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH dlp AS (
+			SELECT
+				'dlp' AS type,
+				f->>'pattern_name' AS pattern_name,
+				f->>'category' AS category,
+				(f->>'count')::BIGINT AS cnt
+			FROM telemetry_events,
+				jsonb_array_elements(dlp_findings) AS f
+			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		),
+		injection AS (
+			SELECT
+				'injection' AS type,
+				f->>'pattern_name' AS pattern_name,
+				'' AS category,
+				(f->>'count')::BIGINT AS cnt
+			FROM telemetry_events,
+				jsonb_array_elements(injection_findings) AS f
+			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		),
+		semantic AS (
+			SELECT
+				'semantic' AS type,
+				f->>'finding_type' AS pattern_name,
+				'' AS category,
+				1::BIGINT AS cnt
+			FROM telemetry_events,
+				jsonb_array_elements(semantic_findings) AS f
+			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		),
+		combined AS (
+			SELECT * FROM dlp
+			UNION ALL SELECT * FROM injection
+			UNION ALL SELECT * FROM semantic
+		)
+		SELECT type, pattern_name, category,
+			SUM(cnt) AS total_count,
+			COUNT(*) AS event_count
+		FROM combined
+		GROUP BY type, pattern_name, category
+		ORDER BY total_count DESC
+		LIMIT $2
+	`, hours, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var patterns []ThreatPattern
+	for rows.Next() {
+		var p ThreatPattern
+		if err := rows.Scan(&p.Type, &p.PatternName, &p.Category, &p.TotalCount, &p.EventCount); err != nil {
+			return nil, err
+		}
+		patterns = append(patterns, p)
+	}
+	return patterns, rows.Err()
+}
+
 // RunMigrations applies the SQL migration files. For Phase 1, this is a
 // simple single-file apply. Phase 2 will switch to golang-migrate.
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationSQL string) error {
