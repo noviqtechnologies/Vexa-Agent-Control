@@ -48,9 +48,9 @@ export default function FleetOverview() {
       api.listRecentAlerts(),
     ]).then(([s, a, h, al]) => {
       setStats(s)
-      setAgents(a)
-      setHeatmap(h)
-      setAlerts(al)
+      setAgents(a || [])
+      setHeatmap(h || [])
+      setAlerts(al || [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -196,11 +196,11 @@ export default function FleetOverview() {
                 <div className={`alert-dot ${a.severity}`} />
                 <div className="alert-body">
                   <div className="alert-title">
-                    {a.event.dlp_findings.length > 0
+                    {a.event.dlp_findings?.length > 0
                       ? `DLP: ${a.event.dlp_findings.map(f => f.category).join(', ')}`
-                      : a.event.injection_findings.length > 0
+                      : a.event.injection_findings?.length > 0
                         ? `Injection: ${a.event.injection_findings.map(f => f.pattern_name).join(', ')}`
-                        : a.event.semantic_findings.length > 0
+                        : a.event.semantic_findings?.length > 0
                           ? `Semantic: ${a.event.semantic_findings.map(f => f.finding_type).join(', ')}`
                           : `${a.event.decision} — ${a.event.tool_name}`
                     }

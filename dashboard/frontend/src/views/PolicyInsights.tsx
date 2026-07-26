@@ -37,7 +37,7 @@ export default function PolicyInsights() {
       api.getPolicySuggestions(),
     ]).then(([s, sug]) => {
       setStatus(s)
-      setSuggestions(sug)
+      setSuggestions(sug || [])
     }).catch((e) => {
       setError(e.message)
     }).finally(() => setLoading(false))
@@ -50,7 +50,7 @@ export default function PolicyInsights() {
       api.getPolicySuggestions(),
     ]).then(([s, sug]) => {
       setStatus(s)
-      setSuggestions(sug)
+      setSuggestions(sug || [])
       setError(null)
     }).catch((e) => {
       setError(e.message)
@@ -73,8 +73,8 @@ export default function PolicyInsights() {
     )
   }
 
-  const staleTools = status?.tools.filter(t => t.stale) ?? []
-  const activeTools = status?.tools.filter(t => !t.stale) ?? []
+  const staleTools = status?.tools?.filter(t => t.stale) ?? []
+  const activeTools = status?.tools?.filter(t => !t.stale) ?? []
   const highAnomalySuggestions = suggestions?.filter(s => s.anomaly_score >= 0.95) ?? []
 
   return (
@@ -99,7 +99,7 @@ export default function PolicyInsights() {
             <div className="stat-label">Engine Status</div>
           </div>
           <div className="card stat-tile">
-            <div className="stat-value">{status.tools.length}</div>
+            <div className="stat-value">{status.tools?.length || 0}</div>
             <div className="stat-label">Monitored Tools</div>
           </div>
           <div className="card stat-tile">
@@ -128,7 +128,7 @@ export default function PolicyInsights() {
         {/* Tool confidence */}
         <div className="card">
           <div className="card-title">Tool Confidence Decay</div>
-          {status && status.tools.length > 0 ? (
+          {status && status.tools?.length > 0 ? (
             <div className="table-wrap">
               <table>
                 <thead>

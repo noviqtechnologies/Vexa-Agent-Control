@@ -28,8 +28,8 @@ export default function ThreatIntelligence() {
       api.getTopThreatPatterns(hours),
     ]).then(([s, t, p]) => {
       setSummary(s)
-      setTimeline(t)
-      setPatterns(p)
+      setTimeline(t || [])
+      setPatterns(p || [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [hours])

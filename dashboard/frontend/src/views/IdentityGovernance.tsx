@@ -36,7 +36,7 @@ export default function IdentityGovernance() {
 
   useEffect(() => {
     api.listCredentials()
-      .then(setCredentials)
+      .then(res => setCredentials(res || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -47,7 +47,7 @@ export default function IdentityGovernance() {
     api.triggerRotation(agentId)
       .then((result) => {
         setRotateMsg({ agentId, ok: true, text: `Rotated — new credential ${result.new_credential_id}` })
-        api.listCredentials().then(setCredentials).catch(() => {})
+        api.listCredentials().then(res => setCredentials(res || [])).catch(() => {})
       })
       .catch((err) => {
         setRotateMsg({ agentId, ok: false, text: `Rotation failed: ${err.message}` })
@@ -108,7 +108,7 @@ export default function IdentityGovernance() {
                 </div>
 
                 <div className="cred-scope">
-                  {c.scope.map((s) => (
+                  {(c.scope || []).map((s) => (
                     <span className="scope-tag" key={s}>{s}</span>
                   ))}
                 </div>
@@ -158,10 +158,10 @@ export default function IdentityGovernance() {
                 </div>
 
                 {/* Rotation history */}
-                {c.rotation_history.length > 0 && (
+                {c.rotation_history?.length > 0 && (
                   <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                     <div className="card-title" style={{ marginBottom: 8 }}>Rotation History</div>
-                    {c.rotation_history.map((r, i) => (
+                    {(c.rotation_history || []).map((r, i) => (
                       <div className="cred-detail" key={i}>
                         <span>{REASON_LABELS[r.reason] || r.reason}</span>
                         <span>{formatDate(r.rotated_at_ms)}</span>

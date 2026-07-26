@@ -30,7 +30,7 @@ services:
       ALLOW_DEV_MODE: "true"
       GATEWAY_SECRET: local-dev-shared-secret-change-me
       POLICY_READ_SECRET: local-dev-policy-read-secret
-      GATEWAY_URL: ""
+      GATEWAY_URL: "http://host.docker.internal:8080"
     ports:
       - "8400:8400"
     healthcheck:

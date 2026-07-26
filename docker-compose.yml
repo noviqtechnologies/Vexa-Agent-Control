@@ -80,7 +80,7 @@ services:
       context: ./test-tools/mock-mcp-server
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 10s
@@ -106,6 +106,7 @@ services:
       AGENTWALL_MCP_URL: "http://mock-mcp:3000"
       AGENTWALL_LOG_PATH: "/var/log/agentwall/audit.log"
       AGENTWALL_DRY_RUN: "false"
+      POLICY_READ_SECRET: "local-dev-policy-read-secret"
 
       # OIDC — points to the local mock provider (AC-203-2: same code path as production)
       AGENTWALL_OIDC_ISSUER: "http://mock-oidc:8081"
