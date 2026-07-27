@@ -27,4 +27,8 @@ type DataStore interface {
 	GetThreatSummary(ctx context.Context, hours int) (*store.ThreatSummary, error)
 	GetThreatTimeline(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error)
 	GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error)
+
+	UpsertMcpServer(ctx context.Context, agentID string, m *model.SanitizedMcpServerMeta) error
+	ListMcpServersByAgent(ctx context.Context, agentID string) ([]store.McpServerInventoryRow, error)
+	ListMcpServersFleetWide(ctx context.Context) ([]store.McpServerInventoryRow, error)
 }

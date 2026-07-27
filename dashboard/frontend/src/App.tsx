@@ -13,6 +13,8 @@ import SafeMode from './views/SafeMode'
 import AuditLogs from './views/AuditLogs'
 import IdeConnections from './views/IdeConnections'
 import Login from './views/Login'
+import RequireAdmin from './auth/RequireAdmin'
+import McpServers from './views/McpServers'
 
 interface NavSection {
   id: string
@@ -77,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
     ),
     children: [
       { label: 'IDE Connections', to: '/integrations/ide' },
+      { label: 'MCP Servers', to: '/integrations/mcp-servers' },
     ],
   },
 ]
@@ -240,6 +243,11 @@ export default function App() {
                 <Route path="/admin/auth-providers" element={<AuthProviders />} />
                 <Route path="/admin/users" element={<Users />} />
                 <Route path="/integrations/ide" element={<IdeConnections />} />
+                <Route path="/integrations/mcp-servers" element={
+                  <RequireAdmin>
+                    <McpServers />
+                  </RequireAdmin>
+                } />
                 {/* Legacy redirect */}
                 <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
               </Routes>

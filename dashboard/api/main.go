@@ -43,6 +43,7 @@ func main() {
 	ingestH := handler.NewIngestHandler(db, broker)
 	fleetH := handler.NewFleetHandler(db)
 	identityH := handler.NewIdentityHandler(db)
+	mcpServersH := handler.NewMcpServersHandler(db)
 	alertH := handler.NewAlertHandler(db, broker)
 	threatH := handler.NewThreatHandler(db)
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
@@ -74,6 +75,7 @@ func main() {
 		r.Post("/events", ingestH.PostEvent)
 		r.Post("/alerts", ingestH.PostAlert)
 		r.Post("/credentials", ingestH.PostCredential)
+		r.Post("/mcp-servers", ingestH.PostMcpServers)
 	})
 
 	// Unauthenticated Auth Routes
@@ -91,6 +93,13 @@ func main() {
 		r.Get("/fleet/heatmap", fleetH.GetHeatmap)
 		r.Get("/fleet/events", fleetH.ListEvents)
 		r.Get("/fleet/agents/{agentID}/events", fleetH.ListEvents)
+
+		// Admin-only fleet routes
+		r.Route("/fleet/mcp-servers", func(r chi.Router) {
+			r.Use(middleware.RequireAdmin())
+			r.Get("/", mcpServersH.ListFleetWide)
+			r.Get("/{agentID}", mcpServersH.ListByAgent)
+		})
 
 		r.Get("/identity/credentials", identityH.ListCredentials)
 

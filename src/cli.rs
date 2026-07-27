@@ -398,6 +398,36 @@ pub enum Commands {
         /// YAML policy file path
         policy: String,
     },
+
+    /// Show config path, existence, and wrap status for all 8 IDE targets
+    ///
+    /// Displays a table with: target name, resolved config path, whether the
+    /// file exists, and whether all MCP servers are wrapped. Paths that are
+    /// known-wrong or unverified are flagged explicitly.
+    Status,
+
+    /// Watch IDE configs and auto-wrap new MCP servers (daemon, event-driven)
+    ///
+    /// Monitors the config file of each selected IDE target via OS-native
+    /// filesystem events (inotify / FSEvents / ReadDirectoryChangesW).
+    /// When an unwrapped `mcpServers` entry is detected, the daemon calls
+    /// the same wrap logic as `agentwall wrap <target>` — closing the gap
+    /// before the IDE's next restart.
+    ///
+    /// NOTE: IDEs load `mcpServers` at process startup. This daemon does NOT
+    /// make IDEs hot-reload. Correct framing: "closes the gap before the
+    /// IDE's next restart." You must restart the IDE for changes to take
+    /// effect after each wrap.
+    Watch {
+        /// Watch all verified targets (currently Claude Desktop only — other
+        /// paths are unverified and excluded from --all)
+        #[arg(long, default_value_t = false)]
+        all: bool,
+
+        /// Target to watch (e.g. claude, cursor, vscode)
+        #[command(subcommand)]
+        target: Option<WatchTarget>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -454,6 +484,34 @@ pub enum UnwrapTarget {
     Opencode { #[arg(long, default_value_t = false)] force: bool },
     /// Restore Antigravity config
     Antigravity { #[arg(long, default_value_t = false)] force: bool },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum WatchTarget {
+    /// Watch Claude Desktop MCP config (verified path — safe to use with --all)
+    Claude {
+        /// Enable response scanning for secret detection on each daemon-triggered re-wrap
+        #[arg(long, default_value_t = false)]
+        scan_responses: bool,
+
+        /// Block entire response on secret detection instead of redacting
+        #[arg(long, default_value_t = false)]
+        block_on_secrets: bool,
+    },
+    /// Watch Cursor IDE config (⚠ path unverified — excluded from --all)
+    Cursor,
+    /// Watch VS Code config (⚠ path unverified — excluded from --all)
+    Vscode,
+    /// Watch JetBrains config (⚠ path unverified — excluded from --all)
+    Jetbrains,
+    /// Watch Zed Editor config (⚠ path unverified — excluded from --all)
+    Zed,
+    /// Watch Cline extension config (⚠ path unverified — excluded from --all)
+    Cline,
+    /// Watch OpenCode config (⚠ path unverified — excluded from --all)
+    Opencode,
+    /// Watch Antigravity IDE config (⚠ path unverified — excluded from --all)
+    Antigravity,
 }
 
 #[derive(Subcommand)]

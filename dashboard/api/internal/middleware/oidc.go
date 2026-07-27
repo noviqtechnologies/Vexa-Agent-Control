@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/subtle"
+	"log"
 	"net/http"
 	"strings"
 
@@ -66,6 +67,28 @@ func GatewayAuth(secret string) func(http.Handler) http.Handler {
 				return
 			}
 
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireAdmin enforces that the authenticated user has IsAdmin = true.
+// DashboardAuth must have run prior to this middleware.
+func RequireAdmin() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, _ := r.Context().Value(UserClaimsKey).(*UserClaims)
+			if claims == nil {
+				log.Printf("RequireAdmin denied: no claims found")
+				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			if !claims.IsAdmin {
+				log.Printf("RequireAdmin denied: user_id=%s is_admin=%v", claims.UserID, claims.IsAdmin)
+				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			log.Printf("RequireAdmin allowed: user_id=%s is_admin=%v", claims.UserID, claims.IsAdmin)
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -81,3 +81,16 @@ func (a *RedactedAlert) Valid() bool {
 		validSeverities[a.Severity] &&
 		a.Event.Valid()
 }
+
+type SanitizedMcpServerMeta struct {
+	IDETarget    string `json:"ide_target"`
+	ServerName   string `json:"server_name"`
+	Wrapped      bool   `json:"wrapped"`
+	PathVerified bool   `json:"path_verified"`
+	LastSeenAtMs int64  `json:"last_seen_at_ms,omitempty"`
+}
+
+type McpServerSnapshot struct {
+	AgentID string                   `json:"agent_id"`
+	Servers []SanitizedMcpServerMeta `json:"servers"`
+}

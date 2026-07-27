@@ -38,6 +38,8 @@ async fn main() {
             | Commands::Test { .. }
             | Commands::Wrap { .. }
             | Commands::StdioProxy { .. }
+            | Commands::Status
+            | Commands::Watch { .. }
     );
 
     if !suppress_banner {
@@ -191,6 +193,8 @@ async fn main() {
             }
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
+        Commands::Status => agentwall::wrap::run_status(),
+        Commands::Watch { all, target } => agentwall::wrap::run_watch(all, target),
         Commands::StdioProxy { args, scan_responses, block_on_secrets, max_scan_bytes } => {
             run_stdio_proxy(args, scan_responses, block_on_secrets, max_scan_bytes).await
         }

@@ -118,3 +118,39 @@ func (h *IngestHandler) PostCredential(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 }
+
+// PostMcpServers handles POST /api/v1/ingest/mcp-servers from the gateway.
+func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	var snap model.McpServerSnapshot
+	if err := dec.Decode(&snap); err != nil {
+		log.Printf("decode mcp servers payload: %v", err)
+		http.Error(w, `{"error":"invalid mcp servers payload"}`, http.StatusBadRequest)
+		return
+	}
+	if snap.AgentID == "" {
+		http.Error(w, `{"error":"mcp servers snapshot missing agent_id"}`, http.StatusUnprocessableEntity)
+		return
+	}
+
+	ctx := r.Context()
+	if err := h.store.UpsertAgent(ctx, snap.AgentID); err != nil {
+		log.Printf("upsert agent: %v", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	for _, s := range snap.Servers {
+		srv := s
+		if err := h.store.UpsertMcpServer(ctx, snap.AgentID, &srv); err != nil {
+			log.Printf("upsert mcp server: %v", err)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+	log.Printf("ingest mcp servers: received %d servers for agent %s", len(snap.Servers), snap.AgentID)
+
+	w.WriteHeader(http.StatusCreated)
+}

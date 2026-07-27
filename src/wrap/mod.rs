@@ -4,9 +4,11 @@ pub mod backup;
 pub mod claude;
 pub mod config_path;
 pub mod generic_ide;
+pub mod status;
 pub mod transformer;
+pub mod watch;
 
-use crate::cli::{WrapTarget, UnwrapTarget};
+use crate::cli::{WrapTarget, UnwrapTarget, WatchTarget};
 
 /// Errors from wrap/unwrap operations
 #[derive(Debug)]
@@ -139,4 +141,15 @@ pub fn run_unwrap_target(target: &UnwrapTarget) -> i32 {
             2
         }
     }
+}
+
+/// Run `agentwall status` — enumerate all 8 targets and print their wrap state.
+pub fn run_status() -> i32 {
+    status::print_all_targets();
+    0
+}
+
+/// Run `agentwall watch` — start the event-driven wrap daemon.
+pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
+    watch::run_watch(all, target)
 }

@@ -461,6 +461,83 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationSQL string)
 	return err
 }
 
+type McpServerInventoryRow struct {
+	AgentID      string `json:"agent_id"`
+	IDETarget    string `json:"ide_target"`
+	ServerName   string `json:"server_name"`
+	Wrapped      bool   `json:"wrapped"`
+	PathVerified bool   `json:"path_verified"`
+	LastSeenAt   string `json:"last_seen_at"`
+}
+
+func (s *Store) UpsertMcpServer(ctx context.Context, agentID string, m *model.SanitizedMcpServerMeta) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mcp_servers
+			(agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (agent_id, ide_target, server_name) DO UPDATE SET
+			wrapped       = EXCLUDED.wrapped,
+			path_verified = EXCLUDED.path_verified,
+			last_seen_at  = now()
+	`, agentID, m.IDETarget, m.ServerName, m.Wrapped, m.PathVerified)
+	return err
+}
+
+func (s *Store) ListMcpServersByAgent(ctx context.Context, agentID string) ([]McpServerInventoryRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at
+		FROM mcp_servers
+		WHERE agent_id = $1
+		ORDER BY last_seen_at DESC
+	`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var servers []McpServerInventoryRow
+	for rows.Next() {
+		var sr McpServerInventoryRow
+		var lastSeen time.Time
+		if err := rows.Scan(&sr.AgentID, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+			return nil, err
+		}
+		sr.LastSeenAt = lastSeen.Format(time.RFC3339)
+		servers = append(servers, sr)
+	}
+	return servers, rows.Err()
+}
+
+func (s *Store) ListMcpServersFleetWide(ctx context.Context) ([]McpServerInventoryRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.agent_id, 
+		       COALESCE(m.ide_target, ''), 
+		       COALESCE(m.server_name, ''), 
+		       COALESCE(m.wrapped, false), 
+		       COALESCE(m.path_verified, false), 
+		       COALESCE(m.last_seen_at, a.last_seen_at)
+		FROM mcp_servers m
+		RIGHT JOIN agents a ON a.agent_id = m.agent_id
+		ORDER BY a.agent_id ASC, m.last_seen_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var servers []McpServerInventoryRow
+	for rows.Next() {
+		var sr McpServerInventoryRow
+		var lastSeen time.Time
+		if err := rows.Scan(&sr.AgentID, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+			return nil, err
+		}
+		sr.LastSeenAt = lastSeen.Format(time.RFC3339)
+		servers = append(servers, sr)
+	}
+	return servers, rows.Err()
+}
+
 // Transactional helper for ingest operations.
 func (s *Store) InTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	tx, err := s.pool.Begin(ctx)

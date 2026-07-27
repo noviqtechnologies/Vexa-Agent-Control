@@ -38,6 +38,7 @@ pub mod event;
 pub mod alert;
 pub mod credential;
 pub mod redact;
+pub mod mcp_server;
 
 pub use event::{
     RedactedDecision, RedactedDlpFinding, RedactedEvent, RedactedInjectionFinding,
@@ -45,6 +46,7 @@ pub use event::{
 };
 pub use alert::{AlertSeverity, RedactedAlert};
 pub use credential::{RotationReason, RotationRecord, SanitizedCredentialMeta};
+pub use mcp_server::{McpServerSnapshot, SanitizedMcpServerMeta};
 pub use redact::{
     redact_event, RawDecision, RawDlpFinding, RawEventForRedaction, RawInjectionFinding,
     RawSemanticFinding,

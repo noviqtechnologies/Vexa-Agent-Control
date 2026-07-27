@@ -75,6 +75,13 @@ shlex = "1.3"
 # OS-specific dirs (FR-304: agentwall wrap)
 dirs = "5"
 
+# Filesystem events (FR-watch: agentwall watch daemon)
+# Uses OS-native backends: inotify (Linux), FSEvents (macOS), ReadDirectoryChangesW (Windows)
+notify = "6"
+
+# Ctrl-C / SIGTERM handler (FR-watch: daemon graceful shutdown)
+ctrlc = "3"
+
 # CLI Aesthetics
 colored = "2"
 futures = "0.3.32"

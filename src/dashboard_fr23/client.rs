@@ -1,5 +1,6 @@
 use dashboard_proto::event::RedactedEvent;
 use dashboard_proto::alert::RedactedAlert;
+use dashboard_proto::mcp_server::McpServerSnapshot;
 
 pub struct DashboardClient {
     http: reqwest::Client,
@@ -20,7 +21,7 @@ impl DashboardClient {
         Some(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
-            secret,
+            secret: format!("Bearer {}", secret),
         })
     }
 
@@ -61,4 +62,21 @@ impl DashboardClient {
             }
         });
     }
+
+    pub fn send_mcp_server_snapshot(&self, snapshot: McpServerSnapshot) {
+        let url = format!("{}/api/v1/ingest/mcp-servers", self.base_url);
+        let req = self
+            .http
+            .post(&url)
+            .header("Authorization", &self.secret)
+            .json(&snapshot);
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // Block current thread to complete request before CLI process terminates
+            let _ = tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
+        } else if let Ok(rt) = tokio::runtime::Runtime::new() {
+            let _ = rt.block_on(async move { req.send().await });
+        }
+    }
 }
+
