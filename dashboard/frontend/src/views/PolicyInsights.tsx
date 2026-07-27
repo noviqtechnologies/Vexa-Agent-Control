@@ -60,14 +60,38 @@ export default function PolicyInsights() {
   if (loading) return <div className="loading">Loading policy data</div>
 
   if (error) {
+    const isGatewayDown = error.includes('502') || error.includes('gateway') || error.includes('fetch')
     return (
       <>
         <div className="page-header">
           <h1>Policy Insights</h1>
           <p>Self-healing engine status and policy suggestions</p>
         </div>
-        <div className="card empty-state">
-          Unable to reach the gateway: {error}
+        <div className="card empty-state" style={{ textAlign: 'left', padding: '32px 28px' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+          {isGatewayDown ? (
+            <>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
+                AgentWall Gateway is not reachable
+              </div>
+              <div style={{ color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
+                The Policy Insights page requires the AgentWall gateway to be running.
+                When using <code>run-demo.ps1</code> the gateway starts automatically as part of the stack.
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--surface-2)', padding: '10px 14px', borderRadius: 6 }}>
+                docker compose -f dashboard/docker-compose.yml up --build
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
+                Unable to reach the gateway
+              </div>
+              <div style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                {error}
+              </div>
+            </>
+          )}
         </div>
       </>
     )

@@ -33,6 +33,17 @@ export default function McpServers() {
     fetchServers()
   }, [])
 
+  const getHostname = (agentId: string) => {
+    if (agentId.startsWith('agent-')) {
+      const parts = agentId.split('-');
+      if (parts.length >= 3) {
+        // Return the hostname part (index 2 onwards)
+        return parts.slice(2).join('-');
+      }
+    }
+    return '-';
+  };
+
   if (loading) return <div className="loading">Loading MCP servers...</div>
   if (error) return <div className="error">{error}</div>
 
@@ -44,6 +55,7 @@ export default function McpServers() {
           <thead>
             <tr>
               <th>Agent ID</th>
+              <th>Host Name</th>
               <th>IDE Target</th>
               <th>Server Name</th>
               <th>Wrapped</th>
@@ -54,12 +66,13 @@ export default function McpServers() {
           <tbody>
             {servers.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center' }}>No MCP servers found.</td>
+                <td colSpan={7} style={{ textAlign: 'center' }}>No MCP servers found.</td>
               </tr>
             ) : (
               servers.map((s, i) => (
                 <tr key={`${s.agent_id}-${s.ide_target}-${s.server_name}-${i}`}>
                   <td>{s.agent_id}</td>
+                  <td><code style={{ fontSize: '0.9em' }}>{getHostname(s.agent_id)}</code></td>
                   <td>{s.ide_target || '-'}</td>
                   <td>{s.server_name || '-'}</td>
                   <td>

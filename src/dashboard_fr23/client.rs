@@ -10,8 +10,19 @@ pub struct DashboardClient {
 
 impl DashboardClient {
     pub fn from_env() -> Option<Self> {
-        let base_url = std::env::var("DASHBOARD_API_URL").ok()?;
-        let secret = std::env::var("GATEWAY_SECRET").unwrap_or_default();
+        // Fallback to local development dashboard API URL if DASHBOARD_API_URL is not set
+        let base_url = std::env::var("DASHBOARD_API_URL")
+            .unwrap_or_else(|_| {
+                // LOCAL DEV FALLBACK: Connects to local docker-compose dashboard API by default
+                "http://localhost:8400".to_string()
+            });
+
+        // Fallback to local development gateway secret if GATEWAY_SECRET is not set
+        let secret = std::env::var("GATEWAY_SECRET")
+            .unwrap_or_else(|_| {
+                // LOCAL DEV FALLBACK: Matches default secret in dashboard/docker-compose.yml
+                "local-dev-shared-secret-change-me".to_string()
+            });
 
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))

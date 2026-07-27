@@ -10,3 +10,6 @@ pub mod injection;
 pub mod credential_scope;
 pub mod community_rules;
 pub mod semantic;
+/// Remote policy loader: fetches active policy from the dashboard API (PostgreSQL)
+/// and provides a background polling task for automatic hot-reload.
+pub mod remote;

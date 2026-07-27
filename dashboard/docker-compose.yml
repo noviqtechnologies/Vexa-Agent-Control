@@ -9,13 +9,63 @@ services:
       - "5432:5432"
     volumes:
       - agentwall_pg_data:/var/lib/postgresql/data
-      - ./db/migrations/000001_init_schema.up.sql:/docker-entrypoint-initdb.d/000001_init_schema.up.sql:ro
+      # All .sql files in this directory run automatically on first boot (alphabetical order).
+      # 000001_init_schema     -> core tables
+      # 000002_auth_and_policy -> auth providers + policies table
+      # 000003_seed_default_policy -> seeds v1.0.0 policy so the gateway has something to load
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentwall -d agentwall"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 10s
+
+  # AgentWall Gateway
+  # The enforcement engine that proxies MCP tool calls through policy evaluation.
+  # Policy is fetched from PostgreSQL via the dashboard API on startup, then
+  # polled every POLICY_POLL_INTERVAL_SECS seconds for live admin updates.
+  # No --policy YAML file is needed — the DB is the single source of truth.
+  gateway:
+    build:
+      context: ..        # workspace root — where Dockerfile and Cargo.toml live
+      dockerfile: Dockerfile
+    depends_on:
+      # Must start after dashboard-api is healthy so the /api/v1/policy/active
+      # endpoint is ready when the gateway fetches policy on startup.
+      dashboard-api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Gateway listen address (all interfaces inside the container)
+      AGENTWALL_LISTEN: "0.0.0.0:8080"
+
+      # Dashboard API URL — tells the gateway WHERE to fetch the active policy.
+      # Uses Docker DNS service name; resolves to the dashboard-api container.
+      DASHBOARD_API_URL: "http://dashboard-api:8400"
+
+      # Shared secret protecting the /api/v1/policy/active read endpoint.
+      # Must match POLICY_READ_SECRET in dashboard-api below.
+      POLICY_READ_SECRET: "local-dev-policy-read-secret"
+
+      # Shared secret authenticating telemetry pushes from the CLI.
+      # Must match GATEWAY_SECRET in dashboard-api below.
+      GATEWAY_SECRET: "local-dev-shared-secret-change-me"
+
+      # How often (seconds) the gateway polls for policy changes made by the admin.
+      # Default: 30. Lower values mean faster propagation but more API calls.
+      POLICY_POLL_INTERVAL_SECS: "30"
+
+      AGENTWALL_LOG_PATH: "/var/log/agentwall/audit.log"
+    # No --policy flag — policy comes from PostgreSQL via DASHBOARD_API_URL.
+    command: ["start"]
+    healthcheck:
+      test: ["CMD-SHELL", "agentwall --version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   dashboard-api:
     build:
@@ -28,9 +78,14 @@ services:
       DASHBOARD_PORT: "8400"
       DEV_MODE: "true"
       ALLOW_DEV_MODE: "true"
+      # Must match GATEWAY_SECRET set in the gateway service above
       GATEWAY_SECRET: local-dev-shared-secret-change-me
+      # Must match POLICY_READ_SECRET set in the gateway service above.
+      # The gateway sends this as Bearer token when calling /api/v1/policy/active.
       POLICY_READ_SECRET: local-dev-policy-read-secret
-      GATEWAY_URL: "http://host.docker.internal:8080"
+      # Used by the dashboard to proxy self-healing requests back to the gateway.
+      # Uses Docker DNS service name for inter-container communication.
+      GATEWAY_URL: "http://gateway:8080"
     ports:
       - "8400:8400"
     healthcheck:
@@ -47,7 +102,7 @@ services:
       dashboard-api:
         condition: service_healthy
     ports:
-      - "3000:80"
+      - "8081:80"
 
 volumes:
   agentwall_pg_data:

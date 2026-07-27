@@ -221,7 +221,16 @@ pub fn gather_servers_for_snapshot(agent_id: String) -> dashboard_proto::mcp_ser
 
 pub fn gather_and_send_mcp_servers_snapshot() {
     if let Some(client) = crate::dashboard_fr23::client::DashboardClient::from_env() {
-        let agent_id = std::env::var("AGENT_ID").unwrap_or_else(|_| "unknown-agent".to_string());
+        // Fallback to agent-<user>-<hostname> if AGENT_ID is not explicitly configured
+        let agent_id = std::env::var("AGENT_ID").unwrap_or_else(|_| {
+            let user = std::env::var("USER")
+                .or_else(|_| std::env::var("USERNAME"))
+                .unwrap_or_else(|_| "user".to_string());
+            let hostname = std::env::var("HOSTNAME")
+                .or_else(|_| std::env::var("COMPUTERNAME"))
+                .unwrap_or_else(|_| "host".to_string());
+            format!("agent-{}-{}", user, hostname).to_lowercase()
+        });
         let snapshot = gather_servers_for_snapshot(agent_id);
         client.send_mcp_server_snapshot(snapshot);
     }

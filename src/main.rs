@@ -403,43 +403,94 @@ async fn run_start(
         agent_pid.or_else(|| agent_pid_file.as_ref().and_then(|f| kill::read_pid_file(f)));
 
     // NFR-203: Startup self-check
-    // 1. Load policy
-    let (compiled_policy, _policy_hash, _warnings, policy_loaded) = match policy_path.as_deref() {
-        Some(path) => {
-            print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
-            match load_policy(Path::new(path), oidc_issuer) {
-                PolicyLoadResult::Loaded {
-                    policy,
-                    raw_hash,
-                    warnings,
-                } => {
-                    println!("{}", "OK".green().bold());
-                    (Some(policy), raw_hash, warnings, true)
-                }
-                PolicyLoadResult::Degraded { reason } => {
-                    println!("{}", "DEGRADED".yellow().bold());
-                    log_warn!("policy_degraded", "reason": reason);
+    // 1. Load policy — priority order:
+    //    a) DASHBOARD_API_URL is set  → fetch active policy from PostgreSQL via dashboard API
+    //    b) --policy <file> is set    → load from local YAML file (fallback / dev override)
+    //    c) neither                   → Safe Mode (no policy enforcement, audit only)
+    let dashboard_api_url = std::env::var("DASHBOARD_API_URL").ok().filter(|s| !s.is_empty());
+    let policy_read_secret_env = std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty());
+
+    let (compiled_policy, _policy_hash, _warnings, policy_loaded) = if let Some(ref api_url) = dashboard_api_url {
+        // (a) Fetch from dashboard API — policy is stored in PostgreSQL
+        print!("{} Fetching policy from dashboard API ({})... ", "ℹ".blue(), api_url.yellow());
+        let remote_result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(
+                agentwall::policy::remote::load_remote_policy(api_url, policy_read_secret_env.as_deref())
+            )
+        });
+        match remote_result {
+            PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
+                println!("{}", "OK".green().bold());
+                (Some(policy), raw_hash, warnings, true)
+            }
+            PolicyLoadResult::Degraded { reason } => {
+                // No policy in DB yet — try file fallback
+                println!("{} ({})", "NO POLICY IN DB".yellow().bold(), reason);
+                if let Some(ref path) = policy_path {
+                    print!("{} Falling back to policy file {}... ", "ℹ".blue(), path.yellow());
+                    match load_policy(Path::new(path), oidc_issuer.clone()) {
+                        PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
+                            println!("{}", "OK".green().bold());
+                            (Some(policy), raw_hash, warnings, true)
+                        }
+                        PolicyLoadResult::Degraded { reason } => {
+                            println!("{}", "DEGRADED".yellow().bold());
+                            log_warn!("policy_degraded", "reason": reason);
+                            (None, "sha256:none".to_string(), vec![], false)
+                        }
+                        PolicyLoadResult::Fatal { error } => {
+                            println!("{}", "FAILED".red().bold());
+                            log_error!("startup_error", "reason": error.to_string());
+                            return 1;
+                        }
+                    }
+                } else {
+                    println!(
+                        "{} {}",
+                        "🛡".green(),
+                        "Safe Mode enabled — no policy in DB and no --policy file.".green()
+                    );
                     (None, "sha256:none".to_string(), vec![], false)
                 }
-                PolicyLoadResult::Fatal { error } => {
-                    println!("{}", "FAILED".red().bold());
-                    log_error!("startup_error", "reason": error.to_string());
-                    return 1;
-                }
+            }
+            PolicyLoadResult::Fatal { error } => {
+                println!("{}", "FAILED".red().bold());
+                log_error!("startup_error", "reason": error.to_string());
+                return 1;
             }
         }
-        None => {
-            println!(
-                "{} {}",
-                "🛡".green(),
-                "Safe Mode v1 enabled (Audit mode recommended). Blocking high-risk secrets & exfil.".green()
-            );
-            if !dry_run {
-                println!("{} {}", "ℹ".blue(), "Run with --dry-run to preview.".blue());
+    } else if let Some(ref path) = policy_path {
+        // (b) Local YAML file — used when no dashboard API is configured
+        print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
+        match load_policy(Path::new(path), oidc_issuer) {
+            PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
+                println!("{}", "OK".green().bold());
+                (Some(policy), raw_hash, warnings, true)
             }
-            (None, "sha256:none".to_string(), vec![], false)
+            PolicyLoadResult::Degraded { reason } => {
+                println!("{}", "DEGRADED".yellow().bold());
+                log_warn!("policy_degraded", "reason": reason);
+                (None, "sha256:none".to_string(), vec![], false)
+            }
+            PolicyLoadResult::Fatal { error } => {
+                println!("{}", "FAILED".red().bold());
+                log_error!("startup_error", "reason": error.to_string());
+                return 1;
+            }
         }
+    } else {
+        // (c) Safe Mode — no dashboard API, no policy file
+        println!(
+            "{} {}",
+            "🛡".green(),
+            "Safe Mode v1 enabled (Audit mode recommended). Blocking high-risk secrets & exfil.".green()
+        );
+        if !dry_run {
+            println!("{} {}", "ℹ".blue(), "Run with --dry-run to preview.".blue());
+        }
+        (None, "sha256:none".to_string(), vec![], false)
     };
+
 
     // 2. Check log path writable
     let mut log_dir = Path::new(&log_path).parent().unwrap_or(Path::new("."));
@@ -601,12 +652,43 @@ async fn run_start(
     });
 
     if state.dashboard_client.is_some() {
+        let msg = if std::env::var("DASHBOARD_API_URL").is_ok() {
+            "Connected (DASHBOARD_API_URL set)".green()
+        } else {
+            "Connected (Local Dev Fallback: http://localhost:8400)".yellow()
+        };
         println!(
             "{} {} {}",
             "📊".green(),
             "FR-23 Dashboard:".bold(),
-            "Connected (DASHBOARD_API_URL set)".green()
+            msg
         );
+    }
+
+    // Background policy polling — only active when DASHBOARD_API_URL is set.
+    // Fetches the active policy from PostgreSQL (via dashboard API) every N seconds
+    // and hot-swaps it without restarting the gateway.
+    if let Some(api_url) = dashboard_api_url {
+        let poll_interval = std::env::var("POLICY_POLL_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(30);
+
+        let poll_state = state.clone();
+        let poll_secret = policy_read_secret_env;
+        tokio::spawn(async move {
+            println!(
+                "{} Policy polling started — checking every {}s for changes",
+                "🔄".blue(), poll_interval
+            );
+            agentwall::policy::remote::start_policy_poll(
+                poll_state,
+                api_url,
+                poll_secret,
+                poll_interval,
+            )
+            .await;
+        });
     }
 
     if shadow_mode {

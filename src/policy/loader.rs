@@ -88,6 +88,19 @@ pub enum PolicyLoadResult {
     },
 }
 
+/// Load, validate, and compile a policy YAML string.
+/// Used by both the file-based loader and the remote dashboard-API loader.
+pub fn load_policy_from_str(raw_str: &str, issuer_override: Option<String>) -> PolicyLoadResult {
+    let mut hasher = Sha256::new();
+    hasher.update(raw_str.as_bytes());
+    let raw_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
+
+    let warnings: Vec<String> = Vec::new();
+
+    // Delegate to the shared compile path
+    compile_policy_yaml(raw_str, raw_hash, warnings, issuer_override)
+}
+
 /// Load, validate, and compile a policy file.
 pub fn load_policy(path: &Path, issuer_override: Option<String>) -> PolicyLoadResult {
     let raw_bytes = match std::fs::read(path) {
@@ -131,7 +144,19 @@ pub fn load_policy(path: &Path, issuer_override: Option<String>) -> PolicyLoadRe
         }
     };
 
-    let policy_file: PolicyFile = match serde_yaml::from_str(raw_str) {
+    compile_policy_yaml(raw_str, raw_hash, warnings, issuer_override)
+}
+
+/// Inner compile function: parse YAML, validate, and build a CompiledPolicy.
+/// Called by both load_policy() and load_policy_from_str().
+fn compile_policy_yaml(
+    raw_str: &str,
+    raw_hash: String,
+    mut warnings: Vec<String>,
+    issuer_override: Option<String>,
+) -> PolicyLoadResult {
+
+    let policy_file: PolicyFile = match serde_yaml::from_str::<PolicyFile>(raw_str) {
         Ok(p) => p,
         Err(e) => {
             let err_str = e.to_string();
