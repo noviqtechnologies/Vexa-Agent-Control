@@ -18,7 +18,7 @@ AgentWall intercepts outbound traffic from your agent, surfacing patterns in a l
 - **Injection Defense:** 6-pass normalizer and 16-pattern injection scanner that blocks inbound tool responses and external payloads.
 - **Safe Mode (FR-303a):** 15 tool-aware rules that block dangerous file access, shell exfiltration, and cloud metadata SSRF — enabled by default, no policy file required.
 - **Agent Identity & Credential Governance:** Per-agent short-lived credential provisioning, rotation, and per-tool-call scoping to eliminate long-lived secret sprawl.
-- **SaaS Dashboard (FR-23):** Optional self-hosted web dashboard for fleet-wide visibility into agent activity, identity governance, and policy insights.
+- **SaaS Dashboard (FR-23):** Optional self-hosted web dashboard for fleet-wide visibility into agent activity, identity governance, policy insights, and Per-Client MCP Server Visibility (Admin-Only).
 - **Compliance & Auditing:** HMAC-chained audit logs with direct export to SIEMs like Splunk and Datadog.
 
 ## Architecture

@@ -181,9 +181,11 @@ agentwall identity audit --agent my-agent --verify
 
 ---
 
-## 8. SaaS Dashboard — Fleet Overview, Identity Governance & Policy Insights (FR-23)
+## 8. SaaS Dashboard & IDE Telemetry (FR-23)
 
-AgentWall includes an optional, self-hosted web dashboard with three panels: Fleet Overview, Identity Governance, and Policy Insights. It runs alongside the gateway — no external SaaS dependency.
+AgentWall includes an optional, self-hosted web dashboard with panels for Fleet Overview, Identity Governance, Policy Insights, and **Per-Client MCP Server Visibility (Admin-Only)**. It runs alongside the gateway — no external SaaS dependency.
+
+When developers run `agentwall status`, their local IDE wrapping configurations and active MCP servers are sent as snapshots to the Dashboard, allowing administrators to maintain centralized visibility into the fleet's tool usage.
 
 ### Deploying the Dashboard via Helm (Production)
 

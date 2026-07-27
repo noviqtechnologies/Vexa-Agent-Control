@@ -4,6 +4,27 @@ AgentWall provides seamless integrations with the most popular AI-powered IDEs a
 
 Instead of manually setting up environment variables, you can use the `agentwall wrap` command to automatically patch your local IDE configurations to route traffic through the AgentWall proxy.
 
+### Advanced Wrapping Commands
+
+- **Auto-Detect & Wrap All:** `agentwall wrap --auto-detect`
+- **Dry Run:** `agentwall wrap <target> --dry-run`
+- **Scan Responses:** `agentwall wrap <target> --scan-responses`
+
+### Continuous Auto-Wrapping (`agentwall watch`)
+
+You can run the **Watch Daemon** to continuously monitor your IDE configuration directories. Whenever a new MCP server is added to your IDE, AgentWall will automatically detect and wrap it in real time:
+```bash
+agentwall watch
+```
+
+### Telemetry & Fleet Visibility (`agentwall status`)
+
+Run the status command to view the existence and wrap status of all supported IDE configurations on your machine:
+```bash
+agentwall status
+```
+When connected to an AgentWall Dashboard, this command also sends an **MCP Server Inventory Snapshot**, providing Administrators with centralized, per-client visibility into which MCP servers are being used across the fleet.
+
 ## Supported Targets
 
 | Target IDE | Wrap Command | Unwrap Command |
