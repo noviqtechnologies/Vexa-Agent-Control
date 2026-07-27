@@ -48,6 +48,15 @@ func main() {
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 	rotationH := handler.NewRotationHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 
+	authH := handler.NewAuthHandler(db)
+	authProviderH := handler.NewAuthProviderHandler(db)
+	userH := handler.NewUserHandler(db)
+	policyMgmtH := handler.NewPolicyMgmtHandler(db)
+	safeModeH := handler.NewSafeModeHandler()
+
+	// Check and generate bootstrap token if needed
+	authH.CheckBootstrap()
+
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
@@ -67,9 +76,15 @@ func main() {
 		r.Post("/credentials", ingestH.PostCredential)
 	})
 
-	// Dashboard API — OIDC auth for human operators.
+	// Unauthenticated Auth Routes
+	r.Route("/api/v1/auth", func(r chi.Router) {
+		r.Post("/login", authH.Login)
+		r.Post("/logout", authH.Logout)
+	})
+
+	// Dashboard API — session cookie auth for human operators.
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.OIDCAuth(cfg.OIDCIssuer, cfg.OIDCClientID))
+		r.Use(middleware.DashboardAuth())
 
 		r.Get("/fleet/overview", fleetH.GetOverview)
 		r.Get("/fleet/agents", fleetH.ListAgents)
@@ -90,6 +105,23 @@ func main() {
 		r.Post("/policy/suggestions", policyH.GetSuggestions)
 
 		r.Post("/identity/rotate", rotationH.TriggerRotation)
+		
+		// Auth Providers
+		r.Get("/auth_providers", authProviderH.List)
+		r.Get("/auth_providers/{id}", authProviderH.Get)
+		r.Put("/auth_providers", authProviderH.Upsert)
+		
+		// Users
+		r.Get("/users", userH.List)
+		r.Post("/users", userH.Create)
+		r.Delete("/users/{id}", userH.Delete)
+		
+		// Policy Management
+		r.Get("/policies/active", policyMgmtH.GetActive)
+		r.Post("/policies", policyMgmtH.Save)
+
+		// Safe Mode status (always active — static endpoint)
+		r.Get("/policy/safe-mode/status", safeModeH.GetStatus)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

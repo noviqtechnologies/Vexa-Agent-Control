@@ -755,3 +755,21 @@ func TestThreatHandler_GetTopPatterns_StoreError(t *testing.T) {
 		t.Errorf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
 	}
 }
+
+func TestPasswordHashingAndVerification(t *testing.T) {
+	pass := "mySecretPass123!"
+	hash, err := hashPassword(pass)
+	if err != nil {
+		t.Fatalf("hashPassword failed: %v", err)
+	}
+
+	ok, err := VerifyPassword(pass, hash)
+	if err != nil || !ok {
+		t.Errorf("VerifyPassword failed for correct password: ok=%v err=%v", ok, err)
+	}
+
+	ok, err = VerifyPassword("wrongPassword", hash)
+	if ok {
+		t.Errorf("VerifyPassword succeeded for wrong password!")
+	}
+}

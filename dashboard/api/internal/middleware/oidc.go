@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/noviqtechnologies/agentwall/dashboard/api/internal/session"
 )
 
 type contextKey string
@@ -14,52 +14,35 @@ type contextKey string
 const UserClaimsKey contextKey = "user_claims"
 
 type UserClaims struct {
-	Subject string `json:"sub"`
-	Email   string `json:"email"`
+	UserID  string `json:"user_id"`
+	IsAdmin bool   `json:"is_admin"`
 }
 
-// OIDCAuth validates JWT bearer tokens from dashboard operators.
-// If issuer or clientID are empty, OIDC is disabled (dev mode only).
-func OIDCAuth(issuer, clientID string) func(http.Handler) http.Handler {
-	if issuer == "" || clientID == "" {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
-	}
-
-	provider, err := oidc.NewProvider(context.Background(), issuer)
-	if err != nil {
-		panic("failed to initialize OIDC provider: " + err.Error())
-	}
-	verifier := provider.Verifier(&oidc.Config{ClientID: clientID})
-
+// DashboardAuth validates the agentwall_session cookie for dashboard operators.
+func DashboardAuth() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth := r.Header.Get("Authorization")
-			if !strings.HasPrefix(auth, "Bearer ") {
-				http.Error(w, `{"error":"missing bearer token"}`, http.StatusUnauthorized)
-				return
-			}
-			token := strings.TrimPrefix(auth, "Bearer ")
-
-			idToken, err := verifier.Verify(r.Context(), token)
+			cookie, err := r.Cookie("agentwall_session")
 			if err != nil {
-				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
 
-			var claims UserClaims
-			if err := idToken.Claims(&claims); err != nil {
-				http.Error(w, `{"error":"failed to parse claims"}`, http.StatusUnauthorized)
+			userID, isAdmin, err := session.Validate(cookie.Value)
+			if err != nil {
+				http.Error(w, `{"error":"invalid session"}`, http.StatusUnauthorized)
 				return
 			}
 
+			claims := UserClaims{
+				UserID:  userID,
+				IsAdmin: isAdmin,
+			}
 			ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
-
 // GatewayAuth validates the shared HMAC secret the gateway uses for
 // ingest endpoints. Dashboard operators never use this path.
 func GatewayAuth(secret string) func(http.Handler) http.Handler {

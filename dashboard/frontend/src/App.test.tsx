@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
@@ -17,10 +17,17 @@ vi.mock('./views/ThreatIntelligence', () => ({
   default: () => <div data-testid="threat-intelligence">ThreatIntelligence</div>,
 }))
 
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({}),
+  }))
+})
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider config={null}>
+      <AuthProvider>
         <App />
       </AuthProvider>
     </MemoryRouter>
@@ -28,41 +35,43 @@ function renderAt(path: string) {
 }
 
 describe('App routing', () => {
-  it('renders four nav links', () => {
+  it('renders accordion navigation items', async () => {
     renderAt('/')
-    expect(screen.getByText('Fleet Overview')).toBeInTheDocument()
-    expect(screen.getByText('Identity Governance')).toBeInTheDocument()
-    expect(screen.getByText('Policy Insights')).toBeInTheDocument()
-    expect(screen.getByText('Threat Intelligence')).toBeInTheDocument()
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Agent Identity')).toBeInTheDocument()
+    expect(screen.getByText('Policy Management')).toBeInTheDocument()
+    expect(screen.getByText('Observation & Routing')).toBeInTheDocument()
+    expect(screen.getByText('User Management')).toBeInTheDocument()
+    expect(screen.getByText('Ecosystem Integrations')).toBeInTheDocument()
   })
 
-  it('redirects / to /fleet', () => {
+  it('redirects / to /fleet', async () => {
     renderAt('/')
-    expect(screen.getByTestId('fleet-overview')).toBeInTheDocument()
+    expect(await screen.findByTestId('fleet-overview')).toBeInTheDocument()
   })
 
-  it('renders FleetOverview at /fleet', () => {
+  it('renders FleetOverview at /fleet', async () => {
     renderAt('/fleet')
-    expect(screen.getByTestId('fleet-overview')).toBeInTheDocument()
+    expect(await screen.findByTestId('fleet-overview')).toBeInTheDocument()
   })
 
-  it('renders IdentityGovernance at /identity', () => {
+  it('renders IdentityGovernance at /identity', async () => {
     renderAt('/identity')
-    expect(screen.getByTestId('identity-governance')).toBeInTheDocument()
+    expect(await screen.findByTestId('identity-governance')).toBeInTheDocument()
   })
 
-  it('renders PolicyInsights at /policy', () => {
+  it('renders PolicyInsights at /policy', async () => {
     renderAt('/policy')
-    expect(screen.getByTestId('policy-insights')).toBeInTheDocument()
+    expect(await screen.findByTestId('policy-insights')).toBeInTheDocument()
   })
 
-  it('renders ThreatIntelligence at /threats', () => {
+  it('renders ThreatIntelligence at /threats', async () => {
     renderAt('/threats')
-    expect(screen.getByTestId('threat-intelligence')).toBeInTheDocument()
+    expect(await screen.findByTestId('threat-intelligence')).toBeInTheDocument()
   })
 
-  it('shows AgentWall logo', () => {
+  it('shows AgentWall logo', async () => {
     renderAt('/')
-    expect(screen.getByText(/Agent/)).toBeInTheDocument()
+    expect(await screen.findByText('Wall')).toBeInTheDocument()
   })
 })

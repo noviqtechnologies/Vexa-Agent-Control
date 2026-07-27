@@ -10,9 +10,6 @@ type Config struct {
 	Port        int
 	DatabaseURL string
 
-	OIDCIssuer   string
-	OIDCClientID string
-
 	// GatewaySecret is a shared HMAC key the gateway includes in the
 	// Authorization header when POSTing to the ingest endpoints.
 	// Dashboard operators do NOT use this — they use OIDC.
@@ -53,23 +50,15 @@ func Load() (*Config, error) {
 	gatewaySecret := os.Getenv("GATEWAY_SECRET")
 	policyReadSecret := os.Getenv("POLICY_READ_SECRET")
 	gatewayURL := os.Getenv("GATEWAY_URL")
-	oidcIssuer := os.Getenv("OIDC_ISSUER")
-	oidcClientID := os.Getenv("OIDC_CLIENT_ID")
-
 	if !devMode {
 		if gatewaySecret == "" {
 			return nil, fmt.Errorf("GATEWAY_SECRET is required (set DEV_MODE=true and ALLOW_DEV_MODE=true to disable auth for local development)")
-		}
-		if oidcIssuer == "" || oidcClientID == "" {
-			return nil, fmt.Errorf("OIDC_ISSUER and OIDC_CLIENT_ID are required (set DEV_MODE=true and ALLOW_DEV_MODE=true to disable auth for local development)")
 		}
 	}
 
 	return &Config{
 		Port:             port,
 		DatabaseURL:      dbURL,
-		OIDCIssuer:       oidcIssuer,
-		OIDCClientID:     oidcClientID,
 		GatewaySecret:    gatewaySecret,
 		PolicyReadSecret: policyReadSecret,
 		GatewayURL:       gatewayURL,

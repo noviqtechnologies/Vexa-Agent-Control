@@ -99,6 +99,10 @@ export const api = {
     get<ThreatPattern[]>(`/threats/top-patterns?hours=${hours}&limit=${limit}`),
   triggerRotation: (agentId: string, drainSeconds = 300) =>
     postJSON<RotationResult>('/identity/rotate', { agent_id: agentId, drain_seconds: drainSeconds }),
+  
+  // Policy Management
+  getActivePolicy: () => get<Policy>('/policies/active'),
+  savePolicy: (policy: Partial<Policy>) => postJSON<Policy>('/policies', policy),
 }
 
 async function post<T>(path: string): Promise<T> {
@@ -144,6 +148,15 @@ export interface PolicySuggestion {
   anomaly_score: number
   timestamp_ns: number
   suggested_action: string
+}
+
+export interface Policy {
+  id: string
+  version: string
+  content: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 // Threat Intelligence

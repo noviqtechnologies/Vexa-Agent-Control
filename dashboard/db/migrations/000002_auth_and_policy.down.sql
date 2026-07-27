@@ -1,0 +1,8 @@
+BEGIN;
+
+DROP TABLE IF EXISTS policies;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS auth_providers;
+DROP TYPE IF EXISTS auth_provider_type;
+
+COMMIT;
