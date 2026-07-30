@@ -100,6 +100,12 @@ Every tool call routed through the centralized Rust gateway undergoes sequential
 * **MCP Server Inventory:** Fleet-wide view of wrapped MCP servers discovered across developer workstations.
 * **Privacy Boundary:** Enforced Rust `RawEventForRedaction` → `RedactedEvent` boundary strips parameter values and response payloads before publishing to the dashboard API.
 
+### 💰 Spend Caps (Paid Tier)
+* **Budget Hierarchy:** Enforces spend limits at User, Group, and Organization levels (User override > Group default > Org default). Limits operate as circuit breakers rather than exact billing sources of truth; always reconcile against actual upstream provider invoices.
+* **Concurrency Ceiling Warning:** Spend counters rely on a local SQLite write path. While optimal for typical workloads, scaling above 100 concurrent sessions on a single gateway instance may encounter lock contention. This is an open risk under active evaluation.
+* **Period Resets & Timezones:** Budget periods (daily, weekly, monthly) reset strictly at `00:00 UTC`.
+* **Local Durable PII Store (Admin API):** The Spend Caps feature is managed via a dedicated Admin API, which is **disabled by default**. Enabling this API transforms the backing SQLite store into a durable, local PII database for spend and audit history. This data never leaves your infrastructure, but you must implement standard data retention and purge policies to remain compliant with privacy regulations.
+
 ---
 
 ## Installation
@@ -123,7 +129,7 @@ cargo build --release
 # Binary location: ./target/release/agentwall
 
 # Build Go Dashboard API (optional)
-cd dashboard/api && go build -o dashboard-api main.go
+cd control-plane/api && go build -o dashboard-api main.go
 ```
 
 ---
@@ -305,7 +311,7 @@ helm install agentwall ./chart \
 
 ## SaaS Dashboard Reference
 
-The self-hosted AgentWall Dashboard (`dashboard/frontend` + `dashboard/api`) provides web-based management:
+The self-hosted AgentWall Control Plane (`control-plane/frontend` + `control-plane/api`) provides web-based management:
 
 | View Panel | Description | Key Features |
 |---|---|---|

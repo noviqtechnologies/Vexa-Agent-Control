@@ -9,7 +9,7 @@ LOGIN_EMAIL="admin"
 
 # Resolve compose file relative to this script's location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/dashboard/docker-compose.yml"
+COMPOSE_FILE="$SCRIPT_DIR/control-plane/docker-compose.yml"
 
 # Terminal colour codes
 CYAN='\033[0;36m'

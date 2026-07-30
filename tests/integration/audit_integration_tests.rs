@@ -33,6 +33,7 @@ async fn test_integration_full_pipeline_and_report() {
         Some("user-123@corp.com".to_string()),
         Some("policy-sha-abc".to_string()),
         None,
+        None,
     ).await.unwrap();
 
     logger.write_entry(
@@ -45,6 +46,7 @@ async fn test_integration_full_pipeline_and_report() {
         Some("user-123".to_string()),
         Some("user-123@corp.com".to_string()),
         Some("policy-sha-abc".to_string()),
+        None,
         None,
     ).await.unwrap();
 
@@ -110,6 +112,7 @@ async fn test_integration_concurrent_sessions() {
                     None,
                     None,
                     None,
+                    None,
                 ).await.unwrap();
             }
         });
@@ -160,6 +163,7 @@ async fn test_integration_rotation_under_load() {
                     "tool_allow",
                     &format!("tool_{}_{}", t_idx, i),
                     Some(json!({"long_parameter_to_consume_bytes": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"})),
+                    None,
                     None,
                     None,
                     None,
@@ -220,6 +224,7 @@ async fn test_integration_auth_failed_in_chain() {
         None,
         None,
         Some("127.0.0.1".to_string()),
+        None,
     ).await.unwrap();
 
     drop(logger);
@@ -260,12 +265,14 @@ async fn test_integration_tampered_log() {
         None,
         None,
         None,
+        None,
     ).await.unwrap();
 
     logger.write_entry(
         "tamper-session",
         "tool_allow",
         "write_file",
+        None,
         None,
         None,
         None,
@@ -321,6 +328,7 @@ async fn test_siem_export_failure_fallback_logs_locally() {
         "siem-fail-session",
         "tool_allow",
         "read_file",
+        None,
         None,
         None,
         None,

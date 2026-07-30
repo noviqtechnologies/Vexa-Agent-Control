@@ -40,6 +40,11 @@ pub enum PolicyLoadError {
         tool: String,
         action: String,
     },
+    /// FR-112: Group policy validation error
+    InvalidGroup {
+        group_id: String,
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for PolicyLoadError {
@@ -69,6 +74,9 @@ impl std::fmt::Display for PolicyLoadError {
             }
             Self::InvalidAction { tool, action } => {
                 write!(f, "Invalid action \"{}\" for tool \"{}\"", action, tool)
+            }
+            Self::InvalidGroup { group_id, reason } => {
+                write!(f, "Invalid group policy \"{}\": {}", group_id, reason)
             }
         }
     }
@@ -156,6 +164,177 @@ fn compile_policy_yaml(
     issuer_override: Option<String>,
 ) -> PolicyLoadResult {
 
+    // Helper closure to compile a list of tool rules
+    let compile_tools = |tools_list: &Vec<super::schema::ToolRule>, warnings: &mut Vec<String>| -> Result<Vec<super::engine::CompiledTool>, PolicyLoadError> {
+        let mut compiled = Vec::with_capacity(tools_list.len());
+        for tool in tools_list {
+            match tool.action.as_str() {
+                "allow" | "deny" => {}
+                other => {
+                    return Err(PolicyLoadError::InvalidAction {
+                        tool: tool.name.clone(),
+                        action: other.to_string(),
+                    });
+                }
+            }
+
+            let identity_bound = if let Some(ident) = &tool.identity {
+                if ident == "*" {
+                    let allow_wildcard = std::env::var("ALLOW_WILDCARD_IDENTITY")
+                        .map(|v| v == "true")
+                        .unwrap_or(false);
+                    if !allow_wildcard {
+                        return Err(PolicyLoadError::InvalidYaml(format!(
+                            "Tool \"{}\" uses wildcard identity (\"*\") which is strictly gated behind ALLOW_WILDCARD_IDENTITY=true environment variable.",
+                            tool.name
+                        )));
+                    }
+                }
+                Some(ident.clone())
+            } else {
+                None
+            };
+
+            let mut compiled_params = Vec::new();
+            if let Some(params) = &tool.parameters {
+                for param in params {
+                    let compiled_regex = if let Some(pattern) = &param.pattern {
+                        if param.param_type != ParamType::String {
+                            return Err(PolicyLoadError::InvalidYaml(format!(
+                                "pattern only valid for string, tool \"{}\" param \"{}\" is {}",
+                                tool.name, param.name, param.param_type
+                            )));
+                        }
+                        let effective_pattern = if param.unanchored {
+                            warnings.push(format!(
+                                "Tool \"{}\" param \"{}\" has unanchored pattern.",
+                                tool.name, param.name
+                            ));
+                            logging::log_event(
+                                Level::Warn,
+                                "unanchored_pattern",
+                                serde_json::json!({"tool": &tool.name, "param": &param.name}),
+                            );
+                            pattern.clone()
+                        } else {
+                            format!("^(?:{})$", pattern)
+                        };
+                        match Regex::new(&effective_pattern) {
+                            Ok(re) => Some(re),
+                            Err(e) => {
+                                return Err(PolicyLoadError::InvalidRegex {
+                                    tool: tool.name.clone(),
+                                    param: param.name.clone(),
+                                    pattern: pattern.clone(),
+                                    error: e.to_string(),
+                                });
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    if param.max_length.is_some() && param.param_type != ParamType::String {
+                        return Err(PolicyLoadError::InvalidYaml(format!(
+                            "max_length only valid for string, tool \"{}\" param \"{}\" is {}",
+                            tool.name, param.name, param.param_type
+                        )));
+                    }
+
+                    if (param.param_type == ParamType::Object || param.param_type == ParamType::Array)
+                        && param.schema.is_none()
+                    {
+                        return Err(PolicyLoadError::InvalidYaml(format!(
+                            "Tool \"{}\" param \"{}\" has type {} but no 'schema' is defined. \
+                             Policy Schema v2 requires inline JSON Schema for all object and array \
+                             parameters (v6.1 — blind pass-through removal). \
+                             Add a 'schema:' block or change the parameter type to 'string'. \
+                             See docs/VexaAgentWall-PRD-v6.1.md §6.2 for the migration guide.",
+                            tool.name, param.name, param.param_type
+                        )));
+                    }
+
+                    let compiled_schema = if let Some(schema_val) = &param.schema {
+                        let mut schema_to_compile = schema_val.clone();
+                        if let Err(e) = check_schema_depth(&schema_to_compile, 0) {
+                            return Err(PolicyLoadError::InvalidYaml(format!(
+                                "Tool \"{}\" param \"{}\" schema exceeds depth limit: {}",
+                                tool.name, param.name, e
+                            )));
+                        }
+                        inject_additional_properties_false(&mut schema_to_compile);
+                        match JSONSchema::compile(&schema_to_compile) {
+                            Ok(s) => Some(Arc::new(s)),
+                            Err(e) => {
+                                return Err(PolicyLoadError::InvalidYaml(format!(
+                                    "Tool \"{}\" param \"{}\" has invalid JSON Schema: {}",
+                                    tool.name, param.name, e
+                                )));
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let mut compiled_validators = Vec::new();
+                    if let Some(vals) = &param.validators {
+                        for val in vals {
+                            let compiled = match val {
+                                super::schema::ValidatorRule::PathTraversal => {
+                                    super::engine::CompiledValidator::PathTraversal
+                                }
+                                super::schema::ValidatorRule::UrlSchemeAllowlist(ref schemes) => {
+                                    super::engine::CompiledValidator::UrlSchemeAllowlist(schemes.clone())
+                                }
+                                super::schema::ValidatorRule::SqlInjectionBasic => {
+                                    super::engine::CompiledValidator::SqlInjectionBasic
+                                }
+                                super::schema::ValidatorRule::ShellInjectionBasic => {
+                                    super::engine::CompiledValidator::ShellInjectionBasic
+                                }
+                                super::schema::ValidatorRule::Regex(ref pattern) => {
+                                    match Regex::new(pattern) {
+                                        Ok(re) => super::engine::CompiledValidator::Regex(re),
+                                        Err(e) => {
+                                            return Err(PolicyLoadError::InvalidRegex {
+                                                tool: tool.name.clone(),
+                                                param: param.name.clone(),
+                                                pattern: pattern.clone(),
+                                                error: e.to_string(),
+                                            });
+                                        }
+                                    }
+                                }
+                            };
+                            compiled_validators.push(compiled);
+                        }
+                    }
+
+                    compiled_params.push(super::engine::CompiledParam {
+                        name: param.name.clone(),
+                        param_type: param.param_type.clone(),
+                        pattern: compiled_regex,
+                        schema: compiled_schema,
+                        max_length: param.max_length,
+                        required: param.required,
+                        validators: compiled_validators,
+                    });
+                }
+            }
+            compiled.push(super::engine::CompiledTool {
+                name: tool.name.clone(),
+                action: tool.action.clone(),
+                risk: tool.risk.clone(),
+                parameters: compiled_params,
+                identity: identity_bound,
+                credential_scope: tool.credential_scope.clone(),
+                semantic_anomaly_threshold: tool.semantic_anomaly_threshold,
+                a2a_trust_level: tool.a2a_trust_level.clone(),
+            });
+        }
+        Ok(compiled)
+    };
+
     let policy_file: PolicyFile = match serde_yaml::from_str::<PolicyFile>(raw_str) {
         Ok(p) => p,
         Err(e) => {
@@ -195,201 +374,37 @@ fn compile_policy_yaml(
     }
 
     let tools = policy_file.tools.unwrap_or_default();
-    let mut compiled_tools = Vec::with_capacity(tools.len());
+    let compiled_tools = match compile_tools(&tools, &mut warnings) {
+        Ok(ct) => ct,
+        Err(e) => return PolicyLoadResult::Fatal { error: e },
+    };
 
-    for tool in &tools {
-        match tool.action.as_str() {
-            "allow" | "deny" => {}
-            other => {
+    // FR-112: Compile group policies
+    let mut compiled_group_policies = Vec::new();
+    if let Some(groups) = policy_file.groups {
+        for group in groups {
+            // FR-112: Fatal error if a group is defined but has no claims
+            if group.claims.is_empty() {
                 return PolicyLoadResult::Fatal {
-                    error: PolicyLoadError::InvalidAction {
-                        tool: tool.name.clone(),
-                        action: other.to_string(),
+                    error: PolicyLoadError::InvalidGroup {
+                        group_id: group.id,
+                        reason: "claims array cannot be empty".to_string(),
                     },
-                }
-            }
-        }
-
-        let identity_bound = if let Some(ident) = &tool.identity {
-            if ident == "*" {
-                let allow_wildcard = std::env::var("ALLOW_WILDCARD_IDENTITY")
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                if !allow_wildcard {
-                    return PolicyLoadResult::Fatal {
-                        error: PolicyLoadError::InvalidYaml(format!(
-                            "Tool \"{}\" uses wildcard identity (\"*\") which is strictly gated behind ALLOW_WILDCARD_IDENTITY=true environment variable.",
-                            tool.name
-                        )),
-                    };
-                }
-            }
-            Some(ident.clone())
-        } else {
-            None
-        };
-
-        let mut compiled_params = Vec::new();
-        if let Some(params) = &tool.parameters {
-            for param in params {
-                let compiled_regex = if let Some(pattern) = &param.pattern {
-                    if param.param_type != ParamType::String {
-                        return PolicyLoadResult::Fatal {
-                            error: PolicyLoadError::InvalidYaml(format!(
-                                "pattern only valid for string, tool \"{}\" param \"{}\" is {}",
-                                tool.name, param.name, param.param_type
-                            )),
-                        };
-                    }
-                    let effective_pattern = if param.unanchored {
-                        warnings.push(format!(
-                            "Tool \"{}\" param \"{}\" has unanchored pattern.",
-                            tool.name, param.name
-                        ));
-                        logging::log_event(
-                            Level::Warn,
-                            "unanchored_pattern",
-                            serde_json::json!({"tool": &tool.name, "param": &param.name}),
-                        );
-                        pattern.clone()
-                    } else {
-                        format!("^(?:{})$", pattern)
-                    };
-                    match Regex::new(&effective_pattern) {
-                        Ok(re) => Some(re),
-                        Err(e) => {
-                            return PolicyLoadResult::Fatal {
-                                error: PolicyLoadError::InvalidRegex {
-                                    tool: tool.name.clone(),
-                                    param: param.name.clone(),
-                                    pattern: pattern.clone(),
-                                    error: e.to_string(),
-                                },
-                            }
-                        }
-                    }
-                } else {
-                    None
                 };
-
-                if param.max_length.is_some() && param.param_type != ParamType::String {
-                    return PolicyLoadResult::Fatal {
-                        error: PolicyLoadError::InvalidYaml(format!(
-                            "max_length only valid for string, tool \"{}\" param \"{}\" is {}",
-                            tool.name, param.name, param.param_type
-                        )),
-                    };
-                }
-
-                // v6.1 Guidance #6: Reject object/array params without inline JSON Schema.
-                // Blind pass-through of complex parameter types is a critical security
-                // vulnerability removed in v6.1. All object and array parameters MUST
-                // define a schema for DLP inspection and policy enforcement.
-                if (param.param_type == ParamType::Object || param.param_type == ParamType::Array)
-                    && param.schema.is_none()
-                {
-                    return PolicyLoadResult::Fatal {
-                        error: PolicyLoadError::InvalidYaml(format!(
-                            "Tool \"{}\" param \"{}\" has type {} but no 'schema' is defined. \
-                             Policy Schema v2 requires inline JSON Schema for all object and array \
-                             parameters (v6.1 — blind pass-through removal). \
-                             Add a 'schema:' block or change the parameter type to 'string'. \
-                             See docs/VexaAgentWall-PRD-v6.1.md §6.2 for the migration guide.",
-                            tool.name, param.name, param.param_type
-                        )),
-                    };
-                }
-
-                // Nested JSON Schema Compilation (FR-201)
-                let compiled_schema = if let Some(schema_val) = &param.schema {
-                    let mut schema_to_compile = schema_val.clone();
-
-                    // Security: Enforce recursion depth (FR-201: 5 levels)
-                    if let Err(e) = check_schema_depth(&schema_to_compile, 0) {
-                        return PolicyLoadResult::Fatal {
-                            error: PolicyLoadError::InvalidYaml(format!(
-                                "Tool \"{}\" param \"{}\" schema exceeds depth limit: {}",
-                                tool.name, param.name, e
-                            )),
-                        };
-                    }
-
-                    // Security: Default additionalProperties to false (FR-201)
-                    inject_additional_properties_false(&mut schema_to_compile);
-
-                    match JSONSchema::compile(&schema_to_compile) {
-                        Ok(s) => Some(Arc::new(s)),
-                        Err(e) => {
-                            return PolicyLoadResult::Fatal {
-                                error: PolicyLoadError::InvalidYaml(format!(
-                                    "Tool \"{}\" param \"{}\" has invalid JSON Schema: {}",
-                                    tool.name, param.name, e
-                                )),
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let mut compiled_validators = Vec::new();
-                if let Some(vals) = &param.validators {
-                    for val in vals {
-                        let compiled = match val {
-                            super::schema::ValidatorRule::PathTraversal => {
-                                super::engine::CompiledValidator::PathTraversal
-                            }
-                            super::schema::ValidatorRule::UrlSchemeAllowlist(ref schemes) => {
-                                super::engine::CompiledValidator::UrlSchemeAllowlist(schemes.clone())
-                            }
-                            super::schema::ValidatorRule::SqlInjectionBasic => {
-                                super::engine::CompiledValidator::SqlInjectionBasic
-                            }
-                            super::schema::ValidatorRule::ShellInjectionBasic => {
-                                super::engine::CompiledValidator::ShellInjectionBasic
-                            }
-                            super::schema::ValidatorRule::Regex(ref pattern) => {
-                                match Regex::new(pattern) {
-                                    Ok(re) => super::engine::CompiledValidator::Regex(re),
-                                    Err(e) => {
-                                        return PolicyLoadResult::Fatal {
-                                            error: PolicyLoadError::InvalidRegex {
-                                                tool: tool.name.clone(),
-                                                param: param.name.clone(),
-                                                pattern: pattern.clone(),
-                                                error: e.to_string(),
-                                            },
-                                        };
-                                    }
-                                }
-                            }
-                        };
-                        compiled_validators.push(compiled);
-                    }
-                }
-
-                compiled_params.push(super::engine::CompiledParam {
-                    name: param.name.clone(),
-                    param_type: param.param_type.clone(),
-                    pattern: compiled_regex,
-                    schema: compiled_schema,
-                    max_length: param.max_length,
-                    required: param.required,
-                    validators: compiled_validators,
-                });
             }
+            
+            let group_tools = group.tools.unwrap_or_default();
+            let compiled_group_tools = match compile_tools(&group_tools, &mut warnings) {
+                Ok(ct) => ct,
+                Err(e) => return PolicyLoadResult::Fatal { error: e },
+            };
+            
+            compiled_group_policies.push(super::engine::CompiledGroupPolicy {
+                id: group.id,
+                claims: group.claims,
+                tools: compiled_group_tools,
+            });
         }
-        compiled_tools.push(super::engine::CompiledTool {
-            name: tool.name.clone(),
-            action: tool.action.clone(),
-            risk: tool.risk.clone(),
-            parameters: compiled_params,
-            identity: identity_bound,
-            // FR-5 v2.0 fields
-            credential_scope: tool.credential_scope.clone(),
-            semantic_anomaly_threshold: tool.semantic_anomaly_threshold,
-            a2a_trust_level: tool.a2a_trust_level.clone(),
-        });
     }
 
     let max_calls_per_second = policy_file
@@ -397,17 +412,17 @@ fn compile_policy_yaml(
         .and_then(|s| s.max_calls_per_second)
         .unwrap_or(0);
 
-    let (oidc_issuer, oidc_audience, oidc_cache_ttl) = if let Some(auth_cfg) = policy_file.auth {
-        (Some(auth_cfg.issuer), Some(auth_cfg.audience), auth_cfg.cache_ttl_minutes)
+    let (oidc_issuer, oidc_audience, oidc_cache_ttl, group_claim_key) = if let Some(auth_cfg) = policy_file.auth {
+        (Some(auth_cfg.issuer), Some(auth_cfg.audience), auth_cfg.cache_ttl_minutes, "groups".to_string())
     } else if let Some(ident) = policy_file.identity {
-        (ident.issuer.or(ident.oidc_issuer), ident.audience, None)
+        (ident.issuer.or(ident.oidc_issuer), ident.audience, None, ident.group_claim_key.unwrap_or_else(|| "groups".to_string()))
     } else {
-        (None, None, None)
+        (None, None, None, "groups".to_string())
     };
 
     let identity_validator = if let (Some(issuer), Some(audience)) = (oidc_issuer, oidc_audience) {
         let final_issuer = issuer_override.unwrap_or(issuer);
-        let validator = super::identity::IdentityValidator::new(final_issuer, audience, oidc_cache_ttl);
+        let validator = super::identity::IdentityValidator::new(final_issuer, audience, oidc_cache_ttl, group_claim_key);
         validator.clone().start_background_rotation();
         Some(validator)
     } else {
@@ -467,11 +482,13 @@ fn compile_policy_yaml(
     PolicyLoadResult::Loaded {
         policy: CompiledPolicy {
             tools: compiled_tools,
+            group_policies: compiled_group_policies,
             max_calls_per_second,
             identity_validator,
             scannable_tools,
             safe_tools,
             firewall: firewall_config,
+            spend_caps: policy_file.spend_caps,
         },
         raw_hash,
         warnings,

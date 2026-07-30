@@ -22,6 +22,7 @@ fn make_deny_policy() -> CompiledPolicy {
             semantic_anomaly_threshold: None,
             a2a_trust_level: None,
         }],
+        group_policies: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
@@ -38,7 +39,7 @@ fn make_deny_policy() -> CompiledPolicy {
 fn test_ac5_1_policy_engine_deny_not_in_policy() {
     let policy = make_deny_policy();
     // Call a tool that is not in the allowlist at all → should be denied
-    let result = policy.evaluate("unknown_tool", &serde_json::json!({}), None);
+    let result = policy.evaluate("unknown_tool", &serde_json::json!({}), None, &[]);
     assert!(
         matches!(result, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy"),
         "Expected not_in_policy deny, got: {:?}",
@@ -50,7 +51,7 @@ fn test_ac5_1_policy_engine_deny_not_in_policy() {
 fn test_ac5_1_policy_engine_deny_explicit_deny_action() {
     let policy = make_deny_policy();
     // Tool in policy but action = "deny"
-    let result = policy.evaluate("restricted_tool", &serde_json::json!({}), None);
+    let result = policy.evaluate("restricted_tool", &serde_json::json!({}), None, &[]);
     assert!(
         matches!(result, EvalResult::Deny { ref reason_code, .. } if reason_code == "default_deny"),
         "Expected default_deny, got: {:?}",
@@ -81,6 +82,7 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
+        group_policies: vec![],
         safe_tools: vec![],
         firewall: None,
     };
@@ -89,7 +91,7 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
     let start = std::time::Instant::now();
     for i in 0..iterations {
         let tool_name = format!("tool_{}", i % 50);
-        let _ = policy.evaluate(&tool_name, &serde_json::json!({}), None);
+        let _ = policy.evaluate(&tool_name, &serde_json::json!({}), None, &[]);
     }
     let elapsed = start.elapsed();
     let avg_ns = elapsed.as_nanos() / iterations;
@@ -226,6 +228,7 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
     // The engine should deny any tool call
     let policy = CompiledPolicy {
         tools: vec![],   // empty — no tools allowed
+        group_policies: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
@@ -233,7 +236,7 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
         firewall: None,
     };
 
-    let result = policy.evaluate("any_tool", &serde_json::json!({}), None);
+    let result = policy.evaluate("any_tool", &serde_json::json!({}), None, &[]);
     assert!(
         matches!(result, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy"),
         "AC-5.5: Gateway with empty policy must deny ALL tool calls"

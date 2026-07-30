@@ -277,3 +277,26 @@ pub async fn try_export(exporter: &SiemExporter, entry: &AuditEntry) {
         }
     }
 }
+
+// FR-123: Threshold alert (admin: 75%, 90%; user-facing: 75%, 95%)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SpendThresholdAlert {
+    pub agent_id: String,
+    pub threshold_pct: u8,
+    pub spent_cents: u64,
+    pub cap_cents: u64,
+    pub period: String,
+    pub is_estimated: bool,
+    pub pricing_table_version: String,
+}
+
+// FR-123: Budget exhausted alert
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BudgetExhaustedAlert {
+    pub agent_id: String,
+    pub spent_cents: u64,
+    pub cap_cents: u64,
+    pub period: String,
+    pub is_estimated: bool,
+    pub pricing_table_version: String,
+}

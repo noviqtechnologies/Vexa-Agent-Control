@@ -45,7 +45,7 @@ async fn test_log_rotation_and_seed() {
 
     // Write entries until it rotates
     for _ in 0..10 {
-        logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None).await.unwrap();
+        logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
         std::thread::sleep(Duration::from_millis(10));
     }
 
@@ -85,9 +85,9 @@ async fn test_session_report_generation() {
     }).unwrap();
 
     // Mock session events
-    logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None).await.unwrap();
-    logger.write_entry(&session_id, "tool_deny", "exec_shell", None, Some("action is deny".to_string()), None, None, None, None, None).await.unwrap();
-    logger.write_entry(&session_id, "rate_limited", "read_file", None, None, None, None, None, None, None).await.unwrap();
+    logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
+    logger.write_entry(&session_id, "tool_deny", "exec_shell", None, Some("action is deny".to_string()), None, None, None, None, None, None).await.unwrap();
+    logger.write_entry(&session_id, "rate_limited", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
 
     // Drop the logger to flush the background writer
     drop(logger);

@@ -34,6 +34,7 @@ async fn test_audit_sync_write_and_chain() {
             Some("user1@corp.com".to_string()),
             Some("sha256:abc".to_string()),
             None,
+            None,
         )
         .await
         .expect("write failed");
@@ -58,6 +59,7 @@ async fn test_audit_sync_write_and_chain() {
             Some("user-1".to_string()),
             Some("user1@corp.com".to_string()),
             Some("sha256:abc".to_string()),
+            None,
             None,
         )
         .await
@@ -96,6 +98,7 @@ async fn test_audit_log_rotation() {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -111,6 +114,7 @@ async fn test_audit_log_rotation() {
                 "test-session-123",
                 "test_event",
                 sentinel,
+                None,
                 None,
                 None,
                 None,
@@ -149,10 +153,10 @@ async fn test_verify_chain_with_secret_tamper_detection() {
     let logger = AuditLogger::new(config).expect("failed to create logger");
 
     logger.write_entry(
-        "sess-1", "test_event", "tool_1", None, None, None, None, None, None, None
+        "sess-1", "test_event", "tool_1", None, None, None, None, None, None, None, None
     ).await.unwrap();
     logger.write_entry(
-        "sess-1", "test_event", "tool_2", None, None, None, None, None, None, None
+        "sess-1", "test_event", "tool_2", None, None, None, None, None, None, None, None
     ).await.unwrap();
 
     // Initial verify is clean

@@ -32,7 +32,7 @@ def send_request(url, payload, headers=None):
         return 0, {"error": str(e)}
 
 def main():
-    proxy_url = os.environ.get("AGENTWALL_PROXY_URL", "http://127.0.0.1:8443")
+    proxy_url = os.environ.get("AGENTWALL_PROXY_URL", "http://127.0.0.1:8080")
     dashboard_api_url = os.environ.get("DASHBOARD_API_URL", "http://127.0.0.1:8081/api/v1/ingest")
     gateway_secret = os.environ.get("GATEWAY_SECRET", "local-dev-shared-secret-change-me")
     ingest_headers = {
@@ -71,7 +71,11 @@ def main():
         if code == 200 and "error" not in res:
             print("        Result: ✅ ALLOWED by Gateway")
         else:
-            errMsg = res.get("error", {}).get("message", res.get("error"))
+            err_val = res.get("error", {})
+            if isinstance(err_val, dict):
+                errMsg = err_val.get("message", str(err_val))
+            else:
+                errMsg = str(err_val)
             print(f"        Result: 🚫 BLOCKED/POLICY ENFORCED ({errMsg})")
         print()
 

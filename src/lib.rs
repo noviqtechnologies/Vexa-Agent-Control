@@ -11,8 +11,11 @@ pub mod report;
 pub mod wrap;
 pub mod validate;
 pub mod lint;
-pub mod dashboard;
-pub mod dashboard_fr23;
+pub mod local_dashboard;
+pub mod control_plane_client;
 pub mod generate_policy;
 pub mod self_healing;
 pub mod identity;
+
+pub mod license;
+pub mod spend;

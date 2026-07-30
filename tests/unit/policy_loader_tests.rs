@@ -265,12 +265,12 @@ tools:
 
     // Exact match → allow.
     assert!(matches!(
-        policy.evaluate("read_file", &serde_json::json!({"path": "workspace/src/main.rs"}), None),
-        EvalResult::Allow
+        policy.evaluate("read_file", &serde_json::json!({"path": "workspace/src/main.rs"}), None, &[]),
+        EvalResult::Allow { .. }
     ));
 
     // Partial prefix match that would succeed without anchoring → must deny.
-    match policy.evaluate("read_file", &serde_json::json!({"path": "evil/workspace/src/main.rs"}), None) {
+    match policy.evaluate("read_file", &serde_json::json!({"path": "evil/workspace/src/main.rs"}), None, &[]) {
         EvalResult::Deny { reason_code, .. } => {
             assert_eq!(
                 reason_code, "param_pattern_mismatch",
@@ -303,8 +303,8 @@ tools:
 
     // Partial match allowed when unanchored.
     assert!(matches!(
-        policy.evaluate("search", &serde_json::json!({"query": "totally_safe_query"}), None),
-        EvalResult::Allow
+        policy.evaluate("search", &serde_json::json!({"query": "totally_safe_query"}), None, &[]),
+        EvalResult::Allow { .. }
     ));
 
     // Loader must emit a warning for unanchored patterns.
@@ -343,13 +343,13 @@ fn test_10_tools_allowed_1_unlisted_denied() {
     for i in 0..10u32 {
         let name = format!("tool_{}", i);
         assert!(
-            matches!(policy.evaluate(&name, &serde_json::json!({}), None), EvalResult::Allow),
+            matches!(policy.evaluate(&name, &serde_json::json!({}), None, &[]), EvalResult::Allow { .. }),
             "tool_{} must be allowed",
             i
         );
     }
 
-    match policy.evaluate("tool_10", &serde_json::json!({}), None) {
+    match policy.evaluate("tool_10", &serde_json::json!({}), None, &[]) {
         EvalResult::Deny { reason_code, .. } => {
             assert_eq!(
                 reason_code, "not_in_policy",
@@ -405,9 +405,10 @@ tools:
                 "options": {"pool_size": 10, "read_only": false},
                 "db_name": "analytics_db"
             }),
-            None
+            None,
+            &[]
         ),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Schema violation (pool_size too large) → deny.
@@ -418,6 +419,7 @@ tools:
             "db_name": "analytics_db"
         }),
         None,
+        &[],
     ) {
         EvalResult::Deny { reason_code, .. } => {
             assert_eq!(reason_code, "schema_validation_failed");
@@ -433,6 +435,7 @@ tools:
             "db_name": "Analytics_DB"
         }),
         None,
+        &[],
     ) {
         EvalResult::Deny { reason_code, .. } => {
             assert_eq!(reason_code, "param_pattern_mismatch");

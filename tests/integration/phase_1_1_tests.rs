@@ -31,6 +31,7 @@ async fn test_phase_1_1_developer_observability_report() {
             None,
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -42,6 +43,7 @@ async fn test_phase_1_1_developer_observability_report() {
             "dangerous_tool",
             None,
             Some("not_in_policy".to_string()),
+            None,
             None,
             None,
             None,

@@ -232,6 +232,7 @@ async fn resolve_session(
                     None,
                     None,
                     Some(client_ip.to_string()),
+                    None,
                 ).await;
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
@@ -273,6 +274,7 @@ async fn resolve_session(
                 None,
                 None,
                 Some(client_ip.to_string()),
+                None,
             ).await;
             crate::logging::log_event(
                 crate::logging::Level::Error,
@@ -297,10 +299,11 @@ async fn resolve_session(
                     Ok(guard) => guard.clone(),
                     Err(_) => None,
                 };
-                let email = if sub.contains('@') { Some(sub.clone()) } else { None };
+                let email = if sub.sub.contains('@') { Some(sub.sub.clone()) } else { None };
                 let session = Arc::new(super::session::SessionContext::new(
-                    Some(sub.clone()),
+                    Some(sub.sub.clone()),
                     email,
+                    sub.groups.clone(),
                     current_policy,
                     Some(client_ip.to_string()),
                     credential_header.map(|s| s.to_string()),
@@ -315,7 +318,7 @@ async fn resolve_session(
                     "session_start",
                     serde_json::json!({
                         "session": &session.session_id,
-                        "identity": { "sub": &sub },
+                        "identity": { "sub": &sub.sub },
                         "policy_hash": "sha256:active"
                     }),
                 );
@@ -335,6 +338,7 @@ async fn resolve_session(
                     None,
                     None,
                     Some(client_ip.to_string()),
+                    None,
                 ).await;
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
@@ -380,6 +384,7 @@ async fn resolve_session(
         let session = Arc::new(super::session::SessionContext::new(
             None,
             None,
+            vec![],
             current_policy,
             Some(client_ip.to_string()),
             credential_header.map(|s| s.to_string()),
@@ -402,66 +407,6 @@ async fn resolve_session(
     }
 }
 
-/// Core logic for policy-read auth, extracted for testability.
-/// `auth_header`: the raw Authorization header value (if present).
-/// Returns None if access is allowed, or Some(StatusCode) if denied.
-fn check_policy_read_auth_inner(
-    auth_header: Option<&str>,
-    policy_read_secret: Option<&str>,
-    listen_is_loopback: bool,
-) -> Option<(StatusCode, &'static str)> {
-    match policy_read_secret {
-        Some(expected) => {
-            let provided = auth_header.and_then(|s| s.strip_prefix("Bearer "));
-            match provided {
-                Some(token) => {
-                    let a = token.as_bytes();
-                    let b = expected.as_bytes();
-                    let equal = if a.len() == b.len() {
-                        a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-                    } else {
-                        false
-                    };
-                    if equal {
-                        None
-                    } else {
-                        Some((StatusCode::UNAUTHORIZED, r#"{"error":"invalid policy-read token"}"#))
-                    }
-                }
-                None => Some((StatusCode::UNAUTHORIZED, r#"{"error":"missing Authorization header"}"#)),
-            }
-        }
-        None => {
-            if listen_is_loopback {
-                None
-            } else {
-                Some((StatusCode::SERVICE_UNAVAILABLE,
-                    r#"{"error":"POLICY_READ_SECRET must be set when gateway is bound to a non-loopback address"}"#))
-            }
-        }
-    }
-}
-
-/// Check policy-read auth for self-healing endpoints.
-/// Returns None if access is allowed, or Some(Response) if denied.
-fn check_policy_read_auth(
-    req: &Request<Incoming>,
-    state: &ProxyState,
-) -> Option<Response<Full<Bytes>>> {
-    let auth_header = req.headers()
-        .get(hyper::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
-    check_policy_read_auth_inner(
-        auth_header,
-        state.policy_read_secret.as_deref(),
-        state.listen_is_loopback,
-    ).map(|(status, body)| {
-        Response::builder()
-            .status(status)
-            .body(Full::new(Bytes::from(body)))
-            .unwrap()
-    })
-}
 
 /// Handle a single HTTP request
 async fn handle_request(
@@ -503,7 +448,7 @@ async fn handle_request(
     if method == hyper::Method::GET {
         match path.as_str() {
             "/" => {
-                let html = crate::dashboard::dashboard_html();
+                let html = crate::local_dashboard::local_dashboard_html();
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, "text/html; charset=utf-8")
@@ -569,64 +514,7 @@ async fn handle_request(
             "/metrics" => {
                 return Ok(prometheus_metrics_response(&state));
             }
-            "/api/self-healing/status" => {
-                if let Some(deny) = check_policy_read_auth(&req, &state) {
-                    return Ok(deny);
-                }
-                match state.db_manager.get_events(500).await {
-                    Ok(events) => {
-                        let mut scorer = crate::self_healing::AnomalyScorer::new();
-                        let mut tools_status = Vec::new();
-                        
-                        // Extract unique tools and latest timestamps
-                        let mut tool_last_seen = std::collections::HashMap::new();
-                        for e in &events {
-                            if let Some(t) = &e.url_path {
-                                let current = tool_last_seen.get(t).unwrap_or(&0i64);
-                                if e.timestamp_ns > *current {
-                                    tool_last_seen.insert(t.clone(), e.timestamp_ns);
-                                }
-                                
-                                if let Some(body) = &e.request_body {
-                                    if let Ok(params) = serde_json::from_str::<serde_json::Value>(body) {
-                                        let mut flat = Vec::new();
-                                        crate::generate_policy::flatten_json(&params, "", 0, 5, &mut flat);
-                                        for (k, v) in flat {
-                                            if let serde_json::Value::String(s) = v {
-                                                scorer.observe(t, &k, &s);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        for (tool, last_seen) in tool_last_seen {
-                            let decay = crate::self_healing::ConfidenceDecay::calculate(last_seen, 30);
-                            tools_status.push(serde_json::json!({
-                                "name": tool,
-                                "confidence_decay": decay,
-                                "last_seen": last_seen,
-                                "stale": decay == 0.0
-                            }));
-                        }
-                        
-                        let suggestions = crate::self_healing::SuggestionEngine::generate_suggestions(&scorer, 0.9, &events);
-                        
-                        let status = serde_json::json!({
-                            "enabled": true,
-                            "decay_window_days": 30,
-                            "tools": tools_status,
-                            "pending_suggestions": suggestions
-                        });
-                        return Ok(json_response(StatusCode::OK, &status));
-                    }
-                    Err(e) => {
-                        let err = serde_json::json!({"error": format!("Database error: {}", e)});
-                        return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
-                    }
-                }
-            }
+
             // FR-5 v2.0: Gateway status endpoint — mode, uptime, policy, metrics
             "/gateway/status" => {
                 use std::sync::atomic::Ordering;
@@ -661,6 +549,90 @@ async fn handle_request(
                 });
                 return Ok(json_response(StatusCode::OK, &status));
             }
+
+            // FR-4: Self-healing status — per-tool confidence decay scores from SQLite events.
+            // The Go control-plane-api proxies to this at GET /api/self-healing/status.
+            "/api/self-healing/status" => {
+                // Optional bearer-token auth (same secret used for /api/v1/policy/active).
+                if let Some(ref secret) = state.policy_read_secret {
+                    let bearer = req.headers()
+                        .get(hyper::header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.strip_prefix("Bearer "));
+                    if bearer != Some(secret.as_str()) {
+                        let err = serde_json::json!({"error": "Unauthorized"});
+                        return Ok(json_response(StatusCode::UNAUTHORIZED, &err));
+                    }
+                }
+
+                let self_healing_cfg = crate::self_healing::SelfHealingConfig::default();
+
+                match state.db_manager.get_all_events(1000).await {
+                    Ok(events) => {
+                        // Build per-tool last-seen map from MCP events only.
+                        let mut tool_last_seen: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+                        for ev in &events {
+                            if ev.transport == "mcp" {
+                                if let Some(ref tool) = ev.url_path {
+                                    let entry = tool_last_seen.entry(tool.clone()).or_insert(ev.timestamp_ns);
+                                    if ev.timestamp_ns > *entry {
+                                        *entry = ev.timestamp_ns;
+                                    }
+                                }
+                            }
+                        }
+
+                        let decay_window = self_healing_cfg.decay_window_days;
+                        let stale_threshold = 0.3_f64;
+
+                        let tools: Vec<serde_json::Value> = tool_last_seen.iter().map(|(name, &last_ns)| {
+                            let decay = crate::self_healing::ConfidenceDecay::calculate(last_ns, decay_window);
+                            serde_json::json!({
+                                "name": name,
+                                "confidence_decay": decay,
+                                "last_seen": last_ns,
+                                "stale": decay < stale_threshold
+                            })
+                        }).collect();
+
+                        // Build pending suggestions inline so the status payload is self-contained.
+                        let mut scorer = crate::self_healing::AnomalyScorer::new();
+                        for ev in &events {
+                            if ev.transport == "mcp" {
+                                if let (Some(tool), Some(body)) = (&ev.url_path, &ev.request_body) {
+                                    if let Ok(params) = serde_json::from_str::<serde_json::Value>(body) {
+                                        let mut flat = Vec::new();
+                                        crate::generate_policy::flatten_json(&params, "", 0, 5, &mut flat);
+                                        for (k, v) in flat {
+                                            if let serde_json::Value::String(s) = v {
+                                                scorer.observe(tool, &k, &s);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        let suggestions = crate::self_healing::SuggestionEngine::generate_suggestions(
+                            &scorer,
+                            self_healing_cfg.suggest_threshold,
+                            &events,
+                        );
+
+                        let body = serde_json::json!({
+                            "enabled": self_healing_cfg.enabled,
+                            "decay_window_days": decay_window,
+                            "tools": tools,
+                            "pending_suggestions": suggestions,
+                        });
+                        return Ok(json_response(StatusCode::OK, &body));
+                    }
+                    Err(e) => {
+                        let err = serde_json::json!({"error": format!("Database error: {}", e)});
+                        return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
+                    }
+                }
+            }
+
             _ => {}
         }
     }
@@ -673,7 +645,7 @@ async fn handle_request(
         match &state.policy_path {
             None => {
                 let err = serde_json::json!({
-                    "error": "No policy path configured. Start the gateway with --policy <path> to enable hot-reload.",
+                    "error": "No policy file path configured. Start the gateway with the --policy <path> flag to enable hot-reloading.",
                     "hint": "agentwall start --policy agentwall-policy.yaml"
                 });
                 return Ok(json_response(StatusCode::BAD_REQUEST, &err));
@@ -742,6 +714,57 @@ async fn handle_request(
         }
     }
 
+    // FR-4: Self-healing suggestions endpoint.
+    // Runs the SuggestionEngine against recent MCP events and returns anomalous parameter deviations.
+    // The Go control-plane-api proxies POST /policy/suggestions here.
+    if method == hyper::Method::POST && path == "/api/self-healing/suggestions" {
+        // Optional bearer-token auth.
+        if let Some(ref secret) = state.policy_read_secret {
+            let bearer = req.headers()
+                .get(hyper::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "));
+            if bearer != Some(secret.as_str()) {
+                let err = serde_json::json!({"error": "Unauthorized"});
+                return Ok(json_response(StatusCode::UNAUTHORIZED, &err));
+            }
+        }
+
+        let self_healing_cfg = crate::self_healing::SelfHealingConfig::default();
+
+        match state.db_manager.get_all_events(1000).await {
+            Ok(events) => {
+                let mut scorer = crate::self_healing::AnomalyScorer::new();
+                for ev in &events {
+                    if ev.transport == "mcp" {
+                        if let (Some(tool), Some(body)) = (&ev.url_path, &ev.request_body) {
+                            if let Ok(params) = serde_json::from_str::<serde_json::Value>(body) {
+                                let mut flat = Vec::new();
+                                crate::generate_policy::flatten_json(&params, "", 0, 5, &mut flat);
+                                for (k, v) in flat {
+                                    if let serde_json::Value::String(s) = v {
+                                        scorer.observe(tool, &k, &s);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let suggestions = crate::self_healing::SuggestionEngine::generate_suggestions(
+                    &scorer,
+                    self_healing_cfg.suggest_threshold,
+                    &events,
+                );
+                let body = serde_json::to_value(&suggestions).unwrap_or(serde_json::Value::Array(vec![]));
+                return Ok(json_response(StatusCode::OK, &body));
+            }
+            Err(e) => {
+                let err = serde_json::json!({"error": format!("Database error: {}", e)});
+                return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
+            }
+        }
+    }
+
     // Policy Generation endpoint
     if method == hyper::Method::POST && path == "/api/generate-policy" {
         // Fix AW-BUG-002: use get_all_events (ASC order, oldest first) to match
@@ -765,46 +788,7 @@ async fn handle_request(
         }
     }
 
-    // Self-healing suggestions trigger
-    if method == hyper::Method::POST && path == "/api/self-healing/suggestions" {
-        if let Some(deny) = check_policy_read_auth(&req, &state) {
-            return Ok(deny);
-        }
-        match state.db_manager.get_events(500).await {
-            Ok(events) => {
-                let mut scorer = crate::self_healing::AnomalyScorer::new();
-                for e in &events {
-                    if let Some(t) = &e.url_path {
-                        if let Some(body) = &e.request_body {
-                            if let Ok(params) = serde_json::from_str::<serde_json::Value>(body) {
-                                let mut flat = Vec::new();
-                                crate::generate_policy::flatten_json(&params, "", 0, 5, &mut flat);
-                                for (k, v) in flat {
-                                    if let serde_json::Value::String(s) = v {
-                                        scorer.observe(t, &k, &s);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                let suggestions = crate::self_healing::SuggestionEngine::generate_suggestions(&scorer, 0.9, &events);
-                
-                // FR-4: Log to SIEM via StubGitOps
-                let gitops = crate::self_healing::StubGitOps;
-                use crate::self_healing::GitOpsPrPayload;
-                for sug in &suggestions {
-                    let _ = gitops.create_suggestion_pr(sug);
-                }
-                
-                return Ok(json_response(StatusCode::OK, &serde_json::json!(suggestions)));
-            }
-            Err(e) => {
-                let err = serde_json::json!({"error": format!("Database error: {}", e)});
-                return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
-            }
-        }
-    }
+
 
     // Only accept POST for JSON-RPC
     if method != hyper::Method::POST {
@@ -954,9 +938,9 @@ async fn handle_request(
 
         if let Some(ref dc) = state.dashboard_client {
             let decision = if should_kill || response.get("error").is_some() {
-                dashboard_proto::redact::RawDecision::Denied
+                control_plane_proto::redact::RawDecision::Denied
             } else {
-                dashboard_proto::redact::RawDecision::Allowed
+                control_plane_proto::redact::RawDecision::Allowed
             };
 
             let agent_id = session
@@ -972,7 +956,7 @@ async fn handle_request(
                     .unwrap_or(false)
             };
 
-            let raw = dashboard_proto::redact::RawEventForRedaction {
+            let raw = control_plane_proto::redact::RawEventForRedaction {
                 session_id: &session.session_id,
                 agent_id,
                 tool_name: &tool_name,
@@ -984,7 +968,7 @@ async fn handle_request(
                 semantic_findings: &[],
             };
 
-            let redacted = dashboard_proto::redact::redact_event(&raw);
+            let redacted = control_plane_proto::redact::redact_event(&raw);
             dc.send_event(redacted);
         }
     }
@@ -1088,6 +1072,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Warn,
@@ -1127,6 +1112,7 @@ async fn scan_and_process_response(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                None,
                 ).await;
                 logging::log_event(
                     logging::Level::Warn,
@@ -1156,6 +1142,7 @@ async fn scan_and_process_response(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                None,
                 ).await;
                 logging::log_event(
                     logging::Level::Warn,
@@ -1177,6 +1164,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Warn,
@@ -1201,6 +1189,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Error,
@@ -1221,6 +1210,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Error,
@@ -1255,6 +1245,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Error,
@@ -1280,6 +1271,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Warn,
@@ -1309,6 +1301,7 @@ async fn scan_and_process_response(
                         session.identity_email.clone(),
                         None,
                         session.request_ip.clone(),
+                        None,
                     ).await;
                 }
                 logging::log_event(
@@ -1338,6 +1331,7 @@ async fn scan_and_process_response(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                None,
                 ).await;
             }
             logging::log_event(
@@ -1369,6 +1363,7 @@ async fn scan_and_process_response(
                         session.identity_email.clone(),
                         None,
                         session.request_ip.clone(),
+                        None,
                     ).await;
                 }
                 logging::log_event(
@@ -1397,6 +1392,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Warn,
@@ -1433,6 +1429,7 @@ async fn scan_and_process_response(
                 session.identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+            None,
             ).await;
             logging::log_event(
                 logging::Level::Error,

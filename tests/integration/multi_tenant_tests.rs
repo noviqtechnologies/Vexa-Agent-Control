@@ -68,6 +68,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
     let policy = CompiledPolicy {
         max_calls_per_second: 0,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -88,6 +89,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
             let session = Arc::new(SessionContext::new(
                 Some(format!("agent-{}", idx)),
                 Some(format!("agent-{}@enterprise.com", idx)),
+                vec![],
                 Some(policy_clone),
                 None,
                 None,
@@ -137,6 +139,7 @@ async fn test_rate_limiting_isolation() {
     let policy = CompiledPolicy {
         max_calls_per_second: 2,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -149,6 +152,7 @@ async fn test_rate_limiting_isolation() {
     let session_a = Arc::new(SessionContext::new(
         Some("agent-a".to_string()),
         None,
+        vec![],
         Some(policy.clone()),
         None,
         None,
@@ -159,6 +163,7 @@ async fn test_rate_limiting_isolation() {
     let session_b = Arc::new(SessionContext::new(
         Some("agent-b".to_string()),
         None,
+        vec![],
         Some(policy.clone()),
         None,
         None,
@@ -225,6 +230,7 @@ async fn test_cycle_detection_isolation() {
     let policy = CompiledPolicy {
         max_calls_per_second: 0,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -243,6 +249,7 @@ async fn test_cycle_detection_isolation() {
     let session_a = Arc::new(SessionContext::new(
         Some("agent-a".to_string()),
         None,
+        vec![],
         Some(policy.clone()),
         None,
         None,
@@ -253,6 +260,7 @@ async fn test_cycle_detection_isolation() {
     let session_b = Arc::new(SessionContext::new(
         Some("agent-b".to_string()),
         None,
+        vec![],
         Some(policy.clone()),
         None,
         None,
@@ -312,6 +320,7 @@ async fn test_hot_reload_policy_isolation() {
                 a2a_trust_level: None,
             }
         ],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -322,6 +331,7 @@ async fn test_hot_reload_policy_isolation() {
     let policy_v2 = CompiledPolicy {
         max_calls_per_second: 0,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -334,6 +344,7 @@ async fn test_hot_reload_policy_isolation() {
     let session_a = Arc::new(SessionContext::new(
         Some("agent-a".to_string()),
         None,
+        vec![],
         state.policy.read().unwrap().clone(),
         None,
         None,
@@ -350,6 +361,7 @@ async fn test_hot_reload_policy_isolation() {
     let session_b = Arc::new(SessionContext::new(
         Some("agent-b".to_string()),
         None,
+        vec![],
         state.policy.read().unwrap().clone(),
         None,
         None,
@@ -390,6 +402,7 @@ async fn test_dynamic_tool_history_max() {
     let policy = CompiledPolicy {
         max_calls_per_second: 0,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -406,6 +419,7 @@ async fn test_dynamic_tool_history_max() {
     let session = Arc::new(SessionContext::new(
         Some("agent-test".to_string()),
         None,
+        vec![],
         Some(policy.clone()),
         None,
         None,
@@ -442,6 +456,7 @@ async fn test_session_ttl_expiry() {
     let policy = CompiledPolicy {
         max_calls_per_second: 0,
         tools: vec![],
+        group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
         safe_tools: vec![],
@@ -451,6 +466,7 @@ async fn test_session_ttl_expiry() {
     let session = SessionContext::new(
         Some("agent-test".to_string()),
         None,
+        vec![],
         Some(policy),
         None,
         None,

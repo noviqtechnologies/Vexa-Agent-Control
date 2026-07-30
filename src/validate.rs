@@ -27,8 +27,8 @@ pub fn execute(policy_path: &str, tool_name: &str, payload_path: &str) -> Result
 
     // 3. Evaluate Tool Call
     // Locally validating tool call parameters. If identity checks are used, they default to unrestricted here.
-    match policy.evaluate(tool_name, &payload_val, None) {
-        EvalResult::Allow => {
+    match policy.evaluate(tool_name, &payload_val, None, &[]) {
+        EvalResult::Allow { matched_group_id: _ } => {
             println!("VALIDATION SUCCESSFUL: Tool call parameters conform to policy.");
             Ok(())
         }
@@ -39,6 +39,7 @@ pub fn execute(policy_path: &str, tool_name: &str, payload_path: &str) -> Result
             pattern,
             json_pointer,
             validator_name,
+            matched_group_id: _,
         } => {
             let mut err_msg = format!("VALIDATION FAILED: reason={}", reason_code);
             if let Some(p) = param_name {

@@ -88,6 +88,9 @@ pub struct AuditEntry {
     /// Client remote IP address (FR-201).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_ip: Option<String>,
+    /// FR-114: Group policy ID that triggered this decision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_group_id: Option<String>,
     /// Zero-based position of this entry within the current log file.
     pub entry_index: u64,
     /// HMAC hex of the previous entry (ZERO_HMAC for the first entry).
@@ -112,6 +115,8 @@ struct EntryRequest {
     identity_email: Option<String>,
     policy_hash:    Option<String>,
     request_ip:     Option<String>,
+    /// FR-114: Group policy ID that triggered this decision, for SIEM correlation.
+    matched_group_id: Option<String>,
     /// Oneshot sender through which the writer confirms fsync completion.
     ack:            oneshot::Sender<Result<AuditEntry, String>>,
 }
@@ -216,6 +221,7 @@ impl AuditLogger {
                     identity_email: req.identity_email,
                     policy_hash:    req.policy_hash,
                     request_ip:     req.request_ip,
+                    matched_group_id: req.matched_group_id,
                     entry_index:    current_idx,
                     prev_hmac:      prev_hmac.clone(),
                     hmac:           None,
@@ -322,6 +328,7 @@ impl AuditLogger {
                                 identity_email: None,
                                 policy_hash:    None,
                                 request_ip:     None,
+                                matched_group_id: None,
                                 entry_index:    0,
                                 prev_hmac:      hmac_hex.clone(),
                                 hmac:           None,
@@ -396,6 +403,7 @@ impl AuditLogger {
         identity_email: Option<String>,
         policy_hash:    Option<String>,
         request_ip:     Option<String>,
+        matched_group_id: Option<String>,
     ) -> Result<AuditEntry, AuditError> {
         if self.is_broken.load(Ordering::Relaxed) {
             return Err(AuditError::IoError(std::io::Error::other(
@@ -426,6 +434,7 @@ impl AuditLogger {
             identity_email,
             policy_hash,
             request_ip,
+            matched_group_id,
             ack:            ack_tx,
         };
 

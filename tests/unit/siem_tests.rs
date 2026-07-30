@@ -47,6 +47,7 @@ async fn test_siem_timeout_behavior() {
         identity_email: None,
         policy_hash: None,
         request_ip: None,
+        matched_group_id: None,
     };
 
     // try_export should not panic, it should just log a warning and return.
@@ -83,6 +84,7 @@ async fn test_siem_local_disabled_behavior() {
         identity_email: None,
         policy_hash: None,
         request_ip: None,
+        matched_group_id: None,
     };
 
     // Exporting to Local backend should instantly return without error.

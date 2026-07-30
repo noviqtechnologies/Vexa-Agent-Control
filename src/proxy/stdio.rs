@@ -1,4 +1,4 @@
-//! Stdio bridge proxy for local MCP servers (FR-302, FR-303b)
+﻿//! Stdio bridge proxy for local MCP servers (FR-302, FR-303b)
 
 use futures::{SinkExt, StreamExt};
 use std::process::Stdio;
@@ -148,6 +148,7 @@ pub async fn run_stdio_bridge(
     let local_session = Arc::new(crate::proxy::session::SessionContext::new(
         None,
         None,
+        vec![],
         local_policy,
         None,
         std::env::var("AGENTWALL_CREDENTIAL_ID").ok(),
@@ -271,7 +272,7 @@ async fn stdio_scan_response(
         Ok(crate::policy::injection::ScanResult::Block { findings }) => {
             let f = &findings[0];
             let _ = state.audit_logger.write_entry(session_id, "injection_blocked", tool_name, None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None).await;
+                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Warn, "injection_blocked",
                 serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}));
 
@@ -315,7 +316,7 @@ async fn stdio_scan_response(
         Ok(crate::policy::injection::ScanResult::Timeout) => {
             if enforce_mode {
                 let _ = state.audit_logger.write_entry(session_id, "injection_blocked_timeout", tool_name, None,
-                    Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None).await;
+                    Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None, None).await;
                 logging::log_event(logging::Level::Warn, "injection_blocked_timeout",
                     serde_json::json!({"tool": tool_name, "session": session_id}));
 
@@ -357,7 +358,7 @@ async fn stdio_scan_response(
                 });
             } else {
                 let _ = state.audit_logger.write_entry(session_id, "injection_warning_timeout", tool_name, None,
-                    Some("Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string()), None, None, None, None, None).await;
+                    Some("Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string()), None, None, None, None, None, None).await;
                 logging::log_event(logging::Level::Warn, "injection_warning_timeout",
                     serde_json::json!({"tool": tool_name, "session": session_id}));
             }
@@ -365,7 +366,7 @@ async fn stdio_scan_response(
         Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
             let f = &findings[0];
             let _ = state.audit_logger.write_entry(session_id, "injection_warning", tool_name, None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None).await;
+                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Warn, "injection_warning",
                 serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name, "count": findings.len()}));
             
@@ -397,13 +398,13 @@ async fn stdio_scan_response(
         }
         Ok(crate::policy::injection::ScanResult::ScannerError { error }) => {
             let _ = state.audit_logger.write_entry(session_id, "INJECTION_SCANNER_FAILURE", tool_name, None,
-                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None).await;
+                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Error, "INJECTION_SCANNER_FAILURE",
                 serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}));
         }
         Err(_) => {
             let _ = state.audit_logger.write_entry(session_id, "INJECTION_SCANNER_FAILURE", tool_name, None,
-                Some("Injection scanner panicked — fail-open applied".to_string()), None, None, None, None, None).await;
+                Some("Injection scanner panicked — fail-open applied".to_string()), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Error, "INJECTION_SCANNER_FAILURE",
                 serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}));
         }
@@ -426,7 +427,7 @@ async fn stdio_scan_response(
                 session_id,
                 "SCANNER_FAILURE", tool_name, None,
                 Some("Response scanner panicked — fail-open applied".to_string()),
-                None, None, None, None, None,
+                None, None, None, None, None, None,
             ).await;
             logging::log_event(logging::Level::Error, "SCANNER_FAILURE",
                 serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}));
@@ -438,7 +439,7 @@ async fn stdio_scan_response(
         ScanResult::Pass | ScanResult::Clean => response.clone(),
 
         ScanResult::Skipped { reason } => {
-            let _ = state.audit_logger.write_entry(session_id, "response_scan_skipped", tool_name, None, Some(reason.clone()), None, None, None, None, None).await;
+            let _ = state.audit_logger.write_entry(session_id, "response_scan_skipped", tool_name, None, Some(reason.clone()), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Warn, "response_scan_skipped",
                 serde_json::json!({"tool": tool_name, "session": session_id, "reason": &reason}));
             response.clone()
@@ -448,7 +449,7 @@ async fn stdio_scan_response(
             if scan_config.dry_run {
                 for f in &findings {
                     let _ = state.audit_logger.write_entry(session_id, "response_scan_dry_run", tool_name, None,
-                        Some(format!("Would redact {} at {}:{} preview={}", f.pattern_name, f.field_path, f.position, f.preview)), None, None, None, None, None).await;
+                        Some(format!("Would redact {} at {}:{} preview={}", f.pattern_name, f.field_path, f.position, f.preview)), None, None, None, None, None, None).await;
                 }
                 logging::log_event(logging::Level::Warn, "response_scan_dry_run",
                     serde_json::json!({"tool": tool_name, "session": session_id, "action": "redact", "count": findings.len()}));
@@ -456,7 +457,7 @@ async fn stdio_scan_response(
             }
             for f in &findings {
                 let _ = state.audit_logger.write_entry(session_id, "response_secret_redacted", tool_name, None,
-                    Some(format!("pattern={} field={} pos={} len={} preview={}", f.pattern_name, f.field_path, f.position, f.length, f.preview)), None, None, None, None, None).await;
+                    Some(format!("pattern={} field={} pos={} len={} preview={}", f.pattern_name, f.field_path, f.position, f.length, f.preview)), None, None, None, None, None, None).await;
             }
             logging::log_event(logging::Level::Warn, "response_secret_redacted",
                 serde_json::json!({"tool": tool_name, "session": session_id, "count": findings.len()}));
@@ -467,7 +468,7 @@ async fn stdio_scan_response(
             if scan_config.dry_run {
                 for f in &findings {
                     let _ = state.audit_logger.write_entry(session_id, "response_scan_dry_run", tool_name, None,
-                        Some(format!("Would block: {} preview={}", f.pattern_name, f.preview)), None, None, None, None, None).await;
+                        Some(format!("Would block: {} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
                 }
                 logging::log_event(logging::Level::Warn, "response_scan_dry_run",
                     serde_json::json!({"tool": tool_name, "session": session_id, "action": "block", "count": findings.len()}));
@@ -475,7 +476,7 @@ async fn stdio_scan_response(
             }
             let f = &findings[0];
             let _ = state.audit_logger.write_entry(session_id, "response_secret_blocked", tool_name, None,
-                Some(format!("pattern={} field={} preview={}", f.pattern_name, f.field_path, f.preview)), None, None, None, None, None).await;
+                Some(format!("pattern={} field={} preview={}", f.pattern_name, f.field_path, f.preview)), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Warn, "response_secret_blocked",
                 serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}));
 
@@ -493,7 +494,7 @@ async fn stdio_scan_response(
 
         ScanResult::ScannerError { error } => {
             let _ = state.audit_logger.write_entry(session_id, "SCANNER_FAILURE", tool_name, None,
-                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None).await;
+                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None, None).await;
             logging::log_event(logging::Level::Error, "SCANNER_FAILURE",
                 serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}));
             response.clone()
@@ -520,6 +521,7 @@ pub async fn run_stdio_to_http_bridge(
     let local_session = Arc::new(crate::proxy::session::SessionContext::new(
         None,
         None,
+        vec![],
         local_policy,
         None,
         std::env::var("AGENTWALL_CREDENTIAL_ID").ok(),

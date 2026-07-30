@@ -291,6 +291,54 @@ pub async fn handle_egress(
             }
         }
     }
+    // Pre-flight Spend Cap Check (Circuit Breaker)
+    if let Some(ledger) = &state.spend_ledger {
+        if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(&body_str) {
+            // Heuristic to detect LLM requests
+            if json_body.get("model").is_some() && (json_body.get("messages").is_some() || json_body.get("prompt").is_some()) {
+                let agent_id = session.identity_sub.clone().unwrap_or_else(|| "anonymous".to_string());
+                let groups = session.identity_groups.clone();
+                
+                let check_res = ledger.check_and_increment(agent_id, groups, 0).await;
+                if let crate::spend::SpendCheckResult::BudgetExhausted { cap_cents, spent_cents } = check_res {
+                    verdict = "deny".to_string();
+                    let err_res = Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .header("X-AgentWall-Block-Reason", "budget_exhausted")
+                        .body(Full::new(Bytes::from(format!("AgentWall Blocked: Spend cap exhausted (Limit: ${:.2}, Spent: ${:.2})", cap_cents as f64 / 100.0, spent_cents as f64 / 100.0))))
+                        .unwrap();
+
+                    let event = EgressEvent {
+                        timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                        session_id,
+                        transport: "fetch".to_string(),
+                        method: Some(method_str),
+                        target_host,
+                        target_port: Some(target_port as i64),
+                        url_path: Some(url_path),
+                        request_headers: None,
+                        request_body: None,
+                        request_body_hash: None,
+                        response_status: Some(403),
+                        response_body: None,
+                        response_body_hash: None,
+                        dlp_findings: None,
+                        injection_findings: None,
+                        latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                        verdict: Some(verdict),
+                        semantic_anomaly_score: None,
+                        identity_context: None,
+                    };
+                    if let Ok(json_str) = serde_json::to_string(&event) {
+                        let _ = state.event_tx.send(json_str);
+                    }
+                    let _ = state.db_manager.insert(event).await;
+
+                    return Ok(err_res);
+                }
+            }
+        }
+    }
 
     let req_builder = state.http_client.request(
         reqwest_method,
@@ -332,7 +380,7 @@ pub async fn handle_egress(
                         is_blocked = true;
                         
                         let _ = state.audit_logger.write_entry(&session_id, "injection_blocked", "http_fetch", None,
-                            Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None).await;
+                            Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
                     }
                     Ok(crate::policy::injection::ScanResult::Timeout) => {
                         if enforce_mode {
@@ -341,10 +389,10 @@ pub async fn handle_egress(
                             is_blocked = true;
                             
                             let _ = state.audit_logger.write_entry(&session_id, "injection_blocked_timeout", "http_fetch", None,
-                                Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None).await;
+                                Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None, None).await;
                         } else {
                             let _ = state.audit_logger.write_entry(&session_id, "injection_warning_timeout", "http_fetch", None,
-                                Some("Scanner timed out (potential ReDoS) — Warn".to_string()), None, None, None, None, None).await;
+                                Some("Scanner timed out (potential ReDoS) — Warn".to_string()), None, None, None, None, None, None).await;
                         }
                     }
                     Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
@@ -355,6 +403,37 @@ pub async fn handle_egress(
                     }
                     _ => {}
                 }
+
+                // --- Spend Management Post-Flight Accounting ---
+                if let (Some(ledger), Some(pricing)) = (&state.spend_ledger, &state.pricing_table) {
+                    if let Ok(json_resp) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        if let Some(usage) = json_resp.get("usage") {
+                            let model_val = json_resp.get("model").and_then(|m| m.as_str()).unwrap_or("unknown");
+                            
+                            let prompt_tokens = usage.get("prompt_tokens")
+                                .or_else(|| usage.get("input_tokens"))
+                                .and_then(|t| t.as_u64())
+                                .unwrap_or(0);
+                                
+                            let completion_tokens = usage.get("completion_tokens")
+                                .or_else(|| usage.get("output_tokens"))
+                                .and_then(|t| t.as_u64())
+                                .unwrap_or(0);
+                                
+                            if prompt_tokens > 0 || completion_tokens > 0 {
+                                let exact_cents = pricing.estimate_cents(model_val, prompt_tokens, completion_tokens);
+                                let agent_id = session.identity_sub.clone().unwrap_or_else(|| "anonymous".to_string());
+                                let groups = session.identity_groups.clone();
+                                
+                                let ledger_clone = ledger.clone();
+                                tokio::spawn(async move {
+                                    let _ = ledger_clone.check_and_increment(agent_id, groups, exact_cents).await;
+                                });
+                            }
+                        }
+                    }
+                }
+                // -----------------------------------------------
 
                 if is_blocked {
                     Response::builder()

@@ -6,7 +6,7 @@ $LOGIN_EMAIL = "admin"
 
 # Resolve compose file relative to this script's location
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$composeFile = [IO.Path]::Combine($scriptDir, "dashboard", "docker-compose.yml")
+$composeFile = Join-Path $scriptDir "control-plane\docker-compose.yml"
 
 Write-Host ""
 Write-Host "  Building and starting AgentWall Dashboard..." -ForegroundColor Cyan

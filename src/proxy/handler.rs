@@ -94,6 +94,8 @@ pub struct ProxyState {
     
     /// FR-3: SSE broadcast channel for real-time dashboard streaming
     pub event_tx: tokio::sync::broadcast::Sender<String>,
+    pub spend_ledger: Option<Arc<crate::spend::SpendLedger>>,
+    pub pricing_table: Option<Arc<crate::spend::PricingTable>>,
 
     /// Dynamic sessions registry mapping validated client tokens/identities to isolated session contexts (FR-101)
     pub sessions: dashmap::DashMap<String, Arc<super::session::SessionContext>>,
@@ -126,7 +128,7 @@ pub struct ProxyState {
     pub gateway_start_time: std::time::Instant,
 
     /// FR-23: Optional client for sending redacted events to the SaaS dashboard-api.
-    pub dashboard_client: Option<Arc<crate::dashboard_fr23::client::DashboardClient>>,
+    pub dashboard_client: Option<Arc<crate::control_plane_client::client::DashboardClient>>,
 
     /// Whether the listen address is loopback-only (127.0.0.1 / ::1).
     pub listen_is_loopback: bool,
@@ -228,6 +230,7 @@ pub async fn evaluate_jsonrpc(
             session.identity_email.clone(),
             None,
             session.request_ip.clone(),
+            None,
         ).await;
         logging::log_event(
             Level::Warn,
@@ -256,6 +259,7 @@ pub async fn evaluate_jsonrpc(
             session.identity_email.clone(),
             None,
             session.request_ip.clone(),
+            None,
         ).await;
         logging::log_event(
             Level::Warn,
@@ -306,7 +310,7 @@ pub async fn evaluate_jsonrpc(
                     &format!("dlp: {}", dlp_findings[0].pattern_name),
                     session.identity_sub.clone(), session.identity_email.clone(),
                     session.request_ip.clone(),
-                    true, None, None,
+                    true, None, None, None,
                 ).await;
             }
         }
@@ -387,6 +391,7 @@ pub async fn evaluate_jsonrpc(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                    None,
                 ).await;
                 logging::log_event(
                     Level::Warn,
@@ -424,6 +429,7 @@ pub async fn evaluate_jsonrpc(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                    None,
                 ).await;
                 logging::log_event(
                     Level::Warn,
@@ -459,6 +465,7 @@ pub async fn evaluate_jsonrpc(
                     session.identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                    None,
                 ).await;
                 logging::log_event(
                     Level::Warn,
@@ -543,6 +550,7 @@ pub async fn evaluate_jsonrpc(
             session.identity_email.clone(),
             None,
             session.request_ip.clone(),
+            None,
         ).await;
         logging::log_event(
             Level::Warn,
@@ -580,7 +588,7 @@ pub async fn evaluate_jsonrpc(
                     &format!("firewall_cycle_block: {} consecutive identical calls", max_attempts),
                     session.identity_sub.clone(), session.identity_email.clone(),
                     session.request_ip.clone(),
-                    false, None, None,
+                    false, None, None, None,
                 ).await;
             }
             CycleAction::PauseInteractive => {
@@ -599,6 +607,7 @@ pub async fn evaluate_jsonrpc(
                         session.identity_email.clone(),
                         None,
                         session.request_ip.clone(),
+                        None,
                     ).await;
                     logging::log_event(
                         Level::Warn,
@@ -615,7 +624,7 @@ pub async fn evaluate_jsonrpc(
                         &format!("firewall_cycle_block: {} consecutive identical calls (interactive_denied)", max_attempts),
                         session.identity_sub.clone(), session.identity_email.clone(),
                         session.request_ip.clone(),
-                        false, None, None,
+                        false, None, None, None,
                     ).await;
                 }
             }
@@ -628,22 +637,22 @@ pub async fn evaluate_jsonrpc(
     // Policy evaluation against frozen session-specific policy context
     let start = Instant::now();
     let eval_result = session.policy.as_ref().map(|policy| {
-        policy.evaluate(tool_name, &tool_params, session.identity_sub.as_deref())
+        policy.evaluate(tool_name, &tool_params, session.identity_sub.as_deref(), &session.identity_groups)
     });
     let eval_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     let final_eval = match (eval_result, safe_mode_threat) {
-        (Some(EvalResult::Allow), Some(threat)) => {
+        (Some(EvalResult::Allow { matched_group_id }), Some(threat)) => {
             // Escape Hatch: User policy explicitly allowed this, overriding Safe Mode block.
             logging::log_event(
                 Level::Warn,
                 "safe_mode_override",
                 json!({"tool": tool_name, "session": &session.session_id, "threat": threat.category.as_str(), "reason": "user_policy_override"}),
             );
-            EvalResult::Allow
+            EvalResult::Allow { matched_group_id }
         }
-        (Some(EvalResult::Allow), None) => EvalResult::Allow,
-        (Some(EvalResult::Deny { .. }), Some(threat)) => {
+        (Some(EvalResult::Allow { matched_group_id }), None) => EvalResult::Allow { matched_group_id },
+        (Some(EvalResult::Deny { matched_group_id, .. }), Some(threat)) => {
             EvalResult::Deny {
                 reason_code: "safe_mode_deny".to_string(),
                 param_name: Some(threat.param_name.clone()),
@@ -651,10 +660,11 @@ pub async fn evaluate_jsonrpc(
                 pattern: Some(threat.pattern_name.clone()),
                 json_pointer: Some(format!("{} Edit policy: agentwall edit-policy", threat.reason)),
                 validator_name: None,
+                matched_group_id,
             }
         }
-        (Some(EvalResult::Deny { reason_code, param_name, param_value, pattern, json_pointer, validator_name }), None) => {
-            EvalResult::Deny { reason_code, param_name, param_value, pattern, json_pointer, validator_name }
+        (Some(EvalResult::Deny { reason_code, param_name, param_value, pattern, json_pointer, validator_name, matched_group_id }), None) => {
+            EvalResult::Deny { reason_code, param_name, param_value, pattern, json_pointer, validator_name, matched_group_id }
         }
         (None, Some(threat)) => {
             EvalResult::Deny {
@@ -664,12 +674,13 @@ pub async fn evaluate_jsonrpc(
                 pattern: Some(threat.pattern_name.clone()),
                 json_pointer: Some(format!("{} Edit policy: agentwall edit-policy", threat.reason)),
                 validator_name: None,
+                matched_group_id: None,
             }
         }
         (None, None) => {
             if !state.policy_loaded.load(Ordering::Relaxed) {
                 // Out-Of-The-Box Safe Mode: No policy loaded, Safe Mode is clean.
-                EvalResult::Allow
+                EvalResult::Allow { matched_group_id: None }
             } else {
                 // Policy was loaded but is missing/degraded
                 EvalResult::Deny {
@@ -679,6 +690,7 @@ pub async fn evaluate_jsonrpc(
                     pattern: None,
                     json_pointer: None,
                     validator_name: None,
+                    matched_group_id: None,
                 }
             }
         }
@@ -689,7 +701,7 @@ pub async fn evaluate_jsonrpc(
     let identity_email = session.identity_email.clone();
 
     match final_eval {
-        EvalResult::Allow => {
+        EvalResult::Allow { matched_group_id } => {
             state.metrics_allow_total.fetch_add(1, Ordering::Relaxed);
             // ALLOW path: log → fsync → forward (NFR-204)
             let log_result = state.audit_logger.write_entry(
@@ -703,6 +715,7 @@ pub async fn evaluate_jsonrpc(
                 identity_email.clone(),
                 None,
                 session.request_ip.clone(),
+                matched_group_id.clone(),
             ).await;
 
             if let Err(e) = log_result {
@@ -716,7 +729,7 @@ pub async fn evaluate_jsonrpc(
                     state, &session.session_id, &id, tool_name,
                     "log_flush_failed",
                     identity_sub, identity_email, session.request_ip.clone(),
-                    false, None, None,
+                    false, None, None, matched_group_id,
                 ).await;
             }
 
@@ -729,6 +742,7 @@ pub async fn evaluate_jsonrpc(
                     "latency_ms": eval_ms,
                     "sub":       &identity_sub,
                     "email":     &identity_email,
+                    "group":     &matched_group_id,
                 }),
             );
 
@@ -741,6 +755,7 @@ pub async fn evaluate_jsonrpc(
             pattern,
             json_pointer,
             validator_name,
+            matched_group_id,
         } => {
             state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
             let mut reason_parts = vec![format!("reason={}", reason_code)];
@@ -764,6 +779,7 @@ pub async fn evaluate_jsonrpc(
                     identity_email.clone(),
                     None,
                     session.request_ip.clone(),
+                    matched_group_id.clone(),
                 ).await;
                 logging::log_event(
                     Level::Warn,
@@ -774,6 +790,7 @@ pub async fn evaluate_jsonrpc(
                         "reason":  &reason,
                         "sub":     &identity_sub,
                         "email":   &identity_email,
+                        "group":   &matched_group_id,
                     }),
                 );
                 ProxyAction::Forward
@@ -782,7 +799,7 @@ pub async fn evaluate_jsonrpc(
                 handle_deny(
                     state, &session.session_id, &id, tool_name, &reason,
                     identity_sub, identity_email, session.request_ip.clone(),
-                    is_val_fail, param_name, validator_name,
+                    is_val_fail, param_name, validator_name, matched_group_id,
                 ).await
             }
         }
@@ -806,6 +823,7 @@ async fn handle_deny(
     is_validator_fail: bool,
     failing_param:     Option<String>,
     failing_validator: Option<String>,
+    matched_group_id:  Option<String>,
 ) -> ProxyAction {
     let log_result = state.audit_logger.write_entry(
         session_id,
@@ -818,6 +836,7 @@ async fn handle_deny(
         identity_email.clone(),
         None,
         request_ip.clone(),
+        matched_group_id.clone(),
     ).await;
 
     if let Err(e) = log_result {

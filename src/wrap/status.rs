@@ -186,7 +186,7 @@ fn shorten_path(p: &PathBuf) -> String {
     }
 }
 
-pub fn gather_servers_for_snapshot(agent_id: String) -> dashboard_proto::mcp_server::McpServerSnapshot {
+pub fn gather_servers_for_snapshot(agent_id: String) -> control_plane_proto::mcp_server::McpServerSnapshot {
     let targets = gather_all();
     let mut servers_meta = Vec::new();
     
@@ -199,7 +199,7 @@ pub fn gather_servers_for_snapshot(agent_id: String) -> dashboard_proto::mcp_ser
                             for (name, val) in servers {
                                 let wrapped = transformer::is_already_wrapped(val);
                                 let path_verified = t.verification == PathVerification::Verified;
-                                servers_meta.push(dashboard_proto::mcp_server::SanitizedMcpServerMeta {
+                                servers_meta.push(control_plane_proto::mcp_server::SanitizedMcpServerMeta {
                                     ide_target: t.name.to_string(),
                                     server_name: name.to_string(),
                                     wrapped,
@@ -213,14 +213,14 @@ pub fn gather_servers_for_snapshot(agent_id: String) -> dashboard_proto::mcp_ser
         }
     }
     
-    dashboard_proto::mcp_server::McpServerSnapshot {
+    control_plane_proto::mcp_server::McpServerSnapshot {
         agent_id,
         servers: servers_meta,
     }
 }
 
 pub fn gather_and_send_mcp_servers_snapshot() {
-    if let Some(client) = crate::dashboard_fr23::client::DashboardClient::from_env() {
+    if let Some(client) = crate::control_plane_client::client::DashboardClient::from_env() {
         // Fallback to agent-<user>-<hostname> if AGENT_ID is not explicitly configured
         let agent_id = std::env::var("AGENT_ID").unwrap_or_else(|_| {
             let user = std::env::var("USER")

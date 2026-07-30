@@ -20,7 +20,7 @@ self_healing:
   suggest_threshold: 0.9
   approval_required: true
 
-# External authentication provider (for dashboard/users)
+# External authentication provider (for control-plane/users)
 auth:
   provider: okta
   jwks_uri: https://your-org.okta.com/oauth2/default/v1/keys

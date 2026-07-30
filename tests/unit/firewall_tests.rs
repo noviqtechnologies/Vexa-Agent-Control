@@ -52,6 +52,7 @@ fn test_tool_history_memory_bounding() {
         policy: std::sync::RwLock::new(Some(CompiledPolicy {
             max_calls_per_second: 0,
             tools: vec![],
+            group_policies: vec![],
             identity_validator: None,
             scannable_tools: vec![],
             safe_tools: vec![],
@@ -99,6 +100,7 @@ fn test_tool_history_memory_bounding() {
     let session = Arc::new(agentwall::proxy::session::SessionContext::new(
         None,
         None,
+        vec![],
         local_policy,
         None,
         None,
@@ -143,6 +145,7 @@ fn test_cycle_detection_blocking() {
         policy: std::sync::RwLock::new(Some(CompiledPolicy {
             max_calls_per_second: 0,
             tools: vec![],
+            group_policies: vec![],
             identity_validator: None,
             scannable_tools: vec![],
             safe_tools: vec![],
@@ -206,6 +209,7 @@ fn test_cycle_detection_blocking() {
     let session = Arc::new(agentwall::proxy::session::SessionContext::new(
         None,
         None,
+        vec![],
         local_policy,
         None,
         None,
@@ -254,6 +258,7 @@ fn test_pause_interactive_fallback_in_non_tty() {
         policy: std::sync::RwLock::new(Some(CompiledPolicy {
             max_calls_per_second: 0,
             tools: vec![],
+            group_policies: vec![],
             identity_validator: None,
             scannable_tools: vec![],
             safe_tools: vec![],
@@ -317,6 +322,7 @@ fn test_pause_interactive_fallback_in_non_tty() {
     let session = Arc::new(agentwall::proxy::session::SessionContext::new(
         None,
         None,
+        vec![],
         local_policy,
         None,
         None,

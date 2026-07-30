@@ -140,9 +140,9 @@ pub fn run_check(
     let mut any_denied = false;
 
     for call in &calls {
-        let result = policy.evaluate(&call.tool, &call.params, None);
+        let result = policy.evaluate(&call.tool, &call.params, None, &[]);
         let check_result = match &result {
-            EvalResult::Allow => {
+            EvalResult::Allow { matched_group_id: _ } => {
                 let mut params_str = Vec::new();
                 if let Some(obj) = call.params.as_object() {
                     for (k, v) in obj {
@@ -172,6 +172,7 @@ pub fn run_check(
                 pattern,
                 json_pointer,
                 validator_name,
+                matched_group_id: _,
             } => {
                 any_denied = true;
                 let mut reason_parts = vec![format!("reason={}", reason_code)];

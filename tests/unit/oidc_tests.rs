@@ -55,7 +55,7 @@ fn now_secs() -> usize {
 }
 
 fn make_validator(issuer: &str, audience: &str) -> std::sync::Arc<IdentityValidator> {
-    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None);
+    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None, "groups".to_string());
     let decoding_key =
         jsonwebtoken::DecodingKey::from_rsa_pem(RSA_PUBLIC_PEM).expect("valid public key");
     v.keys.insert("test-kid".to_string(), decoding_key);
@@ -71,6 +71,7 @@ fn make_token(issuer: &str, audience: &str, sub: &str, exp_offset_secs: i64) -> 
         aud: audience.to_string(),
         iss: issuer.to_string(),
         exp,
+        extra: Default::default(),
     };
     let header = Header {
         alg: jsonwebtoken::Algorithm::RS256,
@@ -91,7 +92,7 @@ async fn test_ac201_2_valid_token_returns_sub() {
 
     let result = v.validate_token(&token).await;
     assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
-    assert_eq!(result.unwrap(), "agent-alpha");
+    assert_eq!(result.unwrap().sub, "agent-alpha");
 }
 
 // ── AC-201-2: Expired token returns error ────────────────────────────────────
@@ -160,6 +161,7 @@ async fn test_ac201_2_missing_kid_rejected() {
         aud: audience.to_string(),
         iss: issuer.to_string(),
         exp: now_secs() + 3600,
+        extra: Default::default(),
     };
     // Header WITHOUT kid
     let header = Header {
@@ -186,6 +188,7 @@ async fn test_ac201_2_hmac_algorithm_rejected() {
         aud: audience.to_string(),
         iss: issuer.to_string(),
         exp: now_secs() + 3600,
+        extra: Default::default(),
     };
     let header = Header {
         alg: jsonwebtoken::Algorithm::HS256,
@@ -216,6 +219,7 @@ async fn test_ac201_2_unknown_kid_fail_closed() {
         aud: audience.to_string(),
         iss: issuer.to_string(),
         exp: now_secs() + 3600,
+        extra: Default::default(),
     };
     let header = Header {
         alg: jsonwebtoken::Algorithm::RS256,
@@ -233,7 +237,7 @@ async fn test_ac201_2_unknown_kid_fail_closed() {
 
 #[tokio::test]
 async fn test_ac201_5_not_ready_when_no_keys() {
-    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), None);
+    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), None, "groups".to_string());
     // No keys populated
     assert!(!v.is_ready().await, "Should not be ready with empty key cache");
 }
@@ -251,7 +255,7 @@ async fn test_ac201_5_ready_when_key_present() {
 #[test]
 fn test_ac201_5_custom_cache_ttl_applied() {
     // 30-minute TTL
-    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), Some(30));
+    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), Some(30), "groups".to_string());
     assert_eq!(v.cache_ttl.as_secs(), 30 * 60);
 }
 
@@ -261,7 +265,7 @@ fn test_ac201_5_custom_cache_ttl_applied() {
 async fn test_ac201_2_jwk_refresh_race() {
     let issuer = "http://198.51.100.1:80"; // Point to an inaccessible IP to delay refresh
     let audience = "agentwall";
-    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None);
+    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None, "groups".to_string());
 
     let encoding_key = EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).unwrap();
     let claims = Claims {
@@ -269,6 +273,7 @@ async fn test_ac201_2_jwk_refresh_race() {
         aud: audience.to_string(),
         iss: issuer.to_string(),
         exp: now_secs() + 3600,
+        extra: Default::default(),
     };
     let header = Header {
         alg: jsonwebtoken::Algorithm::RS256,

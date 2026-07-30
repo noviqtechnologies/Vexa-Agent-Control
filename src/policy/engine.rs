@@ -10,25 +10,39 @@ use jsonschema::JSONSchema;
 #[derive(Clone)]
 pub struct CompiledPolicy {
     pub tools: Vec<CompiledTool>,
+    /// FR-112: Group-scoped policies
+    pub group_policies: Vec<CompiledGroupPolicy>,
     pub max_calls_per_second: u32,
     pub identity_validator: Option<Arc<super::identity::IdentityValidator>>,
     pub scannable_tools: Vec<String>,
     pub safe_tools: Vec<String>,
     /// FR-306: Agent Firewall configuration (cycle detection).
     pub firewall: Option<super::schema::FirewallConfig>,
+    /// FR-120: Spend caps configuration
+    pub spend_caps: Option<super::schema::SpendCapsConfig>,
 }
 
 impl std::fmt::Debug for CompiledPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CompiledPolicy")
             .field("tools", &self.tools)
+            .field("group_policies", &self.group_policies)
             .field("max_calls_per_second", &self.max_calls_per_second)
             .field("identity_validator", &self.identity_validator.as_ref().map(|_| "Some(IdentityValidator)"))
             .field("scannable_tools", &self.scannable_tools)
             .field("safe_tools", &self.safe_tools)
             .field("firewall", &self.firewall)
+            .field("spend_caps", &self.spend_caps)
             .finish()
     }
+}
+
+/// FR-112: A compiled group policy block
+#[derive(Clone, Debug)]
+pub struct CompiledGroupPolicy {
+    pub id: String,
+    pub claims: Vec<String>,
+    pub tools: Vec<CompiledTool>,
 }
 
 /// A compiled tool rule with pre-compiled regex patterns
@@ -85,7 +99,10 @@ impl std::fmt::Debug for CompiledParam {
 /// Result of policy evaluation
 #[derive(Debug, Clone)]
 pub enum EvalResult {
-    Allow,
+    Allow {
+        /// FR-115: If allowed by a group policy, the ID of the matched group
+        matched_group_id: Option<String>,
+    },
     Deny {
         reason_code: String,
         param_name: Option<String>,
@@ -93,6 +110,8 @@ pub enum EvalResult {
         pattern: Option<String>,
         json_pointer: Option<String>, // FR-201
         validator_name: Option<String>, // FR-202
+        /// FR-115: If denied by a group policy, the ID of the matched group
+        matched_group_id: Option<String>,
     },
 }
 
@@ -123,32 +142,79 @@ impl CompiledPolicy {
 
     /// Evaluate a tool call against the policy.
     /// Returns Allow or Deny with reason.
-    pub fn evaluate(&self, tool_name: &str, params: &Value, identity_sub: Option<&str>) -> EvalResult {
-        // Find tool in allowlist (case-sensitive exact match)
-        // Filter by bound agent identity (FR-201)
-        let tool = match self.tools.iter().find(|t| {
+    pub fn evaluate(
+        &self,
+        tool_name: &str,
+        params: &Value,
+        identity_sub: Option<&str>,
+        identity_groups: &[String], // FR-114
+    ) -> EvalResult {
+        // FR-114 Resolution Order:
+        // 1. Agent-level match (exact `sub` match in top-level tool rule)
+        // 2. Group-level match (deny-beats-allow union)
+        // 3. Org/default match (unrestricted top-level tool rule)
+
+        // 1. Check for Agent-level match
+        let agent_match = self.tools.iter().find(|t| {
             t.name == tool_name && match &t.identity {
                 Some(rule_ident) => {
-                    if rule_ident == "*" {
-                        true
-                    } else {
+                    if rule_ident != "*" {
                         identity_sub.map(|s| s == rule_ident).unwrap_or(false)
+                    } else {
+                        false
                     }
                 }
-                None => true, // unrestricted identity if not specified in the rule
+                None => false,
             }
-        }) {
-            Some(t) => t,
-            None => {
-                return EvalResult::Deny {
-                    reason_code: "not_in_policy".to_string(),
-                    param_name: None,
-                    param_value: None,
-                    pattern: None,
-                    json_pointer: None,
-                    validator_name: None,
+        });
+
+        // 2. Check for Group-level matches
+        // Find all groups where the agent's identity_groups intersect with the group's claims
+        let matching_groups: Vec<&CompiledGroupPolicy> = self.group_policies.iter()
+            .filter(|gp| gp.claims.iter().any(|c| identity_groups.contains(c)))
+            .collect();
+
+        // Find rules for the tool in the matching groups (deny-beats-allow, FR-114)
+        let mut group_allow_rule = None;
+        let mut group_deny_rule = None;
+
+        for gp in matching_groups {
+            if let Some(tool_rule) = gp.tools.iter().find(|t| t.name == tool_name) {
+                if tool_rule.action == "deny" {
+                    group_deny_rule = Some((tool_rule, gp.id.clone()));
+                } else if tool_rule.action == "allow" && group_allow_rule.is_none() {
+                    group_allow_rule = Some((tool_rule, gp.id.clone()));
                 }
             }
+        }
+
+        // 3. Check for Org/default match
+        let org_match = self.tools.iter().find(|t| {
+            t.name == tool_name && match &t.identity {
+                Some(rule_ident) => rule_ident == "*",
+                None => true,
+            }
+        });
+
+        // Determine which rule governs based on precedence
+        let (tool, matched_group_id) = if let Some(agent_rule) = agent_match {
+            (agent_rule, None)
+        } else if let Some((deny_rule, gid)) = group_deny_rule {
+            (deny_rule, Some(gid))
+        } else if let Some((allow_rule, gid)) = group_allow_rule {
+            (allow_rule, Some(gid))
+        } else if let Some(org_rule) = org_match {
+            (org_rule, None)
+        } else {
+            return EvalResult::Deny {
+                reason_code: "not_in_policy".to_string(),
+                param_name: None,
+                param_value: None,
+                pattern: None,
+                json_pointer: None,
+                validator_name: None,
+                matched_group_id: None,
+            };
         };
 
         // Tool explicitly set to deny
@@ -160,6 +226,7 @@ impl CompiledPolicy {
                 pattern: None,
                 json_pointer: None,
                 validator_name: None,
+                matched_group_id,
             };
         }
 
@@ -175,6 +242,7 @@ impl CompiledPolicy {
                     pattern: None,
                     json_pointer: None,
                     validator_name: None,
+                    matched_group_id: matched_group_id.clone(),
                 }
             }
         };
@@ -189,6 +257,7 @@ impl CompiledPolicy {
                 pattern: None,
                 json_pointer: None,
                 validator_name: None,
+                matched_group_id: matched_group_id.clone(),
             };
         }
 
@@ -204,6 +273,7 @@ impl CompiledPolicy {
                     pattern: None,
                     json_pointer: None,
                     validator_name: None,
+                    matched_group_id: matched_group_id.clone(),
                 };
             }
 
@@ -226,6 +296,7 @@ impl CompiledPolicy {
                                 pattern: None,
                                 json_pointer: None,
                                 validator_name: None,
+                                matched_group_id: matched_group_id.clone(),
                             }
                         }
                     };
@@ -239,6 +310,7 @@ impl CompiledPolicy {
                                 pattern: None,
                                 json_pointer: None,
                                 validator_name: None,
+                                matched_group_id: matched_group_id.clone(),
                             };
                         }
                     }
@@ -252,6 +324,7 @@ impl CompiledPolicy {
                                 pattern: Some(re.as_str().to_string()),
                                 json_pointer: None,
                                 validator_name: None,
+                                matched_group_id: matched_group_id.clone(),
                             };
                         }
                     }
@@ -265,6 +338,7 @@ impl CompiledPolicy {
                             pattern: None,
                             json_pointer: None,
                             validator_name: None,
+                            matched_group_id: matched_group_id.clone(),
                         };
                     }
                 }
@@ -277,6 +351,7 @@ impl CompiledPolicy {
                             pattern: None,
                             json_pointer: None,
                             validator_name: None,
+                            matched_group_id: matched_group_id.clone(),
                         };
                     }
                 }
@@ -289,6 +364,7 @@ impl CompiledPolicy {
                             pattern: None,
                             json_pointer: None,
                             validator_name: None,
+                            matched_group_id: matched_group_id.clone(),
                         };
                     }
                 }
@@ -301,6 +377,7 @@ impl CompiledPolicy {
                             pattern: None,
                             json_pointer: None,
                             validator_name: None,
+                            matched_group_id: matched_group_id.clone(),
                         };
                     }
                 }
@@ -320,6 +397,7 @@ impl CompiledPolicy {
                         pattern: None,
                         json_pointer: pointer,
                         validator_name: None,
+                        matched_group_id: matched_group_id.clone(),
                     };
                 }
             }
@@ -403,11 +481,12 @@ impl CompiledPolicy {
                         },
                         json_pointer: None,
                         validator_name: Some(val_name.to_string()),
+                        matched_group_id: matched_group_id.clone(),
                     };
                 }
             }
         }
 
-        EvalResult::Allow
+        EvalResult::Allow { matched_group_id }
     }
 }

@@ -24,6 +24,9 @@ pub struct SessionContext {
     /// Optional authenticated email identity from Okta/Entra ID OIDC claim
     pub identity_email: Option<String>,
     
+    /// FR-112: Authenticated groups extracted from OIDC claim via group_claim_key
+    pub identity_groups: Vec<String>,
+    
     /// The frozen compiled policy context active at the moment of session initiation.
     /// This ensures that policy hot-reloads do not disrupt in-flight sessions (FR-106).
     pub policy: Option<CompiledPolicy>,
@@ -50,6 +53,7 @@ impl SessionContext {
     pub fn new(
         identity_sub: Option<String>,
         identity_email: Option<String>,
+        identity_groups: Vec<String>,
         active_policy: Option<CompiledPolicy>,
         request_ip: Option<String>,
         active_credential_id: Option<String>,
@@ -67,6 +71,7 @@ impl SessionContext {
             session_id,
             identity_sub,
             identity_email,
+            identity_groups,
             policy: active_policy,
             rate_limiter: RateLimiter::new(limit),
             tool_history: Mutex::new(Vec::new()),

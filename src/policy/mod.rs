@@ -13,3 +13,6 @@ pub mod semantic;
 /// Remote policy loader: fetches active policy from the dashboard API (PostgreSQL)
 /// and provides a background polling task for automatic hot-reload.
 pub mod remote;
+
+#[cfg(test)]
+mod group_policy_test;

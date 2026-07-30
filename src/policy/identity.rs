@@ -16,6 +16,20 @@ pub struct Claims {
     pub aud: String,
     pub iss: String,
     pub exp: usize,
+    /// FR-113: Group claims. Can be a string or an array of strings depending on the IdP.
+    /// Uses `serde_json::Value` to capture it losslessly, then parsed in `validate_token()`.
+    /// Flatten ensures we capture any key, since the claim key is configurable.
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Returned by `validate_token` upon successful validation.
+#[derive(Debug, Clone)]
+pub struct ValidatedIdentity {
+    pub sub: String,
+    /// Groups extracted from the JWT using the configured `group_claim_key`.
+    /// Empty if the claim is absent (FR-113).
+    pub groups: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,10 +64,12 @@ pub struct IdentityValidator {
     last_fetched: RwLock<Instant>,
     client: reqwest::Client,
     pub cache_ttl: Duration,
+    /// FR-113: The JWT claim key to extract group membership from.
+    pub group_claim_key: String,
 }
 
 impl IdentityValidator {
-    pub fn new(issuer: String, audience: String, cache_ttl_minutes: Option<u64>) -> Arc<Self> {
+    pub fn new(issuer: String, audience: String, cache_ttl_minutes: Option<u64>, group_claim_key: String) -> Arc<Self> {
         let ttl_secs = cache_ttl_minutes.unwrap_or(15) * 60;
         let keys = DashMap::new();
         if issuer == "mock" || issuer.starts_with("mock:") {
@@ -72,6 +88,7 @@ impl IdentityValidator {
             last_fetched: RwLock::new(Instant::now()),
             client: reqwest::Client::new(),
             cache_ttl: Duration::from_secs(ttl_secs),
+            group_claim_key,
         })
     }
 
@@ -138,8 +155,8 @@ impl IdentityValidator {
         Ok(())
     }
 
-    /// Validate a JWT and return the subject (sub)
-    pub async fn validate_token(&self, token: &str) -> Result<String, String> {
+    /// Validate a JWT and return the subject (sub) and groups
+    pub async fn validate_token(&self, token: &str) -> Result<ValidatedIdentity, String> {
         // 1. Decode header to get kid
         let header = decode_header(token).map_err(|e| format!("Invalid JWT header: {}", e))?;
         let kid = header.kid.ok_or_else(|| "Missing 'kid' in JWT header".to_string())?;
@@ -174,7 +191,31 @@ impl IdentityValidator {
         let token_data = decode::<Claims>(token, &decoding_key, &validation)
             .map_err(|e| format!("JWT validation failed: {}", e))?;
 
-        Ok(token_data.claims.sub)
+        // Extract groups based on configured key (FR-113)
+        let mut groups = Vec::new();
+        if let Some(claim_val) = token_data.claims.extra.get(&self.group_claim_key) {
+            match claim_val {
+                serde_json::Value::Array(arr) => {
+                    for v in arr {
+                        if let Some(s) = v.as_str() {
+                            groups.push(s.to_string());
+                        }
+                    }
+                }
+                serde_json::Value::String(s) => {
+                    // Some IdPs return a space-delimited string
+                    for part in s.split_whitespace() {
+                        groups.push(part.to_string());
+                    }
+                }
+                _ => {} // Ignore other types
+            }
+        }
+
+        Ok(ValidatedIdentity {
+            sub: token_data.claims.sub,
+            groups,
+        })
     }
 
     /// Check if keys have ever been fetched (fail-closed check)
@@ -193,7 +234,7 @@ mod tests {
     async fn test_jwt_validation_success() {
         let issuer = "https://example.com".to_string();
         let audience = "my-agent".to_string();
-        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None);
+        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
 
         let rsa_private_key_pem = br#"-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAudhbe1QgN8OIKg2CTLUctcCzszFAtY19k04MNrqv/Bxz9Eud
@@ -238,11 +279,17 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
         validator.keys.insert(kid.to_string(), decoding_key);
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
+        let mut extra = std::collections::HashMap::new();
+        extra.insert("groups".to_string(), serde_json::Value::Array(vec![
+            serde_json::Value::String("engineering".to_string()),
+            serde_json::Value::String("platform".to_string()),
+        ]));
         let claims = Claims {
             sub: "user-123".to_string(),
             aud: audience.clone(),
             iss: issuer.clone(),
             exp: now + 3600,
+            extra,
         };
 
         let header = Header {
@@ -255,14 +302,16 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
 
         let result = validator.validate_token(&token).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "user-123");
+        let identity = result.unwrap();
+        assert_eq!(identity.sub, "user-123");
+        assert_eq!(identity.groups, vec!["engineering", "platform"]);
     }
 
     #[tokio::test]
     async fn test_jwt_validation_expired() {
         let issuer = "https://example.com".to_string();
         let audience = "my-agent".to_string();
-        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None);
+        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
 
         let rsa_private_key_pem = br#"-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAudhbe1QgN8OIKg2CTLUctcCzszFAtY19k04MNrqv/Bxz9Eud
@@ -312,6 +361,7 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
             aud: audience.clone(),
             iss: issuer.clone(),
             exp: now - 120, // Expired beyond 60s clock skew
+            extra: std::collections::HashMap::new(),
         };
 
         let header = Header {

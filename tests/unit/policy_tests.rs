@@ -20,6 +20,7 @@ use agentwall::policy::schema::ParamType;
 fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
     CompiledPolicy {
         tools,
+        group_policies: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec!["read_file".to_string()],
@@ -72,7 +73,7 @@ trait EvalExt {
 }
 impl EvalExt for CompiledPolicy {
     fn evaluate_test(&self, tool_name: &str, params: &serde_json::Value) -> EvalResult {
-        self.evaluate(tool_name, params, None)
+        self.evaluate(tool_name, params, None, &[])
     }
 }
 
@@ -94,7 +95,7 @@ fn test_allowlist_evaluation() {
     for i in 0..10u32 {
         let name = format!("tool_{}", i);
         assert!(
-            matches!(p.evaluate_test(&name, &json!({})), EvalResult::Allow),
+            matches!(p.evaluate_test(&name, &json!({})), EvalResult::Allow { .. }),
             "tool_{} should be allowed",
             i
         );
@@ -140,7 +141,7 @@ fn test_regex_anchoring_engine_level() {
 
     assert!(matches!(
         p.evaluate_test("fs_read", &json!({"path": "workspace/src/main.rs"})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Without the leading anchor a partial match like "bad/workspace/file"
@@ -176,7 +177,7 @@ fn test_max_length_string_enforcement() {
     let at_limit = "a".repeat(32);
     assert!(matches!(
         p.evaluate_test("log_event", &json!({"message": at_limit})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // One byte over → deny.
@@ -211,12 +212,12 @@ fn test_number_type_enforcement() {
 
     assert!(matches!(
         p.evaluate_test("set_timeout", &json!({"seconds": 30})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     assert!(matches!(
         p.evaluate_test("set_timeout", &json!({"seconds": 1.5})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     match p.evaluate_test("set_timeout", &json!({"seconds": "thirty"})) {
@@ -249,12 +250,12 @@ fn test_boolean_type_enforcement() {
 
     assert!(matches!(
         p.evaluate_test("toggle_feature", &json!({"enabled": true})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     assert!(matches!(
         p.evaluate_test("toggle_feature", &json!({"enabled": false})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // String "true" is not a boolean.
@@ -300,7 +301,7 @@ fn test_required_parameter_missing() {
     // Required present, optional absent → allow.
     assert!(matches!(
         p.evaluate_test("run_query", &json!({"sql": "SELECT 1"})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Required absent → deny.
@@ -345,7 +346,7 @@ fn test_object_schema_violation_is_denied() {
     // Valid payload → allow.
     assert!(matches!(
         p.evaluate_test("query_db", &json!({"options": {"limit": 10}})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Limit exceeds maximum → schema_validation_failed at /limit.
@@ -403,7 +404,7 @@ fn test_array_schema_validation() {
     // Valid array → allow.
     assert!(matches!(
         p.evaluate_test("bulk_tag", &json!({"tags": ["alpha", "beta"]})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Too many items → deny.
@@ -450,7 +451,7 @@ fn test_object_without_schema_engine_passthrough() {
     // Object value → passes type check.
     assert!(matches!(
         p.evaluate_test("legacy", &json!({"data": {"key": "value"}})),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Non-object value → param_type_mismatch.
@@ -481,7 +482,7 @@ fn test_payload_size_limit_100kb() {
 
     // Exactly 1 byte under 100 KB → allow.
     let fine = json!({ "blob": "x".repeat(100 * 1024 - 20) }); // account for JSON overhead
-    assert!(matches!(p.evaluate_test("upload", &fine), EvalResult::Allow));
+    assert!(matches!(p.evaluate_test("upload", &fine), EvalResult::Allow { .. }));
 }
 
 // ---------------------------------------------------------------------------
@@ -495,7 +496,7 @@ fn test_params_must_be_object_or_null() {
     // null params → treated as empty object → allow (no required params).
     assert!(matches!(
         p.evaluate_test("noop", &json!(null)),
-        EvalResult::Allow
+        EvalResult::Allow { .. }
     ));
 
     // Array params → param_type_mismatch at call level.

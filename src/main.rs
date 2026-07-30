@@ -336,7 +336,9 @@ async fn run_stdio_proxy(
         credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
-        dashboard_client: agentwall::dashboard_fr23::client::DashboardClient::from_env().map(Arc::new),
+        spend_ledger: None,
+        pricing_table: None,
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: true,
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
     });
@@ -492,6 +494,100 @@ async fn run_start(
     };
 
 
+
+    // Initialize dashboard client early for SpendLedger sync
+    let dashboard_client = agentwall::control_plane_client::client::DashboardClient::from_env().map(std::sync::Arc::new);
+
+    // --- FR-120: Spend Caps License Validation ---
+    let spend_ledger = if let Some(ref policy) = compiled_policy {
+        if let Some(ref caps) = policy.spend_caps {
+            if caps.enabled {
+                let license_key = match &caps.license_key {
+                    Some(k) => k,
+                    None => {
+                        eprintln!("{} spend_caps.enabled requires a valid license_key. Contact Noviq for a license.", "✖".red());
+                        std::process::exit(1);
+                    }
+                };
+                
+                let validator = match agentwall::license::LicenseValidator::new() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{} Failed to initialize license validator: {}", "✖".red(), e);
+                        std::process::exit(1);
+                    }
+                };
+                
+                match validator.validate(license_key) {
+                    Ok(license) => {
+                        if !validator.has_feature(&license, "spend_caps") {
+                            eprintln!("{} spend_caps is not enabled in your current license.", "✖".red());
+                            std::process::exit(1);
+                        }
+                        agentwall::logging::log_event(
+                            agentwall::logging::Level::Info,
+                            "license_validated",
+                            serde_json::json!({
+                                "org_id": license.org_id,
+                                "features": license.features,
+                                "expires_at": license.expires_at.to_rfc3339()
+                            }),
+                        );
+                        let now = chrono::Utc::now();
+                        let days_until_expiry = (license.expires_at - now).num_days();
+                        if days_until_expiry <= 30 {
+                            agentwall::logging::log_event(
+                                agentwall::logging::Level::Warn,
+                                "license_expiry_warning",
+                                serde_json::json!({
+                                    "days_remaining": days_until_expiry
+                                }),
+                            );
+                            println!("{} License expires in {} days. Renew at noviq.com/license", "⚠".yellow(), days_until_expiry);
+                        }
+                    }
+                    Err(e) => {
+                        match e {
+                            agentwall::license::LicenseError::Expired { expired_at } => {
+                                eprintln!("{} License expired at {}. Renew at noviq.com/license.", "✖".red(), expired_at);
+                            }
+                            _ => {
+                                eprintln!("{} Invalid license: {}", "✖".red(), e);
+                            }
+                        }
+                        std::process::exit(1);
+                    }
+                }
+                
+                if caps.admin_api {
+                    agentwall::logging::log_event(
+                        agentwall::logging::Level::Info,
+                        "admin_api_enabled",
+                        serde_json::json!({
+                            "data_stored": ["spend_counters", "audit_history", "increase_requests"],
+                            "retention_days": {
+                                "spend_counters_days": caps.retention.as_ref().map(|r| r.spend_counters_days).unwrap_or(90),
+                                "increase_requests_days": caps.retention.as_ref().map(|r| r.increase_requests_days).unwrap_or(365),
+                                "thresholds_fired_days": caps.retention.as_ref().map(|r| r.thresholds_fired_days).unwrap_or(90)
+                            },
+                            "location": "~/.agentwall/"
+                        }),
+                    );
+                    println!("{} Spend Caps Admin API enabled. Local durable PII store activated.", "ℹ".blue());
+                }
+
+                Some(std::sync::Arc::new(agentwall::spend::SpendLedger::init(dashboard_client.clone())))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    // ---------------------------------------------
+
     // 2. Check log path writable
     let mut log_dir = Path::new(&log_path).parent().unwrap_or(Path::new("."));
     if log_dir.as_os_str().is_empty() {
@@ -646,7 +742,9 @@ async fn run_start(
         credential_scope_validator,
         policy_path: policy_path.clone(),
         gateway_start_time: std::time::Instant::now(),
-        dashboard_client: agentwall::dashboard_fr23::client::DashboardClient::from_env().map(Arc::new),
+        spend_ledger: spend_ledger.clone(),
+        pricing_table: if spend_ledger.is_some() { Some(Arc::new(agentwall::spend::PricingTable::load(None).unwrap_or_else(|_| agentwall::spend::PricingTable { version: "1".to_string(), models: std::collections::HashMap::new(), fallback: agentwall::spend::ModelPrice { input_per_1m_cents: 0, output_per_1m_cents: 0 } }))) } else { None },
+        dashboard_client: dashboard_client.clone(),
         listen_is_loopback: listen_addr.ip().is_loopback(),
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
     });
@@ -1175,7 +1273,9 @@ async fn run_wrap(
         credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
-        dashboard_client: agentwall::dashboard_fr23::client::DashboardClient::from_env().map(Arc::new),
+        spend_ledger: None,
+        pricing_table: None,
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: true,
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
     });
@@ -1301,7 +1401,9 @@ async fn run_dev(
         credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
-        dashboard_client: agentwall::dashboard_fr23::client::DashboardClient::from_env().map(Arc::new),
+        spend_ledger: None,
+        pricing_table: None,
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: listen.parse::<SocketAddr>().map(|a| a.ip().is_loopback()).unwrap_or(true),
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
     });

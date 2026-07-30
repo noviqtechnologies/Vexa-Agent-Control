@@ -2,6 +2,13 @@
 //!
 //! Implements the v1 policy schema exactly as specified in PRD §6.1.
 //! Uses `#[serde(deny_unknown_fields)]` for strict parsing at all levels.
+//!
+//! ## FR-112: Group-Scoped Policy
+//!
+//! `GroupIdentityPolicy` enables binding policy rules to IdP group claims
+//! instead of enumerating individual agent identities. Group membership is
+//! read from the JWT token's group claim (FR-113). Resolution order (FR-114):
+//! agent-level → group-level (deny beats allow) → org/default.
 
 use serde::Deserialize;
 
@@ -42,6 +49,14 @@ pub struct PolicyFile {
 
     /// Agent identity configuration (FR-22).
     pub agents: Option<Vec<AgentIdentityPolicy>>,
+
+    /// FR-112: Group-scoped policy bindings.
+    /// Each entry binds a set of IdP group claim values to a policy block.
+    /// Group policy is additive — does not replace per-agent bindings.
+    pub groups: Option<Vec<GroupIdentityPolicy>>,
+    
+    /// FR-120: Spend caps configuration (Paid tier).
+    pub spend_caps: Option<SpendCapsConfig>,
 }
 
 /// Agent identity and credential policy (FR-22).
@@ -54,6 +69,38 @@ pub struct AgentIdentityPolicy {
     pub credential_scope: Vec<CredentialScope>,
     pub max_credential_ttl: Option<String>,
     pub rotation_policy: Option<String>,
+}
+
+/// FR-112: Group-scoped identity and tool policy.
+///
+/// Binds one or more IdP group claim values to a set of tool rules.
+/// Group membership is extracted from the JWT token's group claim (FR-113).
+/// When multiple groups match, deny beats allow on the same tool (FR-114).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GroupIdentityPolicy {
+    /// Human-readable group policy ID. Used in audit log entries (FR-115)
+    /// to identify which group triggered an enforcement decision.
+    pub id: String,
+    /// Group claim values that trigger this policy. Any match = policy applies.
+    /// Must be non-empty — an entry with no claims is rejected at load time.
+    pub claims: Vec<String>,
+    /// Tool rules scoped to members of this group.
+    /// Reuses the existing ToolRule struct — one policy representation, not two.
+    pub tools: Option<Vec<ToolRule>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpendCapsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub license_key: Option<String>,
+    #[serde(default)]
+    pub admin_api: bool,
+    pub pricing_table_path: Option<String>,
+    pub concurrency_ceiling: Option<usize>,
+    pub retention: Option<crate::spend::RetentionPolicy>,
 }
 
 /// Per-tool credential scope (FR-22).
@@ -156,6 +203,12 @@ pub struct IdentityConfig {
     // Legacy fields (v1):
     pub issuer: Option<String>,
     pub audience: Option<String>,
+
+    /// FR-113: JWT claim key to extract group membership from.
+    /// Default: "groups". Configurable for IdP compatibility (e.g. "cognito:groups",
+    /// "https://myapp.com/groups"). Located under identity: to match the
+    /// Kubernetes auth-layer / RBAC-layer split.
+    pub group_claim_key: Option<String>,
 }
 
 /// OIDC provider authentication configuration (FR-201).
