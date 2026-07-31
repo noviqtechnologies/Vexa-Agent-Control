@@ -42,8 +42,8 @@ Run the complete self-hosted Control Hub stack (Go API, React UI, PostgreSQL DB)
 cd control-plane
 docker compose up -d --build
 ```
-- **Control Hub UI:** `http://localhost:3000`
-- **Control Hub API:** `http://localhost:8081`
+- **Control Hub UI:** `http://localhost:8081`
+- **Control Hub API:** `http://localhost:8400`
 
 ### 3. Enterprise Production Install (Kubernetes & Helm)
 Deploy the centralized enforcement fleet and Control Hub using the official Helm chart:

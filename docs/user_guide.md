@@ -109,14 +109,14 @@ cd control-plane
 docker compose up -d --build
 ```
 This provisions:
-- **Control Hub UI:** `http://localhost:3000`
-- **Control Hub API:** `http://localhost:8081` (REST API at `/api/v1`)
-- **PostgreSQL Database:** `localhost:5432`
+- **Control Hub UI:** `http://localhost:8081`
+- **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
+- **PostgreSQL Database:** `localhost:5433`
 
 #### Connecting Gateways to the Team Hub
 Start local or staging gateway instances connected to the Control Hub with shared bearer secrets:
 ```bash
-export DASHBOARD_API_URL="http://localhost:8081"
+export DASHBOARD_API_URL="http://localhost:8400"
 export POLICY_READ_SECRET="team-policy-read-secret"
 export GATEWAY_SECRET="team-gateway-secret"
 

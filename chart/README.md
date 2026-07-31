@@ -38,9 +38,9 @@ helm install agentwall ./chart \
   --namespace agentwall-system \
   --create-namespace \
   --set operator.image.repository=myregistry.example.com/agentwall-operator \
-  --set operator.image.tag=v1.0.13 \
+  --set operator.image.tag=v1.0.16 \
   --set gateway.image.repository=myregistry.example.com/agentwall \
-  --set gateway.image.tag=v1.0.13 \
+  --set gateway.image.tag=v1.0.16 \
   --set gateway.tls.enabled=true \
   --set gateway.tls.secretName=my-gateway-tls
 ```
