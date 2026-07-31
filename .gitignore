@@ -15,9 +15,10 @@ session-report.json
 report.json
 matrix_results.json
 
-# HTML & CSS (dashboard.html is tracked)
+# HTML & CSS (local dashboard html is tracked)
 *.html
 !src/dashboard/dashboard.html
+!src/local_dashboard/local_dashboard.html
 *.css
 
 # IDEs and OS
