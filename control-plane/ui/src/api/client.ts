@@ -113,7 +113,21 @@ export interface CredentialMeta {
   rotation_history: { rotated_at_ms: number; reason: string }[]
 }
 
+export interface GatewayInfo {
+  id: string
+  last_seen_at: string
+  version: string
+  mode: string
+  policy_version: number
+  connected: boolean
+}
+
 export const api = {
+  // Gateways
+  listGateways: () => get<{ gateways: GatewayInfo[] }>('/gateways'),
+  rotateProviderKey: (provider: string, newKey: string) =>
+    postJSON<{ provider: string; rotation_version: number; credential_id: string }>('/credentials/rotate', { provider, new_key: newKey }),
+
   // Spend Caps
   listBudgets: () => get<SpendBudget[]>('/spend/budgets'),
   createBudget: (data: any) => postJSON('/spend/budgets', data),

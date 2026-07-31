@@ -65,8 +65,11 @@ fn make_policy(n: usize) -> CompiledPolicy {
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
+        group_policies: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     }
 }
 
@@ -105,8 +108,11 @@ fn make_policy_with_schema() -> CompiledPolicy {
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
+        group_policies: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     }
 }
 

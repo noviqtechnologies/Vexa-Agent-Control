@@ -45,6 +45,12 @@ pub struct SessionContext {
 
     /// FR-22: Active credential presented by the agent for scoping.
     pub active_credential_id: Option<String>,
+
+    /// FR-103: Active agent credential scope header sent via X-AgentWall-Credential-Scope.
+    pub agent_scope_header: Option<String>,
+
+    /// FR-102: Total tokens consumed in this session for spend cap enforcement.
+    pub tokens_used: std::sync::atomic::AtomicU64,
 }
 
 impl SessionContext {
@@ -57,6 +63,26 @@ impl SessionContext {
         active_policy: Option<CompiledPolicy>,
         request_ip: Option<String>,
         active_credential_id: Option<String>,
+    ) -> Self {
+        Self::new_with_scope(
+            identity_sub,
+            identity_email,
+            identity_groups,
+            active_policy,
+            request_ip,
+            active_credential_id,
+            None,
+        )
+    }
+
+    pub fn new_with_scope(
+        identity_sub: Option<String>,
+        identity_email: Option<String>,
+        identity_groups: Vec<String>,
+        active_policy: Option<CompiledPolicy>,
+        request_ip: Option<String>,
+        active_credential_id: Option<String>,
+        agent_scope_header: Option<String>,
     ) -> Self {
         let session_id = Uuid::new_v4().to_string();
         let start_time = Instant::now();
@@ -78,6 +104,8 @@ impl SessionContext {
             start_time,
             request_ip,
             active_credential_id,
+            agent_scope_header,
+            tokens_used: std::sync::atomic::AtomicU64::new(0),
         }
     }
 

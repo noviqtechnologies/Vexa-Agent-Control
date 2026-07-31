@@ -15,6 +15,7 @@ import IdeConnections from './views/IdeConnections'
 import Login from './views/Login'
 import RequireAdmin from './auth/RequireAdmin'
 import McpServers from './views/McpServers'
+import LlmProviders from './views/LlmProviders'
 import GroupPolicyEditor from './views/GroupPolicyEditor'
 import SpendLimits from './views/SpendLimits'
 import IncreaseRequests from './views/IncreaseRequests'
@@ -103,6 +104,7 @@ const NAV_SECTIONS: NavSection[] = [
     children: [
       { label: 'IDE Connections', to: '/integrations/ide' },
       { label: 'MCP Servers', to: '/integrations/mcp-servers' },
+      { label: 'LLM Providers', to: '/integrations/llm-providers' },
     ],
   },
 ]
@@ -298,6 +300,11 @@ export default function App() {
                 <Route path="/integrations/mcp-servers" element={
                   <RequireAdmin>
                     <McpServers />
+                  </RequireAdmin>
+                } />
+                <Route path="/integrations/llm-providers" element={
+                  <RequireAdmin>
+                    <LlmProviders />
                   </RequireAdmin>
                 } />
                 {/* Legacy redirect */}

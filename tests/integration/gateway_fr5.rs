@@ -28,6 +28,8 @@ fn make_deny_policy() -> CompiledPolicy {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     }
 }
 
@@ -85,6 +87,8 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
         group_policies: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let iterations = 1000;
@@ -234,6 +238,8 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let result = policy.evaluate("any_tool", &serde_json::json!({}), None, &[]);

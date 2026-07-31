@@ -52,13 +52,16 @@ func main() {
 	authH := handler.NewAuthHandler(db)
 	authProviderH := handler.NewAuthProviderHandler(db)
 	userH := handler.NewUserHandler(db)
-	policyMgmtH := handler.NewPolicyMgmtHandler(db)
+	policyMgmtH := handler.NewPolicyMgmtHandler(db, broker)
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
 
 	authH.CheckBootstrap()
 
 	groupPolicyH := handler.NewHandler(db)
+	gatewayH := handler.NewGatewayHandler()
+	providerKeysH := handler.NewProviderKeysHandler(db)
+	hubSpecH := handler.NewHubSpecHandler(db, broker)
 
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
@@ -70,6 +73,14 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Gateway API Spec endpoints (Gateway / Read Secret Auth)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/bootstrap", hubSpecH.GetBootstrap)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/events", hubSpecH.GetEventsStream)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/{id}", hubSpecH.GetPolicyByID)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/credentials/{provider}", hubSpecH.GetProviderCredential)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Post("/api/v1/credentials/rotate", hubSpecH.RotateCredential)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
 	// Ingest endpoints — gateway auth (shared secret), NOT OIDC.
 	r.Route("/api/v1/ingest", func(r chi.Router) {
@@ -94,6 +105,7 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
 
+		r.Get("/gateways", hubSpecH.ListGateways)
 		r.Get("/fleet/overview", fleetH.GetOverview)
 		r.Get("/fleet/agents", fleetH.ListAgents)
 		r.Get("/fleet/heatmap", fleetH.GetHeatmap)
@@ -131,10 +143,25 @@ func main() {
 		r.Post("/users", userH.Create)
 		r.Delete("/users/{id}", userH.Delete)
 		
-		// Policy Management
+		// Policy Read & Real-Time Push (Gateway + Operator Auth)
+		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policies/active", policyMgmtH.GetActive)
+		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policy/active", policyMgmtH.GetActive)
+		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policy/subscribe", policyMgmtH.Subscribe)
+
+		// Policy Management (Operator Auth)
 		r.Get("/policies", policyMgmtH.List)
-		r.Get("/policies/active", policyMgmtH.GetActive)
-		r.Post("/policies", policyMgmtH.Save)
+		r.Post("/policies", hubSpecH.CreatePolicy)
+
+		// Gateway Management (Phase 1 Mock)
+		r.Post("/gateways/register", gatewayH.Register)
+
+		// Provider API Keys Management
+		r.Route("/providers/keys", func(r chi.Router) {
+			r.Use(middleware.RequireAdmin())
+			r.Get("/", providerKeysH.List)
+			r.Post("/", providerKeysH.Save)
+			r.Delete("/{id}", providerKeysH.Delete)
+		})
 
 		// Group Policy Management
 		r.Route("/group-policies", func(r chi.Router) {

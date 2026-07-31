@@ -82,6 +82,24 @@ impl LicenseValidator {
     }
 }
 
+/// Helper function to check whether an active, valid enterprise license key is present.
+/// Checks the provided `license_key` string or the `AGENTWALL_LICENSE_KEY` environment variable.
+pub fn is_license_valid(license_key: Option<&str>) -> bool {
+    let key = match license_key {
+        Some(k) if !k.is_empty() => k.to_string(),
+        _ => match std::env::var("AGENTWALL_LICENSE_KEY") {
+            Ok(k) if !k.is_empty() => k,
+            _ => return false,
+        },
+    };
+
+    if let Ok(validator) = LicenseValidator::new() {
+        validator.validate(&key).is_ok()
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

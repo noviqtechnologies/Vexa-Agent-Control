@@ -104,32 +104,37 @@ func TestGatewayAuth_TimingResistance(t *testing.T) {
 	}
 }
 
-// --- OIDCAuth dev-mode bypass ---
+// --- PolicyReadAuth and DashboardAuth tests ---
 
-func TestOIDCAuth_DevMode_EmptyIssuer(t *testing.T) {
-	mw := OIDCAuth("", "")
+func TestPolicyReadAuth_BearerToken(t *testing.T) {
+	secret := "read-secret-123"
+	mw := PolicyReadAuth(secret)
 	handler := mw(http.HandlerFunc(okHandler))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/overview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/policies/active", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("got status %d, want %d — dev mode should pass through", rr.Code, http.StatusOK)
+		t.Errorf("got status %d, want %d", rr.Code, http.StatusOK)
 	}
 }
 
-func TestOIDCAuth_DevMode_EmptyClientID(t *testing.T) {
-	mw := OIDCAuth("https://accounts.google.com", "")
+func TestPolicyReadAuth_InvalidBearerToken(t *testing.T) {
+	secret := "read-secret-123"
+	mw := PolicyReadAuth(secret)
 	handler := mw(http.HandlerFunc(okHandler))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/overview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/policies/active", nil)
+	req.Header.Set("Authorization", "Bearer wrong-secret")
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Errorf("got status %d, want %d — empty clientID should bypass", rr.Code, http.StatusOK)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got status %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 }
+

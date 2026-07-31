@@ -28,7 +28,51 @@ export default function PolicyEditor() {
         setVersion(p.version)
       } else {
         // Provide a valid AgentWall Schema v2 default template if none exists in DB
-        setContent(`version: "2"\ndefault_action: deny\n\nsession:\n  max_calls_per_second: 10\n\ntools:\n  - name: "read_file"\n    action: allow\n    parameters:\n      - name: "path"\n        type: string\n        required: true\n\n  - name: "list_directory"\n    action: allow\n    parameters:\n      - name: "directory"\n        type: string\n        required: true\n\n  - name: "exec_shell"\n    action: allow\n    parameters:\n      - name: "command"\n        type: string\n        required: true\n\nfirewall:\n  enabled: true\n  cycle_detection:\n    max_attempts: 3\n    action: pivot_error`)
+        setContent(`version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 10
+
+# LLM Governance & Prompt DLP
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o", "gpt-3.5-turbo"]
+      dlp_tier: "strict"
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+
+tools:
+  - name: "read_file"
+    action: allow
+    parameters:
+      - name: "path"
+        type: string
+        required: true
+
+  - name: "list_directory"
+    action: allow
+    parameters:
+      - name: "directory"
+        type: string
+        required: true
+
+  - name: "exec_shell"
+    action: allow
+    parameters:
+      - name: "command"
+        type: string
+        required: true
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error`)
         setVersion('v1.0.0')
       }
     } catch (e: any) {

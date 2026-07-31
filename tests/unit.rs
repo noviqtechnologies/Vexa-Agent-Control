@@ -10,4 +10,6 @@ mod unit {
     mod oidc_tests;
     mod dashboard_html_test;
     mod generate_policy_test;
+    mod us003_us005_tests;
+    mod sprint5_safety_test;
 }

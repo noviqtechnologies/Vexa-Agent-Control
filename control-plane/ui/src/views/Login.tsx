@@ -57,12 +57,12 @@ export default function Login() {
             {(hasLocal || noProviders) && (
               <form onSubmit={handleSubmit} className="local-login-form">
                 <div className="form-group">
-                  <label>Email</label>
+                  <label>Email / Username</label>
                   <input 
                     type="text" 
                     value={email} 
                     onChange={e => setEmail(e.target.value)}
-                    placeholder={noProviders ? "admin" : "user@example.com"}
+                    placeholder="admin or user@example.com"
                     required 
                   />
                 </div>

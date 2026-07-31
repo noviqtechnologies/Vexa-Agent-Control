@@ -72,6 +72,6 @@ describe('App routing', () => {
 
   it('shows AgentWall logo', async () => {
     renderAt('/')
-    expect(await screen.findByText('Wall')).toBeInTheDocument()
+    expect(await screen.findByText(/Agentwall/i)).toBeInTheDocument()
   })
 })

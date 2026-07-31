@@ -489,6 +489,7 @@ fn compile_policy_yaml(
             safe_tools,
             firewall: firewall_config,
             spend_caps: policy_file.spend_caps,
+            llm: policy_file.llm,
         },
         raw_hash,
         warnings,

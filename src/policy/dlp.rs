@@ -211,7 +211,82 @@ impl DlpScanner {
 
         findings
     }
+
+    pub fn resolve_action(&self, finding: &SecretFinding, policy: Option<&crate::policy::engine::CompiledPolicy>) -> DlpAction {
+        if let Some(p) = policy {
+            if let Some(llm) = &p.llm {
+                if let Some(dlp_cfg) = &llm.dlp {
+                    if let Some(actions) = &dlp_cfg.actions {
+                        for rule in actions {
+                            let matches_entity = rule.entity.eq_ignore_ascii_case(&finding.pattern_name)
+                                || rule.entity.eq_ignore_ascii_case(finding.category.as_str())
+                                || rule.entity.eq_ignore_ascii_case("default");
+                            if matches_entity {
+                                match rule.action.to_ascii_lowercase().as_str() {
+                                    "block" => return DlpAction::Block,
+                                    "redact" => return DlpAction::Redact,
+                                    "warn" => return DlpAction::Warn,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if finding.category == SecretCategory::EnvVar {
+            DlpAction::Warn
+        } else {
+            DlpAction::Block
+        }
+    }
+
+    pub fn redact_text(&self, content: &str) -> String {
+        let findings = self.scan_content(content);
+        if findings.is_empty() {
+            return content.to_string();
+        }
+        let mut result = content.to_string();
+        for finding in &findings {
+            let replacement = format!("[REDACTED:{}]", finding.pattern_name);
+            for pat in &self.patterns {
+                if pat.name == finding.pattern_name {
+                    result = pat.individual_regex.replace_all(&result, replacement.as_str()).to_string();
+                }
+            }
+        }
+        result
+    }
+
+    pub fn redact_value(&self, value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::String(s) => {
+                let redacted = self.redact_text(s);
+                *s = redacted;
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.redact_value(item);
+                }
+            }
+            serde_json::Value::Object(map) => {
+                for (_, v) in map {
+                    self.redact_value(v);
+                }
+            }
+            _ => {}
+        }
+    }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DlpAction {
+    Block,
+    Redact,
+    Warn,
+}
+
 
 // Helpers
 fn is_base64_like(s: &str) -> bool {

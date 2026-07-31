@@ -26,6 +26,18 @@ default_action: deny
 session:
   max_calls_per_second: 10
 
+# LLM Governance & Prompt DLP
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o", "gpt-3.5-turbo"]
+      dlp_tier: "strict"
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+
 # Tool allowlist — add or restrict tools as needed.
 # All unlisted tools are blocked by default_action: deny.
 tools:

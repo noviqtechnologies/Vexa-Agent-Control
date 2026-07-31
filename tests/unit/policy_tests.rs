@@ -26,6 +26,8 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         scannable_tools: vec!["read_file".to_string()],
         safe_tools: vec!["ping".to_string()],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     }
 }
 

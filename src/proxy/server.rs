@@ -186,10 +186,12 @@ fn evict_expired_sessions(state: &ProxyState) {
 }
 
 /// Helper to resolve or create a SessionContext from the incoming request (FR-101)
-async fn resolve_session(
+/// Helper to resolve or create a SessionContext from the incoming request (FR-101)
+pub(crate) async fn resolve_session(
     state: &ProxyState,
     auth_header: Option<&str>,
     credential_header: Option<&str>,
+    scope_header: Option<&str>,
     client_ip: &str,
 ) -> Result<Arc<super::session::SessionContext>, (StatusCode, String)> {
     // Fix 5: Poison-safe RwLock read — if a prior writer panicked, log and deny rather
@@ -299,14 +301,44 @@ async fn resolve_session(
                     Ok(guard) => guard.clone(),
                     Err(_) => None,
                 };
+
+                // Check concurrency ceiling before creating new session
+                let ceiling = current_policy.as_ref()
+                    .and_then(|p| p.spend_caps.as_ref())
+                    .and_then(|sc| sc.concurrency_ceiling.or(sc.max_concurrent_sessions));
+                if let Some(max_conn) = ceiling {
+                    if state.sessions.len() >= max_conn {
+                        let license_key = current_policy.as_ref()
+                            .and_then(|p| p.spend_caps.as_ref())
+                            .and_then(|sc| sc.license_key.as_deref());
+                        if crate::license::validator::is_license_valid(license_key) {
+                            return Err((
+                                StatusCode::TOO_MANY_REQUESTS,
+                                format!("SPEND_LIMIT_EXCEEDED: Concurrency ceiling reached ({}/{} active sessions)", state.sessions.len(), max_conn),
+                            ));
+                        } else {
+                            crate::logging::log_event(
+                                crate::logging::Level::Info,
+                                "concurrency_ceiling_exceeded_unlicensed",
+                                serde_json::json!({
+                                    "active_sessions": state.sessions.len(),
+                                    "ceiling": max_conn,
+                                    "note": "License absent — recorded without enforcement",
+                                }),
+                            );
+                        }
+                    }
+                }
+
                 let email = if sub.sub.contains('@') { Some(sub.sub.clone()) } else { None };
-                let session = Arc::new(super::session::SessionContext::new(
+                let session = Arc::new(super::session::SessionContext::new_with_scope(
                     Some(sub.sub.clone()),
                     email,
                     sub.groups.clone(),
                     current_policy,
                     Some(client_ip.to_string()),
                     credential_header.map(|s| s.to_string()),
+                    scope_header.map(|s| s.to_string()),
                 ));
 
                 // Fix 3: Evict expired sessions before inserting new one
@@ -361,6 +393,21 @@ async fn resolve_session(
             .unwrap_or(client_ip)
             .to_string();
 
+        if state.centralized_mode && session_key == client_ip {
+            crate::logging::log_event(
+                crate::logging::Level::Warn,
+                "auth_failed",
+                serde_json::json!({
+                    "reason": "centralized_mode_requires_auth",
+                    "remote_addr": client_ip,
+                }),
+            );
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Authorization header is required in centralized mode".to_string(),
+            ));
+        }
+
         if let Some(session) = state.sessions.get(&session_key) {
             return Ok(session.clone());
         }
@@ -381,13 +428,42 @@ async fn resolve_session(
             }
         };
 
-        let session = Arc::new(super::session::SessionContext::new(
+        // Check concurrency ceiling before creating new session
+        let ceiling = current_policy.as_ref()
+            .and_then(|p| p.spend_caps.as_ref())
+            .and_then(|sc| sc.concurrency_ceiling.or(sc.max_concurrent_sessions));
+        if let Some(max_conn) = ceiling {
+            if state.sessions.len() >= max_conn {
+                let license_key = current_policy.as_ref()
+                    .and_then(|p| p.spend_caps.as_ref())
+                    .and_then(|sc| sc.license_key.as_deref());
+                if crate::license::validator::is_license_valid(license_key) {
+                    return Err((
+                        StatusCode::TOO_MANY_REQUESTS,
+                        format!("SPEND_LIMIT_EXCEEDED: Concurrency ceiling reached ({}/{} active sessions)", state.sessions.len(), max_conn),
+                    ));
+                } else {
+                    crate::logging::log_event(
+                        crate::logging::Level::Info,
+                        "concurrency_ceiling_exceeded_unlicensed",
+                        serde_json::json!({
+                            "active_sessions": state.sessions.len(),
+                            "ceiling": max_conn,
+                            "note": "License absent — recorded without enforcement",
+                        }),
+                    );
+                }
+            }
+        }
+
+        let session = Arc::new(super::session::SessionContext::new_with_scope(
             None,
             None,
             vec![],
             current_policy,
             Some(client_ip.to_string()),
             credential_header.map(|s| s.to_string()),
+            scope_header.map(|s| s.to_string()),
         ));
 
         // Fix 3: Evict expired sessions before inserting new one
@@ -417,6 +493,11 @@ async fn handle_request(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
+    // LLM API Proxying route (e.g. /v1/chat/completions)
+    if path.starts_with("/v1/") {
+        return crate::proxy::llm_proxy::handle_request(req, state, client_ip).await;
+    }
+
     // Determine if this is an egress proxy request (CONNECT, WebSocket upgrade, or absolute URI)
     let is_egress = method == hyper::Method::CONNECT
         || hyper_tungstenite::is_upgrade_request(&req)
@@ -430,8 +511,12 @@ async fn handle_request(
         let credential_header = req.headers().get("X-AgentWall-Credential")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
+        let scope_header = req.headers().get("X-AgentWall-Credential-Scope")
+            .or_else(|| req.headers().get("X-AgentWall-Scope"))
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
         
-        let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), client_ip).await {
+        let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), scope_header.as_deref(), client_ip).await {
             Ok(s) => s,
             Err((status, err_msg)) => {
                 let err = serde_json::json!({
@@ -790,6 +875,7 @@ async fn handle_request(
 
 
 
+
     // Only accept POST for JSON-RPC
     if method != hyper::Method::POST {
         return Ok(Response::builder()
@@ -804,6 +890,11 @@ async fn handle_request(
         .map(|s| s.to_string());
 
     let credential_header = req.headers().get("X-AgentWall-Credential")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
+    let scope_header = req.headers().get("X-AgentWall-Credential-Scope")
+        .or_else(|| req.headers().get("X-AgentWall-Scope"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
@@ -834,7 +925,7 @@ async fn handle_request(
     let start_time = std::time::Instant::now();
 
     // Resolve dynamic multi-tenant session context (FR-101)
-    let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), client_ip).await {
+    let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), scope_header.as_deref(), client_ip).await {
         Ok(s) => s,
         Err((status, err_msg)) => {
             let err = serde_json::json!({
@@ -984,8 +1075,8 @@ async fn handle_request(
     Ok(http_response)
 }
 
-/// Build a JSON HTTP response
-fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<Full<Bytes>> {
+/// Create a JSON response
+pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<Full<Bytes>> {
     let json_str = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
     Response::builder()
         .status(status)
@@ -1437,6 +1528,31 @@ async fn scan_and_process_response(
                 serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
             );
             response.clone()
+        }
+    }
+}
+
+fn check_policy_read_auth_inner(
+    auth_header: Option<&str>,
+    secret_token: Option<&str>,
+    is_loopback: bool,
+) -> Option<(StatusCode, String)> {
+    if let Some(secret) = secret_token {
+        let expected = format!("Bearer {}", secret);
+        if let Some(header) = auth_header {
+            if header == expected {
+                None
+            } else {
+                Some((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))
+            }
+        } else {
+            Some((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))
+        }
+    } else {
+        if is_loopback {
+            None
+        } else {
+            Some((StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable".to_string()))
         }
     }
 }

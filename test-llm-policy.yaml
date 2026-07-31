@@ -1,0 +1,18 @@
+version: "2"
+default_action: deny
+
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o", "gpt-3.5-turbo"]
+      dlp_tier: "strict"
+    - name: "mock-provider"
+      action: "deny"
+      models: ["bad-model"]
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+      - entity: "SSN"
+        action: "deny"

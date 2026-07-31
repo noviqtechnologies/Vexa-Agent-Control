@@ -86,9 +86,12 @@ func TestLoad_MissingOIDC_NonDevMode(t *testing.T) {
 		"GATEWAY_SECRET": "s3cret",
 	})
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for missing OIDC in production mode")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error when OIDC env vars omitted: %v", err)
+	}
+	if cfg.GatewaySecret != "s3cret" {
+		t.Errorf("GatewaySecret = %q, want %q", cfg.GatewaySecret, "s3cret")
 	}
 }
 

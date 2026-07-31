@@ -57,6 +57,8 @@ fn test_tool_history_memory_bounding() {
             scannable_tools: vec![],
             safe_tools: vec![],
             firewall: None, // Will fallback to default (enabled=true, max_attempts=3)
+            spend_caps: None,
+            llm: None,
         })),
         audit_logger,
         session_id: "session-fw-mem".to_string(),
@@ -92,6 +94,10 @@ fn test_tool_history_memory_bounding() {
         dashboard_client: None,
         listen_is_loopback: true,
         policy_read_secret: None,
+        spend_ledger: None,
+        pricing_table: None,
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -156,6 +162,8 @@ fn test_cycle_detection_blocking() {
                     action: CycleAction::PivotError,
                 },
             }),
+            spend_caps: None,
+            llm: None,
         })),
         audit_logger,
         session_id: "session-fw-block".to_string(),
@@ -191,6 +199,10 @@ fn test_cycle_detection_blocking() {
         dashboard_client: None,
         listen_is_loopback: true,
         policy_read_secret: None,
+        spend_ledger: None,
+        pricing_table: None,
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     };
 
     let req = json!({
@@ -269,6 +281,8 @@ fn test_pause_interactive_fallback_in_non_tty() {
                     action: CycleAction::PauseInteractive,
                 },
             }),
+            spend_caps: None,
+            llm: None,
         })),
         audit_logger,
         session_id: "session-fw-tty".to_string(),
@@ -304,6 +318,10 @@ fn test_pause_interactive_fallback_in_non_tty() {
         dashboard_client: None,
         listen_is_loopback: true,
         policy_read_secret: None,
+        spend_ledger: None,
+        pricing_table: None,
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     };
 
     let req = json!({

@@ -19,6 +19,41 @@ type UserClaims struct {
 	IsAdmin bool   `json:"is_admin"`
 }
 
+// PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
+// or the operator agentwall_session cookie.
+func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check Bearer token (gateway read secret)
+			auth := r.Header.Get("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				token := strings.TrimPrefix(auth, "Bearer ")
+				if secret == "" || subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			// Fallback to session cookie (dashboard operators)
+			cookie, err := r.Cookie("agentwall_session")
+			if err == nil {
+				userID, isAdmin, err := session.Validate(cookie.Value)
+				if err == nil {
+					claims := UserClaims{
+						UserID:  userID,
+						IsAdmin: isAdmin,
+					}
+					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		})
+	}
+}
+
 // DashboardAuth validates the agentwall_session cookie for dashboard operators.
 func DashboardAuth() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

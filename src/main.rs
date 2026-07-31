@@ -105,6 +105,7 @@ async fn main() {
             strict_credential_scope,
             tls_cert,
             tls_key,
+            centralized,
         } => {
             run_start(
                 policy,
@@ -131,6 +132,7 @@ async fn main() {
                 strict_credential_scope,
                 tls_cert,
                 tls_key,
+                centralized,
             )
             .await
         }
@@ -150,7 +152,7 @@ async fn main() {
         Commands::Promote { policy, key } => {
             promote::run_promote(&policy, key.as_deref())
         }
-        Commands::VerifyLog { log_path } => run_verify_log(&log_path),
+        Commands::VerifyLog { log_path, key_file } => run_verify_log(&log_path, key_file.as_deref()),
         Commands::Report {
             log_path,
             output,
@@ -257,7 +259,7 @@ async fn run_stdio_proxy(
         return 1;
     }
 
-    let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
+    let session_secret = resolve_hmac_key();
     let session_id = uuid::Uuid::new_v4().to_string();
 
     // Resolve log path relative to binary (ensures writability when run from Claude)
@@ -341,6 +343,8 @@ async fn run_stdio_proxy(
         dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: true,
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     });
 
     let mut parts = args.clone();
@@ -387,6 +391,7 @@ async fn run_start(
     strict_credential_scope: bool,
     tls_cert: Option<String>,
     tls_key: Option<String>,
+    centralized: bool,
 ) -> i32 {
     println!("{} Loading configuration...", "ℹ".blue());
 
@@ -602,6 +607,14 @@ async fn run_start(
         return 1;
     }
 
+    // Override listen address for centralized mode if it's the default
+    // Override listen address for centralized mode if it's the default
+    let listen = if centralized && listen == "127.0.0.1:8080" {
+        "0.0.0.0:8080".to_string()
+    } else {
+        listen
+    };
+
     // 3. Parse listen address
     let listen_addr: SocketAddr = match listen.parse() {
         Ok(a) => a,
@@ -611,8 +624,8 @@ async fn run_start(
         }
     };
 
-    // Generate session secret
-    let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
+    // Generate session secret (persisted at ~/.AgentWall/audit.key per ADR-007)
+    let session_secret = resolve_hmac_key();
     let session_id = uuid::Uuid::new_v4().to_string();
 
     let siem_backend_parsed = agentwall::audit::siem::SiemBackend::from_str(&siem_backend);
@@ -747,6 +760,8 @@ async fn run_start(
         dashboard_client: dashboard_client.clone(),
         listen_is_loopback: listen_addr.ip().is_loopback(),
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        centralized_mode: centralized,
+        provider_keys: dashmap::DashMap::new(),
     });
 
     if state.dashboard_client.is_some() {
@@ -763,27 +778,21 @@ async fn run_start(
         );
     }
 
-    // Background policy polling — only active when DASHBOARD_API_URL is set.
-    // Fetches the active policy from PostgreSQL (via dashboard API) every N seconds
-    // and hot-swaps it without restarting the gateway.
+    // Background policy push subscriber — only active when DASHBOARD_API_URL is set.
+    // Listens for Server-Sent Events (SSE) from the Hub to instantly hot-swap
+    // the policy and credentials in memory.
     if let Some(api_url) = dashboard_api_url {
-        let poll_interval = std::env::var("POLICY_POLL_INTERVAL_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(30);
-
-        let poll_state = state.clone();
-        let poll_secret = policy_read_secret_env;
+        let sub_state = state.clone();
+        let sub_secret = policy_read_secret_env.unwrap_or_default();
         tokio::spawn(async move {
             println!(
-                "{} Policy polling started — checking every {}s for changes",
-                "🔄".blue(), poll_interval
+                "{} Connected to Hub for real-time policy push (SSE)",
+                "🔄".blue()
             );
-            agentwall::policy::remote::start_policy_poll(
-                poll_state,
+            agentwall::control_plane_client::subscribe::start_policy_subscriber(
                 api_url,
-                poll_secret,
-                poll_interval,
+                sub_secret,
+                sub_state,
             )
             .await;
         });
@@ -1035,8 +1044,67 @@ async fn run_start(
     0
 }
 
-fn run_verify_log(log_path: &str) -> i32 {
-    print!("{} Verifying log integrity for {}... ", "ℹ".blue(), log_path.yellow());
+fn resolve_hmac_key() -> Vec<u8> {
+    let key_path = dirs::home_dir().map(|h| h.join(".AgentWall").join("audit.key"));
+
+    if let Some(ref path) = key_path {
+        if path.exists() {
+            if let Ok(data) = std::fs::read(path) {
+                if data.len() >= 32 {
+                    return data[..32].to_vec();
+                }
+            }
+        }
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
+        if std::fs::write(path, &secret).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+            }
+            return secret;
+        }
+    }
+
+    (0..32).map(|_| rand::random::<u8>()).collect()
+}
+
+fn run_verify_log(log_path: &str, key_file: Option<&str>) -> i32 {
+    let key_path = key_file
+        .map(std::path::PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".AgentWall").join("audit.key")));
+
+    if let Some(ref kpath) = key_path {
+        if kpath.exists() {
+            if let Ok(key_bytes) = std::fs::read(kpath) {
+                if key_bytes.len() >= 32 {
+                    print!("{} Verifying HMAC chain and payload integrity for {} (key: {})... ", "ℹ".blue(), log_path.yellow(), kpath.display().to_string().cyan());
+                    match audit::verifier::verify_chain_with_secret(Path::new(log_path), &key_bytes[..32]) {
+                        audit::verifier::VerifyResult::Valid { entry_count } => {
+                            println!("{}", "VALID".green().bold());
+                            println!("  {} {} entries verified with HMAC key, cryptographic chain and payloads intact.", "✓".green(), entry_count);
+                            return 0;
+                        }
+                        audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
+                            println!("{}", "INVALID".red().bold());
+                            println!("  {} Chain/payload broken at index {}: {}", "✖".red(), entry_index, reason);
+                            return 1;
+                        }
+                        audit::verifier::VerifyResult::Error(e) => {
+                            println!("{}", "ERROR".red().bold());
+                            eprintln!("  {} {}", "✖".red(), e);
+                            return 2;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    print!("{} Verifying log chain integrity for {}... ", "ℹ".blue(), log_path.yellow());
     match audit::verifier::verify_chain(Path::new(log_path)) {
         audit::verifier::VerifyResult::Valid { entry_count } => {
             println!("{}", "VALID".green().bold());
@@ -1278,6 +1346,8 @@ async fn run_wrap(
         dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: true,
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     });
 
     // Parse the command string
@@ -1406,6 +1476,8 @@ async fn run_dev(
         dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         listen_is_loopback: listen.parse::<SocketAddr>().map(|a| a.ip().is_loopback()).unwrap_or(true),
         policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     });
 
     if stdio {

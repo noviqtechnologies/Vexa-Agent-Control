@@ -127,6 +127,8 @@ async fn test_audit_log_rotation() {
             .unwrap();
     }
 
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
     // Since max_bytes was tiny, it should have rotated a few times.
     let files: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
@@ -177,5 +179,33 @@ async fn test_verify_chain_with_secret_tamper_detection() {
             assert!(reason.contains("HMAC mismatch"));
         }
         other => panic!("Expected invalid chain, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_verify_log_key_file_integration() {
+    let dir = tempdir().unwrap();
+    let key_file_path = dir.path().join("audit.key");
+    let key_secret: Vec<u8> = vec![0xAB; 32];
+    fs::write(&key_file_path, &key_secret).unwrap();
+
+    let mut config = create_temp_config(dir.path(), 1024 * 1024);
+    config.session_secret = key_secret.clone();
+    let log_path = config.log_path.clone();
+
+    let logger = AuditLogger::new(config).expect("failed to create logger");
+
+    logger.write_entry(
+        "sess-key-test", "tool_allow", "read_file", None, None, None,
+        Some("user-sub-123".to_string()), Some("user@corp.com".to_string()),
+        Some("sha256:active".to_string()), Some("127.0.0.1".to_string()), None
+    ).await.unwrap();
+
+    // Verify using key file secret
+    let read_key = fs::read(&key_file_path).unwrap();
+    assert_eq!(read_key.len(), 32);
+    match verify_chain_with_secret(&log_path, &read_key) {
+        VerifyResult::Valid { entry_count: 1 } => {}
+        other => panic!("Expected valid chain with key file, got {:?}", other),
     }
 }

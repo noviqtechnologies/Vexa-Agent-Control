@@ -7,3 +7,4 @@ pub mod session;
 pub mod db;
 pub mod egress;
 pub mod tls;
+pub mod llm_proxy;

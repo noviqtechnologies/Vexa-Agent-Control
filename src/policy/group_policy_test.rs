@@ -97,6 +97,8 @@ mod tests {
             scannable_tools: vec![],
             safe_tools: vec![],
             firewall: None,
+            spend_caps: None,
+            llm: None,
         }
     }
 

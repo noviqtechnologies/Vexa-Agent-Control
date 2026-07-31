@@ -117,6 +117,58 @@ func (m *mockStore) GetTopThreatPatterns(ctx context.Context, hours int, limit i
 	return nil, nil
 }
 
+func (m *mockStore) UpsertMcpServer(ctx context.Context, agentID string, s *model.SanitizedMcpServerMeta) error {
+	return nil
+}
+func (m *mockStore) ListMcpServersByAgent(ctx context.Context, agentID string) ([]store.McpServerInventoryRow, error) {
+	return nil, nil
+}
+func (m *mockStore) ListMcpServersFleetWide(ctx context.Context) ([]store.McpServerInventoryRow, error) {
+	return nil, nil
+}
+
+func (m *mockStore) UpsertSpendBudget(ctx context.Context, b *store.SpendBudget) error {
+	return nil
+}
+func (m *mockStore) ListSpendBudgets(ctx context.Context) ([]store.SpendBudget, error) {
+	return nil, nil
+}
+func (m *mockStore) UpsertSpendSnapshot(ctx context.Context, snap *store.SpendSnapshot) error {
+	return nil
+}
+func (m *mockStore) ListSpendSnapshots(ctx context.Context) ([]store.SpendSnapshot, error) {
+	return nil, nil
+}
+func (m *mockStore) InsertIncreaseRequest(ctx context.Context, r *store.IncreaseRequest) error {
+	return nil
+}
+func (m *mockStore) ResolveIncreaseRequest(ctx context.Context, id string, status string, resolvedBy string, newCap *int64) error {
+	return nil
+}
+func (m *mockStore) ListIncreaseRequests(ctx context.Context) ([]store.IncreaseRequest, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetActiveGroupPolicy(ctx context.Context, groupID string) (*store.GroupPolicyVersion, error) {
+	return nil, nil
+}
+func (m *mockStore) PublishGroupPolicy(ctx context.Context, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*store.GroupPolicyVersion, error) {
+	return nil, nil
+}
+func (m *mockStore) ListGroupPolicies(ctx context.Context) ([]*store.GroupPolicyVersion, error) {
+	return nil, nil
+}
+
+func (m *mockStore) InsertProviderKey(ctx context.Context, k *store.ProviderKey) error {
+	return nil
+}
+func (m *mockStore) ListProviderKeys(ctx context.Context) ([]store.ProviderKey, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteProviderKey(ctx context.Context, id string) error {
+	return nil
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 func validEventJSON() string {

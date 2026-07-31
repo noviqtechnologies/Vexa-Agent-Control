@@ -134,6 +134,11 @@ pub struct ProxyState {
     pub listen_is_loopback: bool,
     /// Shared secret for authenticating dashboard-api→gateway policy read requests.
     pub policy_read_secret: Option<String>,
+
+    /// FR-1 centralized mode: if true, Gateway acts as a fleet proxy for multiple agents/users.
+    pub centralized_mode: bool,
+    /// FR-1 centralized mode: Provider API keys distributed from Hub, securely held in memory.
+    pub provider_keys: dashmap::DashMap<String, String>,
 }
 
 pub struct RateLimiter {
@@ -242,7 +247,7 @@ pub async fn evaluate_jsonrpc(
 
     // tools/call — extract tool name and arguments
     let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    let tool_params = params.get("arguments").cloned().unwrap_or(Value::Null);
+    let mut tool_params = params.get("arguments").cloned().unwrap_or(Value::Null);
 
     // Rate limit check (FR-107) — strictly isolated per session
     if !session.rate_limiter.acquire() {
@@ -303,18 +308,79 @@ pub async fn evaluate_jsonrpc(
                 }),
             );
         } else {
-            let critical = dlp_findings.iter().any(|f| f.category != crate::policy::dlp::SecretCategory::EnvVar);
-            if critical {
+            // Evaluate ladder actions per finding
+            let actions: Vec<crate::policy::dlp::DlpAction> = dlp_findings
+                .iter()
+                .map(|f| state.dlp_scanner.resolve_action(f, session.policy.as_ref()))
+                .collect();
+
+            if actions.contains(&crate::policy::dlp::DlpAction::Block) {
+                let block_finding = dlp_findings
+                    .iter()
+                    .zip(&actions)
+                    .find(|(_, a)| **a == crate::policy::dlp::DlpAction::Block)
+                    .map(|(f, _)| f)
+                    .unwrap_or(&dlp_findings[0]);
+
                 return handle_deny(
                     state, &session.session_id, &id, tool_name,
-                    &format!("dlp: {}", dlp_findings[0].pattern_name),
+                    &format!("dlp: {}", block_finding.pattern_name),
                     session.identity_sub.clone(), session.identity_email.clone(),
                     session.request_ip.clone(),
                     true, None, None, None,
                 ).await;
+            } else if actions.contains(&crate::policy::dlp::DlpAction::Redact) {
+                state.dlp_scanner.redact_value(&mut tool_params);
+                let _ = state.audit_logger.write_entry(
+                    &session.session_id,
+                    "dlp_request_redacted",
+                    tool_name,
+                    None,
+                    Some(format!("Redacted {} secret(s)", dlp_findings.len())),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                ).await;
+                logging::log_event(
+                    Level::Warn,
+                    "dlp_request_redacted",
+                    json!({
+                        "tool": tool_name,
+                        "session": &session.session_id,
+                        "count": dlp_findings.len(),
+                    }),
+                );
+            } else {
+                // All actions are Warn
+                let _ = state.audit_logger.write_entry(
+                    &session.session_id,
+                    "dlp_request_warn",
+                    tool_name,
+                    None,
+                    Some(format!("DLP match: {}", dlp_findings[0].pattern_name)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                ).await;
+                logging::log_event(
+                    Level::Warn,
+                    "dlp_request_warn",
+                    json!({
+                        "tool": tool_name,
+                        "session": &session.session_id,
+                        "finding": dlp_findings[0].pattern_name,
+                    }),
+                );
             }
         }
     }
+
 
     // FR-12B: Semantic Scanner (Phi-4-Mini Heuristic Stub)
     if state.semantic_scanner.config.enabled {
@@ -352,7 +418,7 @@ pub async fn evaluate_jsonrpc(
         // Currently keeping it purely async to avoid adding latency per AC-12.7.
     }
 
-    // ── Step 2: Credential Scope Validation (FR-5 / AC-5.8) ─────────────
+    // ── Step 2: Credential Scope Validation (FR-5 / AC-5.8 / US-103) ─────────────
     // Read credential scope requirements from the per-tool policy rule.
     // Scope header comes from the MCP agent via X-AgentWall-Credential-Scope.
     // In WARN mode (default): mismatches are logged and the call continues.
@@ -368,16 +434,14 @@ pub async fn evaluate_jsonrpc(
         };
 
         if !required_scopes.is_empty() {
-            let agent_id = session.identity_sub.as_deref().unwrap_or("unknown-agent");
-            let credential_id = session.active_credential_id.as_deref().unwrap_or("");
-            
-            let scope_result = crate::identity::scope_validator::IdentityScopeValidator::validate(
-                agent_id,
+            let scope_check = state.credential_scope_validator.validate(
                 tool_name,
-                credential_id,
+                &required_scopes,
+                session.agent_scope_header.as_deref(),
+                &session.session_id,
             );
 
-            if let crate::identity::scope_validator::CredentialScopeCheckResult::Insufficient(reason) = &scope_result {
+            if let crate::policy::credential_scope::CredentialScopeResult::Insufficient { reason } = scope_check {
                 let reason_str = reason.clone();
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 let _ = state.audit_logger.write_entry(
@@ -415,81 +479,219 @@ pub async fn evaluate_jsonrpc(
                         }
                     }
                 }));
-            } else if let crate::identity::scope_validator::CredentialScopeCheckResult::Invalid(reason) = &scope_result {
-                let reason_str = reason.clone();
-                state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
-                let _ = state.audit_logger.write_entry(
-                    &session.session_id,
-                    "credential_invalid",
-                    tool_name,
-                    None,
-                    Some(reason_str.clone()),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                    None,
-                ).await;
-                logging::log_event(
-                    Level::Warn,
-                    "credential_invalid",
-                    json!({
-                        "tool": tool_name,
-                        "session": &session.session_id,
-                        "reason": &reason_str,
-                    }),
-                );
-                return ProxyAction::Respond(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32401,
-                        "message": format!("Invalid Credential: {}", reason_str),
-                        "data": {
-                            "session_id": &session.session_id,
-                            "tool": tool_name,
-                        }
-                    }
-                }));
-            } else if let crate::identity::scope_validator::CredentialScopeCheckResult::Expired = &scope_result {
-                state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
-                let _ = state.audit_logger.write_entry(
-                    &session.session_id,
-                    "credential_expired",
-                    tool_name,
-                    None,
-                    Some("credential expired".to_string()),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                    None,
-                ).await;
-                logging::log_event(
-                    Level::Warn,
-                    "credential_expired",
-                    json!({
-                        "tool": tool_name,
-                        "session": &session.session_id,
-                        "credential_id": credential_id,
-                    }),
-                );
-                return ProxyAction::Respond(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32401,
-                        "message": "Credential Expired",
-                        "data": {
-                            "session_id": &session.session_id,
-                            "tool": tool_name,
-                        }
-                    }
-                }));
             }
 
+            if let Some(credential_id) = session.active_credential_id.as_deref() {
+                let agent_id = session.identity_sub.as_deref().unwrap_or("unknown-agent");
+                let scope_result = crate::identity::scope_validator::IdentityScopeValidator::validate(
+                    agent_id,
+                    tool_name,
+                    credential_id,
+                );
+
+                if let crate::identity::scope_validator::CredentialScopeCheckResult::Insufficient(reason) = &scope_result {
+                    let reason_str = reason.clone();
+                    state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                    let _ = state.audit_logger.write_entry(
+                        &session.session_id,
+                        "credential_scope_deny",
+                        tool_name,
+                        None,
+                        Some(reason_str.clone()),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    ).await;
+                    logging::log_event(
+                        Level::Warn,
+                        "credential_scope_deny",
+                        json!({
+                            "tool": tool_name,
+                            "session": &session.session_id,
+                            "reason": &reason_str,
+                        }),
+                    );
+                    return ProxyAction::Respond(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32403,
+                            "message": format!("Credential Scope Insufficient: {}", reason_str),
+                            "data": {
+                                "session_id": &session.session_id,
+                                "tool": tool_name,
+                                "required_scopes": required_scopes,
+                            }
+                        }
+                    }));
+                } else if let crate::identity::scope_validator::CredentialScopeCheckResult::Invalid(reason) = &scope_result {
+                    let reason_str = reason.clone();
+                    state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                    let _ = state.audit_logger.write_entry(
+                        &session.session_id,
+                        "credential_invalid",
+                        tool_name,
+                        None,
+                        Some(reason_str.clone()),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    ).await;
+                    logging::log_event(
+                        Level::Warn,
+                        "credential_invalid",
+                        json!({
+                            "tool": tool_name,
+                            "session": &session.session_id,
+                            "reason": &reason_str,
+                        }),
+                    );
+                    return ProxyAction::Respond(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32401,
+                            "message": format!("Invalid Credential: {}", reason_str),
+                            "data": {
+                                "session_id": &session.session_id,
+                                "tool": tool_name,
+                            }
+                        }
+                    }));
+                } else if let crate::identity::scope_validator::CredentialScopeCheckResult::Expired = &scope_result {
+                    state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                    let _ = state.audit_logger.write_entry(
+                        &session.session_id,
+                        "credential_expired",
+                        tool_name,
+                        None,
+                        Some("credential expired".to_string()),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    ).await;
+                    logging::log_event(
+                        Level::Warn,
+                        "credential_expired",
+                        json!({
+                            "tool": tool_name,
+                            "session": &session.session_id,
+                            "credential_id": credential_id,
+                        }),
+                    );
+                    return ProxyAction::Respond(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32401,
+                            "message": "Credential Expired",
+                            "data": {
+                                "session_id": &session.session_id,
+                                "tool": tool_name,
+                            }
+                        }
+                    }));
+                }
+            }
+        }
+    }
+
+    // ── Step 2.5: Spend Cap & Token Limit Enforcement (FR-102 / US-101) ─────
+    if let Some(spend_caps) = session.policy.as_ref().and_then(|p| p.spend_caps.as_ref()) {
+        if spend_caps.enabled {
+            let is_licensed = crate::license::validator::is_license_valid(spend_caps.license_key.as_deref());
+
+            // 1. Session token budget check
+            if let Some(max_tokens) = spend_caps.max_tokens_per_session {
+                let used = session.tokens_used.load(std::sync::atomic::Ordering::Relaxed);
+                if used >= max_tokens {
+                    if is_licensed {
+                        state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                        let _ = state.audit_logger.write_entry(
+                            &session.session_id,
+                            "spend_cap_exceeded",
+                            tool_name,
+                            None,
+                            Some(format!("session token budget exhausted: used={} max={}", used, max_tokens)),
+                            None,
+                            session.identity_sub.clone(),
+                            session.identity_email.clone(),
+                            None,
+                            session.request_ip.clone(),
+                            None,
+                        ).await;
+                        logging::log_event(
+                            Level::Warn,
+                            "spend_cap_exceeded",
+                            json!({
+                                "tool": tool_name,
+                                "session": &session.session_id,
+                                "used_tokens": used,
+                                "max_tokens": max_tokens,
+                            }),
+                        );
+                        return ProxyAction::Respond(json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {
+                                "code": -32029,
+                                "message": format!("Token spend cap exceeded for session: {} tokens used (max: {})", used, max_tokens),
+                                "data": {
+                                    "session_id": &session.session_id,
+                                    "used_tokens": used,
+                                    "max_tokens": max_tokens,
+                                }
+                            }
+                        }));
+                    } else {
+                        // Unlicensed: record usage without blocking (US-101 AC-2)
+                        logging::log_event(
+                            Level::Info,
+                            "spend_cap_exceeded_unlicensed",
+                            json!({
+                                "tool": tool_name,
+                                "session": &session.session_id,
+                                "used_tokens": used,
+                                "max_tokens": max_tokens,
+                                "note": "License absent — usage recorded without enforcement",
+                            }),
+                        );
+                    }
+                }
+            }
+
+            // 2. Spend Ledger check (if initialized)
+            if let Some(ledger) = &state.spend_ledger {
+                let agent_id = session.identity_sub.clone().unwrap_or_else(|| session.session_id.clone());
+                let res = ledger.check_and_increment(agent_id, session.identity_groups.clone(), 0).await;
+                if let crate::spend::SpendCheckResult::BudgetExhausted { cap_cents, spent_cents } = res {
+                    if is_licensed {
+                        state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                        return ProxyAction::Respond(json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {
+                                "code": -32029,
+                                "message": format!("Spend limit exceeded: {} cents spent (cap: {} cents)", spent_cents, cap_cents),
+                                "data": {
+                                    "session_id": &session.session_id,
+                                    "spent_cents": spent_cents,
+                                    "cap_cents": cap_cents,
+                                }
+                            }
+                        }));
+                    }
+                }
+            }
         }
     }
 

@@ -60,6 +60,10 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(256).0,
+        spend_ledger: None,
+        pricing_table: None,
+        centralized_mode: false,
+        provider_keys: dashmap::DashMap::new(),
     })
 }
 
@@ -73,6 +77,8 @@ async fn test_concurrency_and_isolation_100_sessions() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -144,6 +150,8 @@ async fn test_rate_limiting_isolation() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -241,6 +249,8 @@ async fn test_cycle_detection_isolation() {
                 action: CycleAction::PivotError,
             },
         }),
+        spend_caps: None,
+        llm: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -325,6 +335,8 @@ async fn test_hot_reload_policy_isolation() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     // Policy 2 (Denies everything)
@@ -336,6 +348,8 @@ async fn test_hot_reload_policy_isolation() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let state = create_mock_proxy_state(Some(policy_v1.clone()));
@@ -413,6 +427,8 @@ async fn test_dynamic_tool_history_max() {
                 action: CycleAction::PivotError,
             },
         }),
+        spend_caps: None,
+        llm: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -461,6 +477,8 @@ async fn test_session_ttl_expiry() {
         scannable_tools: vec![],
         safe_tools: vec![],
         firewall: None,
+        spend_caps: None,
+        llm: None,
     };
 
     let session = SessionContext::new(

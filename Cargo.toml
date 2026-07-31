@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.15"
+version = "1.0.16"
 edition = "2021"
 description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -68,7 +68,8 @@ chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 
 # Reqwest for forwarding
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking", "stream"] }
+reqwest-eventsource = "0.6.0"
 rusqlite = { version = "0.31", features = ["bundled"] }
 shlex = "1.3"
 

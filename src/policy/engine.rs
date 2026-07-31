@@ -20,6 +20,8 @@ pub struct CompiledPolicy {
     pub firewall: Option<super::schema::FirewallConfig>,
     /// FR-120: Spend caps configuration
     pub spend_caps: Option<super::schema::SpendCapsConfig>,
+    /// LLM API governance configuration
+    pub llm: Option<super::schema::LlmConfig>,
 }
 
 impl std::fmt::Debug for CompiledPolicy {
@@ -33,6 +35,7 @@ impl std::fmt::Debug for CompiledPolicy {
             .field("safe_tools", &self.safe_tools)
             .field("firewall", &self.firewall)
             .field("spend_caps", &self.spend_caps)
+            .field("llm", &self.llm)
             .finish()
     }
 }

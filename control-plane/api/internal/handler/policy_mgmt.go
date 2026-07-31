@@ -5,15 +5,17 @@ import (
 	"net/http"
 
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
 type PolicyMgmtHandler struct {
-	store *store.Store
+	store  *store.Store
+	broker *sse.Broker
 }
 
-func NewPolicyMgmtHandler(s *store.Store) *PolicyMgmtHandler {
-	return &PolicyMgmtHandler{store: s}
+func NewPolicyMgmtHandler(s *store.Store, b *sse.Broker) *PolicyMgmtHandler {
+	return &PolicyMgmtHandler{store: s, broker: b}
 }
 
 func (h *PolicyMgmtHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -74,4 +76,55 @@ func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)
+
+	// Broadcast the new policy over SSE to connected gateways
+	if h.broker != nil {
+		msg := map[string]string{
+			"event": "policy_update",
+			"data":  p.Content,
+		}
+		h.broker.Publish(msg)
+	}
+}
+
+func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
+	if h.broker == nil {
+		http.Error(w, "SSE broker not configured", http.StatusInternalServerError)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	clientChan, cleanup := h.broker.Subscribe()
+	defer cleanup()
+
+	// Send initial active policy if available
+	policy, err := h.store.GetActivePolicy(r.Context())
+	if err == nil && policy != nil {
+		msg, _ := json.Marshal(map[string]string{
+			"event": "policy_update",
+			"data":  policy.Content,
+		})
+		w.Write([]byte("data: " + string(msg) + "\n\n"))
+		flusher.Flush()
+	}
+
+	notify := r.Context().Done()
+	for {
+		select {
+		case <-notify:
+			return
+		case payload := <-clientChan:
+			w.Write(payload)
+			flusher.Flush()
+		}
+	}
 }

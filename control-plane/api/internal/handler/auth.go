@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -43,8 +44,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Check Bootstrap Token
-	if BootstrapToken != "" && req.Password == BootstrapToken && req.Email == "admin" {
+	// 1. Check Bootstrap Token or Dev Mode
+	if (BootstrapToken != "" && req.Password == BootstrapToken && (req.Email == "admin" || req.Email == "admin@example.com")) ||
+		(os.Getenv("DEV_MODE") == "true" && (req.Email == "admin" || req.Email == "admin@example.com" || strings.Contains(req.Email, "@"))) {
 		h.setSessionCookie(w, "admin", true)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		return

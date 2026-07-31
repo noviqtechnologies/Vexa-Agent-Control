@@ -56,7 +56,45 @@ pub struct PolicyFile {
     pub groups: Option<Vec<GroupIdentityPolicy>>,
     
     /// FR-120: Spend caps configuration (Paid tier).
+    #[serde(alias = "spend")]
     pub spend_caps: Option<SpendCapsConfig>,
+
+    /// LLM API governance configuration (providers, models, DLP).
+    pub llm: Option<LlmConfig>,
+}
+
+/// LLM API configuration block.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LlmConfig {
+    pub providers: Option<Vec<LlmProviderRule>>,
+    pub dlp: Option<DlpConfig>,
+}
+
+/// LLM Provider access rule.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LlmProviderRule {
+    pub name: String,
+    pub action: String,
+    pub models: Option<Vec<String>>,
+    pub max_tokens_per_request: Option<u32>,
+    pub dlp_tier: Option<String>,
+}
+
+/// LLM DLP configuration block.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DlpConfig {
+    pub actions: Option<Vec<DlpActionRule>>,
+}
+
+/// DLP Action ladder rule.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DlpActionRule {
+    pub entity: String,
+    pub action: String,
 }
 
 /// Agent identity and credential policy (FR-22).
@@ -100,6 +138,8 @@ pub struct SpendCapsConfig {
     pub admin_api: bool,
     pub pricing_table_path: Option<String>,
     pub concurrency_ceiling: Option<usize>,
+    pub max_tokens_per_session: Option<u64>,
+    pub max_concurrent_sessions: Option<usize>,
     pub retention: Option<crate::spend::RetentionPolicy>,
 }
 

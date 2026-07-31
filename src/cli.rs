@@ -192,6 +192,10 @@ pub enum Commands {
         /// Must be provided together with --tls-cert.
         #[arg(long, env = "AGENTWALL_TLS_KEY")]
         tls_key: Option<String>,
+
+        /// Run in centralized mode: binds to 0.0.0.0 by default, enables Hub credential management.
+        #[arg(long, env = "AGENTWALL_CENTRALIZED", default_value_t = false)]
+        centralized: bool,
     },
 
     /// Validate a policy against a gateway instance using fixture test calls (FR-204)
@@ -242,6 +246,10 @@ pub enum Commands {
     VerifyLog {
         /// Audit log file path
         log_path: String,
+
+        /// Optional path to HMAC signing key file for full payload verification (ADR-007)
+        #[arg(long, env = "AGENTWALL_KEY_FILE")]
+        key_file: Option<String>,
     },
 
     /// Generate a session report from a completed audit log

@@ -44,4 +44,8 @@ type DataStore interface {
 	GetActiveGroupPolicy(ctx context.Context, groupID string) (*store.GroupPolicyVersion, error)
 	PublishGroupPolicy(ctx context.Context, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*store.GroupPolicyVersion, error)
 	ListGroupPolicies(ctx context.Context) ([]*store.GroupPolicyVersion, error)
+
+	InsertProviderKey(ctx context.Context, k *store.ProviderKey) error
+	ListProviderKeys(ctx context.Context) ([]store.ProviderKey, error)
+	DeleteProviderKey(ctx context.Context, id string) error
 }

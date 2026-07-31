@@ -78,7 +78,7 @@ describe('PolicyInsights', () => {
     renderView()
 
     await waitFor(() => {
-      expect(screen.getByText(/Unable to reach the gateway/)).toBeInTheDocument()
+      expect(screen.getByText(/not reachable/i)).toBeInTheDocument()
     })
   })
 
