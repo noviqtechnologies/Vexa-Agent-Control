@@ -60,6 +60,22 @@ helm install agentwall ./chart \
 
 ---
 
+## Architecture
+
+AgentWall implements a Hub-and-Spoke governance model for AI agents across local developer workstations, team environments, and enterprise infrastructure:
+
+![AgentWall System Architecture](docs/system_architecture_diagram.png)
+
+### Deployment Tiers
+
+| Tier | Components | Deployment Target |
+|------|-----------|------------------|
+| **Local Sidecar** | Gateway + SQLite | Standalone Developer Workstation (`agentwall dev`) |
+| **Team Hub** | Gateway + Hub API + Hub UI + PostgreSQL | Team Staging / Shared Server (Docker Compose) |
+| **Enterprise** | Gateway Fleet + Hub API Cluster + PostgreSQL | Enterprise Multi-Tenant (Kubernetes & Helm) |
+
+---
+
 ## Quick Start
 
 ### 1. Local Shadow Proxy & Embedded Dashboard (`agentwall dev`)
