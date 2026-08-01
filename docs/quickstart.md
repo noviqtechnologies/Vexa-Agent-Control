@@ -50,7 +50,7 @@ Now that AgentWall has seen what tools Claude needs to use, we can generate a se
 In your second terminal window, run:
 
 ```bash
-agentwall generate-policy --decay-window 30d
+agentwall generate-policy --decay-window 30
 ```
 
 This creates an `agentwall-policy.yaml` file in your current folder. If you open this file, you will see something like this:

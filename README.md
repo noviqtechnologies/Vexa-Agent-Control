@@ -209,7 +209,6 @@ For detailed, step-by-step documentation, architecture specs, and advanced deplo
 - 📖 **[Vexa AgentWall Detailed User Guide](docs/user_guide.md)** — Comprehensive guide covering deployment tiers, v2 policy creation, DLP tuning, OIDC identity binding, Control Hub setup, audit verification, and troubleshooting.
 - 📚 **[Documentation Hub](docs/index.md)** — Core documentation index and capabilities overview.
 - 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Scenario-based command walkthroughs for developers.
-- 🏗️ **[Architecture & API Specifications](design/architecture/api-specifications.md)** — Control Hub REST API, SSE streaming schemas, and data flow specifications.
 
 ---
 

@@ -41,7 +41,7 @@ python my_agent.py
 Once your agent has been observed, automatically draft a YAML security policy:
 **All OS:**
 ```bash
-agentwall generate-policy --decay-window 30d
+agentwall generate-policy --decay-window 30
 ```
 
 ---
@@ -207,7 +207,7 @@ If you have Docker installed, you can spin up the full dashboard stack (Frontend
 
 **All OS (macOS, Linux, Windows via Docker Desktop):**
 ```bash
-cd agentwall/dashboard
+cd control-plane
 docker compose up -d --build
 ```
 
