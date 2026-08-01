@@ -66,17 +66,23 @@ helm install agentwall ./chart \
 
 ### Deployment Tiers
 
-| Tier | Components | Deployment Target |
-|------|-----------|------------------|
-| **Local Sidecar** | Gateway + SQLite | Standalone Developer Workstation (`agentwall dev`) |
-| **Team Hub** | Gateway + Hub API + Hub UI + PostgreSQL | Team Staging / Shared Server (Docker Compose) |
-| **Enterprise** | Gateway Fleet + Hub API Cluster + PostgreSQL | Enterprise Multi-Tenant (Kubernetes & Helm) |
+| Tier | Components | Deployment Target | Guide & Installation Links |
+|------|-----------|------------------|---------------------------|
+| **Local Sidecar** | Gateway + SQLite | Standalone Developer Workstation (`agentwall dev`) | [Binary Install](#1-developer--binary-install-standalone-cli) · [Tier 1 Guide](docs/user_guide.md#tier-1-developer--workstation) |
+| **Team Hub** | Gateway + Hub API + Hub UI + PostgreSQL | Team Staging / Shared Server (Docker Compose) | [Docker Compose Install](#2-team--staging-install-docker-compose) · [Tier 2 Guide](docs/user_guide.md#tier-2-team--staging) |
+| **Enterprise** | Gateway Fleet + Hub API Cluster + PostgreSQL | Enterprise Multi-Tenant (Kubernetes & Helm) | [Helm Production Install](#3-enterprise-production-install-kubernetes--helm) · [Tier 3 Guide](docs/user_guide.md#tier-3-enterprise-cloud--production) |
 
 ---
 
 ## Quick Start
 
 ### 1. Local Shadow Proxy & Embedded Dashboard (`agentwall dev`)
+
+**Prerequisites:**
+- **AgentWall CLI Installed**: `agentwall` binary installed locally (see [Installation](#installation) step 1).
+- **Target Upstream MCP Server / HTTP Service**: An active local or remote MCP server / AI agent service to proxy (or use `--stdio` to wrap a stdio command directly).
+- **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`) free for the proxy and embedded Web UI.
+
 Launch the shadow proxy in observation mode. This automatically starts the local Web UI at `http://127.0.0.1:8080` and opens your browser:
 
 ```bash
