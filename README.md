@@ -62,8 +62,6 @@ helm install agentwall ./chart \
 
 ## Architecture
 
-AgentWall implements a Hub-and-Spoke governance model for AI agents across local developer workstations, team environments, and enterprise infrastructure:
-
 ![AgentWall System Architecture](docs/system_architecture_diagram.png)
 
 ### Deployment Tiers
