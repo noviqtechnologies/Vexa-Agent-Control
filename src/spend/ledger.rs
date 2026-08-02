@@ -1,3 +1,5 @@
+//! Thread-safe SQLite token ledger for persistent spend tracking, budget caps, and request increase approvals.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -10,6 +12,7 @@ use super::model::{
     SpendCheckResult,
 };
 
+/// Commands sent to the background spend ledger worker thread.
 pub enum SpendCmd {
     CheckAndIncrement {
         agent_id: String,

@@ -1,7 +1,22 @@
+//! Policy linting and static security analysis tool (FR-108).
+//!
+//! Evaluates policy YAML files for schema compliance, overly permissive rules (wildcards,
+//! unvalidated mutation parameters), and generates human-readable access control summaries.
+
 use std::path::Path;
 use crate::policy::loader::{load_policy, PolicyLoadResult};
 use crate::policy::schema::ParamType;
 
+/// Executes static policy linting and rule analysis on the specified policy file path.
+///
+/// # Arguments
+/// * `policy_path` - Path to the policy YAML file to analyze.
+///
+/// # Returns
+/// * `Ok(0)` - Policy passed linting with zero warnings or errors.
+/// * `Ok(1)` - Policy contains fatal schema errors or lint errors.
+/// * `Ok(2)` - Policy passed parsing but contains security warnings (e.g. unvalidated mutation params).
+/// * `Err(String)` - Subcommand execution failure error message.
 pub fn execute(policy_path: &str) -> Result<i32, String> {
     // 1. Load the policy
     let load_res = load_policy(Path::new(policy_path), None);

@@ -64,6 +64,7 @@ impl KillMode {
         }
     }
 
+    /// Returns the static string representation of the `KillMode`.
     pub fn as_str(&self) -> &'static str {
         match self {
             KillMode::Connection => "connection",

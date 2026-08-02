@@ -1,3 +1,5 @@
+//! Bridge conversion implementations mapping Gateway local types to Control Plane protobuf types.
+
 use crate::policy::dlp::SecretCategory as GwSecretCategory;
 use crate::policy::semantic::SemanticFindingType as GwSemanticFindingType;
 use control_plane_proto::event::SecretCategory as DpSecretCategory;

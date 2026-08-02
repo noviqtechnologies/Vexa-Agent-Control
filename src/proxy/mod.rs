@@ -1,3 +1,5 @@
+//! Proxy server, TLS interception, JSON-RPC forwarding, STDIO transport, and egress tracking subsystem.
+
 pub mod forward;
 pub mod handler;
 pub mod server;

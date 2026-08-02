@@ -1,7 +1,13 @@
+//! Data Loss Prevention (DLP) engine for identifying API keys, PII, high-entropy tokens, and credentials.
+//!
+//! Evaluates incoming request parameters and outgoing LLM response payloads against high-performance `RegexSet`
+//! patterns, BIP39 mnemonic validation, Shannon entropy thresholds, and Luhn credit card algorithms.
+
 use regex::{Regex, RegexSet};
 use bip39::Mnemonic;
 use base64::{engine::general_purpose, Engine as _};
 
+/// Categories of secrets detected by the DLP engine.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SecretCategory {
     AwsAccessKey,

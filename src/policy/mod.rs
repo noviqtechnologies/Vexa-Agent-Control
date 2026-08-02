@@ -1,3 +1,5 @@
+//! Policy engine module for evaluation, DLP inspection, prompt injection, and schema loading.
+
 pub mod engine;
 pub mod identity;
 pub mod loader;

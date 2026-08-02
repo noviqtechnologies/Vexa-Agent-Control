@@ -278,7 +278,7 @@ pub async fn try_export(exporter: &SiemExporter, entry: &AuditEntry) {
     }
 }
 
-// FR-123: Threshold alert (admin: 75%, 90%; user-facing: 75%, 95%)
+/// FR-123: Alert emitted when an agent approaches spend budget thresholds (75%, 90%, 95%).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SpendThresholdAlert {
     pub agent_id: String,
@@ -290,7 +290,7 @@ pub struct SpendThresholdAlert {
     pub pricing_table_version: String,
 }
 
-// FR-123: Budget exhausted alert
+/// FR-123: Alert emitted when an agent exhausts its total allowed spend cap.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetExhaustedAlert {
     pub agent_id: String,

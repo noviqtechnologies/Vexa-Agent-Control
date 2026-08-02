@@ -1,8 +1,11 @@
+//! LLM model token cost pricing table loader and estimator.
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
 use serde::{Deserialize, Serialize};
 
+/// Cost rates per 1 million input and output tokens (in US cents).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelPrice {
     pub input_per_1m_cents: u64,

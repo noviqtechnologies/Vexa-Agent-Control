@@ -1,3 +1,5 @@
+//! Server-Sent Events (SSE) subscriber client for real-time remote policy pushes from Control Plane.
+
 use futures_util::StreamExt;
 use reqwest_eventsource::{Event, EventSource};
 use std::sync::Arc;
@@ -5,7 +7,15 @@ use std::sync::Arc;
 use crate::logging::{self, Level};
 use crate::policy::loader::load_policy_from_str;
 
-/// Subscribes to the Hub's SSE endpoint to receive real-time policy and credential updates.
+/// Subscribes to the Hub's SSE endpoint to receive real-time policy updates.
+///
+/// Runs an infinite event loop with automatic reconnect handling. On receipt of `policy_update`
+/// events, parses and validates the policy string and updates the thread-safe `ProxyState`.
+///
+/// # Arguments
+/// * `dashboard_url` - Control plane hub base HTTP URL.
+/// * `secret` - Authentication Bearer token for the control plane.
+/// * `state` - Shared atomic application state to update when new policy versions arrive.
 pub async fn start_policy_subscriber(
     dashboard_url: String,
     secret: String,

@@ -1532,6 +1532,8 @@ async fn scan_and_process_response(
     }
 }
 
+/// Internal helper to validate policy read authorization headers against configured secret tokens.
+#[allow(dead_code)]
 fn check_policy_read_auth_inner(
     auth_header: Option<&str>,
     secret_token: Option<&str>,

@@ -1,4 +1,7 @@
-//! FR-304: agentwall wrap — module root
+//! IDE wrapping and MCP server proxy interception management subsystem (FR-304).
+//!
+//! Intercepts MCP server configurations across supported AI IDEs (Claude Desktop, Cursor,
+//! VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity) to route tool execution through AgentWall.
 
 pub mod backup;
 pub mod claude;
@@ -10,7 +13,7 @@ pub mod watch;
 
 use crate::cli::{WrapTarget, UnwrapTarget, WatchTarget};
 
-/// Errors from wrap/unwrap operations
+/// Errors from wrap/unwrap operations.
 #[derive(Debug)]
 pub enum WrapError {
     UnsupportedOs(String),
@@ -54,6 +57,13 @@ impl From<std::io::Error> for WrapError {
     }
 }
 
+/// Executes the `agentwall wrap` command for a specific IDE target.
+///
+/// # Arguments
+/// * `target` - Target IDE configuration enum variant.
+///
+/// # Returns
+/// Exit code: `0` on success, `2` on error.
 pub fn run_wrap_target(target: &WrapTarget) -> i32 {
     let result = match target {
         WrapTarget::Claude { dry_run, scan_responses, block_on_secrets: _ } => {
@@ -99,6 +109,13 @@ pub fn run_wrap_target(target: &WrapTarget) -> i32 {
     }
 }
 
+/// Executes the `agentwall unwrap` command for a specific IDE target.
+///
+/// # Arguments
+/// * `target` - Target IDE unwrap configuration enum variant.
+///
+/// # Returns
+/// Exit code: `0` on success, `2` on error.
 pub fn run_unwrap_target(target: &UnwrapTarget) -> i32 {
     let result = match target {
         UnwrapTarget::Claude { force } => {

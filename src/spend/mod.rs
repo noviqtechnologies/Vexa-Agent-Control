@@ -1,3 +1,5 @@
+//! Spend tracking, token ledger accounting, budget enforcement, and LLM model pricing subsystem (FR-120).
+
 pub mod ledger;
 pub mod model;
 pub mod pricing;

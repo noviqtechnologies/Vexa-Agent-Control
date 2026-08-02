@@ -1,7 +1,10 @@
+//! Asynchronous HTTP client for transmitting telemetry, events, alerts, and snapshots to the Control Plane Dashboard.
+
 use control_plane_proto::event::RedactedEvent;
 use control_plane_proto::alert::RedactedAlert;
 use control_plane_proto::mcp_server::McpServerSnapshot;
 
+/// HTTP client for exporting audit events, alerts, spend data, and server snapshots.
 pub struct DashboardClient {
     http: reqwest::Client,
     base_url: String,
@@ -9,6 +12,9 @@ pub struct DashboardClient {
 }
 
 impl DashboardClient {
+    /// Constructs a `DashboardClient` from environment variables (`DASHBOARD_API_URL`, `GATEWAY_SECRET`).
+    ///
+    /// Falls back to local dev defaults if environment variables are unset.
     pub fn from_env() -> Option<Self> {
         // Fallback to local development dashboard API URL if DASHBOARD_API_URL is not set
         let base_url = std::env::var("DASHBOARD_API_URL")
@@ -36,6 +42,7 @@ impl DashboardClient {
         })
     }
 
+    /// Asynchronously transmits a redacted event to the dashboard ingestion endpoint.
     pub fn send_event(&self, event: RedactedEvent) {
         let url = format!("{}/api/v1/ingest/events", self.base_url);
         let req = self
@@ -55,6 +62,7 @@ impl DashboardClient {
         });
     }
 
+    /// Asynchronously transmits a redacted alert to the dashboard ingestion endpoint.
     pub fn send_alert(&self, alert: RedactedAlert) {
         let url = format!("{}/api/v1/ingest/alerts", self.base_url);
         let req = self
@@ -74,7 +82,7 @@ impl DashboardClient {
         });
     }
 
-    
+    /// Asynchronously transmits a spend snapshot JSON payload to the dashboard.
     pub fn send_spend_snapshot(&self, snapshot: serde_json::Value) {
         let url = format!("{}/api/v1/ingest/spend-snapshots", self.base_url);
         let req = self
@@ -94,7 +102,8 @@ impl DashboardClient {
         });
     }
 
-pub fn send_mcp_server_snapshot(&self, snapshot: McpServerSnapshot) {
+    /// Transmits an MCP server snapshot synchronously to ensure complete delivery before process termination.
+    pub fn send_mcp_server_snapshot(&self, snapshot: McpServerSnapshot) {
         let url = format!("{}/api/v1/ingest/mcp-servers", self.base_url);
         let req = self
             .http

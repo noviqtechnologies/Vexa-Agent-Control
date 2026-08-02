@@ -1,8 +1,13 @@
+//! Self-Healing policy suggestion and anomaly scoring engine.
+//!
+//! Provides frequency-based Z-score anomaly calculation for tool parameter baseline values,
+//! confidence decay over time, GitOps PR suggestion generation, and SIEM alerting.
+
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Configuration for the Self-Healing engine.
+/// Configuration options for the Self-Healing policy engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelfHealingConfig {
     pub enabled: bool,

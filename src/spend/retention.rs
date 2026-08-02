@@ -1,7 +1,8 @@
+//! Spend data retention and automatic record purging policy configuration.
+
 use serde::{Deserialize, Serialize};
 
-/// Purge configuration for the spend PII store.
-/// Activated when `spend_caps.admin_api: true`.
+/// Purge configuration for the spend database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetentionPolicy {
     /// Spend counter rows older than this are purged. Default: 90 days.

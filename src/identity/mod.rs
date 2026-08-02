@@ -65,7 +65,7 @@ pub mod vault;
 pub use credential::AgentCredential;
 pub use scope_validator::{CredentialScopeCheckResult, IdentityScopeValidator};
 
-/// FR-22: Identity subcommand routing
+/// CLI subcommands for agent identity and dynamic credential lifecycle management (FR-22).
 #[derive(Debug)]
 pub enum IdentityCommand {
     /// Provision a new scoped, short-lived credential for an agent
@@ -98,9 +98,13 @@ pub enum IdentityCommand {
     },
 }
 
-/// Execute an identity subcommand.
+/// Executes an `IdentityCommand` subcommand.
 ///
-/// Returns an exit code (0 = success, 1 = error, 2 = validation failure).
+/// # Arguments
+/// * `cmd` - The parsed `IdentityCommand` enum.
+///
+/// # Returns
+/// Exit code: `0` on success, `1` on error, `2` on validation failure.
 pub fn run_identity(cmd: IdentityCommand) -> i32 {
     match cmd {
         IdentityCommand::Create {

@@ -1,10 +1,24 @@
-//! FR-20: agentwall init — IDE discovery & sidecar generation
+//! IDE discovery and sidecar deployment manifest generator (FR-20).
+//!
+//! Provides automatic detection of standard AI IDE configurations (Claude, Cursor, VS Code,
+//! JetBrains, Zed, Cline, OpenCode, Antigravity) and generates Kubernetes sidecar deployment YAMLs.
+
 use colored::*;
 use std::path::Path;
 
 use crate::cli::InitTarget;
 use crate::wrap::config_path::*;
 
+/// Executes the `agentwall init` subcommand.
+///
+/// Scans known filesystem locations for AI IDE and assistant configurations or generates
+/// a Kubernetes sidecar manifest if an `InitTarget` is specified.
+///
+/// # Arguments
+/// * `target` - Optional specific initialization target (e.g. `Sidecar`).
+///
+/// # Returns
+/// Exit code: `0` on successful execution or discovery.
 pub fn run_init(target: &Option<InitTarget>) -> i32 {
     if let Some(t) = target {
         match t {
@@ -99,6 +113,14 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
     0
 }
 
+/// Generates and outputs a Kubernetes Deployment and Service YAML manifest
+/// configuring AgentWall as a sidecar proxy targeting an upstream MCP server URL.
+///
+/// # Arguments
+/// * `mcp_upstream` - Upstream target URL for the MCP proxy instance.
+///
+/// # Returns
+/// Exit code: `0`.
 fn run_init_sidecar(mcp_upstream: &str) -> i32 {
     let yaml = format!(
 r#"---

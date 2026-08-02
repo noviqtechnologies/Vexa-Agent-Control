@@ -13,6 +13,7 @@ pub enum Level {
 }
 
 impl Level {
+    /// Returns the static string representation (`"info"`, `"warn"`, `"error"`) of the log level.
     pub fn as_str(&self) -> &'static str {
         match self {
             Level::Info => "info",

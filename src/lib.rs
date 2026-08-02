@@ -1,3 +1,8 @@
+//! # AgentWall Security Proxy & Policy Engine Core Library
+//!
+//! `agentwall` provides an enterprise-grade AI proxy, dynamic policy evaluation engine,
+//! process wrapper, identity management, and audit logger for securing LLM applications and agentic workflows.
+
 pub mod audit;
 pub mod check;
 pub mod cli;

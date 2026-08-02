@@ -1,9 +1,14 @@
+//! Community and custom regex DLP rule loader (FR-112).
+//!
+//! Extends built-in DLP secret detectors with custom user-defined regex patterns loaded from YAML.
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use regex::Regex;
 use crate::policy::dlp::SecretCategory;
 
+/// Custom community DLP detection rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityRule {
     pub name: String,
@@ -11,12 +16,17 @@ pub struct CommunityRule {
     pub regex: String,
 }
 
+/// Container for loaded community DLP rules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityRulesConfig {
     pub rules: Vec<CommunityRule>,
 }
 
 impl CommunityRulesConfig {
+    /// Loads and validates a community rules YAML file from the specified path.
+    ///
+    /// # Errors
+    /// Returns an error string if the file cannot be read, parsed, or contains invalid regexes.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let path = path.as_ref();
         if !path.exists() {

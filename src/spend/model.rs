@@ -1,6 +1,9 @@
+//! Data structures and enums representing spend budgets, scopes, agent spend stats, and increase requests.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Target scope of a budget cap (Organization-wide, Group-level, or Individual User).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BudgetScope {
     Org,

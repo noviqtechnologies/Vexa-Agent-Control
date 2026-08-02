@@ -1,4 +1,7 @@
-//! Session report generation (FR-111)
+//! Session reporting engine and audit log aggregator (FR-111).
+//!
+//! Parses JSON-RPC audit logs to compile session execution metrics, denied calls, tool usage counts,
+//! and security warnings (e.g. unvalidated object/array parameters).
 
 use chrono::Utc;
 use serde::Serialize;
@@ -6,7 +9,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-/// Session report matching PRD §6.5
+/// Aggregated session report structure adhering to PRD §6.5 schema.
 #[derive(Debug, Serialize)]
 pub struct SessionReport {
     pub schema_version: String,
@@ -26,6 +29,7 @@ pub struct SessionReport {
     pub object_param_tools: Vec<String>,
 }
 
+/// Summary metrics of calls processed during the session.
 #[derive(Debug, Serialize)]
 pub struct ReportSummary {
     pub total_calls: u64,
@@ -35,6 +39,7 @@ pub struct ReportSummary {
     pub rate_limited: u64,
 }
 
+/// Information on a denied tool call.
 #[derive(Debug, Serialize)]
 pub struct DeniedCall {
     pub ts: String,
@@ -46,6 +51,7 @@ pub struct DeniedCall {
     pub params: Option<serde_json::Value>,
 }
 
+/// Usage frequency stats for an observed tool.
 #[derive(Debug, Serialize)]
 pub struct ToolUsed {
     pub name: String,
@@ -53,7 +59,19 @@ pub struct ToolUsed {
     pub first_called: String,
 }
 
-/// Generate a session report from an audit log file.
+/// Generates a `SessionReport` by parsing JSON lines from the specified audit log file.
+///
+/// # Arguments
+/// * `log_path` - Path to the `audit.log` file.
+/// * `include_params` - Whether to include raw tool parameters in the report.
+/// * `policy_hash` - Hash string of the active policy.
+/// * `policy_loaded` - Indicates if a policy was active.
+/// * `kill_mode` - Configured connection/process kill mode string.
+/// * `dry_run` - Whether dry-run mode was enabled.
+/// * `object_param_tools` - Tools using uninspected object/array parameters.
+///
+/// # Errors
+/// Returns an error string if the file cannot be opened or contains unparseable entries.
 pub fn generate_report(
     log_path: &Path,
     include_params: bool,
@@ -211,6 +229,13 @@ pub fn generate_report(
     })
 }
 
+/// Formats a `SessionReport` into an ANSI-colored human-readable terminal string summary.
+///
+/// # Arguments
+/// * `report` - Reference to the `SessionReport` to format.
+///
+/// # Returns
+/// Formatted summary string ready for terminal printing.
 pub fn format_text_report(report: &SessionReport) -> String {
     use colored::*;
     let mut out = String::new();

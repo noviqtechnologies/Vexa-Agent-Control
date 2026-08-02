@@ -1,4 +1,4 @@
-//! Policy engine — allowlist evaluation, type enforcement (FR-102)
+//! Policy engine — allowlist evaluation, type enforcement, parameter validators, and group policy evaluation (FR-102).
 
 use super::schema::ParamType;
 use regex::Regex;
@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use jsonschema::JSONSchema;
 
-/// A compiled, ready-to-evaluate policy
+/// A compiled, ready-to-evaluate security policy.
 #[derive(Clone)]
 pub struct CompiledPolicy {
     pub tools: Vec<CompiledTool>,

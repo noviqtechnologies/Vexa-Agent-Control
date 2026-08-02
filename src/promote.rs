@@ -9,14 +9,27 @@ use std::path::Path;
 use crate::policy::loader::{load_policy, PolicyLoadResult};
 use crate::policy::schema::PolicyFile;
 
-/// Result of a promotion check
+/// Result of a policy promotion check.
 pub enum PromoteResult {
+    /// Policy passed validation and signature was saved.
     Success { signature_path: String },
+    /// Policy validation error message.
     ValidationError(String),
+    /// File I/O error message.
     IoError(String),
 }
 
-/// Run the promotion logic
+/// Executes policy promotion validation and Ed25519 signing (FR-204).
+///
+/// Ensures policy uses Schema v2, enforces HTTPS identity issuers, checks for explicit risk scores,
+/// and signs the policy YAML with the provided Ed25519 private key or an ephemeral key.
+///
+/// # Arguments
+/// * `policy_path` - Path to the policy file to promote.
+/// * `key_path` - Optional path to the Ed25519 private key file.
+///
+/// # Returns
+/// Exit code: `0` on successful validation and signing, `1` on failure.
 pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
     println!("{} Promoting policy: {}", "ℹ".blue(), policy_path.yellow());
 
@@ -120,6 +133,10 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
     0
 }
 
+/// Loads a 32-byte Ed25519 private key from the given file path.
+///
+/// # Errors
+/// Returns an error if the file cannot be read or is not exactly 32 bytes long.
 fn load_signing_key(path: &str) -> Result<SigningKey, Box<dyn std::error::Error>> {
     let bytes = fs::read(path)?;
     if bytes.len() == 32 {

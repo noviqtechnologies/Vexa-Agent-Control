@@ -467,7 +467,7 @@ impl AuditLogger {
     }
 }
 
-/// Produce a canonical JSON string with sorted object keys for deterministic hashing.
+/// Produces a canonical JSON string with lexicographically sorted keys for deterministic hashing.
 fn canonical_json(value: &Value) -> String {
     match value {
         Value::Object(map) => {

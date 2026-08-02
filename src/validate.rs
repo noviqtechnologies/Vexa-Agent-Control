@@ -1,9 +1,22 @@
+//! Ad-hoc tool payload policy validation utility (FR-108).
+//!
+//! Validates a single JSON payload against a policy definition for a specific tool call.
+
 use std::path::Path;
 use std::fs;
 use serde_json::Value;
 use crate::policy::loader::{load_policy, PolicyLoadResult};
 use crate::policy::engine::EvalResult;
 
+/// Evaluates a single tool call payload file against a security policy.
+///
+/// # Arguments
+/// * `policy_path` - Path to the policy YAML file.
+/// * `tool_name` - Name of the tool being executed.
+/// * `payload_path` - Path to the JSON payload file containing parameter values.
+///
+/// # Errors
+/// Returns an error message if policy loading fails, payload parsing fails, or the payload violates policy.
 pub fn execute(policy_path: &str, tool_name: &str, payload_path: &str) -> Result<(), String> {
     // 1. Load Policy
     let load_res = load_policy(Path::new(policy_path), None);

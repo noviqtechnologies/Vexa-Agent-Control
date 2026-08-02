@@ -1,3 +1,5 @@
+//! Decodes, verifies Ed25519 signatures, and validates feature license claims for AgentWall Enterprise.
+
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -14,12 +16,18 @@ pub struct License {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Errors raised during enterprise license verification.
 #[derive(Debug)]
 pub enum LicenseError {
+    /// No license key provided in config or environment.
     Missing,
+    /// Ed25519 cryptographic signature check failed.
     InvalidSignature,
+    /// License timestamp has expired.
     Expired { expired_at: DateTime<Utc> },
+    /// Enterprise feature is missing from the license's `features` array.
     FeatureNotLicensed { feature: String },
+    /// Failed to parse license JWT token.
     Malformed(String),
 }
 
@@ -39,17 +47,26 @@ impl std::fmt::Display for LicenseError {
     }
 }
 
+/// Evaluates Ed25519-signed enterprise license tokens against Noviq public keys.
 pub struct LicenseValidator {
     decoding_key: DecodingKey,
 }
 
 impl LicenseValidator {
+    /// Constructs a `LicenseValidator` using embedded Ed25519 public key bytes.
     pub fn new() -> Result<Self, String> {
         let public_key_bytes = include_bytes!("../../keys/noviq_license.pub");
         let decoding_key = DecodingKey::from_ed_der(public_key_bytes);
         Ok(Self { decoding_key })
     }
 
+    /// Decodes and verifies the signature and expiry timestamp of a license JWT string.
+    ///
+    /// # Arguments
+    /// * `license_key` - Encoded JWT license string.
+    ///
+    /// # Errors
+    /// Returns `LicenseError::InvalidSignature`, `LicenseError::Expired`, or `LicenseError::Malformed`.
     pub fn validate(&self, license_key: &str) -> Result<License, LicenseError> {
         let mut validation = Validation::new(Algorithm::EdDSA);
         // Do not validate exp here automatically so we can return a specific error
@@ -77,6 +94,7 @@ impl LicenseValidator {
         Ok(license)
     }
 
+    /// Checks if the given feature string is enabled in the decoded license.
     pub fn has_feature(&self, license: &License, feature: &str) -> bool {
         license.features.contains(&feature.to_string())
     }
