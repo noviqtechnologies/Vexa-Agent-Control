@@ -12,4 +12,6 @@ mod unit {
     mod generate_policy_test;
     mod us003_us005_tests;
     mod sprint5_safety_test;
+    mod functional_matrix_tests;
 }
+

@@ -9,5 +9,7 @@ mod integration {
     mod stdio_tests;
     /// FR-5: Centralized Enforcement Gateway acceptance criteria tests
     mod gateway_fr5;
+    mod backend_integration_suite;
 }
+
 
