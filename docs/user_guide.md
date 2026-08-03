@@ -118,12 +118,15 @@ The Developer Tier provides local observation, automatic policy generation, and 
    * **Stdio Wrapping:** Wrap stdio-based MCP servers directly (ensure target directory exists):
      ```bash
      # Linux / macOS / WSL:
-     mkdir -p /workspace
-     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+     mkdir -p ~/workspace
+     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+
+     # If npx is not found (e.g. nvm / brew / fnm users), pass $(which npx):
+     agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
 
      # Windows (PowerShell):
-     New-Item -ItemType Directory -Force -Path C:\workspace
-     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
+     New-Item -ItemType Directory -Force -Path $HOME\workspace
+     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
      ```
    * **IDE Wrapping & Diagnostics:** Secure local IDEs (e.g., Claude Desktop, Cursor):
      ```bash
@@ -856,18 +859,23 @@ To ensure `agentwall` works globally across **all future terminal sessions** wit
 
 #### Issue: `✖ Stdio proxy error: No such file or directory (os error 2)`
 
-- **Cause:** The underlying MCP server executable (e.g. `npx`) or the requested directory path (e.g. `/workspace`) does not exist on the target host filesystem.
-- **Solution (macOS / Linux / WSL):**
-  Create the target directory before launching `agentwall dev`:
-  ```bash
-  mkdir -p /workspace
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
-  ```
-- **Solution (Windows PowerShell):**
-  ```powershell
-  New-Item -ItemType Directory -Force -Path C:\workspace
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
-  ```
+- **Cause 1 (`npx` not in PATH environment):** On macOS, Node/nvm/brew/fnm binaries like `npx` may reside in a non-standard binary directory (e.g. `~/.nvm/versions/node/v20.x/bin/npx` or `/opt/homebrew/bin/npx`) that `agentwall` cannot resolve automatically if executed in a restricted shell context.
+  - **Solution:** Pass the full path using `$(which npx)`:
+    ```bash
+    agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
+    ```
+
+- **Cause 2 (Target directory missing or invalid path):** The target directory (e.g., `/workspace`) does not exist or violates macOS root read-only filesystem restrictions.
+  - **Solution (macOS / Linux / WSL):**
+    ```bash
+    mkdir -p ~/workspace
+    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+    ```
+  - **Solution (Windows PowerShell):**
+    ```powershell
+    New-Item -ItemType Directory -Force -Path $HOME\workspace
+    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
+    ```
 
 ---
 

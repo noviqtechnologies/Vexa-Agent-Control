@@ -16,7 +16,11 @@ use crate::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 pub fn resolve_command(program: &str) -> (String, Vec<String>) {
     #[cfg(not(windows))]
     {
-        (program.to_string(), vec![])
+        if let Ok(path) = which::which(program) {
+            (path.to_string_lossy().to_string(), vec![])
+        } else {
+            (program.to_string(), vec![])
+        }
     }
 
     #[cfg(windows)]

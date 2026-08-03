@@ -134,12 +134,15 @@ agentwall dev
 * Wrap stdio-based MCP servers directly (ensure target directory exists):
   ```bash
   # Linux / macOS / WSL:
-  mkdir -p /workspace
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+  mkdir -p ~/workspace
+  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+
+  # If npx is not found (e.g. nvm / brew / fnm users), pass the full path:
+  agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
 
   # Windows (PowerShell):
-  New-Item -ItemType Directory -Force -Path C:\workspace
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
+  New-Item -ItemType Directory -Force -Path $HOME\workspace
+  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
   ```
 
 ### 2. Route Local Agent Traffic
