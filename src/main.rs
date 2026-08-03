@@ -403,7 +403,7 @@ async fn run_stdio_proxy(
         provider_keys: dashmap::DashMap::new(),
     });
 
-    let mut parts = args.clone();
+    let mut parts: Vec<String> = args.iter().map(|a| proxy::stdio::expand_arg(a)).collect();
     let program = parts.remove(0);
     let (resolved_program, prefix_args) = proxy::stdio::resolve_command(&program);
 
@@ -1597,6 +1597,7 @@ async fn run_wrap(
         return 1;
     }
 
+    let mut parts: Vec<String> = parts.iter().map(|a| proxy::stdio::expand_arg(a)).collect();
     let program = parts.remove(0);
     let (resolved_program, prefix_args) = proxy::stdio::resolve_command(&program);
     let mut cmd = tokio::process::Command::new(resolved_program);

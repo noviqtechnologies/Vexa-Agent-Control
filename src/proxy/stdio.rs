@@ -12,8 +12,19 @@ use crate::policy::response_scanner::ScanResult;
 use crate::proxy::codec::JsonRpcCodec;
 use crate::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 
+/// Expands leading `~` to $HOME if present.
+pub fn expand_arg(arg: &str) -> String {
+    if arg.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{}{}", home, &arg[1..]);
+        }
+    }
+    arg.to_string()
+}
+
 /// Resolves a command name to an absolute path, handling Windows extensions and cmd /C wrapping if necessary.
 pub fn resolve_command(program: &str) -> (String, Vec<String>) {
+    let program = &expand_arg(program);
     #[cfg(not(windows))]
     {
         use std::env;
