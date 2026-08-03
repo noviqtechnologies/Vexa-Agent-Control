@@ -497,15 +497,19 @@ agentwall start \
 
 AgentWall binds agent sessions and tool call execution to cryptographic OIDC identities, ensuring zero-trust attribution and access enforcement.
 
+> [!NOTE]
+> For complete step-by-step configuration guides, claims mappings, and policy examples for **Okta**, **Keycloak**, **Microsoft Entra ID**, **Auth0**, **AWS Cognito**, **Google Workspace**, and **PingIdentity**, see the dedicated [OIDC Identity Binding & Auth Provider Guide](file:///c:/AgentWall/agentwall/docs/oidc_identity_binding.md).
+
 ### IdP Configuration
 
-In your YAML policy, define the IdP configuration:
+In your YAML policy, define the `identity` configuration:
 
 ```yaml
-identity_binding:
-  oidc_discovery_url: "https://auth.yourorg.com/.well-known/openid-configuration"
-  allowed_audiences: ["agentwall-gateway"]
-  group_claim: "groups"
+identity:
+  provider: "oidc"
+  issuer: "https://auth.yourorg.com/oauth2/default"
+  audience: "agentwall-gateway-prod"
+  group_claim_key: "groups"    # IdP-specific claim key (e.g., "cognito:groups", "memberOf")
 ```
 
 Or pass the discovery issuer via command line:

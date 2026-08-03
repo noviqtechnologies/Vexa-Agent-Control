@@ -37,6 +37,7 @@ AgentWall is deployed in distinct modes depending on your operational needs:
 ## Documentation Index
 
 - [Detailed User Guide](user_guide.md)
+- [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md)
 - [Deployment & Installation](deployment.md)
 - [Quickstart Guide](quickstart.md)
 - [Comprehensive Functional Scenarios Guide](comprehensive_guide.md)
