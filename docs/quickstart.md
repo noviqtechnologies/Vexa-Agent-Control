@@ -5,7 +5,7 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) i
 ### Installing AgentWall
 * **macOS / Linux / WSL:**
   ```bash
-  curl -fsSL https://vexasec.io/install.sh | sh
+  curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
   ```
 * **Windows (PowerShell):**

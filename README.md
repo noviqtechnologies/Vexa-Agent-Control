@@ -11,21 +11,28 @@ Vexa AgentWall is an enterprise-grade default-deny security gateway and LLM agen
 </p>
 
 <p align="center">
-  <a href="https://vexasec.io/">Website</a> · <a href="docs/user_guide.md">User Guide</a> · <a href="docs/index.md">Documentation</a> · <a href="https://github.com/noviqtechnologies/agentwall/issues">Issues</a> · <a href="mailto:security@vexasec.io">Security</a>
+  <a href="https://vexasec.io/">Website</a> · <a href="docs/user_guide.md">User Guide</a> · <a href="docs/index.md">Documentation Hub</a> · <a href="docs/oidc_identity_binding.md">OIDC Guide</a> · <a href="https://github.com/noviqtechnologies/agentwall/issues">Issues</a> · <a href="mailto:security@vexasec.io">Security</a>
 </p>
 
 ---
 
 ## Installation
 
-AgentWall provides flexible installation methods tailored to your deployment tier:
+AgentWall provides flexible installation methods tailored to your deployment tier across macOS, Linux, and Windows:
 
 ### 1. Developer / Binary Install (Standalone CLI)
-Installs the statically-linked `agentwall` binary into `~/.local/bin/agentwall`:
+Installs the statically-linked `agentwall` binary:
 
-```bash
-curl -fsSL https://vexasec.io/install.sh | sh
-```
+* **macOS / Linux / WSL:**
+  ```bash
+  curl -fsSL https://vexasec.io/install.sh | bash
+  agentwall --version
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  irm https://vexasec.io/install.ps1 | iex
+  agentwall.exe --version
+  ```
 
 Or build from source (requires Rust 1.89+):
 ```bash
@@ -36,27 +43,44 @@ cargo build --release
 ```
 
 ### 2. Team / Staging Install (Docker Compose)
-Run the complete self-hosted Control Hub stack (Go API, React UI, PostgreSQL DB):
+Run the self-hosted Control Hub stack (Go REST API, React UI, PostgreSQL DB) and connect gateway instances:
 
-```bash
-cd control-plane
-docker compose up -d --build
-```
-- **Control Hub UI:** `http://localhost:8081`
-- **Control Hub API:** `http://localhost:8400`
+1. **Deploy Control Hub Stack:**
+   ```bash
+   cd control-plane
+   docker compose up -d --build
+   ```
+   * **Control Hub UI:** `http://localhost:8081`
+   * **Control Hub API:** `http://localhost:8400`
+
+2. **Start Gateway in Centralized Mode:**
+   ```bash
+   export DASHBOARD_API_URL="http://localhost:8400"
+   export POLICY_READ_SECRET="team-policy-read-secret"
+   export GATEWAY_SECRET="team-gateway-secret"
+
+   agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
+   ```
 
 ### 3. Enterprise Production Install (Kubernetes & Helm)
-Deploy the centralized enforcement fleet and Control Hub using the official Helm chart:
+Deploy the centralized enforcement fleet and Control Hub on Kubernetes:
 
-```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
-  --create-namespace \
-  --set gateway.tls.enabled=true \
-  --set dashboardApi.enabled=true \
-  --set dashboardDb.enabled=true \
-  --set dashboardFrontend.enabled=true
-```
+1. **Create Namespace & TLS Secret:**
+   ```bash
+   kubectl create namespace agentwall-system
+   kubectl create secret tls agentwall-tls --cert=/etc/certs/tls.crt --key=/etc/certs/tls.key -n agentwall-system
+   ```
+
+2. **Deploy Helm Chart:**
+   ```bash
+   helm install agentwall ./chart \
+     --namespace agentwall-system \
+     --set gateway.tls.enabled=true \
+     --set gateway.tls.secretName="agentwall-tls" \
+     --set dashboardApi.enabled=true \
+     --set dashboardDb.enabled=true \
+     --set dashboardFrontend.enabled=true
+   ```
 
 ---
 
@@ -79,9 +103,8 @@ helm install agentwall ./chart \
 ### 1. Local Shadow Proxy & Embedded Dashboard (`agentwall dev`)
 
 **Prerequisites:**
-- **AgentWall CLI Installed**: `agentwall` binary installed locally (see [Installation](#installation) step 1).
-- **Target Upstream MCP Server / HTTP Service**: An active local or remote MCP server / AI agent service to proxy (or use `--stdio` to wrap a stdio command directly).
-- **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`) free for the proxy and embedded Web UI.
+- **AgentWall CLI Installed**: `agentwall` binary installed locally.
+- **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`).
 
 Launch the shadow proxy in observation mode. This automatically starts the local Web UI at `http://127.0.0.1:8080` and opens your browser:
 
@@ -89,24 +112,32 @@ Launch the shadow proxy in observation mode. This automatically starts the local
 agentwall dev
 ```
 * Use `--no-browser` to prevent automatic browser launching.
-* Use `--enforce` to test active DLP and policy blocking locally without running a full gateway deployment.
-* Wrap stdio-based MCP servers:
+* Use `--enforce` to test active DLP and policy blocking locally.
+* Wrap stdio-based MCP servers directly:
   ```bash
   agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
   ```
 
 ### 2. Route Local Agent Traffic
-Set standard proxy environment variables in your terminal:
+Set standard proxy environment variables in your shell:
 
-```bash
-export HTTP_PROXY=http://127.0.0.1:8080
-export HTTPS_PROXY=http://127.0.0.1:8080
-export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
-python my_agent.py
-```
+* **macOS / Linux (Bash/Zsh):**
+  ```bash
+  export HTTP_PROXY=http://127.0.0.1:8080
+  export HTTPS_PROXY=http://127.0.0.1:8080
+  export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  python my_agent.py
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  $env:HTTP_PROXY="http://127.0.0.1:8080"
+  $env:HTTPS_PROXY="http://127.0.0.1:8080"
+  $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
+  python my_agent.py
+  ```
 
 ### 3. Wrap Local IDEs (`agentwall wrap`)
-Automatically patch IDE configuration files to route all MCP server tool calls through AgentWall:
+Automatically patch IDE configuration files (Claude Desktop, Cursor) to route MCP server tool calls through AgentWall:
 
 ```bash
 # Wrap Claude Desktop
@@ -116,12 +147,16 @@ agentwall wrap claude
 agentwall status
 ```
 
-### 4. Auto-Generate & Lint Policy
-Draft a YAML security policy from observed shadow-mode traffic and lint it:
+### 4. Auto-Generate & Enforce Policy
+Draft a YAML security policy from observed shadow-mode traffic, lint it, and switch to enforcement mode:
 
 ```bash
+# Generate policy draft from observed events
 agentwall generate-policy --decay-window 30
 agentwall lint agentwall-policy.yaml
+
+# Start gateway in active enforcement mode
+agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
 ```
 
 ---
@@ -136,10 +171,17 @@ AgentWall policies operate on a **default-deny** principle (`agentwall-policy.ya
 version: 2
 default_action: deny
 
-identity_binding:
-  oidc_discovery_url: "https://auth.corp.com/.well-known/openid-configuration"
-  allowed_audiences: ["agentwall-gateway-prod"]
-  group_claim: "groups"
+identity:
+  provider: "oidc"
+  issuer: "https://auth.corp.com/oauth2/default"
+  audience: "agentwall-gateway-prod"
+  group_claim_key: "groups"
+
+policy_bindings:
+  - group: "secops-team"
+    policy: "admin-unrestricted"
+  - group: "dev-team"
+    policy: "developer-standard"
 
 tools:
   - name: "read_file"
@@ -208,11 +250,15 @@ audit:
 
 ## User Guide & Documentation Links
 
-For detailed, step-by-step documentation, architecture specs, and advanced deployment guides, consult our documentation suite:
+Consult our comprehensive documentation suite for detailed guides, architecture specifications, and provider configurations:
 
 - 📖 **[Vexa AgentWall Detailed User Guide](docs/user_guide.md)** — Comprehensive guide covering deployment tiers, v2 policy creation, DLP tuning, OIDC identity binding, Control Hub setup, audit verification, and troubleshooting.
-- 📚 **[Documentation Hub](docs/index.md)** — Core documentation index and capabilities overview.
-- 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Scenario-based command walkthroughs for developers.
+- 🔐 **[OIDC Identity Binding & Auth Provider Guide](docs/oidc_identity_binding.md)** — Step-by-step setup guides, claims mappings, and policy examples for Okta, Keycloak, Entra ID, Auth0, AWS Cognito, Google Workspace, and PingIdentity.
+- 🚀 **[Quickstart Guide](docs/quickstart.md)** — Real-world tutorial for securing Claude Desktop and MCP tools.
+- 📦 **[Deployment & Installation Guide](docs/deployment.md)** — Step-by-step installation for macOS, Linux, Windows, Docker, and Kubernetes.
+- ⚙️ **[Configuration & Policy Reference](docs/configuration.md)** — In-depth reference for Schema v2 policies, Safe Mode rules, and DLP regex patterns.
+- 📚 **[Documentation Hub](docs/index.md)** — Centralized documentation index.
+- 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Command-line scenario walkthroughs for developers across all 9 core capabilities.
 
 ---
 

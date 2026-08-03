@@ -70,7 +70,7 @@ The Developer Tier provides local observation, automatic policy generation, and 
 #### Step-by-Step Installation
 * **macOS / Linux / WSL:**
   ```bash
-  curl -fsSL https://vexasec.io/install.sh | sh
+  curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
   ```
 * **Windows (PowerShell):**
@@ -129,7 +129,7 @@ The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + 
    - Linux / macOS / Windows host with Docker (v24.0+) and Docker Compose (v2.20+) installed.
    - Network ports available: `8081` (UI), `8400` (API), `5433` (Postgres DB).
 2. **Gateway Host(s) / Developer Workstations:**
-   - Installed `agentwall` binary (`curl -fsSL https://vexasec.io/install.sh | sh` on Linux/macOS or `irm https://vexasec.io/install.ps1 | iex` on Windows).
+   - Installed `agentwall` binary (`curl -fsSL https://vexasec.io/install.sh | bash` on Linux/macOS or `irm https://vexasec.io/install.ps1 | iex` on Windows).
    - Network connectivity to the Control Hub server on port `8400`.
 
 #### Step-by-Step Installation

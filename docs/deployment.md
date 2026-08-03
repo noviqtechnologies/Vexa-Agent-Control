@@ -11,7 +11,7 @@ You can find the Terminal app by pressing `Cmd + Space` (Spotlight Search), typi
 Copy the following command, paste it into your Terminal window, and press `Return`:
 
 ```bash
-curl -fsSL https://vexasec.io/install.sh | sh
+curl -fsSL https://vexasec.io/install.sh | bash
 ```
 *This script safely downloads the AgentWall application and places it in a hidden folder on your computer (`~/.local/bin`).*
 
@@ -40,7 +40,7 @@ Open your preferred terminal emulator (e.g., GNOME Terminal, Konsole, xterm).
 Paste the following command to download and install the binary:
 
 ```bash
-curl -fsSL https://vexasec.io/install.sh | sh
+curl -fsSL https://vexasec.io/install.sh | bash
 ```
 
 ### Step 3: Make AgentWall accessible
