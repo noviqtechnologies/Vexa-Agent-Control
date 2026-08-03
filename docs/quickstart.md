@@ -1,35 +1,53 @@
-# Quickstart Guide
+## Prerequisites & Installation
 
-This guide will walk you through a real-world scenario: **Securing Claude Desktop so it can only run specific commands on your computer.**
+Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) installed, along with the `agentwall` binary on your system:
 
-By default, when you give an AI Agent access to your filesystem or terminal (via the Model Context Protocol), it has full control. In this guide, we will use AgentWall to observe what Claude Desktop does, and then lock it down using a security policy.
+### Installing AgentWall
+* **macOS / Linux / WSL:**
+  ```bash
+  curl -fsSL https://vexasec.io/install.sh | sh
+  agentwall --version
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  irm https://vexasec.io/install.ps1 | iex
+  agentwall.exe --version
+  ```
 
 ---
 
 ## Step 1: Start the AgentWall Proxy
 
-First, we need to start AgentWall in **developer mode**. In this mode, AgentWall acts as a "shadow proxy"—it watches the traffic between Claude Desktop and your computer but doesn't block anything yet. 
+First, start AgentWall in **developer mode** (shadow proxy). In this mode, AgentWall watches the traffic between Claude Desktop and your computer without blocking calls yet:
 
-Open a terminal (or PowerShell on Windows) and run:
+* **macOS / Linux:**
+  ```bash
+  agentwall dev
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  agentwall.exe dev
+  ```
 
-```bash
-agentwall dev
-```
-
-*AgentWall is now running and listening on `http://127.0.0.1:8080`.*
+*AgentWall is now running and listening on `http://127.0.0.1:8080` (and opens the embedded browser dashboard at `http://127.0.0.1:8080`).*
 
 ---
 
 ## Step 2: Connect Claude Desktop to AgentWall
 
-Now we need to tell Claude Desktop to route its tool requests through AgentWall instead of directly to your computer.
+Open a **new, separate terminal window** and run the integration command:
 
-Open a **new, separate terminal window** and run our automatic integration command:
-
-```bash
-agentwall wrap claude
-```
-*(This command automatically updates Claude Desktop's `claude_desktop_config.json` file so that its MCP traffic routes through the proxy you just started.)*
+* **macOS / Linux:**
+  ```bash
+  agentwall wrap claude
+  agentwall status
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  agentwall.exe wrap claude
+  agentwall.exe status
+  ```
+*(This command updates Claude Desktop's configuration file so its MCP tool traffic routes through the proxy. Running `agentwall status` verifies the wrapping status).*
 
 ---
 

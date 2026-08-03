@@ -63,31 +63,24 @@ agentwall --help
 ### Step 1: Open PowerShell
 Press the `Windows` key on your keyboard, type `PowerShell`, and click **Windows PowerShell**.
 
-### Step 2: Download AgentWall
-Copy and paste the following command into PowerShell and press `Enter`. This downloads the AgentWall ZIP file to your computer.
+### Step 2: Download and Install AgentWall
+Copy and paste the following 1-line command into PowerShell and press `Enter`:
 
+```powershell
+irm https://vexasec.io/install.ps1 | iex
+```
+
+*(Alternatively, download the ZIP archive manually):*
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
-```
-
-### Step 3: Extract the Application
-Now, let's extract the downloaded file into a dedicated folder. Paste this command and press `Enter`:
-
-```powershell
 Expand-Archive -Path "agentwall.zip" -DestinationPath "$env:USERPROFILE\.local" -Force
-```
-
-### Step 4: Make AgentWall accessible
-Add the AgentWall folder to your active PowerShell session so you can run it easily:
-
-```powershell
 $env:PATH += ";$env:USERPROFILE\.local\bin"
 ```
-*(Tip: To make this permanent so you don't have to run this command every time you open PowerShell, search for "Environment Variables" in your Windows Start menu and add `%USERPROFILE%\.local\bin` to your User `PATH` variable).*
 
-### Step 5: Verify Installation
+### Step 3: Verify Installation
 Type the following and press `Enter`:
 ```powershell
+agentwall.exe --version
 agentwall.exe --help
 ```
 
