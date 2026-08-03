@@ -16,11 +16,24 @@ use crate::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 pub fn resolve_command(program: &str) -> (String, Vec<String>) {
     #[cfg(not(windows))]
     {
-        if let Ok(path) = which::which(program) {
-            (path.to_string_lossy().to_string(), vec![])
-        } else {
-            (program.to_string(), vec![])
+        use std::env;
+        use std::path::Path;
+
+        let path = Path::new(program);
+        if path.is_absolute() && path.exists() {
+            return (program.to_string(), vec![]);
         }
+
+        if let Ok(path_var) = env::var("PATH") {
+            for p in env::split_paths(&path_var) {
+                let full_path = p.join(program);
+                if full_path.is_file() {
+                    return (full_path.to_string_lossy().to_string(), vec![]);
+                }
+            }
+        }
+
+        (program.to_string(), vec![])
     }
 
     #[cfg(windows)]
