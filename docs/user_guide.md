@@ -62,39 +62,61 @@ AgentWall supports three graduated deployment tiers designed to fit seamlessly i
 
 The Developer Tier provides local observation, automatic policy generation, and Safe Mode protection without requiring external servers, Docker, or database setups.
 
-#### Installation
-Download and install the statically-linked binary:
-```bash
-curl -fsSL https://vexasec.io/install.sh | sh
-```
-Verify the installation:
-```bash
-agentwall --version
-```
+#### Prerequisites
+- **Operating System:** Linux, macOS, or Windows (WSL / PowerShell).
+- **Network / Utilities:** `curl` and `sh` installed for binary download.
+- **Permissions:** Execution permission to write to `/usr/local/bin` (or user `$PATH`).
 
-#### Running Local Shadow Proxy
-Launch `agentwall dev` to start an observation-mode shadow proxy listening on `127.0.0.1:8080`. This automatically opens the embedded local single-page dashboard in your browser:
-```bash
-agentwall dev
-```
-* **HTTP Proxy Routing:** Route your local agent HTTP traffic by setting:
+#### Step-by-Step Installation
+* **macOS / Linux / WSL:**
   ```bash
-  export HTTP_PROXY=http://127.0.0.1:8080
-  export HTTPS_PROXY=http://127.0.0.1:8080
-  export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  curl -fsSL https://vexasec.io/install.sh | sh
+  agentwall --version
   ```
-* **Stdio Wrapping:** Wrap stdio-based MCP servers directly:
-  ```bash
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+* **Windows (PowerShell):**
+  ```powershell
+  irm https://vexasec.io/install.ps1 | iex
+  agentwall.exe --version
   ```
-* **IDE Wrapping:** Secure local IDEs (e.g. Claude Desktop):
-  ```bash
-  agentwall wrap claude
-  ```
-* **Auto-Generating Policies:** Draft a policy from observed local traffic recorded in `~/.agentwall/events.db`:
-  ```bash
-  agentwall generate-policy --decay-window 30
-  ```
+
+#### Post-Installation Activities & Verification
+1. **Launch Local Observation Proxy:**
+   Launch `agentwall dev` to start an observation-mode shadow proxy listening on `127.0.0.1:8080`. This automatically opens the embedded local single-page dashboard in your browser:
+   ```bash
+   agentwall dev
+   ```
+2. **Verify Embedded Web Dashboard:**
+   Open `http://127.0.0.1:8080` in your web browser to view live traffic events.
+3. **Configure Agent HTTP Proxy Environment:**
+   Route your local agent HTTP traffic through AgentWall:
+
+   * **Linux / macOS (Bash / Zsh):**
+     ```bash
+     export HTTP_PROXY=http://127.0.0.1:8080
+     export HTTPS_PROXY=http://127.0.0.1:8080
+     export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+     ```
+   * **Windows (PowerShell):**
+     ```powershell
+     $env:HTTP_PROXY="http://127.0.0.1:8080"
+     $env:HTTPS_PROXY="http://127.0.0.1:8080"
+     $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
+     ```
+4. **Wrap Stdio / IDE Tools:**
+   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly:
+     ```bash
+     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+     ```
+   * **IDE Wrapping & Diagnostics:** Secure local IDEs (e.g., Claude Desktop, Cursor):
+     ```bash
+     agentwall wrap claude
+     agentwall status
+     ```
+5. **Auto-Generate YAML Policy:**
+   Draft a initial policy from observed local traffic recorded in `~/.agentwall/events.db`:
+   ```bash
+   agentwall generate-policy --decay-window 30
+   ```
 
 ---
 
@@ -102,30 +124,73 @@ agentwall dev
 
 The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + Go REST API + PostgreSQL Database) running alongside local or shared gateway instances.
 
-#### Setup via Docker Compose
-Navigate to the `control-plane` directory and build the stack:
-```bash
-cd control-plane
-docker compose up -d --build
-```
-This provisions:
-- **Control Hub UI:** `http://localhost:8081`
-- **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
-- **PostgreSQL Database:** `localhost:5433`
+#### Prerequisites
+1. **Control Hub Server Host:**
+   - Linux / macOS / Windows host with Docker (v24.0+) and Docker Compose (v2.20+) installed.
+   - Network ports available: `8081` (UI), `8400` (API), `5433` (Postgres DB).
+2. **Gateway Host(s) / Developer Workstations:**
+   - Installed `agentwall` binary (`curl -fsSL https://vexasec.io/install.sh | sh` on Linux/macOS or `irm https://vexasec.io/install.ps1 | iex` on Windows).
+   - Network connectivity to the Control Hub server on port `8400`.
 
-#### Connecting Gateways to the Team Hub
-Start local or staging gateway instances connected to the Control Hub with shared bearer secrets:
-```bash
-export DASHBOARD_API_URL="http://localhost:8400"
-export POLICY_READ_SECRET="team-policy-read-secret"
-export GATEWAY_SECRET="team-gateway-secret"
+#### Step-by-Step Installation
+1. **Deploy the Control Hub Stack via Docker Compose:**
+   Navigate to the `control-plane` directory and build the services:
+   ```bash
+   cd control-plane
+   docker compose up -d --build
+   ```
+   This provisions:
+   - **Control Hub UI:** `http://localhost:8081`
+   - **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
+   - **PostgreSQL Database:** `localhost:5433`
 
-agentwall start \
-  --listen 127.0.0.1:8080 \
-  --centralized \
-  --log-path ./team-audit.log
-```
-The gateway will bootstrap its policy state directly from the Hub and maintain a live SSE connection (`GET /api/v1/events`) for zero-downtime policy hot-reloading.
+2. **Start Gateway Instances Connected to the Control Hub:**
+   Configure shared bearer secrets and start gateway instances in centralized mode:
+
+   * **Linux / macOS (Bash / Zsh):**
+     ```bash
+     export DASHBOARD_API_URL="http://localhost:8400"
+     export POLICY_READ_SECRET="team-policy-read-secret"
+     export GATEWAY_SECRET="team-gateway-secret"
+
+     agentwall start \
+       --listen 127.0.0.1:8080 \
+       --centralized \
+       --log-path ./team-audit.log
+     ```
+   * **Windows (PowerShell):**
+     ```powershell
+     $env:DASHBOARD_API_URL="http://localhost:8400"
+     $env:POLICY_READ_SECRET="team-policy-read-secret"
+     $env:GATEWAY_SECRET="team-gateway-secret"
+
+     agentwall.exe start `
+       --listen 127.0.0.1:8080 `
+       --centralized `
+       --log-path ./team-audit.log
+     ```
+   The gateway will bootstrap its policy state directly from PostgreSQL via the Control Hub API and maintain a live SSE connection (`GET /api/v1/events`) for zero-downtime policy hot-reloading.
+
+#### Post-Installation Activities & Verification
+1. **Verify Control Hub API Health:**
+   Ensure the API backend is healthy and responding:
+   ```bash
+   curl -i http://localhost:8400/healthz
+   ```
+   *(Expected response: HTTP `200 OK` with `{"status":"ok"}`).*
+2. **Access Team Dashboard:**
+   Open `http://localhost:8081` in your browser to view the centralized team dashboard, active policies, and real-time telemetry.
+3. **Verify Gateway Hot-Reloading & Logs:**
+   Inspect the gateway stdout logs to confirm policy bootstrap success:
+   ```
+   [INFO] Policy loaded successfully from Control Hub
+   [INFO] SSE event subscription connected to http://localhost:8400/api/v1/events
+   ```
+4. **Verify Audit Log Integrity:**
+   Periodically verify the cryptographic HMAC hash chain of the team audit log:
+   ```bash
+   agentwall verify-log team-audit.log
+   ```
 
 ---
 
@@ -134,28 +199,70 @@ The gateway will bootstrap its policy state directly from the Hub and maintain a
 The Enterprise Tier deploys AgentWall as a high-availability, cloud-native gateway fleet on Kubernetes, featuring memory-safe TLS (`rustls`), enterprise OIDC SSO, direct SIEM audit streaming, and zero-downtime policy distribution.
 
 #### Production Prerequisites
-1. Kubernetes 1.26+ cluster
-2. Helm v3 installed
-3. Domain TLS certificate and private key in PEM format
-4. Enterprise OIDC provider (Okta, Keycloak, Microsoft Entra ID)
 
-#### Deployment via Helm
-Deploy AgentWall using the official Helm chart:
-```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
-  --create-namespace \
-  --set gateway.tls.enabled=true \
-  --set gateway.tls.cert="$(cat /etc/certs/tls.crt)" \
-  --set gateway.tls.key="$(cat /etc/certs/tls.key)" \
-  --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default" \
-  --set gateway.siem.backend="splunk" \
-  --set gateway.siem.endpoint="https://splunk.corp.com:8088/services/collector/event" \
-  --set gateway.siem.token="${SPLUNK_HEC_TOKEN}" \
-  --set dashboardApi.enabled=true \
-  --set dashboardDb.enabled=true \
-  --set dashboardFrontend.enabled=true
-```
+1. **Target Kubernetes Cluster (Target Infrastructure):**
+   - Kubernetes cluster v1.26+ (AWS EKS, GCP GKE, Azure AKS, or On-Premise K8s).
+   - Ingress controller / Load Balancer configured for external TLS traffic.
+   - StorageClass available for persistent database storage (if deploying embedded PostgreSQL).
+
+2. **Admin Workstation / CI/CD Deployment Host:**
+   - `helm` CLI v3+ installed.
+   - `kubectl` CLI installed and configured with `cluster-admin` context permissions for the target cluster.
+
+3. **Security & Cryptography Assets:**
+   - Domain TLS Certificate (`tls.crt`) and matching private key (`tls.key`) in PEM format.
+
+4. **Enterprise Identity & Audit Services (External Integrations):**
+   - **OIDC Provider:** Okta, Keycloak, Microsoft Entra ID (Azure AD), Auth0, or PingIdentity configured with an OIDC Discovery URL (`.well-known/openid-configuration`).
+   - **SIEM Collector (Optional):** Splunk HEC, Datadog HTTP Intake, or OpenSearch endpoint and authentication token.
+
+#### Step-by-Step Installation
+
+1. **Create K8s Namespace & Secrets for TLS:**
+   Create a Kubernetes secret containing your TLS certificate and key in the target namespace:
+   ```bash
+   kubectl create namespace agentwall-system
+   kubectl create secret tls agentwall-tls \
+     --cert=/etc/certs/tls.crt \
+     --key=/etc/certs/tls.key \
+     -n agentwall-system
+   ```
+
+2. **Deploy AgentWall Stack via Helm:**
+   Deploy the AgentWall stack using the official Helm chart:
+   ```bash
+   helm install agentwall ./chart \
+     --namespace agentwall-system \
+     --set gateway.tls.enabled=true \
+     --set gateway.tls.secretName="agentwall-tls" \
+     --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default" \
+     --set gateway.siem.backend="splunk" \
+     --set gateway.siem.endpoint="https://splunk.corp.com:8088/services/collector/event" \
+     --set gateway.siem.token="${SPLUNK_HEC_TOKEN}" \
+     --set dashboardApi.enabled=true \
+     --set dashboardDb.enabled=true \
+     --set dashboardFrontend.enabled=true
+   ```
+
+#### Post-Installation Activities & Verification
+
+1. **Verify Kubernetes Workload Health:**
+   Confirm all gateway pods, control plane API, database, and frontend deployments are `Running` and `1/1 Ready`:
+   ```bash
+   kubectl get pods -n agentwall-system -o wide
+   ```
+2. **Inspect Gateway Container Logs:**
+   Verify zero startup errors and successful OIDC/SIEM initialization:
+   ```bash
+   kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway --tail=100
+   ```
+3. **Execute Automated Smoke Test:**
+   Run the CLI policy test suite against the deployed gateway endpoint:
+   ```bash
+   agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com
+   ```
+4. **Configure Automated SIEM & OIDC Monitoring:**
+   Verify that test events are reaching your SIEM dashboard (e.g. Splunk index `security_events`) and OIDC JWT tokens are properly validated upon agent request.
 
 ---
 
