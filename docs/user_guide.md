@@ -498,7 +498,7 @@ agentwall start \
 AgentWall binds agent sessions and tool call execution to cryptographic OIDC identities, ensuring zero-trust attribution and access enforcement.
 
 > [!NOTE]
-> For complete step-by-step configuration guides, claims mappings, and policy examples for **Okta**, **Keycloak**, **Microsoft Entra ID**, **Auth0**, **AWS Cognito**, **Google Workspace**, and **PingIdentity**, see the dedicated [OIDC Identity Binding & Auth Provider Guide](file:///c:/AgentWall/agentwall/docs/oidc_identity_binding.md).
+> For complete step-by-step configuration guides, claims mappings, and policy examples for **Okta**, **Keycloak**, **Microsoft Entra ID**, **Auth0**, **AWS Cognito**, **Google Workspace**, and **PingIdentity**, see the dedicated [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md) ([oidc_identity_binding.md](file:///c:/AgentWall/agentwall/docs/oidc_identity_binding.md)).
 
 ### IdP Configuration
 
