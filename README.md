@@ -28,11 +28,18 @@ Installs the statically-linked `agentwall` binary:
   curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
   ```
+  > **Note:** If `agentwall --version` reports `command not found`, ensure `~/.local/bin` is in your `PATH`:
+  > ```bash
+  > export PATH="$HOME/.local/bin:$PATH"
+  > # To make permanent: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc (or ~/.zshrc)
+  > ```
+
 * **Windows (PowerShell):**
   ```powershell
   irm https://vexasec.io/install.ps1 | iex
   agentwall.exe --version
   ```
+  > **Note:** If running via Git Bash / MSYS2, use `agentwall` directly or `$HOME/.local/bin/agentwall`. In PowerShell/CMD, ensure `%USERPROFILE%\.local\bin` is present in your User Environment `Path`.
 
 Or build from source (requires Rust 1.89+):
 ```bash
