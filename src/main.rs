@@ -415,6 +415,12 @@ async fn run_stdio_proxy(
 
     if let Err(e) = proxy::stdio::run_stdio_bridge(state, cmd).await {
         eprintln!("{} Stdio proxy error: {}", "✖".red(), e);
+        if e.to_string().contains("No such file or directory") || e.to_string().contains("os error 2") {
+            eprintln!("\n{} Missing prerequisite: Could not find or execute '{}'", "💡".yellow(), program);
+            if program == "npx" || program == "node" || program == "npm" {
+                eprintln!("   Please install Node.js / npx (https://nodejs.org) or add Node to your PATH.");
+            }
+        }
         return 1;
     }
 
@@ -1608,6 +1614,12 @@ async fn run_wrap(
 
     if let Err(e) = proxy::stdio::run_stdio_bridge(state, cmd).await {
         eprintln!("{} Stdio proxy error: {}", "✖".red(), e);
+        if e.to_string().contains("No such file or directory") || e.to_string().contains("os error 2") {
+            eprintln!("\n{} Missing prerequisite: Could not find or execute '{}'", "💡".yellow(), program);
+            if program == "npx" || program == "node" || program == "npm" {
+                eprintln!("   Please install Node.js / npx (https://nodejs.org) or add Node to your PATH.");
+            }
+        }
         return 1;
     }
 

@@ -35,7 +35,6 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
             return (program.to_string(), vec![]);
         }
 
-        // Search PATH environment variable
         if let Ok(path_var) = env::var("PATH") {
             for p in env::split_paths(&path_var) {
                 let full_path = p.join(program);
@@ -45,21 +44,37 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
             }
         }
 
-        // Check common Node.js / nvm / Homebrew / standard binary paths on macOS/Linux
-        if let Ok(home) = env::var("HOME") {
-            let common_search_dirs = [
-                format!("{}/.nvm/versions/node/current/bin", home),
-                format!("{}/.fnm/current/bin", home),
-                format!("{}/.volta/bin", home),
-                format!("{}/.asdf/shims", home),
-                "/opt/homebrew/bin".to_string(),
-                "/usr/local/bin".to_string(),
+        // Search common Node.js / nvm / Homebrew / macports binary locations if not found in PATH
+        if program == "npx" || program == "node" || program == "npm" {
+            let mut extra_paths = vec![
+                "/usr/local/bin",
+                "/opt/homebrew/bin",
+                "/opt/homebrew/share/npm/bin",
+                "~/.nvm/current/bin",
+                "~/.fnm/current/bin",
+                "~/.n/bin",
+                "~/.volta/bin",
             ];
 
-            for dir in &common_search_dirs {
-                let full_path = Path::new(dir).join(program);
-                if full_path.is_file() {
-                    return (full_path.to_string_lossy().to_string(), vec![]);
+            if let Ok(home) = env::var("HOME") {
+                if let Ok(entries) = std::fs::read_dir(format!("{}/.nvm/versions/node", home)) {
+                    for entry in entries.flatten() {
+                        let bin_dir = entry.path().join("bin");
+                        if bin_dir.exists() {
+                            let candidate = bin_dir.join(program);
+                            if candidate.is_file() {
+                                return (candidate.to_string_lossy().to_string(), vec![]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            for extra in extra_paths {
+                let expanded = expand_arg(extra);
+                let candidate = Path::new(&expanded).join(program);
+                if candidate.is_file() {
+                    return (candidate.to_string_lossy().to_string(), vec![]);
                 }
             }
         }
@@ -161,18 +176,7 @@ pub async fn run_stdio_bridge(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::inherit());
 
-    let mut child = match command.spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                return Err(format!(
-                    "Executable '{}' was not found in PATH or standard binary locations.\n    Please ensure Node.js/npx is installed (e.g., via Homebrew: 'brew install node', or NVM: 'nvm install --lts').",
-                    command.as_std().get_program().to_string_lossy()
-                ).into());
-            }
-            return Err(e.into());
-        }
-    };
+    let mut child = command.spawn()?;
 
     if state.shadow_mode {
         let mut child_stdin = child.stdin.take().expect("Failed to open stdin");

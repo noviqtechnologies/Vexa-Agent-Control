@@ -122,8 +122,8 @@ Deploy the centralized enforcement fleet and Control Hub on Kubernetes:
 
 **Prerequisites:**
 - **AgentWall CLI Installed**: `agentwall` binary installed locally.
+- **Node.js / npx (Optional for stdio MCP wrapping)**: Required if wrapping stdio MCP servers like `@modelcontextprotocol/server-filesystem` (`node >= 18` & `npx`).
 - **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`).
-- **Node.js / npx (Optional for stdio MCP wrapping)**: Required if running `npx`-based MCP servers (e.g. `brew install node` or `nvm install --lts`).
 
 Launch the shadow proxy in observation mode. This automatically starts the local Web UI at `http://127.0.0.1:8080` and opens your browser:
 
@@ -132,14 +132,11 @@ agentwall dev
 ```
 * Use `--no-browser` to prevent automatic browser launching.
 * Use `--enforce` to test active DLP and policy blocking locally.
-* Wrap stdio-based MCP servers directly (ensure target directory exists):
+* Wrap stdio-based MCP servers directly (requires Node.js / `npx` installed):
   ```bash
   # Linux / macOS / WSL:
   mkdir -p ~/workspace
   agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-
-  # If npx is not found (e.g. nvm / brew / fnm users), pass the full path:
-  agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
 
   # Windows (PowerShell):
   New-Item -ItemType Directory -Force -Path $HOME\workspace

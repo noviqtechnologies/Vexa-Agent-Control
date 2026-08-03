@@ -65,8 +65,8 @@ The Developer Tier provides local observation, automatic policy generation, and 
 #### Prerequisites
 - **Operating System:** Linux, macOS, or Windows (WSL / PowerShell).
 - **Network / Utilities:** `curl` and `sh` installed for binary download.
+- **Node.js Environment (Optional):** Node.js (`node` & `npx` v18+) required if proxying stdio MCP servers like `@modelcontextprotocol/server-filesystem`.
 - **Permissions:** Execution permission to write to `/usr/local/bin` (or user `$PATH`).
-- **Node.js / npx (Optional for stdio MCP wrapping):** Node.js 18+ installed if wrapping `npx`-based Model Context Protocol (MCP) servers (e.g. `brew install node` or `nvm install --lts`).
 
 #### Step-by-Step Installation
 * **macOS / Linux / WSL:**
