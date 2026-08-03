@@ -73,16 +73,23 @@ The Developer Tier provides local observation, automatic policy generation, and 
   curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
   ```
-  > **Note:** If `agentwall` is not recognized, add `$HOME/.local/bin` to your system `PATH`:
-  > ```bash
-  > export PATH="$HOME/.local/bin:$PATH"
-  > ```
-* **Windows (PowerShell):**
+  > **Permanent PATH Configuration (Set Once Across Terminals):**
+  > - **Bash (Linux/WSL):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
+  > - **Zsh (macOS):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
+  > - **Fish:** `fish_add_path ~/.local/bin`
+
+* **Windows (PowerShell / CMD / Git Bash):**
   ```powershell
   irm https://vexasec.io/install.ps1 | iex
   agentwall.exe --version
   ```
-  > **Note:** If executing inside Git Bash / MSYS2 shell, use `$HOME/.local/bin/agentwall`. For PowerShell / CMD, ensure `$env:USERPROFILE\.local\bin` is added to your environment `Path`.
+  > **Permanent PATH Configuration (Set Once Across Terminals):**
+  > - **PowerShell (User Path):**
+  >   `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")`
+  > - **Command Prompt (CMD):**
+  >   `setx PATH "%PATH%;%USERPROFILE%\.local\bin"`
+  > - **Git Bash / MSYS2:**
+  >   `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile && source ~/.bash_profile`
 
 #### Post-Installation Activities & Verification
 1. **Launch Local Observation Proxy:**
@@ -801,28 +808,45 @@ agentwall start \
 
 ### Executable & PATH Troubleshooting
 
-#### Issue: `agentwall: command not found` or `agentwall --version` failing after installation
+#### Issue: `agentwall: command not found` or `agentwall --version` failing across terminal restarts
 
-* **Linux / macOS / WSL (Bash / Zsh):**
-  - **Cause:** The shell installer installs the executable binary to `$HOME/.local/bin/agentwall`, which is not present in your active `$PATH`.
-  - **Solution (Temporary):** Run `export PATH="$HOME/.local/bin:$PATH"` in your current terminal session.
-  - **Solution (Permanent):** Append the export command to your shell startup file:
-    ```bash
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc   # For Bash
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # For Zsh
-    source ~/.bashrc
-    ```
+To ensure `agentwall` works globally across **all future terminal sessions** without re-running `export PATH` manually, persist the installation directory in your shell/OS environment configuration:
+
+* **Linux / WSL (Bash):**
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+* **macOS / Linux (Zsh):**
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+  source ~/.zshrc
+  ```
+
+* **Fish Shell (Linux / macOS):**
+  ```fish
+  fish_add_path ~/.local/bin
+  ```
+
+* **Windows (PowerShell):**
+  Persistently append `%USERPROFILE%\.local\bin` to the User `Path` environment variable:
+  ```powershell
+  [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")
+  ```
+  *(Note: Restart active PowerShell windows for the change to take effect).*
+
+* **Windows (Command Prompt / CMD):**
+  ```cmd
+  setx PATH "%PATH%;%USERPROFILE%\.local\bin"
+  ```
+  *(Note: Re-open Command Prompt for the change to take effect).*
 
 * **Windows (Git Bash / MSYS2):**
-  - **Cause:** Git Bash uses POSIX pathing and might not pick up user binary paths automatically.
-  - **Solution:** Execute via full path `$HOME/.local/bin/agentwall --version` or add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bash_profile`.
-
-* **Windows (PowerShell / Command Prompt):**
-  - **Cause:** `$env:USERPROFILE\.local\bin` is not in your Windows User `Path` environment variable.
-  - **Solution (PowerShell):**
-    ```powershell
-    [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
-    ```
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile
+  source ~/.bash_profile
+  ```
 
 ---
 

@@ -28,18 +28,29 @@ Installs the statically-linked `agentwall` binary:
   curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
   ```
-  > **Note:** If `agentwall --version` reports `command not found`, ensure `~/.local/bin` is in your `PATH`:
-  > ```bash
-  > export PATH="$HOME/.local/bin:$PATH"
-  > # To make permanent: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc (or ~/.zshrc)
-  > ```
+  > **Permanent PATH Setup (Set Once):**
+  > - **Bash (Linux/WSL):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
+  > - **Zsh (macOS / modern Linux):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
+  > - **Fish:** `fish_add_path ~/.local/bin`
 
-* **Windows (PowerShell):**
+* **Windows (PowerShell / CMD / Git Bash):**
   ```powershell
   irm https://vexasec.io/install.ps1 | iex
   agentwall.exe --version
   ```
-  > **Note:** If running via Git Bash / MSYS2, use `agentwall` directly or `$HOME/.local/bin/agentwall`. In PowerShell/CMD, ensure `%USERPROFILE%\.local\bin` is present in your User Environment `Path`.
+  > **Permanent PATH Setup (Set Once):**
+  > - **PowerShell (Run once):**
+  >   ```powershell
+  >   [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")
+  >   ```
+  > - **Command Prompt (CMD):**
+  >   ```cmd
+  >   setx PATH "%PATH%;%USERPROFILE%\.local\bin"
+  >   ```
+  > - **Git Bash / MSYS2:**
+  >   ```bash
+  >   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile && source ~/.bash_profile
+  >   ```
 
 Or build from source (requires Rust 1.89+):
 ```bash
