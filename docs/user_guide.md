@@ -66,6 +66,7 @@ The Developer Tier provides local observation, automatic policy generation, and 
 - **Operating System:** Linux, macOS, or Windows (WSL / PowerShell).
 - **Network / Utilities:** `curl` and `sh` installed for binary download.
 - **Permissions:** Execution permission to write to `/usr/local/bin` (or user `$PATH`).
+- **Node.js / npx (Optional for stdio MCP wrapping):** Node.js 18+ installed if wrapping `npx`-based Model Context Protocol (MCP) servers (e.g. `brew install node` or `nvm install --lts`).
 
 #### Step-by-Step Installation
 * **macOS / Linux / WSL:**

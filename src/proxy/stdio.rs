@@ -35,9 +35,29 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
             return (program.to_string(), vec![]);
         }
 
+        // Search PATH environment variable
         if let Ok(path_var) = env::var("PATH") {
             for p in env::split_paths(&path_var) {
                 let full_path = p.join(program);
+                if full_path.is_file() {
+                    return (full_path.to_string_lossy().to_string(), vec![]);
+                }
+            }
+        }
+
+        // Check common Node.js / nvm / Homebrew / standard binary paths on macOS/Linux
+        if let Ok(home) = env::var("HOME") {
+            let common_search_dirs = [
+                format!("{}/.nvm/versions/node/current/bin", home),
+                format!("{}/.fnm/current/bin", home),
+                format!("{}/.volta/bin", home),
+                format!("{}/.asdf/shims", home),
+                "/opt/homebrew/bin".to_string(),
+                "/usr/local/bin".to_string(),
+            ];
+
+            for dir in &common_search_dirs {
+                let full_path = Path::new(dir).join(program);
                 if full_path.is_file() {
                     return (full_path.to_string_lossy().to_string(), vec![]);
                 }
@@ -141,7 +161,18 @@ pub async fn run_stdio_bridge(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::inherit());
 
-    let mut child = command.spawn()?;
+    let mut child = match command.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return Err(format!(
+                    "Executable '{}' was not found in PATH or standard binary locations.\n    Please ensure Node.js/npx is installed (e.g., via Homebrew: 'brew install node', or NVM: 'nvm install --lts').",
+                    command.as_std().get_program().to_string_lossy()
+                ).into());
+            }
+            return Err(e.into());
+        }
+    };
 
     if state.shadow_mode {
         let mut child_stdin = child.stdin.take().expect("Failed to open stdin");

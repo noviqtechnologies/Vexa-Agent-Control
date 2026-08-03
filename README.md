@@ -123,6 +123,7 @@ Deploy the centralized enforcement fleet and Control Hub on Kubernetes:
 **Prerequisites:**
 - **AgentWall CLI Installed**: `agentwall` binary installed locally.
 - **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`).
+- **Node.js / npx (Optional for stdio MCP wrapping)**: Required if running `npx`-based MCP servers (e.g. `brew install node` or `nvm install --lts`).
 
 Launch the shadow proxy in observation mode. This automatically starts the local Web UI at `http://127.0.0.1:8080` and opens your browser:
 
