@@ -40,7 +40,11 @@ impl std::fmt::Display for LicenseError {
                 write!(f, "License expired at {}.", expired_at)
             }
             LicenseError::FeatureNotLicensed { feature } => {
-                write!(f, "Feature '{}' is not enabled in your current license.", feature)
+                write!(
+                    f,
+                    "Feature '{}' is not enabled in your current license.",
+                    feature
+                )
             }
             LicenseError::Malformed(e) => write!(f, "Malformed license key: {}", e),
         }
@@ -72,15 +76,13 @@ impl LicenseValidator {
         // Do not validate exp here automatically so we can return a specific error
         validation.validate_exp = false;
 
-        let token_data = decode::<License>(
-            license_key,
-            &self.decoding_key,
-            &validation,
-        )
-        .map_err(|e| match e.kind() {
-            jsonwebtoken::errors::ErrorKind::InvalidSignature => LicenseError::InvalidSignature,
-            _ => LicenseError::Malformed(e.to_string()),
-        })?;
+        let token_data =
+            decode::<License>(license_key, &self.decoding_key, &validation).map_err(|e| match e
+                .kind()
+            {
+                jsonwebtoken::errors::ErrorKind::InvalidSignature => LicenseError::InvalidSignature,
+                _ => LicenseError::Malformed(e.to_string()),
+            })?;
 
         let license = token_data.claims;
         let now = Utc::now();
@@ -120,6 +122,7 @@ pub fn is_license_valid(license_key: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     // TODO: Write tests with mock ed25519 keys

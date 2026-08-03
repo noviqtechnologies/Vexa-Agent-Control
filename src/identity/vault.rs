@@ -160,13 +160,21 @@ impl HashicorpVaultAdapter {
 
         // Production mode: AppRole login
         let role_id = self.config.vault_role_id.as_deref().ok_or_else(|| {
-            VaultError::Configuration("VAULT_ROLE_ID not set (required for AppRole auth)".to_string())
+            VaultError::Configuration(
+                "VAULT_ROLE_ID not set (required for AppRole auth)".to_string(),
+            )
         })?;
         let secret_id = self.config.vault_secret_id.as_deref().ok_or_else(|| {
-            VaultError::Configuration("VAULT_SECRET_ID not set (required for AppRole auth)".to_string())
+            VaultError::Configuration(
+                "VAULT_SECRET_ID not set (required for AppRole auth)".to_string(),
+            )
         })?;
 
-        let vault_addr = self.config.vault_addr.as_deref().unwrap_or("http://127.0.0.1:8200");
+        let vault_addr = self
+            .config
+            .vault_addr
+            .as_deref()
+            .unwrap_or("http://127.0.0.1:8200");
 
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_millis(500))
@@ -189,14 +197,16 @@ impl HashicorpVaultAdapter {
             )));
         }
 
-        let body: serde_json::Value = resp
-            .json()
-            .map_err(|e| VaultError::AuthFailed(format!("Cannot parse Vault login response: {}", e)))?;
+        let body: serde_json::Value = resp.json().map_err(|e| {
+            VaultError::AuthFailed(format!("Cannot parse Vault login response: {}", e))
+        })?;
 
         body["auth"]["client_token"]
             .as_str()
             .map(|s| s.to_string())
-            .ok_or_else(|| VaultError::AuthFailed("Vault response missing client_token".to_string()))
+            .ok_or_else(|| {
+                VaultError::AuthFailed("Vault response missing client_token".to_string())
+            })
     }
 
     /// Write a scoped secret entry to Vault KV v2 for the agent.
@@ -207,7 +217,11 @@ impl HashicorpVaultAdapter {
         scope: &str,
         ttl_seconds: u64,
     ) -> Result<String, VaultError> {
-        let vault_addr = self.config.vault_addr.as_deref().unwrap_or("http://127.0.0.1:8200");
+        let vault_addr = self
+            .config
+            .vault_addr
+            .as_deref()
+            .unwrap_or("http://127.0.0.1:8200");
         let issued_at = chrono::Utc::now().timestamp();
         let expires_at = issued_at + ttl_seconds as i64;
         let vault_cred_id = uuid::Uuid::new_v4().to_string();
@@ -327,7 +341,11 @@ impl VaultAdapter for HashicorpVaultAdapter {
         );
 
         let token = self.get_client_token()?;
-        let vault_addr = self.config.vault_addr.as_deref().unwrap_or("http://127.0.0.1:8200");
+        let vault_addr = self
+            .config
+            .vault_addr
+            .as_deref()
+            .unwrap_or("http://127.0.0.1:8200");
 
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_millis(500))
@@ -355,7 +373,11 @@ impl VaultAdapter for HashicorpVaultAdapter {
     }
 
     fn health_check(&self) -> Result<(), VaultError> {
-        let vault_addr = self.config.vault_addr.as_deref().unwrap_or("http://127.0.0.1:8200");
+        let vault_addr = self
+            .config
+            .vault_addr
+            .as_deref()
+            .unwrap_or("http://127.0.0.1:8200");
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_millis(2000))
             .build()
@@ -369,9 +391,14 @@ impl VaultAdapter for HashicorpVaultAdapter {
         // Vault returns 200 (active), 429 (standby), 501 (not initialized), 503 (sealed)
         match resp.status().as_u16() {
             200 | 429 => Ok(()), // Active or standby — both can serve requests
-            501 => Err(VaultError::Configuration("Vault not initialized".to_string())),
+            501 => Err(VaultError::Configuration(
+                "Vault not initialized".to_string(),
+            )),
             503 => Err(VaultError::Unreachable("Vault is sealed".to_string())),
-            s => Err(VaultError::Unreachable(format!("Vault health returned HTTP {}", s))),
+            s => Err(VaultError::Unreachable(format!(
+                "Vault health returned HTTP {}",
+                s
+            ))),
         }
     }
 
@@ -437,7 +464,11 @@ impl VaultAdapter for AwsSecretsManagerAdapter {
             "awssm.{}.{}",
             base64::Engine::encode(
                 &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-                format!("{{\"sub\":\"{}\",\"scope\":\"{}\",\"exp\":{}}}", agent_id, scope, expires_at_unix).as_bytes()
+                format!(
+                    "{{\"sub\":\"{}\",\"scope\":\"{}\",\"exp\":{}}}",
+                    agent_id, scope, expires_at_unix
+                )
+                .as_bytes()
             ),
             "stub-signature"
         );
@@ -511,9 +542,10 @@ impl VaultAdapter for AzureKeyVaultAdapter {
         scope: &str,
         ttl_seconds: u64,
     ) -> Result<IssuedCredential, VaultError> {
-        let keyvault_url = self.config.azure_keyvault_url.as_deref().ok_or_else(|| {
-            VaultError::Configuration("AZURE_KEYVAULT_URL not set".to_string())
-        })?;
+        let keyvault_url =
+            self.config.azure_keyvault_url.as_deref().ok_or_else(|| {
+                VaultError::Configuration("AZURE_KEYVAULT_URL not set".to_string())
+            })?;
 
         logging::log_event(
             Level::Info,
@@ -562,6 +594,7 @@ impl VaultAdapter for AzureKeyVaultAdapter {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn test_config() -> VaultConfig {
         VaultConfig {
             backend: "vault".to_string(),

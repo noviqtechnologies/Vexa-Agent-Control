@@ -28,11 +28,11 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
-use super::handler::{self, ProxyState, ProxyAction};
+use super::forward;
+use super::handler::{self, ProxyAction, ProxyState};
 use crate::kill::{self};
 use crate::logging;
 use crate::policy::response_scanner::ScanResult;
-use super::forward;
 
 /// Run the proxy server. Blocks until shutdown signal.
 pub async fn run_server(
@@ -42,15 +42,19 @@ pub async fn run_server(
     tls_acceptor: Option<super::tls::TlsAcceptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Enable SO_REUSEADDR to handle TIME_WAIT on Windows (FR-101)
-    let domain = if listen_addr.is_ipv4() { Domain::IPV4 } else { Domain::IPV6 };
+    let domain = if listen_addr.is_ipv4() {
+        Domain::IPV4
+    } else {
+        Domain::IPV6
+    };
     let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
-    
+
     socket.set_reuse_address(true)?;
     // On Unix we'd use set_reuse_port(true) too, but on Windows reuse_address is enough
-    
+
     socket.bind(&listen_addr.into())?;
     socket.listen(128)?;
-    
+
     let std_listener: std::net::TcpListener = socket.into();
     std_listener.set_nonblocking(true)?;
     let listener = TcpListener::from_std(std_listener)?;
@@ -74,7 +78,7 @@ pub async fn run_server(
                     // doesn't block the accept loop from taking new connections.
                     let stream = if let Some(acceptor) = tls {
                         match acceptor.accept(stream).await {
-                            Ok(tls_stream) => super::tls::MaybeTlsStream::Tls(tls_stream),
+                            Ok(tls_stream) => super::tls::MaybeTlsStream::Tls(Box::new(tls_stream)),
                             Err(e) => {
                                 crate::logging::log_event(
                                     crate::logging::Level::Warn,
@@ -223,19 +227,22 @@ pub(crate) async fn resolve_session(
             Some(t) if !t.is_empty() => t,
             _ => {
                 // Fix 1: Write auth_failed to HMAC audit chain (not just stderr)
-                let _ = state.audit_logger.write_entry(
-                    &state.session_id,
-                    "auth_failed",
-                    "",
-                    None,
-                    Some(format!("identity_token_missing remote_addr={}", client_ip)),
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(client_ip.to_string()),
-                    None,
-                ).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &state.session_id,
+                        "auth_failed",
+                        "",
+                        None,
+                        Some(format!("identity_token_missing remote_addr={}", client_ip)),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(client_ip.to_string()),
+                        None,
+                    )
+                    .await;
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
                     "auth_failed",
@@ -265,19 +272,22 @@ pub(crate) async fn resolve_session(
         // Fail-Closed: ensure keys are loaded
         if !validator.is_ready().await {
             // Fix 1: Write keys-not-ready failure to HMAC audit chain
-            let _ = state.audit_logger.write_entry(
-                &state.session_id,
-                "auth_failed",
-                "",
-                None,
-                Some(format!("identity_keys_not_ready remote_addr={}", client_ip)),
-                None,
-                None,
-                None,
-                None,
-                Some(client_ip.to_string()),
-                None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &state.session_id,
+                    "auth_failed",
+                    "",
+                    None,
+                    Some(format!("identity_keys_not_ready remote_addr={}", client_ip)),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(client_ip.to_string()),
+                    None,
+                )
+                .await;
             crate::logging::log_event(
                 crate::logging::Level::Error,
                 "auth_failed",
@@ -303,12 +313,14 @@ pub(crate) async fn resolve_session(
                 };
 
                 // Check concurrency ceiling before creating new session
-                let ceiling = current_policy.as_ref()
+                let ceiling = current_policy
+                    .as_ref()
                     .and_then(|p| p.spend_caps.as_ref())
                     .and_then(|sc| sc.concurrency_ceiling.or(sc.max_concurrent_sessions));
                 if let Some(max_conn) = ceiling {
                     if state.sessions.len() >= max_conn {
-                        let license_key = current_policy.as_ref()
+                        let license_key = current_policy
+                            .as_ref()
                             .and_then(|p| p.spend_caps.as_ref())
                             .and_then(|sc| sc.license_key.as_deref());
                         if crate::license::validator::is_license_valid(license_key) {
@@ -330,7 +342,11 @@ pub(crate) async fn resolve_session(
                     }
                 }
 
-                let email = if sub.sub.contains('@') { Some(sub.sub.clone()) } else { None };
+                let email = if sub.sub.contains('@') {
+                    Some(sub.sub.clone())
+                } else {
+                    None
+                };
                 let session = Arc::new(super::session::SessionContext::new_with_scope(
                     Some(sub.sub.clone()),
                     email,
@@ -359,19 +375,22 @@ pub(crate) async fn resolve_session(
             }
             Err(e) => {
                 // Fix 1: Write invalid-token failure to HMAC audit chain
-                let _ = state.audit_logger.write_entry(
-                    &state.session_id,
-                    "auth_failed",
-                    "",
-                    None,
-                    Some(format!("invalid_token: {} remote_addr={}", e, client_ip)),
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(client_ip.to_string()),
-                    None,
-                ).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &state.session_id,
+                        "auth_failed",
+                        "",
+                        None,
+                        Some(format!("invalid_token: {} remote_addr={}", e, client_ip)),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(client_ip.to_string()),
+                        None,
+                    )
+                    .await;
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
                     "auth_failed",
@@ -389,9 +408,7 @@ pub(crate) async fn resolve_session(
     } else {
         // OIDC is NOT configured. Fall back to local session tracking!
         // We use X-Session-ID header or Client IP as session key.
-        let session_key = auth_header
-            .unwrap_or(client_ip)
-            .to_string();
+        let session_key = auth_header.unwrap_or(client_ip).to_string();
 
         if state.centralized_mode && session_key == client_ip {
             crate::logging::log_event(
@@ -429,12 +446,14 @@ pub(crate) async fn resolve_session(
         };
 
         // Check concurrency ceiling before creating new session
-        let ceiling = current_policy.as_ref()
+        let ceiling = current_policy
+            .as_ref()
             .and_then(|p| p.spend_caps.as_ref())
             .and_then(|sc| sc.concurrency_ceiling.or(sc.max_concurrent_sessions));
         if let Some(max_conn) = ceiling {
             if state.sessions.len() >= max_conn {
-                let license_key = current_policy.as_ref()
+                let license_key = current_policy
+                    .as_ref()
                     .and_then(|p| p.spend_caps.as_ref())
                     .and_then(|sc| sc.license_key.as_deref());
                 if crate::license::validator::is_license_valid(license_key) {
@@ -483,7 +502,6 @@ pub(crate) async fn resolve_session(
     }
 }
 
-
 /// Handle a single HTTP request
 async fn handle_request(
     req: Request<Incoming>,
@@ -505,18 +523,32 @@ async fn handle_request(
 
     if is_egress {
         // Resolve dynamic multi-tenant session context for egress
-        let auth_header = req.headers().get(hyper::header::AUTHORIZATION)
+        let auth_header = req
+            .headers()
+            .get(hyper::header::AUTHORIZATION)
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
-        let credential_header = req.headers().get("X-AgentWall-Credential")
+        let credential_header = req
+            .headers()
+            .get("X-AgentWall-Credential")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
-        let scope_header = req.headers().get("X-AgentWall-Credential-Scope")
+        let scope_header = req
+            .headers()
+            .get("X-AgentWall-Credential-Scope")
             .or_else(|| req.headers().get("X-AgentWall-Scope"))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
-        
-        let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), scope_header.as_deref(), client_ip).await {
+
+        let session = match resolve_session(
+            &state,
+            auth_header.as_deref(),
+            credential_header.as_deref(),
+            scope_header.as_deref(),
+            client_ip,
+        )
+        .await
+        {
             Ok(s) => s,
             Err((status, err_msg)) => {
                 let err = serde_json::json!({
@@ -540,22 +572,22 @@ async fn handle_request(
                     .body(Full::new(Bytes::from(html)))
                     .unwrap());
             }
-            "/api/stats" => {
-                match state.db_manager.get_stats().await {
-                    Ok(stats) => {
-                        let json_val = serde_json::to_value(&stats).unwrap();
-                        return Ok(json_response(StatusCode::OK, &json_val));
-                    }
-                    Err(e) => {
-                        let err = serde_json::json!({
-                            "error": format!("Database error: {}", e)
-                        });
-                        return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
-                    }
+            "/api/stats" => match state.db_manager.get_stats().await {
+                Ok(stats) => {
+                    let json_val = serde_json::to_value(&stats).unwrap();
+                    return Ok(json_response(StatusCode::OK, &json_val));
                 }
-            }
+                Err(e) => {
+                    let err = serde_json::json!({
+                        "error": format!("Database error: {}", e)
+                    });
+                    return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
+                }
+            },
             "/api/events" => {
-                let limit = req.uri().query()
+                let limit = req
+                    .uri()
+                    .query()
                     .and_then(|q| {
                         q.split('&')
                             .find(|pair| pair.starts_with("limit="))
@@ -640,7 +672,8 @@ async fn handle_request(
             "/api/self-healing/status" => {
                 // Optional bearer-token auth (same secret used for /api/v1/policy/active).
                 if let Some(ref secret) = state.policy_read_secret {
-                    let bearer = req.headers()
+                    let bearer = req
+                        .headers()
                         .get(hyper::header::AUTHORIZATION)
                         .and_then(|v| v.to_str().ok())
                         .and_then(|s| s.strip_prefix("Bearer "));
@@ -655,11 +688,14 @@ async fn handle_request(
                 match state.db_manager.get_all_events(1000).await {
                     Ok(events) => {
                         // Build per-tool last-seen map from MCP events only.
-                        let mut tool_last_seen: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+                        let mut tool_last_seen: std::collections::HashMap<String, i64> =
+                            std::collections::HashMap::new();
                         for ev in &events {
                             if ev.transport == "mcp" {
                                 if let Some(ref tool) = ev.url_path {
-                                    let entry = tool_last_seen.entry(tool.clone()).or_insert(ev.timestamp_ns);
+                                    let entry = tool_last_seen
+                                        .entry(tool.clone())
+                                        .or_insert(ev.timestamp_ns);
                                     if ev.timestamp_ns > *entry {
                                         *entry = ev.timestamp_ns;
                                     }
@@ -670,24 +706,34 @@ async fn handle_request(
                         let decay_window = self_healing_cfg.decay_window_days;
                         let stale_threshold = 0.3_f64;
 
-                        let tools: Vec<serde_json::Value> = tool_last_seen.iter().map(|(name, &last_ns)| {
-                            let decay = crate::self_healing::ConfidenceDecay::calculate(last_ns, decay_window);
-                            serde_json::json!({
-                                "name": name,
-                                "confidence_decay": decay,
-                                "last_seen": last_ns,
-                                "stale": decay < stale_threshold
+                        let tools: Vec<serde_json::Value> = tool_last_seen
+                            .iter()
+                            .map(|(name, &last_ns)| {
+                                let decay = crate::self_healing::ConfidenceDecay::calculate(
+                                    last_ns,
+                                    decay_window,
+                                );
+                                serde_json::json!({
+                                    "name": name,
+                                    "confidence_decay": decay,
+                                    "last_seen": last_ns,
+                                    "stale": decay < stale_threshold
+                                })
                             })
-                        }).collect();
+                            .collect();
 
                         // Build pending suggestions inline so the status payload is self-contained.
                         let mut scorer = crate::self_healing::AnomalyScorer::new();
                         for ev in &events {
                             if ev.transport == "mcp" {
                                 if let (Some(tool), Some(body)) = (&ev.url_path, &ev.request_body) {
-                                    if let Ok(params) = serde_json::from_str::<serde_json::Value>(body) {
+                                    if let Ok(params) =
+                                        serde_json::from_str::<serde_json::Value>(body)
+                                    {
                                         let mut flat = Vec::new();
-                                        crate::generate_policy::flatten_json(&params, "", 0, 5, &mut flat);
+                                        crate::generate_policy::flatten_json(
+                                            &params, "", 0, 5, &mut flat,
+                                        );
                                         for (k, v) in flat {
                                             if let serde_json::Value::String(s) = v {
                                                 scorer.observe(tool, &k, &s);
@@ -697,11 +743,12 @@ async fn handle_request(
                                 }
                             }
                         }
-                        let suggestions = crate::self_healing::SuggestionEngine::generate_suggestions(
-                            &scorer,
-                            self_healing_cfg.suggest_threshold,
-                            &events,
-                        );
+                        let suggestions =
+                            crate::self_healing::SuggestionEngine::generate_suggestions(
+                                &scorer,
+                                self_healing_cfg.suggest_threshold,
+                                &events,
+                            );
 
                         let body = serde_json::json!({
                             "enabled": self_healing_cfg.enabled,
@@ -742,10 +789,15 @@ async fn handle_request(
                         std::path::Path::new(&path_clone),
                         None, // issuer override not re-applied on hot-reload
                     )
-                }).await;
+                })
+                .await;
 
                 match reload_result {
-                    Ok(crate::policy::loader::PolicyLoadResult::Loaded { policy, raw_hash, warnings }) => {
+                    Ok(crate::policy::loader::PolicyLoadResult::Loaded {
+                        policy,
+                        raw_hash,
+                        warnings,
+                    }) => {
                         // Atomically swap the policy — zero dropped connections
                         match state.policy.write() {
                             Ok(mut guard) => *guard = Some(policy),
@@ -754,7 +806,9 @@ async fn handle_request(
                                 return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
                             }
                         }
-                        state.policy_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                        state
+                            .policy_loaded
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
 
                         crate::logging::log_event(
                             crate::logging::Level::Info,
@@ -776,14 +830,18 @@ async fn handle_request(
                             let _ = state.event_tx.send(s);
                         }
 
-                        return Ok(json_response(StatusCode::OK, &serde_json::json!({
-                            "status": "reloaded",
-                            "policy_hash": raw_hash,
-                            "warnings": warnings,
-                        })));
+                        return Ok(json_response(
+                            StatusCode::OK,
+                            &serde_json::json!({
+                                "status": "reloaded",
+                                "policy_hash": raw_hash,
+                                "warnings": warnings,
+                            }),
+                        ));
                     }
                     Ok(crate::policy::loader::PolicyLoadResult::Degraded { reason }) => {
-                        let err = serde_json::json!({"error": format!("Policy degraded: {}", reason)});
+                        let err =
+                            serde_json::json!({"error": format!("Policy degraded: {}", reason)});
                         return Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &err));
                     }
                     Ok(crate::policy::loader::PolicyLoadResult::Fatal { error }) => {
@@ -791,7 +849,8 @@ async fn handle_request(
                         return Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &err));
                     }
                     Err(e) => {
-                        let err = serde_json::json!({"error": format!("Reload task failed: {}", e)});
+                        let err =
+                            serde_json::json!({"error": format!("Reload task failed: {}", e)});
                         return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
                     }
                 }
@@ -805,7 +864,8 @@ async fn handle_request(
     if method == hyper::Method::POST && path == "/api/self-healing/suggestions" {
         // Optional bearer-token auth.
         if let Some(ref secret) = state.policy_read_secret {
-            let bearer = req.headers()
+            let bearer = req
+                .headers()
                 .get(hyper::header::AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer "));
@@ -840,7 +900,8 @@ async fn handle_request(
                     self_healing_cfg.suggest_threshold,
                     &events,
                 );
-                let body = serde_json::to_value(&suggestions).unwrap_or(serde_json::Value::Array(vec![]));
+                let body =
+                    serde_json::to_value(&suggestions).unwrap_or(serde_json::Value::Array(vec![]));
                 return Ok(json_response(StatusCode::OK, &body));
             }
             Err(e) => {
@@ -873,9 +934,6 @@ async fn handle_request(
         }
     }
 
-
-
-
     // Only accept POST for JSON-RPC
     if method != hyper::Method::POST {
         return Ok(Response::builder()
@@ -885,15 +943,21 @@ async fn handle_request(
     }
 
     // Extract Authorization header (FR-202)
-    let auth_header = req.headers().get(hyper::header::AUTHORIZATION)
+    let auth_header = req
+        .headers()
+        .get(hyper::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
-    let credential_header = req.headers().get("X-AgentWall-Credential")
+    let credential_header = req
+        .headers()
+        .get("X-AgentWall-Credential")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
-    let scope_header = req.headers().get("X-AgentWall-Credential-Scope")
+    let scope_header = req
+        .headers()
+        .get("X-AgentWall-Credential-Scope")
         .or_else(|| req.headers().get("X-AgentWall-Scope"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
@@ -925,7 +989,15 @@ async fn handle_request(
     let start_time = std::time::Instant::now();
 
     // Resolve dynamic multi-tenant session context (FR-101)
-    let session = match resolve_session(&state, auth_header.as_deref(), credential_header.as_deref(), scope_header.as_deref(), client_ip).await {
+    let session = match resolve_session(
+        &state,
+        auth_header.as_deref(),
+        credential_header.as_deref(),
+        scope_header.as_deref(),
+        client_ip,
+    )
+    .await
+    {
         Ok(s) => s,
         Err((status, err_msg)) => {
             let err = serde_json::json!({
@@ -941,7 +1013,8 @@ async fn handle_request(
     let action = handler::evaluate_jsonrpc(&state, &session, &body).await;
 
     // Extract tool name from original request for response scanning context
-    let tool_name = body.get("params")
+    let tool_name = body
+        .get("params")
         .and_then(|p| p.get("name"))
         .and_then(|n| n.as_str())
         .unwrap_or("");
@@ -961,9 +1034,10 @@ async fn handle_request(
                         tool_name,
                         &mut dlp_findings_json,
                         &mut injection_findings_json,
-                    ).await;
+                    )
+                    .await;
                     (processed, false, StatusCode::OK)
-                },
+                }
                 Err(e) => (
                     serde_json::json!({
                         "jsonrpc": "2.0",
@@ -982,18 +1056,20 @@ async fn handle_request(
     };
 
     if body.get("method").and_then(|m| m.as_str()) == Some("tools/call") {
-        let tool_name = body.get("params")
+        let tool_name = body
+            .get("params")
             .and_then(|p| p.get("name"))
             .and_then(|n| n.as_str())
             .unwrap_or("")
             .to_string();
-        let parameters = body.get("params")
+        let parameters = body
+            .get("params")
             .and_then(|p| p.get("arguments"))
             .map(|a| a.to_string())
             .unwrap_or_else(|| "{}".to_string());
         let response_str = response.to_string();
         let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        
+
         let event = crate::proxy::db::EgressEvent {
             timestamp_ns,
             session_id: session.session_id.clone(),
@@ -1011,12 +1087,16 @@ async fn handle_request(
             dlp_findings: dlp_findings_json.clone(),
             injection_findings: injection_findings_json.clone(),
             latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
-            verdict: Some(if should_kill || response.get("error").is_some() { "deny".to_string() } else { "allow".to_string() }),
+            verdict: Some(if should_kill || response.get("error").is_some() {
+                "deny".to_string()
+            } else {
+                "allow".to_string()
+            }),
             semantic_anomaly_score: None,
             identity_context: None,
         };
         let db = state.db_manager.clone();
-        
+
         // Broadcast to SSE clients
         if let Ok(json_str) = serde_json::to_string(&event) {
             let _ = state.event_tx.send(json_str);
@@ -1034,10 +1114,7 @@ async fn handle_request(
                 control_plane_proto::redact::RawDecision::Allowed
             };
 
-            let agent_id = session
-                .identity_sub
-                .as_deref()
-                .unwrap_or("anonymous");
+            let agent_id = session.identity_sub.as_deref().unwrap_or("anonymous");
 
             let tool_on_allowlist = {
                 let guard = state.policy.read().unwrap_or_else(|e| e.into_inner());
@@ -1092,13 +1169,15 @@ pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Res
 fn prometheus_metrics_response(state: &ProxyState) -> Response<Full<Bytes>> {
     use std::sync::atomic::Ordering;
 
-    let requests    = state.metrics_requests_total.load(Ordering::Relaxed);
-    let allowed     = state.metrics_allow_total.load(Ordering::Relaxed);
-    let denied      = state.metrics_deny_total.load(Ordering::Relaxed);
-    let rate_lim    = state.metrics_rate_limited_total.load(Ordering::Relaxed);
-    let cycles      = state.metrics_firewall_cycle_total.load(Ordering::Relaxed);
-    let siem_ok     = state.metrics_siem_export_total.load(Ordering::Relaxed);
-    let siem_failed = state.metrics_siem_export_failed_total.load(Ordering::Relaxed);
+    let requests = state.metrics_requests_total.load(Ordering::Relaxed);
+    let allowed = state.metrics_allow_total.load(Ordering::Relaxed);
+    let denied = state.metrics_deny_total.load(Ordering::Relaxed);
+    let rate_lim = state.metrics_rate_limited_total.load(Ordering::Relaxed);
+    let cycles = state.metrics_firewall_cycle_total.load(Ordering::Relaxed);
+    let siem_ok = state.metrics_siem_export_total.load(Ordering::Relaxed);
+    let siem_failed = state
+        .metrics_siem_export_failed_total
+        .load(Ordering::Relaxed);
 
     let body = format!(
         "# HELP agentwall_requests_total Total tool call requests evaluated by the gateway.\n\
@@ -1146,25 +1225,30 @@ async fn scan_and_process_response(
     // 1. Prompt Injection Scanning (FR-13)
     let enforce_mode = !state.shadow_mode;
     let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        state.injection_scanner.scan_response(response, tool_name, session_id, enforce_mode)
+        state
+            .injection_scanner
+            .scan_response(response, tool_name, session_id, enforce_mode)
     }));
 
     match inj_scan_result {
         Ok(crate::policy::injection::ScanResult::Block { findings }) => {
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "injection_blocked",
-                tool_name,
-                None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "injection_blocked",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Warn,
                 "injection_blocked",
@@ -1176,7 +1260,10 @@ async fn scan_and_process_response(
             });
             *injection_findings_json = Some(findings_json.to_string());
 
-            let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+            let id = response
+                .get("id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             return serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -1192,26 +1279,32 @@ async fn scan_and_process_response(
         }
         Ok(crate::policy::injection::ScanResult::Timeout) => {
             if enforce_mode {
-                let _ = state.audit_logger.write_entry(
-                    session_id,
-                    "injection_blocked_timeout",
-                    tool_name,
-                    None,
-                    Some("Scanner timed out (potential ReDoS) — Blocked".to_string()),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                None,
-                ).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "injection_blocked_timeout",
+                        tool_name,
+                        None,
+                        Some("Scanner timed out (potential ReDoS) — Blocked".to_string()),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
                 logging::log_event(
                     logging::Level::Warn,
                     "injection_blocked_timeout",
                     serde_json::json!({"tool": tool_name, "session": session_id}),
                 );
 
-                let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
                 return serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -1222,19 +1315,24 @@ async fn scan_and_process_response(
                     }
                 });
             } else {
-                let _ = state.audit_logger.write_entry(
-                    session_id,
-                    "injection_warning_timeout",
-                    tool_name,
-                    None,
-                    Some("Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string()),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                None,
-                ).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "injection_warning_timeout",
+                        tool_name,
+                        None,
+                        Some(
+                            "Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string(),
+                        ),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
                 logging::log_event(
                     logging::Level::Warn,
                     "injection_warning_timeout",
@@ -1244,19 +1342,22 @@ async fn scan_and_process_response(
         }
         Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "injection_warning",
-                tool_name,
-                None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "injection_warning",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Warn,
                 "injection_warning",
@@ -1269,19 +1370,22 @@ async fn scan_and_process_response(
             *injection_findings_json = Some(findings_json.to_string());
         }
         Ok(crate::policy::injection::ScanResult::ScannerError { error }) => {
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "INJECTION_SCANNER_FAILURE",
-                tool_name,
-                None,
-                Some(format!("Scanner error: {} — fail-open applied", error)),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "INJECTION_SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some(format!("Scanner error: {} — fail-open applied", error)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Error,
                 "INJECTION_SCANNER_FAILURE",
@@ -1290,19 +1394,22 @@ async fn scan_and_process_response(
         }
         Ok(crate::policy::injection::ScanResult::Clean) => {}
         Err(_) => {
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "INJECTION_SCANNER_FAILURE",
-                tool_name,
-                None,
-                Some("Injection scanner panicked — fail-open applied".to_string()),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "INJECTION_SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some("Injection scanner panicked — fail-open applied".to_string()),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Error,
                 "INJECTION_SCANNER_FAILURE",
@@ -1318,26 +1425,31 @@ async fn scan_and_process_response(
     };
     // Catch panics — fail-open on any error
     let scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        state.response_scanner.scan_response(response, tool_name, &scan_config)
+        state
+            .response_scanner
+            .scan_response(response, tool_name, &scan_config)
     }));
 
     let scan_result = match scan_result {
         Ok(result) => result,
         Err(_) => {
             // Scanner panicked — fail-open + loud audit log
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "SCANNER_FAILURE",
-                tool_name,
-                None,
-                Some("Response scanner panicked — fail-open applied".to_string()),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some("Response scanner panicked — fail-open applied".to_string()),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Error,
                 "SCANNER_FAILURE",
@@ -1351,19 +1463,22 @@ async fn scan_and_process_response(
         ScanResult::Pass | ScanResult::Clean => response.clone(),
 
         ScanResult::Skipped { reason } => {
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "response_scan_skipped",
-                tool_name,
-                None,
-                Some(reason.clone()),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "response_scan_skipped",
+                    tool_name,
+                    None,
+                    Some(reason.clone()),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Warn,
                 "response_scan_skipped",
@@ -1381,27 +1496,33 @@ async fn scan_and_process_response(
             if scan_config.dry_run {
                 // Dry-run: log what would be redacted but pass through
                 for f in &findings {
-                    let _ = state.audit_logger.write_entry(
-                        session_id,
-                        "response_scan_dry_run",
-                        tool_name,
-                        None,
-                        Some(format!("Would redact {} at {}:{} preview={}", f.pattern_name, f.field_path, f.position, f.preview)),
-                        None,
-                        session.identity_sub.clone(),
-                        session.identity_email.clone(),
-                        None,
-                        session.request_ip.clone(),
-                        None,
-                    ).await;
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            session_id,
+                            "response_scan_dry_run",
+                            tool_name,
+                            None,
+                            Some(format!(
+                                "Would redact {} at {}:{} preview={}",
+                                f.pattern_name, f.field_path, f.position, f.preview
+                            )),
+                            None,
+                            session.identity_sub.clone(),
+                            session.identity_email.clone(),
+                            None,
+                            session.request_ip.clone(),
+                            None,
+                        )
+                        .await;
                 }
                 logging::log_event(
                     logging::Level::Warn,
                     "response_scan_dry_run",
                     serde_json::json!({
-                        "tool": tool_name, 
-                        "session": session_id, 
-                        "would_action": "redact", 
+                        "tool": tool_name,
+                        "session": session_id,
+                        "would_action": "redact",
                         "pattern": findings.first().map(|f| f.pattern_name.clone()).unwrap_or_default(),
                         "count": findings.len()
                     }),
@@ -1411,19 +1532,25 @@ async fn scan_and_process_response(
 
             // Log each finding (never the full secret)
             for f in &findings {
-                let _ = state.audit_logger.write_entry(
-                    session_id,
-                    "response_secret_redacted",
-                    tool_name,
-                    None,
-                    Some(format!("pattern={} field={} pos={} len={} preview={}", f.pattern_name, f.field_path, f.position, f.length, f.preview)),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                None,
-                ).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "response_secret_redacted",
+                        tool_name,
+                        None,
+                        Some(format!(
+                            "pattern={} field={} pos={} len={} preview={}",
+                            f.pattern_name, f.field_path, f.position, f.length, f.preview
+                        )),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
             }
             logging::log_event(
                 logging::Level::Warn,
@@ -1432,7 +1559,9 @@ async fn scan_and_process_response(
             );
 
             // Apply redaction
-            state.response_scanner.redact_response(response, &scan_config)
+            state
+                .response_scanner
+                .redact_response(response, &scan_config)
         }
 
         ScanResult::Block { findings } => {
@@ -1443,27 +1572,33 @@ async fn scan_and_process_response(
 
             if scan_config.dry_run {
                 for f in &findings {
-                    let _ = state.audit_logger.write_entry(
-                        session_id,
-                        "response_scan_dry_run",
-                        tool_name,
-                        None,
-                        Some(format!("Would block: {} preview={}", f.pattern_name, f.preview)),
-                        None,
-                        session.identity_sub.clone(),
-                        session.identity_email.clone(),
-                        None,
-                        session.request_ip.clone(),
-                        None,
-                    ).await;
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            session_id,
+                            "response_scan_dry_run",
+                            tool_name,
+                            None,
+                            Some(format!(
+                                "Would block: {} preview={}",
+                                f.pattern_name, f.preview
+                            )),
+                            None,
+                            session.identity_sub.clone(),
+                            session.identity_email.clone(),
+                            None,
+                            session.request_ip.clone(),
+                            None,
+                        )
+                        .await;
                 }
                 logging::log_event(
                     logging::Level::Warn,
                     "response_scan_dry_run",
                     serde_json::json!({
-                        "tool": tool_name, 
-                        "session": session_id, 
-                        "would_action": "block", 
+                        "tool": tool_name,
+                        "session": session_id,
+                        "would_action": "block",
                         "pattern": findings.first().map(|f| f.pattern_name.clone()).unwrap_or_default(),
                         "count": findings.len()
                     }),
@@ -1472,19 +1607,25 @@ async fn scan_and_process_response(
             }
 
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "response_secret_blocked",
-                tool_name,
-                None,
-                Some(format!("pattern={} field={} preview={}", f.pattern_name, f.field_path, f.preview)),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "response_secret_blocked",
+                    tool_name,
+                    None,
+                    Some(format!(
+                        "pattern={} field={} preview={}",
+                        f.pattern_name, f.field_path, f.preview
+                    )),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Warn,
                 "response_secret_blocked",
@@ -1492,7 +1633,10 @@ async fn scan_and_process_response(
             );
 
             // Return JSON-RPC error instead of the response
-            let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+            let id = response
+                .get("id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -1509,19 +1653,22 @@ async fn scan_and_process_response(
 
         ScanResult::ScannerError { error } => {
             // Fail-open + loud audit log
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "SCANNER_FAILURE",
-                tool_name,
-                None,
-                Some(format!("Scanner error: {} — fail-open applied", error)),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-            None,
-            ).await;
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some(format!("Scanner error: {} — fail-open applied", error)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 logging::Level::Error,
                 "SCANNER_FAILURE",
@@ -1554,7 +1701,10 @@ fn check_policy_read_auth_inner(
         if is_loopback {
             None
         } else {
-            Some((StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable".to_string()))
+            Some((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service Unavailable".to_string(),
+            ))
         }
     }
 }
@@ -1596,21 +1746,13 @@ mod tests {
 
     #[test]
     fn policy_read_auth_missing_header_denies_401() {
-        let result = check_policy_read_auth_inner(
-            None,
-            Some("my-secret-token"),
-            false,
-        );
+        let result = check_policy_read_auth_inner(None, Some("my-secret-token"), false);
         assert_eq!(result.unwrap().0, StatusCode::UNAUTHORIZED);
     }
 
     #[test]
     fn policy_read_auth_loopback_with_secret_still_requires_token() {
-        let result = check_policy_read_auth_inner(
-            None,
-            Some("my-secret-token"),
-            true,
-        );
+        let result = check_policy_read_auth_inner(None, Some("my-secret-token"), true);
         assert_eq!(result.unwrap().0, StatusCode::UNAUTHORIZED);
     }
 

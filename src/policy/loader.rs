@@ -18,8 +18,8 @@ use std::path::Path;
 use super::engine::CompiledPolicy;
 use super::schema::{ParamType, PolicyFile, SUPPORTED_VERSIONS};
 use crate::logging::{self, Level};
-use std::sync::Arc;
 use jsonschema::JSONSchema;
+use std::sync::Arc;
 
 /// Errors during policy loading
 #[derive(Debug)]
@@ -82,6 +82,7 @@ impl std::fmt::Display for PolicyLoadError {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum PolicyLoadResult {
     Loaded {
         policy: CompiledPolicy,
@@ -163,9 +164,10 @@ fn compile_policy_yaml(
     mut warnings: Vec<String>,
     issuer_override: Option<String>,
 ) -> PolicyLoadResult {
-
     // Helper closure to compile a list of tool rules
-    let compile_tools = |tools_list: &Vec<super::schema::ToolRule>, warnings: &mut Vec<String>| -> Result<Vec<super::engine::CompiledTool>, PolicyLoadError> {
+    let compile_tools = |tools_list: &Vec<super::schema::ToolRule>,
+                         warnings: &mut Vec<String>|
+     -> Result<Vec<super::engine::CompiledTool>, PolicyLoadError> {
         let mut compiled = Vec::with_capacity(tools_list.len());
         for tool in tools_list {
             match tool.action.as_str() {
@@ -241,7 +243,8 @@ fn compile_policy_yaml(
                         )));
                     }
 
-                    if (param.param_type == ParamType::Object || param.param_type == ParamType::Array)
+                    if (param.param_type == ParamType::Object
+                        || param.param_type == ParamType::Array)
                         && param.schema.is_none()
                     {
                         return Err(PolicyLoadError::InvalidYaml(format!(
@@ -284,7 +287,9 @@ fn compile_policy_yaml(
                                     super::engine::CompiledValidator::PathTraversal
                                 }
                                 super::schema::ValidatorRule::UrlSchemeAllowlist(ref schemes) => {
-                                    super::engine::CompiledValidator::UrlSchemeAllowlist(schemes.clone())
+                                    super::engine::CompiledValidator::UrlSchemeAllowlist(
+                                        schemes.clone(),
+                                    )
                                 }
                                 super::schema::ValidatorRule::SqlInjectionBasic => {
                                     super::engine::CompiledValidator::SqlInjectionBasic
@@ -392,13 +397,13 @@ fn compile_policy_yaml(
                     },
                 };
             }
-            
+
             let group_tools = group.tools.unwrap_or_default();
             let compiled_group_tools = match compile_tools(&group_tools, &mut warnings) {
                 Ok(ct) => ct,
                 Err(e) => return PolicyLoadResult::Fatal { error: e },
             };
-            
+
             compiled_group_policies.push(super::engine::CompiledGroupPolicy {
                 id: group.id,
                 claims: group.claims,
@@ -412,22 +417,40 @@ fn compile_policy_yaml(
         .and_then(|s| s.max_calls_per_second)
         .unwrap_or(0);
 
-    let (oidc_issuer, oidc_audience, oidc_cache_ttl, group_claim_key) = if let Some(auth_cfg) = policy_file.auth {
-        (Some(auth_cfg.issuer), Some(auth_cfg.audience), auth_cfg.cache_ttl_minutes, "groups".to_string())
-    } else if let Some(ident) = policy_file.identity {
-        (ident.issuer.or(ident.oidc_issuer), ident.audience, None, ident.group_claim_key.unwrap_or_else(|| "groups".to_string()))
-    } else {
-        (None, None, None, "groups".to_string())
-    };
+    let (oidc_issuer, oidc_audience, oidc_cache_ttl, group_claim_key) =
+        if let Some(auth_cfg) = policy_file.auth {
+            (
+                Some(auth_cfg.issuer),
+                Some(auth_cfg.audience),
+                auth_cfg.cache_ttl_minutes,
+                "groups".to_string(),
+            )
+        } else if let Some(ident) = policy_file.identity {
+            (
+                ident.issuer.or(ident.oidc_issuer),
+                ident.audience,
+                None,
+                ident
+                    .group_claim_key
+                    .unwrap_or_else(|| "groups".to_string()),
+            )
+        } else {
+            (None, None, None, "groups".to_string())
+        };
 
     let identity_validator = if let (Some(issuer), Some(audience)) = (oidc_issuer, oidc_audience) {
         let final_issuer = issuer_override.unwrap_or(issuer);
-        let validator = super::identity::IdentityValidator::new(final_issuer, audience, oidc_cache_ttl, group_claim_key);
+        let validator = super::identity::IdentityValidator::new(
+            final_issuer,
+            audience,
+            oidc_cache_ttl,
+            group_claim_key,
+        );
         validator.clone().start_background_rotation();
         Some(validator)
     } else {
         if let Some(issuer) = issuer_override {
-             logging::log_event(
+            logging::log_event(
                 Level::Warn,
                 "oidc_issuer_ignored",
                 serde_json::json!({"reason": "no auth or identity section in policy", "issuer": &issuer}),
@@ -438,29 +461,57 @@ fn compile_policy_yaml(
 
     let (scannable_tools, safe_tools) = if let Some(scanning) = policy_file.response_scanning {
         (
-            scanning.scannable_tools.unwrap_or_else(|| vec![
-                "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(), 
-                "run_command".to_string(), "http_get".to_string(), "list_files".to_string(), 
-                "bash".to_string(), "execute".to_string(), "terminal".to_string(), 
-                "read".to_string(), "cat".to_string(), "shell".to_string(), 
-                "leak_secret".to_string(), "secret".to_string()
-            ]),
-            scanning.safe_tools.unwrap_or_else(|| vec![
-                "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string()
-            ])
+            scanning.scannable_tools.unwrap_or_else(|| {
+                vec![
+                    "read_file".to_string(),
+                    "exec_command".to_string(),
+                    "run_shell".to_string(),
+                    "run_command".to_string(),
+                    "http_get".to_string(),
+                    "list_files".to_string(),
+                    "bash".to_string(),
+                    "execute".to_string(),
+                    "terminal".to_string(),
+                    "read".to_string(),
+                    "cat".to_string(),
+                    "shell".to_string(),
+                    "leak_secret".to_string(),
+                    "secret".to_string(),
+                ]
+            }),
+            scanning.safe_tools.unwrap_or_else(|| {
+                vec![
+                    "tools/list".to_string(),
+                    "get_schema".to_string(),
+                    "get_metadata".to_string(),
+                    "ping".to_string(),
+                ]
+            }),
         )
     } else {
         (
             vec![
-                "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(), 
-                "run_command".to_string(), "http_get".to_string(), "list_files".to_string(), 
-                "bash".to_string(), "execute".to_string(), "terminal".to_string(), 
-                "read".to_string(), "cat".to_string(), "shell".to_string(), 
-                "leak_secret".to_string(), "secret".to_string()
+                "read_file".to_string(),
+                "exec_command".to_string(),
+                "run_shell".to_string(),
+                "run_command".to_string(),
+                "http_get".to_string(),
+                "list_files".to_string(),
+                "bash".to_string(),
+                "execute".to_string(),
+                "terminal".to_string(),
+                "read".to_string(),
+                "cat".to_string(),
+                "shell".to_string(),
+                "leak_secret".to_string(),
+                "secret".to_string(),
             ],
             vec![
-                "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string()
-            ]
+                "tools/list".to_string(),
+                "get_schema".to_string(),
+                "get_metadata".to_string(),
+                "ping".to_string(),
+            ],
         )
     };
 

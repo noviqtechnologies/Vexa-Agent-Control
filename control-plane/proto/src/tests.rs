@@ -167,7 +167,10 @@ fn dlp_findings_grouped_by_category_and_pattern() {
     let redacted = redact_event(&raw);
     assert_eq!(redacted.dlp_findings.len(), 1);
     assert_eq!(redacted.dlp_findings[0].count, 2);
-    assert_eq!(redacted.dlp_findings[0].category, SecretCategory::AwsAccessKey);
+    assert_eq!(
+        redacted.dlp_findings[0].category,
+        SecretCategory::AwsAccessKey
+    );
 }
 
 #[test]

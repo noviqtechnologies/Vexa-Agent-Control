@@ -40,19 +40,31 @@ fn write_temp_policy(yaml: &str) -> tempfile::NamedTempFile {
 #[test]
 fn test_ac4_1_lint_passes() {
     let events = vec![
-        make_event("list_files", "{\"path\": \"/var/log\"}", "2026-06-11T10:00:00Z"),
-        make_event("delete_file", "{\"path\": \"/etc/passwd\"}", "2026-06-11T10:01:00Z"),
+        make_event(
+            "list_files",
+            "{\"path\": \"/var/log\"}",
+            "2026-06-11T10:00:00Z",
+        ),
+        make_event(
+            "delete_file",
+            "{\"path\": \"/etc/passwd\"}",
+            "2026-06-11T10:01:00Z",
+        ),
     ];
     let yaml = generate_from_events(&events, 30);
-    
+
     // Write to a temporary file and lint it
     let file = write_temp_policy(&yaml);
     let path = file.path().to_str().unwrap();
-    
+
     // We expect warning 2 because the policy has mutation tools with no validators
     // Let's just check it doesn't fail with 1 (fatal/error)
     let exit_code = agentwall::lint::execute(path).unwrap();
-    assert!(exit_code == 0 || exit_code == 2, "Linter returned fatal error code {}", exit_code);
+    assert!(
+        exit_code == 0 || exit_code == 2,
+        "Linter returned fatal error code {}",
+        exit_code
+    );
 }
 
 #[test]
@@ -73,8 +85,12 @@ fn test_ac4_3_max_length_headroom() {
     let mut events = Vec::new();
     // length of string is 100
     let long_str = "a".repeat(100);
-    events.push(make_event("tool_a", &format!("{{\"param\": \"{}\"}}", long_str), "2026-06-11T10:00:00Z"));
-    
+    events.push(make_event(
+        "tool_a",
+        &format!("{{\"param\": \"{}\"}}", long_str),
+        "2026-06-11T10:00:00Z",
+    ));
+
     let yaml = generate_from_events(&events, 30);
     assert!(yaml.contains("max_length: 120")); // 100 * 1.2 = 120
 }
@@ -94,12 +110,20 @@ fn test_ac4_4_low_confidence_flag() {
 fn test_ac4_5_anomaly_detection() {
     let mut events = Vec::new();
     for _ in 0..20 {
-        events.push(make_event("tool_a", "{\"param\": \"common\"}", "2026-06-11T10:00:00Z"));
+        events.push(make_event(
+            "tool_a",
+            "{\"param\": \"common\"}",
+            "2026-06-11T10:00:00Z",
+        ));
     }
     // A much longer string to trigger a z-score > 3.0 (score 1.0)
     let rare = "a".repeat(50);
-    events.push(make_event("tool_a", &format!("{{\"param\": \"{}\"}}", rare), "2026-06-11T10:00:00Z"));
-    
+    events.push(make_event(
+        "tool_a",
+        &format!("{{\"param\": \"{}\"}}", rare),
+        "2026-06-11T10:00:00Z",
+    ));
+
     let yaml = generate_from_events(&events, 30);
     assert!(yaml.contains("Anomalies (review required)"));
     assert!(yaml.contains(&rare));
@@ -107,9 +131,11 @@ fn test_ac4_5_anomaly_detection() {
 
 #[test]
 fn test_ac4_6_nested_json_5levels() {
-    let events = vec![
-        make_event("tool_a", "{\"l1\": {\"l2\": {\"l3\": {\"l4\": {\"l5\": \"deep_value\"}}}}}", "2026-06-11T10:00:00Z")
-    ];
+    let events = vec![make_event(
+        "tool_a",
+        "{\"l1\": {\"l2\": {\"l3\": {\"l4\": {\"l5\": \"deep_value\"}}}}}",
+        "2026-06-11T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
     // Should be flattened to l1.l2.l3.l4.l5
     assert!(yaml.contains("name: l1.l2.l3.l4.l5"));
@@ -119,8 +145,16 @@ fn test_ac4_6_nested_json_5levels() {
 fn test_enum_detection() {
     let mut events = Vec::new();
     for _ in 0..5 {
-        events.push(make_event("tool_a", "{\"color\": \"red\"}", "2026-06-11T10:00:00Z"));
-        events.push(make_event("tool_a", "{\"color\": \"blue\"}", "2026-06-11T10:00:00Z"));
+        events.push(make_event(
+            "tool_a",
+            "{\"color\": \"red\"}",
+            "2026-06-11T10:00:00Z",
+        ));
+        events.push(make_event(
+            "tool_a",
+            "{\"color\": \"blue\"}",
+            "2026-06-11T10:00:00Z",
+        ));
     }
     let yaml = generate_from_events(&events, 30);
     assert!(yaml.contains("# enum:"));
@@ -130,9 +164,11 @@ fn test_enum_detection() {
 
 #[test]
 fn test_array_max_items() {
-    let events = vec![
-        make_event("tool_a", "{\"arr\": [1, 2, 3]}", "2026-06-11T10:00:00Z")
-    ];
+    let events = vec![make_event(
+        "tool_a",
+        "{\"arr\": [1, 2, 3]}",
+        "2026-06-11T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
     // 3 * 1.2 = 3.6 -> ceil -> 4, max with 1 -> 4
     assert!(yaml.contains("# max_items: 4"));
@@ -140,9 +176,11 @@ fn test_array_max_items() {
 
 #[test]
 fn test_path_traversal_validator() {
-    let events = vec![
-        make_event("tool_a", "{\"path\": \"/etc/passwd\"}", "2026-06-11T10:00:00Z")
-    ];
+    let events = vec![make_event(
+        "tool_a",
+        "{\"path\": \"/etc/passwd\"}",
+        "2026-06-11T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
     assert!(yaml.contains("validators:"));
     assert!(yaml.contains("- path_traversal"));
@@ -163,7 +201,11 @@ fn test_required_threshold() {
     let mut events = Vec::new();
     for _ in 0..8 {
         // Param is present 80% of the time
-        events.push(make_event("tool_a", "{\"opt\": \"yes\"}", "2026-06-11T10:00:00Z"));
+        events.push(make_event(
+            "tool_a",
+            "{\"opt\": \"yes\"}",
+            "2026-06-11T10:00:00Z",
+        ));
     }
     for _ in 0..2 {
         events.push(make_event("tool_a", "{}", "2026-06-11T10:00:00Z"));
@@ -187,11 +229,15 @@ fn test_large_event_set() {
         events.push(make_event(
             &format!("tool_{}", i % 50),
             "{\"param\": \"value\"}",
-            "2026-06-11T10:00:00Z"
+            "2026-06-11T10:00:00Z",
         ));
     }
     let start = Instant::now();
     let _yaml = generate_from_events(&events, 30);
     let duration = start.elapsed();
-    assert!(duration.as_secs() < 3, "Policy generation took too long: {:?}", duration);
+    assert!(
+        duration.as_secs() < 3,
+        "Policy generation took too long: {:?}",
+        duration
+    );
 }

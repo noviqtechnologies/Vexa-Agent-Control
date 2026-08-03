@@ -1,7 +1,7 @@
 //! FR-304: JSON transformer — wraps / unwraps mcpServer entries
 
-use serde_json::{json, Value};
 use super::WrapError;
+use serde_json::{json, Value};
 
 const STDIO_PROXY_MARKER: &str = "stdio-proxy";
 
@@ -26,22 +26,15 @@ pub fn wrap_entry(entry: &mut Value, agentwall_bin: &str) -> Result<(), WrapErro
 
     let command = entry["command"]
         .as_str()
-        .ok_or_else(|| WrapError::InvalidJson(
-            "mcpServer entry missing 'command' field".to_string()
-        ))?
+        .ok_or_else(|| {
+            WrapError::InvalidJson("mcpServer entry missing 'command' field".to_string())
+        })?
         .to_string();
 
-    let existing_args: Vec<Value> = entry["args"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let existing_args: Vec<Value> = entry["args"].as_array().cloned().unwrap_or_default();
 
     // Build: ["stdio-proxy", "--", <original_command>, <original_args...>]
-    let mut new_args = vec![
-        json!(STDIO_PROXY_MARKER),
-        json!("--"),
-        json!(command),
-    ];
+    let mut new_args = vec![json!(STDIO_PROXY_MARKER), json!("--"), json!(command)];
     new_args.extend(existing_args);
 
     entry["command"] = json!(agentwall_bin);
@@ -59,15 +52,12 @@ pub fn unwrap_entry(entry: &mut Value) -> Result<(), WrapError> {
         return Ok(());
     }
 
-    let args = entry["args"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let args = entry["args"].as_array().cloned().unwrap_or_default();
 
     // args[0] = "stdio-proxy", args[1] = "--", args[2] = original command, args[3..] = original args
     if args.len() < 3 {
         return Err(WrapError::InvalidJson(
-            "Wrapped entry has unexpected args format".to_string()
+            "Wrapped entry has unexpected args format".to_string(),
         ));
     }
 

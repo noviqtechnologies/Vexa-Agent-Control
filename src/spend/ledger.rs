@@ -8,8 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 use rusqlite::{params, Connection};
 
 use super::model::{
-    AgentSpend, BudgetConfig, BudgetPeriod, BudgetScope, IncreaseRequest,
-    SpendCheckResult,
+    AgentSpend, BudgetConfig, BudgetPeriod, BudgetScope, IncreaseRequest, SpendCheckResult,
 };
 
 /// Commands sent to the background spend ledger worker thread.
@@ -60,18 +59,27 @@ pub struct SpendLedger {
 }
 
 impl SpendLedger {
-        pub fn init(dashboard_client: Option<Arc<crate::control_plane_client::client::DashboardClient>>) -> Self {
+    pub fn init(
+        dashboard_client: Option<Arc<crate::control_plane_client::client::DashboardClient>>,
+    ) -> Self {
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        let db_path = PathBuf::from(&home_dir).join(".agentwall").join("events.db");
-        
+        let db_path = PathBuf::from(&home_dir)
+            .join(".agentwall")
+            .join("events.db");
+
         let start = Instant::now();
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB for spend");
-        
+
         // Write latency measurement
-        conn.execute("CREATE TABLE IF NOT EXISTS spend_latency_test (id INTEGER)", []).ok();
-        conn.execute("INSERT INTO spend_latency_test (id) VALUES (1)", []).ok();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS spend_latency_test (id INTEGER)",
+            [],
+        )
+        .ok();
+        conn.execute("INSERT INTO spend_latency_test (id) VALUES (1)", [])
+            .ok();
         let write_latency_ms = start.elapsed().as_millis();
-        
+
         if write_latency_ms > 50 {
             crate::logging::log_event(
                 crate::logging::Level::Warn,
@@ -96,7 +104,8 @@ impl SpendLedger {
                 PRIMARY KEY (scope_type, scope_key)
             )",
             [],
-        ).ok();
+        )
+        .ok();
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS spend_counters (
@@ -107,7 +116,8 @@ impl SpendLedger {
                 PRIMARY KEY (agent_id, period_start)
             )",
             [],
-        ).ok();
+        )
+        .ok();
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS spend_thresholds_fired (
@@ -118,7 +128,8 @@ impl SpendLedger {
                 PRIMARY KEY (agent_id, period_start, threshold_pct)
             )",
             [],
-        ).ok();
+        )
+        .ok();
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS spend_increase_requests (
@@ -133,21 +144,24 @@ impl SpendLedger {
                 new_cap      INTEGER
             )",
             [],
-        ).ok();
-
+        )
+        .ok();
 
         if let Some(client) = dashboard_client {
-            let conn2 = Connection::open(&db_path).expect("Failed to open SQLite DB for spend sync");
+            let conn2 =
+                Connection::open(&db_path).expect("Failed to open SQLite DB for spend sync");
             std::thread::spawn(move || {
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(60));
                     // Sync snapshots
-                    let mut stmt = conn2.prepare("SELECT agent_id, period_start, spent_cents FROM spend_counters").unwrap();
+                    let mut stmt = conn2
+                        .prepare("SELECT agent_id, period_start, spent_cents FROM spend_counters")
+                        .unwrap();
                     let rows = stmt.query_map([], |row| {
                         Ok((
                             row.get::<_, String>(0)?,
                             row.get::<_, i64>(1)?,
-                            row.get::<_, i64>(2)?
+                            row.get::<_, i64>(2)?,
                         ))
                     });
                     if let Ok(mapped_rows) = rows {
@@ -169,13 +183,19 @@ impl SpendLedger {
 
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<SpendCmd>();
         let _shutdown = Arc::new(());
-        
+
         std::thread::spawn(move || {
             let mut conn = conn;
             while let Some(cmd) = cmd_rx.blocking_recv() {
                 match cmd {
-                    SpendCmd::CheckAndIncrement { agent_id, identity_groups, estimated_cents, responder } => {
-                        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate);
+                    SpendCmd::CheckAndIncrement {
+                        agent_id,
+                        identity_groups,
+                        estimated_cents,
+                        responder,
+                    } => {
+                        let tx = conn
+                            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate);
                         match tx {
                             Ok(tx) => {
                                 // 1. Determine budget
@@ -218,8 +238,13 @@ impl SpendLedger {
                                 if let Some(cap) = active_cap {
                                     let now = chrono::Utc::now();
                                     // Midnight UTC
-                                    let period_start = now.date_naive().and_hms_opt(0,0,0).unwrap().and_utc().timestamp();
-                                    
+                                    let period_start = now
+                                        .date_naive()
+                                        .and_hms_opt(0, 0, 0)
+                                        .unwrap()
+                                        .and_utc()
+                                        .timestamp();
+
                                     let mut spent_cents: u64 = tx.query_row(
                                         "SELECT spent_cents FROM spend_counters WHERE agent_id=? AND period_start=?",
                                         params![&agent_id, period_start],
@@ -228,7 +253,10 @@ impl SpendLedger {
 
                                     if spent_cents + estimated_cents > cap {
                                         let _ = tx.commit();
-                                        let _ = responder.send(SpendCheckResult::BudgetExhausted { cap_cents: cap, spent_cents });
+                                        let _ = responder.send(SpendCheckResult::BudgetExhausted {
+                                            cap_cents: cap,
+                                            spent_cents,
+                                        });
                                     } else {
                                         spent_cents += estimated_cents;
                                         let _ = tx.execute(
@@ -237,7 +265,9 @@ impl SpendLedger {
                                             params![&agent_id, period_start, spent_cents, now.timestamp(), spent_cents, now.timestamp()],
                                         );
                                         let _ = tx.commit();
-                                        let _ = responder.send(SpendCheckResult::Ok { remaining_cents: cap - spent_cents });
+                                        let _ = responder.send(SpendCheckResult::Ok {
+                                            remaining_cents: cap - spent_cents,
+                                        });
                                     }
                                 } else {
                                     let _ = tx.commit();
@@ -248,8 +278,13 @@ impl SpendLedger {
                                 let _ = responder.send(SpendCheckResult::LedgerUnavailable);
                             }
                         }
-                    },
-                    SpendCmd::SetBudget { scope, cap_cents, period, responder } => {
+                    }
+                    SpendCmd::SetBudget {
+                        scope,
+                        cap_cents,
+                        period,
+                        responder,
+                    } => {
                         let (scope_type, scope_key) = match scope {
                             BudgetScope::Org => ("org", "".to_string()),
                             BudgetScope::Group(g) => ("group", g),
@@ -268,7 +303,7 @@ impl SpendLedger {
                             params![scope_type, scope_key, cap_cents, p, now, now, cap_cents, p, now],
                         ).map(|_| ()).map_err(|e| e.to_string());
                         let _ = responder.send(res);
-                    },
+                    }
                     _ => {} // Other commands unimplemented in prototype
                 }
             }
@@ -281,9 +316,23 @@ impl SpendLedger {
         }
     }
 
-    pub async fn check_and_increment(&self, agent_id: String, identity_groups: Vec<String>, estimated_cents: u64) -> SpendCheckResult {
+    pub async fn check_and_increment(
+        &self,
+        agent_id: String,
+        identity_groups: Vec<String>,
+        estimated_cents: u64,
+    ) -> SpendCheckResult {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(SpendCmd::CheckAndIncrement { agent_id, identity_groups, estimated_cents, responder: tx }).is_err() {
+        if self
+            .cmd_tx
+            .send(SpendCmd::CheckAndIncrement {
+                agent_id,
+                identity_groups,
+                estimated_cents,
+                responder: tx,
+            })
+            .is_err()
+        {
             return SpendCheckResult::LedgerUnavailable;
         }
         rx.await.unwrap_or(SpendCheckResult::LedgerUnavailable)

@@ -72,7 +72,7 @@ pub struct ResponseScanConfig {
 impl Default for ResponseScanConfig {
     fn default() -> Self {
         Self {
-            enabled: false,     // opt-in per PRD
+            enabled: false, // opt-in per PRD
             block_mode: false,
             dry_run: false,
             max_scan_bytes: 1_048_576, // 1MB
@@ -103,7 +103,10 @@ const PATTERN_DEFS: &[(&str, &str)] = &[
     // Anthropic API Key (must be checked before OpenAI due to sk- prefix overlap)
     ("Anthropic API Key", r"sk-ant-[a-zA-Z0-9_\-]{20,}"),
     // SSH Private Key Headers
-    ("SSH Private Key", r"-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----"),
+    (
+        "SSH Private Key",
+        r"-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----",
+    ),
     // Stripe Keys
     ("Stripe Secret Key", r"sk_live_[0-9a-zA-Z]{20,}"),
     ("Stripe Restricted Key", r"rk_live_[0-9a-zA-Z]{20,}"),
@@ -143,7 +146,10 @@ impl ResponseScanner {
             });
         }
 
-        Ok(Self { regex_set, patterns })
+        Ok(Self {
+            regex_set,
+            patterns,
+        })
     }
 
     /// Scan a JSON-RPC response value for secrets.
@@ -158,7 +164,11 @@ impl ResponseScanner {
         }
 
         // Tool-aware filtering
-        if config.safe_tools.iter().any(|t| tool_name.eq_ignore_ascii_case(t)) {
+        if config
+            .safe_tools
+            .iter()
+            .any(|t| tool_name.eq_ignore_ascii_case(t))
+        {
             return ScanResult::Pass;
         }
         if !is_scannable_tool(tool_name, &config.scannable_tools) {
@@ -218,7 +228,8 @@ impl ResponseScanner {
 
         // Fix 6: Deduplicate findings by field_path and position to prevent pattern overlap
         findings.sort_by(|a, b| {
-            a.field_path.cmp(&b.field_path)
+            a.field_path
+                .cmp(&b.field_path)
                 .then(a.position.cmp(&b.position))
                 .then(b.length.cmp(&a.length)) // Descending length
                 .then(a.pattern_name.cmp(&b.pattern_name)) // Anthropic before OpenAI
@@ -228,7 +239,9 @@ impl ResponseScanner {
         if config.block_mode && !findings.is_empty() {
             // Fail-fast: block on first deduplicated match
             let first = findings.remove(0);
-            return ScanResult::Block { findings: vec![first] };
+            return ScanResult::Block {
+                findings: vec![first],
+            };
         }
 
         if findings.is_empty() {
@@ -301,13 +314,13 @@ impl ResponseScanner {
 /// Check if a tool name matches any scannable tool pattern.
 fn is_scannable_tool(tool_name: &str, scannable_list: &[String]) -> bool {
     let lower = tool_name.to_ascii_lowercase();
-    scannable_list.iter().any(|t| lower.contains(&t.to_ascii_lowercase()))
+    scannable_list
+        .iter()
+        .any(|t| lower.contains(&t.to_ascii_lowercase()))
 }
 
 /// Content fields to extract and scan from JSON-RPC result
-const CONTENT_FIELDS: &[&str] = &[
-    "content", "stdout", "result", "data", "text",
-];
+const CONTENT_FIELDS: &[&str] = &["content", "stdout", "result", "data", "text"];
 
 /// Extract content field strings from a JSON-RPC response.
 /// Returns Vec<(field_path, content_string)>.
@@ -485,7 +498,9 @@ mod tests {
         });
         match s.scan_response(&resp, "read_file", &enabled_config()) {
             ScanResult::Redact { findings } => {
-                assert!(findings.iter().any(|f| f.category == SecretCategory::AnthropicApiKey));
+                assert!(findings
+                    .iter()
+                    .any(|f| f.category == SecretCategory::AnthropicApiKey));
             }
             other => panic!("Expected Redact, got {:?}", other),
         }

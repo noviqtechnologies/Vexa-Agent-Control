@@ -58,29 +58,59 @@ pub fn run_identity_inspect(credential_id: &str) -> i32 {
     println!("{} Credential Details", "📄".blue().bold());
     println!("{}", "─".repeat(60).cyan());
     println!("  {} {}", "Agent ID:".bold(), cred.agent_id.cyan());
-    println!("  {} {}", "Credential ID:".bold(), cred.credential_id.cyan());
-    println!("  {} {}", "Type:".bold(), cred.credential_type.to_string().yellow());
-    println!("  {} {}", "Status:".bold(), cred.status.to_string().magenta());
+    println!(
+        "  {} {}",
+        "Credential ID:".bold(),
+        cred.credential_id.cyan()
+    );
+    println!(
+        "  {} {}",
+        "Type:".bold(),
+        cred.credential_type.to_string().yellow()
+    );
+    println!(
+        "  {} {}",
+        "Status:".bold(),
+        cred.status.to_string().magenta()
+    );
     println!("  {} {}", "Scope:".bold(), cred.scope.green());
     println!(
         "  {} {}",
         "Issued At:".bold(),
-        cred.issued_at.format("%Y-%m-%d %H:%M:%S UTC").to_string().yellow()
+        cred.issued_at
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string()
+            .yellow()
     );
     println!(
         "  {} {}",
         "Expires At:".bold(),
-        cred.expires_at.format("%Y-%m-%d %H:%M:%S UTC").to_string().yellow()
+        cred.expires_at
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string()
+            .yellow()
     );
     println!("  {} {}", "Backend:".bold(), cred.vault_backend.cyan());
-    println!("  {} {}", "Authorized By:".bold(), cred.authorized_by.dimmed());
-    println!("  {} {}", "Binding Hash:".bold(), cred.binding_hash.dimmed());
+    println!(
+        "  {} {}",
+        "Authorized By:".bold(),
+        cred.authorized_by.dimmed()
+    );
+    println!(
+        "  {} {}",
+        "Binding Hash:".bold(),
+        cred.binding_hash.dimmed()
+    );
 
     if !cred.tool_scopes.is_empty() {
         println!("{}", "─".repeat(60).cyan());
         println!("  {} Tool Scope Overrides:", "🛠".blue().bold());
         for scope in &cred.tool_scopes {
-            let action = if scope.allow { "ALLOW".green() } else { "DENY".red() };
+            let action = if scope.allow {
+                "ALLOW".green()
+            } else {
+                "DENY".red()
+            };
             println!("    - {}: {}", scope.tool.cyan(), action);
         }
     }
@@ -93,11 +123,17 @@ pub fn run_identity_inspect(credential_id: &str) -> i32 {
     if let Ok(entries) = audit_logger.read_for_agent(&cred.agent_id) {
         let cred_entries: Vec<_> = entries
             .into_iter()
-            .filter(|e| e.credential_id == credential_id || e.new_credential_id.as_deref() == Some(credential_id))
+            .filter(|e| {
+                e.credential_id == credential_id
+                    || e.new_credential_id.as_deref() == Some(credential_id)
+            })
             .collect();
 
         if cred_entries.is_empty() {
-            println!("    {}", "No audit history found for this credential.".dimmed());
+            println!(
+                "    {}",
+                "No audit history found for this credential.".dimmed()
+            );
         } else {
             for entry in cred_entries {
                 let event = entry.event_type.to_string();

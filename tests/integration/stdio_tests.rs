@@ -10,12 +10,7 @@ async fn test_stdio_bridge() {
 
     // Spawn agentwall in stdio mode
     let mut child = Command::new(bin)
-        .args([
-            "dev",
-            "--stdio",
-            "--mcp-url",
-            "http://127.0.0.1:3000",
-        ])
+        .args(["dev", "--stdio", "--mcp-url", "http://127.0.0.1:3000"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -36,11 +31,14 @@ async fn test_stdio_bridge() {
     });
     let req_str = format!("{}\n", serde_json::to_string(&req).unwrap());
 
-    stdin.write_all(req_str.as_bytes()).await.expect("Failed to write to stdin");
+    stdin
+        .write_all(req_str.as_bytes())
+        .await
+        .expect("Failed to write to stdin");
     stdin.flush().await.expect("Failed to flush stdin");
 
     // Read the response from stdout
-    
+
     // We use a small timeout to read the response to avoid hanging if the bridge is broken
     let mut res_str = String::new();
     let _ = tokio::time::timeout(Duration::from_secs(5), async {
@@ -48,13 +46,18 @@ async fn test_stdio_bridge() {
         loop {
             let mut line = String::new();
             use tokio::io::AsyncBufReadExt;
-            if reader.read_line(&mut line).await.unwrap() == 0 { break; }
+            if reader.read_line(&mut line).await.unwrap() == 0 {
+                break;
+            }
             res_str.push_str(&line);
-            if line.contains("jsonrpc") { break; }
+            if line.contains("jsonrpc") {
+                break;
+            }
         }
-    }).await;
+    })
+    .await;
 
-    // The proxy should respond to ping automatically or forward it. 
+    // The proxy should respond to ping automatically or forward it.
     // Either way, we expect a valid JSON-RPC message containing jsonrpc: 2.0
     assert!(
         res_str.contains(r#""jsonrpc":"2.0""#) || res_str.contains(r#""jsonrpc": "2.0""#),

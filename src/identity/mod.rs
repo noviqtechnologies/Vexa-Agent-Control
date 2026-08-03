@@ -76,15 +76,9 @@ pub enum IdentityCommand {
         rotation_policy: Option<String>,
     },
     /// Rotate agent credentials with zero downtime
-    Rotate {
-        agent: String,
-        drain_secs: u64,
-    },
+    Rotate { agent: String, drain_secs: u64 },
     /// Display the full HMAC-chained credential audit history
-    Audit {
-        agent: String,
-        verify: bool,
-    },
+    Audit { agent: String, verify: bool },
     /// Set per-tool-call credential scoping rules
     Scope {
         agent: String,
@@ -93,9 +87,7 @@ pub enum IdentityCommand {
         policy_path: String,
     },
     /// Inspect a specific credential binding
-    Inspect {
-        credential_id: String,
-    },
+    Inspect { credential_id: String },
 }
 
 /// Executes an `IdentityCommand` subcommand.
@@ -116,17 +108,13 @@ pub fn run_identity(cmd: IdentityCommand) -> i32 {
         IdentityCommand::Rotate { agent, drain_secs } => {
             rotate::run_identity_rotate(&agent, drain_secs)
         }
-        IdentityCommand::Audit { agent, verify } => {
-            audit::run_identity_audit(&agent, verify)
-        }
+        IdentityCommand::Audit { agent, verify } => audit::run_identity_audit(&agent, verify),
         IdentityCommand::Scope {
             agent,
             tool,
             allow,
             policy_path,
         } => scope::run_identity_scope(&agent, &tool, allow, &policy_path),
-        IdentityCommand::Inspect { credential_id } => {
-            inspect::run_identity_inspect(&credential_id)
-        }
+        IdentityCommand::Inspect { credential_id } => inspect::run_identity_inspect(&credential_id),
     }
 }

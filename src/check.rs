@@ -121,7 +121,9 @@ pub fn run_check(
                 // Check if it's a tool call event
                 let event = entry.get("event").and_then(|e| e.as_str()).unwrap_or("");
                 if event == "tool_allow" || event == "tool_deny" || event == "tool_dry_run_deny" {
-                    if let (Some(tool), Some(params)) = (entry.get("tool_name"), entry.get("params")) {
+                    if let (Some(tool), Some(params)) =
+                        (entry.get("tool_name"), entry.get("params"))
+                    {
                         lines_calls.push(FixtureCall {
                             tool: tool.as_str().unwrap_or("").to_string(),
                             params: params.clone(),
@@ -131,7 +133,9 @@ pub fn run_check(
             }
         }
         if lines_calls.is_empty() {
-            eprintln!("ERROR: Invalid fixture JSON: expected a sequence [...] or a valid audit.log");
+            eprintln!(
+                "ERROR: Invalid fixture JSON: expected a sequence [...] or a valid audit.log"
+            );
             return 2;
         }
         lines_calls
@@ -142,7 +146,9 @@ pub fn run_check(
     for call in &calls {
         let result = policy.evaluate(&call.tool, &call.params, None, &[]);
         let check_result = match &result {
-            EvalResult::Allow { matched_group_id: _ } => {
+            EvalResult::Allow {
+                matched_group_id: _,
+            } => {
                 let mut params_str = Vec::new();
                 if let Some(obj) = call.params.as_object() {
                     for (k, v) in obj {
@@ -204,7 +210,9 @@ pub fn run_check(
         match &check_result.reason {
             Some(detail) => println!(
                 "{}  {:<18}  {}",
-                check_result.verdict, check_result.tool.bold(), detail
+                check_result.verdict,
+                check_result.tool.bold(),
+                detail
             ),
             None => println!("{}  {}", check_result.verdict, check_result.tool.bold()),
         }

@@ -2,11 +2,11 @@
 //!
 //! Extends built-in DLP secret detectors with custom user-defined regex patterns loaded from YAML.
 
+use crate::policy::dlp::SecretCategory;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use regex::Regex;
-use crate::policy::dlp::SecretCategory;
 
 /// Custom community DLP detection rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,10 @@ impl CommunityRulesConfig {
         // Validate regexes
         for rule in &config.rules {
             if let Err(e) = Regex::new(&rule.regex) {
-                return Err(format!("Invalid regex in community rule '{}': {}", rule.name, e));
+                return Err(format!(
+                    "Invalid regex in community rule '{}': {}",
+                    rule.name, e
+                ));
             }
         }
 
@@ -53,8 +56,8 @@ impl CommunityRulesConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_load_community_rules() {

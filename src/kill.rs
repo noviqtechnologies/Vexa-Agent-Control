@@ -46,17 +46,15 @@ impl KillMode {
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "connection" => Ok(KillMode::Connection),
-            "process" => Err(
-                "--kill-mode process is removed in v6.1. \
+            "process" => Err("--kill-mode process is removed in v6.1. \
                 The gateway cannot reliably send SIGKILL to remote agent processes across \
                 network boundaries. Connection termination is the security enforcement boundary. \
-                Remove --kill-mode from your configuration (connection is now the default).".to_string()
-            ),
-            "both" => Err(
-                "--kill-mode both is removed in v6.1. \
+                Remove --kill-mode from your configuration (connection is now the default)."
+                .to_string()),
+            "both" => Err("--kill-mode both is removed in v6.1. \
                 Connection termination is the only supported enforcement mechanism. \
-                Remove --kill-mode from your configuration (connection is now the default).".to_string()
-            ),
+                Remove --kill-mode from your configuration (connection is now the default)."
+                .to_string()),
             other => Err(format!(
                 "Invalid kill mode: \"{}\". The only supported value in v6.1 is: connection",
                 other

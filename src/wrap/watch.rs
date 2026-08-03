@@ -33,8 +33,8 @@ use std::time::{Duration, Instant};
 use colored::*;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
+use super::{claude, config_path, generic_ide, WrapError};
 use crate::cli::WatchTarget;
-use super::{WrapError, config_path, generic_ide, claude};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -105,17 +105,12 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
         "ℹ".blue(),
         "restart the IDE to apply changes".yellow()
     );
-    println!(
-        "  {} Press {} to stop.",
-        "ℹ".blue(),
-        "Ctrl-C".bold()
-    );
+    println!("  {} Press {} to stop.", "ℹ".blue(), "Ctrl-C".bold());
     println!();
 
     // Set up per-target last-own-hash store (suppresses self-write re-triggers).
     // Key: canonical config path string.
-    let own_hashes: Arc<Mutex<HashMap<String, [u8; 32]>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let own_hashes: Arc<Mutex<HashMap<String, [u8; 32]>>> = Arc::new(Mutex::new(HashMap::new()));
 
     // Channel for FS events from notify.
     let (tx, rx) = std::sync::mpsc::channel::<Result<Event, notify::Error>>();
@@ -188,7 +183,10 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     // Debounce state: config_path_string → (last_event_instant, pending)
     let mut debounce: HashMap<String, Instant> = HashMap::new();
 
-    println!("{} Daemon running — waiting for config changes…", "●".green());
+    println!(
+        "{} Daemon running — waiting for config changes…",
+        "●".green()
+    );
 
     loop {
         if stop.load(std::sync::atomic::Ordering::SeqCst) {
@@ -283,23 +281,33 @@ fn resolve_all_verified() -> Result<Vec<ActiveTarget>, String> {
 
 fn resolve_single_target(target: WatchTarget) -> Result<Vec<ActiveTarget>, String> {
     match target {
-        WatchTarget::Claude { scan_responses, block_on_secrets } => {
+        WatchTarget::Claude {
+            scan_responses,
+            block_on_secrets,
+        } => {
             let path = config_path::claude_config_path()
                 .map_err(|e| format!("Cannot resolve Claude Desktop config path: {}", e))?;
             Ok(vec![ActiveTarget {
                 name: "Claude Desktop",
                 config_path: path,
                 verified: true,
-                claude_flags: Some(ClaudeFlags { scan_responses, block_on_secrets }),
+                claude_flags: Some(ClaudeFlags {
+                    scan_responses,
+                    block_on_secrets,
+                }),
             }])
         }
         WatchTarget::Cursor => make_unverified("Cursor", config_path::cursor_config_path()),
         WatchTarget::Vscode => make_unverified("VS Code", config_path::vscode_config_path()),
-        WatchTarget::Jetbrains => make_unverified("JetBrains", config_path::jetbrains_config_path()),
+        WatchTarget::Jetbrains => {
+            make_unverified("JetBrains", config_path::jetbrains_config_path())
+        }
         WatchTarget::Zed => make_unverified("Zed", config_path::zed_config_path()),
         WatchTarget::Cline => make_unverified("Cline", config_path::cline_config_path()),
         WatchTarget::Opencode => make_unverified("OpenCode", config_path::opencode_config_path()),
-        WatchTarget::Antigravity => make_unverified("Antigravity", config_path::antigravity_config_path()),
+        WatchTarget::Antigravity => {
+            make_unverified("Antigravity", config_path::antigravity_config_path())
+        }
     }
 }
 
@@ -406,7 +414,10 @@ fn flush_debounce(
         debounce.remove(&key);
 
         // Find the matching active target.
-        let at = match active.iter().find(|t| t.config_path.display().to_string() == key) {
+        let at = match active
+            .iter()
+            .find(|t| t.config_path.display().to_string() == key)
+        {
             Some(t) => t,
             None => continue,
         };
@@ -436,8 +447,7 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
         return;
     }
 
-    let wrap_result = if at.claude_flags.is_some() {
-        let flags = at.claude_flags.as_ref().unwrap();
+    let wrap_result = if let Some(flags) = &at.claude_flags {
         // Call wrap_claude directly (returns Result<WrapResult, WrapError>).
         claude::wrap_claude(false, flags.scan_responses)
     } else {
@@ -471,12 +481,7 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
             // No mcpServers in config, nothing to wrap
         }
         Err(e) => {
-            eprintln!(
-                "{} [watch] Error wrapping {}: {}",
-                "✖".red(),
-                at.name,
-                e
-            );
+            eprintln!("{} [watch] Error wrapping {}: {}", "✖".red(), at.name, e);
         }
     }
 }

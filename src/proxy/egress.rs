@@ -4,8 +4,8 @@ use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use std::sync::Arc;
 
-use crate::proxy::handler::ProxyState;
 use crate::proxy::db::EgressEvent;
+use crate::proxy::handler::ProxyState;
 use crate::proxy::session::SessionContext;
 
 pub async fn handle_egress(
@@ -16,12 +16,15 @@ pub async fn handle_egress(
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();
-    
+
     // 1. CONNECT proxying
     if method == hyper::Method::CONNECT {
-        let target_host = uri.authority().map(|a| a.host().to_string()).unwrap_or_default();
+        let target_host = uri
+            .authority()
+            .map(|a| a.host().to_string())
+            .unwrap_or_default();
         let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(443);
-        
+
         let target_url = format!("{}:{}", target_host, target_port);
         let session_id = session.session_id.clone();
         let state_clone = state.clone();
@@ -50,7 +53,7 @@ pub async fn handle_egress(
                 }
                 Err(e) => eprintln!("upgrade error: {}", e),
             }
-            
+
             // Log egress event after tunnel closes
             let event = EgressEvent {
                 timestamp_ns,
@@ -78,21 +81,27 @@ pub async fn handle_egress(
             }
             let _ = state_clone.db_manager.insert(event).await;
         });
-        
+
         return Ok(Response::new(Full::new(Bytes::new())));
     }
-    
+
     // 2. WebSockets proxying
     if hyper_tungstenite::is_upgrade_request(&req) {
-        let target_host = uri.authority().map(|a| a.host().to_string()).unwrap_or_default();
+        let target_host = uri
+            .authority()
+            .map(|a| a.host().to_string())
+            .unwrap_or_default();
         let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(80);
-        let url_path = uri.path_and_query().map(|pq| pq.as_str().to_string()).unwrap_or_default();
+        let url_path = uri
+            .path_and_query()
+            .map(|pq| pq.as_str().to_string())
+            .unwrap_or_default();
         let target_url_str = if target_port == 443 {
             format!("wss://{}{}", target_host, url_path)
         } else {
             format!("ws://{}:{}{}", target_host, target_port, url_path)
         };
-        
+
         // Fix AW-BUG-003: handle malformed WebSocket upgrade gracefully instead
         // of panicking. Missing Sec-WebSocket-Key or invalid headers now return
         // 400 Bad Request with an audit log entry, instead of crashing the handler.
@@ -124,7 +133,10 @@ pub async fn handle_egress(
                 let _ = state.db_manager.insert(event).await;
                 return Ok(Response::builder()
                     .status(StatusCode::BAD_REQUEST)
-                    .body(Full::new(Bytes::from(format!("WebSocket upgrade failed: {}", e))))
+                    .body(Full::new(Bytes::from(format!(
+                        "WebSocket upgrade failed: {}",
+                        e
+                    ))))
                     .unwrap());
             }
         };
@@ -140,22 +152,30 @@ pub async fn handle_egress(
                     let target_ws = tokio_tungstenite::connect_async(&target_url_str).await;
                     match target_ws {
                         Ok((server_ws, _)) => {
-                            use futures_util::{StreamExt, SinkExt};
+                            use futures_util::{SinkExt, StreamExt};
                             let (mut client_tx, mut client_rx) = client_ws.split();
                             let (mut server_tx, mut server_rx) = server_ws.split();
-                            
+
                             let c2s = async move {
                                 while let Some(msg) = client_rx.next().await {
                                     if let Ok(m) = msg {
-                                        if server_tx.send(m).await.is_err() { break; }
-                                    } else { break; }
+                                        if server_tx.send(m).await.is_err() {
+                                            break;
+                                        }
+                                    } else {
+                                        break;
+                                    }
                                 }
                             };
                             let s2c = async move {
                                 while let Some(msg) = server_rx.next().await {
                                     if let Ok(m) = msg {
-                                        if client_tx.send(m).await.is_err() { break; }
-                                    } else { break; }
+                                        if client_tx.send(m).await.is_err() {
+                                            break;
+                                        }
+                                    } else {
+                                        break;
+                                    }
                                 }
                             };
                             tokio::join!(c2s, s2c);
@@ -167,7 +187,7 @@ pub async fn handle_egress(
                 }
                 Err(e) => eprintln!("WebSocket upgrade error: {}", e),
             }
-            
+
             // Log egress event
             let event = EgressEvent {
                 timestamp_ns,
@@ -195,24 +215,30 @@ pub async fn handle_egress(
             }
             let _ = state_clone.db_manager.insert(event).await;
         });
-        
+
         let mut res = Response::builder().status(response.status());
         for (k, v) in response.headers() {
             res = res.header(k, v);
         }
         return Ok(res.body(Full::new(Bytes::new())).unwrap());
     }
-    
+
     // 3. Standard fetch proxying
-    let target_host = uri.authority().map(|a| a.host().to_string()).unwrap_or_default();
+    let target_host = uri
+        .authority()
+        .map(|a| a.host().to_string())
+        .unwrap_or_default();
     let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(80);
-    let url_path = uri.path_and_query().map(|pq| pq.as_str().to_string()).unwrap_or_default();
+    let url_path = uri
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_default();
     let method_str = method.to_string();
-    
+
     let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let start_time = std::time::Instant::now();
     let session_id = session.session_id.clone();
-    
+
     // Parse request body
     let mut req_headers = reqwest::header::HeaderMap::new();
     for (k, v) in req.headers() {
@@ -222,7 +248,7 @@ pub async fn handle_egress(
         Ok(b) => b.to_bytes(),
         Err(_) => Bytes::new(),
     };
-    
+
     let reqwest_method = reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap();
 
     // FR-12: Content-Aware DLP & Secret Detection on outbound egress requests
@@ -251,13 +277,20 @@ pub async fn handle_egress(
                 }),
             );
         } else {
-            let critical = dlp_findings.iter().any(|f| f.category != crate::policy::dlp::SecretCategory::EnvVar);
+            let critical = dlp_findings
+                .iter()
+                .any(|f| f.category != crate::policy::dlp::SecretCategory::EnvVar);
             if critical {
                 verdict = "deny".to_string();
                 let err_res = Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .header("X-AgentWall-Block-Reason", format!("dlp:{}", dlp_findings[0].pattern_name))
-                    .body(Full::new(Bytes::from("AgentWall Blocked: Secret DLP Violation")))
+                    .header(
+                        "X-AgentWall-Block-Reason",
+                        format!("dlp:{}", dlp_findings[0].pattern_name),
+                    )
+                    .body(Full::new(Bytes::from(
+                        "AgentWall Blocked: Secret DLP Violation",
+                    )))
                     .unwrap();
 
                 // Log egress event for blocked request
@@ -295,17 +328,30 @@ pub async fn handle_egress(
     if let Some(ledger) = &state.spend_ledger {
         if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(&body_str) {
             // Heuristic to detect LLM requests
-            if json_body.get("model").is_some() && (json_body.get("messages").is_some() || json_body.get("prompt").is_some()) {
-                let agent_id = session.identity_sub.clone().unwrap_or_else(|| "anonymous".to_string());
+            if json_body.get("model").is_some()
+                && (json_body.get("messages").is_some() || json_body.get("prompt").is_some())
+            {
+                let agent_id = session
+                    .identity_sub
+                    .clone()
+                    .unwrap_or_else(|| "anonymous".to_string());
                 let groups = session.identity_groups.clone();
-                
+
                 let check_res = ledger.check_and_increment(agent_id, groups, 0).await;
-                if let crate::spend::SpendCheckResult::BudgetExhausted { cap_cents, spent_cents } = check_res {
+                if let crate::spend::SpendCheckResult::BudgetExhausted {
+                    cap_cents,
+                    spent_cents,
+                } = check_res
+                {
                     verdict = "deny".to_string();
                     let err_res = Response::builder()
                         .status(StatusCode::FORBIDDEN)
                         .header("X-AgentWall-Block-Reason", "budget_exhausted")
-                        .body(Full::new(Bytes::from(format!("AgentWall Blocked: Spend cap exhausted (Limit: ${:.2}, Spent: ${:.2})", cap_cents as f64 / 100.0, spent_cents as f64 / 100.0))))
+                        .body(Full::new(Bytes::from(format!(
+                            "AgentWall Blocked: Spend cap exhausted (Limit: ${:.2}, Spent: ${:.2})",
+                            cap_cents as f64 / 100.0,
+                            spent_cents as f64 / 100.0
+                        ))))
                         .unwrap();
 
                     let event = EgressEvent {
@@ -340,15 +386,14 @@ pub async fn handle_egress(
         }
     }
 
-    let req_builder = state.http_client.request(
-        reqwest_method,
-        uri.to_string()
-    )
-    .headers(req_headers)
-    .body(body_bytes);
-    
+    let req_builder = state
+        .http_client
+        .request(reqwest_method, uri.to_string())
+        .headers(req_headers)
+        .body(body_bytes);
+
     let mut response_status = 502;
-    
+
     let mut injection_findings_json = None;
 
     let final_res = match req_builder.send().await {
@@ -363,10 +408,16 @@ pub async fn handle_egress(
                 // Scan for Prompt Injection
                 let enforce_mode = !state.shadow_mode;
                 let scan_val = serde_json::json!({ "content": body_str.to_string() });
-                let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    state.injection_scanner.scan_response(&scan_val, "http_fetch", &session_id, enforce_mode)
-                }));
-                
+                let inj_scan_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        state.injection_scanner.scan_response(
+                            &scan_val,
+                            "http_fetch",
+                            &session_id,
+                            enforce_mode,
+                        )
+                    }));
+
                 let mut is_blocked = false;
                 match inj_scan_result {
                     Ok(crate::policy::injection::ScanResult::Block { findings }) => {
@@ -378,21 +429,65 @@ pub async fn handle_egress(
                         verdict = "deny".to_string();
                         response_status = 403;
                         is_blocked = true;
-                        
-                        let _ = state.audit_logger.write_entry(&session_id, "injection_blocked", "http_fetch", None,
-                            Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
+
+                        let _ = state
+                            .audit_logger
+                            .write_entry(
+                                &session_id,
+                                "injection_blocked",
+                                "http_fetch",
+                                None,
+                                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                            )
+                            .await;
                     }
                     Ok(crate::policy::injection::ScanResult::Timeout) => {
                         if enforce_mode {
                             verdict = "deny".to_string();
                             response_status = 403;
                             is_blocked = true;
-                            
-                            let _ = state.audit_logger.write_entry(&session_id, "injection_blocked_timeout", "http_fetch", None,
-                                Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None, None).await;
+
+                            let _ = state
+                                .audit_logger
+                                .write_entry(
+                                    &session_id,
+                                    "injection_blocked_timeout",
+                                    "http_fetch",
+                                    None,
+                                    Some(
+                                        "Scanner timed out (potential ReDoS) — Blocked".to_string(),
+                                    ),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                )
+                                .await;
                         } else {
-                            let _ = state.audit_logger.write_entry(&session_id, "injection_warning_timeout", "http_fetch", None,
-                                Some("Scanner timed out (potential ReDoS) — Warn".to_string()), None, None, None, None, None, None).await;
+                            let _ = state
+                                .audit_logger
+                                .write_entry(
+                                    &session_id,
+                                    "injection_warning_timeout",
+                                    "http_fetch",
+                                    None,
+                                    Some("Scanner timed out (potential ReDoS) — Warn".to_string()),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                )
+                                .await;
                         }
                     }
                     Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
@@ -408,26 +503,40 @@ pub async fn handle_egress(
                 if let (Some(ledger), Some(pricing)) = (&state.spend_ledger, &state.pricing_table) {
                     if let Ok(json_resp) = serde_json::from_str::<serde_json::Value>(&body_str) {
                         if let Some(usage) = json_resp.get("usage") {
-                            let model_val = json_resp.get("model").and_then(|m| m.as_str()).unwrap_or("unknown");
-                            
-                            let prompt_tokens = usage.get("prompt_tokens")
+                            let model_val = json_resp
+                                .get("model")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("unknown");
+
+                            let prompt_tokens = usage
+                                .get("prompt_tokens")
                                 .or_else(|| usage.get("input_tokens"))
                                 .and_then(|t| t.as_u64())
                                 .unwrap_or(0);
-                                
-                            let completion_tokens = usage.get("completion_tokens")
+
+                            let completion_tokens = usage
+                                .get("completion_tokens")
                                 .or_else(|| usage.get("output_tokens"))
                                 .and_then(|t| t.as_u64())
                                 .unwrap_or(0);
-                                
+
                             if prompt_tokens > 0 || completion_tokens > 0 {
-                                let exact_cents = pricing.estimate_cents(model_val, prompt_tokens, completion_tokens);
-                                let agent_id = session.identity_sub.clone().unwrap_or_else(|| "anonymous".to_string());
+                                let exact_cents = pricing.estimate_cents(
+                                    model_val,
+                                    prompt_tokens,
+                                    completion_tokens,
+                                );
+                                let agent_id = session
+                                    .identity_sub
+                                    .clone()
+                                    .unwrap_or_else(|| "anonymous".to_string());
                                 let groups = session.identity_groups.clone();
-                                
+
                                 let ledger_clone = ledger.clone();
                                 tokio::spawn(async move {
-                                    let _ = ledger_clone.check_and_increment(agent_id, groups, exact_cents).await;
+                                    let _ = ledger_clone
+                                        .check_and_increment(agent_id, groups, exact_cents)
+                                        .await;
                                 });
                             }
                         }
@@ -439,7 +548,9 @@ pub async fn handle_egress(
                     Response::builder()
                         .status(StatusCode::FORBIDDEN)
                         .header("X-AgentWall-Block-Reason", "injection_detected")
-                        .body(Full::new(Bytes::from("AgentWall Blocked: Prompt Injection Detected")))
+                        .body(Full::new(Bytes::from(
+                            "AgentWall Blocked: Prompt Injection Detected",
+                        )))
                         .unwrap()
                 } else {
                     builder.body(Full::new(bytes)).unwrap_or_default()
@@ -448,14 +559,12 @@ pub async fn handle_egress(
                 builder.body(Full::new(Bytes::new())).unwrap_or_default()
             }
         }
-        Err(e) => {
-            Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(format!("Bad Gateway: {}", e))))
-                .unwrap()
-        }
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .body(Full::new(Bytes::from(format!("Bad Gateway: {}", e))))
+            .unwrap(),
     };
-    
+
     // Log egress event
     let event = EgressEvent {
         timestamp_ns,
@@ -482,6 +591,6 @@ pub async fn handle_egress(
         let _ = state.event_tx.send(json_str);
     }
     let _ = state.db_manager.insert(event).await;
-    
+
     Ok(final_res)
 }

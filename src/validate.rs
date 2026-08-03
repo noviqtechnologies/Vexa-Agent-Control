@@ -2,11 +2,11 @@
 //!
 //! Validates a single JSON payload against a policy definition for a specific tool call.
 
-use std::path::Path;
-use std::fs;
-use serde_json::Value;
-use crate::policy::loader::{load_policy, PolicyLoadResult};
 use crate::policy::engine::EvalResult;
+use crate::policy::loader::{load_policy, PolicyLoadResult};
+use serde_json::Value;
+use std::fs;
+use std::path::Path;
 
 /// Evaluates a single tool call payload file against a security policy.
 ///
@@ -41,7 +41,9 @@ pub fn execute(policy_path: &str, tool_name: &str, payload_path: &str) -> Result
     // 3. Evaluate Tool Call
     // Locally validating tool call parameters. If identity checks are used, they default to unrestricted here.
     match policy.evaluate(tool_name, &payload_val, None, &[]) {
-        EvalResult::Allow { matched_group_id: _ } => {
+        EvalResult::Allow {
+            matched_group_id: _,
+        } => {
             println!("VALIDATION SUCCESSFUL: Tool call parameters conform to policy.");
             Ok(())
         }

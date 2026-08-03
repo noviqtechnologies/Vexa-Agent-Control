@@ -3,9 +3,9 @@
 //! Evaluates policy YAML files for schema compliance, overly permissive rules (wildcards,
 //! unvalidated mutation parameters), and generates human-readable access control summaries.
 
-use std::path::Path;
 use crate::policy::loader::{load_policy, PolicyLoadResult};
 use crate::policy::schema::ParamType;
+use std::path::Path;
 
 /// Executes static policy linting and rule analysis on the specified policy file path.
 ///
@@ -30,7 +30,9 @@ pub fn execute(policy_path: &str) -> Result<i32, String> {
             eprintln!("LINT ERROR: Policy is degraded: {}", reason);
             return Ok(1);
         }
-        PolicyLoadResult::Loaded { policy, warnings, .. } => (policy, warnings),
+        PolicyLoadResult::Loaded {
+            policy, warnings, ..
+        } => (policy, warnings),
     };
 
     let mut warnings = loader_warnings;
@@ -76,16 +78,22 @@ pub fn execute(policy_path: &str) -> Result<i32, String> {
 
     // Print human-readable summary of what each agent identity is allowed to do
     println!("\n=== AgentWall Policy Access Control Summary ===");
-    
+
     // Group allowed tools by identity
     use std::collections::HashMap;
     let mut identity_map: HashMap<String, Vec<(String, Vec<String>)>> = HashMap::new();
 
     for tool in &policy.tools {
         if tool.action == "allow" {
-            let ident = tool.identity.clone().unwrap_or_else(|| "* (All Identities)".to_string());
+            let ident = tool
+                .identity
+                .clone()
+                .unwrap_or_else(|| "* (All Identities)".to_string());
             let params: Vec<String> = tool.parameters.iter().map(|p| p.name.clone()).collect();
-            identity_map.entry(ident).or_default().push((tool.name.clone(), params));
+            identity_map
+                .entry(ident)
+                .or_default()
+                .push((tool.name.clone(), params));
         }
     }
 

@@ -54,7 +54,7 @@ pub struct PolicyFile {
     /// Each entry binds a set of IdP group claim values to a policy block.
     /// Group policy is additive — does not replace per-agent bindings.
     pub groups: Option<Vec<GroupIdentityPolicy>>,
-    
+
     /// FR-120: Spend caps configuration (Paid tier).
     #[serde(alias = "spend")]
     pub spend_caps: Option<SpendCapsConfig>,
@@ -393,7 +393,8 @@ impl<'de> Deserialize<'de> for ValidatorRule {
             where
                 A: serde::de::MapAccess<'de>,
             {
-                let key: String = map.next_key()?
+                let key: String = map
+                    .next_key()?
                     .ok_or_else(|| serde::de::Error::custom("expected a validator key"))?;
                 match key.as_str() {
                     "regex" => {
@@ -404,7 +405,10 @@ impl<'de> Deserialize<'de> for ValidatorRule {
                         let val: Vec<String> = map.next_value()?;
                         Ok(ValidatorRule::UrlSchemeAllowlist(Some(val)))
                     }
-                    _ => Err(serde::de::Error::custom(format!("unknown validator key: {}", key))),
+                    _ => Err(serde::de::Error::custom(format!(
+                        "unknown validator key: {}",
+                        key
+                    ))),
                 }
             }
         }

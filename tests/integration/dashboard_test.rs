@@ -35,7 +35,8 @@ async fn test_dashboard_api_endpoints() {
     let client = Client::new();
 
     // 1. Test GET / (HTML Dashboard)
-    let res = client.get(format!("http://{}", listen_addr))
+    let res = client
+        .get(format!("http://{}", listen_addr))
         .send()
         .await
         .expect("Failed to GET /");
@@ -45,7 +46,8 @@ async fn test_dashboard_api_endpoints() {
     assert!(html.contains("<!DOCTYPE html>"));
 
     // 2. Test GET /api/stats
-    let res = client.get(format!("http://{}/api/stats", listen_addr))
+    let res = client
+        .get(format!("http://{}/api/stats", listen_addr))
         .send()
         .await
         .expect("Failed to GET /api/stats");
@@ -56,7 +58,8 @@ async fn test_dashboard_api_endpoints() {
     assert!(json.get("unique_tools").is_some());
 
     // 3. Test POST /api/generate-policy
-    let res = client.post(format!("http://{}/api/generate-policy", listen_addr))
+    let res = client
+        .post(format!("http://{}/api/generate-policy", listen_addr))
         .send()
         .await
         .expect("Failed to POST /api/generate-policy");

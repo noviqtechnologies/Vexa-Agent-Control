@@ -69,7 +69,12 @@ pub struct IdentityValidator {
 }
 
 impl IdentityValidator {
-    pub fn new(issuer: String, audience: String, cache_ttl_minutes: Option<u64>, group_claim_key: String) -> Arc<Self> {
+    pub fn new(
+        issuer: String,
+        audience: String,
+        cache_ttl_minutes: Option<u64>,
+        group_claim_key: String,
+    ) -> Arc<Self> {
         let ttl_secs = cache_ttl_minutes.unwrap_or(15) * 60;
         let keys = DashMap::new();
         if issuer == "mock" || issuer.starts_with("mock:") {
@@ -124,7 +129,13 @@ impl IdentityValidator {
         let oidc_config: OidcConfig = self.client.get(oidc_url).send().await?.json().await?;
 
         // 2. Fetch JWKS
-        let jwks: JwksResponse = self.client.get(oidc_config.jwks_uri).send().await?.json().await?;
+        let jwks: JwksResponse = self
+            .client
+            .get(oidc_config.jwks_uri)
+            .send()
+            .await?
+            .json()
+            .await?;
 
         // 3. Update Cache
         for key in jwks.keys {
@@ -159,12 +170,17 @@ impl IdentityValidator {
     pub async fn validate_token(&self, token: &str) -> Result<ValidatedIdentity, String> {
         // 1. Decode header to get kid
         let header = decode_header(token).map_err(|e| format!("Invalid JWT header: {}", e))?;
-        let kid = header.kid.ok_or_else(|| "Missing 'kid' in JWT header".to_string())?;
+        let kid = header
+            .kid
+            .ok_or_else(|| "Missing 'kid' in JWT header".to_string())?;
 
         // Enforce RS256 and ES256 signatures only (FR-201)
         use jsonwebtoken::Algorithm;
         if header.alg != Algorithm::RS256 && header.alg != Algorithm::ES256 {
-            return Err(format!("Algorithm {:?} is not supported. Only RS256 and ES256 are permitted.", header.alg));
+            return Err(format!(
+                "Algorithm {:?} is not supported. Only RS256 and ES256 are permitted.",
+                header.alg
+            ));
         }
 
         // 2. Get decoding key from cache (with cache miss dynamic refresh)
@@ -178,9 +194,9 @@ impl IdentityValidator {
                     serde_json::json!({"kid": &kid, "error": e.to_string()}),
                 );
             }
-            self.keys.get(&kid).ok_or_else(|| {
-                format!("No matching JWK found for kid: {}. Fail-Closed.", kid)
-            })?
+            self.keys
+                .get(&kid)
+                .ok_or_else(|| format!("No matching JWK found for kid: {}. Fail-Closed.", kid))?
         };
 
         // 3. Validate claims
@@ -234,7 +250,8 @@ mod tests {
     async fn test_jwt_validation_success() {
         let issuer = "https://example.com".to_string();
         let audience = "my-agent".to_string();
-        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
+        let validator =
+            IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
 
         let rsa_private_key_pem = br#"-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAudhbe1QgN8OIKg2CTLUctcCzszFAtY19k04MNrqv/Bxz9Eud
@@ -278,12 +295,18 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
         let kid = "test-kid";
         validator.keys.insert(kid.to_string(), decoding_key);
 
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as usize;
         let mut extra = std::collections::HashMap::new();
-        extra.insert("groups".to_string(), serde_json::Value::Array(vec![
-            serde_json::Value::String("engineering".to_string()),
-            serde_json::Value::String("platform".to_string()),
-        ]));
+        extra.insert(
+            "groups".to_string(),
+            serde_json::Value::Array(vec![
+                serde_json::Value::String("engineering".to_string()),
+                serde_json::Value::String("platform".to_string()),
+            ]),
+        );
         let claims = Claims {
             sub: "user-123".to_string(),
             aud: audience.clone(),
@@ -311,7 +334,8 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
     async fn test_jwt_validation_expired() {
         let issuer = "https://example.com".to_string();
         let audience = "my-agent".to_string();
-        let validator = IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
+        let validator =
+            IdentityValidator::new(issuer.clone(), audience.clone(), None, "groups".to_string());
 
         let rsa_private_key_pem = br#"-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAudhbe1QgN8OIKg2CTLUctcCzszFAtY19k04MNrqv/Bxz9Eud
@@ -355,7 +379,10 @@ sTCQ754eF9Kqpj/ZL6ZZaFLdT3BATCAnKwIDAQAB
         let kid = "test-kid";
         validator.keys.insert(kid.to_string(), decoding_key);
 
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as usize;
         let claims = Claims {
             sub: "user-123".to_string(),
             aud: audience.clone(),

@@ -1,13 +1,13 @@
 //! Promotion validation suite (FR-204)
 //! Validates risk scores, identity config, and signs policies.
 
+use crate::policy::loader::{load_policy, PolicyLoadResult};
+use crate::policy::schema::PolicyFile;
 use colored::*;
-use ed25519_dalek::{SigningKey, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
 use std::fs;
 use std::path::Path;
-use crate::policy::loader::{load_policy, PolicyLoadResult};
-use crate::policy::schema::PolicyFile;
 
 /// Result of a policy promotion check.
 pub enum PromoteResult {
@@ -61,12 +61,17 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
 
     // Check identity issuer (HTTPS)
     if let Some(ident) = &policy_file.identity {
-        let issuer = ident.issuer.as_deref().or(ident.oidc_issuer.as_deref()).unwrap_or("");
+        let issuer = ident
+            .issuer
+            .as_deref()
+            .or(ident.oidc_issuer.as_deref())
+            .unwrap_or("");
         if !issuer.starts_with("https://") {
             errors.push(format!("Identity issuer must use HTTPS: {}", issuer));
         }
     } else {
-        errors.push("Production policies MUST have an identity configuration (FR-202).".to_string());
+        errors
+            .push("Production policies MUST have an identity configuration (FR-202).".to_string());
     }
 
     // Check risk scores for all tools
@@ -81,12 +86,18 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
     // Load/Compile policy to ensure it's functional
     match load_policy(Path::new(policy_path), None) {
         PolicyLoadResult::Loaded { .. } => {}
-        PolicyLoadResult::Degraded { reason } => errors.push(format!("Policy degraded: {}", reason)),
+        PolicyLoadResult::Degraded { reason } => {
+            errors.push(format!("Policy degraded: {}", reason))
+        }
         PolicyLoadResult::Fatal { error } => errors.push(format!("Policy fatal error: {}", error)),
     }
 
     if !errors.is_empty() {
-        eprintln!("{} Promotion failed with {} errors:", "✖".red(), errors.len());
+        eprintln!(
+            "{} Promotion failed with {} errors:",
+            "✖".red(),
+            errors.len()
+        );
         for err in errors {
             eprintln!("  - {}", err.yellow());
         }
@@ -97,7 +108,7 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
 
     // 2. Signing
     println!("{} Signing policy...", "ℹ".blue());
-    
+
     // In a real scenario, the key would be loaded from key_path.
     // For FR-204 implementation, we'll generate a temporary key if none provided.
     let signing_key = if let Some(path) = key_path {
@@ -109,7 +120,10 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
             }
         }
     } else {
-        println!("  {} No key provided, using ephemeral key for signing (DEMO MODE).", "⚠".yellow());
+        println!(
+            "  {} No key provided, using ephemeral key for signing (DEMO MODE).",
+            "⚠".yellow()
+        );
         let mut csprng = rand::rngs::OsRng;
         let mut key_bytes = [0u8; 32];
         csprng.fill_bytes(&mut key_bytes);
@@ -126,9 +140,13 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
 
     println!("{} Policy promoted and signed!", "✓".green().bold());
     println!("  {} Signature saved to: {}", "→".blue(), sig_path.cyan());
-    
+
     // Also output public key for verification
-    println!("  {} Public Key (hex): {}", "🔑".blue(), hex::encode(signing_key.verifying_key().to_bytes()));
+    println!(
+        "  {} Public Key (hex): {}",
+        "🔑".blue(),
+        hex::encode(signing_key.verifying_key().to_bytes())
+    );
 
     0
 }

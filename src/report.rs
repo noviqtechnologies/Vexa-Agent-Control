@@ -91,14 +91,15 @@ pub fn generate_report(
         if trimmed.is_empty() {
             continue;
         }
-        
+
         // Use from_str but catch trailing characters by allowing partial parse if needed
         // though normally serde_json::from_str is strict.
         let entry: crate::audit::logger::AuditEntry = match serde_json::from_str(trimmed) {
             Ok(e) => e,
             Err(_) => {
                 // Fallback: Try to parse just the first object in case of trailing junk
-                let mut stream = serde_json::Deserializer::from_str(trimmed).into_iter::<crate::audit::logger::AuditEntry>();
+                let mut stream = serde_json::Deserializer::from_str(trimmed)
+                    .into_iter::<crate::audit::logger::AuditEntry>();
                 if let Some(Ok(e)) = stream.next() {
                     e
                 } else {
@@ -175,7 +176,10 @@ pub fn generate_report(
                 denied_calls.push(DeniedCall {
                     ts: entry.ts.clone(),
                     tool: entry.tool_name.clone().unwrap_or_default(),
-                    reason: entry.reason.clone().unwrap_or_else(|| "firewall_cycle_block".to_string()),
+                    reason: entry
+                        .reason
+                        .clone()
+                        .unwrap_or_else(|| "firewall_cycle_block".to_string()),
                     params_redacted: !include_params,
                     params: if include_params {
                         entry.params.clone()
@@ -207,8 +211,16 @@ pub fn generate_report(
     Ok(SessionReport {
         schema_version: "1".to_string(),
         proxy_version: env!("CARGO_PKG_VERSION").to_string(),
-        policy_version: if policy_loaded { Some("1".to_string()) } else { None },
-        policy_hash: if policy_loaded { Some(policy_hash.to_string()) } else { None },
+        policy_version: if policy_loaded {
+            Some("1".to_string())
+        } else {
+            None
+        },
+        policy_hash: if policy_loaded {
+            Some(policy_hash.to_string())
+        } else {
+            None
+        },
         policy: None,
         session_id,
         dry_run: session_dry_run,
@@ -239,31 +251,39 @@ pub fn generate_report(
 pub fn format_text_report(report: &SessionReport) -> String {
     use colored::*;
     let mut out = String::new();
-    
+
     let title = " AgentWall Session Report ".bold().white().on_cyan();
     out.push_str(&format!("\n{}\n", title));
     out.push_str(&format!("{}\n", "─".repeat(60).cyan()));
-    
-    out.push_str(&format!("  {:<12} {}\n", "Session:".bold(), report.session_id.cyan()));
-    
+
+    out.push_str(&format!(
+        "  {:<12} {}\n",
+        "Session:".bold(),
+        report.session_id.cyan()
+    ));
+
     if let Some(hash) = &report.policy_hash {
-        let hash_disp = if hash.len() > 19 {
-            &hash[0..19]
-        } else {
-            hash
-        };
-        out.push_str(&format!("  {:<12} {}...\n", "Policy:".bold(), hash_disp.yellow()));
+        let hash_disp = if hash.len() > 19 { &hash[0..19] } else { hash };
+        out.push_str(&format!(
+            "  {:<12} {}...\n",
+            "Policy:".bold(),
+            hash_disp.yellow()
+        ));
     } else {
-        out.push_str(&format!("  {:<12} {}\n", "Policy:".bold(), "None (Allow-all sentinel)".red()));
+        out.push_str(&format!(
+            "  {:<12} {}\n",
+            "Policy:".bold(),
+            "None (Allow-all sentinel)".red()
+        ));
     }
-    
-    let mode_str = if report.dry_run { 
-        "DRY-RUN (Logging Only)".yellow().bold() 
-    } else { 
-        "ENFORCEMENT (Active Blocking)".green().bold() 
+
+    let mode_str = if report.dry_run {
+        "DRY-RUN (Logging Only)".yellow().bold()
+    } else {
+        "ENFORCEMENT (Active Blocking)".green().bold()
     };
     out.push_str(&format!("  {:<12} {}\n", "Mode:".bold(), mode_str));
-    
+
     out.push_str(&format!(
         "  {:<12} {} → {}\n",
         "Duration:".bold(),
@@ -273,17 +293,37 @@ pub fn format_text_report(report: &SessionReport) -> String {
     out.push_str(&format!("{}\n\n", "─".repeat(60).cyan()));
 
     // Summary Box
-    out.push_str(&format!("  {}   {} total calls\n", "📊".blue(), report.summary.total_calls.to_string().bold()));
-    out.push_str(&format!("  {}   {} allowed\n", "✅".green(), report.summary.allowed.to_string().green()));
-    
+    out.push_str(&format!(
+        "  {}   {} total calls\n",
+        "📊".blue(),
+        report.summary.total_calls.to_string().bold()
+    ));
+    out.push_str(&format!(
+        "  {}   {} allowed\n",
+        "✅".green(),
+        report.summary.allowed.to_string().green()
+    ));
+
     if report.dry_run {
-        out.push_str(&format!("  {}   {} dry-run violations\n", "⚠ ".yellow(), report.summary.dry_run_denied.to_string().yellow()));
+        out.push_str(&format!(
+            "  {}   {} dry-run violations\n",
+            "⚠ ".yellow(),
+            report.summary.dry_run_denied.to_string().yellow()
+        ));
     } else {
-        out.push_str(&format!("  {}   {} blocked\n", "🚫".red(), report.summary.denied.to_string().red()));
+        out.push_str(&format!(
+            "  {}   {} blocked\n",
+            "🚫".red(),
+            report.summary.denied.to_string().red()
+        ));
     }
-    
+
     if report.summary.rate_limited > 0 {
-        out.push_str(&format!("  {}   {} rate limited\n", "⏳".blue(), report.summary.rate_limited.to_string().blue()));
+        out.push_str(&format!(
+            "  {}   {} rate limited\n",
+            "⏳".blue(),
+            report.summary.rate_limited.to_string().blue()
+        ));
     }
     out.push('\n');
 
@@ -311,7 +351,7 @@ pub fn format_text_report(report: &SessionReport) -> String {
             "Denied Calls:".bold().red().underline()
         };
         out.push_str(&format!("  {}\n", violation_title));
-        
+
         for call in &report.denied_calls {
             let mut params_str = String::new();
             if !call.params_redacted {
@@ -332,20 +372,38 @@ pub fn format_text_report(report: &SessionReport) -> String {
 
     // Warnings
     if report.object_param_blind_passthrough {
-        out.push_str(&format!("  {} {}\n", "⚠".yellow(), "OBJECT PARAM WARNING:".bold().yellow()));
-        out.push_str("    The following tools use complex objects/arrays which were NOT validated:\n");
-        out.push_str(&format!("    {}\n\n", report.object_param_tools.join(", ").dimmed()));
+        out.push_str(&format!(
+            "  {} {}\n",
+            "⚠".yellow(),
+            "OBJECT PARAM WARNING:".bold().yellow()
+        ));
+        out.push_str(
+            "    The following tools use complex objects/arrays which were NOT validated:\n",
+        );
+        out.push_str(&format!(
+            "    {}\n\n",
+            report.object_param_tools.join(", ").dimmed()
+        ));
     }
 
     if report.policy_hash.is_none() {
-        out.push_str(&format!("  {} {}\n\n", "⚠".red(), "CRITICAL: No policy loaded during this session.".bold().red()));
+        out.push_str(&format!(
+            "  {} {}\n\n",
+            "⚠".red(),
+            "CRITICAL: No policy loaded during this session."
+                .bold()
+                .red()
+        ));
     }
 
     // Footer / Next Steps
     out.push_str(&format!("{}\n", "─".repeat(60).cyan()));
     out.push_str(&format!("  {}\n", "Next Steps:".bold()));
     if report.policy_hash.is_none() || report.dry_run {
-        out.push_str(&format!("    Run `{}` to generate your rules.\n", "agentwall init --from-log audit.log".cyan()));
+        out.push_str(&format!(
+            "    Run `{}` to generate your rules.\n",
+            "agentwall init --from-log audit.log".cyan()
+        ));
     } else {
         out.push_str("    Review denied calls and refine your policy regex patterns.\n");
     }

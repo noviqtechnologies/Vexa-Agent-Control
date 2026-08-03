@@ -75,7 +75,9 @@ impl DbManager {
     pub fn init() -> Self {
         // Resolve path
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        let db_path = PathBuf::from(&home_dir).join(".agentwall").join("events.db");
+        let db_path = PathBuf::from(&home_dir)
+            .join(".agentwall")
+            .join("events.db");
         // Ensure directory exists
         if let Some(parent) = db_path.parent() {
             if !parent.exists() {
@@ -113,8 +115,16 @@ impl DbManager {
         .expect("Failed to create egress_events table");
 
         // Schema v2.0 migrations
-        conn.execute("ALTER TABLE egress_events ADD COLUMN semantic_anomaly_score REAL", []).ok();
-        conn.execute("ALTER TABLE egress_events ADD COLUMN identity_context TEXT", []).ok();
+        conn.execute(
+            "ALTER TABLE egress_events ADD COLUMN semantic_anomaly_score REAL",
+            [],
+        )
+        .ok();
+        conn.execute(
+            "ALTER TABLE egress_events ADD COLUMN identity_context TEXT",
+            [],
+        )
+        .ok();
 
         // Channel for commands
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<DbCmd>();
@@ -128,145 +138,159 @@ impl DbManager {
             while let Some(cmd) = cmd_rx.blocking_recv() {
                 match cmd {
                     DbCmd::Insert(event) => {
-                            let sql = "INSERT INTO egress_events (
+                        let sql = "INSERT INTO egress_events (
                                 timestamp_ns, session_id, transport, method, target_host, target_port, url_path,
                                 request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash,
                                 dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                            let params_arr = params![
-                                event.timestamp_ns, event.session_id, event.transport, event.method, event.target_host,
-                                event.target_port, event.url_path, event.request_headers, event.request_body, event.request_body_hash,
-                                event.response_status, event.response_body, event.response_body_hash, event.dlp_findings, event.injection_findings,
-                                event.latency_ms, event.verdict, event.semantic_anomaly_score, event.identity_context
-                            ];
-                            if let Some(ref mut tx) = tx {
-                                tx.execute(sql, params_arr).ok();
-                            } else {
-                                conn.execute(sql, params_arr).ok();
-                            }
+                        let params_arr = params![
+                            event.timestamp_ns,
+                            event.session_id,
+                            event.transport,
+                            event.method,
+                            event.target_host,
+                            event.target_port,
+                            event.url_path,
+                            event.request_headers,
+                            event.request_body,
+                            event.request_body_hash,
+                            event.response_status,
+                            event.response_body,
+                            event.response_body_hash,
+                            event.dlp_findings,
+                            event.injection_findings,
+                            event.latency_ms,
+                            event.verdict,
+                            event.semantic_anomaly_score,
+                            event.identity_context
+                        ];
+                        if let Some(ref mut tx) = tx {
+                            tx.execute(sql, params_arr).ok();
+                        } else {
+                            conn.execute(sql, params_arr).ok();
                         }
-                        DbCmd::Fetch { limit, responder } => {
-                            let mut stmt = conn.prepare(
+                    }
+                    DbCmd::Fetch { limit, responder } => {
+                        let mut stmt = conn.prepare(
                                 "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context FROM egress_events ORDER BY id DESC LIMIT ?",
                             )
                             .expect("Failed to prepare fetch stmt");
-                            let rows = stmt
-                                .query_map(params![limit as i64], |row| {
-                                    Ok(EgressEvent {
-                                        timestamp_ns: row.get(0)?,
-                                        session_id: row.get(1)?,
-                                        transport: row.get(2)?,
-                                        method: row.get(3)?,
-                                        target_host: row.get(4)?,
-                                        target_port: row.get(5)?,
-                                        url_path: row.get(6)?,
-                                        request_headers: row.get(7)?,
-                                        request_body: row.get(8)?,
-                                        request_body_hash: row.get(9)?,
-                                        response_status: row.get(10)?,
-                                        response_body: row.get(11)?,
-                                        response_body_hash: row.get(12)?,
-                                        dlp_findings: row.get(13)?,
-                                        injection_findings: row.get(14)?,
-                                        latency_ms: row.get(15)?,
-                                        verdict: row.get(16)?,
-                                        semantic_anomaly_score: row.get(17).unwrap_or(None),
-                                        identity_context: row.get(18).unwrap_or(None),
-                                    })
+                        let rows = stmt
+                            .query_map(params![limit as i64], |row| {
+                                Ok(EgressEvent {
+                                    timestamp_ns: row.get(0)?,
+                                    session_id: row.get(1)?,
+                                    transport: row.get(2)?,
+                                    method: row.get(3)?,
+                                    target_host: row.get(4)?,
+                                    target_port: row.get(5)?,
+                                    url_path: row.get(6)?,
+                                    request_headers: row.get(7)?,
+                                    request_body: row.get(8)?,
+                                    request_body_hash: row.get(9)?,
+                                    response_status: row.get(10)?,
+                                    response_body: row.get(11)?,
+                                    response_body_hash: row.get(12)?,
+                                    dlp_findings: row.get(13)?,
+                                    injection_findings: row.get(14)?,
+                                    latency_ms: row.get(15)?,
+                                    verdict: row.get(16)?,
+                                    semantic_anomaly_score: row.get(17).unwrap_or(None),
+                                    identity_context: row.get(18).unwrap_or(None),
                                 })
-                                .expect("Failed to query events");
-                            let mut events = Vec::new();
-                            for e in rows.flatten() {
-                                events.push(e);
-                            }
-                            let _ = responder.send(Ok(events));
+                            })
+                            .expect("Failed to query events");
+                        let mut events = Vec::new();
+                        for e in rows.flatten() {
+                            events.push(e);
                         }
-                        DbCmd::FetchAll { limit, responder } => {
-                            // Oldest-first ordering for policy generation corpus (FR-4)
-                            let mut stmt = conn.prepare(
+                        let _ = responder.send(Ok(events));
+                    }
+                    DbCmd::FetchAll { limit, responder } => {
+                        // Oldest-first ordering for policy generation corpus (FR-4)
+                        let mut stmt = conn.prepare(
                                 "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context FROM egress_events ORDER BY id ASC LIMIT ?",
                             )
                             .expect("Failed to prepare fetch-all stmt");
-                            let rows = stmt
-                                .query_map(params![limit as i64], |row| {
-                                    Ok(EgressEvent {
-                                        timestamp_ns: row.get(0)?,
-                                        session_id: row.get(1)?,
-                                        transport: row.get(2)?,
-                                        method: row.get(3)?,
-                                        target_host: row.get(4)?,
-                                        target_port: row.get(5)?,
-                                        url_path: row.get(6)?,
-                                        request_headers: row.get(7)?,
-                                        request_body: row.get(8)?,
-                                        request_body_hash: row.get(9)?,
-                                        response_status: row.get(10)?,
-                                        response_body: row.get(11)?,
-                                        response_body_hash: row.get(12)?,
-                                        dlp_findings: row.get(13)?,
-                                        injection_findings: row.get(14)?,
-                                        latency_ms: row.get(15)?,
-                                        verdict: row.get(16)?,
-                                        semantic_anomaly_score: row.get(17).unwrap_or(None),
-                                        identity_context: row.get(18).unwrap_or(None),
-                                    })
+                        let rows = stmt
+                            .query_map(params![limit as i64], |row| {
+                                Ok(EgressEvent {
+                                    timestamp_ns: row.get(0)?,
+                                    session_id: row.get(1)?,
+                                    transport: row.get(2)?,
+                                    method: row.get(3)?,
+                                    target_host: row.get(4)?,
+                                    target_port: row.get(5)?,
+                                    url_path: row.get(6)?,
+                                    request_headers: row.get(7)?,
+                                    request_body: row.get(8)?,
+                                    request_body_hash: row.get(9)?,
+                                    response_status: row.get(10)?,
+                                    response_body: row.get(11)?,
+                                    response_body_hash: row.get(12)?,
+                                    dlp_findings: row.get(13)?,
+                                    injection_findings: row.get(14)?,
+                                    latency_ms: row.get(15)?,
+                                    verdict: row.get(16)?,
+                                    semantic_anomaly_score: row.get(17).unwrap_or(None),
+                                    identity_context: row.get(18).unwrap_or(None),
                                 })
-                                .expect("Failed to query all events");
-                            let mut events = Vec::new();
-                            for e in rows.flatten() {
-                                events.push(e);
-                            }
-                            let _ = responder.send(Ok(events));
+                            })
+                            .expect("Failed to query all events");
+                        let mut events = Vec::new();
+                        for e in rows.flatten() {
+                            events.push(e);
                         }
-                        DbCmd::GetStats { responder } => {
-                            let total_events: i64 = conn.query_row(
-                                "SELECT COUNT(*) FROM egress_events",
-                                [],
-                                |row| row.get(0),
-                            ).unwrap_or(0);
-                            
-                            let unique_tools: i64 = conn.query_row(
+                        let _ = responder.send(Ok(events));
+                    }
+                    DbCmd::GetStats { responder } => {
+                        let total_events: i64 = conn
+                            .query_row("SELECT COUNT(*) FROM egress_events", [], |row| row.get(0))
+                            .unwrap_or(0);
+
+                        let unique_tools: i64 = conn.query_row(
                                 "SELECT COUNT(DISTINCT url_path) FROM egress_events WHERE transport='mcp'",
                                 [],
                                 |row| row.get(0),
                             ).unwrap_or(0);
 
-                            let _ = responder.send(Ok(DbStats {
-                                total_events,
-                                unique_tools,
-                                risk_flag_count: 0, // Inferred on client
-                            }));
+                        let _ = responder.send(Ok(DbStats {
+                            total_events,
+                            unique_tools,
+                            risk_flag_count: 0, // Inferred on client
+                        }));
+                    }
+                    DbCmd::UpdateAnomalyScore {
+                        session_id,
+                        timestamp_ns,
+                        score,
+                    } => {
+                        let sql = "UPDATE egress_events SET semantic_anomaly_score = ? WHERE session_id = ? AND timestamp_ns = ?";
+                        let params_arr = params![score, session_id, timestamp_ns];
+                        if let Some(ref mut tx) = tx {
+                            tx.execute(sql, params_arr).ok();
+                        } else {
+                            conn.execute(sql, params_arr).ok();
                         }
-                        DbCmd::UpdateAnomalyScore { session_id, timestamp_ns, score } => {
-                            let sql = "UPDATE egress_events SET semantic_anomaly_score = ? WHERE session_id = ? AND timestamp_ns = ?";
-                            let params_arr = params![score, session_id, timestamp_ns];
-                            if let Some(ref mut tx) = tx {
-                                tx.execute(sql, params_arr).ok();
-                            } else {
-                                conn.execute(sql, params_arr).ok();
-                            }
-                        }
-                        DbCmd::Prune => {
-                            // Prune if file size > 500 MiB
-                            if let Ok(metadata) = fs::metadata(&db_path) {
-                                if metadata.len() > 500 * 1024 * 1024 {
-                                    // Delete oldest 1000 rows
-                                    conn.execute(
+                    }
+                    DbCmd::Prune => {
+                        // Prune if file size > 500 MiB
+                        if let Ok(metadata) = fs::metadata(&db_path) {
+                            if metadata.len() > 500 * 1024 * 1024 {
+                                // Delete oldest 1000 rows
+                                conn.execute(
                                         "DELETE FROM egress_events WHERE id IN (SELECT id FROM egress_events ORDER BY id ASC LIMIT 1000)",
                                         [],
                                     )
                                     .ok();
-                                }
                             }
                         }
                     }
+                }
             }
         });
 
-        Self {
-            cmd_tx,
-            _shutdown,
-        }
+        Self { cmd_tx, _shutdown }
     }
 
     /// Async insert of an event.
@@ -280,9 +304,13 @@ impl DbManager {
     pub async fn get_events(&self, limit: usize) -> Result<Vec<EgressEvent>, String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(DbCmd::Fetch { limit, responder: tx })
+            .send(DbCmd::Fetch {
+                limit,
+                responder: tx,
+            })
             .map_err(|e| format!("Failed to send fetch cmd: {}", e))?;
-        rx.await.map_err(|e| format!("Fetch response error: {}", e))?
+        rx.await
+            .map_err(|e| format!("Fetch response error: {}", e))?
     }
 
     /// Async fetch of all events in chronological order (oldest first) for policy generation (FR-4).
@@ -290,9 +318,13 @@ impl DbManager {
     pub async fn get_all_events(&self, limit: usize) -> Result<Vec<EgressEvent>, String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(DbCmd::FetchAll { limit, responder: tx })
+            .send(DbCmd::FetchAll {
+                limit,
+                responder: tx,
+            })
             .map_err(|e| format!("Failed to send fetch-all cmd: {}", e))?;
-        rx.await.map_err(|e| format!("FetchAll response error: {}", e))?
+        rx.await
+            .map_err(|e| format!("FetchAll response error: {}", e))?
     }
 
     /// Async fetch of aggregate stats.
@@ -301,7 +333,8 @@ impl DbManager {
         self.cmd_tx
             .send(DbCmd::GetStats { responder: tx })
             .map_err(|e| format!("Failed to send stats cmd: {}", e))?;
-        rx.await.map_err(|e| format!("Stats response error: {}", e))?
+        rx.await
+            .map_err(|e| format!("Stats response error: {}", e))?
     }
 
     /// Async update of anomaly score.

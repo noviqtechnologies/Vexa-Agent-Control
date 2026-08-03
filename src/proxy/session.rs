@@ -17,26 +17,26 @@ pub const SESSION_TTL_SECS: u64 = 4 * 60 * 60; // 4 hours
 pub struct SessionContext {
     /// Unique session UUID generated dynamically by the gateway
     pub session_id: String,
-    
+
     /// Optional authenticated subject identity from Okta/Entra ID OIDC claim
     pub identity_sub: Option<String>,
-    
+
     /// Optional authenticated email identity from Okta/Entra ID OIDC claim
     pub identity_email: Option<String>,
-    
+
     /// FR-112: Authenticated groups extracted from OIDC claim via group_claim_key
     pub identity_groups: Vec<String>,
-    
+
     /// The frozen compiled policy context active at the moment of session initiation.
     /// This ensures that policy hot-reloads do not disrupt in-flight sessions (FR-106).
     pub policy: Option<CompiledPolicy>,
-    
+
     /// Isolated token-bucket rate limiter for this specific session context
     pub rate_limiter: RateLimiter,
-    
+
     /// Isolated sliding window of tool call fingerprints for cycle detection / loop prevention
     pub tool_history: Mutex<Vec<ToolCallFingerprint>>,
-    
+
     /// The precise timestamp when this session was initialized
     pub start_time: Instant,
 

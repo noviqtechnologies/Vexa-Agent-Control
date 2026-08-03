@@ -1,21 +1,21 @@
 //! FR-304: OS-specific Claude Desktop config path resolution
 
-use std::path::PathBuf;
 use super::WrapError;
+use std::path::PathBuf;
 
 /// Returns the absolute path to claude_desktop_config.json for the current OS.
 pub fn claude_config_path() -> Result<PathBuf, WrapError> {
     let base = match std::env::consts::OS {
         "macos" => dirs::data_dir()
             .ok_or_else(|| {
-                WrapError::ConfigNotFound("Cannot resolve ~/Library/Application Support".to_string())
+                WrapError::ConfigNotFound(
+                    "Cannot resolve ~/Library/Application Support".to_string(),
+                )
             })?
             .join("Claude")
             .join("claude_desktop_config.json"),
         "linux" => dirs::config_dir()
-            .ok_or_else(|| {
-                WrapError::ConfigNotFound("Cannot resolve ~/.config".to_string())
-            })?
+            .ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve ~/.config".to_string()))?
             .join("Claude")
             .join("claude_desktop_config.json"),
         "windows" => {
@@ -70,12 +70,16 @@ pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
 
 pub fn jetbrains_config_path() -> Result<PathBuf, WrapError> {
     let base = match std::env::consts::OS {
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/JetBrains/mcp.json")),
+        "macos" => {
+            dirs::home_dir().map(|h| h.join("Library/Application Support/JetBrains/mcp.json"))
+        }
         "linux" => dirs::config_dir().map(|d| d.join("JetBrains/mcp.json")),
         "windows" => dirs::data_dir().map(|d| d.join("JetBrains\\mcp.json")),
         other => return Err(WrapError::UnsupportedOs(other.to_string())),
     };
-    base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string()))
+    base.ok_or_else(|| {
+        WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string())
+    })
 }
 
 pub fn zed_config_path() -> Result<PathBuf, WrapError> {
@@ -95,7 +99,9 @@ pub fn cline_config_path() -> Result<PathBuf, WrapError> {
 
 pub fn opencode_config_path() -> Result<PathBuf, WrapError> {
     let base = match std::env::consts::OS {
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/OpenCode/mcp.json")),
+        "macos" => {
+            dirs::home_dir().map(|h| h.join("Library/Application Support/OpenCode/mcp.json"))
+        }
         "linux" => dirs::config_dir().map(|d| d.join("opencode/mcp.json")),
         "windows" => dirs::data_dir().map(|d| d.join("OpenCode\\mcp.json")),
         other => return Err(WrapError::UnsupportedOs(other.to_string())),
@@ -105,12 +111,16 @@ pub fn opencode_config_path() -> Result<PathBuf, WrapError> {
 
 pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
     let base = match std::env::consts::OS {
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/Antigravity/mcp.json")),
+        "macos" => {
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Antigravity/mcp.json"))
+        }
         "linux" => dirs::config_dir().map(|d| d.join("antigravity/mcp.json")),
         "windows" => dirs::data_dir().map(|d| d.join("Antigravity\\mcp.json")),
         other => return Err(WrapError::UnsupportedOs(other.to_string())),
     };
-    base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+    base.ok_or_else(|| {
+        WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string())
+    })
 }
 
 /// Returns the path to the ~/.agentwall/ config directory.

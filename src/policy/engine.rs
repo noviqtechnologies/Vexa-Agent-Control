@@ -1,10 +1,10 @@
 //! Policy engine — allowlist evaluation, type enforcement, parameter validators, and group policy evaluation (FR-102).
 
 use super::schema::ParamType;
+use jsonschema::JSONSchema;
 use regex::Regex;
 use serde_json::Value;
 use std::sync::Arc;
-use jsonschema::JSONSchema;
 
 /// A compiled, ready-to-evaluate security policy.
 #[derive(Clone)]
@@ -30,7 +30,13 @@ impl std::fmt::Debug for CompiledPolicy {
             .field("tools", &self.tools)
             .field("group_policies", &self.group_policies)
             .field("max_calls_per_second", &self.max_calls_per_second)
-            .field("identity_validator", &self.identity_validator.as_ref().map(|_| "Some(IdentityValidator)"))
+            .field(
+                "identity_validator",
+                &self
+                    .identity_validator
+                    .as_ref()
+                    .map(|_| "Some(IdentityValidator)"),
+            )
             .field("scannable_tools", &self.scannable_tools)
             .field("safe_tools", &self.safe_tools)
             .field("firewall", &self.firewall)
@@ -111,7 +117,7 @@ pub enum EvalResult {
         param_name: Option<String>,
         param_value: Option<String>,
         pattern: Option<String>,
-        json_pointer: Option<String>, // FR-201
+        json_pointer: Option<String>,   // FR-201
         validator_name: Option<String>, // FR-202
         /// FR-115: If denied by a group policy, the ID of the matched group
         matched_group_id: Option<String>,
@@ -159,21 +165,20 @@ impl CompiledPolicy {
 
         // 1. Check for Agent-level match
         let agent_match = self.tools.iter().find(|t| {
-            t.name == tool_name && match &t.identity {
-                Some(rule_ident) => {
-                    if rule_ident != "*" {
+            t.name == tool_name
+                && match &t.identity {
+                    Some(rule_ident) if rule_ident != "*" => {
                         identity_sub.map(|s| s == rule_ident).unwrap_or(false)
-                    } else {
-                        false
                     }
+                    _ => false,
                 }
-                None => false,
-            }
         });
 
         // 2. Check for Group-level matches
         // Find all groups where the agent's identity_groups intersect with the group's claims
-        let matching_groups: Vec<&CompiledGroupPolicy> = self.group_policies.iter()
+        let matching_groups: Vec<&CompiledGroupPolicy> = self
+            .group_policies
+            .iter()
             .filter(|gp| gp.claims.iter().any(|c| identity_groups.contains(c)))
             .collect();
 
@@ -193,10 +198,11 @@ impl CompiledPolicy {
 
         // 3. Check for Org/default match
         let org_match = self.tools.iter().find(|t| {
-            t.name == tool_name && match &t.identity {
-                Some(rule_ident) => rule_ident == "*",
-                None => true,
-            }
+            t.name == tool_name
+                && match &t.identity {
+                    Some(rule_ident) => rule_ident == "*",
+                    None => true,
+                }
         });
 
         // Determine which rule governs based on precedence
@@ -392,7 +398,7 @@ impl CompiledPolicy {
                     // Get the first error and return as JSON Pointer (RFC 6901)
                     let first_error = errors.into_iter().next();
                     let pointer = first_error.map(|e| e.instance_path.to_string());
-                    
+
                     return EvalResult::Deny {
                         reason_code: "schema_validation_failed".to_string(),
                         param_name: Some(param_rule.name.clone()),
@@ -411,7 +417,11 @@ impl CompiledPolicy {
                     CompiledValidator::PathTraversal => {
                         if let Some(s) = value.as_str() {
                             let s_upper = s.to_ascii_uppercase();
-                            !s.contains("../") && !s.contains("..\\") && !s_upper.contains("%2E%2E%2F") && !s_upper.contains("%2E%2E/") && !s_upper.contains("..%2F")
+                            !s.contains("../")
+                                && !s.contains("..\\")
+                                && !s_upper.contains("%2E%2E%2F")
+                                && !s_upper.contains("%2E%2E/")
+                                && !s_upper.contains("..%2F")
                         } else {
                             true
                         }
@@ -422,9 +432,9 @@ impl CompiledPolicy {
                                 if s.starts_with("file://") || s.starts_with("javascript://") {
                                     false
                                 } else if let Some(schemes) = allowed_schemes {
-                                    schemes.iter().any(|sch| {
-                                        s.starts_with(&format!("{}://", sch))
-                                    })
+                                    schemes
+                                        .iter()
+                                        .any(|sch| s.starts_with(&format!("{}://", sch)))
                                 } else {
                                     true
                                 }

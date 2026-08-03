@@ -36,13 +36,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
-use super::siem::{SiemExporter, try_export};
+use super::siem::{try_export, SiemExporter};
 
 type HmacSha256 = Hmac<Sha256>;
 
 /// Sentinel value for the first entry's `prev_hmac` field.
-pub const ZERO_HMAC: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+pub const ZERO_HMAC: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 // ─── Schema ────────────────────────────────────────────────────────────────
 
@@ -104,21 +103,21 @@ pub struct AuditEntry {
 
 /// A request sent from the public API to the background writer thread.
 struct EntryRequest {
-    session_id:     String,
-    event:          String,
-    tool_name:      String,
-    params_hash:    Option<String>,
-    params:         Option<Value>,
-    reason:         Option<String>,
-    latency_ms:     Option<f64>,
-    identity_sub:   Option<String>,
+    session_id: String,
+    event: String,
+    tool_name: String,
+    params_hash: Option<String>,
+    params: Option<Value>,
+    reason: Option<String>,
+    latency_ms: Option<f64>,
+    identity_sub: Option<String>,
     identity_email: Option<String>,
-    policy_hash:    Option<String>,
-    request_ip:     Option<String>,
+    policy_hash: Option<String>,
+    request_ip: Option<String>,
     /// FR-114: Group policy ID that triggered this decision, for SIEM correlation.
     matched_group_id: Option<String>,
     /// Oneshot sender through which the writer confirms fsync completion.
-    ack:            oneshot::Sender<Result<AuditEntry, String>>,
+    ack: oneshot::Sender<Result<AuditEntry, String>>,
 }
 
 // ─── Configuration ─────────────────────────────────────────────────────────
@@ -126,13 +125,13 @@ struct EntryRequest {
 /// Configuration passed to `AuditLogger::new`.
 pub struct AuditLoggerConfig {
     /// Path to the append-only log file.
-    pub log_path:      PathBuf,
+    pub log_path: PathBuf,
     /// Session UUID for this gateway instance.
-    pub session_id:    String,
+    pub session_id: String,
     /// Per-session HMAC secret (32 random bytes generated at startup).
     pub session_secret: Vec<u8>,
     /// Rotate the log file after this many bytes (0 = never).
-    pub max_bytes:     u64,
+    pub max_bytes: u64,
     /// SIEM exporter — set to `Local` backend to disable network export.
     pub siem_exporter: Option<SiemExporter>,
     /// When true, raw params are stored alongside `params_hash`.
@@ -142,8 +141,8 @@ pub struct AuditLoggerConfig {
 // ─── Logger ────────────────────────────────────────────────────────────────
 
 pub struct AuditLogger {
-    sender:      mpsc::UnboundedSender<EntryRequest>,
-    is_broken:   Arc<AtomicBool>,
+    sender: mpsc::UnboundedSender<EntryRequest>,
+    is_broken: Arc<AtomicBool>,
     entry_count: Arc<AtomicU64>,
 }
 
@@ -157,9 +156,9 @@ pub enum AuditError {
 impl std::fmt::Display for AuditError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IoError(e)              => write!(f, "I/O error: {}", e),
-            Self::SerializationError(e)   => write!(f, "Serialization error: {}", e),
-            Self::WriterDead              => write!(f, "Audit writer thread has terminated"),
+            Self::IoError(e) => write!(f, "I/O error: {}", e),
+            Self::SerializationError(e) => write!(f, "Serialization error: {}", e),
+            Self::WriterDead => write!(f, "Audit writer thread has terminated"),
         }
     }
 }
@@ -172,10 +171,10 @@ impl AuditLogger {
     /// is dropped), flushing any pending writes first.
     pub fn new(cfg: AuditLoggerConfig) -> Result<Self, AuditError> {
         let (tx, mut rx) = mpsc::unbounded_channel::<EntryRequest>();
-        let is_broken      = Arc::new(AtomicBool::new(false));
-        let is_broken_w    = is_broken.clone();
-        let entry_count    = Arc::new(AtomicU64::new(0));
-        let entry_count_w  = entry_count.clone();
+        let is_broken = Arc::new(AtomicBool::new(false));
+        let is_broken_w = is_broken.clone();
+        let entry_count = Arc::new(AtomicU64::new(0));
+        let entry_count_w = entry_count.clone();
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -184,10 +183,10 @@ impl AuditLogger {
             .map_err(AuditError::IoError)?;
 
         // Move config values into the writer thread.
-        let log_path       = cfg.log_path.clone();
+        let log_path = cfg.log_path.clone();
         let session_secret = cfg.session_secret.clone();
-        let max_bytes      = cfg.max_bytes;
-        let siem_exporter  = cfg.siem_exporter.clone();
+        let max_bytes = cfg.max_bytes;
+        let siem_exporter = cfg.siem_exporter.clone();
         let include_params = cfg.include_params;
 
         // Tokio's `spawn_blocking` keeps the blocking writes off the async executor.
@@ -206,45 +205,53 @@ impl AuditLogger {
             while let Some(req) = rx.blocking_recv() {
                 // ── Build the canonical entry (hmac = None) ────────────────
                 let params_hash_field = req.params_hash.clone();
-                let params_field      = if include_params { req.params.clone() } else { None };
+                let params_field = if include_params {
+                    req.params.clone()
+                } else {
+                    None
+                };
 
                 let mut entry = AuditEntry {
-                    ts:             Utc::now().to_rfc3339(),
-                    session_id:     req.session_id.clone(),
-                    event:          req.event.clone(),
-                    tool_name:      if req.tool_name.is_empty() { None } else { Some(req.tool_name.clone()) },
-                    params_hash:    params_hash_field,
-                    params:         params_field,
-                    reason:         req.reason,
-                    latency_ms:     req.latency_ms,
-                    identity_sub:   req.identity_sub,
+                    ts: Utc::now().to_rfc3339(),
+                    session_id: req.session_id.clone(),
+                    event: req.event.clone(),
+                    tool_name: if req.tool_name.is_empty() {
+                        None
+                    } else {
+                        Some(req.tool_name.clone())
+                    },
+                    params_hash: params_hash_field,
+                    params: params_field,
+                    reason: req.reason,
+                    latency_ms: req.latency_ms,
+                    identity_sub: req.identity_sub,
                     identity_email: req.identity_email,
-                    policy_hash:    req.policy_hash,
-                    request_ip:     req.request_ip,
+                    policy_hash: req.policy_hash,
+                    request_ip: req.request_ip,
                     matched_group_id: req.matched_group_id,
-                    entry_index:    current_idx,
-                    prev_hmac:      prev_hmac.clone(),
-                    hmac:           None,
+                    entry_index: current_idx,
+                    prev_hmac: prev_hmac.clone(),
+                    hmac: None,
                 };
 
                 // ── Compute HMAC over canonical JSON ────────────────────────
                 let canonical = match serde_json::to_string(&entry) {
-                    Ok(s)  => s,
+                    Ok(s) => s,
                     Err(e) => {
                         let _ = req.ack.send(Err(format!("serialize error: {}", e)));
                         continue;
                     }
                 };
 
-                let mut mac = HmacSha256::new_from_slice(&session_secret)
-                    .expect("HMAC key length is valid");
+                let mut mac =
+                    HmacSha256::new_from_slice(&session_secret).expect("HMAC key length is valid");
                 mac.update(canonical.as_bytes());
                 let hmac_hex = hex::encode(mac.finalize().into_bytes());
                 entry.hmac = Some(hmac_hex.clone());
 
                 // ── Write line + fsync ───────────────────────────────────────
                 let line = match serde_json::to_string(&entry) {
-                    Ok(l)  => l,
+                    Ok(l) => l,
                     Err(e) => {
                         let _ = req.ack.send(Err(format!("final serialize error: {}", e)));
                         continue;
@@ -271,7 +278,7 @@ impl AuditLogger {
                 // ── SIEM export (async, within timeout) ─────────────────────
                 if let Some(ref exporter) = siem_exporter {
                     let exporter_clone = exporter.clone();
-                    let entry_clone    = confirmed_entry.clone();
+                    let entry_clone = confirmed_entry.clone();
                     rt.block_on(async move {
                         try_export(&exporter_clone, &entry_clone).await;
                     });
@@ -279,10 +286,13 @@ impl AuditLogger {
 
                 // ── Log rotation ─────────────────────────────────────────────
                 let needs_rotation = max_bytes > 0
-                    && file.metadata().map(|m| m.len() >= max_bytes).unwrap_or(false);
+                    && file
+                        .metadata()
+                        .map(|m| m.len() >= max_bytes)
+                        .unwrap_or(false);
 
                 if needs_rotation {
-                    let ts_compact  = Utc::now().format("%Y%m%dT%H%M%S%.9f").to_string();
+                    let ts_compact = Utc::now().format("%Y%m%dT%H%M%S%.9f").to_string();
                     let rand_suffix: u16 = rand::random();
                     let mut backup_path = log_path.clone();
                     backup_path.set_file_name(format!(
@@ -300,7 +310,9 @@ impl AuditLogger {
                         for _ in 0..10 {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                             rename_ok = std::fs::rename(&log_path, &backup_path).is_ok();
-                            if rename_ok { break; }
+                            if rename_ok {
+                                break;
+                            }
                         }
                     }
 
@@ -316,27 +328,27 @@ impl AuditLogger {
                             // Write a rotation-seed entry that carries the HMAC of the
                             // last entry in the old file, preserving chain continuity.
                             let mut seed = AuditEntry {
-                                ts:             Utc::now().to_rfc3339(),
-                                session_id:     req.session_id.clone(),
-                                event:          "log_rotation_seed".to_string(),
-                                tool_name:      None,
-                                params_hash:    None,
-                                params:         None,
-                                reason:         None,
-                                latency_ms:     None,
-                                identity_sub:   None,
+                                ts: Utc::now().to_rfc3339(),
+                                session_id: req.session_id.clone(),
+                                event: "log_rotation_seed".to_string(),
+                                tool_name: None,
+                                params_hash: None,
+                                params: None,
+                                reason: None,
+                                latency_ms: None,
+                                identity_sub: None,
                                 identity_email: None,
-                                policy_hash:    None,
-                                request_ip:     None,
+                                policy_hash: None,
+                                request_ip: None,
                                 matched_group_id: None,
-                                entry_index:    0,
-                                prev_hmac:      hmac_hex.clone(),
-                                hmac:           None,
+                                entry_index: 0,
+                                prev_hmac: hmac_hex.clone(),
+                                hmac: None,
                             };
 
                             let seed_canonical = serde_json::to_string(&seed).unwrap();
-                            let mut mac = HmacSha256::new_from_slice(&session_secret)
-                                .expect("HMAC key");
+                            let mut mac =
+                                HmacSha256::new_from_slice(&session_secret).expect("HMAC key");
                             mac.update(seed_canonical.as_bytes());
                             let seed_hmac = hex::encode(mac.finalize().into_bytes());
                             seed.hmac = Some(seed_hmac.clone());
@@ -359,7 +371,7 @@ impl AuditLogger {
                                 }),
                             );
 
-                            prev_hmac   = seed_hmac;
+                            prev_hmac = seed_hmac;
                             current_idx = 1;
                         }
                         Err(_) => {
@@ -393,16 +405,16 @@ impl AuditLogger {
     #[allow(clippy::too_many_arguments)]
     pub async fn write_entry(
         &self,
-        session_id:     &str,
-        event:          &str,
-        tool_name:      &str,
-        params:         Option<Value>,
-        reason:         Option<String>,
-        latency_ms:     Option<f64>,
-        identity_sub:   Option<String>,
+        session_id: &str,
+        event: &str,
+        tool_name: &str,
+        params: Option<Value>,
+        reason: Option<String>,
+        latency_ms: Option<f64>,
+        identity_sub: Option<String>,
         identity_email: Option<String>,
-        policy_hash:    Option<String>,
-        request_ip:     Option<String>,
+        policy_hash: Option<String>,
+        request_ip: Option<String>,
         matched_group_id: Option<String>,
     ) -> Result<AuditEntry, AuditError> {
         if self.is_broken.load(Ordering::Relaxed) {
@@ -423,9 +435,9 @@ impl AuditLogger {
         let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
 
         let req = EntryRequest {
-            session_id:     session_id.to_string(),
-            event:          event.to_string(),
-            tool_name:      tool_name.to_string(),
+            session_id: session_id.to_string(),
+            event: event.to_string(),
+            tool_name: tool_name.to_string(),
             params_hash,
             params,
             reason,
@@ -435,7 +447,7 @@ impl AuditLogger {
             policy_hash,
             request_ip,
             matched_group_id,
-            ack:            ack_tx,
+            ack: ack_tx,
         };
 
         if self.sender.send(req).is_err() {
@@ -448,8 +460,8 @@ impl AuditLogger {
 
         match result {
             Ok(Ok(entry)) => Ok(entry),
-            Ok(Err(e))    => Err(AuditError::SerializationError(e)),
-            Err(_)        => {
+            Ok(Err(e)) => Err(AuditError::SerializationError(e)),
+            Err(_) => {
                 self.is_broken.store(true, Ordering::Relaxed);
                 Err(AuditError::WriterDead)
             }

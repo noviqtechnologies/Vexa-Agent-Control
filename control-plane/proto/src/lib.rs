@@ -34,18 +34,18 @@
 //! from a Rust `dashboard-api` and easy to emit JSON schema from for a Go
 //! `dashboard-api`.
 
-pub mod event;
 pub mod alert;
 pub mod credential;
-pub mod redact;
+pub mod event;
 pub mod mcp_server;
+pub mod redact;
 
+pub use alert::{AlertSeverity, RedactedAlert};
+pub use credential::{RotationReason, RotationRecord, SanitizedCredentialMeta};
 pub use event::{
     RedactedDecision, RedactedDlpFinding, RedactedEvent, RedactedInjectionFinding,
     RedactedSemanticFinding, SecretCategory, SemanticFindingType,
 };
-pub use alert::{AlertSeverity, RedactedAlert};
-pub use credential::{RotationReason, RotationRecord, SanitizedCredentialMeta};
 pub use mcp_server::{McpServerSnapshot, SanitizedMcpServerMeta};
 pub use redact::{
     redact_event, RawDecision, RawDlpFinding, RawEventForRedaction, RawInjectionFinding,

@@ -2,8 +2,8 @@
 //!
 //! This is read-only inspection — it never modifies any config.
 
-use std::path::PathBuf;
 use colored::*;
+use std::path::{Path, PathBuf};
 
 use super::{config_path, transformer};
 
@@ -24,15 +24,51 @@ struct TargetInfo {
 
 /// Collect status for all 8 IDE targets.
 fn gather_all() -> Vec<TargetInfo> {
-    let targets: Vec<(&'static str, PathVerification, Result<PathBuf, super::WrapError>)> = vec![
-        ("Claude Desktop",  PathVerification::Verified,   config_path::claude_config_path()),
-        ("Cursor",          PathVerification::Unverified,  config_path::cursor_config_path()),
-        ("VS Code",         PathVerification::Unverified,  config_path::vscode_config_path()),
-        ("JetBrains",       PathVerification::Unverified,  config_path::jetbrains_config_path()),
-        ("Zed",             PathVerification::Unverified,  config_path::zed_config_path()),
-        ("Cline",           PathVerification::Unverified,  config_path::cline_config_path()),
-        ("OpenCode",        PathVerification::Unverified,  config_path::opencode_config_path()),
-        ("Antigravity",     PathVerification::Unverified,  config_path::antigravity_config_path()),
+    let targets: Vec<(
+        &'static str,
+        PathVerification,
+        Result<PathBuf, super::WrapError>,
+    )> = vec![
+        (
+            "Claude Desktop",
+            PathVerification::Verified,
+            config_path::claude_config_path(),
+        ),
+        (
+            "Cursor",
+            PathVerification::Unverified,
+            config_path::cursor_config_path(),
+        ),
+        (
+            "VS Code",
+            PathVerification::Unverified,
+            config_path::vscode_config_path(),
+        ),
+        (
+            "JetBrains",
+            PathVerification::Unverified,
+            config_path::jetbrains_config_path(),
+        ),
+        (
+            "Zed",
+            PathVerification::Unverified,
+            config_path::zed_config_path(),
+        ),
+        (
+            "Cline",
+            PathVerification::Unverified,
+            config_path::cline_config_path(),
+        ),
+        (
+            "OpenCode",
+            PathVerification::Unverified,
+            config_path::opencode_config_path(),
+        ),
+        (
+            "Antigravity",
+            PathVerification::Unverified,
+            config_path::antigravity_config_path(),
+        ),
     ];
 
     targets
@@ -75,10 +111,7 @@ pub fn print_all_targets() {
 
     // Header
     println!();
-    println!(
-        "{}",
-        "AgentWall — IDE Config Status".bold().white()
-    );
+    println!("{}", "AgentWall — IDE Config Status".bold().white());
     println!("{}", "─".repeat(90).dimmed());
     println!(
         "  {:<18} {:<12} {:<8} {:<10} {}",
@@ -99,12 +132,13 @@ pub fn print_all_targets() {
         match &t.path_result {
             Err(e) => {
                 println!(
-                    "  {:<18} {:<12} {:<8} {:<10} {}",
+                    "  {:<18} {:<12} {:<8} {:<10} path error: {} {}",
                     t.name.cyan(),
                     "N/A".dimmed(),
                     "✖".red(),
                     "—".dimmed(),
-                    format!("path error: {} {}", e, verified_label),
+                    e,
+                    verified_label,
                 );
             }
             Ok(path) => {
@@ -136,12 +170,20 @@ pub fn print_all_targets() {
                         Ok((total, wrapped)) if wrapped == 0 => (
                             "✔".green().to_string(),
                             format!("{}/{}", wrapped, total).red().bold().to_string(),
-                            format!("⚠ unwrapped! run: agentwall wrap {} {}", t.name.to_lowercase().replace(' ', "-"), verified_label),
+                            format!(
+                                "⚠ unwrapped! run: agentwall wrap {} {}",
+                                t.name.to_lowercase().replace(' ', "-"),
+                                verified_label
+                            ),
                         ),
                         Ok((total, wrapped)) => (
                             "✔".green().to_string(),
                             format!("{}/{}", wrapped, total).yellow().to_string(),
-                            format!("⚠ partial — run: agentwall wrap {} {}", t.name.to_lowercase().replace(' ', "-"), verified_label),
+                            format!(
+                                "⚠ partial — run: agentwall wrap {} {}",
+                                t.name.to_lowercase().replace(' ', "-"),
+                                verified_label
+                            ),
                         ),
                     }
                 };
@@ -157,11 +199,7 @@ pub fn print_all_targets() {
 
                 // Debug: always print full path on a second line for unverified targets
                 if t.verification == PathVerification::Unverified && exists {
-                    eprintln!(
-                        "  [debug] {} full path: {}",
-                        t.name,
-                        path.display()
-                    );
+                    eprintln!("  [debug] {} full path: {}", t.name, path.display());
                 }
             }
         }
@@ -177,7 +215,7 @@ pub fn print_all_targets() {
 }
 
 /// Shorten a long path for table display (max 34 chars with ellipsis).
-fn shorten_path(p: &PathBuf) -> String {
+fn shorten_path(p: &Path) -> String {
     let s = p.display().to_string();
     if s.len() <= 34 {
         s
@@ -186,25 +224,30 @@ fn shorten_path(p: &PathBuf) -> String {
     }
 }
 
-pub fn gather_servers_for_snapshot(agent_id: String) -> control_plane_proto::mcp_server::McpServerSnapshot {
+pub fn gather_servers_for_snapshot(
+    agent_id: String,
+) -> control_plane_proto::mcp_server::McpServerSnapshot {
     let targets = gather_all();
     let mut servers_meta = Vec::new();
-    
+
     for t in targets {
         if let Ok(path) = t.path_result {
             if path.exists() {
                 if let Ok(raw) = std::fs::read_to_string(&path) {
                     if let Ok(config) = serde_json::from_str::<serde_json::Value>(&raw) {
-                        if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) {
+                        if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object())
+                        {
                             for (name, val) in servers {
                                 let wrapped = transformer::is_already_wrapped(val);
                                 let path_verified = t.verification == PathVerification::Verified;
-                                servers_meta.push(control_plane_proto::mcp_server::SanitizedMcpServerMeta {
-                                    ide_target: t.name.to_string(),
-                                    server_name: name.to_string(),
-                                    wrapped,
-                                    path_verified,
-                                });
+                                servers_meta.push(
+                                    control_plane_proto::mcp_server::SanitizedMcpServerMeta {
+                                        ide_target: t.name.to_string(),
+                                        server_name: name.to_string(),
+                                        wrapped,
+                                        path_verified,
+                                    },
+                                );
                             }
                         }
                     }
@@ -212,7 +255,7 @@ pub fn gather_servers_for_snapshot(agent_id: String) -> control_plane_proto::mcp
             }
         }
     }
-    
+
     control_plane_proto::mcp_server::McpServerSnapshot {
         agent_id,
         servers: servers_meta,

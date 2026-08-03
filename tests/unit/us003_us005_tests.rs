@@ -1,9 +1,9 @@
 //! Unit tests verifying US-003 and US-005 acceptance criteria.
 
-use agentwall::policy::loader::{load_policy_from_str, PolicyLoadResult};
+use agentwall::policy::dlp::{DlpAction, DlpScanner};
 use agentwall::policy::engine::EvalResult;
-use agentwall::policy::dlp::{DlpScanner, DlpAction};
-use agentwall::policy::response_scanner::{ResponseScanner, ResponseScanConfig, ScanResult};
+use agentwall::policy::loader::{load_policy_from_str, PolicyLoadResult};
+use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,10 @@ tools:
     let res = load_policy_from_str(yaml, None);
     if let PolicyLoadResult::Loaded { policy, .. } = res {
         // Allowed tool passes
-        assert!(matches!(policy.evaluate("allowed_tool", &json!({}), None, &[]), EvalResult::Allow { .. }));
+        assert!(matches!(
+            policy.evaluate("allowed_tool", &json!({}), None, &[]),
+            EvalResult::Allow { .. }
+        ));
         // Unlisted tool is denied immediately
         match policy.evaluate("unlisted_tool", &json!({}), None, &[]) {
             EvalResult::Deny { reason_code, .. } => {
@@ -58,7 +61,12 @@ tools:
     if let PolicyLoadResult::Loaded { policy, .. } = res {
         // Valid params pass
         assert!(matches!(
-            policy.evaluate("query_db", &json!({"query": "SELECT * FROM users"}), None, &[]),
+            policy.evaluate(
+                "query_db",
+                &json!({"query": "SELECT * FROM users"}),
+                None,
+                &[]
+            ),
             EvalResult::Allow { .. }
         ));
 
@@ -80,8 +88,17 @@ tools:
         }
 
         // Path traversal validator blocked
-        match policy.evaluate("query_db", &json!({"query": "SELECT 1", "path": "../etc/passwd"}), None, &[]) {
-            EvalResult::Deny { reason_code, validator_name, .. } => {
+        match policy.evaluate(
+            "query_db",
+            &json!({"query": "SELECT 1", "path": "../etc/passwd"}),
+            None,
+            &[],
+        ) {
+            EvalResult::Deny {
+                reason_code,
+                validator_name,
+                ..
+            } => {
                 assert_eq!(reason_code, "validator_failed");
                 assert_eq!(validator_name.as_deref(), Some("path_traversal"));
             }
@@ -106,7 +123,11 @@ tools:
     match res {
         PolicyLoadResult::Fatal { error } => {
             let err_msg = error.to_string();
-            assert!(err_msg.contains("unknown field"), "Error should mention unknown field: {}", err_msg);
+            assert!(
+                err_msg.contains("unknown field"),
+                "Error should mention unknown field: {}",
+                err_msg
+            );
         }
         _ => panic!("Expected Fatal error for unknown field due to deny_unknown_fields"),
     }
@@ -122,7 +143,10 @@ tools:
     action: "allow"
 "#;
     let res1 = load_policy_from_str(v1_yaml, None);
-    assert!(matches!(res1, PolicyLoadResult::Loaded { .. }), "v1 schema should be accepted");
+    assert!(
+        matches!(res1, PolicyLoadResult::Loaded { .. }),
+        "v1 schema should be accepted"
+    );
 
     let v2_yaml = r#"
 version: "2"
@@ -132,7 +156,10 @@ tools:
     action: "allow"
 "#;
     let res2 = load_policy_from_str(v2_yaml, None);
-    assert!(matches!(res2, PolicyLoadResult::Loaded { .. }), "v2 schema should be accepted");
+    assert!(
+        matches!(res2, PolicyLoadResult::Loaded { .. }),
+        "v2 schema should be accepted"
+    );
 }
 
 // ---------------------------------------------------------------------------

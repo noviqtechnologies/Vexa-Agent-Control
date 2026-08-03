@@ -8,4 +8,3 @@
 pub fn local_dashboard_html() -> &'static str {
     include_str!("local_dashboard.html")
 }
-

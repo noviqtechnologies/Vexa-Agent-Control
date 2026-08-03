@@ -39,7 +39,10 @@ pub async fn fetch_policy_yaml(
     dashboard_url: &str,
     policy_read_secret: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let url = format!("{}/api/v1/policy/active", dashboard_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/api/v1/policy/active",
+        dashboard_url.trim_end_matches('/')
+    );
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -189,7 +192,11 @@ pub async fn start_policy_poll(
         .await;
 
         match result {
-            Ok(PolicyLoadResult::Loaded { policy, raw_hash, warnings }) => {
+            Ok(PolicyLoadResult::Loaded {
+                policy,
+                raw_hash,
+                warnings,
+            }) => {
                 match state.policy.write() {
                     Ok(mut guard) => {
                         *guard = Some(policy);

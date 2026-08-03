@@ -1,5 +1,5 @@
 //! Backend & Systems Integration Test Suite for AgentWall
-//! 
+//!
 //! Covers four primary interaction boundaries:
 //! 1. Component-to-Component (ProxyHandler <-> Policy Engine <-> Identity <-> DLP)
 //! 2. Data Persistence (SQLite Audit Logger Hash-Chain & Tamper Evident Persistence)
@@ -151,8 +151,18 @@ async fn test_boundary_1_policy_identity_dlp_interaction() {
 
     // Assert side effects and explicit return
     assert!(matches!(action, ProxyAction::Forward));
-    assert_eq!(state.metrics_requests_total.load(std::sync::atomic::Ordering::Relaxed), 1);
-    assert_eq!(state.metrics_allow_total.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        state
+            .metrics_requests_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+    assert_eq!(
+        state
+            .metrics_allow_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // 2. Send request to restricted_tool to verify Component-to-Component policy engine DENY action
     let attack_json = json!({
@@ -167,7 +177,12 @@ async fn test_boundary_1_policy_identity_dlp_interaction() {
 
     let attack_action = evaluate_jsonrpc(&state, &session, &attack_json).await;
     assert!(!matches!(attack_action, ProxyAction::Forward));
-    assert_eq!(state.metrics_deny_total.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        state
+            .metrics_deny_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,7 +211,11 @@ async fn test_boundary_2_audit_persistence_hash_chain_tamper_detection() {
         logger
             .write_entry(
                 "persistence-session",
-                if i % 2 == 0 { "tool_allow" } else { "tool_deny" },
+                if i % 2 == 0 {
+                    "tool_allow"
+                } else {
+                    "tool_deny"
+                },
                 &format!("tool_{}", i),
                 Some(json!({ "step": i })),
                 None,
@@ -229,11 +248,16 @@ async fn test_boundary_2_audit_persistence_hash_chain_tamper_detection() {
 
     // Verify tamper detection mechanism catches data corruption
     match verify_chain_with_secret(&log_path, &secret) {
-        VerifyResult::Invalid { reason, entry_index } => {
+        VerifyResult::Invalid {
+            reason,
+            entry_index,
+        } => {
             assert_eq!(entry_index, 0);
             assert!(reason.contains("mismatch"), "Reason: {}", reason);
         }
-        VerifyResult::Valid { .. } => panic!("Expected tamper detection to flag invalid hash chain!"),
+        VerifyResult::Valid { .. } => {
+            panic!("Expected tamper detection to flag invalid hash chain!")
+        }
         other => panic!("Unexpected verify result: {:?}", other),
     }
 }
@@ -422,8 +446,16 @@ async fn test_boundary_4_state_rate_limit_multi_step_exhaustion() {
 
     // Step 3: Burst exhausts rate limit
     let a3 = evaluate_jsonrpc(&state, &session, &req).await;
-    assert!(matches!(a3, ProxyAction::Respond(_) | ProxyAction::RespondWithStatus(_, _)));
-    assert_eq!(state.metrics_rate_limited_total.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert!(matches!(
+        a3,
+        ProxyAction::Respond(_) | ProxyAction::RespondWithStatus(_, _)
+    ));
+    assert_eq!(
+        state
+            .metrics_rate_limited_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

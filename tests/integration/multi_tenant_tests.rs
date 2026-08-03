@@ -1,17 +1,18 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64};
-use serde_json::json;
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
-use agentwall::policy::engine::CompiledPolicy;
-use agentwall::policy::schema::{FirewallConfig, CycleDetectionConfig, CycleAction};
 use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
 use agentwall::kill::KillMode;
+use agentwall::policy::engine::CompiledPolicy;
+use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
 use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::response_scanner::{ResponseScanner, ResponseScanConfig};
+use agentwall::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
+use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
 use agentwall::proxy::session::SessionContext;
+use serde_json::json;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::Arc;
 
 fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
-    let log_path = std::env::temp_dir().join(format!("multi_tenant_test_{}.log", uuid::Uuid::new_v4()));
+    let log_path =
+        std::env::temp_dir().join(format!("multi_tenant_test_{}.log", uuid::Uuid::new_v4()));
     let config = AuditLoggerConfig {
         log_path,
         session_id: "multi-tenant-test-session".to_string(),
@@ -31,7 +32,9 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         dashboard_client: None,
         listen_is_loopback: true,
         policy_read_secret: None,
-        credential_scope_validator: Arc::new(agentwall::policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         audit_logger,
         session_id: "multi-tenant-test-session".to_string(),
         kill_mode: KillMode::Connection,
@@ -48,7 +51,9 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
         dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -89,7 +94,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
         let state_clone = state.clone();
         let policy_clone = policy.clone();
         let session_token = format!("bearer-token-{}", idx);
-        
+
         let handle = tokio::spawn(async move {
             // Resolve session context
             let session = Arc::new(SessionContext::new(
@@ -100,7 +105,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
                 None,
                 None,
             ));
-            
+
             state_clone.sessions.insert(session_token, session.clone());
 
             // Make a tool call and evaluate it
@@ -123,20 +128,30 @@ async fn test_concurrency_and_isolation_100_sessions() {
     let mut session_ids = std::collections::HashSet::new();
     for handle in handles {
         let (session_id, action) = handle.await.unwrap();
-        
+
         // Assert that each session ID is unique
-        assert!(session_ids.insert(session_id), "Each session context must have a unique UUID");
+        assert!(
+            session_ids.insert(session_id),
+            "Each session context must have a unique UUID"
+        );
 
         // Since the policy tools list is empty, default action is deny (policy violation)
         match action {
             ProxyAction::KillAndRespond(val) => {
-                assert_eq!(val["error"]["code"], -32001, "Should deny tool call as policy violation");
+                assert_eq!(
+                    val["error"]["code"], -32001,
+                    "Should deny tool call as policy violation"
+                );
             }
             _ => panic!("Expected tool call to be denied"),
         }
     }
 
-    assert_eq!(state.sessions.len(), 100, "Should have successfully registered exactly 100 sessions in the registry");
+    assert_eq!(
+        state.sessions.len(),
+        100,
+        "Should have successfully registered exactly 100 sessions in the registry"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -165,7 +180,9 @@ async fn test_rate_limiting_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-a".to_string(), session_a.clone());
+    state
+        .sessions
+        .insert("token-a".to_string(), session_a.clone());
 
     // Create session B
     let session_b = Arc::new(SessionContext::new(
@@ -176,7 +193,9 @@ async fn test_rate_limiting_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-b".to_string(), session_b.clone());
+    state
+        .sessions
+        .insert("token-b".to_string(), session_b.clone());
 
     let req_a = json!({
         "jsonrpc": "2.0",
@@ -216,8 +235,14 @@ async fn test_rate_limiting_isolation() {
     let action_a3 = evaluate_jsonrpc(&state, &session_a, &req_a).await;
     match action_a3 {
         ProxyAction::Respond(val) => {
-            assert_eq!(val["error"]["code"], -32029, "3rd call of Session A must be rate-limited");
-            assert!(val["error"]["message"].as_str().unwrap().contains("Rate limit exceeded"));
+            assert_eq!(
+                val["error"]["code"], -32029,
+                "3rd call of Session A must be rate-limited"
+            );
+            assert!(val["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Rate limit exceeded"));
         }
         _ => panic!("Expected rate limit respond action"),
     }
@@ -227,7 +252,10 @@ async fn test_rate_limiting_isolation() {
     // Session B should NOT be rate-limited! (should get policy deny -32001)
     match action_b1 {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "Session B must NOT be affected by Session A's rate limit");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "Session B must NOT be affected by Session A's rate limit"
+            );
         }
         _ => panic!("Expected Session B call to pass through rate limiter and get policy deny"),
     }
@@ -264,7 +292,9 @@ async fn test_cycle_detection_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-a".to_string(), session_a.clone());
+    state
+        .sessions
+        .insert("token-a".to_string(), session_a.clone());
 
     // Create session B
     let session_b = Arc::new(SessionContext::new(
@@ -275,7 +305,9 @@ async fn test_cycle_detection_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-b".to_string(), session_b.clone());
+    state
+        .sessions
+        .insert("token-b".to_string(), session_b.clone());
 
     let req = json!({
         "jsonrpc": "2.0",
@@ -295,8 +327,14 @@ async fn test_cycle_detection_isolation() {
     // Session A's 3rd call should trigger a cycle block
     match action_a3 {
         ProxyAction::Respond(val) => {
-            assert_eq!(val["error"]["code"], -32010, "Session A must be blocked by cycle detection on the 3rd attempt");
-            assert!(val["error"]["message"].as_str().unwrap().contains("Cycle detected"));
+            assert_eq!(
+                val["error"]["code"], -32010,
+                "Session A must be blocked by cycle detection on the 3rd attempt"
+            );
+            assert!(val["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Cycle detected"));
         }
         _ => panic!("Expected cycle detection block for Session A"),
     }
@@ -307,7 +345,10 @@ async fn test_cycle_detection_isolation() {
     // Session B must NOT trigger a cycle block! It should get regular policy deny
     match action_b1 {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "Session B must have clean history and NOT be blocked by Session A's tool cycle");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "Session B must have clean history and NOT be blocked by Session A's tool cycle"
+            );
         }
         _ => panic!("Expected Session B call to get regular policy deny, not cycle block"),
     }
@@ -318,18 +359,16 @@ async fn test_hot_reload_policy_isolation() {
     // Policy 1 (Allows 'read_file')
     let policy_v1 = CompiledPolicy {
         max_calls_per_second: 0,
-        tools: vec![
-            agentwall::policy::engine::CompiledTool {
-                name: "read_file".to_string(),
-                action: "allow".to_string(),
-                risk: None,
-                parameters: vec![],
-                identity: None,
-                credential_scope: vec![],
-                semantic_anomaly_threshold: None,
-                a2a_trust_level: None,
-            }
-        ],
+        tools: vec![agentwall::policy::engine::CompiledTool {
+            name: "read_file".to_string(),
+            action: "allow".to_string(),
+            risk: None,
+            parameters: vec![],
+            identity: None,
+            credential_scope: vec![],
+            semantic_anomaly_threshold: None,
+            a2a_trust_level: None,
+        }],
         group_policies: vec![],
         identity_validator: None,
         scannable_tools: vec![],
@@ -363,7 +402,9 @@ async fn test_hot_reload_policy_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-a".to_string(), session_a.clone());
+    state
+        .sessions
+        .insert("token-a".to_string(), session_a.clone());
 
     // Perform Hot-Reload on the Gateway state (Swap active policy to Policy 2)
     {
@@ -380,7 +421,9 @@ async fn test_hot_reload_policy_isolation() {
         None,
         None,
     ));
-    state.sessions.insert("token-b".to_string(), session_b.clone());
+    state
+        .sessions
+        .insert("token-b".to_string(), session_b.clone());
 
     let req = json!({
         "jsonrpc": "2.0",
@@ -397,7 +440,9 @@ async fn test_hot_reload_policy_isolation() {
     // Session A should follow frozen Policy 1 and ALLOW the tool call (which triggers forward)
     match action_a {
         ProxyAction::Forward => {}
-        _ => panic!("In-flight Session A must be allowed to execute under its frozen policy context"),
+        _ => {
+            panic!("In-flight Session A must be allowed to execute under its frozen policy context")
+        }
     }
 
     // Evaluate tool call on Session B (new session)
@@ -405,7 +450,10 @@ async fn test_hot_reload_policy_isolation() {
     // Session B should follow the hot-reloaded Policy 2 and DENY the tool call
     match action_b {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "New Session B must enforce the hot-reloaded policy rules immediately");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "New Session B must enforce the hot-reloaded policy rules immediately"
+            );
         }
         _ => panic!("Expected Session B call to be denied under new policy"),
     }
@@ -461,7 +509,10 @@ async fn test_dynamic_tool_history_max() {
 
     match action {
         ProxyAction::Respond(val) => {
-            assert_eq!(val["error"]["code"], -32010, "Cycle detection must work for max_attempts > 5");
+            assert_eq!(
+                val["error"]["code"], -32010,
+                "Cycle detection must work for max_attempts > 5"
+            );
         }
         _ => panic!("Expected cycle detection block on 7th attempt"),
     }
@@ -494,5 +545,9 @@ async fn test_session_ttl_expiry() {
     assert!(!session.is_expired(), "Fresh session should not be expired");
 
     // We can't mock Instant easily without a crate like `mock_instant`, but we can verify the constant is 4 hours
-    assert_eq!(agentwall::proxy::session::SESSION_TTL_SECS, 4 * 60 * 60, "TTL must be 4 hours");
+    assert_eq!(
+        agentwall::proxy::session::SESSION_TTL_SECS,
+        4 * 60 * 60,
+        "TTL must be 4 hours"
+    );
 }

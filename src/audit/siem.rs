@@ -30,19 +30,19 @@ impl SiemBackend {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
-            "splunk"     => Self::Splunk,
-            "datadog"    => Self::Datadog,
+            "splunk" => Self::Splunk,
+            "datadog" => Self::Datadog,
             "opensearch" => Self::OpenSearch,
-            _            => Self::Local,
+            _ => Self::Local,
         }
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Splunk     => "splunk",
-            Self::Datadog    => "datadog",
+            Self::Splunk => "splunk",
+            Self::Datadog => "datadog",
             Self::OpenSearch => "opensearch",
-            Self::Local      => "local",
+            Self::Local => "local",
         }
     }
 }
@@ -61,9 +61,9 @@ pub enum SiemError {
 impl std::fmt::Display for SiemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RequestFailed(e)         => write!(f, "request failed: {}", e),
+            Self::RequestFailed(e) => write!(f, "request failed: {}", e),
             Self::HttpError { status, body } => write!(f, "HTTP {}: {}", status, body),
-            Self::Disabled                 => write!(f, "SIEM export disabled (local only)"),
+            Self::Disabled => write!(f, "SIEM export disabled (local only)"),
         }
     }
 }
@@ -71,11 +71,11 @@ impl std::fmt::Display for SiemError {
 /// SIEM exporter.  Cheap to clone — the inner `reqwest::Client` is `Arc`-backed.
 #[derive(Clone)]
 pub struct SiemExporter {
-    backend:  SiemBackend,
+    backend: SiemBackend,
     endpoint: String,
-    token:    String,
-    timeout:  Duration,
-    client:   reqwest::Client,
+    token: String,
+    timeout: Duration,
+    client: reqwest::Client,
 }
 
 impl SiemExporter {
@@ -85,12 +85,7 @@ impl SiemExporter {
     /// * `endpoint` — full ingestion URL supplied by the operator
     /// * `token`    — Splunk HEC token / Datadog API key / OpenSearch API key
     /// * `timeout_secs` — per-request timeout; 0 means use the 2s default
-    pub fn new(
-        backend: SiemBackend,
-        endpoint: String,
-        token: String,
-        timeout_secs: u64,
-    ) -> Self {
+    pub fn new(backend: SiemBackend, endpoint: String, token: String, timeout_secs: u64) -> Self {
         let timeout = if timeout_secs == 0 {
             Duration::from_secs(2)
         } else {
@@ -103,7 +98,13 @@ impl SiemExporter {
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
-        Self { backend, endpoint, token, timeout, client }
+        Self {
+            backend,
+            endpoint,
+            token,
+            timeout,
+            client,
+        }
     }
 
     /// Export a single audit entry to the configured SIEM backend.
@@ -143,7 +144,8 @@ impl SiemExporter {
             "event":      serde_json::to_value(entry).unwrap_or(Value::Null),
         });
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&self.endpoint)
             .header("Authorization", format!("Splunk {}", self.token))
             .header("Content-Type", "application/json")
@@ -172,7 +174,8 @@ impl SiemExporter {
             "entry_index": entry.entry_index,
         }]);
 
-        let resp = self.client
+        let resp = self
+            .client
             .post(&self.endpoint)
             .header("DD-API-KEY", &self.token)
             .header("Content-Type", "application/json")
@@ -191,7 +194,8 @@ impl SiemExporter {
         // Example endpoint: https://opensearch.corp.com/agentwall-logs/_doc
         let payload = serde_json::to_value(entry).unwrap_or(Value::Null);
 
-        let mut req = self.client
+        let mut req = self
+            .client
             .post(&self.endpoint)
             .header("Content-Type", "application/json")
             .json(&payload);
@@ -207,7 +211,10 @@ impl SiemExporter {
             req = req.bearer_auth(&self.token);
         }
 
-        let resp = req.send().await.map_err(|e| SiemError::RequestFailed(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| SiemError::RequestFailed(e.to_string()))?;
 
         Self::check_response(resp).await
     }
@@ -224,10 +231,14 @@ impl SiemExporter {
             .text()
             .await
             .unwrap_or_else(|_| "<unreadable body>".to_string());
-        let truncated = if body.len() > 512 { &body[..512] } else { &body };
+        let truncated = if body.len() > 512 {
+            &body[..512]
+        } else {
+            &body
+        };
         Err(SiemError::HttpError {
             status: status.as_u16(),
-            body:   truncated.to_string(),
+            body: truncated.to_string(),
         })
     }
 }

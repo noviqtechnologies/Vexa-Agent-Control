@@ -28,15 +28,25 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# Async runtime (Pruned unused features like tracing/fs)
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "io-util",
+    "io-std",
+    "process",
+    "net",
+    "sync",
+    "time",
+    "signal"
+] }
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = "0.1"
 socket2 = { version = "0.5", features = ["all"] }
 
-# HTTP
-hyper = { version = "1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["full"] }
+# HTTP Engine (Hyper 1.0 ecosystem)
+hyper = { version = "1", features = ["server", "client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["server", "client", "tokio", "http1", "http2"] }
 http-body-util = "0.1"
 bytes = "1"
 
@@ -67,9 +77,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # Random
 rand = "0.8"
 
-# Reqwest for forwarding
+# Reqwest HTTP Client
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking", "stream"] }
-reqwest-eventsource = "0.6.0"
+eventsource-stream = "0.2"
+
 rusqlite = { version = "0.31", features = ["bundled"] }
 shlex = "1.3"
 
@@ -77,15 +88,13 @@ shlex = "1.3"
 dirs = "5"
 
 # Filesystem events (FR-watch: agentwall watch daemon)
-# Uses OS-native backends: inotify (Linux), FSEvents (macOS), ReadDirectoryChangesW (Windows)
 notify = "6"
 
 # Ctrl-C / SIGTERM handler (FR-watch: daemon graceful shutdown)
 ctrlc = "3"
 
-# CLI Aesthetics
+# Utilities & WebSockets
 colored = "2"
-futures = "0.3.32"
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-native-roots"] }
 base64 = "0.22.1"
 hyper-tungstenite = "0.20.0"
@@ -96,9 +105,6 @@ urlencoding = "2.1.3"
 tokio-rustls = "0.26"
 rustls-pemfile = "2"
 toml = "1.1.3"
-
-# Tracing (structured stderr)
-# We roll our own JSON stderr logger for exact event control
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -118,3 +124,21 @@ harness = false
 [[bench]]
 name = "safe_mode"
 harness = false
+
+# --- Compilation Speed Optimizations ---
+
+[profile.dev]
+# Minimal debug info for workspace code - speeds up linking on Windows significantly
+debug = "line-tables-only"
+# Fast split-debuginfo generation on Windows MSVC
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+# Optimize dependencies once so your gateway runs fast during testing,
+# while disabling their debug symbols to keep linking lightweight.
+opt-level = 2
+debug = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 16

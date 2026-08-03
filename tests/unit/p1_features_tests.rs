@@ -1,8 +1,7 @@
-use std::time::Duration;
 use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
 use agentwall::proxy::handler::RateLimiter;
 use agentwall::report::generate_report;
-
+use std::time::Duration;
 
 #[test]
 fn test_rate_limiting_logic() {
@@ -19,7 +18,10 @@ fn test_rate_limiting_logic() {
 
     // Wait for tokens to replenish (0.2s per token)
     std::thread::sleep(Duration::from_millis(250));
-    assert!(limiter.acquire(), "Should allow call after partial replenishment");
+    assert!(
+        limiter.acquire(),
+        "Should allow call after partial replenishment"
+    );
 }
 
 #[tokio::test]
@@ -35,17 +37,33 @@ async fn test_log_rotation_and_seed() {
 
     // Set a tiny rotation limit (200 bytes)
     let logger = AuditLogger::new(AuditLoggerConfig {
-        log_path:       log_path.clone(),
-        session_id:     session_id.clone(),
+        log_path: log_path.clone(),
+        session_id: session_id.clone(),
         session_secret: secret.clone(),
-        max_bytes:      200,
-        siem_exporter:  None,
+        max_bytes: 200,
+        siem_exporter: None,
         include_params: false,
-    }).unwrap();
+    })
+    .unwrap();
 
     // Write entries until it rotates
     for _ in 0..10 {
-        logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
+        logger
+            .write_entry(
+                &session_id,
+                "tool_allow",
+                "read_file",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
         std::thread::sleep(Duration::from_millis(10));
     }
 
@@ -63,12 +81,16 @@ async fn test_log_rotation_and_seed() {
 
     // Verify the new log starts with a log_rotation_seed
     let content = std::fs::read_to_string(&log_path).unwrap();
-    assert!(content.contains("log_rotation_seed"), "New log should contain rotation seed");
+    assert!(
+        content.contains("log_rotation_seed"),
+        "New log should contain rotation seed"
+    );
 }
 
 #[tokio::test]
 async fn test_session_report_generation() {
-    let log_path = std::env::temp_dir().join(format!("vexa_test_report_{}.log", uuid::Uuid::new_v4()));
+    let log_path =
+        std::env::temp_dir().join(format!("vexa_test_report_{}.log", uuid::Uuid::new_v4()));
     let session_id = "test-report-session".to_string();
     let secret = b"test-secret-123456789012345678901".to_vec();
 
@@ -76,18 +98,64 @@ async fn test_session_report_generation() {
     let _ = std::fs::remove_file(&log_path);
 
     let logger = AuditLogger::new(AuditLoggerConfig {
-        log_path:       log_path.clone(),
-        session_id:     session_id.clone(),
+        log_path: log_path.clone(),
+        session_id: session_id.clone(),
         session_secret: secret.clone(),
-        max_bytes:      100000,
-        siem_exporter:  None,
+        max_bytes: 100000,
+        siem_exporter: None,
         include_params: false,
-    }).unwrap();
+    })
+    .unwrap();
 
     // Mock session events
-    logger.write_entry(&session_id, "tool_allow", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
-    logger.write_entry(&session_id, "tool_deny", "exec_shell", None, Some("action is deny".to_string()), None, None, None, None, None, None).await.unwrap();
-    logger.write_entry(&session_id, "rate_limited", "read_file", None, None, None, None, None, None, None, None).await.unwrap();
+    logger
+        .write_entry(
+            &session_id,
+            "tool_allow",
+            "read_file",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    logger
+        .write_entry(
+            &session_id,
+            "tool_deny",
+            "exec_shell",
+            None,
+            Some("action is deny".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    logger
+        .write_entry(
+            &session_id,
+            "rate_limited",
+            "read_file",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
     // Drop the logger to flush the background writer
     drop(logger);
@@ -101,7 +169,8 @@ async fn test_session_report_generation() {
         "both",
         false,
         vec![],
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(report.summary.total_calls, 3);
     assert_eq!(report.summary.allowed, 1);

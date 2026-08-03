@@ -1,6 +1,6 @@
-﻿//! Stdio bridge proxy for local MCP servers (FR-302, FR-303b)
+//! Stdio bridge proxy for local MCP servers (FR-302, FR-303b)
 
-use futures::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -21,7 +21,6 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
 
     #[cfg(windows)]
     {
-        
         use std::path::PathBuf;
 
         let mut final_program = program.to_string();
@@ -39,7 +38,7 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
                 } else {
                     format!("{}.{}", program, ext)
                 };
-                
+
                 if let Ok(p) = which_windows(&with_ext) {
                     final_program = p;
                     found = true;
@@ -66,9 +65,17 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
             // On Windows, if it's not an .exe, it's likely a script that needs cmd /C or is a shell script
             return ("cmd".to_string(), vec!["/C".to_string(), final_program]);
         }
-        
+
         if lower.ends_with(".ps1") {
-            return ("powershell".to_string(), vec!["-ExecutionPolicy".to_string(), "Bypass".to_string(), "-File".to_string(), final_program]);
+            return (
+                "powershell".to_string(),
+                vec![
+                    "-ExecutionPolicy".to_string(),
+                    "Bypass".to_string(),
+                    "-File".to_string(),
+                    final_program,
+                ],
+            );
         }
 
         (final_program, vec![])
@@ -156,7 +163,8 @@ pub async fn run_stdio_bridge(
 
     // FR-303b: Track forwarded tools by their JSON-RPC ID for response correlation.
     // This prevents out-of-order responses from being scanned against the wrong tool context.
-    let mut forwarded_requests: std::collections::HashMap<serde_json::Value, String> = std::collections::HashMap::new();
+    let mut forwarded_requests: std::collections::HashMap<serde_json::Value, String> =
+        std::collections::HashMap::new();
 
     loop {
         tokio::select! {
@@ -219,7 +227,7 @@ pub async fn run_stdio_bridge(
                         // Correlate with the original tool name using the response ID
                         let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
                         let tool_name = forwarded_requests.remove(&id).unwrap_or_default();
-                        
+
                         let processed = stdio_scan_response(&state, &local_session.session_id, &json, &tool_name).await;
                         if let Err(e) = agent_writer.send(processed).await {
                             eprintln!("Error sending to agent: {}", e);
@@ -265,16 +273,35 @@ async fn stdio_scan_response(
     // 1. Injection & Poisoning Scan (FR-13)
     let enforce_mode = !state.shadow_mode;
     let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        state.injection_scanner.scan_response(response, tool_name, session_id, enforce_mode)
+        state
+            .injection_scanner
+            .scan_response(response, tool_name, session_id, enforce_mode)
     }));
 
     match inj_scan_result {
         Ok(crate::policy::injection::ScanResult::Block { findings }) => {
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(session_id, "injection_blocked", tool_name, None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Warn, "injection_blocked",
-                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "injection_blocked",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Warn,
+                "injection_blocked",
+                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}),
+            );
 
             // Notify UI
             let event = crate::proxy::db::EgressEvent {
@@ -302,7 +329,10 @@ async fn stdio_scan_response(
                 let _ = state.event_tx.send(json_str);
             }
 
-            let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+            let id = response
+                .get("id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             return serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -315,10 +345,27 @@ async fn stdio_scan_response(
         }
         Ok(crate::policy::injection::ScanResult::Timeout) => {
             if enforce_mode {
-                let _ = state.audit_logger.write_entry(session_id, "injection_blocked_timeout", tool_name, None,
-                    Some("Scanner timed out (potential ReDoS) — Blocked".to_string()), None, None, None, None, None, None).await;
-                logging::log_event(logging::Level::Warn, "injection_blocked_timeout",
-                    serde_json::json!({"tool": tool_name, "session": session_id}));
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "injection_blocked_timeout",
+                        tool_name,
+                        None,
+                        Some("Scanner timed out (potential ReDoS) — Blocked".to_string()),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Warn,
+                    "injection_blocked_timeout",
+                    serde_json::json!({"tool": tool_name, "session": session_id}),
+                );
 
                 // Notify UI
                 let event = crate::proxy::db::EgressEvent {
@@ -336,7 +383,9 @@ async fn stdio_scan_response(
                     response_body: None,
                     response_body_hash: None,
                     dlp_findings: None,
-                    injection_findings: Some(serde_json::json!({"findings": ["timeout: potential ReDoS"]}).to_string()),
+                    injection_findings: Some(
+                        serde_json::json!({"findings": ["timeout: potential ReDoS"]}).to_string(),
+                    ),
                     latency_ms: Some(0.0),
                     verdict: Some("deny".to_string()),
                     semantic_anomaly_score: None,
@@ -346,7 +395,10 @@ async fn stdio_scan_response(
                     let _ = state.event_tx.send(json_str);
                 }
 
-                let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
                 return serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -357,19 +409,55 @@ async fn stdio_scan_response(
                     }
                 });
             } else {
-                let _ = state.audit_logger.write_entry(session_id, "injection_warning_timeout", tool_name, None,
-                    Some("Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string()), None, None, None, None, None, None).await;
-                logging::log_event(logging::Level::Warn, "injection_warning_timeout",
-                    serde_json::json!({"tool": tool_name, "session": session_id}));
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "injection_warning_timeout",
+                        tool_name,
+                        None,
+                        Some(
+                            "Scanner timed out (potential ReDoS) — Warn (Shadow Mode)".to_string(),
+                        ),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Warn,
+                    "injection_warning_timeout",
+                    serde_json::json!({"tool": tool_name, "session": session_id}),
+                );
             }
         }
         Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(session_id, "injection_warning", tool_name, None,
-                Some(format!("pattern={} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Warn, "injection_warning",
-                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name, "count": findings.len()}));
-            
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "injection_warning",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Warn,
+                "injection_warning",
+                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name, "count": findings.len()}),
+            );
+
             // Notify UI
             let event = crate::proxy::db::EgressEvent {
                 timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
@@ -397,16 +485,50 @@ async fn stdio_scan_response(
             }
         }
         Ok(crate::policy::injection::ScanResult::ScannerError { error }) => {
-            let _ = state.audit_logger.write_entry(session_id, "INJECTION_SCANNER_FAILURE", tool_name, None,
-                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Error, "INJECTION_SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "INJECTION_SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some(format!("Scanner error: {} — fail-open applied", error)),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Error,
+                "INJECTION_SCANNER_FAILURE",
+                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+            );
         }
         Err(_) => {
-            let _ = state.audit_logger.write_entry(session_id, "INJECTION_SCANNER_FAILURE", tool_name, None,
-                Some("Injection scanner panicked — fail-open applied".to_string()), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Error, "INJECTION_SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "INJECTION_SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some("Injection scanner panicked — fail-open applied".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Error,
+                "INJECTION_SCANNER_FAILURE",
+                serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}),
+            );
         }
         Ok(crate::policy::injection::ScanResult::Clean) => {}
     }
@@ -417,20 +539,35 @@ async fn stdio_scan_response(
         Err(_) => crate::policy::response_scanner::ResponseScanConfig::default(),
     };
     let scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        state.response_scanner.scan_response(response, tool_name, &scan_config)
+        state
+            .response_scanner
+            .scan_response(response, tool_name, &scan_config)
     }));
 
     let scan_result = match scan_result {
         Ok(result) => result,
         Err(_) => {
-            let _ = state.audit_logger.write_entry(
-                session_id,
-                "SCANNER_FAILURE", tool_name, None,
-                Some("Response scanner panicked — fail-open applied".to_string()),
-                None, None, None, None, None, None,
-            ).await;
-            logging::log_event(logging::Level::Error, "SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some("Response scanner panicked — fail-open applied".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Error,
+                "SCANNER_FAILURE",
+                serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}),
+            );
             return response.clone();
         }
     };
@@ -439,48 +576,151 @@ async fn stdio_scan_response(
         ScanResult::Pass | ScanResult::Clean => response.clone(),
 
         ScanResult::Skipped { reason } => {
-            let _ = state.audit_logger.write_entry(session_id, "response_scan_skipped", tool_name, None, Some(reason.clone()), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Warn, "response_scan_skipped",
-                serde_json::json!({"tool": tool_name, "session": session_id, "reason": &reason}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "response_scan_skipped",
+                    tool_name,
+                    None,
+                    Some(reason.clone()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Warn,
+                "response_scan_skipped",
+                serde_json::json!({"tool": tool_name, "session": session_id, "reason": &reason}),
+            );
             response.clone()
         }
 
         ScanResult::Redact { findings } => {
             if scan_config.dry_run {
                 for f in &findings {
-                    let _ = state.audit_logger.write_entry(session_id, "response_scan_dry_run", tool_name, None,
-                        Some(format!("Would redact {} at {}:{} preview={}", f.pattern_name, f.field_path, f.position, f.preview)), None, None, None, None, None, None).await;
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            session_id,
+                            "response_scan_dry_run",
+                            tool_name,
+                            None,
+                            Some(format!(
+                                "Would redact {} at {}:{} preview={}",
+                                f.pattern_name, f.field_path, f.position, f.preview
+                            )),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                        .await;
                 }
-                logging::log_event(logging::Level::Warn, "response_scan_dry_run",
-                    serde_json::json!({"tool": tool_name, "session": session_id, "action": "redact", "count": findings.len()}));
+                logging::log_event(
+                    logging::Level::Warn,
+                    "response_scan_dry_run",
+                    serde_json::json!({"tool": tool_name, "session": session_id, "action": "redact", "count": findings.len()}),
+                );
                 return response.clone();
             }
             for f in &findings {
-                let _ = state.audit_logger.write_entry(session_id, "response_secret_redacted", tool_name, None,
-                    Some(format!("pattern={} field={} pos={} len={} preview={}", f.pattern_name, f.field_path, f.position, f.length, f.preview)), None, None, None, None, None, None).await;
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "response_secret_redacted",
+                        tool_name,
+                        None,
+                        Some(format!(
+                            "pattern={} field={} pos={} len={} preview={}",
+                            f.pattern_name, f.field_path, f.position, f.length, f.preview
+                        )),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
             }
-            logging::log_event(logging::Level::Warn, "response_secret_redacted",
-                serde_json::json!({"tool": tool_name, "session": session_id, "count": findings.len()}));
-            state.response_scanner.redact_response(response, &scan_config)
+            logging::log_event(
+                logging::Level::Warn,
+                "response_secret_redacted",
+                serde_json::json!({"tool": tool_name, "session": session_id, "count": findings.len()}),
+            );
+            state
+                .response_scanner
+                .redact_response(response, &scan_config)
         }
 
         ScanResult::Block { findings } => {
             if scan_config.dry_run {
                 for f in &findings {
-                    let _ = state.audit_logger.write_entry(session_id, "response_scan_dry_run", tool_name, None,
-                        Some(format!("Would block: {} preview={}", f.pattern_name, f.preview)), None, None, None, None, None, None).await;
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            session_id,
+                            "response_scan_dry_run",
+                            tool_name,
+                            None,
+                            Some(format!(
+                                "Would block: {} preview={}",
+                                f.pattern_name, f.preview
+                            )),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                        .await;
                 }
-                logging::log_event(logging::Level::Warn, "response_scan_dry_run",
-                    serde_json::json!({"tool": tool_name, "session": session_id, "action": "block", "count": findings.len()}));
+                logging::log_event(
+                    logging::Level::Warn,
+                    "response_scan_dry_run",
+                    serde_json::json!({"tool": tool_name, "session": session_id, "action": "block", "count": findings.len()}),
+                );
                 return response.clone();
             }
             let f = &findings[0];
-            let _ = state.audit_logger.write_entry(session_id, "response_secret_blocked", tool_name, None,
-                Some(format!("pattern={} field={} preview={}", f.pattern_name, f.field_path, f.preview)), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Warn, "response_secret_blocked",
-                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "response_secret_blocked",
+                    tool_name,
+                    None,
+                    Some(format!(
+                        "pattern={} field={} preview={}",
+                        f.pattern_name, f.field_path, f.preview
+                    )),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Warn,
+                "response_secret_blocked",
+                serde_json::json!({"tool": tool_name, "session": session_id, "pattern": &f.pattern_name}),
+            );
 
-            let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+            let id = response
+                .get("id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -493,10 +733,27 @@ async fn stdio_scan_response(
         }
 
         ScanResult::ScannerError { error } => {
-            let _ = state.audit_logger.write_entry(session_id, "SCANNER_FAILURE", tool_name, None,
-                Some(format!("Scanner error: {} — fail-open applied", error)), None, None, None, None, None, None).await;
-            logging::log_event(logging::Level::Error, "SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}));
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    session_id,
+                    "SCANNER_FAILURE",
+                    tool_name,
+                    None,
+                    Some(format!("Scanner error: {} — fail-open applied", error)),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            logging::log_event(
+                logging::Level::Error,
+                "SCANNER_FAILURE",
+                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+            );
             response.clone()
         }
     }
@@ -505,7 +762,7 @@ async fn stdio_scan_response(
 pub async fn run_stdio_to_http_bridge(
     state: Arc<ProxyState>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use futures::{SinkExt, StreamExt};
+    use futures_util::{SinkExt, StreamExt};
     use tokio_util::codec::{FramedRead, FramedWrite};
 
     let agent_stdin = tokio::io::stdin();
@@ -542,12 +799,19 @@ pub async fn run_stdio_to_http_bridge(
 
                         match response {
                             Ok(resp) => {
-                                let tool_name = json.get("params")
+                                let tool_name = json
+                                    .get("params")
                                     .and_then(|p| p.get("name"))
                                     .and_then(|n| n.as_str())
                                     .unwrap_or("")
                                     .to_string();
-                                let processed = stdio_scan_response(&state, &local_session.session_id, &resp, &tool_name).await;
+                                let processed = stdio_scan_response(
+                                    &state,
+                                    &local_session.session_id,
+                                    &resp,
+                                    &tool_name,
+                                )
+                                .await;
                                 if let Err(e) = agent_writer.send(processed).await {
                                     eprintln!("Error sending to agent: {}", e);
                                     break;
@@ -576,7 +840,8 @@ pub async fn run_stdio_to_http_bridge(
                             break;
                         }
                     }
-                    ProxyAction::KillAndRespond(resp) | ProxyAction::KillAndRespondWithStatus(_, resp) => {
+                    ProxyAction::KillAndRespond(resp)
+                    | ProxyAction::KillAndRespondWithStatus(_, resp) => {
                         let _ = agent_writer.send(resp).await;
                         break;
                     }
@@ -591,4 +856,3 @@ pub async fn run_stdio_to_http_bridge(
 
     Ok(())
 }
-

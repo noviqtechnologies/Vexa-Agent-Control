@@ -55,7 +55,12 @@ fn now_secs() -> usize {
 }
 
 fn make_validator(issuer: &str, audience: &str) -> std::sync::Arc<IdentityValidator> {
-    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None, "groups".to_string());
+    let v = IdentityValidator::new(
+        issuer.to_string(),
+        audience.to_string(),
+        None,
+        "groups".to_string(),
+    );
     let decoding_key =
         jsonwebtoken::DecodingKey::from_rsa_pem(RSA_PUBLIC_PEM).expect("valid public key");
     v.keys.insert("test-kid".to_string(), decoding_key);
@@ -63,8 +68,7 @@ fn make_validator(issuer: &str, audience: &str) -> std::sync::Arc<IdentityValida
 }
 
 fn make_token(issuer: &str, audience: &str, sub: &str, exp_offset_secs: i64) -> String {
-    let encoding_key =
-        EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).expect("valid private key");
+    let encoding_key = EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).expect("valid private key");
     let exp = (now_secs() as i64 + exp_offset_secs) as usize;
     let claims = Claims {
         sub: sub.to_string(),
@@ -127,7 +131,8 @@ async fn test_ac201_2_wrong_audience_rejected() {
     let err = result.unwrap_err();
     assert!(
         err.contains("InvalidAudience") || err.contains("audience"),
-        "Expected audience error, got: {}", err
+        "Expected audience error, got: {}",
+        err
     );
 }
 
@@ -144,7 +149,8 @@ async fn test_ac201_2_wrong_issuer_rejected() {
     let err = result.unwrap_err();
     assert!(
         err.contains("InvalidIssuer") || err.contains("issuer"),
-        "Expected issuer error, got: {}", err
+        "Expected issuer error, got: {}",
+        err
     );
 }
 
@@ -237,9 +243,17 @@ async fn test_ac201_2_unknown_kid_fail_closed() {
 
 #[tokio::test]
 async fn test_ac201_5_not_ready_when_no_keys() {
-    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), None, "groups".to_string());
+    let v = IdentityValidator::new(
+        "https://example.com".to_string(),
+        "aud".to_string(),
+        None,
+        "groups".to_string(),
+    );
     // No keys populated
-    assert!(!v.is_ready().await, "Should not be ready with empty key cache");
+    assert!(
+        !v.is_ready().await,
+        "Should not be ready with empty key cache"
+    );
 }
 
 // ── AC-201-5: is_ready returns true when a key is present ────────────────────
@@ -255,7 +269,12 @@ async fn test_ac201_5_ready_when_key_present() {
 #[test]
 fn test_ac201_5_custom_cache_ttl_applied() {
     // 30-minute TTL
-    let v = IdentityValidator::new("https://example.com".to_string(), "aud".to_string(), Some(30), "groups".to_string());
+    let v = IdentityValidator::new(
+        "https://example.com".to_string(),
+        "aud".to_string(),
+        Some(30),
+        "groups".to_string(),
+    );
     assert_eq!(v.cache_ttl.as_secs(), 30 * 60);
 }
 
@@ -265,7 +284,12 @@ fn test_ac201_5_custom_cache_ttl_applied() {
 async fn test_ac201_2_jwk_refresh_race() {
     let issuer = "http://198.51.100.1:80"; // Point to an inaccessible IP to delay refresh
     let audience = "agentwall";
-    let v = IdentityValidator::new(issuer.to_string(), audience.to_string(), None, "groups".to_string());
+    let v = IdentityValidator::new(
+        issuer.to_string(),
+        audience.to_string(),
+        None,
+        "groups".to_string(),
+    );
 
     let encoding_key = EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).unwrap();
     let claims = Claims {
@@ -286,15 +310,11 @@ async fn test_ac201_2_jwk_refresh_race() {
     // This will trigger concurrent refresh_keys calls.
     let v1 = v.clone();
     let token1 = token.clone();
-    let t1 = tokio::spawn(async move {
-        v1.validate_token(&token1).await
-    });
+    let t1 = tokio::spawn(async move { v1.validate_token(&token1).await });
 
     let v2 = v.clone();
     let token2 = token.clone();
-    let t2 = tokio::spawn(async move {
-        v2.validate_token(&token2).await
-    });
+    let t2 = tokio::spawn(async move { v2.validate_token(&token2).await });
 
     let res1 = t1.await.unwrap();
     let res2 = t2.await.unwrap();

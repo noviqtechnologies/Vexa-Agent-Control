@@ -56,7 +56,10 @@ pub fn run_identity_create(
         return 2;
     }
     if scope.is_empty() {
-        eprintln!("{} Scope cannot be empty. Use e.g.: --scope read-only", "✖".red());
+        eprintln!(
+            "{} Scope cannot be empty. Use e.g.: --scope read-only",
+            "✖".red()
+        );
         return 2;
     }
 
@@ -64,7 +67,11 @@ pub fn run_identity_create(
     let ttl_duration = crate::identity::credential::parse_ttl(ttl);
     let ttl_seconds = ttl_duration.num_seconds() as u64;
     if ttl_seconds == 0 {
-        eprintln!("{} Invalid TTL '{}'. Use format: 1h, 30m, 3600s.", "✖".red(), ttl);
+        eprintln!(
+            "{} Invalid TTL '{}'. Use format: 1h, 30m, 3600s.",
+            "✖".red(),
+            ttl
+        );
         return 2;
     }
 
@@ -114,7 +121,7 @@ pub fn run_identity_create(
         agent_id,
         &format!("{}@agentwall.local", agent_id), // sub claim — in production, from OIDC token
         scope,
-        vec![],                // tool_scopes — set via `identity scope` command
+        vec![], // tool_scopes — set via `identity scope` command
         CredentialType::Jwt,
         adapter.backend_name(),
         ttl,
@@ -140,7 +147,10 @@ pub fn run_identity_create(
         adapter.backend_name(),
         &format!(
             "Credential issued for agent '{}' with scope '{}' (TTL: {}, backend: {})",
-            agent_id, scope, ttl, adapter.backend_name()
+            agent_id,
+            scope,
+            ttl,
+            adapter.backend_name()
         ),
     );
 
@@ -161,7 +171,11 @@ pub fn run_identity_create(
             );
         }
         Err(e) => {
-            eprintln!("{} Warning: Cannot write identity audit log: {}", "⚠".yellow(), e);
+            eprintln!(
+                "{} Warning: Cannot write identity audit log: {}",
+                "⚠".yellow(),
+                e
+            );
             // Non-fatal — credential was issued, just audit write failed
         }
     }
@@ -171,16 +185,27 @@ pub fn run_identity_create(
     println!("{} Credential provisioned successfully", "✓".green().bold());
     println!("{}", "─".repeat(60).cyan());
     println!("  {} {}", "Agent:".bold(), agent_id.cyan());
-    println!("  {} {}", "Credential ID:".bold(), cred.credential_id.cyan());
+    println!(
+        "  {} {}",
+        "Credential ID:".bold(),
+        cred.credential_id.cyan()
+    );
     println!("  {} {}", "Scope:".bold(), scope.green());
     println!("  {} {}", "TTL:".bold(), ttl.yellow());
     println!(
         "  {} {}",
         "Expires at:".bold(),
-        cred.expires_at.format("%Y-%m-%d %H:%M:%S UTC").to_string().yellow()
+        cred.expires_at
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string()
+            .yellow()
     );
     println!("  {} {}", "Backend:".bold(), adapter.backend_name().cyan());
-    println!("  {} {} ms", "Issued in:".bold(), elapsed_ms.to_string().green());
+    println!(
+        "  {} {} ms",
+        "Issued in:".bold(),
+        elapsed_ms.to_string().green()
+    );
 
     if let Some(policy) = rotation_policy {
         println!("  {} {}", "Rotation Policy:".bold(), policy.yellow());

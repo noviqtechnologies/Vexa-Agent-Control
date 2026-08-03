@@ -47,13 +47,16 @@ fn parse_line(line: &str, line_num: usize) -> Result<Option<AuditEntry>, String>
 
     // Slow path: streaming parser recovers the first object from a line that
     // has unexpected trailing bytes (e.g. double-written entries during crash).
-    let mut stream = serde_json::Deserializer::from_str(trimmed)
-        .into_iter::<AuditEntry>();
+    let mut stream = serde_json::Deserializer::from_str(trimmed).into_iter::<AuditEntry>();
     if let Some(Ok(e)) = stream.next() {
         return Ok(Some(e));
     }
 
-    Err(format!("malformed JSON at line {}: {}", line_num + 1, trimmed))
+    Err(format!(
+        "malformed JSON at line {}: {}",
+        line_num + 1,
+        trimmed
+    ))
 }
 
 /// Advance the chain cursor over a `log_rotation_seed` entry.
@@ -80,7 +83,7 @@ fn handle_rotation_seed(entry: &AuditEntry, count: &mut u64, prev_hmac: &mut Str
 /// for that level of assurance.
 pub fn verify_chain(log_path: &Path) -> VerifyResult {
     let file = match std::fs::File::open(log_path) {
-        Ok(f)  => f,
+        Ok(f) => f,
         Err(e) => return VerifyResult::Error(format!("cannot open log file: {}", e)),
     };
 
@@ -90,18 +93,16 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
 
     for (line_num, raw) in reader.lines().enumerate() {
         let raw = match raw {
-            Ok(l)  => l,
+            Ok(l) => l,
             Err(e) => {
-                return VerifyResult::Error(
-                    format!("read error at line {}: {}", line_num + 1, e)
-                );
+                return VerifyResult::Error(format!("read error at line {}: {}", line_num + 1, e));
             }
         };
 
         let entry = match parse_line(&raw, line_num) {
-            Ok(None)     => continue,
-            Ok(Some(e))  => e,
-            Err(msg)     => return VerifyResult::Error(msg),
+            Ok(None) => continue,
+            Ok(Some(e)) => e,
+            Err(msg) => return VerifyResult::Error(msg),
         };
 
         // Rotation seed resets the per-segment index counter.
@@ -115,17 +116,14 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
         if entry.entry_index != count {
             return VerifyResult::Invalid {
                 entry_index: entry.entry_index,
-                reason:      format!(
-                    "expected entry_index {}, got {}",
-                    count, entry.entry_index
-                ),
+                reason: format!("expected entry_index {}, got {}", count, entry.entry_index),
             };
         }
 
         if entry.prev_hmac != prev_hmac {
             return VerifyResult::Invalid {
                 entry_index: entry.entry_index,
-                reason:      format!("prev_hmac mismatch at entry {}", entry.entry_index),
+                reason: format!("prev_hmac mismatch at entry {}", entry.entry_index),
             };
         }
 
@@ -148,7 +146,7 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
 /// `ts`, `reason`, `identity_sub`, `policy_hash`, etc. — is detected.
 pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> VerifyResult {
     let file = match std::fs::File::open(log_path) {
-        Ok(f)  => f,
+        Ok(f) => f,
         Err(e) => return VerifyResult::Error(format!("cannot open log file: {}", e)),
     };
 
@@ -158,18 +156,16 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
 
     for (line_num, raw) in reader.lines().enumerate() {
         let raw = match raw {
-            Ok(l)  => l,
+            Ok(l) => l,
             Err(e) => {
-                return VerifyResult::Error(
-                    format!("read error at line {}: {}", line_num + 1, e)
-                );
+                return VerifyResult::Error(format!("read error at line {}: {}", line_num + 1, e));
             }
         };
 
         let entry = match parse_line(&raw, line_num) {
-            Ok(None)     => continue,
-            Ok(Some(e))  => e,
-            Err(msg)     => return VerifyResult::Error(msg),
+            Ok(None) => continue,
+            Ok(Some(e)) => e,
+            Err(msg) => return VerifyResult::Error(msg),
         };
 
         // Rotation seed.
@@ -180,17 +176,14 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
         if entry.entry_index != count {
             return VerifyResult::Invalid {
                 entry_index: entry.entry_index,
-                reason:      format!(
-                    "expected entry_index {}, got {}",
-                    count, entry.entry_index
-                ),
+                reason: format!("expected entry_index {}, got {}", count, entry.entry_index),
             };
         }
 
         if entry.prev_hmac != prev_hmac {
             return VerifyResult::Invalid {
                 entry_index: entry.entry_index,
-                reason:      format!("prev_hmac mismatch at entry {}", entry.entry_index),
+                reason: format!("prev_hmac mismatch at entry {}", entry.entry_index),
             };
         }
 
@@ -200,23 +193,26 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
         verify_entry.hmac = None;
 
         let canonical = match serde_json::to_string(&verify_entry) {
-            Ok(s)  => s,
+            Ok(s) => s,
             Err(e) => {
-                return VerifyResult::Error(
-                    format!("re-serialisation error at entry {}: {}", count, e)
-                );
+                return VerifyResult::Error(format!(
+                    "re-serialisation error at entry {}: {}",
+                    count, e
+                ));
             }
         };
 
-        let mut mac =
-            HmacSha256::new_from_slice(session_secret).expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(session_secret).expect("HMAC key length is valid");
         mac.update(canonical.as_bytes());
         let computed = hex::encode(mac.finalize().into_bytes());
 
         if computed != stored_hmac {
             return VerifyResult::Invalid {
                 entry_index: verify_entry.entry_index,
-                reason:      format!("HMAC mismatch at entry {} — payload has been modified", verify_entry.entry_index),
+                reason: format!(
+                    "HMAC mismatch at entry {} — payload has been modified",
+                    verify_entry.entry_index
+                ),
             };
         }
 

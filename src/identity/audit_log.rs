@@ -110,7 +110,10 @@ impl IdentityAuditLogger {
     ///
     /// Reads the last entry to get the previous HMAC, computes the new HMAC,
     /// and appends the entry as a JSONL record.
-    pub fn append(&self, entry_builder: IdentityAuditEntryBuilder) -> Result<IdentityAuditEntry, String> {
+    pub fn append(
+        &self,
+        entry_builder: IdentityAuditEntryBuilder,
+    ) -> Result<IdentityAuditEntry, String> {
         // Ensure the directory exists
         if let Some(parent) = self.log_path.parent() {
             std::fs::create_dir_all(parent)
@@ -181,7 +184,11 @@ impl IdentityAuditLogger {
                 continue;
             }
             let entry: IdentityAuditEntry = serde_json::from_str(line).map_err(|e| {
-                format!("Cannot parse identity audit log at line {}: {}", line_num + 1, e)
+                format!(
+                    "Cannot parse identity audit log at line {}: {}",
+                    line_num + 1,
+                    e
+                )
             })?;
             entries.push(entry);
         }
@@ -325,8 +332,7 @@ fn compute_entry_hmac(
 ) -> String {
     // Key: derivation seed specific to identity audit log
     let key = b"agentwall-identity-audit-v2-hmac-key";
-    let mut mac = Hmac::<Sha256>::new_from_slice(key)
-        .expect("HMAC accepts any key size");
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key size");
 
     let data = format!(
         "{}:{}:{}:{}:{}:{}:{}",
@@ -350,15 +356,17 @@ mod tests {
         let dir = tempdir().unwrap();
         let logger = make_logger(dir.path());
 
-        let entry = logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Issued,
-            "test-agent",
-            "cred-001",
-            "read-only",
-            "operator",
-            "vault",
-            "Credential issued for test-agent",
-        )).unwrap();
+        let entry = logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "test-agent",
+                "cred-001",
+                "read-only",
+                "operator",
+                "vault",
+                "Credential issued for test-agent",
+            ))
+            .unwrap();
 
         assert_eq!(entry.index, 1);
         assert_eq!(entry.prev_hmac, "genesis");
@@ -374,15 +382,29 @@ mod tests {
         let dir = tempdir().unwrap();
         let logger = make_logger(dir.path());
 
-        logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Issued, "agent-a", "cred-001", "read-only",
-            "operator", "vault", "First entry",
-        )).unwrap();
+        logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "agent-a",
+                "cred-001",
+                "read-only",
+                "operator",
+                "vault",
+                "First entry",
+            ))
+            .unwrap();
 
-        logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Rotated, "agent-a", "cred-001", "read-only",
-            "operator", "vault", "Rotation",
-        )).unwrap();
+        logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Rotated,
+                "agent-a",
+                "cred-001",
+                "read-only",
+                "operator",
+                "vault",
+                "Rotation",
+            ))
+            .unwrap();
 
         let count = logger.verify_chain().unwrap();
         assert_eq!(count, 2);
@@ -393,10 +415,17 @@ mod tests {
         let dir = tempdir().unwrap();
         let logger = make_logger(dir.path());
 
-        logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Issued, "agent-a", "cred-001", "read-only",
-            "operator", "vault", "First entry",
-        )).unwrap();
+        logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "agent-a",
+                "cred-001",
+                "read-only",
+                "operator",
+                "vault",
+                "First entry",
+            ))
+            .unwrap();
 
         // Tamper with the log file
         let log_path = dir.path().join("identity_audit.log");
@@ -405,7 +434,10 @@ mod tests {
         std::fs::write(&log_path, tampered).unwrap();
 
         let result = logger.verify_chain();
-        assert!(result.is_err(), "Chain verification should fail after tampering");
+        assert!(
+            result.is_err(),
+            "Chain verification should fail after tampering"
+        );
     }
 
     #[test]
@@ -413,15 +445,29 @@ mod tests {
         let dir = tempdir().unwrap();
         let logger = make_logger(dir.path());
 
-        logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Issued, "agent-a", "cred-001", "read-only",
-            "operator", "vault", "Entry for agent-a",
-        )).unwrap();
+        logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "agent-a",
+                "cred-001",
+                "read-only",
+                "operator",
+                "vault",
+                "Entry for agent-a",
+            ))
+            .unwrap();
 
-        logger.append(IdentityAuditEntryBuilder::new(
-            IdentityEventType::Issued, "agent-b", "cred-002", "admin",
-            "operator", "vault", "Entry for agent-b",
-        )).unwrap();
+        logger
+            .append(IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "agent-b",
+                "cred-002",
+                "admin",
+                "operator",
+                "vault",
+                "Entry for agent-b",
+            ))
+            .unwrap();
 
         let agent_a_entries = logger.read_for_agent("agent-a").unwrap();
         assert_eq!(agent_a_entries.len(), 1);

@@ -22,33 +22,39 @@ async fn test_integration_full_pipeline_and_report() {
     let logger = AuditLogger::new(config).unwrap();
 
     // 1. Write several entries
-    logger.write_entry(
-        "integration-session",
-        "tool_allow",
-        "calculator",
-        Some(json!({"val": 42})),
-        None,
-        Some(0.1),
-        Some("user-123".to_string()),
-        Some("user-123@corp.com".to_string()),
-        Some("policy-sha-abc".to_string()),
-        None,
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "integration-session",
+            "tool_allow",
+            "calculator",
+            Some(json!({"val": 42})),
+            None,
+            Some(0.1),
+            Some("user-123".to_string()),
+            Some("user-123@corp.com".to_string()),
+            Some("policy-sha-abc".to_string()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
-    logger.write_entry(
-        "integration-session",
-        "tool_deny",
-        "bash",
-        Some(json!({"cmd": "rm -rf"})),
-        Some("unauthorized tool".to_string()),
-        Some(1.2),
-        Some("user-123".to_string()),
-        Some("user-123@corp.com".to_string()),
-        Some("policy-sha-abc".to_string()),
-        None,
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "integration-session",
+            "tool_deny",
+            "bash",
+            Some(json!({"cmd": "rm -rf"})),
+            Some("unauthorized tool".to_string()),
+            Some(1.2),
+            Some("user-123".to_string()),
+            Some("user-123@corp.com".to_string()),
+            Some("policy-sha-abc".to_string()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
     // Drop logger to flush background writer
     drop(logger);
@@ -71,7 +77,8 @@ async fn test_integration_full_pipeline_and_report() {
         "both",
         false, // dry_run
         vec![],
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(report.session_id, "integration-session");
     assert_eq!(report.summary.allowed, 1);
@@ -101,19 +108,22 @@ async fn test_integration_concurrent_sessions() {
         let logger_clone = logger.clone();
         let handle = tokio::spawn(async move {
             for i in 0..10 {
-                logger_clone.write_entry(
-                    "shared-session-id",
-                    "tool_allow",
-                    &format!("tool_{}_{}", t_idx, i),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ).await.unwrap();
+                logger_clone
+                    .write_entry(
+                        "shared-session-id",
+                        "tool_allow",
+                        &format!("tool_{}_{}", t_idx, i),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await
+                    .unwrap();
             }
         });
         handles.push(handle);
@@ -213,19 +223,22 @@ async fn test_integration_auth_failed_in_chain() {
     let logger = AuditLogger::new(config).unwrap();
 
     // Fix 1: Write an auth_failed event
-    logger.write_entry(
-        "auth-test-session",
-        "auth_failed",
-        "",
-        None,
-        Some("identity_token_missing remote_addr=127.0.0.1".to_string()),
-        None,
-        None,
-        None,
-        None,
-        Some("127.0.0.1".to_string()),
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "auth-test-session",
+            "auth_failed",
+            "",
+            None,
+            Some("identity_token_missing remote_addr=127.0.0.1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            Some("127.0.0.1".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
 
     drop(logger);
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -254,33 +267,39 @@ async fn test_integration_tampered_log() {
     let logger = AuditLogger::new(config).unwrap();
 
     // Write a couple of entries
-    logger.write_entry(
-        "tamper-session",
-        "tool_allow",
-        "read_file",
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "tamper-session",
+            "tool_allow",
+            "read_file",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
-    logger.write_entry(
-        "tamper-session",
-        "tool_allow",
-        "write_file",
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "tamper-session",
+            "tool_allow",
+            "write_file",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
     drop(logger);
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -324,19 +343,22 @@ async fn test_siem_export_failure_fallback_logs_locally() {
     let secret = config.session_secret.clone();
     let logger = AuditLogger::new(config).unwrap();
 
-    logger.write_entry(
-        "siem-fail-session",
-        "tool_allow",
-        "read_file",
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "siem-fail-session",
+            "tool_allow",
+            "read_file",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
     drop(logger);
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

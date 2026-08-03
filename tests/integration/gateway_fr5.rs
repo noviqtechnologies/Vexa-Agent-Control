@@ -33,8 +33,6 @@ fn make_deny_policy() -> CompiledPolicy {
     }
 }
 
-
-
 // ── AC-5.1: DENY returns correct JSON-RPC error structure ────────────────────
 
 #[test]
@@ -231,7 +229,7 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
     // Simulate: policy_loaded = true but compiled policy is None (degraded)
     // The engine should deny any tool call
     let policy = CompiledPolicy {
-        tools: vec![],   // empty — no tools allowed
+        tools: vec![], // empty — no tools allowed
         group_policies: vec![],
         max_calls_per_second: 0,
         identity_validator: None,

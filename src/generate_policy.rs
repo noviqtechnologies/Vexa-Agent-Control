@@ -107,7 +107,9 @@ fn looks_like_path(s: &str) -> bool {
         || s.starts_with("./")
         || s.starts_with("../")
         || s.starts_with('~')
-        || (s.len() >= 3 && s.chars().nth(1) == Some(':') && (s.chars().nth(2) == Some('\\') || s.chars().nth(2) == Some('/')))
+        || (s.len() >= 3
+            && s.chars().nth(1) == Some(':')
+            && (s.chars().nth(2) == Some('\\') || s.chars().nth(2) == Some('/')))
 }
 
 /// Flatten a JSON object into dot-notation key-value pairs up to `max_depth` levels.
@@ -274,33 +276,33 @@ pub fn generate_from_events(events: &[EgressEvent], decay_window_days: u32) -> S
                 let mut flat: Vec<(String, serde_json::Value)> = Vec::new();
                 flatten_json(&params_val, "", 0, 5, &mut flat);
 
-            for (key, val) in flat {
-                let stats = analysis.params.entry(key.clone()).or_default();
-                stats.presence_count += 1;
-                stats.types.insert(json_type_name(&val).to_string());
+                for (key, val) in flat {
+                    let stats = analysis.params.entry(key.clone()).or_default();
+                    stats.presence_count += 1;
+                    stats.types.insert(json_type_name(&val).to_string());
 
-                match &val {
-                    serde_json::Value::String(s) => {
-                        if s.len() > stats.max_raw_len {
-                            stats.max_raw_len = s.len();
+                    match &val {
+                        serde_json::Value::String(s) => {
+                            if s.len() > stats.max_raw_len {
+                                stats.max_raw_len = s.len();
+                            }
+                            if looks_like_path(s) {
+                                stats.has_path_like_value = true;
+                            }
+                            // Cap stored values at 200 to avoid memory issues
+                            if stats.string_values.len() < 200 {
+                                stats.string_values.push(s.clone());
+                            }
+                            scorer.observe(&tool_name, &key, s);
                         }
-                        if looks_like_path(s) {
-                            stats.has_path_like_value = true;
+                        serde_json::Value::Array(arr) if arr.len() > stats.max_raw_items => {
+                            stats.max_raw_items = arr.len();
                         }
-                        // Cap stored values at 200 to avoid memory issues
-                        if stats.string_values.len() < 200 {
-                            stats.string_values.push(s.clone());
-                        }
-                        scorer.observe(&tool_name, &key, s);
+                        serde_json::Value::Array(_) => {}
+                        _ => {}
                     }
-                    serde_json::Value::Array(arr) if arr.len() > stats.max_raw_items => {
-                        stats.max_raw_items = arr.len();
-                    }
-                    serde_json::Value::Array(_) => {}
-                    _ => {}
                 }
             }
-        }
         }
     }
 
@@ -309,8 +311,10 @@ pub fn generate_from_events(events: &[EgressEvent], decay_window_days: u32) -> S
     let global_last = events.iter().map(|e| e.timestamp_ns).max().unwrap_or(0);
 
     // Trim to date portion (first 10 chars of ISO 8601 timestamp) - we will just convert to datetime
-    let window_start_dt = chrono::DateTime::from_timestamp(global_first / 1_000_000_000, 0).unwrap_or_default();
-    let window_end_dt = chrono::DateTime::from_timestamp(global_last / 1_000_000_000, 0).unwrap_or_default();
+    let window_start_dt =
+        chrono::DateTime::from_timestamp(global_first / 1_000_000_000, 0).unwrap_or_default();
+    let window_end_dt =
+        chrono::DateTime::from_timestamp(global_last / 1_000_000_000, 0).unwrap_or_default();
     let window_start = window_start_dt.format("%Y-%m-%d").to_string();
     let window_end = window_end_dt.format("%Y-%m-%d").to_string();
 
@@ -369,10 +373,13 @@ pub fn generate_from_events(events: &[EgressEvent], decay_window_days: u32) -> S
         };
 
         // FR-4 Self-Healing: calculate confidence decay and stale status
-        let last_seen_ns = analysis.last_seen.and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+        let last_seen_ns = analysis
+            .last_seen
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
         let decay = ConfidenceDecay::calculate(last_seen_ns, decay_window_days);
         let stale = decay == 0.0;
-        
+
         let last_seen_str = if last_seen_ns > 0 {
             chrono::DateTime::from_timestamp(last_seen_ns / 1_000_000_000, 0)
                 .unwrap_or_default()
@@ -449,7 +456,10 @@ pub fn generate_from_events(events: &[EgressEvent], decay_window_days: u32) -> S
                         out.push_str("        # enum:\n");
                         for val in &unique_vals {
                             // Escape quotes in enum values
-                            out.push_str(&format!("        #  - \"{}\"\n", val.replace('"', "\\\"")));
+                            out.push_str(&format!(
+                                "        #  - \"{}\"\n",
+                                val.replace('"', "\\\"")
+                            ));
                         }
                     }
 
@@ -560,7 +570,7 @@ mod tests {
     fn test_with_headroom_applies_20_percent() {
         assert_eq!(with_headroom(100, 64), 120);
         assert_eq!(with_headroom(10, 64), 64); // floor wins
-        assert_eq!(with_headroom(0, 64), 64);  // floor on zero
+        assert_eq!(with_headroom(0, 64), 64); // floor on zero
     }
 
     #[test]
@@ -575,7 +585,10 @@ mod tests {
 
     #[test]
     fn test_generation_contains_observed_tool() {
-        let events = vec![make_event("read_file", "{\"path\": \"/workspace/foo.txt\"}")];
+        let events = vec![make_event(
+            "read_file",
+            "{\"path\": \"/workspace/foo.txt\"}",
+        )];
         let yaml = generate_from_events(&events, 30);
         assert!(yaml.contains("name: read_file"));
         assert!(yaml.contains("path"));

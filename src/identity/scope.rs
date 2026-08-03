@@ -67,7 +67,11 @@ pub fn run_identity_scope(agent_id: &str, tool_name: &str, allow: bool, _policy_
 
     // 3. Save the updated credential binding
     if let Err(e) = cred.save() {
-        eprintln!("{} Cannot save updated credential binding: {}", "✖".red(), e);
+        eprintln!(
+            "{} Cannot save updated credential binding: {}",
+            "✖".red(),
+            e
+        );
         return 1;
     }
 
@@ -93,7 +97,11 @@ pub fn run_identity_scope(agent_id: &str, tool_name: &str, allow: bool, _policy_
     audit_entry.tool_name = Some(tool_name.to_string());
 
     if let Err(e) = audit_logger.append(audit_entry) {
-        eprintln!("{} Warning: Cannot write scope audit entry: {}", "⚠".yellow(), e);
+        eprintln!(
+            "{} Warning: Cannot write scope audit entry: {}",
+            "⚠".yellow(),
+            e
+        );
     }
 
     // 5. Print result
@@ -103,7 +111,11 @@ pub fn run_identity_scope(agent_id: &str, tool_name: &str, allow: bool, _policy_
     println!("  {} {}", "Agent:".bold(), agent_id.cyan());
     println!("  {} {}", "Tool:".bold(), tool_name.cyan());
     println!("  {} {}", "Action:".bold(), action_str);
-    println!("  {} {}", "Credential ID:".bold(), cred.credential_id.dimmed());
+    println!(
+        "  {} {}",
+        "Credential ID:".bold(),
+        cred.credential_id.dimmed()
+    );
     println!("{}", "─".repeat(60).cyan());
 
     0

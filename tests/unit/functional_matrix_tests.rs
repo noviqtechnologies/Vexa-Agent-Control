@@ -25,7 +25,10 @@ tools:
             assert_eq!(policy.tools.len(), 1);
             assert_eq!(policy.tools[0].name, "ping");
         }
-        other => panic!("Expected Loaded policy, got: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Loaded policy, got: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -40,7 +43,10 @@ tools:
 "#;
     match load_policy_from_str(malformed_yaml, None) {
         PolicyLoadResult::Fatal { .. } => {}
-        other => panic!("Expected Fatal error for malformed YAML, got: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Fatal error for malformed YAML, got: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -54,7 +60,10 @@ tools: []
 "#;
     match load_policy_from_str(unknown_field_yaml, None) {
         PolicyLoadResult::Fatal { .. } => {}
-        other => panic!("Expected Fatal error for unknown top-level fields, got: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Fatal error for unknown top-level fields, got: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -88,7 +97,10 @@ tools:
         "text_processor",
         payload_file_empty.path().to_str().unwrap(),
     );
-    assert!(res_empty.is_ok(), "Empty string parameter should be valid for string type");
+    assert!(
+        res_empty.is_ok(),
+        "Empty string parameter should be valid for string type"
+    );
 
     // 2. Null input for required string field (Invalid)
     let payload_null = r#"{"input_text": null}"#;
@@ -100,7 +112,10 @@ tools:
         "text_processor",
         payload_file_null.path().to_str().unwrap(),
     );
-    assert!(res_null.is_err(), "Null value for required string field should fail validation");
+    assert!(
+        res_null.is_err(),
+        "Null value for required string field should fail validation"
+    );
 }
 
 #[test]
@@ -127,7 +142,10 @@ tools:
         "set_port",
         payload_file.path().to_str().unwrap(),
     );
-    assert!(res.is_err(), "String value passed to integer schema must fail validation");
+    assert!(
+        res.is_err(),
+        "String value passed to integer schema must fail validation"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +184,11 @@ tools:
             "read_file",
             payload_file.path().to_str().unwrap(),
         );
-        assert!(res.is_err(), "Path traversal payload '{}' must be rejected", payload);
+        assert!(
+            res.is_err(),
+            "Path traversal payload '{}' must be rejected",
+            payload
+        );
     }
 }
 
@@ -202,7 +224,11 @@ tools:
             "run_cmd",
             payload_file.path().to_str().unwrap(),
         );
-        assert!(res.is_err(), "Shell injection payload '{}' must be rejected", payload);
+        assert!(
+            res.is_err(),
+            "Shell injection payload '{}' must be rejected",
+            payload
+        );
     }
 }
 
@@ -238,7 +264,11 @@ tools:
             "query_user",
             payload_file.path().to_str().unwrap(),
         );
-        assert!(res.is_err(), "SQL injection payload '{}' must be rejected", payload);
+        assert!(
+            res.is_err(),
+            "SQL injection payload '{}' must be rejected",
+            payload
+        );
     }
 }
 
@@ -266,16 +296,19 @@ tools:
         "unlisted_dangerous_tool",
         payload_file.path().to_str().unwrap(),
     );
-    assert!(res.is_err(), "Unlisted tool must be denied under default_action: deny");
+    assert!(
+        res.is_err(),
+        "Unlisted tool must be denied under default_action: deny"
+    );
 }
 
 // ---------------------------------------------------------------------------
 // 5. DLP & Secret Scanning
 // ---------------------------------------------------------------------------
 
+use agentwall::policy::dlp::{DlpAction, DlpScanner};
+use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
 use serde_json::json;
-use agentwall::policy::dlp::{DlpScanner, DlpAction};
-use agentwall::policy::response_scanner::{ResponseScanner, ResponseScanConfig, ScanResult};
 
 #[test]
 fn test_matrix_dlp_secret_detection_and_redaction() {
@@ -341,7 +374,10 @@ fn test_matrix_response_scanner_secret_leak_prevention() {
     let scan_res = scanner.scan_response(&leaked_response, "read_db", &config);
     match scan_res {
         ScanResult::Block { findings } | ScanResult::Redact { findings } => {
-            assert!(!findings.is_empty(), "Response scanner must find leaked AWS key");
+            assert!(
+                !findings.is_empty(),
+                "Response scanner must find leaked AWS key"
+            );
         }
         other => panic!("Expected Block or Redact for secret leak, got: {:?}", other),
     }
@@ -385,6 +421,8 @@ async fn test_matrix_audit_logger_sql_injection_safe_storage() {
         )
         .await;
 
-    assert!(res.is_ok(), "Audit logger must handle malicious SQL strings safely");
+    assert!(
+        res.is_ok(),
+        "Audit logger must handle malicious SQL strings safely"
+    );
 }
-

@@ -1,22 +1,25 @@
 //! Generic wrap/unwrap orchestration for standard IDEs (Cursor, VS Code, etc.)
 
+use colored::*;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use colored::*;
 
-use super::{WrapError, backup, transformer};
-use super::claude::{WrapResult, UnwrapResult};
+use super::claude::{UnwrapResult, WrapResult};
+use super::{backup, transformer, WrapError};
 
-pub fn wrap_generic(ide_name: &str, config_path: PathBuf, dry_run: bool) -> Result<WrapResult, WrapError> {
+pub fn wrap_generic(
+    ide_name: &str,
+    config_path: PathBuf,
+    dry_run: bool,
+) -> Result<WrapResult, WrapError> {
     if !config_path.exists() {
         return Err(WrapError::ConfigNotFound(config_path.display().to_string()));
     }
 
-    let raw = fs::read_to_string(&config_path)
-        .map_err(WrapError::Io)?;
-    let config: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+    let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
+    let config: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
 
     if config.get("mcpServers").is_none() {
         return Err(WrapError::NoMcpServers);
@@ -27,7 +30,8 @@ pub fn wrap_generic(ide_name: &str, config_path: PathBuf, dry_run: bool) -> Resu
         .to_string_lossy()
         .to_string();
 
-    let servers = config["mcpServers"].as_object()
+    let servers = config["mcpServers"]
+        .as_object()
         .ok_or(WrapError::NoMcpServers)?;
     if !servers.is_empty() && servers.values().all(transformer::is_already_wrapped) {
         return Err(WrapError::AlreadyWrapped);
@@ -37,9 +41,23 @@ pub fn wrap_generic(ide_name: &str, config_path: PathBuf, dry_run: bool) -> Resu
     let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentwall_bin)?;
 
     if dry_run {
-        println!("{} {}", "🔍".blue(), format!("DRY-RUN MODE — no changes will be written for {}", ide_name).yellow().bold());
-        println!("{} Config: {}", "  →".dimmed(), config_path.display().to_string().cyan());
-        println!("{} Servers that would be wrapped: {}", "  →".dimmed(), wrapped_count.to_string().green());
+        println!(
+            "{} {}",
+            "🔍".blue(),
+            format!("DRY-RUN MODE — no changes will be written for {}", ide_name)
+                .yellow()
+                .bold()
+        );
+        println!(
+            "{} Config: {}",
+            "  →".dimmed(),
+            config_path.display().to_string().cyan()
+        );
+        println!(
+            "{} Servers that would be wrapped: {}",
+            "  →".dimmed(),
+            wrapped_count.to_string().green()
+        );
         return Ok(WrapResult {
             config_path,
             backup_path: PathBuf::from("<dry-run: no backup created>"),
@@ -56,11 +74,13 @@ pub fn wrap_generic(ide_name: &str, config_path: PathBuf, dry_run: bool) -> Resu
 
     let output_str = serde_json::to_string_pretty(&modified)
         .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
-    serde_json::from_str::<serde_json::Value>(&output_str)
-        .map_err(|e| {
-            let _ = fs::copy(&backup_path, &config_path);
-            WrapError::InvalidJson(format!("Transform produced invalid JSON: {}. Restored from backup.", e))
-        })?;
+    serde_json::from_str::<serde_json::Value>(&output_str).map_err(|e| {
+        let _ = fs::copy(&backup_path, &config_path);
+        WrapError::InvalidJson(format!(
+            "Transform produced invalid JSON: {}. Restored from backup.",
+            e
+        ))
+    })?;
 
     atomic_write(&config_path, &output_str)?;
 
@@ -72,7 +92,11 @@ pub fn wrap_generic(ide_name: &str, config_path: PathBuf, dry_run: bool) -> Resu
     })
 }
 
-pub fn unwrap_generic(ide_name: &str, config_path: PathBuf, force: bool) -> Result<UnwrapResult, WrapError> {
+pub fn unwrap_generic(
+    ide_name: &str,
+    config_path: PathBuf,
+    force: bool,
+) -> Result<UnwrapResult, WrapError> {
     if !config_path.exists() {
         return Err(WrapError::ConfigNotFound(config_path.display().to_string()));
     }
@@ -83,11 +107,21 @@ pub fn unwrap_generic(ide_name: &str, config_path: PathBuf, force: bool) -> Resu
         Some(backup_path) => {
             fs::copy(&backup_path, &config_path)?;
             fs::remove_file(&backup_path)?;
-            Ok(UnwrapResult { config_path, backup_path })
+            Ok(UnwrapResult {
+                config_path,
+                backup_path,
+            })
         }
         None if force => {
-            println!("{} No backup found for {}. Manual cleanup instructions:", "⚠".yellow().bold(), ide_name);
-            println!("\nEdit {} and restore each mcpServer entry.", config_path.display().to_string().cyan());
+            println!(
+                "{} No backup found for {}. Manual cleanup instructions:",
+                "⚠".yellow().bold(),
+                ide_name
+            );
+            println!(
+                "\nEdit {} and restore each mcpServer entry.",
+                config_path.display().to_string().cyan()
+            );
             Err(WrapError::NoBackupFound)
         }
         None => Err(WrapError::NoBackupFound),
@@ -95,17 +129,47 @@ pub fn unwrap_generic(ide_name: &str, config_path: PathBuf, force: bool) -> Resu
 }
 
 pub fn print_wrap_summary_generic(ide_name: &str, result: &WrapResult) {
-    println!("{} {}", "✔".green().bold(), format!("AgentWall wrapped {}.", ide_name).green().bold());
-    println!("  {} Config:            {}", "→".dimmed(), result.config_path.display().to_string().cyan());
-    println!("  {} Backup:            {}", "→".dimmed(), result.backup_path.display().to_string().cyan());
-    println!("  {} Servers wrapped:   {}", "→".dimmed(), result.servers_wrapped.to_string().green());
+    println!(
+        "{} {}",
+        "✔".green().bold(),
+        format!("AgentWall wrapped {}.", ide_name).green().bold()
+    );
+    println!(
+        "  {} Config:            {}",
+        "→".dimmed(),
+        result.config_path.display().to_string().cyan()
+    );
+    println!(
+        "  {} Backup:            {}",
+        "→".dimmed(),
+        result.backup_path.display().to_string().cyan()
+    );
+    println!(
+        "  {} Servers wrapped:   {}",
+        "→".dimmed(),
+        result.servers_wrapped.to_string().green()
+    );
     println!("\n  {} Restart {} to apply changes.", "ℹ".blue(), ide_name);
 }
 
 pub fn print_unwrap_summary_generic(ide_name: &str, result: &UnwrapResult) {
-    println!("{} {}", "✔".green().bold(), format!("AgentWall removed from {}.", ide_name).green().bold());
-    println!("  {} Config restored:   {}", "→".dimmed(), result.config_path.display().to_string().cyan());
-    println!("  {} Backup removed:    {}", "→".dimmed(), result.backup_path.display().to_string().dimmed());
+    println!(
+        "{} {}",
+        "✔".green().bold(),
+        format!("AgentWall removed from {}.", ide_name)
+            .green()
+            .bold()
+    );
+    println!(
+        "  {} Config restored:   {}",
+        "→".dimmed(),
+        result.config_path.display().to_string().cyan()
+    );
+    println!(
+        "  {} Backup removed:    {}",
+        "→".dimmed(),
+        result.backup_path.display().to_string().dimmed()
+    );
     println!("\n  {} Restart {} to apply changes.", "ℹ".blue(), ide_name);
 }
 

@@ -12,7 +12,7 @@
 #[cfg(test)]
 mod tests {
     use crate::policy::engine::{
-        CompiledGroupPolicy, CompiledPolicy, CompiledTool, CompiledParam, EvalResult,
+        CompiledGroupPolicy, CompiledParam, CompiledPolicy, CompiledTool, EvalResult,
     };
     use crate::policy::loader::load_policy_from_str;
     use serde_json::json;
@@ -80,7 +80,11 @@ mod tests {
         }
     }
 
-    fn make_group_policy(id: &str, claims: Vec<&str>, tools: Vec<CompiledTool>) -> CompiledGroupPolicy {
+    fn make_group_policy(
+        id: &str,
+        claims: Vec<&str>,
+        tools: Vec<CompiledTool>,
+    ) -> CompiledGroupPolicy {
         CompiledGroupPolicy {
             id: id.to_string(),
             claims: claims.into_iter().map(|s| s.to_string()).collect(),
@@ -116,7 +120,10 @@ mod tests {
         );
 
         let result = policy.evaluate("read_file", &json!({}), None, &["engineering".to_string()]);
-        assert!(matches!(result, EvalResult::Allow { .. }), "Expected Allow for group member");
+        assert!(
+            matches!(result, EvalResult::Allow { .. }),
+            "Expected Allow for group member"
+        );
     }
 
     // ─── Test 2: Non-member gets not_in_policy deny ───────────────────────────
@@ -135,7 +142,8 @@ mod tests {
         let result = policy.evaluate("read_file", &json!({}), None, &["finance".to_string()]);
         assert!(
             matches!(&result, EvalResult::Deny { reason_code, .. } if reason_code == "not_in_policy"),
-            "Expected not_in_policy deny for non-member, got: {:?}", result,
+            "Expected not_in_policy deny for non-member, got: {:?}",
+            result,
         );
     }
 
@@ -147,8 +155,16 @@ mod tests {
         let policy = base_policy(
             vec![],
             vec![
-                make_group_policy("allow-grp", vec!["engineering"], vec![allow_tool("write_file")]),
-                make_group_policy("deny-grp", vec!["contractors"], vec![deny_tool("write_file")]),
+                make_group_policy(
+                    "allow-grp",
+                    vec!["engineering"],
+                    vec![allow_tool("write_file")],
+                ),
+                make_group_policy(
+                    "deny-grp",
+                    vec!["contractors"],
+                    vec![deny_tool("write_file")],
+                ),
             ],
         );
 
@@ -156,7 +172,8 @@ mod tests {
         let result = policy.evaluate("write_file", &json!({}), None, &groups);
         assert!(
             matches!(&result, EvalResult::Deny { reason_code, .. } if reason_code == "default_deny"),
-            "Deny-overrides failed: expected default_deny, got: {:?}", result,
+            "Deny-overrides failed: expected default_deny, got: {:?}",
+            result,
         );
     }
 
@@ -253,7 +270,10 @@ mod tests {
             None,
             &["readers".to_string()],
         );
-        assert!(matches!(allow_result, EvalResult::Allow { .. }), "SELECT should be allowed");
+        assert!(
+            matches!(allow_result, EvalResult::Allow { .. }),
+            "SELECT should be allowed"
+        );
 
         // Disallowed value
         let deny_result = policy.evaluate(
@@ -264,7 +284,8 @@ mod tests {
         );
         assert!(
             matches!(&deny_result, EvalResult::Deny { reason_code, .. } if reason_code == "param_pattern_mismatch"),
-            "DELETE should be denied, got: {:?}", deny_result,
+            "DELETE should be denied, got: {:?}",
+            deny_result,
         );
     }
 
@@ -289,7 +310,10 @@ tools: []
 "#;
         let result = load_policy_from_str(yaml, None);
         assert!(
-            matches!(result, crate::policy::loader::PolicyLoadResult::Loaded { .. }),
+            matches!(
+                result,
+                crate::policy::loader::PolicyLoadResult::Loaded { .. }
+            ),
             "Policy with groups block should load cleanly"
         );
 

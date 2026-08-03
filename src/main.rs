@@ -4,13 +4,13 @@
 use agentwall::audit;
 use agentwall::check;
 use agentwall::cli;
+use agentwall::identity; // FR-22
 use agentwall::init;
 use agentwall::kill;
 use agentwall::policy;
 use agentwall::promote;
 use agentwall::proxy;
 use agentwall::report;
-use agentwall::identity; // FR-22
 use agentwall::{log_error, log_warn};
 
 use colored::*;
@@ -31,7 +31,7 @@ use proxy::handler::ProxyState;
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    
+
     let suppress_banner = matches!(
         &cli.command,
         Commands::Report { .. }
@@ -149,10 +149,10 @@ async fn main() {
             gateway.as_deref(),
             oidc_token.as_deref(),
         ),
-        Commands::Promote { policy, key } => {
-            promote::run_promote(&policy, key.as_deref())
+        Commands::Promote { policy, key } => promote::run_promote(&policy, key.as_deref()),
+        Commands::VerifyLog { log_path, key_file } => {
+            run_verify_log(&log_path, key_file.as_deref())
         }
-        Commands::VerifyLog { log_path, key_file } => run_verify_log(&log_path, key_file.as_deref()),
         Commands::Report {
             log_path,
             output,
@@ -162,18 +162,30 @@ async fn main() {
         Commands::Init { target } => init::run_init(&target),
         // FR-22: Identity subcommand dispatch
         Commands::Identity { command } => match command {
-            cli::IdentityCommands::Create { agent, scope, ttl, rotation_policy } => {
-                identity::run_identity(identity::IdentityCommand::Create {
-                    agent, scope, ttl, rotation_policy
-                })
-            }
+            cli::IdentityCommands::Create {
+                agent,
+                scope,
+                ttl,
+                rotation_policy,
+            } => identity::run_identity(identity::IdentityCommand::Create {
+                agent,
+                scope,
+                ttl,
+                rotation_policy,
+            }),
             cli::IdentityCommands::Rotate { agent, drain_secs } => {
                 identity::run_identity(identity::IdentityCommand::Rotate { agent, drain_secs })
             }
             cli::IdentityCommands::Audit { agent, verify } => {
                 identity::run_identity(identity::IdentityCommand::Audit { agent, verify })
             }
-            cli::IdentityCommands::Scope { agent, tool, allow, deny, policy } => {
+            cli::IdentityCommands::Scope {
+                agent,
+                tool,
+                allow,
+                deny,
+                policy,
+            } => {
                 // Fix AW-BUG-005: require exactly one of --allow or --deny.
                 // Previous logic: allow || !deny evaluated to true when both false,
                 // silently creating ALLOW rules without explicit intent.
@@ -186,20 +198,28 @@ async fn main() {
                     2
                 } else {
                     identity::run_identity(identity::IdentityCommand::Scope {
-                        agent, tool, allow, policy_path: policy
+                        agent,
+                        tool,
+                        allow,
+                        policy_path: policy,
                     })
                 }
             }
             cli::IdentityCommands::Inspect { credential } => {
-                identity::run_identity(identity::IdentityCommand::Inspect { credential_id: credential })
+                identity::run_identity(identity::IdentityCommand::Inspect {
+                    credential_id: credential,
+                })
             }
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
         Commands::Status => agentwall::wrap::run_status(),
         Commands::Watch { all, target } => agentwall::wrap::run_watch(all, target),
-        Commands::StdioProxy { args, scan_responses, block_on_secrets, max_scan_bytes } => {
-            run_stdio_proxy(args, scan_responses, block_on_secrets, max_scan_bytes).await
-        }
+        Commands::StdioProxy {
+            args,
+            scan_responses,
+            block_on_secrets,
+            max_scan_bytes,
+        } => run_stdio_proxy(args, scan_responses, block_on_secrets, max_scan_bytes).await,
         Commands::Dev {
             listen,
             mcp_url,
@@ -207,31 +227,30 @@ async fn main() {
             no_browser,
             enforce,
             args,
-        } => {
-            run_dev(listen, mcp_url, stdio, no_browser, enforce, args).await
-        }
-        Commands::GeneratePolicy { output, decay_window } => {
-            run_generate_policy(output, decay_window).await
-        }
-        Commands::Validate { policy, tool, payload } => {
-            match agentwall::validate::execute(&policy, &tool, &payload) {
-                Ok(_) => 0,
-                Err(e) => {
-                    eprintln!("{}", e);
-                    1
-                }
+        } => run_dev(listen, mcp_url, stdio, no_browser, enforce, args).await,
+        Commands::GeneratePolicy {
+            output,
+            decay_window,
+        } => run_generate_policy(output, decay_window).await,
+        Commands::Validate {
+            policy,
+            tool,
+            payload,
+        } => match agentwall::validate::execute(&policy, &tool, &payload) {
+            Ok(_) => 0,
+            Err(e) => {
+                eprintln!("{}", e);
+                1
             }
-        }
+        },
 
-        Commands::Lint { policy } => {
-            match agentwall::lint::execute(&policy) {
-                Ok(code) => code,
-                Err(e) => {
-                    eprintln!("Lint failed: {}", e);
-                    1
-                }
+        Commands::Lint { policy } => match agentwall::lint::execute(&policy) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("Lint failed: {}", e);
+                1
             }
-        }
+        },
     };
 
     std::process::exit(exit_code);
@@ -263,8 +282,12 @@ async fn run_stdio_proxy(
     let session_id = uuid::Uuid::new_v4().to_string();
 
     // Resolve log path relative to binary (ensures writability when run from Claude)
-    let bin_path = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentwall.exe"));
-    let log_path = bin_path.parent().unwrap_or(std::path::Path::new(".")).join("audit.log");
+    let bin_path =
+        std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentwall.exe"));
+    let log_path = bin_path
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("audit.log");
 
     let audit_logger = match AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
         log_path,
@@ -281,25 +304,46 @@ async fn run_stdio_proxy(
         }
     };
 
-    let safe_mode_scanner = Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
-    let response_scanner = Arc::new(policy::response_scanner::ResponseScanner::new().expect("Failed to compile ResponseScanner regexes"));
-    
+    let safe_mode_scanner =
+        Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
+    let response_scanner = Arc::new(
+        policy::response_scanner::ResponseScanner::new()
+            .expect("Failed to compile ResponseScanner regexes"),
+    );
+
     let response_scan_config = policy::response_scanner::ResponseScanConfig {
         enabled: scan_responses,
         block_mode: block_on_secrets,
         dry_run: false,
         max_scan_bytes,
         scannable_tools: vec![
-            "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(), 
-            "run_command".to_string(), "http_get".to_string(), "http_post".to_string(), 
-            "list_files".to_string(), "database_query".to_string(),
-            "bash".to_string(), "execute".to_string(), "terminal".to_string(), 
-            "read".to_string(), "cat".to_string(), "shell".to_string(), 
-            "leak_secret".to_string(), "secret".to_string()
+            "read_file".to_string(),
+            "exec_command".to_string(),
+            "run_shell".to_string(),
+            "run_command".to_string(),
+            "http_get".to_string(),
+            "http_post".to_string(),
+            "list_files".to_string(),
+            "database_query".to_string(),
+            "bash".to_string(),
+            "execute".to_string(),
+            "terminal".to_string(),
+            "read".to_string(),
+            "cat".to_string(),
+            "shell".to_string(),
+            "leak_secret".to_string(),
+            "secret".to_string(),
         ],
         safe_tools: vec![
-            "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string(),
-            "calculator".to_string(), "weather".to_string(), "datetime".to_string(), "search".to_string(), "grep".to_string()
+            "tools/list".to_string(),
+            "get_schema".to_string(),
+            "get_metadata".to_string(),
+            "ping".to_string(),
+            "calculator".to_string(),
+            "weather".to_string(),
+            "datetime".to_string(),
+            "search".to_string(),
+            "grep".to_string(),
         ],
     };
 
@@ -322,9 +366,16 @@ async fn run_stdio_proxy(
         db_manager,
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes")),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
-        injection_scanner: std::sync::Arc::new(agentwall::policy::injection::InjectionScanner::new().expect("Failed to compile Injection regexes")),
+        dlp_scanner: std::sync::Arc::new(
+            agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+        ),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
+        injection_scanner: std::sync::Arc::new(
+            agentwall::policy::injection::InjectionScanner::new()
+                .expect("Failed to compile Injection regexes"),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -335,14 +386,19 @@ async fn run_stdio_proxy(
         metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
-        credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: None,
         pricing_table: None,
-        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env()
+            .map(Arc::new),
         listen_is_loopback: true,
-        policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        policy_read_secret: std::env::var("POLICY_READ_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
     });
@@ -350,7 +406,7 @@ async fn run_stdio_proxy(
     let mut parts = args.clone();
     let program = parts.remove(0);
     let (resolved_program, prefix_args) = proxy::stdio::resolve_command(&program);
-    
+
     let mut final_args = prefix_args;
     final_args.extend(parts);
 
@@ -414,94 +470,122 @@ async fn run_start(
     //    a) DASHBOARD_API_URL is set  → fetch active policy from PostgreSQL via dashboard API
     //    b) --policy <file> is set    → load from local YAML file (fallback / dev override)
     //    c) neither                   → Safe Mode (no policy enforcement, audit only)
-    let dashboard_api_url = std::env::var("DASHBOARD_API_URL").ok().filter(|s| !s.is_empty());
-    let policy_read_secret_env = std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty());
+    let dashboard_api_url = std::env::var("DASHBOARD_API_URL")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let policy_read_secret_env = std::env::var("POLICY_READ_SECRET")
+        .ok()
+        .filter(|s| !s.is_empty());
 
-    let (compiled_policy, _policy_hash, _warnings, policy_loaded) = if let Some(ref api_url) = dashboard_api_url {
-        // (a) Fetch from dashboard API — policy is stored in PostgreSQL
-        print!("{} Fetching policy from dashboard API ({})... ", "ℹ".blue(), api_url.yellow());
-        let remote_result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(
-                agentwall::policy::remote::load_remote_policy(api_url, policy_read_secret_env.as_deref())
-            )
-        });
-        match remote_result {
-            PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
-                println!("{}", "OK".green().bold());
-                (Some(policy), raw_hash, warnings, true)
-            }
-            PolicyLoadResult::Degraded { reason } => {
-                // No policy in DB yet — try file fallback
-                println!("{} ({})", "NO POLICY IN DB".yellow().bold(), reason);
-                if let Some(ref path) = policy_path {
-                    print!("{} Falling back to policy file {}... ", "ℹ".blue(), path.yellow());
-                    match load_policy(Path::new(path), oidc_issuer.clone()) {
-                        PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
-                            println!("{}", "OK".green().bold());
-                            (Some(policy), raw_hash, warnings, true)
+    let (compiled_policy, _policy_hash, _warnings, policy_loaded) =
+        if let Some(ref api_url) = dashboard_api_url {
+            // (a) Fetch from dashboard API — policy is stored in PostgreSQL
+            print!(
+                "{} Fetching policy from dashboard API ({})... ",
+                "ℹ".blue(),
+                api_url.yellow()
+            );
+            let remote_result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    agentwall::policy::remote::load_remote_policy(
+                        api_url,
+                        policy_read_secret_env.as_deref(),
+                    ),
+                )
+            });
+            match remote_result {
+                PolicyLoadResult::Loaded {
+                    policy,
+                    raw_hash,
+                    warnings,
+                } => {
+                    println!("{}", "OK".green().bold());
+                    (Some(policy), raw_hash, warnings, true)
+                }
+                PolicyLoadResult::Degraded { reason } => {
+                    // No policy in DB yet — try file fallback
+                    println!("{} ({})", "NO POLICY IN DB".yellow().bold(), reason);
+                    if let Some(ref path) = policy_path {
+                        print!(
+                            "{} Falling back to policy file {}... ",
+                            "ℹ".blue(),
+                            path.yellow()
+                        );
+                        match load_policy(Path::new(path), oidc_issuer.clone()) {
+                            PolicyLoadResult::Loaded {
+                                policy,
+                                raw_hash,
+                                warnings,
+                            } => {
+                                println!("{}", "OK".green().bold());
+                                (Some(policy), raw_hash, warnings, true)
+                            }
+                            PolicyLoadResult::Degraded { reason } => {
+                                println!("{}", "DEGRADED".yellow().bold());
+                                log_warn!("policy_degraded", "reason": reason);
+                                (None, "sha256:none".to_string(), vec![], false)
+                            }
+                            PolicyLoadResult::Fatal { error } => {
+                                println!("{}", "FAILED".red().bold());
+                                log_error!("startup_error", "reason": error.to_string());
+                                return 1;
+                            }
                         }
-                        PolicyLoadResult::Degraded { reason } => {
-                            println!("{}", "DEGRADED".yellow().bold());
-                            log_warn!("policy_degraded", "reason": reason);
-                            (None, "sha256:none".to_string(), vec![], false)
-                        }
-                        PolicyLoadResult::Fatal { error } => {
-                            println!("{}", "FAILED".red().bold());
-                            log_error!("startup_error", "reason": error.to_string());
-                            return 1;
-                        }
+                    } else {
+                        println!(
+                            "{} {}",
+                            "🛡".green(),
+                            "Safe Mode enabled — no policy in DB and no --policy file.".green()
+                        );
+                        (None, "sha256:none".to_string(), vec![], false)
                     }
-                } else {
-                    println!(
-                        "{} {}",
-                        "🛡".green(),
-                        "Safe Mode enabled — no policy in DB and no --policy file.".green()
-                    );
-                    (None, "sha256:none".to_string(), vec![], false)
+                }
+                PolicyLoadResult::Fatal { error } => {
+                    println!("{}", "FAILED".red().bold());
+                    log_error!("startup_error", "reason": error.to_string());
+                    return 1;
                 }
             }
-            PolicyLoadResult::Fatal { error } => {
-                println!("{}", "FAILED".red().bold());
-                log_error!("startup_error", "reason": error.to_string());
-                return 1;
+        } else if let Some(ref path) = policy_path {
+            // (b) Local YAML file — used when no dashboard API is configured
+            print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
+            match load_policy(Path::new(path), oidc_issuer) {
+                PolicyLoadResult::Loaded {
+                    policy,
+                    raw_hash,
+                    warnings,
+                } => {
+                    println!("{}", "OK".green().bold());
+                    (Some(policy), raw_hash, warnings, true)
+                }
+                PolicyLoadResult::Degraded { reason } => {
+                    println!("{}", "DEGRADED".yellow().bold());
+                    log_warn!("policy_degraded", "reason": reason);
+                    (None, "sha256:none".to_string(), vec![], false)
+                }
+                PolicyLoadResult::Fatal { error } => {
+                    println!("{}", "FAILED".red().bold());
+                    log_error!("startup_error", "reason": error.to_string());
+                    return 1;
+                }
             }
-        }
-    } else if let Some(ref path) = policy_path {
-        // (b) Local YAML file — used when no dashboard API is configured
-        print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
-        match load_policy(Path::new(path), oidc_issuer) {
-            PolicyLoadResult::Loaded { policy, raw_hash, warnings } => {
-                println!("{}", "OK".green().bold());
-                (Some(policy), raw_hash, warnings, true)
+        } else {
+            // (c) Safe Mode — no dashboard API, no policy file
+            println!(
+                "{} {}",
+                "🛡".green(),
+                "Safe Mode v1 enabled (Audit mode recommended). Blocking high-risk secrets & exfil."
+                    .green()
+            );
+            if !dry_run {
+                println!("{} {}", "ℹ".blue(), "Run with --dry-run to preview.".blue());
             }
-            PolicyLoadResult::Degraded { reason } => {
-                println!("{}", "DEGRADED".yellow().bold());
-                log_warn!("policy_degraded", "reason": reason);
-                (None, "sha256:none".to_string(), vec![], false)
-            }
-            PolicyLoadResult::Fatal { error } => {
-                println!("{}", "FAILED".red().bold());
-                log_error!("startup_error", "reason": error.to_string());
-                return 1;
-            }
-        }
-    } else {
-        // (c) Safe Mode — no dashboard API, no policy file
-        println!(
-            "{} {}",
-            "🛡".green(),
-            "Safe Mode v1 enabled (Audit mode recommended). Blocking high-risk secrets & exfil.".green()
-        );
-        if !dry_run {
-            println!("{} {}", "ℹ".blue(), "Run with --dry-run to preview.".blue());
-        }
-        (None, "sha256:none".to_string(), vec![], false)
-    };
-
-
+            (None, "sha256:none".to_string(), vec![], false)
+        };
 
     // Initialize dashboard client early for SpendLedger sync
-    let dashboard_client = agentwall::control_plane_client::client::DashboardClient::from_env().map(std::sync::Arc::new);
+    let dashboard_client = agentwall::control_plane_client::client::DashboardClient::from_env()
+        .map(std::sync::Arc::new);
 
     // --- FR-120: Spend Caps License Validation ---
     let spend_ledger = if let Some(ref policy) = compiled_policy {
@@ -514,19 +598,26 @@ async fn run_start(
                         std::process::exit(1);
                     }
                 };
-                
+
                 let validator = match agentwall::license::LicenseValidator::new() {
                     Ok(v) => v,
                     Err(e) => {
-                        eprintln!("{} Failed to initialize license validator: {}", "✖".red(), e);
+                        eprintln!(
+                            "{} Failed to initialize license validator: {}",
+                            "✖".red(),
+                            e
+                        );
                         std::process::exit(1);
                     }
                 };
-                
+
                 match validator.validate(license_key) {
                     Ok(license) => {
                         if !validator.has_feature(&license, "spend_caps") {
-                            eprintln!("{} spend_caps is not enabled in your current license.", "✖".red());
+                            eprintln!(
+                                "{} spend_caps is not enabled in your current license.",
+                                "✖".red()
+                            );
                             std::process::exit(1);
                         }
                         agentwall::logging::log_event(
@@ -548,13 +639,21 @@ async fn run_start(
                                     "days_remaining": days_until_expiry
                                 }),
                             );
-                            println!("{} License expires in {} days. Renew at noviq.com/license", "⚠".yellow(), days_until_expiry);
+                            println!(
+                                "{} License expires in {} days. Renew at noviq.com/license",
+                                "⚠".yellow(),
+                                days_until_expiry
+                            );
                         }
                     }
                     Err(e) => {
                         match e {
                             agentwall::license::LicenseError::Expired { expired_at } => {
-                                eprintln!("{} License expired at {}. Renew at noviq.com/license.", "✖".red(), expired_at);
+                                eprintln!(
+                                    "{} License expired at {}. Renew at noviq.com/license.",
+                                    "✖".red(),
+                                    expired_at
+                                );
                             }
                             _ => {
                                 eprintln!("{} Invalid license: {}", "✖".red(), e);
@@ -563,7 +662,7 @@ async fn run_start(
                         std::process::exit(1);
                     }
                 }
-                
+
                 if caps.admin_api {
                     agentwall::logging::log_event(
                         agentwall::logging::Level::Info,
@@ -578,10 +677,15 @@ async fn run_start(
                             "location": "~/.agentwall/"
                         }),
                     );
-                    println!("{} Spend Caps Admin API enabled. Local durable PII store activated.", "ℹ".blue());
+                    println!(
+                        "{} Spend Caps Admin API enabled. Local durable PII store activated.",
+                        "ℹ".blue()
+                    );
                 }
 
-                Some(std::sync::Arc::new(agentwall::spend::SpendLedger::init(dashboard_client.clone())))
+                Some(std::sync::Arc::new(agentwall::spend::SpendLedger::init(
+                    dashboard_client.clone(),
+                )))
             } else {
                 None
             }
@@ -656,7 +760,11 @@ async fn run_start(
         }
     };
 
-    println!("{} Proxy session initialized: {}", "✓".green(), session_id.cyan());
+    println!(
+        "{} Proxy session initialized: {}",
+        "✓".green(),
+        session_id.cyan()
+    );
 
     // Build proxy state
     let rate_limit_val = rate_limit.unwrap_or_else(|| {
@@ -666,33 +774,54 @@ async fn run_start(
             .unwrap_or(0)
     });
 
-    let safe_mode_scanner = Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
+    let safe_mode_scanner =
+        Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
     println!(
         "{} Safe Mode v1 active — {} rules loaded. Run with {} to preview.",
         "✔".green(),
         safe_mode_scanner.rule_count.to_string().cyan(),
         "--dry-run".yellow()
     );
-    
+
     // FR-303b: Initialize response scanner
-    let response_scanner = Arc::new(policy::response_scanner::ResponseScanner::new().expect("Failed to compile ResponseScanner regexes"));
-    
+    let response_scanner = Arc::new(
+        policy::response_scanner::ResponseScanner::new()
+            .expect("Failed to compile ResponseScanner regexes"),
+    );
+
     let (sc_tools, sf_tools) = if let Some(p) = &compiled_policy {
         (p.scannable_tools.clone(), p.safe_tools.clone())
     } else {
         (
             vec![
-                "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(), 
-                "run_command".to_string(), "http_get".to_string(), "http_post".to_string(), 
-                "list_files".to_string(), "database_query".to_string(),
-                "bash".to_string(), "execute".to_string(), "terminal".to_string(), 
-                "read".to_string(), "cat".to_string(), "shell".to_string(), 
-                "leak_secret".to_string(), "secret".to_string()
+                "read_file".to_string(),
+                "exec_command".to_string(),
+                "run_shell".to_string(),
+                "run_command".to_string(),
+                "http_get".to_string(),
+                "http_post".to_string(),
+                "list_files".to_string(),
+                "database_query".to_string(),
+                "bash".to_string(),
+                "execute".to_string(),
+                "terminal".to_string(),
+                "read".to_string(),
+                "cat".to_string(),
+                "shell".to_string(),
+                "leak_secret".to_string(),
+                "secret".to_string(),
             ],
             vec![
-                "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string(),
-                "calculator".to_string(), "weather".to_string(), "datetime".to_string(), "search".to_string(), "grep".to_string()
-            ]
+                "tools/list".to_string(),
+                "get_schema".to_string(),
+                "get_metadata".to_string(),
+                "ping".to_string(),
+                "calculator".to_string(),
+                "weather".to_string(),
+                "datetime".to_string(),
+                "search".to_string(),
+                "grep".to_string(),
+            ],
         )
     };
 
@@ -708,7 +837,7 @@ async fn run_start(
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
 
     let credential_scope_validator = Arc::new(
-        policy::credential_scope::CredentialScopeValidator::new(strict_credential_scope)
+        policy::credential_scope::CredentialScopeValidator::new(strict_credential_scope),
     );
 
     // Log credential scope mode at startup
@@ -738,9 +867,16 @@ async fn run_start(
         db_manager,
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes")),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
-        injection_scanner: std::sync::Arc::new(agentwall::policy::injection::InjectionScanner::new().expect("Failed to compile Injection regexes")),
+        dlp_scanner: std::sync::Arc::new(
+            agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+        ),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
+        injection_scanner: std::sync::Arc::new(
+            agentwall::policy::injection::InjectionScanner::new()
+                .expect("Failed to compile Injection regexes"),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -756,10 +892,27 @@ async fn run_start(
         policy_path: policy_path.clone(),
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: spend_ledger.clone(),
-        pricing_table: if spend_ledger.is_some() { Some(Arc::new(agentwall::spend::PricingTable::load(None).unwrap_or_else(|_| agentwall::spend::PricingTable { version: "1".to_string(), models: std::collections::HashMap::new(), fallback: agentwall::spend::ModelPrice { input_per_1m_cents: 0, output_per_1m_cents: 0 } }))) } else { None },
+        pricing_table: if spend_ledger.is_some() {
+            Some(Arc::new(
+                agentwall::spend::PricingTable::load(None).unwrap_or_else(|_| {
+                    agentwall::spend::PricingTable {
+                        version: "1".to_string(),
+                        models: std::collections::HashMap::new(),
+                        fallback: agentwall::spend::ModelPrice {
+                            input_per_1m_cents: 0,
+                            output_per_1m_cents: 0,
+                        },
+                    }
+                }),
+            ))
+        } else {
+            None
+        },
         dashboard_client: dashboard_client.clone(),
         listen_is_loopback: listen_addr.ip().is_loopback(),
-        policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        policy_read_secret: std::env::var("POLICY_READ_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty()),
         centralized_mode: centralized,
         provider_keys: dashmap::DashMap::new(),
     });
@@ -770,12 +923,7 @@ async fn run_start(
         } else {
             "Connected (Local Dev Fallback: http://localhost:8400)".yellow()
         };
-        println!(
-            "{} {} {}",
-            "📊".green(),
-            "FR-23 Dashboard:".bold(),
-            msg
-        );
+        println!("{} {} {}", "📊".green(), "FR-23 Dashboard:".bold(), msg);
     }
 
     // Background policy push subscriber — only active when DASHBOARD_API_URL is set.
@@ -790,9 +938,7 @@ async fn run_start(
                 "🔄".blue()
             );
             agentwall::control_plane_client::subscribe::start_policy_subscriber(
-                api_url,
-                sub_secret,
-                sub_state,
+                api_url, sub_secret, sub_state,
             )
             .await;
         });
@@ -805,7 +951,11 @@ async fn run_start(
             "Mode:".bold(),
             "SHADOW (Observation Only — no enforcement)".cyan().bold()
         );
-        println!("{} {}", "ℹ".blue(), "All tool calls forwarded and logged. Enforcement is OFF.".blue());
+        println!(
+            "{} {}",
+            "ℹ".blue(),
+            "All tool calls forwarded and logged. Enforcement is OFF.".blue()
+        );
     } else if dry_run {
         println!(
             "{} {} {}",
@@ -895,9 +1045,7 @@ async fn run_start(
     let shutdown_tx_panic = shutdown_tx.clone();
     let default_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        eprintln!(
-            "\nFATAL: Gateway panic detected — initiating fail-closed shutdown (AC-5.5)"
-        );
+        eprintln!("\nFATAL: Gateway panic detected — initiating fail-closed shutdown (AC-5.5)");
         // Trigger shutdown before printing backtrace (speed matters for fail-closed)
         let _ = shutdown_tx_panic.send(true);
         // Delegate to the default hook for backtrace output
@@ -907,10 +1055,13 @@ async fn run_start(
     // Handle SIGTERM (Unix) / Ctrl+C
     let shutdown_tx_clone = shutdown_tx.clone();
     let _audit_logger_clone = audit_logger.clone();
-    
+
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
-        println!("\n{} Shutdown signal received. Finishing logs...", "ℹ".blue());
+        println!(
+            "\n{} Shutdown signal received. Finishing logs...",
+            "ℹ".blue()
+        );
         let _ = shutdown_tx_clone.send(true);
     });
 
@@ -932,8 +1083,8 @@ async fn run_start(
         let sighup_policy_path = policy_path.clone();
         tokio::spawn(async move {
             use tokio::signal::unix::{signal, SignalKind};
-            let mut sighup = signal(SignalKind::hangup())
-                .expect("failed to register SIGHUP handler");
+            let mut sighup =
+                signal(SignalKind::hangup()).expect("failed to register SIGHUP handler");
 
             loop {
                 sighup.recv().await;
@@ -960,10 +1111,15 @@ async fn run_start(
                         std::path::Path::new(&path_for_task),
                         None, // issuer override not re-applied on hot-reload
                     )
-                }).await;
+                })
+                .await;
 
                 match result {
-                    Ok(agentwall::policy::loader::PolicyLoadResult::Loaded { policy, raw_hash, warnings }) => {
+                    Ok(agentwall::policy::loader::PolicyLoadResult::Loaded {
+                        policy,
+                        raw_hash,
+                        warnings,
+                    }) => {
                         match sighup_state.policy.write() {
                             Ok(mut guard) => *guard = Some(policy),
                             Err(_) => {
@@ -975,7 +1131,9 @@ async fn run_start(
                                 continue;
                             }
                         }
-                        sighup_state.policy_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                        sighup_state
+                            .policy_loaded
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
 
                         let elapsed_ms = reload_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -1081,16 +1239,32 @@ fn run_verify_log(log_path: &str, key_file: Option<&str>) -> i32 {
         if kpath.exists() {
             if let Ok(key_bytes) = std::fs::read(kpath) {
                 if key_bytes.len() >= 32 {
-                    print!("{} Verifying HMAC chain and payload integrity for {} (key: {})... ", "ℹ".blue(), log_path.yellow(), kpath.display().to_string().cyan());
-                    match audit::verifier::verify_chain_with_secret(Path::new(log_path), &key_bytes[..32]) {
+                    print!(
+                        "{} Verifying HMAC chain and payload integrity for {} (key: {})... ",
+                        "ℹ".blue(),
+                        log_path.yellow(),
+                        kpath.display().to_string().cyan()
+                    );
+                    match audit::verifier::verify_chain_with_secret(
+                        Path::new(log_path),
+                        &key_bytes[..32],
+                    ) {
                         audit::verifier::VerifyResult::Valid { entry_count } => {
                             println!("{}", "VALID".green().bold());
                             println!("  {} {} entries verified with HMAC key, cryptographic chain and payloads intact.", "✓".green(), entry_count);
                             return 0;
                         }
-                        audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
+                        audit::verifier::VerifyResult::Invalid {
+                            entry_index,
+                            reason,
+                        } => {
                             println!("{}", "INVALID".red().bold());
-                            println!("  {} Chain/payload broken at index {}: {}", "✖".red(), entry_index, reason);
+                            println!(
+                                "  {} Chain/payload broken at index {}: {}",
+                                "✖".red(),
+                                entry_index,
+                                reason
+                            );
                             return 1;
                         }
                         audit::verifier::VerifyResult::Error(e) => {
@@ -1104,11 +1278,19 @@ fn run_verify_log(log_path: &str, key_file: Option<&str>) -> i32 {
         }
     }
 
-    print!("{} Verifying log chain integrity for {}... ", "ℹ".blue(), log_path.yellow());
+    print!(
+        "{} Verifying log chain integrity for {}... ",
+        "ℹ".blue(),
+        log_path.yellow()
+    );
     match audit::verifier::verify_chain(Path::new(log_path)) {
         audit::verifier::VerifyResult::Valid { entry_count } => {
             println!("{}", "VALID".green().bold());
-            println!("  {} {} entries found, cryptographic chain intact.", "✓".green(), entry_count);
+            println!(
+                "  {} {} entries found, cryptographic chain intact.",
+                "✓".green(),
+                entry_count
+            );
             0
         }
         audit::verifier::VerifyResult::Invalid {
@@ -1116,7 +1298,12 @@ fn run_verify_log(log_path: &str, key_file: Option<&str>) -> i32 {
             reason,
         } => {
             println!("{}", "INVALID".red().bold());
-            println!("  {} Chain broken at index {}: {}", "✖".red(), entry_index, reason);
+            println!(
+                "  {} Chain broken at index {}: {}",
+                "✖".red(),
+                entry_index,
+                reason
+            );
             1
         }
         audit::verifier::VerifyResult::Error(e) => {
@@ -1175,10 +1362,17 @@ async fn run_wrap(
     max_scan_bytes: usize,
 ) -> i32 {
     if auto_detect {
-        println!("{} Auto-detecting known agent configurations...", "ℹ".blue());
-        
+        println!(
+            "{} Auto-detecting known agent configurations...",
+            "ℹ".blue()
+        );
+
         let targets = vec![
-            agentwall::cli::WrapTarget::Claude { dry_run, scan_responses, block_on_secrets },
+            agentwall::cli::WrapTarget::Claude {
+                dry_run,
+                scan_responses,
+                block_on_secrets,
+            },
             agentwall::cli::WrapTarget::Cursor { dry_run },
             agentwall::cli::WrapTarget::Vscode { dry_run },
             agentwall::cli::WrapTarget::Jetbrains { dry_run },
@@ -1202,7 +1396,10 @@ async fn run_wrap(
             println!("{} Auto-detect wrap completed successfully.", "✓".green());
             return 0;
         } else {
-            eprintln!("{} No supported agents found to wrap automatically.", "✖".red());
+            eprintln!(
+                "{} No supported agents found to wrap automatically.",
+                "✖".red()
+            );
             return 1;
         }
     }
@@ -1210,28 +1407,32 @@ async fn run_wrap(
     let cmd_str = match command {
         Some(c) => c,
         None => {
-            eprintln!("{} You must provide a --command or use --auto-detect.", "✖".red());
+            eprintln!(
+                "{} You must provide a --command or use --auto-detect.",
+                "✖".red()
+            );
             return 1;
         }
     };
 
     // Load policy
     let (compiled_policy, _policy_hash, _warnings, policy_loaded) = match policy_path.as_deref() {
-        Some(path) => {
-            match load_policy(Path::new(path), None) {
-                PolicyLoadResult::Loaded { policy, raw_hash, warnings, .. } => {
-                    (Some(policy), raw_hash, warnings, true)
-                }
-                PolicyLoadResult::Degraded { reason } => {
-                    log_warn!("policy_degraded", "reason": reason);
-                    (None, "sha256:none".to_string(), vec![], false)
-                }
-                PolicyLoadResult::Fatal { error } => {
-                    log_error!("startup_error", "reason": error.to_string());
-                    return 1;
-                }
+        Some(path) => match load_policy(Path::new(path), None) {
+            PolicyLoadResult::Loaded {
+                policy,
+                raw_hash,
+                warnings,
+                ..
+            } => (Some(policy), raw_hash, warnings, true),
+            PolicyLoadResult::Degraded { reason } => {
+                log_warn!("policy_degraded", "reason": reason);
+                (None, "sha256:none".to_string(), vec![], false)
             }
-        }
+            PolicyLoadResult::Fatal { error } => {
+                log_error!("startup_error", "reason": error.to_string());
+                return 1;
+            }
+        },
         None => {
             println!(
                 "{} {}",
@@ -1263,7 +1464,8 @@ async fn run_wrap(
         }
     };
 
-    let safe_mode_scanner = Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
+    let safe_mode_scanner =
+        Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
     eprintln!(
         "{} Safe Mode v1 active — {} rules loaded.",
         "✔".green(),
@@ -1271,24 +1473,44 @@ async fn run_wrap(
     );
 
     // FR-303b: Initialize response scanner
-    let response_scanner = Arc::new(policy::response_scanner::ResponseScanner::new().expect("Failed to compile ResponseScanner regexes"));
-    
+    let response_scanner = Arc::new(
+        policy::response_scanner::ResponseScanner::new()
+            .expect("Failed to compile ResponseScanner regexes"),
+    );
+
     let (sc_tools, sf_tools) = if let Some(p) = &compiled_policy {
         (p.scannable_tools.clone(), p.safe_tools.clone())
     } else {
         (
             vec![
-                "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(), 
-                "run_command".to_string(), "http_get".to_string(), "http_post".to_string(), 
-                "list_files".to_string(), "database_query".to_string(),
-                "bash".to_string(), "execute".to_string(), "terminal".to_string(), 
-                "read".to_string(), "cat".to_string(), "shell".to_string(), 
-                "leak_secret".to_string(), "secret".to_string()
+                "read_file".to_string(),
+                "exec_command".to_string(),
+                "run_shell".to_string(),
+                "run_command".to_string(),
+                "http_get".to_string(),
+                "http_post".to_string(),
+                "list_files".to_string(),
+                "database_query".to_string(),
+                "bash".to_string(),
+                "execute".to_string(),
+                "terminal".to_string(),
+                "read".to_string(),
+                "cat".to_string(),
+                "shell".to_string(),
+                "leak_secret".to_string(),
+                "secret".to_string(),
             ],
             vec![
-                "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string(),
-                "calculator".to_string(), "weather".to_string(), "datetime".to_string(), "search".to_string(), "grep".to_string()
-            ]
+                "tools/list".to_string(),
+                "get_schema".to_string(),
+                "get_metadata".to_string(),
+                "ping".to_string(),
+                "calculator".to_string(),
+                "weather".to_string(),
+                "datetime".to_string(),
+                "search".to_string(),
+                "grep".to_string(),
+            ],
         )
     };
 
@@ -1325,9 +1547,16 @@ async fn run_wrap(
         db_manager,
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes")),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
-        injection_scanner: std::sync::Arc::new(agentwall::policy::injection::InjectionScanner::new().expect("Failed to compile Injection regexes")),
+        dlp_scanner: std::sync::Arc::new(
+            agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+        ),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
+        injection_scanner: std::sync::Arc::new(
+            agentwall::policy::injection::InjectionScanner::new()
+                .expect("Failed to compile Injection regexes"),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -1338,14 +1567,19 @@ async fn run_wrap(
         metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
-        credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: None,
         pricing_table: None,
-        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env()
+            .map(Arc::new),
         listen_is_loopback: true,
-        policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        policy_read_secret: std::env::var("POLICY_READ_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
     });
@@ -1366,7 +1600,7 @@ async fn run_wrap(
     let program = parts.remove(0);
     let (resolved_program, prefix_args) = proxy::stdio::resolve_command(&program);
     let mut cmd = tokio::process::Command::new(resolved_program);
-    
+
     let mut final_args = prefix_args;
     final_args.extend(parts);
     cmd.args(final_args);
@@ -1394,8 +1628,12 @@ async fn run_dev(
     let session_id = uuid::Uuid::new_v4().to_string();
 
     // Resolve log path (same as stdio proxy)
-    let bin_path = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentwall.exe"));
-    let log_path = bin_path.parent().unwrap_or(std::path::Path::new(".")).join("audit.log");
+    let bin_path =
+        std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentwall.exe"));
+    let log_path = bin_path
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("audit.log");
 
     let audit_logger = match AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
         log_path,
@@ -1412,8 +1650,12 @@ async fn run_dev(
         }
     };
 
-    let safe_mode_scanner = Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
-    let response_scanner = Arc::new(policy::response_scanner::ResponseScanner::new().expect("Failed to compile ResponseScanner regexes"));
+    let safe_mode_scanner =
+        Arc::new(SafeModeScanner::new().expect("Failed to compile SafeMode regexes"));
+    let response_scanner = Arc::new(
+        policy::response_scanner::ResponseScanner::new()
+            .expect("Failed to compile ResponseScanner regexes"),
+    );
 
     let response_scan_config = policy::response_scanner::ResponseScanConfig {
         enabled: false,
@@ -1421,16 +1663,33 @@ async fn run_dev(
         dry_run: false,
         max_scan_bytes: 1048576,
         scannable_tools: vec![
-            "read_file".to_string(), "exec_command".to_string(), "run_shell".to_string(),
-            "run_command".to_string(), "http_get".to_string(), "http_post".to_string(),
-            "list_files".to_string(), "database_query".to_string(),
-            "bash".to_string(), "execute".to_string(), "terminal".to_string(),
-            "read".to_string(), "cat".to_string(), "shell".to_string(),
-            "leak_secret".to_string(), "secret".to_string()
+            "read_file".to_string(),
+            "exec_command".to_string(),
+            "run_shell".to_string(),
+            "run_command".to_string(),
+            "http_get".to_string(),
+            "http_post".to_string(),
+            "list_files".to_string(),
+            "database_query".to_string(),
+            "bash".to_string(),
+            "execute".to_string(),
+            "terminal".to_string(),
+            "read".to_string(),
+            "cat".to_string(),
+            "shell".to_string(),
+            "leak_secret".to_string(),
+            "secret".to_string(),
         ],
         safe_tools: vec![
-            "tools/list".to_string(), "get_schema".to_string(), "get_metadata".to_string(), "ping".to_string(),
-            "calculator".to_string(), "weather".to_string(), "datetime".to_string(), "search".to_string(), "grep".to_string()
+            "tools/list".to_string(),
+            "get_schema".to_string(),
+            "get_metadata".to_string(),
+            "ping".to_string(),
+            "calculator".to_string(),
+            "weather".to_string(),
+            "datetime".to_string(),
+            "search".to_string(),
+            "grep".to_string(),
         ],
     };
 
@@ -1455,9 +1714,16 @@ async fn run_dev(
         db_manager,
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes")),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
-        injection_scanner: std::sync::Arc::new(agentwall::policy::injection::InjectionScanner::new().expect("Failed to compile Injection regexes")),
+        dlp_scanner: std::sync::Arc::new(
+            agentwall::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+        ),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
+        injection_scanner: std::sync::Arc::new(
+            agentwall::policy::injection::InjectionScanner::new()
+                .expect("Failed to compile Injection regexes"),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -1468,14 +1734,22 @@ async fn run_dev(
         metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
-        credential_scope_validator: Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: None,
         pricing_table: None,
-        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
-        listen_is_loopback: listen.parse::<SocketAddr>().map(|a| a.ip().is_loopback()).unwrap_or(true),
-        policy_read_secret: std::env::var("POLICY_READ_SECRET").ok().filter(|s| !s.is_empty()),
+        dashboard_client: agentwall::control_plane_client::client::DashboardClient::from_env()
+            .map(Arc::new),
+        listen_is_loopback: listen
+            .parse::<SocketAddr>()
+            .map(|a| a.ip().is_loopback())
+            .unwrap_or(true),
+        policy_read_secret: std::env::var("POLICY_READ_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
     });
@@ -1520,7 +1794,11 @@ async fn run_dev(
         "Mode:".bold(),
         "SHADOW (Observation Only — no enforcement)".cyan().bold()
     );
-    println!("{} {}", "ℹ".blue(), "All tool calls forwarded and logged. Enforcement is OFF.".blue());
+    println!(
+        "{} {}",
+        "ℹ".blue(),
+        "All tool calls forwarded and logged. Enforcement is OFF.".blue()
+    );
     println!(
         "{} {} {}",
         "📡".blue(),
@@ -1535,7 +1813,9 @@ async fn run_dev(
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             #[cfg(target_os = "windows")]
-            let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn();
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", &url])
+                .spawn();
             #[cfg(target_os = "macos")]
             let _ = std::process::Command::new("open").arg(&url).spawn();
             #[cfg(target_os = "linux")]
@@ -1548,7 +1828,10 @@ async fn run_dev(
     let shutdown_tx_clone = shutdown_tx.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
-        println!("\n{} Shutdown signal received. Finishing logs...", "ℹ".blue());
+        println!(
+            "\n{} Shutdown signal received. Finishing logs...",
+            "ℹ".blue()
+        );
         let _ = shutdown_tx_clone.send(true);
     });
 
@@ -1566,7 +1849,10 @@ async fn run_dev(
 /// Reads up to 500 events from the local SQLite event store (chronological order),
 /// runs the analysis engine, and writes the resulting YAML to `output_path`.
 async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
-    println!("{} Reading observed tool calls from event store...", "ℹ".blue());
+    println!(
+        "{} Reading observed tool calls from event store...",
+        "ℹ".blue()
+    );
 
     let db = agentwall::proxy::db::DbManager::init();
     let events = match db.get_all_events(500).await {
@@ -1578,10 +1864,7 @@ async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
     };
 
     if events.is_empty() {
-        println!(
-            "{} No tool calls observed yet.",
-            "⚠".yellow()
-        );
+        println!("{} No tool calls observed yet.", "⚠".yellow());
         println!(
             "{} Start shadow mode first: {}",
             "ℹ".blue(),
@@ -1612,12 +1895,15 @@ async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
                 "✓".green().bold(),
                 output_path.cyan().underline()
             );
+            println!("{} Next steps:", "ℹ".blue());
             println!(
-                "{} Next steps:",
-                "ℹ".blue()
+                "    1. Review {} carefully — check anomalies section.",
+                output_path.cyan()
             );
-            println!("    1. Review {} carefully — check anomalies section.", output_path.cyan());
-            println!("    2. Run {} to validate.", "agentwall lint agentwall-policy.yaml".yellow());
+            println!(
+                "    2. Run {} to validate.",
+                "agentwall lint agentwall-policy.yaml".yellow()
+            );
             println!("    3. Submit to your platform/security team for gateway deployment.");
             0
         }
@@ -1627,5 +1913,3 @@ async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
         }
     }
 }
-
-

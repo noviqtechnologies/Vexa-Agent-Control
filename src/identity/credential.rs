@@ -167,8 +167,10 @@ impl AgentCredential {
 
     /// Check if this credential is currently valid (active and not expired).
     pub fn is_valid(&self) -> bool {
-        matches!(self.status, CredentialStatus::Active | CredentialStatus::Draining)
-            && Utc::now() < self.expires_at
+        matches!(
+            self.status,
+            CredentialStatus::Active | CredentialStatus::Draining
+        ) && Utc::now() < self.expires_at
     }
 
     /// Check if the credential permits calling the given tool.
@@ -228,8 +230,7 @@ impl AgentCredential {
         }
         let json = std::fs::read_to_string(&path)
             .map_err(|e| format!("Cannot read credential file: {}", e))?;
-        serde_json::from_str(&json)
-            .map_err(|e| format!("Cannot parse credential file: {}", e))
+        serde_json::from_str(&json).map_err(|e| format!("Cannot parse credential file: {}", e))
     }
 }
 
@@ -263,8 +264,8 @@ fn compute_binding_hash(agent_id: &str, agent_sub: &str, scope: &str, issued_at:
     // Use a deterministic salt derived from the agent identity for the binding hash.
     // In production with Vault, this would use a hardware-rooted key.
     let salt = format!("agentwall-v2-identity-binding:{}", agent_id);
-    let mut mac = Hmac::<Sha256>::new_from_slice(salt.as_bytes())
-        .expect("HMAC accepts any key size");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(salt.as_bytes()).expect("HMAC accepts any key size");
     mac.update(format!("{}:{}:{}:{}", agent_id, agent_sub, scope, issued_at).as_bytes());
     let result = mac.finalize();
     hex::encode(result.into_bytes())
@@ -310,8 +311,15 @@ mod tests {
     #[test]
     fn test_permits_tool_no_restrictions() {
         let cred = AgentCredential::new(
-            "test-agent", "test@example.com", "read-only",
-            vec![], CredentialType::Jwt, "vault", "1h", 30, "operator",
+            "test-agent",
+            "test@example.com",
+            "read-only",
+            vec![],
+            CredentialType::Jwt,
+            "vault",
+            "1h",
+            30,
+            "operator",
         );
         // No tool_scopes = all tools permitted
         assert!(cred.permits_tool("read_file"));
@@ -321,28 +329,47 @@ mod tests {
     #[test]
     fn test_permits_tool_with_restrictions() {
         let cred = AgentCredential::new(
-            "test-agent", "test@example.com", "read-only",
+            "test-agent",
+            "test@example.com",
+            "read-only",
             vec![
-                ToolScope { tool: "read_file".to_string(), paths: vec![], databases: vec![], allow: true },
-                ToolScope { tool: "execute_shell".to_string(), paths: vec![], databases: vec![], allow: false },
+                ToolScope {
+                    tool: "read_file".to_string(),
+                    paths: vec![],
+                    databases: vec![],
+                    allow: true,
+                },
+                ToolScope {
+                    tool: "execute_shell".to_string(),
+                    paths: vec![],
+                    databases: vec![],
+                    allow: false,
+                },
             ],
-            CredentialType::Jwt, "vault", "1h", 30, "operator",
+            CredentialType::Jwt,
+            "vault",
+            "1h",
+            30,
+            "operator",
         );
-        assert!(cred.permits_tool("read_file"));       // allowed
-        assert!(!cred.permits_tool("execute_shell"));  // denied (allow=false)
-        assert!(!cred.permits_tool("execute_query"));  // not listed = denied
+        assert!(cred.permits_tool("read_file")); // allowed
+        assert!(!cred.permits_tool("execute_shell")); // denied (allow=false)
+        assert!(!cred.permits_tool("execute_query")); // not listed = denied
     }
 
     #[test]
     fn test_binding_hash_is_deterministic() {
-        let h1 = super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
-        let h2 = super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
+        let h1 =
+            super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
+        let h2 =
+            super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
         assert_eq!(h1, h2);
     }
 
     #[test]
     fn test_binding_hash_differs_for_different_inputs() {
-        let h1 = super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
+        let h1 =
+            super::compute_binding_hash("agent-a", "sub-1", "read-only", "2026-01-01T00:00:00Z");
         let h2 = super::compute_binding_hash("agent-b", "sub-2", "admin", "2026-01-01T00:00:00Z");
         assert_ne!(h1, h2);
     }

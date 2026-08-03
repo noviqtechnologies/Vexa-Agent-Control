@@ -44,7 +44,10 @@ fn test_malformed_yaml_is_fatal() {
     let f = yaml_to_tempfile("version: [\nunclosed bracket");
     match load_policy(f.path(), None) {
         PolicyLoadResult::Fatal { .. } => {}
-        other => panic!("Expected Fatal for malformed YAML, got discriminant: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Fatal for malformed YAML, got discriminant: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -81,11 +84,8 @@ tools: []
 "#;
     let f = yaml_to_tempfile(yaml);
     // Expect either Fatal or Degraded — either way the gateway must not start permissively.
-    match load_policy(f.path(), None) {
-        PolicyLoadResult::Loaded { .. } => {
-            panic!("Must not load successfully when default_action is absent")
-        }
-        _ => {} // Fatal or Degraded — both acceptable here
+    if let PolicyLoadResult::Loaded { .. } = load_policy(f.path(), None) {
+        panic!("Must not load successfully when default_action is absent");
     }
 }
 
@@ -192,7 +192,10 @@ tools:
                 msg
             );
         }
-        other => panic!("Expected Fatal for invalid regex, got: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Fatal for invalid regex, got: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -235,7 +238,10 @@ tools:
                 msg
             );
         }
-        other => panic!("Expected Fatal for invalid action, got: {:?}", std::mem::discriminant(&other)),
+        other => panic!(
+            "Expected Fatal for invalid action, got: {:?}",
+            std::mem::discriminant(&other)
+        ),
     }
 }
 
@@ -265,12 +271,22 @@ tools:
 
     // Exact match → allow.
     assert!(matches!(
-        policy.evaluate("read_file", &serde_json::json!({"path": "workspace/src/main.rs"}), None, &[]),
+        policy.evaluate(
+            "read_file",
+            &serde_json::json!({"path": "workspace/src/main.rs"}),
+            None,
+            &[]
+        ),
         EvalResult::Allow { .. }
     ));
 
     // Partial prefix match that would succeed without anchoring → must deny.
-    match policy.evaluate("read_file", &serde_json::json!({"path": "evil/workspace/src/main.rs"}), None, &[]) {
+    match policy.evaluate(
+        "read_file",
+        &serde_json::json!({"path": "evil/workspace/src/main.rs"}),
+        None,
+        &[],
+    ) {
         EvalResult::Deny { reason_code, .. } => {
             assert_eq!(
                 reason_code, "param_pattern_mismatch",
@@ -303,7 +319,12 @@ tools:
 
     // Partial match allowed when unanchored.
     assert!(matches!(
-        policy.evaluate("search", &serde_json::json!({"query": "totally_safe_query"}), None, &[]),
+        policy.evaluate(
+            "search",
+            &serde_json::json!({"query": "totally_safe_query"}),
+            None,
+            &[]
+        ),
         EvalResult::Allow { .. }
     ));
 
@@ -324,18 +345,10 @@ tools:
 #[test]
 fn test_10_tools_allowed_1_unlisted_denied() {
     let tools: String = (0..10)
-        .map(|i| {
-            format!(
-                "  - name: tool_{i}\n    action: allow\n",
-                i = i
-            )
-        })
+        .map(|i| format!("  - name: tool_{i}\n    action: allow\n", i = i))
         .collect();
 
-    let yaml = format!(
-        "version: \"2\"\ndefault_action: deny\ntools:\n{}",
-        tools
-    );
+    let yaml = format!("version: \"2\"\ndefault_action: deny\ntools:\n{}", tools);
 
     let f = yaml_to_tempfile(&yaml);
     let (policy, _) = extract_loaded(f.path());
@@ -343,7 +356,10 @@ fn test_10_tools_allowed_1_unlisted_denied() {
     for i in 0..10u32 {
         let name = format!("tool_{}", i);
         assert!(
-            matches!(policy.evaluate(&name, &serde_json::json!({}), None, &[]), EvalResult::Allow { .. }),
+            matches!(
+                policy.evaluate(&name, &serde_json::json!({}), None, &[]),
+                EvalResult::Allow { .. }
+            ),
             "tool_{} must be allowed",
             i
         );
@@ -448,9 +464,13 @@ tools:
 // Internal: extract a loaded policy or panic — keeps test bodies clean.
 // ---------------------------------------------------------------------------
 
-fn extract_loaded(path: &std::path::Path) -> (agentwall::policy::engine::CompiledPolicy, Vec<String>) {
+fn extract_loaded(
+    path: &std::path::Path,
+) -> (agentwall::policy::engine::CompiledPolicy, Vec<String>) {
     match load_policy(path, None) {
-        PolicyLoadResult::Loaded { policy, warnings, .. } => (policy, warnings),
+        PolicyLoadResult::Loaded {
+            policy, warnings, ..
+        } => (policy, warnings),
         PolicyLoadResult::Fatal { error } => {
             panic!("Policy load failed unexpectedly: {}", error)
         }

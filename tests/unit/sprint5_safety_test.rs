@@ -4,7 +4,9 @@ use agentwall::policy::credential_scope::CredentialScopeValidator;
 use agentwall::policy::engine::{CompiledPolicy, CompiledTool};
 use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
 use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig, SpendCapsConfig};
+use agentwall::policy::schema::{
+    CycleAction, CycleDetectionConfig, FirewallConfig, SpendCapsConfig,
+};
 use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
 use agentwall::proxy::session::SessionContext;
 use serde_json::json;
@@ -13,14 +15,17 @@ use std::sync::Arc;
 
 fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
     let log_path = std::env::temp_dir().join(format!("vexa_test_s5_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
-        log_path,
-        session_id: "test-session".to_string(),
-        session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-        max_bytes: 100000,
-        siem_exporter: None,
-        include_params: false,
-    }).unwrap());
+    let audit_logger = Arc::new(
+        AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "test-session".to_string(),
+            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
+            max_bytes: 100000,
+            siem_exporter: None,
+            include_params: false,
+        })
+        .unwrap(),
+    );
 
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
 
@@ -131,7 +136,10 @@ async fn test_us100_loop_prevention_pivot_error() {
     let act3 = evaluate_jsonrpc(&state, &session, &req_body).await;
     if let ProxyAction::Respond(resp) = act3 {
         assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32010);
-        assert!(resp["error"]["message"].as_str().unwrap().contains("Cycle detected"));
+        assert!(resp["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Cycle detected"));
     } else {
         panic!("Expected ProxyAction::Respond on 3rd identical call");
     }
@@ -189,7 +197,11 @@ async fn test_us100_loop_prevention_different_params_not_blocked() {
             }
         });
         let act = evaluate_jsonrpc(&state, &session, &req_body).await;
-        assert!(matches!(act, ProxyAction::Forward), "Call {} with different params should forward", i);
+        assert!(
+            matches!(act, ProxyAction::Forward),
+            "Call {} with different params should forward",
+            i
+        );
     }
 }
 
@@ -238,7 +250,9 @@ async fn test_us101_spend_cap_enforcement_licensed_vs_unlicensed() {
     ));
 
     // Exceed token limit
-    session.tokens_used.store(1500, std::sync::atomic::Ordering::Relaxed);
+    session
+        .tokens_used
+        .store(1500, std::sync::atomic::Ordering::Relaxed);
 
     let req_body = json!({
         "jsonrpc": "2.0",
@@ -310,7 +324,10 @@ async fn test_us103_credential_scope_strict_mode() {
     let act1 = evaluate_jsonrpc(&state, &session_no_header, &req_restricted).await;
     if let ProxyAction::Respond(resp) = act1 {
         assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32403);
-        assert!(resp["error"]["message"].as_str().unwrap().contains("Credential Scope Insufficient"));
+        assert!(resp["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Credential Scope Insufficient"));
     } else {
         panic!("Expected ProxyAction::Respond with -32403 on missing scope header");
     }
@@ -327,7 +344,10 @@ async fn test_us103_credential_scope_strict_mode() {
     ));
 
     let act2 = evaluate_jsonrpc(&state, &session_with_scope, &req_restricted).await;
-    assert!(matches!(act2, ProxyAction::Forward), "Call with matching scope header should forward");
+    assert!(
+        matches!(act2, ProxyAction::Forward),
+        "Call with matching scope header should forward"
+    );
 
     // 3. Unrestricted tool calling without scope header -> PERMITTED
     let req_public = json!({
@@ -338,5 +358,8 @@ async fn test_us103_credential_scope_strict_mode() {
     });
 
     let act3 = evaluate_jsonrpc(&state, &session_no_header, &req_public).await;
-    assert!(matches!(act3, ProxyAction::Forward), "Public tool call without scope header should forward");
+    assert!(
+        matches!(act3, ProxyAction::Forward),
+        "Public tool call without scope header should forward"
+    );
 }

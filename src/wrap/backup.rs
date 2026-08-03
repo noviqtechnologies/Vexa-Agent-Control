@@ -1,8 +1,8 @@
 //! FR-304: Backup creation, rotation, and lookup for Claude Desktop config
 
+use super::WrapError;
 use chrono::Local;
 use std::path::{Path, PathBuf};
-use super::WrapError;
 
 const BACKUP_SUFFIX_PREFIX: &str = "agentwall-backup-";
 #[allow(dead_code)]
@@ -14,7 +14,12 @@ pub fn create_backup(config_path: &Path) -> Result<PathBuf, WrapError> {
     let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
     let file_name = config_path
         .file_name()
-        .ok_or_else(|| WrapError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid config path")))?
+        .ok_or_else(|| {
+            WrapError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid config path",
+            ))
+        })?
         .to_string_lossy();
 
     let backup_name = format!("{}.{}{}", file_name, BACKUP_SUFFIX_PREFIX, ts);
@@ -65,8 +70,8 @@ fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     fn make_fake_config(dir: &Path) -> PathBuf {
         let p = dir.join("claude_desktop_config.json");
@@ -90,8 +95,10 @@ mod tests {
         // Create 7 backups
         for i in 0..7 {
             let ts = format!("20260512-{:06}", i);
-            let bk = dir.path().join(format!("claude_desktop_config.json.{}{}",
-                BACKUP_SUFFIX_PREFIX, ts));
+            let bk = dir.path().join(format!(
+                "claude_desktop_config.json.{}{}",
+                BACKUP_SUFFIX_PREFIX, ts
+            ));
             fs::write(&bk, "{}").unwrap();
         }
         prune_backups(dir.path(), MAX_BACKUPS).unwrap();
@@ -106,8 +113,10 @@ mod tests {
         let dir = tempdir().unwrap();
         make_fake_config(dir.path());
         for ts in &["20260512-100000", "20260512-110000", "20260512-120000"] {
-            let bk = dir.path().join(format!("claude_desktop_config.json.{}{}",
-                BACKUP_SUFFIX_PREFIX, ts));
+            let bk = dir.path().join(format!(
+                "claude_desktop_config.json.{}{}",
+                BACKUP_SUFFIX_PREFIX, ts
+            ));
             fs::write(&bk, "{}").unwrap();
         }
         let latest = find_latest_backup(dir.path()).unwrap();

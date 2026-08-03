@@ -41,7 +41,7 @@ pub use tokio_rustls::TlsAcceptor;
 /// Unpin), so `Pin::new(s)` in the trait impls is safe without pin_project.
 pub enum MaybeTlsStream {
     Plain(TcpStream),
-    Tls(TlsStream<TcpStream>),
+    Tls(Box<TlsStream<TcpStream>>),
 }
 
 impl AsyncRead for MaybeTlsStream {
@@ -52,7 +52,7 @@ impl AsyncRead for MaybeTlsStream {
     ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             MaybeTlsStream::Plain(s) => Pin::new(s).poll_read(cx, buf),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_read(cx, buf),
+            MaybeTlsStream::Tls(s) => Pin::new(s.as_mut()).poll_read(cx, buf),
         }
     }
 }
@@ -65,21 +65,21 @@ impl AsyncWrite for MaybeTlsStream {
     ) -> Poll<std::io::Result<usize>> {
         match self.get_mut() {
             MaybeTlsStream::Plain(s) => Pin::new(s).poll_write(cx, buf),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_write(cx, buf),
+            MaybeTlsStream::Tls(s) => Pin::new(s.as_mut()).poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             MaybeTlsStream::Plain(s) => Pin::new(s).poll_flush(cx),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_flush(cx),
+            MaybeTlsStream::Tls(s) => Pin::new(s.as_mut()).poll_flush(cx),
         }
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             MaybeTlsStream::Plain(s) => Pin::new(s).poll_shutdown(cx),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_shutdown(cx),
+            MaybeTlsStream::Tls(s) => Pin::new(s.as_mut()).poll_shutdown(cx),
         }
     }
 }
@@ -121,9 +121,7 @@ pub fn build_tls_acceptor(
         .map_err(|e| format!("Invalid PEM in cert file '{}': {}", cert_path.display(), e))?;
 
     if certs.is_empty() {
-        return Err(
-            format!("No valid certificates found in '{}'", cert_path.display()).into(),
-        );
+        return Err(format!("No valid certificates found in '{}'", cert_path.display()).into());
     }
 
     // ── Load private key (PKCS#8 / RSA / EC) ─────────────────────────────
@@ -143,9 +141,9 @@ pub fn build_tls_acceptor(
     // pulls ring, tokio-tungstenite pulls aws-lc-rs). rustls 0.23 panics
     // at runtime if it can't auto-detect a single provider. Explicitly
     // selecting ring avoids the ambiguity without touching other deps.
-    let config = tokio_rustls::rustls::ServerConfig::builder_with_provider(
-        Arc::new(tokio_rustls::rustls::crypto::ring::default_provider()),
-    )
+    let config = tokio_rustls::rustls::ServerConfig::builder_with_provider(Arc::new(
+        tokio_rustls::rustls::crypto::ring::default_provider(),
+    ))
     .with_safe_default_protocol_versions()
     .map_err(|e| format!("TLS protocol version error: {}", e))?
     .with_no_client_auth()

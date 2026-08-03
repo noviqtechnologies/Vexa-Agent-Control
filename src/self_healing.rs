@@ -3,8 +3,8 @@
 //! Provides frequency-based Z-score anomaly calculation for tool parameter baseline values,
 //! confidence decay over time, GitOps PR suggestion generation, and SIEM alerting.
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Configuration options for the Self-Healing policy engine.
@@ -36,7 +36,10 @@ impl ConfidenceDecay {
     /// Calculate decay factor from 0.0 (fully decayed/stale) to 1.0 (fresh).
     /// `last_seen_ns` is timestamp in nanoseconds.
     pub fn calculate(last_seen_ns: i64, decay_window_days: u32) -> f64 {
-        let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as i64;
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as i64;
         Self::calculate_with_now(last_seen_ns, now_ns, decay_window_days)
     }
 
@@ -75,7 +78,7 @@ impl AnomalyScorer {
         let tool_map = self.frequencies.entry(tool.to_string()).or_default();
         let param_map = tool_map.entry(param.to_string()).or_default();
         *param_map.entry(value.to_string()).or_default() += 1;
-        
+
         *self.tool_counts.entry(tool.to_string()).or_default() += 1;
     }
 
@@ -119,9 +122,9 @@ impl AnomalyScorer {
         // Calculate score: 1.0 - (frequency / max_frequency), adjusted for total occurrences
         // A single occurrence in a sea of 100 common values will score very high.
         // A single occurrence where every value is unique will score around 0.5.
-        
+
         let freq_ratio = value_count as f64 / max_freq as f64;
-        
+
         // Base score inversely proportional to frequency relative to the most common item
         let base_score = 1.0 - freq_ratio;
 
@@ -176,7 +179,7 @@ impl SuggestionEngine {
             if event.transport != "mcp" {
                 continue;
             }
-            
+
             let tool = match &event.url_path {
                 Some(t) => t,
                 None => continue,
@@ -190,12 +193,12 @@ impl SuggestionEngine {
                     for (k, v) in flat {
                         if let serde_json::Value::String(s) = v {
                             let score = scorer.score(tool, &k, &s);
-                            
+
                             if score >= threshold {
                                 let dedup_key = format!("{}::{}::{}", tool, k, s);
                                 if !seen_keys.contains(&dedup_key) {
                                     seen_keys.insert(dedup_key);
-                                    
+
                                     suggestions.push(PolicySuggestion {
                                         tool: tool.clone(),
                                         field: k.clone(),
@@ -203,7 +206,8 @@ impl SuggestionEngine {
                                         new_value: s.clone(),
                                         anomaly_score: score,
                                         timestamp_ns: event.timestamp_ns,
-                                        suggested_action: "Review potential baseline deviation".to_string(),
+                                        suggested_action: "Review potential baseline deviation"
+                                            .to_string(),
                                     });
                                 }
                             }
@@ -240,7 +244,7 @@ impl GitOpsPrPayload for StubGitOps {
             });
             eprintln!("[SIEM ALERT] {}", alert);
         }
-        
+
         Ok(format!("Stub PR created for {} deviation", suggestion.tool))
     }
 }

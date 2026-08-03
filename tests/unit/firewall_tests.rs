@@ -1,13 +1,15 @@
-use std::sync::Arc;
-use serde_json::json;
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter, ToolCallFingerprint};
-use agentwall::policy::engine::CompiledPolicy;
-use agentwall::policy::schema::{FirewallConfig, CycleDetectionConfig, CycleAction};
 use agentwall::audit::logger::AuditLogger;
 use agentwall::kill::KillMode;
+use agentwall::policy::engine::CompiledPolicy;
+use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
 use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::response_scanner::{ResponseScanner, ResponseScanConfig};
-use std::sync::atomic::{AtomicU64, AtomicBool};
+use agentwall::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
+use agentwall::proxy::handler::{
+    evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter, ToolCallFingerprint,
+};
+use serde_json::json;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::Arc;
 
 #[test]
 fn test_canonical_json_hashing() {
@@ -32,20 +34,27 @@ fn test_canonical_json_hashing() {
     let fp1 = ToolCallFingerprint::new("my_tool", &args1);
     let fp2 = ToolCallFingerprint::new("my_tool", &args2);
 
-    assert_eq!(fp1, fp2, "Fingerprints must be identical regardless of parameter order");
+    assert_eq!(
+        fp1, fp2,
+        "Fingerprints must be identical regardless of parameter order"
+    );
 }
 
 #[test]
 fn test_tool_history_memory_bounding() {
-    let log_path = std::env::temp_dir().join(format!("vexa_test_fw_mem_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
-        log_path,
-        session_id: "session-fw-mem".to_string(),
-        session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-        max_bytes: 100000,
-        siem_exporter: None,
-        include_params: false,
-    }).unwrap());
+    let log_path =
+        std::env::temp_dir().join(format!("vexa_test_fw_mem_{}.log", uuid::Uuid::new_v4()));
+    let audit_logger = Arc::new(
+        AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "session-fw-mem".to_string(),
+            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
+            max_bytes: 100000,
+            siem_exporter: None,
+            include_params: false,
+        })
+        .unwrap(),
+    );
 
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
     let state = ProxyState {
@@ -76,7 +85,9 @@ fn test_tool_history_memory_bounding() {
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
         dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -88,7 +99,9 @@ fn test_tool_history_memory_bounding() {
         metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(agentwall::policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         gateway_start_time: std::time::Instant::now(),
         policy_path: None,
         dashboard_client: None,
@@ -124,27 +137,33 @@ fn test_tool_history_memory_bounding() {
             },
             "id": i
         });
-        
-        let _ = rt.block_on(async {
-            evaluate_jsonrpc(&state, &session, &req).await
-        });
+
+        let _ = rt.block_on(async { evaluate_jsonrpc(&state, &session, &req).await });
     }
 
     let history = session.tool_history.lock().unwrap();
-    assert_eq!(history.len(), 5, "History size must be capped at TOOL_HISTORY_MAX (5)");
+    assert_eq!(
+        history.len(),
+        5,
+        "History size must be capped at TOOL_HISTORY_MAX (5)"
+    );
 }
 
 #[test]
 fn test_cycle_detection_blocking() {
-    let log_path = std::env::temp_dir().join(format!("vexa_test_fw_block_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
-        log_path,
-        session_id: "session-fw-block".to_string(),
-        session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-        max_bytes: 100000,
-        siem_exporter: None,
-        include_params: false,
-    }).unwrap());
+    let log_path =
+        std::env::temp_dir().join(format!("vexa_test_fw_block_{}.log", uuid::Uuid::new_v4()));
+    let audit_logger = Arc::new(
+        AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "session-fw-block".to_string(),
+            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
+            max_bytes: 100000,
+            siem_exporter: None,
+            include_params: false,
+        })
+        .unwrap(),
+    );
 
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
     let state = ProxyState {
@@ -181,7 +200,9 @@ fn test_cycle_detection_blocking() {
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
         dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -193,7 +214,9 @@ fn test_cycle_detection_blocking() {
         metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(agentwall::policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         gateway_start_time: std::time::Instant::now(),
         policy_path: None,
         dashboard_client: None,
@@ -232,22 +255,37 @@ fn test_cycle_detection_blocking() {
 
     match res1 {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "First call should fail with policy violation");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "First call should fail with policy violation"
+            );
         }
         _ => panic!("Expected KillAndRespond for first call"),
     }
 
     match res2 {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "Second call should fail with policy violation");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "Second call should fail with policy violation"
+            );
         }
         _ => panic!("Expected KillAndRespond for second call"),
     }
 
     match res3 {
         ProxyAction::Respond(val) => {
-            assert_eq!(val["error"]["code"], -32010, "Third call should fail with JSONRPC_FIREWALL_CYCLE");
-            assert!(val["error"]["message"].as_str().unwrap().contains("Cycle detected"), "Error message should mention cycle detection");
+            assert_eq!(
+                val["error"]["code"], -32010,
+                "Third call should fail with JSONRPC_FIREWALL_CYCLE"
+            );
+            assert!(
+                val["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Cycle detected"),
+                "Error message should mention cycle detection"
+            );
         }
         _ => panic!("Expected Respond with cycle block for third call"),
     }
@@ -255,15 +293,19 @@ fn test_cycle_detection_blocking() {
 
 #[test]
 fn test_pause_interactive_fallback_in_non_tty() {
-    let log_path = std::env::temp_dir().join(format!("vexa_test_fw_tty_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
-        log_path,
-        session_id: "session-fw-tty".to_string(),
-        session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-        max_bytes: 100000,
-        siem_exporter: None,
-        include_params: false,
-    }).unwrap());
+    let log_path =
+        std::env::temp_dir().join(format!("vexa_test_fw_tty_{}.log", uuid::Uuid::new_v4()));
+    let audit_logger = Arc::new(
+        AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "session-fw-tty".to_string(),
+            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
+            max_bytes: 100000,
+            siem_exporter: None,
+            include_params: false,
+        })
+        .unwrap(),
+    );
 
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
     let state = ProxyState {
@@ -300,7 +342,9 @@ fn test_pause_interactive_fallback_in_non_tty() {
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
         dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(agentwall::policy::semantic::SemanticConfig::default())),
+        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
+            agentwall::policy::semantic::SemanticConfig::default(),
+        )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -312,7 +356,9 @@ fn test_pause_interactive_fallback_in_non_tty() {
         metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(agentwall::policy::credential_scope::CredentialScopeValidator::new(false)),
+        credential_scope_validator: Arc::new(
+            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+        ),
         gateway_start_time: std::time::Instant::now(),
         policy_path: None,
         dashboard_client: None,
@@ -351,7 +397,10 @@ fn test_pause_interactive_fallback_in_non_tty() {
 
     match res2 {
         ProxyAction::KillAndRespond(val) => {
-            assert_eq!(val["error"]["code"], -32001, "PauseInteractive fallback should fail with policy violation");
+            assert_eq!(
+                val["error"]["code"], -32001,
+                "PauseInteractive fallback should fail with policy violation"
+            );
         }
         _ => panic!("Expected KillAndRespond for blocked call"),
     }

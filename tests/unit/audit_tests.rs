@@ -68,7 +68,7 @@ async fn test_audit_sync_write_and_chain() {
     assert_eq!(e2.entry_index, 1);
     assert_eq!(e2.prev_hmac, e1.hmac.unwrap()); // Chain is intact
     assert!(e2.hmac.is_some());
-    
+
     // Verify the log offline
     let verify_res = verify_chain(&dir.path().join("audit.log"));
     if let VerifyResult::Valid { entry_count } = verify_res {
@@ -134,7 +134,7 @@ async fn test_audit_log_rotation() {
         .unwrap()
         .map(|res| res.unwrap().path())
         .collect();
-    
+
     assert!(files.len() > 1, "Log file should have been rotated");
 
     // The active file should verify cleanly (starts with rotation_seed)
@@ -151,15 +151,41 @@ async fn test_verify_chain_with_secret_tamper_detection() {
     let config = create_temp_config(dir.path(), 1024 * 1024);
     let session_secret = config.session_secret.clone();
     let log_path = config.log_path.clone();
-    
+
     let logger = AuditLogger::new(config).expect("failed to create logger");
 
-    logger.write_entry(
-        "sess-1", "test_event", "tool_1", None, None, None, None, None, None, None, None
-    ).await.unwrap();
-    logger.write_entry(
-        "sess-1", "test_event", "tool_2", None, None, None, None, None, None, None, None
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "sess-1",
+            "test_event",
+            "tool_1",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    logger
+        .write_entry(
+            "sess-1",
+            "test_event",
+            "tool_2",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
     // Initial verify is clean
     match verify_chain_with_secret(&log_path, &session_secret) {
@@ -174,7 +200,10 @@ async fn test_verify_chain_with_secret_tamper_detection() {
 
     // Verify again - should detect tampering
     match verify_chain_with_secret(&log_path, &session_secret) {
-        VerifyResult::Invalid { entry_index, reason } => {
+        VerifyResult::Invalid {
+            entry_index,
+            reason,
+        } => {
             assert_eq!(entry_index, 0);
             assert!(reason.contains("HMAC mismatch"));
         }
@@ -195,11 +224,22 @@ async fn test_verify_log_key_file_integration() {
 
     let logger = AuditLogger::new(config).expect("failed to create logger");
 
-    logger.write_entry(
-        "sess-key-test", "tool_allow", "read_file", None, None, None,
-        Some("user-sub-123".to_string()), Some("user@corp.com".to_string()),
-        Some("sha256:active".to_string()), Some("127.0.0.1".to_string()), None
-    ).await.unwrap();
+    logger
+        .write_entry(
+            "sess-key-test",
+            "tool_allow",
+            "read_file",
+            None,
+            None,
+            None,
+            Some("user-sub-123".to_string()),
+            Some("user@corp.com".to_string()),
+            Some("sha256:active".to_string()),
+            Some("127.0.0.1".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
 
     // Verify using key file secret
     let read_key = fs::read(&key_file_path).unwrap();

@@ -109,7 +109,10 @@ fn test_wrap_is_idempotent() {
 
     // Second wrap attempt: all already wrapped → AlreadyWrapped
     let result = transformer::wrap_all_servers(&mut config, "/bin/agentwall");
-    assert!(matches!(result, Err(agentwall::wrap::WrapError::AlreadyWrapped)));
+    assert!(matches!(
+        result,
+        Err(agentwall::wrap::WrapError::AlreadyWrapped)
+    ));
 }
 
 #[test]
@@ -141,16 +144,24 @@ fn test_backup_and_prune() {
     // Create 6 backups manually (simulate time-ordered)
     for i in 0..6usize {
         let ts = format!("20260512-{:06}", i * 1000);
-        let bk = dir.path().join(format!("claude_desktop_config.json.agentwall-backup-{}", ts));
+        let bk = dir.path().join(format!(
+            "claude_desktop_config.json.agentwall-backup-{}",
+            ts
+        ));
         fs::write(&bk, "{}").unwrap();
     }
 
     backup::prune_backups(dir.path(), 5).unwrap();
 
     // Count remaining backup files
-    let count = fs::read_dir(dir.path()).unwrap()
+    let count = fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().contains("agentwall-backup-"))
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .contains("agentwall-backup-")
+        })
         .count();
     assert_eq!(count, 5);
 
@@ -166,7 +177,10 @@ fn test_find_latest_backup() {
     write_config(dir.path(), &fake_config_1_server());
 
     for ts in &["20260512-100000", "20260512-110000", "20260512-120000"] {
-        let bk = dir.path().join(format!("claude_desktop_config.json.agentwall-backup-{}", ts));
+        let bk = dir.path().join(format!(
+            "claude_desktop_config.json.agentwall-backup-{}",
+            ts
+        ));
         fs::write(&bk, "{}").unwrap();
     }
 
@@ -187,7 +201,10 @@ fn test_wrap_empty_servers_returns_error() {
     use agentwall::wrap::transformer;
     let mut config = serde_json::json!({ "mcpServers": {} });
     let result = transformer::wrap_all_servers(&mut config, "/bin/agentwall");
-    assert!(matches!(result, Err(agentwall::wrap::WrapError::NoMcpServers)));
+    assert!(matches!(
+        result,
+        Err(agentwall::wrap::WrapError::NoMcpServers)
+    ));
 }
 
 #[test]
@@ -198,7 +215,7 @@ fn test_unwrap_restores_exact_original() {
     let mut config = original.clone();
 
     transformer::wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
-    
+
     // Unwrap all servers
     for (_name, entry) in config["mcpServers"].as_object_mut().unwrap() {
         transformer::unwrap_entry(entry).unwrap();
@@ -207,8 +224,16 @@ fn test_unwrap_restores_exact_original() {
     // Each server matches original
     for (name, entry) in config["mcpServers"].as_object().unwrap() {
         let orig_entry = &original["mcpServers"][name];
-        assert_eq!(entry["command"], orig_entry["command"], "command mismatch for {}", name);
-        assert_eq!(entry["args"], orig_entry["args"], "args mismatch for {}", name);
+        assert_eq!(
+            entry["command"], orig_entry["command"],
+            "command mismatch for {}",
+            name
+        );
+        assert_eq!(
+            entry["args"], orig_entry["args"],
+            "args mismatch for {}",
+            name
+        );
         assert_eq!(entry["env"], orig_entry["env"], "env mismatch for {}", name);
     }
 }
@@ -222,6 +247,9 @@ fn test_absolute_agentwall_path_is_used() {
     transformer::wrap_entry(&mut entry, "/home/alice/.local/bin/agentwall").unwrap();
 
     let cmd = entry["command"].as_str().unwrap();
-    assert!(cmd.starts_with('/') || cmd.contains(':'), // Unix or Windows absolute path
-        "command should be absolute: {}", cmd);
+    assert!(
+        cmd.starts_with('/') || cmd.contains(':'), // Unix or Windows absolute path
+        "command should be absolute: {}",
+        cmd
+    );
 }

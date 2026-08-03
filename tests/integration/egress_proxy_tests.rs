@@ -11,29 +11,26 @@ use reqwest::Client;
 use std::time::Duration;
 use tokio::time::sleep;
 
-
 /// Helper to start a local dummy HTTP server
 fn start_dummy_http_server() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    
+
     std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            if let Ok(mut stream) = stream {
-                use std::io::{Read, Write};
-                let mut buf = [0; 1024];
-                if let Ok(n) = stream.read(&mut buf) {
-                    if n > 0 {
-                        let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-                        let _ = stream.write_all(response.as_bytes());
-                        let _ = stream.flush();
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-                    }
+        for mut stream in listener.incoming().flatten() {
+            use std::io::{Read, Write};
+            let mut buf = [0; 1024];
+            if let Ok(n) = stream.read(&mut buf) {
+                if n > 0 {
+                    let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.flush();
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
         }
     });
-    
+
     port
 }
 
@@ -185,21 +182,26 @@ async fn test_https_connect_tunnel() {
     let mut child = start_proxy(port).await;
     let mock_port = start_dummy_http_server();
 
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
-    use tokio::io::{AsyncWriteExt, AsyncReadExt};
 
-    let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).await.unwrap();
-    
-    let connect_req = format!("CONNECT 127.0.0.1:{} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n", mock_port, mock_port);
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+        .await
+        .unwrap();
+
+    let connect_req = format!(
+        "CONNECT 127.0.0.1:{} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+        mock_port, mock_port
+    );
     stream.write_all(connect_req.as_bytes()).await.unwrap();
-    
+
     let mut buf = [0; 1024];
     let n = stream.read(&mut buf).await.unwrap();
     let response = String::from_utf8_lossy(&buf[..n]);
-    
+
     assert!(
-        response.starts_with("HTTP/1.1 200 OK"), 
-        "Expected 200 OK for CONNECT, got: {}", 
+        response.starts_with("HTTP/1.1 200 OK"),
+        "Expected 200 OK for CONNECT, got: {}",
         response
     );
 

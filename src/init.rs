@@ -105,9 +105,15 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
 
     println!();
     if !found_any {
-        println!("{}", "No supported IDE configs were detected in standard locations.".yellow());
+        println!(
+            "{}",
+            "No supported IDE configs were detected in standard locations.".yellow()
+        );
     } else {
-        println!("{}", "Run the integration commands above to wrap your MCP servers with AgentWall.".dimmed());
+        println!(
+            "{}",
+            "Run the integration commands above to wrap your MCP servers with AgentWall.".dimmed()
+        );
     }
 
     0
@@ -123,7 +129,7 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
 /// Exit code: `0`.
 fn run_init_sidecar(mcp_upstream: &str) -> i32 {
     let yaml = format!(
-r#"---
+        r#"---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -171,7 +177,8 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8080
-"#);
+"#
+    );
     println!("{}", yaml);
     0
 }

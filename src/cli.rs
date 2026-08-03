@@ -20,6 +20,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Start local shadow proxy (observation only, no enforcement)
     Dev {
@@ -65,7 +66,11 @@ pub enum Commands {
         log_path: String,
 
         /// Upstream MCP server URL
-        #[arg(long, env = "AGENTWALL_MCP_URL", default_value = "http://127.0.0.1:3000")]
+        #[arg(
+            long,
+            env = "AGENTWALL_MCP_URL",
+            default_value = "http://127.0.0.1:3000"
+        )]
         mcp_url: String,
 
         /// Agent PID (ignored in v6.1 — process kill is removed)
@@ -124,7 +129,6 @@ pub enum Commands {
         max_scan_bytes: usize,
 
         // ── FR-104: SIEM Export ────────────────────────────────────────────
-
         /// SIEM backend to export audit events to (FR-104).
         /// Supported values: splunk | datadog | opensearch | local
         /// Use 'local' (default) for disk-only operation without network export.
@@ -168,11 +172,14 @@ pub enum Commands {
         ///
         /// Requires FR-22 (Agent Identity Platform) for full scope validation.
         /// Default: false (WARN mode — log only, permit the call).
-        #[arg(long, env = "AGENTWALL_STRICT_CREDENTIAL_SCOPE", default_value_t = false)]
+        #[arg(
+            long,
+            env = "AGENTWALL_STRICT_CREDENTIAL_SCOPE",
+            default_value_t = false
+        )]
         strict_credential_scope: bool,
 
         // ── FR-5 §5.5.6: TLS Configuration ─────────────────────────────────
-
         /// TLS certificate chain PEM file for HTTPS listener (FR-5 §5.5.6).
         ///
         /// The file should contain the leaf certificate first, followed by any
@@ -364,8 +371,6 @@ pub enum Commands {
         target: UnwrapTarget,
     },
 
-
-
     /// Internal command used by Claude Desktop to proxy tool calls (FR-304)
     #[command(name = "stdio-proxy", hide = true)]
     StdioProxy {
@@ -455,19 +460,40 @@ pub enum WrapTarget {
         block_on_secrets: bool,
     },
     /// Wrap Cursor IDE with AgentWall
-    Cursor { #[arg(long, default_value_t = false)] dry_run: bool },
+    Cursor {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap VS Code with AgentWall
-    Vscode { #[arg(long, default_value_t = false)] dry_run: bool },
+    Vscode {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap JetBrains IDEs with AgentWall
-    Jetbrains { #[arg(long, default_value_t = false)] dry_run: bool },
+    Jetbrains {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap Zed Editor with AgentWall
-    Zed { #[arg(long, default_value_t = false)] dry_run: bool },
+    Zed {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap Cline Extension with AgentWall
-    Cline { #[arg(long, default_value_t = false)] dry_run: bool },
+    Cline {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap OpenCode with AgentWall
-    Opencode { #[arg(long, default_value_t = false)] dry_run: bool },
+    Opencode {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
     /// Wrap Antigravity IDE with AgentWall
-    Antigravity { #[arg(long, default_value_t = false)] dry_run: bool },
+    Antigravity {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -479,19 +505,40 @@ pub enum UnwrapTarget {
         force: bool,
     },
     /// Restore Cursor config
-    Cursor { #[arg(long, default_value_t = false)] force: bool },
+    Cursor {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore VS Code config
-    Vscode { #[arg(long, default_value_t = false)] force: bool },
+    Vscode {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore JetBrains config
-    Jetbrains { #[arg(long, default_value_t = false)] force: bool },
+    Jetbrains {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore Zed config
-    Zed { #[arg(long, default_value_t = false)] force: bool },
+    Zed {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore Cline config
-    Cline { #[arg(long, default_value_t = false)] force: bool },
+    Cline {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore OpenCode config
-    Opencode { #[arg(long, default_value_t = false)] force: bool },
+    Opencode {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Restore Antigravity config
-    Antigravity { #[arg(long, default_value_t = false)] force: bool },
+    Antigravity {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -539,65 +586,65 @@ pub enum IdentityCommands {
         /// Agent identifier
         #[arg(long)]
         agent: String,
-        
+
         /// Scope string (e.g., "read-only")
         #[arg(long)]
         scope: String,
-        
+
         /// Time-to-live (e.g., "1h", "30m")
         #[arg(long, default_value = "1h")]
         ttl: String,
-        
+
         /// Optional rotation policy (e.g., "daily")
         #[arg(long)]
         rotation_policy: Option<String>,
     },
-    
+
     /// Rotate an agent's active credential with zero downtime
     Rotate {
         /// Agent identifier
         #[arg(long)]
         agent: String,
-        
+
         /// Drain period in seconds (old credential remains valid for this long)
         #[arg(long, default_value_t = 30)]
         drain_secs: u64,
     },
-    
+
     /// Display the HMAC-chained identity audit history
     Audit {
         /// Agent identifier
         #[arg(long)]
         agent: String,
-        
+
         /// Verify the HMAC chain integrity before displaying
         #[arg(long, default_value_t = false)]
         verify: bool,
     },
-    
+
     /// Set per-tool-call credential scoping rules
     Scope {
         /// Agent identifier
         #[arg(long)]
         agent: String,
-        
+
         /// Tool name to scope
         #[arg(long)]
         tool: String,
-        
+
         /// Explicitly allow this tool (default)
         #[arg(long, group = "action")]
         allow: bool,
-        
+
         /// Explicitly deny this tool
         #[arg(long, group = "action")]
         deny: bool,
-        
+
         /// Policy file to update (optional)
         #[arg(long, default_value = "agentwall-policy.yaml")]
         policy: String,
     },
-    
+
     /// Inspect a specific credential binding
     Inspect {
         /// Credential binding ID (UUID)
@@ -605,4 +652,3 @@ pub enum IdentityCommands {
         credential: String,
     },
 }
-

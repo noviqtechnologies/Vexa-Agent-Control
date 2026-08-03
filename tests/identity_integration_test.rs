@@ -1,12 +1,19 @@
 use agentwall::identity::audit_log::{IdentityAuditLogger, IdentityEventType};
-use agentwall::identity::vault::{VaultAdapter, HashicorpVaultAdapter, AwsSecretsManagerAdapter, VaultConfig, VaultError, IssuedCredential};
 use agentwall::identity::credential::{AgentCredential, CredentialType, ToolScope};
-use agentwall::identity::scope_validator::{IdentityScopeValidator, CredentialScopeCheckResult};
+use agentwall::identity::scope_validator::{CredentialScopeCheckResult, IdentityScopeValidator};
+use agentwall::identity::vault::{
+    AwsSecretsManagerAdapter, IssuedCredential, VaultAdapter, VaultConfig, VaultError,
+};
 
 struct MockVaultAdapter;
 
 impl VaultAdapter for MockVaultAdapter {
-    fn issue(&self, agent_id: &str, scope: &str, ttl_seconds: u64) -> Result<IssuedCredential, VaultError> {
+    fn issue(
+        &self,
+        _agent_id: &str,
+        _scope: &str,
+        ttl_seconds: u64,
+    ) -> Result<IssuedCredential, VaultError> {
         let now = chrono::Utc::now();
         let expires_at_unix = (now + chrono::Duration::seconds(ttl_seconds as i64)).timestamp();
         Ok(IssuedCredential {
@@ -36,22 +43,33 @@ fn test_create_issues_vault_credential_within_200ms() {
     // Use an isolated agent name
     let cred = vault.issue("agent-test-create", "read-only", 3600).unwrap();
     let elapsed = start.elapsed();
-    
-    assert!(elapsed.as_millis() < 200, "Credential issuance took longer than 200ms");
+
+    assert!(
+        elapsed.as_millis() < 200,
+        "Credential issuance took longer than 200ms"
+    );
     assert!(!cred.vault_credential_id.is_empty());
 }
 
 #[test]
 fn test_expired_jwt_rejected_by_gateway() {
     let mut cred = AgentCredential::new(
-        "agent-test-exp", "sub-1", "read-only", vec![],
-        CredentialType::Jwt, "vault", "1h", 30, "operator"
+        "agent-test-exp",
+        "sub-1",
+        "read-only",
+        vec![],
+        CredentialType::Jwt,
+        "vault",
+        "1h",
+        30,
+        "operator",
     );
     // Force expire
     cred.expires_at = chrono::Utc::now() - chrono::Duration::seconds(10);
     cred.save().unwrap();
 
-    let result = IdentityScopeValidator::validate("agent-test-exp", "read_file", &cred.credential_id);
+    let result =
+        IdentityScopeValidator::validate("agent-test-exp", "read_file", &cred.credential_id);
     assert_eq!(result, CredentialScopeCheckResult::Expired);
 }
 
@@ -59,7 +77,7 @@ fn test_expired_jwt_rejected_by_gateway() {
 fn test_rotate_drain_period() {
     let vault = MockVaultAdapter;
     let old_cred = vault.issue("agent-test-rotate", "read-only", 3600).unwrap();
-    
+
     let new_cred = vault.issue("agent-test-rotate", "read-only", 3600).unwrap();
     assert_ne!(old_cred.vault_credential_id, new_cred.vault_credential_id);
 }
@@ -67,13 +85,28 @@ fn test_rotate_drain_period() {
 #[test]
 fn test_scope_insufficient_blocks_execute_shell() {
     let cred = AgentCredential::new(
-        "agent-test-insufficient", "sub-1", "read-only",
-        vec![ToolScope { tool: "read_file".to_string(), paths: vec![], databases: vec![], allow: true }],
-        CredentialType::Jwt, "vault", "1h", 30, "operator"
+        "agent-test-insufficient",
+        "sub-1",
+        "read-only",
+        vec![ToolScope {
+            tool: "read_file".to_string(),
+            paths: vec![],
+            databases: vec![],
+            allow: true,
+        }],
+        CredentialType::Jwt,
+        "vault",
+        "1h",
+        30,
+        "operator",
     );
     cred.save().unwrap();
 
-    let result = IdentityScopeValidator::validate("agent-test-insufficient", "execute_shell", &cred.credential_id);
+    let result = IdentityScopeValidator::validate(
+        "agent-test-insufficient",
+        "execute_shell",
+        &cred.credential_id,
+    );
     match result {
         CredentialScopeCheckResult::Insufficient(_) => {}
         _ => panic!("Expected Insufficient"),
@@ -85,12 +118,32 @@ fn test_audit_hmac_chain_valid() {
     let dir = tempfile::tempdir().unwrap();
     let logger = IdentityAuditLogger::with_path(dir.path().join("audit.log"));
 
-    logger.append(agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
-        IdentityEventType::Issued, "agent-1", "cred-1", "read-only", "admin", "mock", "test",
-    )).unwrap();
-    logger.append(agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
-        IdentityEventType::Rotated, "agent-1", "cred-2", "read-only", "admin", "mock", "test",
-    )).unwrap();
+    logger
+        .append(
+            agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
+                IdentityEventType::Issued,
+                "agent-1",
+                "cred-1",
+                "read-only",
+                "admin",
+                "mock",
+                "test",
+            ),
+        )
+        .unwrap();
+    logger
+        .append(
+            agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
+                IdentityEventType::Rotated,
+                "agent-1",
+                "cred-2",
+                "read-only",
+                "admin",
+                "mock",
+                "test",
+            ),
+        )
+        .unwrap();
 
     let count = logger.verify_chain().unwrap();
     assert_eq!(count, 2);
@@ -114,12 +167,24 @@ fn test_aws_sm_backend_mock() {
 #[test]
 fn test_per_tool_scope_enforcement() {
     let cred = AgentCredential::new(
-        "agent-test-per-tool", "sub-1", "read-only",
-        vec![ToolScope { tool: "read_file".to_string(), paths: vec![], databases: vec![], allow: true }],
-        CredentialType::Jwt, "vault", "1h", 30, "operator"
+        "agent-test-per-tool",
+        "sub-1",
+        "read-only",
+        vec![ToolScope {
+            tool: "read_file".to_string(),
+            paths: vec![],
+            databases: vec![],
+            allow: true,
+        }],
+        CredentialType::Jwt,
+        "vault",
+        "1h",
+        30,
+        "operator",
     );
     cred.save().unwrap();
 
-    let result = IdentityScopeValidator::validate("agent-test-per-tool", "read_file", &cred.credential_id);
+    let result =
+        IdentityScopeValidator::validate("agent-test-per-tool", "read_file", &cred.credential_id);
     assert_eq!(result, CredentialScopeCheckResult::Allowed);
 }

@@ -131,7 +131,11 @@ pub fn run_identity_rotate(agent_id: &str, drain_secs: u64) -> i32 {
     audit_entry.new_credential_id = Some(new_cred.credential_id.clone());
 
     if let Err(e) = audit_logger.append(audit_entry) {
-        eprintln!("{} Warning: Cannot write rotation audit entry: {}", "⚠".yellow(), e);
+        eprintln!(
+            "{} Warning: Cannot write rotation audit entry: {}",
+            "⚠".yellow(),
+            e
+        );
     }
 
     logging::log_event(
@@ -151,13 +155,25 @@ pub fn run_identity_rotate(agent_id: &str, drain_secs: u64) -> i32 {
     println!("{} Credential rotated successfully", "✓".green().bold());
     println!("{}", "─".repeat(60).cyan());
     println!("  {} {}", "Agent:".bold(), agent_id.cyan());
-    println!("  {} {}", "Old Credential ID:".bold(), old_credential_id.dimmed());
-    println!("  {} {}", "New Credential ID:".bold(), new_cred.credential_id.cyan());
+    println!(
+        "  {} {}",
+        "Old Credential ID:".bold(),
+        old_credential_id.dimmed()
+    );
+    println!(
+        "  {} {}",
+        "New Credential ID:".bold(),
+        new_cred.credential_id.cyan()
+    );
     println!("  {} {}", "Scope:".bold(), old_cred.scope.green());
     println!(
         "  {} {}",
         "New expires at:".bold(),
-        new_cred.expires_at.format("%Y-%m-%d %H:%M:%S UTC").to_string().yellow()
+        new_cred
+            .expires_at
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string()
+            .yellow()
     );
     println!(
         "  {} Old credential valid for {}s (draining)",

@@ -101,8 +101,7 @@ impl CredentialScopeValidator {
 
         // Check that the agent holds at least one of the required scopes.
         let has_required = required_scopes.iter().any(|req| {
-            agent_scopes.contains(&req.as_str())
-                || agent_scopes.contains(&"*") // wildcard scope grants all
+            agent_scopes.contains(&req.as_str()) || agent_scopes.contains(&"*") // wildcard scope grants all
         });
 
         if has_required {

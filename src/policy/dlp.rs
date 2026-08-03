@@ -3,9 +3,9 @@
 //! Evaluates incoming request parameters and outgoing LLM response payloads against high-performance `RegexSet`
 //! patterns, BIP39 mnemonic validation, Shannon entropy thresholds, and Luhn credit card algorithms.
 
-use regex::{Regex, RegexSet};
-use bip39::Mnemonic;
 use base64::{engine::general_purpose, Engine as _};
+use bip39::Mnemonic;
+use regex::{Regex, RegexSet};
 
 /// Categories of secrets detected by the DLP engine.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -74,38 +74,125 @@ pub struct DlpScanner {
 }
 
 impl DlpScanner {
-    pub fn new(community_rules: Option<Vec<crate::policy::community_rules::CommunityRule>>) -> Result<Self, regex::Error> {
+    pub fn new(
+        community_rules: Option<Vec<crate::policy::community_rules::CommunityRule>>,
+    ) -> Result<Self, regex::Error> {
         let pattern_defs = vec![
-            ("AWS Access Key (AKIA)", SecretCategory::AwsAccessKey, r"AKIA[0-9A-Z]{16}"),
-            ("AWS Access Key (ASIA)", SecretCategory::AwsAccessKey, r"ASIA[0-9A-Z]{16}"),
-            ("GitHub PAT (ghp)", SecretCategory::GitHubToken, r"ghp_[0-9a-zA-Z\-]{36,}"),
-            ("GitHub OAuth (gho)", SecretCategory::GitHubToken, r"gho_[0-9a-zA-Z\-]{36,}"),
-            ("GitHub Fine-Grained PAT", SecretCategory::GitHubToken, r"github_pat_[0-9a-zA-Z_]{80,96}"),
-            ("OpenAI API Key", SecretCategory::OpenAiApiKey, r"sk-[a-zA-Z0-9\-]{20,}"),
-            ("Anthropic API Key", SecretCategory::AnthropicApiKey, r"sk-ant-[a-zA-Z0-9_\-]{20,}"),
-            ("SSH Private Key", SecretCategory::SshPrivateKey, r"-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----"),
-            ("Stripe Secret Key", SecretCategory::StripeKey, r"sk_live_[0-9a-zA-Z]{20,}"),
-            ("Stripe Restricted Key", SecretCategory::StripeKey, r"rk_live_[0-9a-zA-Z]{20,}"),
-            ("PostgreSQL URI", SecretCategory::DatabaseUri, r"postgres(ql)?://[^:]+:[^@]+@[a-zA-Z0-9.-]+:[0-9]+/[a-zA-Z0-9_]+"),
-            ("MongoDB URI", SecretCategory::DatabaseUri, r"mongodb(\+srv)?://[^:]+:[^@]+@[a-zA-Z0-9.-]+"),
-            ("Redis URI", SecretCategory::DatabaseUri, r"redis(s)?://(:[^@]+@)?[a-zA-Z0-9.-]+:[0-9]+"),
-            ("US SSN", SecretCategory::Pii, r"\b[0-8][0-9]{2}-[0-9]{2}-[0-9]{4}\b"),
-            ("Emirates ID", SecretCategory::Pii, r"\b784-[0-9]{4}-[0-9]{7}-[0-9]\b"),
-            ("Env Var Access", SecretCategory::EnvVar, r"\$[A-Z_][A-Z0-9_]+"),
-            ("Azure Storage Key", SecretCategory::AzureStorageKey, r"(?i)AccountKey=[a-zA-Z0-9+/]{86}=="),
-            ("GCP API Key", SecretCategory::GcpApiKey, r"AIza[0-9A-Za-z\-_]{35}"),
-            ("Slack Token", SecretCategory::SlackToken, r"xox[baprs]-[0-9a-zA-Z]{10,48}"),
-            ("SendGrid Key", SecretCategory::SendGridKey, r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}"),
-            ("Credit Card Number", SecretCategory::CreditCard, r"\b(?:\d[ -]*?){13,16}\b"),
+            (
+                "AWS Access Key (AKIA)",
+                SecretCategory::AwsAccessKey,
+                r"AKIA[0-9A-Z]{16}",
+            ),
+            (
+                "AWS Access Key (ASIA)",
+                SecretCategory::AwsAccessKey,
+                r"ASIA[0-9A-Z]{16}",
+            ),
+            (
+                "GitHub PAT (ghp)",
+                SecretCategory::GitHubToken,
+                r"ghp_[0-9a-zA-Z\-]{36,}",
+            ),
+            (
+                "GitHub OAuth (gho)",
+                SecretCategory::GitHubToken,
+                r"gho_[0-9a-zA-Z\-]{36,}",
+            ),
+            (
+                "GitHub Fine-Grained PAT",
+                SecretCategory::GitHubToken,
+                r"github_pat_[0-9a-zA-Z_]{80,96}",
+            ),
+            (
+                "OpenAI API Key",
+                SecretCategory::OpenAiApiKey,
+                r"sk-[a-zA-Z0-9\-]{20,}",
+            ),
+            (
+                "Anthropic API Key",
+                SecretCategory::AnthropicApiKey,
+                r"sk-ant-[a-zA-Z0-9_\-]{20,}",
+            ),
+            (
+                "SSH Private Key",
+                SecretCategory::SshPrivateKey,
+                r"-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----",
+            ),
+            (
+                "Stripe Secret Key",
+                SecretCategory::StripeKey,
+                r"sk_live_[0-9a-zA-Z]{20,}",
+            ),
+            (
+                "Stripe Restricted Key",
+                SecretCategory::StripeKey,
+                r"rk_live_[0-9a-zA-Z]{20,}",
+            ),
+            (
+                "PostgreSQL URI",
+                SecretCategory::DatabaseUri,
+                r"postgres(ql)?://[^:]+:[^@]+@[a-zA-Z0-9.-]+:[0-9]+/[a-zA-Z0-9_]+",
+            ),
+            (
+                "MongoDB URI",
+                SecretCategory::DatabaseUri,
+                r"mongodb(\+srv)?://[^:]+:[^@]+@[a-zA-Z0-9.-]+",
+            ),
+            (
+                "Redis URI",
+                SecretCategory::DatabaseUri,
+                r"redis(s)?://(:[^@]+@)?[a-zA-Z0-9.-]+:[0-9]+",
+            ),
+            (
+                "US SSN",
+                SecretCategory::Pii,
+                r"\b[0-8][0-9]{2}-[0-9]{2}-[0-9]{4}\b",
+            ),
+            (
+                "Emirates ID",
+                SecretCategory::Pii,
+                r"\b784-[0-9]{4}-[0-9]{7}-[0-9]\b",
+            ),
+            (
+                "Env Var Access",
+                SecretCategory::EnvVar,
+                r"\$[A-Z_][A-Z0-9_]+",
+            ),
+            (
+                "Azure Storage Key",
+                SecretCategory::AzureStorageKey,
+                r"(?i)AccountKey=[a-zA-Z0-9+/]{86}==",
+            ),
+            (
+                "GCP API Key",
+                SecretCategory::GcpApiKey,
+                r"AIza[0-9A-Za-z\-_]{35}",
+            ),
+            (
+                "Slack Token",
+                SecretCategory::SlackToken,
+                r"xox[baprs]-[0-9a-zA-Z]{10,48}",
+            ),
+            (
+                "SendGrid Key",
+                SecretCategory::SendGridKey,
+                r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}",
+            ),
+            (
+                "Credit Card Number",
+                SecretCategory::CreditCard,
+                r"\b(?:\d[ -]*?){13,16}\b",
+            ),
         ];
 
-        let mut raw_patterns: Vec<String> = pattern_defs.iter().map(|(_, _, p)| p.to_string()).collect();
+        let mut raw_patterns: Vec<String> =
+            pattern_defs.iter().map(|(_, _, p)| p.to_string()).collect();
         if let Some(rules) = &community_rules {
             for rule in rules {
                 raw_patterns.push(rule.regex.clone());
             }
         }
-        
+
         let regex_set = RegexSet::new(&raw_patterns)?;
 
         let mut patterns = Vec::new();
@@ -116,7 +203,7 @@ impl DlpScanner {
                 individual_regex: Regex::new(pat)?,
             });
         }
-        
+
         if let Some(rules) = community_rules {
             for rule in rules {
                 patterns.push(PatternDef {
@@ -127,13 +214,16 @@ impl DlpScanner {
             }
         }
 
-        Ok(Self { regex_set, patterns })
+        Ok(Self {
+            regex_set,
+            patterns,
+        })
     }
 
     pub fn scan_content(&self, content: &str) -> Vec<SecretFinding> {
         let mut findings = Vec::new();
         let mut decoded = content.to_string();
-        
+
         // Base64 recursive decoding (up to 3 levels)
         for _ in 0..3 {
             if is_base64_like(&decoded) {
@@ -153,10 +243,14 @@ impl DlpScanner {
             let pat = &self.patterns[idx];
             for m in pat.individual_regex.find_iter(&decoded) {
                 let text = m.as_str();
-                
+
                 // Optional: checksum validation
-                if pat.name == "Emirates ID" && !validate_emirates_id(text) { continue; }
-                if pat.name == "Credit Card Number" && !validate_luhn(text) { continue; }
+                if pat.name == "Emirates ID" && !validate_emirates_id(text) {
+                    continue;
+                }
+                if pat.name == "Credit Card Number" && !validate_luhn(text) {
+                    continue;
+                }
 
                 findings.push(SecretFinding {
                     category: pat.category.clone(),
@@ -172,7 +266,8 @@ impl DlpScanner {
         // (e.g. OpenAI sk- pattern vs Anthropic sk-ant- pattern).
         // If two findings share the exact same start position, keep the longer match.
         findings.sort_by(|a, b| {
-            a.position.cmp(&b.position)
+            a.position
+                .cmp(&b.position)
                 .then(b.length.cmp(&a.length)) // Descending length so the longer match is first
                 .then(a.pattern_name.cmp(&b.pattern_name)) // e.g. Anthropic < OpenAI
         });
@@ -195,15 +290,20 @@ impl DlpScanner {
             if w.len() > 32 && calculate_shannon_entropy(w) > 4.5 {
                 // Skip if the word itself directly matches any named regex pattern
                 let already_named = self.patterns.iter().any(|p| p.individual_regex.is_match(w));
-                if already_named { continue; }
+                if already_named {
+                    continue;
+                }
 
                 // Ignore if it matches a known pattern to avoid double reporting
                 let mut known = false;
                 for f in &findings {
                     let parts: Vec<&str> = f.preview.split("****").collect();
-                    if parts.iter().all(|p| w.contains(p)) { known = true; break; }
+                    if parts.iter().all(|p| w.contains(p)) {
+                        known = true;
+                        break;
+                    }
                 }
-                if !known && !is_base64_like(w) { 
+                if !known && !is_base64_like(w) {
                     findings.push(SecretFinding {
                         category: SecretCategory::HighEntropy,
                         pattern_name: "suspicious_high_entropy".to_string(),
@@ -218,15 +318,20 @@ impl DlpScanner {
         findings
     }
 
-    pub fn resolve_action(&self, finding: &SecretFinding, policy: Option<&crate::policy::engine::CompiledPolicy>) -> DlpAction {
+    pub fn resolve_action(
+        &self,
+        finding: &SecretFinding,
+        policy: Option<&crate::policy::engine::CompiledPolicy>,
+    ) -> DlpAction {
         if let Some(p) = policy {
             if let Some(llm) = &p.llm {
                 if let Some(dlp_cfg) = &llm.dlp {
                     if let Some(actions) = &dlp_cfg.actions {
                         for rule in actions {
-                            let matches_entity = rule.entity.eq_ignore_ascii_case(&finding.pattern_name)
-                                || rule.entity.eq_ignore_ascii_case(finding.category.as_str())
-                                || rule.entity.eq_ignore_ascii_case("default");
+                            let matches_entity =
+                                rule.entity.eq_ignore_ascii_case(&finding.pattern_name)
+                                    || rule.entity.eq_ignore_ascii_case(finding.category.as_str())
+                                    || rule.entity.eq_ignore_ascii_case("default");
                             if matches_entity {
                                 match rule.action.to_ascii_lowercase().as_str() {
                                     "block" => return DlpAction::Block,
@@ -257,7 +362,10 @@ impl DlpScanner {
             let replacement = format!("[REDACTED:{}]", finding.pattern_name);
             for pat in &self.patterns {
                 if pat.name == finding.pattern_name {
-                    result = pat.individual_regex.replace_all(&result, replacement.as_str()).to_string();
+                    result = pat
+                        .individual_regex
+                        .replace_all(&result, replacement.as_str())
+                        .to_string();
                 }
             }
         }
@@ -293,12 +401,14 @@ pub enum DlpAction {
     Warn,
 }
 
-
 // Helpers
 fn is_base64_like(s: &str) -> bool {
     let s = s.trim();
-    if s.len() < 16 || !s.len().is_multiple_of(4) { return false; }
-    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    if s.len() < 16 || !s.len().is_multiple_of(4) {
+        return false;
+    }
+    s.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
 }
 
 pub fn calculate_shannon_entropy(s: &str) -> f64 {
@@ -308,7 +418,9 @@ pub fn calculate_shannon_entropy(s: &str) -> f64 {
         counts[b as usize] += 1;
         total += 1;
     }
-    if total == 0 { return 0.0; }
+    if total == 0 {
+        return 0.0;
+    }
     let mut entropy = 0.0;
     for &c in counts.iter() {
         if c > 0 {
@@ -321,8 +433,10 @@ pub fn calculate_shannon_entropy(s: &str) -> f64 {
 
 fn detect_bip39(s: &str) -> Option<String> {
     let words: Vec<&str> = s.split_whitespace().collect();
-    if words.len() < 12 { return None; }
-    
+    if words.len() < 12 {
+        return None;
+    }
+
     // Check sliding windows of 12 or 24 words
     for window_size in [24, 12] {
         if words.len() >= window_size {
@@ -345,7 +459,7 @@ fn validate_emirates_id(id: &str) -> bool {
     if digits[0] != 7 || digits[1] != 8 || digits[2] != 4 {
         return false;
     }
-    
+
     // Luhn Mod-10 checksum check
     let mut sum = 0;
     let mut double = false;
@@ -368,7 +482,7 @@ fn validate_luhn(cc: &str) -> bool {
     if digits.len() < 13 || digits.len() > 16 {
         return false;
     }
-    
+
     let mut sum = 0;
     let mut double = false;
     for i in (0..digits.len()).rev() {
@@ -386,8 +500,16 @@ fn validate_luhn(cc: &str) -> bool {
 }
 
 pub fn truncated_preview(secret: &str) -> String {
-    if secret.len() <= 8 { return "****".to_string(); }
-    let prefix_len = secret.char_indices().skip(2).find(|(_, c)| *c == '_' || *c == '-').map(|(i, _)| (i + 1).min(6)).unwrap_or(4).min(secret.len());
+    if secret.len() <= 8 {
+        return "****".to_string();
+    }
+    let prefix_len = secret
+        .char_indices()
+        .skip(2)
+        .find(|(_, c)| *c == '_' || *c == '-')
+        .map(|(i, _)| (i + 1).min(6))
+        .unwrap_or(4)
+        .min(secret.len());
     let suffix_len = 4.min(secret.len().saturating_sub(prefix_len + 4));
     let suffix_start = secret.len() - suffix_len;
     format!("{}****{}", &secret[..prefix_len], &secret[suffix_start..])
@@ -421,7 +543,10 @@ mod tests {
         let scanner = DlpScanner::new(None).unwrap();
         let random_string = "xK9!pL4@mQ1#vN8$zW2%bC7^hR5&jT3*fD6(yG0)";
         let findings = scanner.scan_content(random_string);
-        let entropy_findings: Vec<_> = findings.into_iter().filter(|f| f.category == SecretCategory::HighEntropy).collect();
+        let entropy_findings: Vec<_> = findings
+            .into_iter()
+            .filter(|f| f.category == SecretCategory::HighEntropy)
+            .collect();
         assert_eq!(entropy_findings.len(), 1);
     }
 
@@ -430,7 +555,10 @@ mod tests {
         let scanner = DlpScanner::new(None).unwrap();
         let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let findings = scanner.scan_content(phrase);
-        let crypto_findings: Vec<_> = findings.into_iter().filter(|f| f.category == SecretCategory::CryptoSeedPhrase).collect();
+        let crypto_findings: Vec<_> = findings
+            .into_iter()
+            .filter(|f| f.category == SecretCategory::CryptoSeedPhrase)
+            .collect();
         assert_eq!(crypto_findings.len(), 1);
     }
 
@@ -463,7 +591,7 @@ mod tests {
         let scanner = DlpScanner::new(None).unwrap();
         let text = "Here is my key: sk-ant-api03-abcdefghijklmnopqrstuvwxyz12345";
         let findings = scanner.scan_content(text);
-        
+
         // It should match Anthropic, not OpenAI, and there should only be ONE finding
         assert_eq!(findings.len(), 1, "Should deduplicate overlapping patterns");
         assert_eq!(findings[0].category, SecretCategory::AnthropicApiKey);
@@ -491,7 +619,10 @@ mod tests {
     #[test]
     fn test_slack_token() {
         let scanner = DlpScanner::new(None).unwrap();
-        let token = format!("xoxb-{}-{}-{}", "123456789012", "1234567890123", "abcdefghijklmnopqrstuvwx");
+        let token = format!(
+            "xoxb-{}-{}-{}",
+            "123456789012", "1234567890123", "abcdefghijklmnopqrstuvwx"
+        );
         let findings = scanner.scan_content(&token);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, SecretCategory::SlackToken);
@@ -509,7 +640,7 @@ mod tests {
     #[test]
     fn test_credit_card_luhn() {
         let scanner = DlpScanner::new(None).unwrap();
-        
+
         // Valid Luhn (Visa test card)
         let valid_cc = "4111-1111-1111-1111";
         let findings_valid = scanner.scan_content(valid_cc);

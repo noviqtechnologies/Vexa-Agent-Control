@@ -1,6 +1,4 @@
-use agentwall::policy::schema::SUPPORTED_VERSIONS;
 use agentwall::policy::loader::load_policy;
-use std::path::Path;
 
 #[test]
 fn test_llm_policy_schema_parsing() {

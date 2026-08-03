@@ -19,7 +19,7 @@ impl Decoder for JsonRpcCodec {
         // Try to parse a JSON object from the buffer using StreamDeserializer
         let de = serde_json::Deserializer::from_slice(src);
         let mut stream = de.into_iter::<Value>();
-        
+
         match stream.next() {
             Some(Ok(val)) => {
                 let bytes_read = stream.byte_offset();
@@ -45,7 +45,7 @@ impl Decoder for JsonRpcCodec {
                 if e.is_eof() {
                     return Ok(None);
                 }
-                
+
                 // If it's a hard error and no newline in sight, we have to stop
                 Err(io::Error::new(io::ErrorKind::InvalidData, e))
             }
@@ -57,7 +57,8 @@ impl Encoder<Value> for JsonRpcCodec {
     type Error = io::Error;
 
     fn encode(&mut self, item: Value, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let bytes = serde_json::to_vec(&item).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let bytes =
+            serde_json::to_vec(&item).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         dst.extend_from_slice(&bytes);
         dst.extend_from_slice(b"\n");
         Ok(())
@@ -75,10 +76,13 @@ mod tests {
     fn test_json_rpc_codec_single_message() {
         let mut codec = JsonRpcCodec;
         let mut buf = BytesMut::from(r#"{"jsonrpc": "2.0", "method": "test", "id": 1}"#.as_bytes());
-        
+
         let result = codec.decode(&mut buf).unwrap();
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), json!({"jsonrpc": "2.0", "method": "test", "id": 1}));
+        assert_eq!(
+            result.unwrap(),
+            json!({"jsonrpc": "2.0", "method": "test", "id": 1})
+        );
         assert!(buf.is_empty());
     }
 
@@ -86,13 +90,13 @@ mod tests {
     fn test_json_rpc_codec_multiple_messages_no_newline() {
         let mut codec = JsonRpcCodec;
         let mut buf = BytesMut::from(r#"{"id":1}{"id":2}"#.as_bytes());
-        
+
         let msg1 = codec.decode(&mut buf).unwrap();
         assert_eq!(msg1.unwrap(), json!({"id": 1}));
-        
+
         let msg2 = codec.decode(&mut buf).unwrap();
         assert_eq!(msg2.unwrap(), json!({"id": 2}));
-        
+
         assert!(buf.is_empty());
     }
 
@@ -100,7 +104,7 @@ mod tests {
     fn test_json_rpc_codec_partial_message() {
         let mut codec = JsonRpcCodec;
         let mut buf = BytesMut::from(r#"{"id":"#.as_bytes());
-        
+
         let result = codec.decode(&mut buf).unwrap();
         assert!(result.is_none());
         assert_eq!(buf.len(), 6);
@@ -113,9 +117,9 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(&[0xFF, 0xFE, 0x00, 0x01, b'\n']);
         data.extend_from_slice(r#"{"id": 3}"#.as_bytes());
-        
+
         let mut buf = BytesMut::from(&data[..]);
-        
+
         // The first decode call might return None or advance past the newline
         // If it advances past the newline and parses the next one recursively, it might return Some immediately.
         let result = codec.decode(&mut buf).unwrap();

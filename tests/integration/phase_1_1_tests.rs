@@ -59,9 +59,9 @@ async fn test_phase_1_1_developer_observability_report() {
 
     let report = generate_report(
         log_file.path(),
-        false, // include_params
+        false,            // include_params
         "sha256:unknown", // hash
-        false, // policy_loaded
+        false,            // policy_loaded
         "both",
         true, // dry_run
         vec![],
@@ -81,6 +81,8 @@ async fn test_phase_1_1_developer_observability_report() {
     assert!(text_output.contains("Policy:      None (Allow-all sentinel)"));
     assert!(text_output.contains("Policy Violations (Dry-Run):"));
     assert!(text_output.contains("dangerous_tool"));
-    assert!(text_output.contains("Run `agentwall init --from-log audit.log` to generate your rules."));
+    assert!(
+        text_output.contains("Run `agentwall init --from-log audit.log` to generate your rules.")
+    );
     assert!(text_output.contains("CRITICAL: No policy loaded during this session."));
 }

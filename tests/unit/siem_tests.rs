@@ -1,5 +1,5 @@
 use agentwall::audit::logger::{AuditEntry, ZERO_HMAC};
-use agentwall::audit::siem::{SiemBackend, SiemExporter, try_export};
+use agentwall::audit::siem::{try_export, SiemBackend, SiemExporter};
 
 #[test]
 fn test_siem_backend_parsing() {
@@ -22,7 +22,7 @@ async fn test_siem_timeout_behavior() {
         "dummy_token".to_string(),
         0, // Use default 2s, but we will wrap it
     );
-    
+
     // We override timeout by creating our own exporter with 10ms timeout
     let fast_exporter = SiemExporter::new(
         SiemBackend::Splunk,
@@ -52,20 +52,22 @@ async fn test_siem_timeout_behavior() {
 
     // try_export should not panic, it should just log a warning and return.
     // We race it with a 2-second timeout just to be safe it doesn't hang indefinitely.
-    let res = tokio::time::timeout(std::time::Duration::from_secs(3), try_export(&fast_exporter, &entry)).await;
-    
-    assert!(res.is_ok(), "try_export hung indefinitely, ignoring its own internal timeout");
+    let res = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        try_export(&fast_exporter, &entry),
+    )
+    .await;
+
+    assert!(
+        res.is_ok(),
+        "try_export hung indefinitely, ignoring its own internal timeout"
+    );
 }
 
 #[tokio::test]
 async fn test_siem_local_disabled_behavior() {
-    let exporter = SiemExporter::new(
-        SiemBackend::Local,
-        "".to_string(),
-        "".to_string(),
-        0,
-    );
-    
+    let exporter = SiemExporter::new(SiemBackend::Local, "".to_string(), "".to_string(), 0);
+
     assert!(!exporter.is_active());
 
     let entry = AuditEntry {
@@ -91,6 +93,9 @@ async fn test_siem_local_disabled_behavior() {
     let start = std::time::Instant::now();
     try_export(&exporter, &entry).await;
     let elapsed = start.elapsed();
-    
-    assert!(elapsed.as_millis() < 50, "Local export should be instantaneous");
+
+    assert!(
+        elapsed.as_millis() < 50,
+        "Local export should be instantaneous"
+    );
 }

@@ -185,7 +185,11 @@ fn test_max_length_string_enforcement() {
     // One byte over → deny.
     let over_limit = "a".repeat(33);
     match p.evaluate_test("log_event", &json!({"message": over_limit})) {
-        EvalResult::Deny { reason_code, param_name, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            param_name,
+            ..
+        } => {
             assert_eq!(reason_code, "param_max_length_exceeded");
             assert_eq!(param_name.as_deref(), Some("message"));
         }
@@ -223,7 +227,11 @@ fn test_number_type_enforcement() {
     ));
 
     match p.evaluate_test("set_timeout", &json!({"seconds": "thirty"})) {
-        EvalResult::Deny { reason_code, param_name, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            param_name,
+            ..
+        } => {
             assert_eq!(reason_code, "param_type_mismatch");
             assert_eq!(param_name.as_deref(), Some("seconds"));
         }
@@ -262,7 +270,11 @@ fn test_boolean_type_enforcement() {
 
     // String "true" is not a boolean.
     match p.evaluate_test("toggle_feature", &json!({"enabled": "true"})) {
-        EvalResult::Deny { reason_code, param_name, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            param_name,
+            ..
+        } => {
             assert_eq!(reason_code, "param_type_mismatch");
             assert_eq!(param_name.as_deref(), Some("enabled"));
         }
@@ -308,7 +320,11 @@ fn test_required_parameter_missing() {
 
     // Required absent → deny.
     match p.evaluate_test("run_query", &json!({"timeout": 5})) {
-        EvalResult::Deny { reason_code, param_name, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            param_name,
+            ..
+        } => {
             assert_eq!(reason_code, "param_required_missing");
             assert_eq!(param_name.as_deref(), Some("sql"));
         }
@@ -353,7 +369,11 @@ fn test_object_schema_violation_is_denied() {
 
     // Limit exceeds maximum → schema_validation_failed at /limit.
     match p.evaluate_test("query_db", &json!({"options": {"limit": 100}})) {
-        EvalResult::Deny { reason_code, json_pointer, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            json_pointer,
+            ..
+        } => {
             assert_eq!(reason_code, "schema_validation_failed");
             assert_eq!(json_pointer.as_deref(), Some("/limit"));
         }
@@ -484,7 +504,10 @@ fn test_payload_size_limit_100kb() {
 
     // Exactly 1 byte under 100 KB → allow.
     let fine = json!({ "blob": "x".repeat(100 * 1024 - 20) }); // account for JSON overhead
-    assert!(matches!(p.evaluate_test("upload", &fine), EvalResult::Allow { .. }));
+    assert!(matches!(
+        p.evaluate_test("upload", &fine),
+        EvalResult::Allow { .. }
+    ));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 //! Asynchronous HTTP client for transmitting telemetry, events, alerts, and snapshots to the Control Plane Dashboard.
 
-use control_plane_proto::event::RedactedEvent;
 use control_plane_proto::alert::RedactedAlert;
+use control_plane_proto::event::RedactedEvent;
 use control_plane_proto::mcp_server::McpServerSnapshot;
 
 /// HTTP client for exporting audit events, alerts, spend data, and server snapshots.
@@ -17,18 +17,16 @@ impl DashboardClient {
     /// Falls back to local dev defaults if environment variables are unset.
     pub fn from_env() -> Option<Self> {
         // Fallback to local development dashboard API URL if DASHBOARD_API_URL is not set
-        let base_url = std::env::var("DASHBOARD_API_URL")
-            .unwrap_or_else(|_| {
-                // LOCAL DEV FALLBACK: Connects to local docker-compose dashboard API by default
-                "http://localhost:8400".to_string()
-            });
+        let base_url = std::env::var("DASHBOARD_API_URL").unwrap_or_else(|_| {
+            // LOCAL DEV FALLBACK: Connects to local docker-compose dashboard API by default
+            "http://localhost:8400".to_string()
+        });
 
         // Fallback to local development gateway secret if GATEWAY_SECRET is not set
-        let secret = std::env::var("GATEWAY_SECRET")
-            .unwrap_or_else(|_| {
-                // LOCAL DEV FALLBACK: Matches default secret in dashboard/docker-compose.yml
-                "local-dev-shared-secret-change-me".to_string()
-            });
+        let secret = std::env::var("GATEWAY_SECRET").unwrap_or_else(|_| {
+            // LOCAL DEV FALLBACK: Matches default secret in dashboard/docker-compose.yml
+            "local-dev-shared-secret-change-me".to_string()
+        });
 
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
@@ -113,10 +111,10 @@ impl DashboardClient {
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             // Block current thread to complete request before CLI process terminates
-            let _ = tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
+            let _ =
+                tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
         } else if let Ok(rt) = tokio::runtime::Runtime::new() {
             let _ = rt.block_on(async move { req.send().await });
         }
     }
 }
-
