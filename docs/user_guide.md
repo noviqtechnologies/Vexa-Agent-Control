@@ -115,9 +115,15 @@ The Developer Tier provides local observation, automatic policy generation, and 
      $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
      ```
 4. **Wrap Stdio / IDE Tools:**
-   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly:
+   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly (ensure target directory exists):
      ```bash
+     # Linux / macOS / WSL:
+     mkdir -p /workspace
      agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+
+     # Windows (PowerShell):
+     New-Item -ItemType Directory -Force -Path C:\workspace
+     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
      ```
    * **IDE Wrapping & Diagnostics:** Secure local IDEs (e.g., Claude Desktop, Cursor):
      ```bash
@@ -846,6 +852,21 @@ To ensure `agentwall` works globally across **all future terminal sessions** wit
   ```bash
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile
   source ~/.bash_profile
+  ```
+
+#### Issue: `✖ Stdio proxy error: No such file or directory (os error 2)`
+
+- **Cause:** The underlying MCP server executable (e.g. `npx`) or the requested directory path (e.g. `/workspace`) does not exist on the target host filesystem.
+- **Solution (macOS / Linux / WSL):**
+  Create the target directory before launching `agentwall dev`:
+  ```bash
+  mkdir -p /workspace
+  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+  ```
+- **Solution (Windows PowerShell):**
+  ```powershell
+  New-Item -ItemType Directory -Force -Path C:\workspace
+  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
   ```
 
 ---

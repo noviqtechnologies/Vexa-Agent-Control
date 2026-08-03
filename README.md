@@ -131,9 +131,15 @@ agentwall dev
 ```
 * Use `--no-browser` to prevent automatic browser launching.
 * Use `--enforce` to test active DLP and policy blocking locally.
-* Wrap stdio-based MCP servers directly:
+* Wrap stdio-based MCP servers directly (ensure target directory exists):
   ```bash
+  # Linux / macOS / WSL:
+  mkdir -p /workspace
   agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspace
+
+  # Windows (PowerShell):
+  New-Item -ItemType Directory -Force -Path C:\workspace
+  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem C:\workspace
   ```
 
 ### 2. Route Local Agent Traffic
