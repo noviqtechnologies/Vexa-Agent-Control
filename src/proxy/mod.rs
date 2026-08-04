@@ -10,3 +10,4 @@ pub mod server;
 pub mod session;
 pub mod stdio;
 pub mod tls;
+pub mod tunnel;

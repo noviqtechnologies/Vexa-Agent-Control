@@ -163,7 +163,23 @@ async fn main() {
             output,
             format,
             report_include_params,
+            risk: _,
         } => run_report(&log_path, output.as_deref(), &format, report_include_params),
+        Commands::Scan { path, format } => {
+            use crate::policy::mcp_score::McpScorer;
+            eprintln!("[vexa-scan] Scanning MCP configuration: {}", path);
+            let score = McpScorer::evaluate_server(&path, &[], false, 0);
+            match format.as_str() {
+                "json" => println!("{}", serde_json::to_string_pretty(&score).unwrap_or_default()),
+                _ => {
+                    println!("Vexa Security Score for '{}': {}/100 [{}]", score.server_name, score.score, score.risk_level);
+                    for flag in &score.vulnerability_flags {
+                        println!("  ⚠ {}", flag);
+                    }
+                }
+            }
+            if score.score < 60 { 1 } else { 0 }
+        }
         Commands::Init { target } => init::run_init(&target),
         // FR-22: Identity subcommand dispatch
         Commands::Identity { command } => match command {

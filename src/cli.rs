@@ -306,6 +306,21 @@ pub enum Commands {
         /// Include raw params in report (WARNING: may leak PII/secrets)
         #[arg(long, default_value_t = false)]
         report_include_params: bool,
+
+        /// Generate a Risk Delta summary report of hypothetical blocks/redactions from shadow mode (FR-301)
+        #[arg(long, default_value_t = false)]
+        risk: bool,
+    },
+
+    /// Run Vexa security scanner against local MCP server configurations (FR-502)
+    Scan {
+        /// Target policy or MCP configuration YAML file path
+        #[arg(long, default_value = "agentwall-policy.yaml")]
+        path: String,
+
+        /// Output format (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Generate a YAML security policy draft from observed shadow-mode traffic (FR-4)

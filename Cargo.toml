@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.16"
+version = "1.0.6"
 edition = "2021"
 description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -54,6 +54,7 @@ bytes = "1"
 hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
+aes-gcm = "0.10"
 
 # Regex
 regex = "1"

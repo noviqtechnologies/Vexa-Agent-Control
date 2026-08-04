@@ -3,3 +3,4 @@
 pub mod logger;
 pub mod siem;
 pub mod verifier;
+pub mod zk_export;

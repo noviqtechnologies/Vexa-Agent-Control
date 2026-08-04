@@ -49,6 +49,12 @@ This guide provides comprehensive instructions for deploying, configuring, secur
    - [Running the Benchmark](#running-the-benchmark)
    - [Reading the Report](#reading-the-report)
    - [Dashboard Integration](#dashboard-integration)
+10. [War Plan Strategic Features (v2.0)](#10-war-plan-strategic-features-v20)
+    - [Passive Shadow AI Risk Delta Reports](#passive-shadow-ai-risk-delta-reports)
+    - [Vexa Security Scanning (vexa-scan)](#vexa-security-scanning-vexa-scan)
+    - [WebSocket Egress Tunneling](#websocket-egress-tunneling)
+    - [Human-in-the-Loop (HITL) Webhooks](#human-in-the-loop-hitl-webhooks)
+    - [Hardened Agent Containers (HAR)](#hardened-agent-containers-har)
 
 ---
 
@@ -1181,6 +1187,45 @@ The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) rende
 
 ```bash
 agentwall dev
+```
+
+---
+
+## 10. War Plan Strategic Features (v2.0)
+
+### Passive Shadow AI Risk Delta Reports
+Run AgentWall in non-blocking observation mode to audit agent traffic:
+```bash
+agentwall start --shadow-mode --log-path audit.log
+# Generate Risk Delta report summarizing hypothetical blocks and PII exfiltrations
+agentwall report audit.log --risk
+```
+
+### Vexa Security Scanning (vexa-scan)
+Scan MCP server definitions and security policy schemas before deployment:
+```bash
+agentwall scan --path agentwall-policy.yaml
+```
+
+### WebSocket Egress Tunneling
+Bridge cloud agents with local MCP tools over a secure Rust WebSocket tunnel with sub-5ms latency and inline DLP:
+```bash
+agentwall start --centralized --listen 0.0.0.0:8080
+```
+
+### Human-in-the-Loop (HITL) Webhooks
+Intercept dangerous commands and require HMAC-signed approval via Slack, Teams, or the Control Hub UI:
+```yaml
+hitl_escalation:
+  enabled: true
+  secret_key: "env:AGENTWALL_HITL_SECRET"
+  webhook_url: "https://hooks.slack.com/services/..."
+```
+
+### Hardened Agent Containers (HAR)
+Deploy AgentWall as an entrypoint proxy inside OCI container environments (Obot, Kubernetes) using the lightweight image (<100MB):
+```bash
+docker build -f Dockerfile.har -t agentwall-har:v2.0 .
 ```
 
 Then click **ADR Benchmark** in the sidebar to view your security score ring and per-category breakdown.
