@@ -74,7 +74,9 @@ pub async fn start_policy_subscriber(
                                             serde_json::json!({"hash": raw_hash}),
                                         );
                                     }
-                                    crate::policy::loader::PolicyLoadResult::Degraded { reason } => {
+                                    crate::policy::loader::PolicyLoadResult::Degraded {
+                                        reason,
+                                    } => {
                                         logging::log_event(
                                             Level::Warn,
                                             "policy_push_degraded",

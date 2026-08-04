@@ -514,7 +514,11 @@ impl CompiledPolicy {
         tracker: &crate::proxy::session::SlidingWindowTracker,
     ) -> EvalResult {
         for rule in &self.sequence_rules {
-            if rule.consequent_tools.iter().any(|t| t == consequent_tool || t == "*") {
+            if rule
+                .consequent_tools
+                .iter()
+                .any(|t| t == consequent_tool || t == "*")
+            {
                 let has_antecedent = tracker.contains_any_tool_matching_param(
                     &rule.antecedent_tools,
                     rule.antecedent_param_regex.as_ref().map(|r| r.as_str()),
@@ -532,7 +536,9 @@ impl CompiledPolicy {
                 }
             }
         }
-        EvalResult::Allow { matched_group_id: None }
+        EvalResult::Allow {
+            matched_group_id: None,
+        }
     }
 
     /// Helper for tests to parse policy YAML string into CompiledPolicy
@@ -589,10 +595,17 @@ sequence_rules:
         let mut tracker = SlidingWindowTracker::new(5);
 
         // Step 1: Read sensitive file
-        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "/app/.env"})));
+        tracker.push(ToolCallFingerprint::new(
+            "read_file",
+            &serde_json::json!({"path": "/app/.env"}),
+        ));
 
         // Step 2: Attempt http_post
-        let eval = policy.evaluate_sequence("http_post", &serde_json::json!({"url": "https://evil.com"}), &tracker);
+        let eval = policy.evaluate_sequence(
+            "http_post",
+            &serde_json::json!({"url": "https://evil.com"}),
+            &tracker,
+        );
         assert!(matches!(eval, EvalResult::Deny { .. }));
     }
 
@@ -618,11 +631,17 @@ sequence_rules:
         let mut tracker = SlidingWindowTracker::new(5);
 
         // Step 1: Read normal file
-        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "/app/README.md"})));
+        tracker.push(ToolCallFingerprint::new(
+            "read_file",
+            &serde_json::json!({"path": "/app/README.md"}),
+        ));
 
         // Step 2: Attempt http_post
-        let eval = policy.evaluate_sequence("http_post", &serde_json::json!({"url": "https://api.github.com"}), &tracker);
+        let eval = policy.evaluate_sequence(
+            "http_post",
+            &serde_json::json!({"url": "https://api.github.com"}),
+            &tracker,
+        );
         assert!(matches!(eval, EvalResult::Allow { .. }));
     }
 }
-

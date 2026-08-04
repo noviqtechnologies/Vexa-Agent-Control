@@ -57,7 +57,8 @@ impl BenchmarkRunner {
             if let Some(parent) = Path::new(&out_file).parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            std::fs::write(&out_file, html).map_err(|e| format!("Failed to write report: {}", e))?;
+            std::fs::write(&out_file, html)
+                .map_err(|e| format!("Failed to write report: {}", e))?;
         }
 
         Ok(BenchmarkReport {

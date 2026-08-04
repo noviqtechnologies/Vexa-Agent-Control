@@ -1,14 +1,14 @@
 //! Multi-tenant agent session context and isolation manager (FR-101)
 
+use regex::Regex;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use regex::Regex;
 use uuid::Uuid;
 
 use crate::policy::engine::CompiledPolicy;
-pub use crate::proxy::handler::ToolCallFingerprint;
 use crate::proxy::handler::RateLimiter;
+pub use crate::proxy::handler::ToolCallFingerprint;
 
 /// Fix 3: Maximum lifetime of an idle session in the DashMap.
 /// Sessions older than this are evicted lazily on the next new session creation.
@@ -42,7 +42,10 @@ impl SlidingWindowTracker {
     }
 
     pub fn count_tool(&self, tool_name: &str) -> usize {
-        self.history.iter().filter(|f| f.tool_name == tool_name).count()
+        self.history
+            .iter()
+            .filter(|f| f.tool_name == tool_name)
+            .count()
     }
 
     pub fn contains_tool_matching_param(&self, tool_name: &str, param_regex: &str) -> bool {
@@ -59,7 +62,11 @@ impl SlidingWindowTracker {
         })
     }
 
-    pub fn contains_any_tool_matching_param(&self, tools: &[String], param_regex: Option<&str>) -> bool {
+    pub fn contains_any_tool_matching_param(
+        &self,
+        tools: &[String],
+        param_regex: Option<&str>,
+    ) -> bool {
         self.history.iter().any(|f| {
             if tools.iter().any(|t| t == &f.tool_name) {
                 if let Some(re_str) = param_regex {
@@ -194,15 +201,27 @@ mod session_window_tests {
     #[test]
     fn test_sliding_window_push_eviction_and_containment() {
         let mut tracker = SlidingWindowTracker::new(3);
-        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": ".env"})));
-        tracker.push(ToolCallFingerprint::new("view_file", &serde_json::json!({"path": "config.json"})));
-        tracker.push(ToolCallFingerprint::new("list_dir", &serde_json::json!({"path": "/"})));
+        tracker.push(ToolCallFingerprint::new(
+            "read_file",
+            &serde_json::json!({"path": ".env"}),
+        ));
+        tracker.push(ToolCallFingerprint::new(
+            "view_file",
+            &serde_json::json!({"path": "config.json"}),
+        ));
+        tracker.push(ToolCallFingerprint::new(
+            "list_dir",
+            &serde_json::json!({"path": "/"}),
+        ));
 
         assert_eq!(tracker.history.len(), 3);
         assert!(tracker.contains_tool("read_file"));
 
         // Push 4th item -> oldest (read_file) must be evicted
-        tracker.push(ToolCallFingerprint::new("write_file", &serde_json::json!({"path": "out.txt"})));
+        tracker.push(ToolCallFingerprint::new(
+            "write_file",
+            &serde_json::json!({"path": "out.txt"}),
+        ));
         assert_eq!(tracker.history.len(), 3);
         assert!(!tracker.contains_tool("read_file"));
         assert!(tracker.contains_tool("write_file"));
@@ -211,13 +230,21 @@ mod session_window_tests {
     #[test]
     fn test_sliding_window_tool_frequency_counting() {
         let mut tracker = SlidingWindowTracker::new(5);
-        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "a.txt"})));
-        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "b.txt"})));
-        tracker.push(ToolCallFingerprint::new("bash", &serde_json::json!({"cmd": "ls"})));
+        tracker.push(ToolCallFingerprint::new(
+            "read_file",
+            &serde_json::json!({"path": "a.txt"}),
+        ));
+        tracker.push(ToolCallFingerprint::new(
+            "read_file",
+            &serde_json::json!({"path": "b.txt"}),
+        ));
+        tracker.push(ToolCallFingerprint::new(
+            "bash",
+            &serde_json::json!({"cmd": "ls"}),
+        ));
 
         assert_eq!(tracker.count_tool("read_file"), 2);
         assert_eq!(tracker.count_tool("bash"), 1);
         assert_eq!(tracker.count_tool("http_post"), 0);
     }
 }
-

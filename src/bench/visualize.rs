@@ -25,8 +25,18 @@ impl Visualizer {
         for cat in AttackCategory::all() {
             let cat_score = category_scores.get(&cat).copied().unwrap_or(92.0);
             let description = get_category_description(&cat);
-            let badge_color = if cat_score >= 90.0 { "#3fb950" } else if cat_score >= 70.0 { "#d29922" } else { "#f85149" };
-            let badge_label = if cat_score >= 90.0 { "PROTECTED" } else { "ATTENTION" };
+            let badge_color = if cat_score >= 90.0 {
+                "#3fb950"
+            } else if cat_score >= 70.0 {
+                "#d29922"
+            } else {
+                "#f85149"
+            };
+            let badge_label = if cat_score >= 90.0 {
+                "PROTECTED"
+            } else {
+                "ATTENTION"
+            };
 
             cat_rows.push_str(&format!(
                 r#"<tr class="category-row">
@@ -58,7 +68,11 @@ impl Visualizer {
         let mut baseline_rows = String::new();
         for b in baselines {
             let is_agentwall = b.system_name.contains("AgentWall");
-            let row_style = if is_agentwall { "background: rgba(83, 155, 245, 0.12); font-weight: bold;" } else { "" };
+            let row_style = if is_agentwall {
+                "background: rgba(83, 155, 245, 0.12); font-weight: bold;"
+            } else {
+                ""
+            };
             let bar_color = if is_agentwall { "#539bf5" } else { "#484f58" };
             baseline_rows.push_str(&format!(
                 r#"<tr style="{}">
@@ -307,22 +321,56 @@ impl Visualizer {
 
 fn get_category_description(cat: &AttackCategory) -> &'static str {
     match cat {
-        AttackCategory::PathTraversal => "Unauthorized file access attempting directory escape (e.g. ../../etc/passwd)",
-        AttackCategory::SecretHarvesting => "Outbound parameters containing API keys, AWS credentials, or private SSH keys",
-        AttackCategory::UnsanitizedShellExecution => "Shell command chaining, pipe execution (curl|bash), and forbidden commands",
-        AttackCategory::MultiStepDataExfiltration => "Unauthorized multi-step transfers of sensitive data to external HTTP targets",
-        AttackCategory::IndirectPromptInjection => "Jailbreaks, system prompt overrides, and homoglyph-encoded instruction bypasses",
-        AttackCategory::ShadowToolInvocation => "Executing unlisted tools not registered in the compiled policy allow-list",
-        AttackCategory::PrivilegeEscalation => "Attempts by unprivileged agents to execute restricted administrative tools",
-        AttackCategory::SSRF => "Attempts to access internal AWS/GCP cloud metadata endpoints (169.254.169.254)",
-        AttackCategory::EnvironmentVariableExfiltration => "Attempts to read or exfiltrate process environment variables and secrets",
-        AttackCategory::GitCredentialTheft => "Stealing git credentials, ssh keys, or personal access tokens via tool parameters",
-        AttackCategory::ArbitraryFileWrite => "Writing files to restricted filesystem locations or overwriting binaries",
-        AttackCategory::ProcessInjection => "Injecting or spawning sub-processes without validation",
-        AttackCategory::CycleExploitation => "Repetitive tool execution loops consuming excessive compute or token budget",
-        AttackCategory::ObfuscatedPayloadExfiltration => "Base64 or unicode-encoded data exfiltration attempts",
-        AttackCategory::CrossToolParameterContamination => "Passing corrupted or poisoned outputs from one tool into another",
-        AttackCategory::ConfigOverride => "Overriding system settings, security flags, or sandbox constraints",
-        AttackCategory::DDoSResourceExhaustion => "High-frequency rapid tool invocations attempting denial of service",
+        AttackCategory::PathTraversal => {
+            "Unauthorized file access attempting directory escape (e.g. ../../etc/passwd)"
+        }
+        AttackCategory::SecretHarvesting => {
+            "Outbound parameters containing API keys, AWS credentials, or private SSH keys"
+        }
+        AttackCategory::UnsanitizedShellExecution => {
+            "Shell command chaining, pipe execution (curl|bash), and forbidden commands"
+        }
+        AttackCategory::MultiStepDataExfiltration => {
+            "Unauthorized multi-step transfers of sensitive data to external HTTP targets"
+        }
+        AttackCategory::IndirectPromptInjection => {
+            "Jailbreaks, system prompt overrides, and homoglyph-encoded instruction bypasses"
+        }
+        AttackCategory::ShadowToolInvocation => {
+            "Executing unlisted tools not registered in the compiled policy allow-list"
+        }
+        AttackCategory::PrivilegeEscalation => {
+            "Attempts by unprivileged agents to execute restricted administrative tools"
+        }
+        AttackCategory::SSRF => {
+            "Attempts to access internal AWS/GCP cloud metadata endpoints (169.254.169.254)"
+        }
+        AttackCategory::EnvironmentVariableExfiltration => {
+            "Attempts to read or exfiltrate process environment variables and secrets"
+        }
+        AttackCategory::GitCredentialTheft => {
+            "Stealing git credentials, ssh keys, or personal access tokens via tool parameters"
+        }
+        AttackCategory::ArbitraryFileWrite => {
+            "Writing files to restricted filesystem locations or overwriting binaries"
+        }
+        AttackCategory::ProcessInjection => {
+            "Injecting or spawning sub-processes without validation"
+        }
+        AttackCategory::CycleExploitation => {
+            "Repetitive tool execution loops consuming excessive compute or token budget"
+        }
+        AttackCategory::ObfuscatedPayloadExfiltration => {
+            "Base64 or unicode-encoded data exfiltration attempts"
+        }
+        AttackCategory::CrossToolParameterContamination => {
+            "Passing corrupted or poisoned outputs from one tool into another"
+        }
+        AttackCategory::ConfigOverride => {
+            "Overriding system settings, security flags, or sandbox constraints"
+        }
+        AttackCategory::DDoSResourceExhaustion => {
+            "High-frequency rapid tool invocations attempting denial of service"
+        }
     }
 }

@@ -921,7 +921,10 @@ pub async fn evaluate_jsonrpc(
 
     // ADR: Sequence rule evaluation against sliding window tracker
     if let Some(ref policy) = session.policy {
-        let tracker = session.sliding_window.lock().unwrap_or_else(|e| e.into_inner());
+        let tracker = session
+            .sliding_window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let seq_eval = policy.evaluate_sequence(tool_name, &tool_params, &tracker);
         if let EvalResult::Deny { validator_name, .. } = seq_eval {
             state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
@@ -936,7 +939,10 @@ pub async fn evaluate_jsonrpc(
 
     // Push fingerprint into sliding window tracker for multi-step sequence evaluation
     {
-        let mut tracker = session.sliding_window.lock().unwrap_or_else(|e| e.into_inner());
+        let mut tracker = session
+            .sliding_window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         tracker.push(ToolCallFingerprint::new(tool_name, &tool_params));
     }
 

@@ -44,7 +44,10 @@ impl LocalDualAgentDetector {
         let interval = self.config.poll_interval_secs;
 
         tokio::spawn(async move {
-            println!("🤖 Local Dual-Agent Threat Detector active [Endpoint: {}]", llm_url);
+            println!(
+                "🤖 Local Dual-Agent Threat Detector active [Endpoint: {}]",
+                llm_url
+            );
             while running.load(Ordering::Relaxed) {
                 sleep(Duration::from_secs(interval)).await;
                 // Async background causal threat reasoning on session traces
