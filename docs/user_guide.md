@@ -261,8 +261,16 @@ curl -i http://localhost:8400/healthz
 
 ##### Step 2: Access & Inspect Team Dashboard
 Open `http://localhost:8081` in your web browser.
-* **Prerequisites:** Control Hub UI service running on port 8081.
-* **What You Will See:** The web interface showing cluster overview, registered gateways, active security policies, and live event telemetry.
+
+* **Prerequisites:** Control Hub UI service running on port `8081`.
+* **Default Dashboard Credentials:**
+  - **Local Docker Compose (DEV_MODE):** Email/Username: `admin` | Password: `admin` (or any string).
+  - **Production Mode:** Email/Username: `admin` | Password: `<Bootstrap Token>` (found via `docker compose logs dashboard-api | grep "Bootstrap Token"`).
+* **How to Populate Live Dashboard Data:**
+  - Connect your centralized gateway (`DASHBOARD_API_URL="http://localhost:8400"` and `GATEWAY_SECRET="local-dev-shared-secret-change-me"`).
+  - Wrap stdio MCP tools (`agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME"`).
+  - Or route agent HTTP traffic through `127.0.0.1:8080` (`export HTTP_PROXY=http://127.0.0.1:8080`).
+* **What You Will See:** The web dashboard displaying active gateways, real-time event telemetry stream, threat heatmaps, and active policy rules.
 * **What You Achieve:** Provides complete visual monitoring and team policy administration.
 
 ---
