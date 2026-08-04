@@ -23,6 +23,7 @@ fn make_deny_policy() -> CompiledPolicy {
             a2a_trust_level: None,
         }],
         group_policies: vec![],
+        sequence_rules: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],
@@ -83,6 +84,7 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
         identity_validator: None,
         scannable_tools: vec![],
         group_policies: vec![],
+        sequence_rules: vec![],
         safe_tools: vec![],
         firewall: None,
         spend_caps: None,
@@ -231,6 +233,7 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
     let policy = CompiledPolicy {
         tools: vec![], // empty — no tools allowed
         group_policies: vec![],
+        sequence_rules: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec![],

@@ -13,17 +13,29 @@
 use serde::Deserialize;
 
 /// The supported policy schema versions.
-pub const SUPPORTED_VERSIONS: &[&str] = &["1", "2"];
+pub const SUPPORTED_VERSIONS: &[&str] = &["1", "2", "2.1"];
+
+/// ADR multi-step stateful sequence rule specification (Schema v2.1)
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct SequenceRuleSpec {
+    pub name: String,
+    pub window_size: Option<usize>,
+    pub antecedent_tools: Vec<String>,
+    pub antecedent_param_regex: Option<String>,
+    pub consequent_tools: Vec<String>,
+    pub action: String, // "block", "deny", "warn"
+    pub message: Option<String>,
+}
 
 /// Top-level policy document.
 /// Unknown fields at any level cause a fatal startup error.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyFile {
-    /// Required. Must be "1" or "2". Any other value = fatal error.
+    /// Required. Must be "1", "2", or "2.1". Any other value = fatal error.
     pub version: String,
 
-    /// Required. Must be "deny". "allow" = fatal error. Absent = fatal error.
+    /// Required. Must be "deny" or "allow". Absent = fatal error.
     pub default_action: String,
 
     /// Identity binding configuration (v2 only).
@@ -54,6 +66,9 @@ pub struct PolicyFile {
     /// Each entry binds a set of IdP group claim values to a policy block.
     /// Group policy is additive — does not replace per-agent bindings.
     pub groups: Option<Vec<GroupIdentityPolicy>>,
+
+    /// ADR stateful sequence rules (v2.1).
+    pub sequence_rules: Option<Vec<SequenceRuleSpec>>,
 
     /// FR-120: Spend caps configuration (Paid tier).
     #[serde(alias = "spend")]

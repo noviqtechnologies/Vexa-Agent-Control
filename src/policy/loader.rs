@@ -530,6 +530,42 @@ fn compile_policy_yaml(
         }
     }
 
+    // ADR sequence_rules compilation
+    let mut compiled_sequence_rules = Vec::new();
+    if let Some(ref rules) = policy_file.sequence_rules {
+        for rule in rules {
+            let re = if let Some(ref p) = rule.antecedent_param_regex {
+                match Regex::new(p) {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        return PolicyLoadResult::Fatal {
+                            error: PolicyLoadError::InvalidRegex {
+                                tool: "sequence_rule".to_string(),
+                                param: rule.name.clone(),
+                                pattern: p.clone(),
+                                error: e.to_string(),
+                            },
+                        };
+                    }
+                }
+            } else {
+                None
+            };
+            compiled_sequence_rules.push(crate::policy::engine::CompiledSequenceRule {
+                name: rule.name.clone(),
+                window_size: rule.window_size.unwrap_or(10),
+                antecedent_tools: rule.antecedent_tools.clone(),
+                antecedent_param_regex: re,
+                consequent_tools: rule.consequent_tools.clone(),
+                action: rule.action.clone(),
+                message: rule
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| format!("Sequence rule violation: {}", rule.name)),
+            });
+        }
+    }
+
     PolicyLoadResult::Loaded {
         policy: CompiledPolicy {
             tools: compiled_tools,
@@ -541,6 +577,7 @@ fn compile_policy_yaml(
             firewall: firewall_config,
             spend_caps: policy_file.spend_caps,
             llm: policy_file.llm,
+            sequence_rules: compiled_sequence_rules,
         },
         raw_hash,
         warnings,

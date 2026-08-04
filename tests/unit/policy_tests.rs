@@ -21,6 +21,7 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
     CompiledPolicy {
         tools,
         group_policies: vec![],
+        sequence_rules: vec![],
         max_calls_per_second: 0,
         identity_validator: None,
         scannable_tools: vec!["read_file".to_string()],

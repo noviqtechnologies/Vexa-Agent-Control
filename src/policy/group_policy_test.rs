@@ -103,6 +103,7 @@ mod tests {
             firewall: None,
             spend_caps: None,
             llm: None,
+            sequence_rules: vec![],
         }
     }
 

@@ -20,11 +20,20 @@ use crate::policy::schema::CycleAction;
 
 /// FR-306: A fingerprint of a tool call for cycle detection.
 /// Stores the tool name and a hash of the canonicalized arguments.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct ToolCallFingerprint {
     pub tool_name: String,
     pub args_hash: u64,
+    pub raw_args: serde_json::Value,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
+
+impl PartialEq for ToolCallFingerprint {
+    fn eq(&self, other: &Self) -> bool {
+        self.tool_name == other.tool_name && self.args_hash == other.args_hash
+    }
+}
+impl Eq for ToolCallFingerprint {}
 
 impl ToolCallFingerprint {
     pub fn new(tool_name: &str, args: &Value) -> Self {
@@ -38,6 +47,8 @@ impl ToolCallFingerprint {
         Self {
             tool_name: tool_name.to_string(),
             args_hash: hasher.finish(),
+            raw_args: args.clone(),
+            timestamp: chrono::Utc::now(),
         }
     }
 }
@@ -305,6 +316,165 @@ pub async fn evaluate_jsonrpc(
 
     // Increment total requests counter after rate limit pass
     state.metrics_requests_total.fetch_add(1, Ordering::Relaxed);
+
+    // FR-306: Cycle Detection (Agent Firewall) — must run before policy/DLP so it
+    // can intercept loops even for tools not yet in the allow-list.
+    // Strictly isolated per session via session.tool_history.
+    let cycle_action_to_take = {
+        let firewall_cfg = session.policy.as_ref().and_then(|p| p.firewall.as_ref());
+        let effective_cfg = firewall_cfg.cloned().unwrap_or_default();
+
+        if effective_cfg.enabled {
+            let fingerprint = ToolCallFingerprint::new(tool_name, &tool_params);
+            let mut history = session
+                .tool_history
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let max_attempts = effective_cfg.cycle_detection.max_attempts as usize;
+
+            // Dynamic window cap — always at least as large as max_attempts.
+            let effective_window = max_attempts.max(TOOL_HISTORY_MIN);
+
+            // Append and bound the window
+            history.push(fingerprint.clone());
+            let len = history.len();
+            if len > effective_window {
+                history.drain(..len - effective_window);
+            }
+
+            if max_attempts > 0 && history.len() >= max_attempts {
+                let tail = &history[history.len() - max_attempts..];
+                let all_identical = tail.iter().all(|f| *f == fingerprint);
+
+                if all_identical {
+                    // Clear history so agent gets a fresh start on developer override
+                    history.clear();
+                    state
+                        .metrics_firewall_cycle_total
+                        .fetch_add(1, Ordering::Relaxed);
+                    Some((effective_cfg.cycle_detection.action, max_attempts))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    if let Some((action, max_attempts)) = cycle_action_to_take {
+        // Cycle detected
+        let _ = state
+            .audit_logger
+            .write_entry(
+                &session.session_id,
+                "firewall_cycle_block",
+                tool_name,
+                None,
+                Some(format!(
+                    "cycle_detected: {} consecutive identical calls (max_attempts={})",
+                    max_attempts, max_attempts
+                )),
+                None,
+                session.identity_sub.clone(),
+                session.identity_email.clone(),
+                None,
+                session.request_ip.clone(),
+                None,
+            )
+            .await;
+        logging::log_event(
+            Level::Warn,
+            "firewall_cycle_block",
+            json!({
+                "tool": tool_name,
+                "session": &session.session_id,
+                "consecutive_calls": max_attempts,
+                "action": format!("{:?}", action)
+            }),
+        );
+
+        match action {
+            CycleAction::PivotError => {
+                return ProxyAction::Respond(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": JSONRPC_FIREWALL_CYCLE,
+                        "message": format!(
+                            "AgentWall: Cycle detected — tool '{}' called {} times with identical arguments. Try a different approach.",
+                            tool_name, max_attempts
+                        ),
+                        "data": {
+                            "session_id": &session.session_id,
+                            "tool": tool_name,
+                            "cycle_length": max_attempts
+                        }
+                    }
+                }));
+            }
+            CycleAction::Block => {
+                return handle_deny(
+                    state,
+                    &session.session_id,
+                    &id,
+                    tool_name,
+                    &format!(
+                        "firewall_cycle_block: {} consecutive identical calls",
+                        max_attempts
+                    ),
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    session.request_ip.clone(),
+                    false,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            }
+            CycleAction::PauseInteractive => {
+                let user_allowed = try_interactive_pause(tool_name, max_attempts);
+                if user_allowed {
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            &session.session_id,
+                            "firewall_cycle_override",
+                            tool_name,
+                            None,
+                            Some("developer_override".to_string()),
+                            None,
+                            session.identity_sub.clone(),
+                            session.identity_email.clone(),
+                            None,
+                            session.request_ip.clone(),
+                            None,
+                        )
+                        .await;
+                    logging::log_event(
+                        Level::Warn,
+                        "firewall_cycle_override",
+                        json!({
+                            "tool": tool_name,
+                            "session": &session.session_id
+                        }),
+                    );
+                    // Fall through to normal evaluation
+                } else {
+                    return handle_deny(
+                        state, &session.session_id, &id, tool_name,
+                        &format!("firewall_cycle_block: {} consecutive identical calls (interactive_denied)", max_attempts),
+                        session.identity_sub.clone(), session.identity_email.clone(),
+                        session.request_ip.clone(),
+                        false, None, None, None,
+                    ).await;
+                }
+            }
+        }
+    }
 
     // FR-12: Content-Aware DLP & Secret Detection on outbound tool call parameters
     let params_str = tool_params.to_string();
@@ -749,164 +919,25 @@ pub async fn evaluate_jsonrpc(
         }
     }
 
-    // FR-306: Cycle Detection (Agent Firewall) — strictly isolated per session
-    let cycle_action_to_take = {
-        let firewall_cfg = session.policy.as_ref().and_then(|p| p.firewall.as_ref());
-        let effective_cfg = firewall_cfg.cloned().unwrap_or_default();
-
-        if effective_cfg.enabled {
-            let fingerprint = ToolCallFingerprint::new(tool_name, &tool_params);
-            let mut history = session
-                .tool_history
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            let max_attempts = effective_cfg.cycle_detection.max_attempts as usize;
-
-            // Fix 2: Dynamic window cap — always at least as large as max_attempts so that
-            // policies with max_attempts > TOOL_HISTORY_MIN are never silently broken.
-            let effective_window = max_attempts.max(TOOL_HISTORY_MIN);
-
-            // Append and bound the window
-            history.push(fingerprint.clone());
-            let len = history.len();
-            if len > effective_window {
-                history.drain(..len - effective_window);
-            }
-
-            if max_attempts > 0 && history.len() >= max_attempts {
-                let tail = &history[history.len() - max_attempts..];
-                let all_identical = tail.iter().all(|f| *f == fingerprint);
-
-                if all_identical {
-                    // Clear history so agent gets a fresh start or on developer override
-                    history.clear();
-                    state
-                        .metrics_firewall_cycle_total
-                        .fetch_add(1, Ordering::Relaxed);
-                    Some((effective_cfg.cycle_detection.action, max_attempts))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
+    // ADR: Sequence rule evaluation against sliding window tracker
+    if let Some(ref policy) = session.policy {
+        let tracker = session.sliding_window.lock().unwrap_or_else(|e| e.into_inner());
+        let seq_eval = policy.evaluate_sequence(tool_name, &tool_params, &tracker);
+        if let EvalResult::Deny { validator_name, .. } = seq_eval {
+            state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+            let rule_desc = validator_name.unwrap_or_else(|| "Sequence rule block".to_string());
+            return ProxyAction::Respond(make_error(
+                &id,
+                -32600,
+                &format!("Multi-step security violation: {}", rule_desc),
+            ));
         }
-    };
+    }
 
-    if let Some((action, max_attempts)) = cycle_action_to_take {
-        // Cycle detected
-        let _ = state
-            .audit_logger
-            .write_entry(
-                &session.session_id,
-                "firewall_cycle_block",
-                tool_name,
-                None,
-                Some(format!(
-                    "cycle_detected: {} consecutive identical calls (max_attempts={})",
-                    max_attempts, max_attempts
-                )),
-                None,
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                None,
-                session.request_ip.clone(),
-                None,
-            )
-            .await;
-        logging::log_event(
-            Level::Warn,
-            "firewall_cycle_block",
-            json!({
-                "tool": tool_name,
-                "session": &session.session_id,
-                "consecutive_calls": max_attempts,
-                "action": format!("{:?}", action)
-            }),
-        );
-
-        match action {
-            CycleAction::PivotError => {
-                return ProxyAction::Respond(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": JSONRPC_FIREWALL_CYCLE,
-                        "message": format!(
-                            "AgentWall: Cycle detected — tool '{}' called {} times with identical arguments. Try a different approach.",
-                            tool_name, max_attempts
-                        ),
-                        "data": {
-                            "session_id": &session.session_id,
-                            "tool": tool_name,
-                            "cycle_length": max_attempts
-                        }
-                    }
-                }));
-            }
-            CycleAction::Block => {
-                return handle_deny(
-                    state,
-                    &session.session_id,
-                    &id,
-                    tool_name,
-                    &format!(
-                        "firewall_cycle_block: {} consecutive identical calls",
-                        max_attempts
-                    ),
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    session.request_ip.clone(),
-                    false,
-                    None,
-                    None,
-                    None,
-                )
-                .await;
-            }
-            CycleAction::PauseInteractive => {
-                // In non-TTY environments, fall back to block.
-                // Attempt console I/O via platform-specific paths.
-                let user_allowed = try_interactive_pause(tool_name, max_attempts);
-                if user_allowed {
-                    let _ = state
-                        .audit_logger
-                        .write_entry(
-                            &session.session_id,
-                            "firewall_cycle_override",
-                            tool_name,
-                            None,
-                            Some("developer_override".to_string()),
-                            None,
-                            session.identity_sub.clone(),
-                            session.identity_email.clone(),
-                            None,
-                            session.request_ip.clone(),
-                            None,
-                        )
-                        .await;
-                    logging::log_event(
-                        Level::Warn,
-                        "firewall_cycle_override",
-                        json!({
-                            "tool": tool_name,
-                            "session": &session.session_id
-                        }),
-                    );
-                    // Fall through to normal evaluation
-                } else {
-                    return handle_deny(
-                        state, &session.session_id, &id, tool_name,
-                        &format!("firewall_cycle_block: {} consecutive identical calls (interactive_denied)", max_attempts),
-                        session.identity_sub.clone(), session.identity_email.clone(),
-                        session.request_ip.clone(),
-                        false, None, None, None,
-                    ).await;
-                }
-            }
-        }
+    // Push fingerprint into sliding window tracker for multi-step sequence evaluation
+    {
+        let mut tracker = session.sliding_window.lock().unwrap_or_else(|e| e.into_inner());
+        tracker.push(ToolCallFingerprint::new(tool_name, &tool_params));
     }
 
     // Safe Mode Evaluation (FR-303a) — tool-aware scanning

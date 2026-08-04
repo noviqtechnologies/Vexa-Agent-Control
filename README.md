@@ -1,6 +1,6 @@
 # Vexa AgentWall
 
-Vexa AgentWall is an enterprise-grade default-deny security gateway and LLM agent egress proxy operating over MCP (Model Context Protocol), HTTP, HTTPS, and WebSocket connections. It intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets — featuring inline DLP scanning, OIDC identity binding, centralized API key custody, and HMAC-chained tamper-evident audit logging.
+Vexa AgentWall is an enterprise-grade default-deny security gateway and LLM agent egress proxy operating over MCP (Model Context Protocol), HTTP, HTTPS, and WebSocket connections. It intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets — featuring inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, and a built-in **ADR (AI Detection & Response)** security benchmark suite.
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
@@ -184,6 +184,16 @@ agentwall lint agentwall-policy.yaml
 agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
 ```
 
+### 5. Run the ADR Security Benchmark
+Measure your security posture against 17 real-world AI attack categories (303 tasks total):
+
+```bash
+agentwall bench --full
+# Report saved to: target/benchmark-report.html
+```
+
+The benchmark produces an overall **A/B/C security grade** with per-category pass rates and comparative baselines against GuardAgent, LlamaFirewall, and ALRPHFS. The **ADR Benchmark** tab in the local dashboard (`http://127.0.0.1:8080`) displays the report interactively.
+
 ---
 
 ## Configuration
@@ -281,9 +291,10 @@ Consult our comprehensive documentation suite for detailed guides, architecture 
 - 🔐 **[OIDC Identity Binding & Auth Provider Guide](docs/oidc_identity_binding.md)** — Step-by-step setup guides, claims mappings, and policy examples for Okta, Keycloak, Entra ID, Auth0, AWS Cognito, Google Workspace, and PingIdentity.
 - 🚀 **[Quickstart Guide](docs/quickstart.md)** — Real-world tutorial for securing Claude Desktop and MCP tools.
 - 📦 **[Deployment & Installation Guide](docs/deployment.md)** — Step-by-step installation for macOS, Linux, Windows, Docker, and Kubernetes.
-- ⚙️ **[Configuration & Policy Reference](docs/configuration.md)** — In-depth reference for Schema v2 policies, Safe Mode rules, and DLP regex patterns.
+- ⚙️ **[Configuration & Policy Reference](docs/configuration.md)** — In-depth reference for Schema v2 policies, sequence rules, Safe Mode rules, and DLP regex patterns.
 - 📚 **[Documentation Hub](docs/index.md)** — Centralized documentation index.
-- 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Command-line scenario walkthroughs for developers across all 9 core capabilities.
+- 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Command-line scenario walkthroughs for developers across all 10 core capabilities including ADR Benchmark and Sequence Rules.
+- 🛡️ **[ADR Security Benchmark Guide](docs/adr_benchmark.md)** — Deep-dive into the 303-task benchmark suite: attack categories, scoring, report interpretation, and policy recommendations.
 
 ---
 

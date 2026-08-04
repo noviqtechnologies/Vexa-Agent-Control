@@ -46,9 +46,40 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         enforce: bool,
 
+        /// Enable local policy learning mode (synthesizes agentwall-policy.yaml from local dev traffic)
+        #[arg(long, default_value_t = false)]
+        learn: bool,
+
+        /// Enable opt-in local dual-agent threat detector worker
+        #[arg(long, default_value_t = false)]
+        dual_agent: bool,
+
+        /// Local LLM API endpoint for dual-agent threat reasoning
+        #[arg(long, default_value = "http://localhost:11434")]
+        local_llm_url: String,
+
         /// Downstream command and arguments (for stdio mode)
         #[arg(last = true)]
         args: Vec<String>,
+    },
+
+    /// Run ADR security benchmark suite (303 tasks, 17 attack classes, 133 MCP servers)
+    Bench {
+        /// Run all 303 benchmark scenarios across 17 attack classes
+        #[arg(long, default_value_t = false)]
+        full: bool,
+
+        /// Benchmark comparative scoring against industry baselines (ALRPHFS, GuardAgent, LlamaFirewall)
+        #[arg(long, default_value_t = false)]
+        compare_baselines: bool,
+
+        /// Render HTML/SVG figures and scorecards
+        #[arg(long, default_value_t = false)]
+        visualize: bool,
+
+        /// Output path for benchmark HTML report
+        #[arg(long, default_value = "./target/benchmark-report.html")]
+        output: String,
     },
 
     /// Run the gateway server

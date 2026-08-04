@@ -24,3 +24,6 @@ pub mod wrap;
 
 pub mod license;
 pub mod spend;
+
+pub mod bench;
+pub mod detector;

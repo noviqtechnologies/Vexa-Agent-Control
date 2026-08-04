@@ -40,6 +40,27 @@ identity:
 session:
   max_calls_per_second: 10
 
+# Stateful multi-step sequence rules (ADR Framework)
+sequence_rules:
+  - id: "no-read-then-exec"
+    description: "Block shell execution that follows a sensitive file read (exfiltration pattern)"
+    window: 5
+    pattern:
+      - tool: read_file
+      - tool: execute_command
+    action: deny
+    message: "Exfiltration chain detected: read_file → execute_command"
+
+  - id: "no-repeated-http-post"
+    description: "Block repeated outbound HTTP POSTs within a sliding window"
+    window: 10
+    pattern:
+      - tool: http_post
+      - tool: http_post
+      - tool: http_post
+    action: deny
+    message: "Repeated POST pattern blocked (possible data exfiltration loop)"
+
 # Explicit Tool Allowlisting
 tools:
   - name: read_file
@@ -71,6 +92,21 @@ It supports 21 built-in regex patterns, detecting:
 - Credit Card Numbers, US SSNs
 - `.env` variable references
 
+## Stateful Sequence Rules (ADR Framework)
+
+The `sequence_rules` stanza enables the **ADR Sequence Engine** to detect multi-step attack patterns across a sliding-window session. Each rule specifies:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique rule identifier (referenced in audit logs) |
+| `description` | Plain-English explanation of the attack pattern |
+| `window` | How many recent tool calls to examine |
+| `pattern` | Ordered list of tool names that together constitute the attack |
+| `action` | `deny` (block) or `log` (observe only) |
+| `message` | Human-readable block reason surfaced to the dashboard |
+
+Sequence rule violations are written to the audit log with the matched rule ID and appear as **Sequence Rule Violation Badges** in the local dashboard at `http://127.0.0.1:8080`.
+
 ## Safe Mode (FR-303a)
 
 Safe Mode is an always-on enforcement layer that blocks dangerous tool calls without any policy configuration. It applies 15 tool-aware rules covering sensitive file access (SSH keys, `.env`, AWS credentials, kubeconfig, `/etc/shadow`, Docker config/socket), shell exfiltration (pipe-to-shell, netcat listeners, `rm -rf /`), and cloud metadata SSRF.
@@ -91,3 +127,16 @@ agentwall identity rotate --agent my-agent
 # Set per-tool-call credential scoping
 agentwall identity scope --agent my-agent --tool execute_shell --deny
 ```
+
+## ADR Security Benchmark
+
+The `agentwall bench` command stress-tests your gateway configuration against 303 curated tasks across 17 AI attack categories. It measures your detection and blocking rates and assigns an overall **A/B/C security grade**.
+
+```bash
+# Run the full benchmark suite
+agentwall bench --full
+
+# Output: target/benchmark-report.html
+```
+
+For a complete description of all 17 attack categories, scoring methodology, and policy recommendations, see the [ADR Security Benchmark Guide](adr_benchmark.md).

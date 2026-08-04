@@ -41,6 +41,14 @@ This guide provides comprehensive instructions for deploying, configuring, secur
    - [Control Hub Synchronization Issues](#control-hub-synchronization-issues)
    - [IDE Wrapping & Watch Daemon Diagnostics](#ide-wrapping--watch-daemon-diagnostics)
    - [Spend Limit & Loop Detection Triggers](#spend-limit--loop-detection-triggers)
+8. [Stateful Sequence Rules (ADR Framework)](#8-stateful-sequence-rules-adr-framework)
+   - [How the Sequence Engine Works](#how-the-sequence-engine-works)
+   - [Writing Sequence Rules](#writing-sequence-rules)
+   - [Sequence Rule Violations in Audit Logs](#sequence-rule-violations-in-audit-logs)
+9. [ADR Security Benchmark](#9-adr-security-benchmark)
+   - [Running the Benchmark](#running-the-benchmark)
+   - [Reading the Report](#reading-the-report)
+   - [Dashboard Integration](#dashboard-integration)
 
 ---
 
@@ -914,3 +922,131 @@ To ensure `agentwall` works globally across **all future terminal sessions** wit
 ```
 - **Cause:** The agent invoked the exact same tool call and parameters repeatedly, tripping cycle detection.
 - **Solution:** AgentWall returned a `PivotError` instructing the agent to break out of its loop. Check agent prompt logic or adjust `loop_detection.threshold` in policy configuration.
+
+---
+
+## 8. Stateful Sequence Rules (ADR Framework)
+
+> **ADR** stands for **AI Detection & Response** — a security framework that extends AgentWall with stateful multi-step attack detection, security benchmarking, and self-healing policy synthesis.
+
+Standard tool allowlisting evaluates each tool call in isolation. However, many real-world attacks unfold across multiple steps — a legitimate-looking `read_file` followed by an `http_post` to an external endpoint is an exfiltration chain that neither call reveals alone. AgentWall's **ADR Sequence Engine** solves this by maintaining a per-session sliding-window call history and evaluating multi-step pattern rules against it.
+
+### How the Sequence Engine Works
+
+1. The **`SessionTracker`** maintains a ring buffer of recent tool calls per session, keyed by session ID.
+2. On every incoming tool call, the **Sequence Engine** evaluates all configured `sequence_rules` against the trailing call window.
+3. If a rule's pattern matches (in order, within the configured `window`), the engine immediately returns a **`deny`** response and logs the violation with the rule ID.
+4. Violations appear as **Sequence Rule Violation Badges** in the local dashboard at `http://127.0.0.1:8080`.
+
+### Writing Sequence Rules
+
+Add a `sequence_rules` stanza to your `agentwall-policy.yaml`:
+
+```yaml
+sequence_rules:
+  # Block the read_file → execute_command chain (common exfiltration pattern)
+  - id: "no-read-then-exec"
+    description: "Block shell execution that follows a file read"
+    window: 5          # Look back over the last 5 tool calls in this session
+    pattern:
+      - tool: read_file
+      - tool: execute_command
+    action: deny
+    message: "Exfiltration chain detected: read_file → execute_command"
+
+  # Block repeated HTTP POSTs (data pump pattern)
+  - id: "no-repeated-http-post"
+    description: "Block more than 3 HTTP POSTs within a 10-call window"
+    window: 10
+    pattern:
+      - tool: http_post
+      - tool: http_post
+      - tool: http_post
+    action: deny
+    message: "Repeated POST pattern blocked"
+
+  # Detect credential file read followed by network call
+  - id: "no-cred-read-then-network"
+    description: "Block network calls after reading credential files"
+    window: 3
+    pattern:
+      - tool: read_file
+      - tool: http_post
+    action: deny
+    message: "Credential theft chain blocked: credential read → outbound network"
+```
+
+### Rule Fields Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier, referenced in audit logs and dashboard badges |
+| `description` | string | No | Human-readable explanation of the attack pattern |
+| `window` | integer | Yes | Number of recent tool calls to examine in the session history |
+| `pattern` | list | Yes | Ordered list of `tool:` names forming the attack chain |
+| `action` | enum | Yes | `deny` — block and log; `log` — observe only |
+| `message` | string | No | Reason string returned to the agent and written to the audit log |
+
+### Sequence Rule Violations in Audit Logs
+
+When a sequence rule fires, the audit log entry includes:
+
+```json
+{
+  "event_type": "sequence_rule_violation",
+  "rule_id": "no-read-then-exec",
+  "matched_pattern": ["read_file", "execute_command"],
+  "session_id": "sess-abc123",
+  "blocked_tool": "execute_command",
+  "timestamp": "2026-08-04T09:00:00Z"
+}
+```
+
+Use `agentwall verify-log audit.log` to confirm the chain of custody for any sequence violation.
+
+---
+
+## 9. ADR Security Benchmark
+
+The `agentwall bench` command runs an offline **303-task benchmark suite** against a local AgentWall gateway instance. It measures how well your current policy configuration detects and blocks 17 categories of AI attack patterns.
+
+### Running the Benchmark
+
+```bash
+# Run all 303 tasks across all 17 attack categories
+agentwall bench --full
+
+# Or when building from source
+cargo run -- bench --full
+```
+
+The benchmark completes in under 60 seconds and writes an HTML report to `target/benchmark-report.html`.
+
+```bash
+# Open the report
+open target/benchmark-report.html           # macOS
+xdg-open target/benchmark-report.html      # Linux
+Start-Process target/benchmark-report.html # Windows PowerShell
+```
+
+### Reading the Report
+
+The report shows:
+
+- **Overall security grade** (A ≥ 90%, B = 75–89%, C < 75%) with pass/fail counts
+- **Per-category pass rates** with plain-English descriptions of what each category tests
+- **Comparative baselines** against GuardAgent, LlamaFirewall, and ALRPHFS
+- **Policy recommendations** to address failing categories
+
+### Dashboard Integration
+
+The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) renders the latest benchmark report interactively. Launch the dashboard with:
+
+```bash
+agentwall dev
+```
+
+Then click **ADR Benchmark** in the sidebar to view your security score ring and per-category breakdown.
+
+For the full benchmark reference including all 17 attack categories and scoring methodology, see the [ADR Security Benchmark Guide](adr_benchmark.md).
+

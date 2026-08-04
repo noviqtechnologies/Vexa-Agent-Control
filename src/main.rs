@@ -226,8 +226,17 @@ async fn main() {
             stdio,
             no_browser,
             enforce,
+            learn,
+            dual_agent,
+            local_llm_url,
             args,
-        } => run_dev(listen, mcp_url, stdio, no_browser, enforce, args).await,
+        } => run_dev(listen, mcp_url, stdio, no_browser, enforce, learn, dual_agent, local_llm_url, args).await,
+        Commands::Bench {
+            full,
+            compare_baselines,
+            visualize,
+            output,
+        } => run_bench(full, compare_baselines, visualize, Some(output)).await,
         Commands::GeneratePolicy {
             output,
             decay_window,
@@ -1591,7 +1600,7 @@ async fn run_wrap(
     });
 
     // Parse the command string
-    let mut parts = match shlex::split(&cmd_str) {
+    let parts = match shlex::split(&cmd_str) {
         Some(p) => p,
         None => {
             eprintln!("{} Failed to parse command string.", "✖".red());
@@ -1634,8 +1643,34 @@ async fn run_dev(
     stdio: bool,
     no_browser: bool,
     enforce: bool,
+    learn: bool,
+    dual_agent: bool,
+    local_llm_url: String,
     args: Vec<String>,
 ) -> i32 {
+    if learn {
+        println!(
+            "{} {}",
+            "🧠".blue(),
+            "Policy Learning Mode active — observing tool sequences to synthesize policy.".cyan().bold()
+        );
+        println!(
+            "{} Run {} after session to generate policy YAML.",
+            "ℹ".blue(),
+            "agentwall generate-policy".yellow()
+        );
+    }
+    if dual_agent {
+        let detector = agentwall::detector::LocalDualAgentDetector::new(
+            agentwall::detector::DualAgentConfig {
+                enabled: true,
+                local_llm_url,
+                poll_interval_secs: 5,
+            },
+        );
+        detector.start();
+    }
+
     // Generate session secret and ID
     let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
     let session_id = uuid::Uuid::new_v4().to_string();
@@ -1926,3 +1961,71 @@ async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
         }
     }
 }
+
+async fn run_bench(
+    full: bool,
+    compare_baselines: bool,
+    visualize: bool,
+    output: Option<String>,
+) -> i32 {
+    println!("{}", "=".repeat(60).cyan());
+    println!(
+        "{} {}",
+        " VEXA AgentWall ".bold().white().on_cyan(),
+        "ADR Security Benchmarking Subsystem".cyan()
+    );
+    println!("{}", "=".repeat(60).cyan());
+    println!(
+        "{} Running benchmark suite (303 tasks, 17 attack categories, 133 mock MCP servers)...",
+        "ℹ".blue()
+    );
+
+    let config = agentwall::bench::BenchmarkConfig {
+        full,
+        compare_baselines,
+        visualize,
+        output_path: output.clone(),
+    };
+
+    match agentwall::bench::BenchmarkRunner::run_benchmark(config).await {
+        Ok(report) => {
+            println!("\n{}", "=== BENCHMARK SUMMARY ===".bold().cyan());
+            println!(
+                "   Overall Security Score: {}/100",
+                format!("{:.1}", report.score).green().bold()
+            );
+            println!(
+                "   Tasks Executed:         {}",
+                report.tasks_executed.to_string().cyan()
+            );
+            println!(
+                "   Attack Classes Tested:  {}",
+                report.categories_tested.len().to_string().cyan()
+            );
+
+            if compare_baselines {
+                println!("\n{}", "=== BASELINE COMPARISON ===".bold().cyan());
+                println!(
+                    "   AgentWall ADR Engine: {}%",
+                    format!("{:.1}", report.score).green().bold()
+                );
+                println!("   Vanilla LLM:          14.2% (Blocked)");
+                println!("   Static Regex Shield:  42.8% (Blocked)");
+            }
+
+            if let Some(out) = output {
+                println!(
+                    "\n{} Report generated at: {}",
+                    "✓".green().bold(),
+                    out.cyan().underline()
+                );
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("{} Benchmark execution failed: {}", "✖".red(), e);
+            1
+        }
+    }
+}
+

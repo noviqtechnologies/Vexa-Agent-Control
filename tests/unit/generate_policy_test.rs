@@ -219,7 +219,7 @@ fn test_required_threshold() {
 fn test_null_events() {
     let yaml = generate_from_events(&[], 30);
     assert!(yaml.contains("tools: []"));
-    assert!(yaml.contains("version: \"2\""));
+    assert!(yaml.contains("version: \"2.1\""));
 }
 
 #[test]

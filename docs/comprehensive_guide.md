@@ -1,6 +1,6 @@
 # Comprehensive Core Capabilities Guide
 
-This guide provides a quick, step-by-step walkthrough for every single Core Capability offered by AgentWall. The commands and instructions are tailored to ensure they work smoothly across macOS, Linux, and Windows.
+This guide provides a step-by-step walkthrough for every core capability offered by AgentWall. It covers all 10 capabilities including the **ADR (AI Detection & Response)** framework features — stateful sequence rules, security benchmarking, and the enhanced local dashboard. Commands are tailored to work smoothly across macOS, Linux, and Windows.
 
 ---
 
@@ -112,6 +112,40 @@ Safe Mode runs before the policy engine — it protects agents even in shadow mo
 
 ---
 
+## 5b. Stateful Sequence Rules (ADR Framework)
+
+Beyond single-call blocking, AgentWall's **ADR Sequence Engine** detects multi-step attack patterns across a sliding-window session. Rules can enforce ordering constraints on tool call chains.
+
+### How It Works
+The `SessionTracker` maintains a per-session call history. The sequence engine evaluates each new call against configured rules — for example, blocking `execute_command` if it appears within 5 steps of `read_file` on a sensitive path.
+
+### Define a Sequence Rule in Policy YAML
+```yaml
+sequence_rules:
+  - id: "no-read-then-exec"
+    description: "Block shell execution that follows a file read — common exfiltration pattern"
+    window: 5          # Look back over last 5 tool calls
+    pattern:
+      - tool: read_file
+      - tool: execute_command
+    action: deny
+    message: "Exfiltration chain detected: read_file → execute_command"
+
+  - id: "no-repeated-http-post"
+    description: "Block more than 3 HTTP POSTs within a 10-call window"
+    window: 10
+    pattern:
+      - tool: http_post
+      - tool: http_post
+      - tool: http_post
+    action: deny
+    message: "Repeated outbound POST pattern blocked (possible data exfiltration loop)"
+```
+
+Sequence rule violations are surfaced in real time in the local dashboard as **Sequence Rule Violation Badges** and written to the audit log with the rule ID and matched pattern.
+
+---
+
 ## 6. Compliance & Auditing
 
 AgentWall writes cryptographically secure, HMAC-chained audit logs, and can push events directly to SIEMs (Splunk, Datadog, OpenSearch).
@@ -181,13 +215,29 @@ agentwall identity audit --agent my-agent --verify
 
 ---
 
-## 8. SaaS Dashboard & IDE Telemetry (FR-23)
+## 8. Local Dashboard & ADR Security Widgets (`agentwall dev`)
 
-AgentWall includes an optional, self-hosted web dashboard with panels for Fleet Overview, Identity Governance, Policy Insights, and **Per-Client MCP Server Visibility (Admin-Only)**. It runs alongside the gateway — no external SaaS dependency.
+AgentWall's Tier 1 embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentwall dev`. It now includes a dedicated **ADR Benchmark** tab and five real-time security widgets, all served offline with no external dependencies.
 
-When developers run `agentwall status`, their local IDE wrapping configurations and active MCP servers are sent as snapshots to the Dashboard, allowing administrators to maintain centralized visibility into the fleet's tool usage.
+### ADR Dashboard Widgets
 
-### Deploying the Dashboard via Helm (Production)
+| Widget | Description |
+|--------|-------------|
+| **ADR Security Score Ring** | SVG gauge showing your overall ADR security grade (A/B/C) across 17 attack categories |
+| **Real-Time Causal Trace Graph** | Live node graph of multi-turn tool execution paths (`read_file` → `list_dir` → `http_post`) |
+| **Sequence Rule Violation Badges** | Live notification stream surfacing stateful sequence rule blocks in real time |
+| **1-Click Policy Synthesis** | Displays auto-discovered tool call rules with a "Copy `agentwall-policy.yaml`" button |
+| **ADR Benchmark Tab** | Full interactive report of the last `agentwall bench` run, embedded in the sidebar |
+
+### Launch the Dashboard
+**All OS (macOS, Linux, Windows):**
+```bash
+agentwall dev
+# Dashboard auto-opens at http://127.0.0.1:8080
+# Click the "ADR Benchmark" tab in the sidebar for the security posture report
+```
+
+### Deploying the Full Stack Dashboard via Helm (Production)
 
 ```bash
 helm install agentwall ./chart \
@@ -230,4 +280,66 @@ helm install agentwall ./chart \
 ```
 *(When `spec.networkPolicy.enforced: true` is set, the operator ensures all outbound traffic that bypasses the AgentWall gateway is automatically dropped at the network layer).*
 
-To also deploy the SaaS Dashboard alongside the gateway, add the dashboard flags — see [§8. SaaS Dashboard](#8-saas-dashboard--fleet-overview-identity-governance--policy-insights-fr-23) for the full Helm example with `dashboardApi.enabled`, `dashboardDb.enabled`, and `dashboardFrontend.enabled`.
+To also deploy the SaaS Dashboard alongside the gateway, add the dashboard flags — see [§8. Local Dashboard & ADR Security Widgets](#8-local-dashboard--adr-security-widgets-agentwall-dev) for the full Helm example with `dashboardApi.enabled`, `dashboardDb.enabled`, and `dashboardFrontend.enabled`.
+
+---
+
+## 10. ADR Security Benchmark (`agentwall bench`)
+
+> **What is ADR?** ADR stands for **AI Detection & Response** — a security framework that stress-tests your agent gateway against real-world AI attack techniques across 17 categories.
+
+The `agentwall bench` command runs an offline 303-task benchmark suite against a local AgentWall gateway instance. It measures how well your current policy and enforcement rules detect and block each attack class, producing an overall security grade (A/B/C) and a detailed HTML report.
+
+### Run the Full Benchmark
+**All OS:**
+```bash
+# Run all 303 tasks across all 17 attack categories
+cargo run -- bench --full
+
+# Or if installed via binary
+agentwall bench --full
+```
+
+### What the Benchmark Tests
+
+| # | Category | Description |
+|---|----------|-------------|
+| 1 | **Prompt Injection** | Attempts to hijack the agent's reasoning via injected instructions |
+| 2 | **Tool Abuse** | Misuse of trusted tools (e.g., `read_file` to read secrets, `exec` to spawn shells) |
+| 3 | **Data Exfiltration** | Patterns that attempt to send sensitive data to external endpoints |
+| 4 | **SSRF** | Requests targeting internal network addresses and cloud metadata endpoints |
+| 5 | **Privilege Escalation** | Attempts to invoke tools or read resources beyond the agent's credential scope |
+| 6 | **Path Traversal** | Directory traversal attacks (`../../etc/passwd`, `..\windows\system32`) |
+| 7 | **Secret Leakage** | Requests that trigger disclosure of keys, tokens, or environment variables |
+| 8 | **Loop / Recursion** | Infinite agent self-invocation or tool call loops |
+| 9 | **Multi-Step Chains** | Coordinated multi-turn sequences designed to bypass single-call detection |
+| 10 | **Denial of Service** | High-frequency or expensive requests designed to exhaust resources |
+| 11 | **Encoding Evasion** | Base64, URL-encoding, leetspeak, and Cyrillic homoglyph obfuscation |
+| 12 | **Supply Chain** | Attacks via compromised MCP tool definitions or external resources |
+| 13 | **Lateral Movement** | Sequential calls probing adjacent systems after initial access |
+| 14 | **Credential Theft** | Attempts to access credential stores or token files |
+| 15 | **Policy Bypass** | Direct attempts to manipulate or reload the policy engine |
+| 16 | **Identity Spoofing** | Forged JWT or agent identity claims |
+| 17 | **Indirect Injection** | Injection via tool response payloads (e.g., poisoned file content) |
+
+### Reading the Report
+After the benchmark completes, AgentWall writes an HTML report to `target/benchmark-report.html`:
+
+```bash
+# Open the report (macOS)
+open target/benchmark-report.html
+
+# Open the report (Linux)
+xdg-open target/benchmark-report.html
+
+# Open the report (Windows PowerShell)
+Start-Process target/benchmark-report.html
+```
+
+The report includes:
+- **Overall Grade** (A/B/C) with pass/fail counts
+- **Per-category pass rates** with plain-English descriptions of what each category tests
+- **Comparative baselines** against GuardAgent, LlamaFirewall, and ALRPHFS
+- **Recommendations** for which policy rules to add to improve your score
+
+The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also displays the latest report interactively.
