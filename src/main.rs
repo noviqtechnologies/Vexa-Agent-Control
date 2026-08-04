@@ -32,7 +32,12 @@ use proxy::handler::ProxyState;
 async fn main() {
     let cli = Cli::parse();
 
-    let suppress_banner = matches!(
+    let is_dev_stdio = match &cli.command {
+        Commands::Dev { stdio, .. } => *stdio,
+        _ => false,
+    };
+
+    let suppress_banner = is_dev_stdio || matches!(
         &cli.command,
         Commands::Report { .. }
             | Commands::Test { .. }
