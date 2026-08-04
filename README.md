@@ -132,16 +132,11 @@ agentwall dev
 ```
 * Use `--no-browser` to prevent automatic browser launching.
 * Use `--enforce` to test active DLP and policy blocking locally.
-* Wrap stdio-based MCP servers directly (requires Node.js / `npx` installed):
+* Wrap stdio-based MCP servers directly:
   ```bash
-  # Linux / macOS / WSL:
-  mkdir -p ~/workspace
   agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-
-  # Windows (PowerShell):
-  New-Item -ItemType Directory -Force -Path $HOME\workspace
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
   ```
+  *(Note: Ensure Node.js/npx is installed and target directory exists).*
 
 ### 2. Route Local Agent Traffic
 Set standard proxy environment variables in your shell:

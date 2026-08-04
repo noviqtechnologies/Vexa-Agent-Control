@@ -124,19 +124,11 @@ The Developer Tier provides local observation, automatic policy generation, and 
      $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
      ```
 4. **Wrap Stdio / IDE Tools:**
-   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly (ensure target directory exists):
+   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly:
      ```bash
-     # Linux / macOS / WSL:
-     mkdir -p ~/workspace
      agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-
-     # If npx is not found (e.g. nvm / brew / fnm users), pass $(which npx):
-     agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
-
-     # Windows (PowerShell):
-     New-Item -ItemType Directory -Force -Path $HOME\workspace
-     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
      ```
+     *(Note: Ensure target directory exists and `npx` is available in PATH).*
    * **IDE Wrapping & Diagnostics:** Secure local IDEs (e.g., Claude Desktop, Cursor):
      ```bash
      agentwall wrap claude
@@ -874,16 +866,11 @@ To ensure `agentwall` works globally across **all future terminal sessions** wit
     agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
     ```
 
-- **Cause 2 (Target directory missing or invalid path):** The target directory (e.g., `/workspace`) does not exist or violates macOS root read-only filesystem restrictions.
-  - **Solution (macOS / Linux / WSL):**
+- **Cause 2 (Target directory missing or invalid path):** The target directory (e.g., `~/workspace`) does not exist.
+  - **Solution:** Ensure the path exists before running `agentwall dev --stdio`:
     ```bash
     mkdir -p ~/workspace
     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-    ```
-  - **Solution (Windows PowerShell):**
-    ```powershell
-    New-Item -ItemType Directory -Force -Path $HOME\workspace
-    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem $HOME\workspace
     ```
 
 ---
