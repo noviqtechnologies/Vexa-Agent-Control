@@ -101,44 +101,81 @@ The Developer Tier provides local observation, automatic policy generation, and 
   >   `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile && source ~/.bash_profile`
 
 #### Post-Installation Activities & Verification
-1. **Launch Local Observation Proxy:**
-   Launch `agentwall dev` to start an observation-mode shadow proxy listening on `127.0.0.1:8080`. This automatically opens the embedded local single-page dashboard in your browser:
-   ```bash
-   agentwall dev
-   ```
-2. **Verify Embedded Web Dashboard:**
-   Open `http://127.0.0.1:8080` in your web browser to view live traffic events.
-3. **Configure Agent HTTP Proxy Environment:**
-   Route your local agent HTTP traffic through AgentWall:
 
-   * **Linux / macOS (Bash / Zsh):**
-     ```bash
-     export HTTP_PROXY=http://127.0.0.1:8080
-     export HTTPS_PROXY=http://127.0.0.1:8080
-     export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
-     ```
-   * **Windows (PowerShell):**
-     ```powershell
-     $env:HTTP_PROXY="http://127.0.0.1:8080"
-     $env:HTTPS_PROXY="http://127.0.0.1:8080"
-     $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
-     ```
-4. **Wrap Stdio / IDE Tools:**
-   * **Stdio Wrapping:** Wrap stdio-based MCP servers directly:
-     ```bash
-     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-     ```
-     *(Note: Ensure target directory exists and `npx` is available in PATH).*
-   * **IDE Wrapping & Diagnostics:** Secure local IDEs (e.g., Claude Desktop, Cursor):
-     ```bash
-     agentwall wrap claude
-     agentwall status
-     ```
-5. **Auto-Generate YAML Policy:**
-   Draft a initial policy from observed local traffic recorded in `~/.agentwall/events.db`:
-   ```bash
-   agentwall generate-policy --decay-window 30
-   ```
+Follow these simplified steps to activate observation mode, wrap agent traffic, and auto-generate governance policies:
+
+##### Step 1: Launch Observation Proxy & Dashboard
+Launch `agentwall dev` to start an observation-mode shadow proxy listening on `127.0.0.1:8080`:
+```bash
+agentwall dev
+```
+* **Prerequisites:** `agentwall` installed and added to PATH (or run as `.\agentwall.exe dev` in PowerShell).
+* **What You Will See:** A terminal banner confirming proxy launch, and your default web browser automatically opens `http://127.0.0.1:8080`.
+* **What You Achieve:** Live proxy monitoring is active, displaying real-time agent events on your local dashboard.
+
+---
+
+##### Step 2: Route Agent HTTP Traffic Through Proxy
+Redirect HTTP/HTTPS requests from your AI agents or SDKs through AgentWall:
+
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  export HTTP_PROXY=http://127.0.0.1:8080
+  export HTTPS_PROXY=http://127.0.0.1:8080
+  export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  $env:HTTP_PROXY="http://127.0.0.1:8080"
+  $env:HTTPS_PROXY="http://127.0.0.1:8080"
+  $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
+  ```
+* **Windows (Command Prompt / CMD):**
+  ```cmd
+  set HTTP_PROXY=http://127.0.0.1:8080
+  set HTTPS_PROXY=http://127.0.0.1:8080
+  set AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  ```
+* **What You Will See:** Silent confirmation in the terminal; live HTTP requests from Python/Node AI scripts immediately appear in the browser dashboard (`http://127.0.0.1:8080`).
+* **What You Achieve:** All outgoing agent HTTP API calls (e.g., to OpenAI or Anthropic) are intercepted and recorded in `~/.agentwall/events.db`.
+
+---
+
+##### Step 3: Wrap Stdio Tools & Desktop IDEs
+Secure Model Context Protocol (MCP) tool calls and desktop AI applications (e.g., Claude Desktop, Cursor):
+
+* **Wrap Stdio MCP Server:**
+  > **Prerequisites:** Node.js (`npx` v18+) installed and target directory created.
+  * **Linux / macOS:**
+    ```bash
+    mkdir -p ~/workspace
+    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+    ```
+  * **Windows (PowerShell):**
+    ```powershell
+    New-Item -ItemType Directory -Path "$HOME\workspace" -Force
+    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
+    ```
+* **Wrap Desktop IDE & Check Health:**
+  ```bash
+  agentwall wrap claude
+  agentwall status
+  ```
+* **What You Will See:**
+  * For stdio wrapping: `AgentWall MCP Security Proxy` initialization header in your terminal.
+  * For `agentwall wrap claude`: Terminal confirmation that client configuration files (e.g., `claude_desktop_config.json`) were updated.
+  * For `agentwall status`: Diagnostic table listing active wrappers and proxy health.
+* **What You Achieve:** MCP tool calls (like file manipulation or shell execution) are proxied and governed by AgentWall.
+
+---
+
+##### Step 4: Auto-Generate Security Policy
+After running your agents or IDE tools, generate a YAML security policy derived from observed traffic:
+```bash
+agentwall generate-policy --decay-window 30
+```
+* **What You Will See:** Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentwall/events.db`.
+* **What You Achieve:** A tailored, baseline security policy automatically crafted for your specific agent tools without manual YAML writing.
 
 ---
 
@@ -194,25 +231,47 @@ The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + 
    The gateway will bootstrap its policy state directly from PostgreSQL via the Control Hub API and maintain a live SSE connection (`GET /api/v1/events`) for zero-downtime policy hot-reloading.
 
 #### Post-Installation Activities & Verification
-1. **Verify Control Hub API Health:**
-   Ensure the API backend is healthy and responding:
-   ```bash
-   curl -i http://localhost:8400/healthz
-   ```
-   *(Expected response: HTTP `200 OK` with `{"status":"ok"}`).*
-2. **Access Team Dashboard:**
-   Open `http://localhost:8081` in your browser to view the centralized team dashboard, active policies, and real-time telemetry.
-3. **Verify Gateway Hot-Reloading & Logs:**
-   Inspect the gateway stdout logs to confirm policy bootstrap success:
-   ```
-   [INFO] Policy loaded successfully from Control Hub
-   [INFO] SSE event subscription connected to http://localhost:8400/api/v1/events
-   ```
-4. **Verify Audit Log Integrity:**
-   Periodically verify the cryptographic HMAC hash chain of the team audit log:
-   ```bash
-   agentwall verify-log team-audit.log
-   ```
+
+Follow these steps to verify your Control Hub deployment and centralized team gateway:
+
+##### Step 1: Verify Control Hub API Backend Health
+Check that the Control Hub API service is running and accessible:
+```bash
+curl -i http://localhost:8400/healthz
+```
+* **Prerequisites:** Control Hub stack launched via Docker Compose (`docker compose up -d`).
+* **What You Will See:** HTTP `200 OK` response with JSON payload `{"status":"ok"}`.
+* **What You Achieve:** Confirms the centralized REST API and PostgreSQL database backend are operational.
+
+---
+
+##### Step 2: Access & Inspect Team Dashboard
+Open `http://localhost:8081` in your web browser.
+* **Prerequisites:** Control Hub UI service running on port 8081.
+* **What You Will See:** The web interface showing cluster overview, registered gateways, active security policies, and live event telemetry.
+* **What You Achieve:** Provides complete visual monitoring and team policy administration.
+
+---
+
+##### Step 3: Verify Gateway Policy Bootstrap & Hot-Reloading
+Inspect stdout logs from your running `agentwall start --centralized` gateway instance.
+* **What You Will See:** Gateway output log lines:
+  ```text
+  [INFO] Policy loaded successfully from Control Hub
+  [INFO] SSE event subscription connected to http://localhost:8400/api/v1/events
+  ```
+* **What You Achieve:** Confirms the gateway is connected to the Control Hub and will receive instant zero-downtime policy hot-reloads when team policies change.
+
+---
+
+##### Step 4: Cryptographically Verify Audit Log Integrity
+Validate the tamper-evident cryptographic hash chain of the team audit log:
+```bash
+agentwall verify-log team-audit.log
+```
+* **Prerequisites:** Audit log file (`team-audit.log`) generated by active gateway sessions.
+* **What You Will See:** Terminal verification report: `Audit log verification complete: Hash chain intact. 0 tampered entries.`
+* **What You Achieve:** Guarantees cryptographic audit log compliance and tamper evidence.
 
 ---
 
@@ -268,23 +327,44 @@ The Enterprise Tier deploys AgentWall as a high-availability, cloud-native gatew
 
 #### Post-Installation Activities & Verification
 
-1. **Verify Kubernetes Workload Health:**
-   Confirm all gateway pods, control plane API, database, and frontend deployments are `Running` and `1/1 Ready`:
-   ```bash
-   kubectl get pods -n agentwall-system -o wide
-   ```
-2. **Inspect Gateway Container Logs:**
-   Verify zero startup errors and successful OIDC/SIEM initialization:
-   ```bash
-   kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway --tail=100
-   ```
-3. **Execute Automated Smoke Test:**
-   Run the CLI policy test suite against the deployed gateway endpoint:
-   ```bash
-   agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com
-   ```
-4. **Configure Automated SIEM & OIDC Monitoring:**
-   Verify that test events are reaching your SIEM dashboard (e.g. Splunk index `security_events`) and OIDC JWT tokens are properly validated upon agent request.
+Follow these steps to verify your enterprise production deployment:
+
+##### Step 1: Verify Kubernetes Workload Health
+Confirm all gateway pods, control plane API, database, and frontend deployments are running:
+```bash
+kubectl get pods -n agentwall-system -o wide
+```
+* **Prerequisites:** Helm deployment completed in the `agentwall-system` namespace.
+* **What You Will See:** Pod status table listing all deployments as `Running` and `1/1 Ready`.
+* **What You Achieve:** Confirms high-availability gateway pods and infrastructure services are healthy.
+
+---
+
+##### Step 2: Inspect Gateway Container Logs
+Inspect gateway logs for clean startup and enterprise service connections:
+```bash
+kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway --tail=100
+```
+* **What You Will See:** Clean startup log stream showing successful TLS certificate binding, OIDC provider discovery, and SIEM HTTP intake connection.
+* **What You Achieve:** Validates cryptographic identity integration, secure TLS listener setup, and SIEM telemetry streaming.
+
+---
+
+##### Step 3: Execute Automated Policy Smoke Test
+Run the CLI policy test suite against the live cluster ingress endpoint:
+```bash
+agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com
+```
+* **Prerequisites:** `agentwall` CLI installed and cluster ingress reachable at `https://agentwall.corp.com`.
+* **What You Will See:** Terminal test report summarizing passed assertions and policy enforcement checks.
+* **What You Achieve:** End-to-end empirical verification of governance policy enforcement across the active cloud gateway fleet.
+
+---
+
+##### Step 4: Verify Enterprise SIEM & OIDC Audit Telemetry
+Check your enterprise SIEM dashboard (e.g., Splunk, Datadog) and OIDC Provider audit logs.
+* **What You Will See:** Real-time audit events indexed in your SIEM portal (e.g. index `security_events`) with valid OIDC subject claim bindings.
+* **What You Achieve:** Guarantees enterprise compliance reporting, automated SIEM alert triggers, and identity-bound audit trails.
 
 ---
 
