@@ -184,12 +184,22 @@ agentwall generate-policy --decay-window 30
 The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + Go REST API + PostgreSQL Database) running alongside local or shared gateway instances.
 
 #### Prerequisites
+
+##### Option A: Standard Control Hub Deployment (Docker Compose — Recommended)
 1. **Control Hub Server Host:**
-   - Linux / macOS / Windows host with Docker (v24.0+) and Docker Compose (v2.20+) installed.
-   - Network ports available: `8081` (UI), `8400` (API), `5433` (Postgres DB).
+   - **Docker Engine / Docker Desktop (v24.0+):** Must be installed and **actively running** (daemon active).
+   - **Docker Compose (v2.20+):** Required to orchestrate PostgreSQL, API, and UI containers.
+   - **Available Network Ports:** `8081` (Control Hub UI), `8400` (Control Hub API), `5433` (PostgreSQL DB).
 2. **Gateway Host(s) / Developer Workstations:**
    - Installed `agentwall` binary (`curl -fsSL https://vexasec.io/install.sh | bash` on Linux/macOS or `irm https://vexasec.io/install.ps1 | iex` on Windows).
-   - Network connectivity to the Control Hub server on port `8400`.
+   - Direct network connectivity to the Control Hub server on port `8400`.
+
+##### Option B: Native / Non-Docker Local Deployment (Bare-Metal Binaries)
+If Docker is not running or available on your local environment:
+1. **PostgreSQL Server (v16+):** Running locally (e.g., port `5433` or `5432`) with database `agentwall` created and schema migrations executed from `control-plane/db/migrations/`.
+2. **Control Hub API Binary (`dashboard-api`):** Compiled or run via Go 1.21+ (`go run ./cmd/server`) with `DATABASE_URL` pointing to PostgreSQL.
+3. **Control Hub UI (`frontend`):** Built or served via Node.js (v18+) development server (`npm run dev` in `control-plane/ui`).
+
 
 #### Step-by-Step Installation
 1. **Deploy the Control Hub Stack via Docker Compose:**
@@ -201,16 +211,20 @@ The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + 
    This provisions:
    - **Control Hub UI:** `http://localhost:8081`
    - **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
-   - **PostgreSQL Database:** `localhost:5433`
 
 2. **Start Gateway Instances Connected to the Control Hub:**
    Configure shared bearer secrets and start gateway instances in centralized mode:
 
+   > [!IMPORTANT]
+   > **Long-Running Foreground Process:** `agentwall start` runs in the foreground. Keep this terminal window open while the gateway is active. Do not run `curl` or `verify-log` commands in this same window.
+   >
+   > **Proxy Environment Warning:** When running `docker compose up -d` for Step 1, ensure `HTTP_PROXY` and `HTTPS_PROXY` are **not** set in that terminal session, as Docker requires direct internet access to download base images.
+
    * **Linux / macOS (Bash / Zsh):**
      ```bash
      export DASHBOARD_API_URL="http://localhost:8400"
-     export POLICY_READ_SECRET="team-policy-read-secret"
-     export GATEWAY_SECRET="team-gateway-secret"
+     export POLICY_READ_SECRET="local-dev-policy-read-secret"
+     export GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
      agentwall start \
        --listen 127.0.0.1:8080 \
@@ -220,15 +234,15 @@ The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + 
    * **Windows (PowerShell):**
      ```powershell
      $env:DASHBOARD_API_URL="http://localhost:8400"
-     $env:POLICY_READ_SECRET="team-policy-read-secret"
-     $env:GATEWAY_SECRET="team-gateway-secret"
+     $env:POLICY_READ_SECRET="local-dev-policy-read-secret"
+     $env:GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
-     agentwall.exe start `
+     .\agentwall.exe start `
        --listen 127.0.0.1:8080 `
        --centralized `
-       --log-path ./team-audit.log
+       --log-path .\team-audit.log
      ```
-   The gateway will bootstrap its policy state directly from PostgreSQL via the Control Hub API and maintain a live SSE connection (`GET /api/v1/events`) for zero-downtime policy hot-reloading.
+   The gateway will bootstrap its policy state directly from PostgreSQL via the Control Hub API and maintain a live SSE connection (`GET /api/v1/policy/subscribe`) for zero-downtime policy hot-reloading.
 
 #### Post-Installation Activities & Verification
 
@@ -254,18 +268,66 @@ Open `http://localhost:8081` in your web browser.
 ---
 
 ##### Step 3: Verify Gateway Policy Bootstrap & Hot-Reloading
-Inspect stdout logs from your running `agentwall start --centralized` gateway instance.
+Inspect stdout logs from your running `agentwall start --centralized` gateway instance in **Terminal 1**.
 * **What You Will See:** Gateway output log lines:
   ```text
   [INFO] Policy loaded successfully from Control Hub
-  [INFO] SSE event subscription connected to http://localhost:8400/api/v1/events
+  [INFO] SSE event subscription connected to http://localhost:8400/api/v1/policy/subscribe
   ```
 * **What You Achieve:** Confirms the gateway is connected to the Control Hub and will receive instant zero-downtime policy hot-reloads when team policies change.
 
 ---
 
-##### Step 4: Cryptographically Verify Audit Log Integrity
+##### Step 4: Generate MCP Traffic & Cryptographically Verify Audit Log Integrity
 Validate the tamper-evident cryptographic hash chain of the team audit log:
+
+> [!NOTE]
+> **Multi-Terminal Workflow:**
+> 1. **Terminal 1:** Keep the `agentwall start` gateway server running.
+> 2. **Terminal 2 (New Window):** Send MCP tool call traffic through the proxy to populate the audit log.
+>
+>    > **What Generates Audit Log Entries?** The audit log exclusively records **MCP `tools/call` JSON-RPC decisions** (allow, deny, rate-limit). Plain HTTP proxy requests (e.g. `curl --proxy`) establish a session and are tracked, but do **not** create audit log entries on their own. Route traffic from an actual AI agent or SDK (e.g. Python OpenAI SDK, Node.js Anthropic SDK) through the proxy to generate audit events.
+>    >
+>    > **Centralized Mode Auth Requirement:** All proxy requests require an `Authorization` header to identify the agent session. Any non-empty value is accepted as a session key when OIDC is not configured.
+>
+>    **Quick Connectivity Test (verifies session start, not audit):**
+>    - **Linux/macOS:**
+>      ```bash
+>      curl --proxy http://127.0.0.1:8080 \
+>           -H "Authorization: Bearer test-agent-session-1" \
+>           http://localhost:8400/healthz
+>      ```
+>    - **Windows (PowerShell):**
+>      ```powershell
+>      curl.exe --proxy http://127.0.0.1:8080 `
+>               -H "Authorization: Bearer test-agent-session-1" `
+>               http://localhost:8400/healthz
+>      ```
+>
+>    **Send an MCP Tool Call Directly to the Gateway (generates audit entries):**
+>    Post a JSON-RPC `tools/call` request **directly to the gateway** on port `8080`. The gateway evaluates the policy and writes an audit entry before forwarding upstream.
+>    - **Linux/macOS:**
+>      ```bash
+>      curl -X POST http://127.0.0.1:8080 \
+>           -H "Authorization: Bearer test-agent-session-1" \
+>           -H "Content-Type: application/json" \
+>           -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_file","arguments":{"path":"/tmp/test.txt"}}}'
+>      ```
+>    - **Windows (PowerShell):**
+>      ```powershell
+>      curl.exe -X POST http://127.0.0.1:8080 `
+>               -H "Authorization: Bearer test-agent-session-1" `
+>               -H "Content-Type: application/json" `
+>               -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}'
+>      ```
+>    > The gateway will evaluate the policy, write a cryptographic audit entry, then attempt to forward to the upstream MCP server. An upstream connection error is expected if no MCP server is running — the audit log entry is still written.
+>
+> 3. **Terminal 2:** After agent traffic has flowed through the proxy, run the log verification command:
+>    - **Linux/macOS:** `agentwall verify-log ./team-audit.log`
+>    - **Windows:** `.\agentwall.exe verify-log .\team-audit.log`
+>
+> *(Note: Running `verify-log` on an empty log file before any MCP tool call traffic has passed through the gateway will report `log file contains no audit entries`).*
+
 ```bash
 agentwall verify-log team-audit.log
 ```

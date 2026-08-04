@@ -80,6 +80,9 @@ func main() {
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/{id}", hubSpecH.GetPolicyByID)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/credentials/{provider}", hubSpecH.GetProviderCredential)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Post("/api/v1/credentials/rotate", hubSpecH.RotateCredential)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/active", policyMgmtH.GetActive)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/active", policyMgmtH.GetActive)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
 	// Ingest endpoints — gateway auth (shared secret), NOT OIDC.
@@ -143,11 +146,6 @@ func main() {
 		r.Post("/users", userH.Create)
 		r.Delete("/users/{id}", userH.Delete)
 		
-		// Policy Read & Real-Time Push (Gateway + Operator Auth)
-		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policies/active", policyMgmtH.GetActive)
-		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policy/active", policyMgmtH.GetActive)
-		r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/policy/subscribe", policyMgmtH.Subscribe)
-
 		// Policy Management (Operator Auth)
 		r.Get("/policies", policyMgmtH.List)
 		r.Post("/policies", hubSpecH.CreatePolicy)

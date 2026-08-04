@@ -27,7 +27,7 @@ pub async fn start_policy_subscriber(
     );
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(0)) // No timeout for SSE
+        .no_proxy()
         .build()
         .expect("Failed to build HTTP client for SSE");
 

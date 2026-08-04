@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
@@ -79,12 +80,18 @@ func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast the new policy over SSE to connected gateways
 	if h.broker != nil {
-		msg := map[string]string{
-			"event": "policy_update",
-			"data":  p.Content,
-		}
-		h.broker.Publish(msg)
+		h.broker.Publish(formatSSE("policy_update", p.Content))
 	}
+}
+
+func formatSSE(event, data string) []byte {
+	var sb strings.Builder
+	sb.WriteString("event: " + event + "\n")
+	for _, line := range strings.Split(data, "\n") {
+		sb.WriteString("data: " + line + "\n")
+	}
+	sb.WriteString("\n")
+	return []byte(sb.String())
 }
 
 func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
@@ -109,11 +116,7 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	// Send initial active policy if available
 	policy, err := h.store.GetActivePolicy(r.Context())
 	if err == nil && policy != nil {
-		msg, _ := json.Marshal(map[string]string{
-			"event": "policy_update",
-			"data":  policy.Content,
-		})
-		w.Write([]byte("data: " + string(msg) + "\n\n"))
+		w.Write(formatSSE("policy_update", policy.Content))
 		flusher.Flush()
 	}
 

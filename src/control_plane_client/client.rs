@@ -29,9 +29,10 @@ impl DashboardClient {
         });
 
         let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(10))
             .build()
-            .expect("failed to build dashboard HTTP client");
+            .ok()?;
 
         Some(Self {
             http,
