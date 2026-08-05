@@ -511,8 +511,8 @@ async fn handle_request(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    // LLM API Proxying route (e.g. /v1/chat/completions)
-    if path.starts_with("/v1/") {
+    // LLM API Proxying route (e.g. /v1/chat/completions), excluding /v1/mcp
+    if path.starts_with("/v1/") && path != "/v1/mcp" {
         return crate::proxy::llm_proxy::handle_request(req, state, client_ip).await;
     }
 

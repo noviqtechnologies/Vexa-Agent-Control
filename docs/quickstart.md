@@ -130,10 +130,22 @@ agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
 
 ### Test the Firewall
 
-Go back to Claude Desktop and ask it to do something malicious or unexpected:
-> *"Claude, can you run the `rm -rf /` command?"* or *"Claude, can you read my `.env` file?"*
+Ask Claude / your agent to perform an unapproved action, such as accessing a restricted directory or unlisted path:
+> *"Can you read the file `/etc/shadow`?"* or *"Can you inspect `../sensitive.key`?"*
 
-AgentWall will immediately intercept and **block** the request because it doesn't match the strict allowlist in your `agentwall-policy.yaml` file. You have successfully secured your AI Agent!
+*(Alternatively, send a test HTTP request to verify policy enforcement directly):*
+
+* **macOS / Linux / Command Prompt / `curl.exe`:**
+  ```bash
+  curl.exe -X POST http://127.0.0.1:8080/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/etc/shadow\"}},\"id\":1}"
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  Invoke-RestMethod -Uri "http://127.0.0.1:8080/mcp" -Method Post -ContentType "application/json" -Body '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_file","arguments":{"path":"/etc/shadow"}},"id":1}'
+  ```
+
+AgentWall will immediately intercept and **block** the tool request (`403 Forbidden` / default-deny policy rule match), preventing the agent call from executing. You have successfully secured your AI Agent!
 
 ---
 
