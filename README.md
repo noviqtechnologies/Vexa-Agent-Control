@@ -1,362 +1,299 @@
-# Vexa AgentWall
-
-Vexa AgentWall is an enterprise-grade default-deny security gateway and LLM agent egress proxy operating over MCP (Model Context Protocol), HTTP, HTTPS, and WebSocket connections. It intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets — featuring inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, passive shadow discovery mode with Risk Delta reporting, verified MCP security scoring, Human-in-the-Loop policy escalation with HMAC-signed webhook callbacks, hardened WebSocket egress tunneling, real-time AI threat intelligence feed integration, multi-tenant project and task policy sharding, zero-knowledge customer-managed-key SIEM export, a pre-built Hardened Agent Container Runtime (HAR) for Kubernetes and Obot deployments, and a built-in **ADR (AI Detection & Response)** security benchmark suite.
+<h1 align="center">Vexa AgentWall</h1>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/version-1.0.6-green.svg" alt="Version"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust"></a>
-  <a href="https://go.dev/"><img src="https://img.shields.io/badge/go-1.22%2B-00ADD8.svg" alt="Go"></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/frontend-React%20%7C%20TypeScript-blue.svg" alt="React"></a>
+  <strong>Enterprise-Grade Default-Deny AI Security Gateway & Firewall for MCP, HTTP, HTTPS, and WebSockets</strong>
 </p>
 
 <p align="center">
-  <a href="https://vexasec.io/">Website</a> · <a href="docs/user_guide.md">User Guide</a> · <a href="docs/index.md">Documentation Hub</a> · <a href="docs/oidc_identity_binding.md">OIDC Guide</a> · <a href="https://github.com/noviqtechnologies/agentwall/issues">Issues</a> · <a href="mailto:security@vexasec.io">Security</a>
+  Vexa AgentWall intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets. It features inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, passive shadow discovery mode with Risk Delta reporting, verified MCP security scoring, Human-in-the-Loop policy escalation with HMAC-signed webhook callbacks, hardened WebSocket egress tunneling, real-time AI threat intelligence feed integration, multi-tenant project and task policy sharding, zero-knowledge customer-managed-key SIEM export, a pre-built Hardened Agent Container Runtime (HAR) for Kubernetes deployments, and a built-in ADR (AI Detection & Response) security benchmark suite.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.6-green.svg?style=flat-square" alt="Version"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Container-HAR%20%3C100MB-2496ED.svg?style=flat-square" alt="Docker"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#why-vexa-agentwall">Why Vexa AgentWall</a> ·
+  <a href="#capabilities-by-operating-profile">Capabilities</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#security-and-control">Security & Control</a> ·
+  <a href="#deployment-options">Deployment options</a> ·
+  <a href="#management-consoles">Management consoles</a> ·
+  <a href="#configuration">Configuration</a>
 </p>
 
 ---
 
-## Capabilities by Deployment Tier
+## Quick start
 
-AgentWall provides unified governance across the entire AI agent lifecycle, scaling from local developer sidecars to high-throughput enterprise security fleets.
+Vexa AgentWall can be deployed across multiple environments: as a zero-config standalone CLI sidecar on a developer workstation, via Docker Compose for engineering teams, as a Kubernetes Helm release for enterprise production fleets, or built directly from source.
 
-### 🖥️ Tier 1 — Developer Workstation (Local Sidecar)
+### Standalone Developer CLI
 
-The local sidecar mode provides developers with instant, zero-configuration security and full traffic visibility without external infrastructure.
+Install the statically-linked `agentwall` binary and launch the shadow gateway with an embedded web dashboard:
 
-- **Default-Deny Policy Enforcement** — Blocks unauthorized tool calls and outbound LLM requests unless explicitly permitted by a YAML policy, with Safe Mode active by default.
-- **Out-of-the-Box Safe Mode** — Pre-configured detection for 15 high-signal rules covering Sensitive Files, Secrets & Config, System Paths, Data Exfiltration, Persistence/Shell Execution, Destructive Operations, and Network/SSRF.
-- **Prompt Injection & Response Poisoning Detection** — Scans incoming tool responses for 9 attack categories including Jailbreaks, Instruction Manipulation, Credential Solicitation, Memory/State Poisoning, Covert Action Directives, CJK Instruction Overrides, and Tool Poisoning.
-- **Inbound & Outbound DLP Scanning** — Dual-pass regex scanning and inline redaction/blocking for AWS keys, SSH private keys, OpenAI/Anthropic/GitHub/Stripe API tokens, PII, and credit card numbers.
-- **Passive Shadow AI Discovery Mode** — Observe agent traffic without blocking calls (`agentwall dev` or `agentwall start --shadow-mode`). Generates a **Risk Delta Report** (`agentwall report --risk`) summarizing potential policy violations prior to enforcement.
-- **MCP Security Scoring Engine (`agentwall scan`)** — Evaluates local MCP server definitions to assign a Vexa Security Score (0–100) based on permission footprint, file access depth, and schema complexity. Fails CI/CD pipelines automatically on low scores.
-- **Local Web Dashboard** — Live traffic monitor at `http://127.0.0.1:8080` displaying real-time tool call logs, risk timelines, Vexa Security Score cards, WebSocket tunnel latencies, and interactive approval modals.
-- **Human-in-the-Loop (HITL) Local Intercept** — Intercepts high-risk tool calls with an interactive browser modal, prompting the developer to Allow Once, Permanently Authorize, or Block.
-- **IDE Wrapping Engine & Watch Daemon** — Auto-patches Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE configuration files to transparently route MCP tool calls through AgentWall (`agentwall wrap`, `agentwall watch`).
-- **Automatic Policy Generation** — Analyzes shadow-mode dev traffic and synthesizes a production-ready, lint-passing `agentwall-policy.yaml` (`agentwall generate-policy`).
-- **ADR AI Detection & Response Benchmark** — Includes a 303-task security benchmark across 17 attack classes (`agentwall bench --full`), scoring your posture against industry baselines (GuardAgent, LlamaFirewall, ALRPHFS).
-- **Tamper-Evident HMAC Audit Logging** — Cryptographically chained audit trail written to local disk, verifiable at any time via `agentwall verify-log`.
-- **Opt-In Dual-Agent Threat Detector** — Worker mode leveraging a local LLM (e.g., via Ollama) to perform semantic threat reasoning on ambiguous tool calls (`agentwall dev --dual-agent`).
-- **Stdio Proxy Wrapper** — Wraps stdio-based MCP servers over stdin/stdout streams (`agentwall dev --stdio -- <command>`), making CLI-based tools fully observable and policy-enforced.
+**macOS / Linux / WSL:**
+```bash
+curl -fsSL https://vexasec.io/install.sh | bash
+agentwall dev
+```
 
----
+**Windows (PowerShell):**
+```powershell
+irm https://vexasec.io/install.ps1 | iex
+agentwall.exe dev
+```
 
-### 👥 Tier 2 — Team / Staging (Control Hub & Docker Compose)
+Open `http://127.0.0.1:8080` in your browser to inspect live traffic, shadow risk telemetry, MCP security scores, and interactive approval modals.
 
-The Control Hub extends governance to staging environments and engineering teams with centralized policy synchronization, identity binding, and spend management.
+### Team / Staging Control Hub (Docker Compose)
 
-- **Centralized Policy Management & Real-time SSE Push** — Version and push policy updates hot from the Control Hub to all connected gateway instances via Server-Sent Events without restarting services.
-- **OIDC Identity & Group Claim Binding** — Authenticates agent sessions against corporate Identity Providers (Keycloak, Okta, Entra ID, Auth0, Cognito, Google Workspace, Ping) and dynamically enforces policies matched to JWT group claims.
-- **Multi-Tenant Project & Task Policy Sharding** — Dynamically resolves and scopes policies to `agent_project_id` and `agent_task_id` session headers in sub-millisecond execution time.
-- **Vault Backend & Credential Management** — Integrated credential issuance, rotation, and revocation supporting HashiCorp Vault (AppRole), AWS Secrets Manager (IAM), and Azure Key Vault (Managed Identity).
-- **Centralized Provider API Key Custody** — Holds LLM provider credentials securely in the gateway. Agents and developers never handle raw API keys; the proxy injects them dynamically on egress.
-- **HITL Async Approval Queue** — Dispatches asynchronous webhook alerts for intercepted dangerous commands to Slack, Microsoft Teams, or the Control Hub UI, validating HMAC-signed callback approvals.
-- **Token Spend Cap & SQLite Ledger** — Tracks per-session token usage, applies model pricing catalogs, enforces concurrency caps, and manages database retention.
-- **Agent Loop Detection & Pivot Error Handling** — Identifies agents trapped in repetitive failure loops and executes configured countermeasures (`PivotError`, `Block`, or `PauseInteractive`).
-- **Self-Healing Behavioral Learning** — Calculates Z-score parameter anomalies, applies confidence decay over time, and automatically drafts GitOps policy pull requests.
-- **Multi-Backend SIEM Export** — Asynchronously streams structured JSON audit events to Splunk HEC, Datadog Logs, or OpenSearch with zero-blocking timeout fallbacks to local disk.
+Deploy the self-hosted Control Hub stack (Go REST API, React Management Console, PostgreSQL database) alongside gateway instances:
 
----
+```bash
+# 1. Start the Control Hub stack
+cd control-plane
+docker compose up -d --build
 
-### 🏢 Tier 3 — Enterprise Production (Kubernetes & Fleet Security)
+# 2. Start Gateway in Centralized Mode
+export DASHBOARD_API_URL="http://localhost:8400"
+export POLICY_READ_SECRET="team-policy-read-secret"
+export GATEWAY_SECRET="team-gateway-secret"
 
-Enterprise fleet deployments deliver high-availability agent governance, compliance-grade cryptographic privacy, and zero-trust data protection at scale.
+agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
+```
 
-- **Hardened Agent Container Runtime (HAR)** — Pre-configured Alpine/Distroless OCI container image (<100MB footprint) operating as an entrypoint proxy for Obot, Docker, and Kubernetes agent pods.
-- **Hardened Rust Egress Tunneling** — High-performance WebSocket proxy bridging cloud-hosted agents to local MCP servers with inline DLP scanning and <5ms frame latency.
-- **Real-Time Threat Intelligence Feed** — Subscribes to Vexa AI Malware signature feeds via SSE, hot-swapping DLP pattern matching rules without dropping active connections.
-- **Zero-Knowledge Customer-Managed Key (CMK) Encryption** — Client-side AES-256-GCM encryption of audit logs using Customer-Managed Keys prior to SIEM egress, ensuring no third party can read sensitive audit data.
-- **Memory-Safe Pure-Rust TLS Termination** — Native HTTPS listening powered by `rustls`, eliminating OpenSSL CVE attack surface and C library dependencies.
-- **Semantic Policy Inspection & Caching** — Performs async or sync semantic threat evaluation against tool description poisoning and instruction manipulation with TTL-based caching.
-- **Fleet-Wide HAR Container Telemetry** — Kubernetes-native monitoring of running AgentWall sidecars, tracking policy sync status, image versions, pod health, and socket performance.
-- **Zero-Downtime Policy Hot-Reloading** — Applies policy modifications atomically across production gateway clusters without dropping inflight requests or splitting evaluation states.
+Access the Team Management Console at `http://localhost:8081` and the Control Hub API at `http://localhost:8400`.
 
----
+### Enterprise Fleet Production (Kubernetes & Helm)
 
+Deploy the high-availability gateway fleet and Hardened Agent Container Runtime (HAR) on Kubernetes:
 
-## Installation
+```bash
+# 1. Create namespace & TLS secret
+kubectl create namespace agentwall-system
+kubectl create secret tls agentwall-tls --cert=/etc/certs/tls.crt --key=/etc/certs/tls.key -n agentwall-system
 
-AgentWall provides flexible installation methods tailored to your deployment tier across macOS, Linux, and Windows:
+# 2. Deploy via Helm Chart
+helm install agentwall ./chart \
+  --namespace agentwall-system \
+  --set gateway.tls.enabled=true \
+  --set gateway.tls.secretName="agentwall-tls" \
+  --set dashboardApi.enabled=true \
+  --set dashboardDb.enabled=true \
+  --set dashboardFrontend.enabled=true
 
-### 1. Developer / Binary Install (Standalone CLI)
-Installs the statically-linked `agentwall` binary:
+# 3. Build & run the HAR OCI sidecar container (<100MB distroless footprint)
+docker build -f Dockerfile.har -t agentwall-har:2.0 .
+docker run -e AGENTWALL_POLICY_PATH=/etc/agentwall/policy.yaml agentwall-har:2.0
+```
 
-* **macOS / Linux / WSL:**
-  ```bash
-  curl -fsSL https://vexasec.io/install.sh | bash
-  agentwall --version
-  ```
-  > **Permanent PATH Setup (Set Once):**
-  > - **Bash (Linux/WSL):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
-  > - **Zsh (macOS / modern Linux):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
-  > - **Fish:** `fish_add_path ~/.local/bin`
+### Build from Source
 
-* **Windows (PowerShell / CMD / Git Bash):**
-  ```powershell
-  irm https://vexasec.io/install.ps1 | iex
-  agentwall.exe --version
-  ```
-  > **Permanent PATH Setup (Set Once):**
-  > - **PowerShell (Run once):**
-  >   ```powershell
-  >   [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")
-  >   ```
-  > - **Command Prompt (CMD):**
-  >   ```cmd
-  >   setx PATH "%PATH%;%USERPROFILE%\.local\bin"
-  >   ```
-  > - **Git Bash / MSYS2:**
-  >   ```bash
-  >   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile && source ~/.bash_profile
-  >   ```
+Requires Rust 1.89+ toolchain:
 
-Or build from source (requires Rust 1.89+):
 ```bash
 git clone https://github.com/noviqtechnologies/agentwall.git
 cd agentwall
 cargo build --release
-# Binary path: ./target/release/agentwall
+# Compiled binary located at: ./target/release/agentwall
 ```
-
-### 2. Team / Staging Install (Docker Compose)
-Run the self-hosted Control Hub stack (Go REST API, React UI, PostgreSQL DB) and connect gateway instances:
-
-1. **Deploy Control Hub Stack:**
-   ```bash
-   cd control-plane
-   docker compose up -d --build
-   ```
-   * **Control Hub UI:** `http://localhost:8081`
-   * **Control Hub API:** `http://localhost:8400`
-
-2. **Start Gateway in Centralized Mode:**
-   ```bash
-   export DASHBOARD_API_URL="http://localhost:8400"
-   export POLICY_READ_SECRET="team-policy-read-secret"
-   export GATEWAY_SECRET="team-gateway-secret"
-
-   agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
-   ```
-
-### 3. Enterprise Production Install (Kubernetes & Helm)
-Deploy the centralized enforcement fleet and Control Hub on Kubernetes:
-
-1. **Create Namespace & TLS Secret:**
-   ```bash
-   kubectl create namespace agentwall-system
-   kubectl create secret tls agentwall-tls --cert=/etc/certs/tls.crt --key=/etc/certs/tls.key -n agentwall-system
-   ```
-
-2. **Deploy Helm Chart:**
-   ```bash
-   helm install agentwall ./chart \
-     --namespace agentwall-system \
-     --set gateway.tls.enabled=true \
-     --set gateway.tls.secretName="agentwall-tls" \
-     --set dashboardApi.enabled=true \
-     --set dashboardDb.enabled=true \
-     --set dashboardFrontend.enabled=true
-   ```
-
-3. **Deploy Hardened Agent Container Runtime (HAR):**
-   ```bash
-   # Build the <100MB OCI sidecar image
-   docker build -f Dockerfile.har -t agentwall-har:2.0 .
-
-   # Run as entrypoint proxy in Obot / Docker / Kubernetes
-   docker run -e AGENTWALL_POLICY_PATH=/etc/agentwall/policy.yaml agentwall-har:2.0
-   ```
 
 ---
 
-## Architecture
+## Why Vexa AgentWall
 
-![AgentWall System Architecture](docs/system_architecture_diagram.png)
+Autonomous AI agents possess powerful capabilities—executing terminal commands, reading files, and invoking external APIs over Model Context Protocol (MCP). Without runtime guardrails, agents are vulnerable to prompt injection, credential leaks, recursive loops, and unauthorized data access. Vexa AgentWall enforces deterministic security boundaries around AI agent execution.
+
+**Default-Deny Zero Trust Security.** Every tool invocation and LLM egress request is blocked by default unless explicitly granted by policy rules, eliminating implicit authorization.
+
+**Real-Time Dual-Pass DLP & Threat Interception.** Performs pre-execution scanning of tool parameters and post-execution scanning of outputs to redact or block AWS keys, SSH credentials, PII, and custom secrets before they escape your security boundary.
+
+**OIDC Identity Binding & Task Sharding.** Dynamically resolves user identity from JWT claims (Okta, Keycloak, Entra ID) and scopes policies in real-time to multi-tenant project and task identifiers.
+
+**Human-in-the-Loop Interception.** Intercepts high-risk actions with real-time interactive browser modals or async Slack/Teams webhooks featuring cryptographic HMAC approval callbacks.
+
+**Continuous Compliance & Tamper-Evident Auditing.** Cryptographically chains all system events into an immutable HMAC audit trail while supporting client-side zero-knowledge AES-256-GCM encryption for SIEM export (Splunk, Datadog, OpenSearch).
+
+---
+
+## Capabilities by Operating Profile
+
+Vexa AgentWall scales seamlessly across three operational deployment profiles:
+
+| Capability | What it gives you | Workstation Sidecar | Team Control Hub | Enterprise Fleet |
+|---|---|:---:|:---:|:---:|
+| **Default-Deny Policy Engine** | Block unauthorized tool calls and LLM egress unless permitted by policy rules | ✓ | ✓ | ✓ |
+| **15 Out-of-the-Box Safe Rules** | Pre-configured detection for sensitive paths, exfiltration, persistence, and destructive commands | ✓ | ✓ | ✓ |
+| **9 Prompt Injection Scanners** | Active defense against jailbreaks, instruction overrides, memory poisoning, and tool poisoning | ✓ | ✓ | ✓ |
+| **Dual-Pass DLP Scanning** | Inline regex scanning and redaction for API tokens, private keys, PII, and secrets | ✓ | ✓ | ✓ |
+| **Passive Shadow AI Discovery** | Observe traffic without blocking and generate pre-enforcement Risk Delta reports | ✓ | ✓ | ✓ |
+| **MCP Security Scoring Engine** | Evaluate local MCP server manifests and assign a 0–100 Vexa Security Score | ✓ | ✓ | ✓ |
+| **IDE Auto-Wrapping Engine** | Transparently route tool calls for Claude Desktop, Cursor, VS Code, JetBrains, and Zed | ✓ | ✓ | ✓ |
+| **ADR Security Benchmark** | Evaluate security posture against 303 tasks across 17 real-world AI attack categories | ✓ | ✓ | ✓ |
+| **Tamper-Evident HMAC Logging** | Cryptographically chained audit trail with local integrity verification (`agentwall verify-log`) | ✓ | ✓ | ✓ |
+| **Centralized Policy Push (SSE)** | Hot-swap policies across running proxy instances without service restarts | — | ✓ | ✓ |
+| **OIDC Identity Binding** | Authenticate agent sessions and map JWT group claims (Okta, Keycloak, Entra ID) to policies | — | ✓ | ✓ |
+| **Project & Task Policy Sharding** | Dynamically resolve sub-millisecond policy scopes via `agent_project_id` and `agent_task_id` | — | ✓ | ✓ |
+| **Centralized Vault & API Keys** | Securely inject LLM provider keys at proxy boundary; agents never touch raw secrets | — | ✓ | ✓ |
+| **Async HITL Webhook Queue** | Dispatch dangerous action approvals to Slack, Teams, or Webhooks with HMAC callbacks | — | ✓ | ✓ |
+| **Spend Caps & Token Ledger** | Enforce per-session token budgets, model pricing catalogs, and concurrency limits | — | ✓ | ✓ |
+| **Loop Detection & Countermeasures** | Intercept repetitive failure loops with `PivotError`, `Block`, or `PauseInteractive` actions | — | ✓ | ✓ |
+| **Hardened Container Runtime (HAR)** | Pre-built <100MB Distroless/Alpine OCI sidecar image for Kubernetes pods | — | — | ✓ |
+| **Hardened Egress Tunneling** | High-performance WebSocket proxy bridging cloud agents to local MCP servers (<5ms latency) | — | — | ✓ |
+| **Real-Time Threat Intel Feed** | Subscribe to live AI malware signature streams via SSE without dropping connections | — | — | ✓ |
+| **Zero-Knowledge CMK Encryption** | Client-side AES-256-GCM encryption of audit streams using Customer-Managed Keys prior to SIEM export | — | — | ✓ |
+| **Pure-Rust TLS Termination** | Native HTTPS listening powered by `rustls`, eliminating C-library attack surfaces | — | — | ✓ |
+
+### Workstation & Local Sidecar Profile
+
+Provides individual developers with instant, zero-configuration security guardrails and complete traffic visibility on local workstations.
+
+- **Safe Mode & Default-Deny Guardrails** — Enforces zero-trust boundaries over MCP tool calls with 15 built-in safe mode rules.
+- **Prompt Injection & Response Poisoning Protection** — Intercepts incoming tool responses for jailbreaks, instruction manipulation, and memory poisoning.
+- **Dual-Pass DLP Redaction** — Scans and redacts sensitive data (AWS keys, SSH private keys, PII) in real-time.
+- **Passive Shadow AI Discovery Mode** — Run `agentwall dev` or `agentwall start --shadow-mode` to observe agent behavior and generate a **Risk Delta Report** (`agentwall report --risk`).
+- **MCP Security Scoring Engine** — Run `agentwall scan` to audit local MCP servers, assigning a Vexa Security Score (0–100) and enforcing CI/CD quality gates.
+- **Local Developer Web Console** — Embedded dashboard at `http://127.0.0.1:8080` for live traffic monitoring, risk analysis, and interactive approvals.
+- **IDE Wrapping Engine** — Auto-patches Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE configuration files (`agentwall wrap`, `agentwall watch`).
+- **ADR AI Detection & Response Benchmark** — Execute the 303-task security benchmark across 17 attack classes (`agentwall bench --full`) to score security posture.
+
+### Team & Staging Control Hub Profile
+
+Extends governance across engineering teams and staging environments with centralized policy coordination, identity binding, and budget controls.
+
+- **Centralized Policy Push (SSE)** — Broadcast versioned security policies from the Control Hub to distributed gateway instances in real-time via Server-Sent Events.
+- **OIDC Identity Binding** — Map corporate identity provider JWT group claims (Keycloak, Okta, Entra ID, Auth0, Ping) directly to dynamic policy rulesets.
+- **Multi-Tenant Policy Sharding** — Resolves and scopes policies dynamically based on `agent_project_id` and `agent_task_id` request context headers.
+- **Vault Integration & API Key Custody** — Holds LLM provider credentials securely within the proxy, eliminating API key distribution to developer workstations or agent code.
+- **Asynchronous HITL Approval Queue** — Routes high-risk tool execution prompts to Slack, Microsoft Teams, or Webhooks with HMAC signature verification.
+- **Spend Caps & Budget Ledger** — Enforce token consumption caps, track model pricing metrics, and manage concurrent agent execution limits via SQLite.
+- **Loop Detection & Pivot Error Countermeasures** — Detects stuck agents trapped in repetitive failure patterns and triggers auto-corrective actions (`PivotError`).
+- **Multi-Backend SIEM Export** — Stream structured JSON audit events to Splunk HEC, Datadog Logs, or OpenSearch with zero-blocking local fallbacks.
+
+### Enterprise Fleet Production Profile
+
+Delivers high-availability security governance, cryptographic privacy, and zero-trust protection for enterprise cloud workloads and multi-tenant agent fleets.
+
+- **Hardened Agent Container Runtime (HAR)** — Light-footprint OCI container image (<100MB) designed as an entrypoint sidecar proxy for Kubernetes container deployments.
+- **Hardened Egress WebSocket Tunneling** — Secure WebSocket proxy connecting remote cloud-hosted agents to local on-premise MCP servers with <5ms frame latency.
+- **Real-Time Threat Intelligence Feed** — Dynamically ingests Vexa AI Malware signature feeds via SSE, updating DLP patterns in-flight without connection loss.
+- **Zero-Knowledge Customer-Managed Key (CMK) Encryption** — Client-side AES-256-GCM encryption of audit logs using Customer-Managed Keys prior to SIEM egress.
+- **Pure-Rust TLS Termination** — Memory-safe HTTPS listener powered by `rustls`, eliminating C-library vulnerabilities and OpenSSL dependencies.
+- **Fleet-Wide Telemetry & Monitoring** — Monitor gateway fleet health, pod status, policy sync state, and socket performance natively in Kubernetes.
+
+---
+
+## How it works
+
+<p align="center">
+  <img src="docs/system_architecture_diagram.png" alt="Vexa AgentWall System Architecture Diagram" width="750">
+</p>
+
+```
+  [ Operating Surfaces & IDEs ] ──► (Claude Desktop / Cursor / VS Code / Antigravity / CLI)
+             │
+             ▼
+ ┌───────────────────────────┐
+ │ 1. Session & Identity     │ ◄── OIDC JWT Claims & Multi-Tenant Project / Task Policy Sharding
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 2. MCP Scoring & Schema   │ ◄── Vexa Security Score (0-100) & Parameter JSON Schema Validation
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 3. Safe Mode & Injection  │ ◄── 15 Out-of-the-Box Safe Mode Rules & 9 Prompt Injection Detectors
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 4. Dual-Pass DLP Engine   │ ◄── Inline PII & Secret Redaction / Dynamic Threat Intel Feed
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 5. Spend & Loop Control   │ ◄── Repeat Failure Loop Intercept (PivotError) & Token Budget Ledger
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 6. HITL & Action Ladder   │ ◄── Default-Deny Evaluation & HMAC Webhook / Browser Escalation
+ └─────────────┬─────────────┘
+               │
+    [ Upstream MCP / LLM ]  ───►  Control Hub Telemetry & Zero-Knowledge Encrypted SIEM Export
+```
 
 ### 6-Pass Security & Policy Engine Pipeline
 
-Every agent tool call and LLM egress payload traversing AgentWall passes sequentially through a 6-pass deterministic pipeline before reaching upstream services:
+Every agent tool call and LLM egress payload traversing Vexa AgentWall passes sequentially through a 6-pass deterministic pipeline before reaching upstream services:
 
-```
-  [ Agent / Client / IDE ]
-             │
-             ▼
- ┌────────────────────────┐
- │ 1. Session & Identity  │ ◄── OIDC JWT Claims / Multi-Tenant Task & Project Policy Sharding
- └───────────┬────────────┘
-             ▼
- ┌────────────────────────┐
- │ 2. MCP Scoring & Schema│ ◄── Vexa Security Score (0-100) & Parameter Regex/Path Validation
- └───────────┬────────────┘
-             ▼
- ┌────────────────────────┐
- │ 3. Safe Mode & Injection│ ◄── 15 Out-of-the-Box Safe Mode Rules & 9 Prompt Injection Detectors
- └───────────┬────────────┘
-             ▼
- ┌────────────────────────┐
- │ 4. Dual-Pass DLP Engine│ ◄── Real-Time Regex PII & Secret Redaction / Dynamic Threat Intel Feed
- └───────────┬────────────┘
-             ▼
- ┌────────────────────────┐
- │ 5. Loop & Spend Control│ ◄── Repeat Failure Loop Intercept (PivotError) & Token Budget Ledger
- └───────────┬────────────┘
-             ▼
- ┌────────────────────────┐
- │ 6. HITL & Action Ladder│ ◄── Default-Deny Evaluation & HMAC Webhook / Browser Approval Escalation
- └───────────┬────────────┘
-             │
-   [ Upstream MCP / LLM ]  ───►  Zero-Knowledge Encrypted SIEM Export (AES-256-GCM)
-```
+1. **Session & Identity Binding** — Validates OIDC JWT claims and dynamically resolves multi-tenant project (`agent_project_id`) and task (`agent_task_id`) policy shards.
+2. **MCP Scoring & Schema Validation** — Evaluates tool parameter schemas and verifies the target MCP server's Vexa Security Score (0–100).
+3. **Safe Mode & Injection Defense** — Applies 15 out-of-the-box safe mode rules and scans tool calls/responses for 9 prompt injection attack categories.
+4. **Dual-Pass DLP Engine** — Executes pre-execution and post-execution regex scanning, redacting sensitive credentials, private keys, and PII against dynamic threat intelligence feeds.
+5. **Spend Control & Loop Prevention** — Enforces session token budgets and interrupts repetitive agent failure loops via `PivotError` responses.
+6. **HITL Intercept & Action Ladder** — Evaluates final default-deny authorization rules, triggering interactive browser modals or HMAC-signed webhook approvals for high-risk actions.
 
-### Deployment Tiers
+### Supported Operating Surfaces & IDE Integrations
 
-| Tier | Components | Deployment Target | Guide & Installation Links |
-|------|-----------|------------------|---------------------------|
-| **Local Sidecar** | Gateway + SQLite + Stdio Proxy + IDE Wrappers | Standalone Developer Workstation (`agentwall dev`) | [Binary Install](#1-developer--binary-install-standalone-cli) · [Tier 1 Guide](docs/user_guide.md#tier-1-developer--workstation) |
-| **Team Hub** | Gateway Fleet + Hub API + Hub UI + PostgreSQL + Vault Adapters | Team Staging / Shared Server (Docker Compose) | [Docker Compose Install](#2-team--staging-install-docker-compose) · [Tier 2 Guide](docs/user_guide.md#tier-2-team--staging) |
-| **Enterprise** | HAR Containers + WebSocket Tunnel + Threat Feed + CMK SIEM | Enterprise Multi-Tenant (Kubernetes & Helm) | [Helm Production Install](#3-enterprise-production-install-kubernetes--helm) · [Tier 3 Guide](docs/user_guide.md#tier-3-enterprise-cloud--production) |
-
-### Dashboard Tiers
-
-| Dashboard | Access | Key Panels |
-|-----------|--------|-----------|
-| **Tier 1 — Local Sidecar** (`127.0.0.1:8080`) | `agentwall dev` | Traffic inventory, Risk Delta (shadow mode), Vexa Security Score, Egress Tunnel latency, HITL intercept modal |
-| **Tier 2 — Team Control Hub** | Docker Compose (`localhost:8081`) | HITL Approval queue, Fleet MCP security audit, Project/Task policy sharding editor, Group spend caps |
-| **Tier 3 — Enterprise Control Hub** | Kubernetes Ingress | HAR container telemetry, Threat Intelligence feed monitor, Zero-Knowledge SIEM status, Enterprise license management |
+| Surface / IDE | Integration Mode | Features |
+|---|---|---|
+| **Claude Desktop** | `agentwall wrap claude` | Automated config patching, stdio tool proxying, real-time DLP |
+| **Cursor / VS Code** | `agentwall wrap cursor` | Native MCP config interception, shadow discovery, risk reporting |
+| **JetBrains / Zed** | `agentwall wrap jetbrains` | Transparent stdio proxying, default-deny policy enforcement |
+| **Container Workloads** | HAR Sidecar Container | Entrypoint container proxying, OIDC binding, spend management |
+| **CLI & Custom Agents** | `agentwall dev --stdio -- <cmd>` | Native HTTP/HTTPS proxying, stdio stream wrapper, audit logging |
+| **Web Dashboard** | Native Browser | Live traffic inventory, HITL approval modals, ADR benchmark runner |
 
 ---
 
+## Security and control
 
-## Quick Start
+Vexa AgentWall enforces security controls at the network and runtime boundaries rather than relying on prompt-based instructions.
 
-### 1. Local Shadow Proxy & Embedded Dashboard (`agentwall dev`)
-
-**Prerequisites:**
-- **AgentWall CLI Installed**: `agentwall` binary installed locally.
-- **Node.js / npx (Optional for stdio MCP wrapping)**: Required if wrapping stdio MCP servers like `@modelcontextprotocol/server-filesystem` (`node >= 18` & `npx`).
-- **Available Socket Address**: Local port `127.0.0.1:8080` (or custom address via `--listen`).
-
-Launch the shadow proxy in observation mode. This automatically starts the local Web UI at `http://127.0.0.1:8080` and opens your browser:
-
-```bash
-agentwall dev
-```
-* Use `--no-browser` to prevent automatic browser launching.
-* Use `--enforce` to test active DLP and policy blocking locally.
-* Wrap stdio-based MCP servers directly:
-  ```bash
-  agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-  ```
-  *(Note: Ensure Node.js/npx is installed and target directory exists).*
-
-### 2. Route Local Agent Traffic
-Set standard proxy environment variables in your shell:
-
-* **macOS / Linux (Bash/Zsh):**
-  ```bash
-  export HTTP_PROXY=http://127.0.0.1:8080
-  export HTTPS_PROXY=http://127.0.0.1:8080
-  export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
-  python my_agent.py
-  ```
-* **Windows (PowerShell):**
-  ```powershell
-  $env:HTTP_PROXY="http://127.0.0.1:8080"
-  $env:HTTPS_PROXY="http://127.0.0.1:8080"
-  $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
-  python my_agent.py
-  ```
-
-### 3. Wrap Local IDEs (`agentwall wrap`)
-Automatically patch IDE configuration files (Claude Desktop, Cursor) to route MCP server tool calls through AgentWall:
-
-```bash
-# Wrap Claude Desktop
-agentwall wrap claude
-
-# Inspect IDE status across all supported editors
-agentwall status
-```
-
-### 4. Auto-Generate & Enforce Policy
-Draft a YAML security policy from observed shadow-mode traffic, lint it, and switch to enforcement mode:
-
-```bash
-# Generate policy draft from observed events
-agentwall generate-policy --decay-window 30
-agentwall lint agentwall-policy.yaml
-
-# Start gateway in active enforcement mode
-agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
-```
-
-### 5. Run the ADR Security Benchmark
-Measure your security posture against 17 real-world AI attack categories (303 tasks total):
-
-```bash
-agentwall bench --full
-# Report saved to: target/benchmark-report.html
-```
-
-The benchmark produces an overall **A/B/C security grade** with per-category pass rates and comparative baselines against GuardAgent, LlamaFirewall, and ALRPHFS. The **ADR Benchmark** tab in the local dashboard (`http://127.0.0.1:8080`) displays the report interactively.
+- **Default-Deny Runtime Boundary** — Tool calls and egress requests are rejected by default unless granted by explicit YAML policy statements.
+- **Interactive Human-in-the-Loop (HITL)** — High-impact actions prompt for manual approval via embedded web UI modals or HMAC-signed Slack/Teams webhook callbacks.
+- **Tamper-Evident Cryptographic Audit Logging** — Log records are linked in a cryptographic HMAC-SHA256 hash chain, verifiable via `agentwall verify-log`.
+- **Zero-Knowledge CMK SIEM Export** — Audit data is encrypted with client-side AES-256-GCM using Customer-Managed Keys prior to external SIEM transmission.
+- **Memory-Safe Pure-Rust Architecture** — Built with Rust and `rustls` to eliminate memory corruption bugs, buffer overflows, and C-library vulnerabilities.
+- **Real-Time Threat Intelligence Integration** — Subscribes to live Vexa threat feeds via SSE, updating DLP pattern signatures on-the-fly without downtime.
 
 ---
 
-## v2.0 Feature Workflows
+## Deployment options
 
-### Passive Shadow AI Risk Delta Report
-Run in non-blocking mode and generate a report of what *would* have been blocked:
+Vexa AgentWall adapts to your existing deployment infrastructure:
 
-```bash
-# Observe without enforcing
-agentwall start --shadow-mode --log-path audit.log
+| Deployment Profile | Orchestration & Deployment | Infrastructure & State Storage |
+|---|---|---|
+| **Workstation Local Sidecar** | Standalone Binary (`agentwall dev`) or IDE Wrapper (`agentwall wrap`) | Local workstation, embedded SQLite database, local disk audit logs |
+| **Team Staging Control Hub** | Docker Compose (`docker compose up`) | Shared team host / VM, PostgreSQL database, central control API |
+| **Enterprise Fleet Production** | Kubernetes Helm Release (`helm install agentwall ./chart`) | Cloud Kubernetes cluster, HA database, external SIEM export |
+| **Hardened Agent Runtime (HAR)** | Distroless/Alpine OCI Image (`Dockerfile.har`) | Kubernetes pod sidecar, production agent containers (<100MB memory footprint) |
 
-# Generate Risk Delta summary
-agentwall report audit.log --risk
-```
+---
 
-### Vexa Security Scan — CLI & CI/CD ( / )
-Scan MCP server configurations for vulnerabilities before deployment:
+## Management consoles
 
-```bash
-# Text output (for developer review)
-agentwall scan --path agentwall-policy.yaml
+Vexa AgentWall provides dedicated management interfaces tailored to each operational profile:
 
-# JSON output (for CI/CD pipeline integration)
-agentwall scan --path agentwall-policy.yaml --format json
-# Exit code: 0 = score ≥ 60 (safe), 1 = score < 60 (CI/CD gate failure)
-```
-
-### Human-in-the-Loop Policy Escalation
-Configure asynchronous approval for P0 dangerous commands via HMAC-signed callbacks:
-
-```yaml
-# In agentwall-policy.yaml
-hitl_escalation:
-  enabled: true
-  secret_key: "env:AGENTWALL_HITL_SECRET"
-  webhook_url: "https://hooks.slack.com/services/..."
-  timeout_seconds: 300
-```
-
-### Zero-Knowledge SIEM Export
-Encrypt audit logs client-side with a Customer-Managed Key before SIEM egress:
-
-```bash
-agentwall start \
-  --siem-backend splunk \
-  --siem-endpoint https://splunk.corp.com:8088/services/collector/event \
-  --siem-token "${SPLUNK_HEC_TOKEN}" \
-  --cmk-key "${CUSTOMER_MANAGED_KEY}"
-```
+| Console Profile | Access Endpoint | Core Capabilities & Telemetry |
+|---|---|---|
+| **Local Developer Console** | `http://127.0.0.1:8080` (`agentwall dev`) | Real-time traffic monitor, shadow mode Risk Delta reporting, Vexa Security Score view, HITL browser modal, ADR benchmark runner |
+| **Team Control Hub Console** | `http://localhost:8081` (Docker Compose) | Centralized policy editor, SSE hot-reload controller, async HITL approval queue, project/task policy sharding, team spend analytics |
+| **Enterprise Control Hub Console** | Kubernetes Ingress / TLS Endpoint | HAR container pod telemetry, threat intelligence feed monitor, zero-knowledge CMK SIEM status, fleet security compliance overview |
 
 ---
 
 ## Configuration
 
-### Policy YAML Example (v2 Schema)
+### Policy YAML Schema (v2 Schema)
 
-AgentWall policies operate on a **default-deny** principle (`agentwall-policy.yaml`):
+AgentWall policies operate on a **default-deny** model (`agentwall-policy.yaml`):
 
 ```yaml
 version: 2
@@ -418,42 +355,24 @@ audit:
 
 ### Environment Variables
 
-| Variable | CLI Command | Description | Default |
-|---|---|---|---|
-| `HTTP_PROXY` / `HTTPS_PROXY` | `dev`, client | Standard HTTP proxy routing URLs | — |
-| `AGENTWALL_LISTEN` | `start`, `dev` | Gateway listen socket address | `127.0.0.1:8080` |
-| `AGENTWALL_POLICY_PATH` | `start` | Path to YAML policy file | — |
-| `DASHBOARD_API_URL` | `start`, proxy | Control Hub API endpoint URL | — |
-| `POLICY_READ_SECRET` | `start` | Shared secret for policy hot-reload SSE | — |
-| `GATEWAY_SECRET` | `start` | Shared secret for telemetry publishing | — |
-| `AGENTWALL_LOG_PATH` | `start` | Path to durable audit log file | `audit.log` |
-| `AGENTWALL_OIDC_ISSUER` | `start` | OIDC issuer URL for identity binding | — |
-| `AGENTWALL_SIEM_BACKEND` | `start` | SIEM backend (`splunk`, `datadog`, `opensearch`, `local`) | `local` |
-| `AGENTWALL_SIEM_ENDPOINT` | `start` | SIEM ingestion URL | — |
-| `AGENTWALL_SIEM_TOKEN` | `start` | SIEM authentication token | — |
-| `AGENTWALL_SHADOW_MODE` | `start` | Observation mode — log without blocking | `false` |
-| `AGENTWALL_DRY_RUN` | `start` | Log policy violations without denying calls | `false` |
-| `AGENTWALL_STRICT_CREDENTIAL_SCOPE` | `start` | Reject credential scope mismatches with 403 | `false` |
-| `AGENTWALL_TLS_CERT` | `start` | Path to TLS certificate PEM file (`rustls`) | — |
-| `AGENTWALL_TLS_KEY` | `start` | Path to TLS private key PEM file (`rustls`) | — |
-| `AGENTWALL_HITL_SECRET` | `start` | HMAC secret for HITL escalation callbacks | — |
-
----
-
-## User Guide & Documentation Links
-
-Consult our comprehensive documentation suite for detailed guides, architecture specifications, and provider configurations:
-
-- 📖 **[Vexa AgentWall Detailed User Guide](docs/user_guide.md)** — Comprehensive guide covering deployment tiers, v2 policy creation, DLP tuning, OIDC identity binding, Control Hub setup, audit verification, troubleshooting, and all v2.0 War Plan features.
-- 🔐 **[OIDC Identity Binding & Auth Provider Guide](docs/oidc_identity_binding.md)** — Step-by-step setup guides, claims mappings, and policy examples for Okta, Keycloak, Entra ID, Auth0, AWS Cognito, Google Workspace, and PingIdentity.
-- 🚀 **[Quickstart Guide](docs/quickstart.md)** — Real-world tutorial for securing Claude Desktop and MCP tools.
-- 📦 **[Deployment & Installation Guide](docs/deployment.md)** — Step-by-step installation for macOS, Linux, Windows, Docker, Kubernetes, and HAR container images.
-- ⚙️ **[Configuration & Policy Reference](docs/configuration.md)** — In-depth reference for Schema v2 policies, sequence rules, Safe Mode rules, HITL escalation configuration, and DLP regex patterns.
-- 📚 **[Documentation Hub](docs/index.md)** — Centralized documentation index.
-- 🛠️ **[Comprehensive Functional Walkthrough](docs/comprehensive_guide.md)** — Command-line scenario walkthroughs for developers across all core capabilities including ADR Benchmark, Sequence Rules, and v2.0 strategic features.
-- 🛡️ **[ADR Security Benchmark Guide](docs/adr_benchmark.md)** — Deep-dive into the 303-task benchmark suite: attack categories, scoring, report interpretation, and policy recommendations.
-- 📋 **[Functional Requirements](design/requirements/functional-requirements.md)** — Full v2.0 functional specification (22 requirements, P0–P2).
-- 📋 **[Non-Functional Requirements](design/requirements/non-functional-requirements.md)** — Performance, security, and operational SLAs (21 NFRs, P0–P2).
+| Variable | Description | Default |
+|---|---|---|
+| `HTTP_PROXY` / `HTTPS_PROXY` | Standard HTTP proxy routing URLs for outbound agent traffic | — |
+| `AGENTWALL_LISTEN` | Gateway listen socket address | `127.0.0.1:8080` |
+| `AGENTWALL_POLICY_PATH` | Path to YAML policy configuration file | — |
+| `DASHBOARD_API_URL` | Control Hub API endpoint URL for centralized management | — |
+| `POLICY_READ_SECRET` | Shared authentication secret for real-time policy hot-reloading | — |
+| `GATEWAY_SECRET` | Shared secret for publishing gateway telemetry events | — |
+| `AGENTWALL_LOG_PATH` | Path to durable audit log file | `audit.log` |
+| `AGENTWALL_OIDC_ISSUER` | OIDC issuer URL for identity binding and group claim mapping | — |
+| `AGENTWALL_SIEM_BACKEND` | SIEM backend target (`splunk`, `datadog`, `opensearch`, `local`) | `local` |
+| `AGENTWALL_SIEM_ENDPOINT` | External SIEM log ingestion endpoint URL | — |
+| `AGENTWALL_SIEM_TOKEN` | Authentication token for external SIEM API | — |
+| `AGENTWALL_SHADOW_MODE` | Passive observation mode — log events without blocking calls | `false` |
+| `AGENTWALL_DRY_RUN` | Log policy violations without denying tool executions | `false` |
+| `AGENTWALL_TLS_CERT` | Path to TLS certificate PEM file (`rustls`) | — |
+| `AGENTWALL_TLS_KEY` | Path to TLS private key PEM file (`rustls`) | — |
+| `AGENTWALL_HITL_SECRET` | Cryptographic HMAC secret for HITL approval callbacks | — |
 
 ---
 
