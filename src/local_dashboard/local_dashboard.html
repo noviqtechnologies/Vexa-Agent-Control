@@ -216,7 +216,8 @@
     /* ── Main Content ── */
     .main-content {
       flex: 1;
-      min-height: 0; /* Fix: allow flexbox child to shrink and be scroll-bounded */
+      min-height: 0;
+      /* Fix: allow flexbox child to shrink and be scroll-bounded */
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -237,7 +238,8 @@
 
     .panel-container {
       flex: 1;
-      min-height: 0; /* Fix: must be 0 (not auto) so overflow-y: auto activates */
+      min-height: 0;
+      /* Fix: must be 0 (not auto) so overflow-y: auto activates */
       overflow-y: auto;
       padding: 28px 32px;
       scroll-behavior: smooth;
@@ -876,7 +878,8 @@
       <div class="logo-vexa">VEXA</div>
       <div class="logo-name">AgentWall</div>
       <div class="logo-tag">Local Observability Proxy</div>
-      <div class="shadow-badge" title="Shadow Mode: Tool calls and security policies are audited without blocking agent traffic. Run with --enforce to enable active blocking.">
+      <div class="shadow-badge"
+        title="Shadow Mode: Tool calls and security policies are audited without blocking agent traffic. Run with --enforce to enable active blocking.">
         <span class="shadow-dot"></span>
         SHADOW MODE
       </div>
@@ -910,10 +913,6 @@
       <div class="nav-item" data-panel="panel-benchmark" id="nav-benchmark">
         <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🛡</span> ADR Benchmark
       </div>
-
-      <div class="nav-item" data-panel="panel-gateway" id="nav-gateway">
-        <span class="nav-icon" style="background:rgba(83,155,245,0.15); color:var(--accent);">⛨</span> Gateway
-      </div>
     </div>
 
     <div class="sidebar-footer">
@@ -935,6 +934,11 @@
         <div class="panel-header">
           <h2>🛠 Tool Inventory</h2>
           <span class="badge blue" id="inv-last-update">Live</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is this panel?</strong> Overview of all AI tools and APIs your agent has called during the
+          session. Tracks execution counts, recent activity, and safety risk tiers for every tool.
         </div>
 
         <div class="stats-bar">
@@ -1014,6 +1018,11 @@
           </div>
         </div>
 
+        <div class="policy-info">
+          <strong>💡 What is this panel?</strong> Real-time streaming log of every request, command, and tool call
+          executed by your AI agent in chronological order.
+        </div>
+
         <div class="filter-row">
           <input id="tl-filter" class="filter-input" type="text" placeholder="Filter by tool name..."
             autocomplete="off">
@@ -1033,6 +1042,12 @@
       <div id="panel-params" class="panel">
         <div class="panel-header">
           <h2>🔍 Parameter Explorer</h2>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is Parameter Explorer?</strong> Inspect the input arguments, text strings, commands, or file
+          paths passed to each tool by your AI agent. Select a tool from the dropdown below to view parameter data
+          types, sample values, and detected patterns.
         </div>
 
         <div class="card">
@@ -1069,6 +1084,11 @@
           <span id="risk-count-badge" class="badge muted">0 flags</span>
         </div>
 
+        <div class="policy-info">
+          <strong>💡 What is this panel?</strong> Automatically flags high-risk tool operations (such as command
+          execution, system file edits, or network calls) that require oversight.
+        </div>
+
         <div class="card" style="padding: 0; overflow: hidden;" id="risks-card">
           <div class="table-wrap">
             <table id="tbl-risks">
@@ -1103,6 +1123,11 @@
           <span id="dlp-count-badge" class="badge muted">0 detections</span>
         </div>
 
+        <div class="policy-info">
+          <strong>💡 What is Data Loss Prevention (DLP)?</strong> Scans outgoing tool payload data to prevent accidental
+          leakage of sensitive credentials, API keys, passwords, and personal information (PII).
+        </div>
+
         <div class="card" style="padding: 0; overflow: hidden;" id="dlp-card">
           <div class="table-wrap">
             <table id="tbl-dlp">
@@ -1123,7 +1148,8 @@
         <div id="dlp-empty" class="card" style="display:none;">
           <div class="risk-empty">
             <span class="big-check">🛡️</span>
-            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No DLP Violations Detected</h3>
+            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No DLP Violations
+              Detected</h3>
             <p style="font-size: 0.85rem;">No data loss prevention (DLP) violations detected in observed traffic.</p>
           </div>
         </div>
@@ -1134,6 +1160,11 @@
         <div class="panel-header">
           <h2>🛡️ Injection & Poisoning</h2>
           <span id="inj-count-badge" class="badge muted">0 detections</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is Injection & Poisoning?</strong> Detects prompt injection attempts and external data
+          poisoning—where malicious inputs attempt to hijack your AI agent's instructions or bypass safety rules.
         </div>
 
         <div class="card" style="padding: 0; overflow: hidden;" id="inj-card">
@@ -1156,7 +1187,8 @@
         <div id="inj-empty" class="card" style="display:none;">
           <div class="risk-empty">
             <span class="big-check">🛡️</span>
-            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No Injections/Poisoning Detected</h3>
+            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No Injections/Poisoning
+              Detected</h3>
             <p style="font-size: 0.85rem;">No prompt injection attempts detected in observed traffic.</p>
           </div>
         </div>
@@ -1167,6 +1199,11 @@
         <div class="panel-header">
           <h2>🧠 Semantic Scanner</h2>
           <span id="semantic-count-badge" class="badge muted">0 detections</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is the Semantic Scanner?</strong> Uses behavioral analysis to detect abnormal or
+          out-of-context tool requests that differ from normal agent interaction patterns.
         </div>
 
         <div class="card" style="padding: 0; overflow: hidden;" id="semantic-card">
@@ -1189,7 +1226,8 @@
         <div id="semantic-empty" class="card" style="display:none;">
           <div class="risk-empty">
             <span class="big-check">🧠</span>
-            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No Semantic Anomalies Detected</h3>
+            <h3 style="font-family: var(--font-head); color: var(--green); margin-bottom: 8px;">No Semantic Anomalies
+              Detected</h3>
             <p style="font-size: 0.85rem;">All observed tool payloads appear semantically benign.</p>
           </div>
         </div>
@@ -1202,7 +1240,8 @@
         </div>
 
         <div class="policy-info">
-          <strong>How it works:</strong> AgentWall continuously analyzes observed tool execution and automatically generates a baseline YAML security policy.
+          <strong>How it works:</strong> AgentWall continuously analyzes observed tool execution and automatically
+          generates a baseline YAML security policy.
           The generated policy allows previously used tools with parameter schemas inferred from real traffic patterns.
           Review the policy carefully before provisioning to production environments.
         </div>
@@ -1231,148 +1270,7 @@
 
 
 
-      <!-- Panel 11: Gateway (FR-5 v2.0) -->
-      <div id="panel-gateway" class="panel">
-        <div class="panel-header">
-          <h2>⛨ Centralized Enforcement Gateway</h2>
-          <span id="gw-mode-badge" class="badge muted">LOADING...</span>
-        </div>
 
-        <!-- Mode Banner -->
-        <div id="gw-mode-banner" class="card" style="margin-bottom:20px; border-left: 4px solid var(--accent); padding: 16px 24px;">
-          <div style="display:flex; align-items:center; gap:14px;">
-            <div id="gw-status-dot" class="status-dot"></div>
-            <div>
-              <div style="font-family:var(--font-head); font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">Enforcement Mode</div>
-              <div id="gw-mode-label" style="font-family:var(--font-head); font-size:1.1rem; font-weight:800; color:var(--text-bright);">—</div>
-            </div>
-            <div style="margin-left:auto; text-align:right;">
-              <div style="font-size:0.7rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Uptime</div>
-              <div id="gw-uptime" style="font-family:var(--font-mono); font-size:0.95rem; color:var(--accent); font-weight:600;">—</div>
-            </div>
-          </div>
-          <div style="margin-top:12px; font-size:0.8rem; color:var(--text-muted); border-top: 1px solid var(--border); padding-top:10px;">
-            <span id="gw-mode-description">
-              <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start with <code style="color:var(--accent)">--enforce</code> to enable active blocking.
-            </span>
-          </div>
-        </div>
-
-        <!-- Gateway Stats Bar -->
-        <div class="stats-bar" id="gw-stats-bar">
-          <div class="stat-card">
-            <div class="stat-label">Total Requests</div>
-            <div class="stat-value accent" id="gw-stat-requests">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Allowed</div>
-            <div class="stat-value green" id="gw-stat-allowed">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Blocked</div>
-            <div class="stat-value red" id="gw-stat-denied">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Rate Limited</div>
-            <div class="stat-value amber" id="gw-stat-rate">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Firewall Cycles</div>
-            <div class="stat-value amber" id="gw-stat-cycles">—</div>
-          </div>
-        </div>
-
-        <!-- 9-Step Pipeline Visualization -->
-        <div class="card" style="margin-bottom:20px;">
-          <h3>⚙ 9-Step Enforcement Pipeline</h3>
-          <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:16px;">Status of each enforcement stage for the last evaluated tool call. Hover a step for details.</p>
-          <div id="gw-pipeline" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-            <div class="gw-step" data-step="1" title="OIDC JWT identity validation">
-              <span class="gw-step-num">1</span><span class="gw-step-name">Identity</span><span class="gw-step-badge badge muted" id="gw-step-1">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="2" title="Credential scope check (FR-5 / AC-5.8)">
-              <span class="gw-step-num">2</span><span class="gw-step-name">Cred Scope</span><span class="gw-step-badge badge muted" id="gw-step-2">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="3" title="Policy engine allowlist evaluation">
-              <span class="gw-step-num">3</span><span class="gw-step-name">Policy Engine</span><span class="gw-step-badge badge muted" id="gw-step-3">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="4" title="Content-aware DLP secret detection">
-              <span class="gw-step-num">4</span><span class="gw-step-name">DLP</span><span class="gw-step-badge badge muted" id="gw-step-4">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="5" title="Injection & prompt poisoning detection">
-              <span class="gw-step-num">5</span><span class="gw-step-name">Injection</span><span class="gw-step-badge badge muted" id="gw-step-5">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="6" title="Semantic anomaly detection (stub)">
-              <span class="gw-step-num">6</span><span class="gw-step-name">Semantic</span><span class="gw-step-badge badge muted" id="gw-step-6">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="7" title="A2A inter-agent protocol scan">
-              <span class="gw-step-num">7</span><span class="gw-step-name">A2A</span><span class="gw-step-badge badge muted" id="gw-step-7">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="8" title="Response scanner for secret exfiltration">
-              <span class="gw-step-num">8</span><span class="gw-step-name">Response Scan</span><span class="gw-step-badge badge muted" id="gw-step-8">—</span>
-            </div>
-            <span style="color:var(--border); font-size:1.2rem;">›</span>
-            <div class="gw-step" data-step="9" title="HMAC audit log write (durable)">
-              <span class="gw-step-num">9</span><span class="gw-step-name">Audit Log</span><span class="gw-step-badge badge muted" id="gw-step-9">—</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Blocked Calls Log -->
-        <div class="card" style="padding:0; overflow:hidden; margin-bottom:20px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);">
-            <h3 style="margin:0;">🚫 Blocked Calls</h3>
-            <span id="gw-blocked-count" class="badge red">0 blocked</span>
-          </div>
-          <div class="table-wrap">
-            <table id="tbl-gw-blocked">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Tool</th>
-                  <th>Deny Reason</th>
-                  <th>Session</th>
-                  <th>Identity</th>
-                </tr>
-              </thead>
-              <tbody id="gw-blocked-body">
-                <tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No blocked calls yet</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Hot-Reload Control -->
-        <div class="card" style="margin-bottom:20px;">
-          <h3>🔄 Policy Hot-Reload</h3>
-          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">Reload the policy configuration from disk without disrupting active connections. This operation requires the gateway to be started with the <code style="color:var(--accent);">--policy &lt;path&gt;</code> flag.</p>
-          <div style="display:flex; gap:12px; align-items:center;">
-            <button class="btn btn-primary" id="btn-gw-reload" onclick="gatewayReloadPolicy()">
-              <div class="spinner" id="gw-reload-spinner" style="display:none;"></div>
-              <span id="gw-reload-text">🔄 Reload Policy</span>
-            </button>
-            <span id="gw-reload-status" style="font-size:0.8rem; color:var(--text-muted);"></span>
-          </div>
-          <div id="gw-reload-result" style="margin-top:12px; font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted); display:none;"></div>
-        </div>
-
-        <!-- Gateway Config Card -->
-        <div class="card">
-          <h3>⚙ Gateway Configuration</h3>
-          <table style="margin-top:8px;">
-            <tbody id="gw-config-body">
-              <tr><td colspan="2" style="color:var(--text-muted); font-size:0.85rem;">Loading gateway status...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <!-- Panel: ADR Benchmark & Security Audit -->
       <div id="panel-benchmark" class="panel">
@@ -1381,10 +1279,14 @@
           <span class="badge green" id="bench-badge-grade">Grade A (88.1%)</span>
         </div>
 
-        <div style="background: linear-gradient(135deg, rgba(83, 155, 245, 0.12) 0%, rgba(63, 185, 80, 0.08) 100%); border: 1px solid rgba(83, 155, 245, 0.25); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px;">
-          <h4 style="color: var(--accent); margin-bottom: 6px; font-size: 0.95rem;">💡 What is ADR (AI Detection & Response)?</h4>
+        <div
+          style="background: linear-gradient(135deg, rgba(83, 155, 245, 0.12) 0%, rgba(63, 185, 80, 0.08) 100%); border: 1px solid rgba(83, 155, 245, 0.25); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px;">
+          <h4 style="color: var(--accent); margin-bottom: 6px; font-size: 0.95rem;">💡 What is ADR (AI Detection &
+            Response)?</h4>
           <p style="font-size: 0.85rem; color: var(--text-main); line-height: 1.5;">
-            <strong>ADR (Architectural Decision Record & AI Detection & Response)</strong> is the security benchmark standard for autonomous AI agents. It tests whether your security gateway can track multi-step session sequences, detect tool poisoning, enforce secret DLP, block rate-limit loops, and dynamically learn zero-trust permissions.
+            <strong>ADR (AI Detection & Response)</strong> is the security benchmark standard for autonomous AI agents.
+            It tests whether your security gateway can track multi-step session sequences, detect tool poisoning,
+            enforce secret DLP, block rate-limit loops, and dynamically learn zero-trust permissions.
           </p>
         </div>
 
@@ -1419,8 +1321,10 @@
             </thead>
             <tbody>
               <tr style="border-bottom:1px solid rgba(48,54,61,0.4); background:rgba(83,155,245,0.08);">
-                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa AgentWall (Inline Rust Gateway)</strong></td>
-                <td style="padding:10px 12px; font-weight:700; color:var(--green);" id="bench-table-score">88.1% (Grade A)</td>
+                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa AgentWall (Inline Rust
+                    Gateway)</strong></td>
+                <td style="padding:10px 12px; font-weight:700; color:var(--green);" id="bench-table-score">88.1% (Grade
+                  A)</td>
                 <td style="padding:10px 12px; color:var(--text-main);" id="bench-table-blocked">267 / 303 blocked</td>
               </tr>
               <tr style="border-bottom:1px solid rgba(48,54,61,0.4);">
@@ -1446,8 +1350,10 @@
           <h3>🛡️ 17 Attack Vector Category Coverage</h3>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
             <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px;">
-              <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">Prompt Injection & Jailbreaks</div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Homoglyph, base64, system prompt overrides</div>
+              <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">Prompt Injection & Jailbreaks
+              </div>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Homoglyph, base64, system prompt
+                overrides</div>
               <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="badge green">100% Protected</span>
                 <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
@@ -1455,7 +1361,8 @@
             </div>
             <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px;">
               <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">Secret DLP & Key Leakage</div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Redacts AWS, GCP, GitHub PATs & SSH keys</div>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Redacts AWS, GCP, GitHub PATs &
+                SSH keys</div>
               <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="badge green">100% Protected</span>
                 <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
@@ -1463,7 +1370,8 @@
             </div>
             <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px;">
               <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">Multi-Step Exfiltration</div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Stateful sequence rules intercept data leaks</div>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Stateful sequence rules intercept
+                data leaks</div>
               <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="badge green">100% Protected</span>
                 <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
@@ -1471,7 +1379,8 @@
             </div>
             <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px;">
               <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">Firewall Cycle Loops</div>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Intercepts repetitive tool loops & token drain</div>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Intercepts repetitive tool loops
+                & token drain</div>
               <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="badge green">100% Protected</span>
                 <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
@@ -1523,38 +1432,38 @@
         if (!res.ok) return;
         const s = await res.json();
         updateGatewayPanel(s);
-      } catch(e) { /* gateway offline — silently skip */ }
+      } catch (e) { /* gateway offline — silently skip */ }
     }
 
     function updateGatewayPanel(s) {
       const mode = s.mode || 'unknown';
       const modeMap = {
-        'enforce': { 
-          label: '🛡 ENFORCEMENT — Active Blocking', 
-          cls: 'green', 
-          dotCls: 'live', 
+        'enforce': {
+          label: '🛡 ENFORCEMENT — Active Blocking',
+          cls: 'green',
+          dotCls: 'live',
           bannerColor: 'var(--green)',
           desc: '<strong>Active Enforcement:</strong> Security policies, DLP secret leaks, and prompt injection attempts are actively evaluated and blocked with DENY responses.'
         },
-        'shadow':  { 
-          label: '👁 SHADOW — Observation Only', 
-          cls: 'blue',  
-          dotCls: 'live', 
+        'shadow': {
+          label: '👁 SHADOW — Observation Only',
+          cls: 'blue',
+          dotCls: 'live',
           bannerColor: 'var(--accent)',
           desc: '<strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start with <code style="color:var(--accent)">--enforce</code> to enable active blocking.'
         },
-        'dry-run': { 
-          label: '📋 DRY-RUN — Logging Only',      
-          cls: 'amber', 
-          dotCls: 'live', 
+        'dry-run': {
+          label: '📋 DRY-RUN — Logging Only',
+          cls: 'amber',
+          dotCls: 'live',
           bannerColor: 'var(--amber)',
           desc: '<strong>Dry-Run Mode:</strong> Policy evaluation logs potential actions without enforcing network boundaries or blocking traffic.'
         },
       };
-      const m = modeMap[mode] || { 
-        label: '⚫ OFFLINE', 
-        cls: 'muted', 
-        dotCls: '', 
+      const m = modeMap[mode] || {
+        label: '⚫ OFFLINE',
+        cls: 'muted',
+        dotCls: '',
         bannerColor: 'var(--text-muted)',
         desc: 'Gateway proxy is currently unreachable.'
       };
@@ -1586,10 +1495,10 @@
       const met = s.metrics || {};
       const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? '—'; };
       setEl('gw-stat-requests', met.requests_total);
-      setEl('gw-stat-allowed',  met.allow_total);
-      setEl('gw-stat-denied',   met.deny_total);
-      setEl('gw-stat-rate',     met.rate_limited_total);
-      setEl('gw-stat-cycles',   met.firewall_cycle_total);
+      setEl('gw-stat-allowed', met.allow_total);
+      setEl('gw-stat-denied', met.deny_total);
+      setEl('gw-stat-rate', met.rate_limited_total);
+      setEl('gw-stat-cycles', met.firewall_cycle_total);
 
       // Pipeline steps — mark all PASS when policy loaded, SKIP when no policy
       const loaded = s.policy_loaded;
@@ -1647,9 +1556,9 @@
         <td class="tool-name">${escHtml(event.url_path || '—')}</td>
         <td style="font-size:0.8rem; color:var(--red); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
             title="${escHtml(event.response_body || '')}">
-          ${escHtml((() => { try { const e = JSON.parse(event.response_body||'{}'); return e?.error?.message || 'Denied'; } catch { return 'Denied'; } })())}
+          ${escHtml((() => { try { const e = JSON.parse(event.response_body || '{}'); return e?.error?.message || 'Denied'; } catch { return 'Denied'; } })())}
         </td>
-        <td style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted);">${escHtml((event.session_id||'').slice(0,12))}…</td>
+        <td style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted);">${escHtml((event.session_id || '').slice(0, 12))}…</td>
         <td style="font-size:0.75rem;">${escHtml(event.identity_sub || '—')}</td>
       `;
       body.prepend(tr);
@@ -1692,7 +1601,7 @@
           if (status) { status.textContent = `✗ ${json.error || 'Reload failed'}`; status.style.color = 'var(--red)'; }
           toast(json.error || 'Reload failed', 'error');
         }
-      } catch(e) {
+      } catch (e) {
         if (status) { status.textContent = `✗ Network error`; status.style.color = 'var(--red)'; }
         toast('Gateway unreachable', 'error');
       } finally {
@@ -2037,7 +1946,7 @@
         if (event.semantic_finding_type === "ToolDescriptionPoisoning") explanation = "Tool description contains prompt injection directives.";
         if (event.semantic_finding_type === "ResponseInstructionManipulation") explanation = "Response attempts to alter the agent's core instructions.";
         if (event.semantic_finding_type === "SemanticExfiltration") explanation = "Suspicious combination of data transmission and HTTP endpoints.";
-        
+
         semanticBlockHtml = `
           <div class="json-label" style="color: var(--amber); display: flex; align-items: center; gap: 6px; font-weight: 700; margin-top: 12px; font-size: 0.75rem;">
             🧠 Semantic Anomaly Detected (Score: ${event.semantic_anomaly_score.toFixed(2)})
@@ -2115,12 +2024,31 @@
     function renderParamExplorer(events) {
       const selector = document.getElementById('tool-selector');
       const tools = [...new Set(events.map(e => e.url_path).filter(Boolean))].sort();
-      const current = selector.value;
+      let current = selector.value;
+
+      // Auto-select the first recorded tool by default if user hasn't manually chosen one yet
+      if (!current && tools.length > 0) {
+        current = tools[0];
+      }
 
       selector.innerHTML = '<option value="">— choose a tool —</option>' +
         tools.map(t => `<option value="${escHtml(t)}" ${t === current ? 'selected' : ''}>${escHtml(t)}</option>`).join('');
 
-      if (current) renderParamsForTool(events, current);
+      if (current) {
+        renderParamsForTool(events, current);
+      } else {
+        const wrap = document.getElementById('params-table-wrap');
+        const empty = document.getElementById('params-empty');
+        if (wrap) wrap.style.display = 'none';
+        if (empty) {
+          empty.style.display = '';
+          empty.innerHTML = `
+            <span class="empty-icon">🔎</span>
+            <h3>Awaiting tool execution parameters</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-top:6px;">Start your AI agent or run <code style="color:var(--accent);">python quickstart_agent.py</code> to record tool parameter telemetry.</p>
+          `;
+        }
+      }
     }
 
     function renderParamsForTool(events, toolName) {
@@ -2335,13 +2263,13 @@
       const semanticFindings = [];
       for (const e of events) {
         if (e.semantic_anomaly_score !== undefined && e.semantic_anomaly_score !== null && e.semantic_anomaly_score >= 0.85) {
-            semanticFindings.push({
-              ts: e.timestamp_ns,
-              tool: e.url_path || 'unknown',
-              score: e.semantic_anomaly_score,
-              category: "Semantic Anomaly",
-              explanation: "Score exceeded 0.85 threshold"
-            });
+          semanticFindings.push({
+            ts: e.timestamp_ns,
+            tool: e.url_path || 'unknown',
+            score: e.semantic_anomaly_score,
+            category: "Semantic Anomaly",
+            explanation: "Score exceeded 0.85 threshold"
+          });
         }
       }
 
@@ -2416,7 +2344,7 @@
             if (tableBlocked) tableBlocked.textContent = `${blocked} / 303 blocked`;
           }
         }
-      } catch {}
+      } catch { }
     }
 
 
@@ -2436,7 +2364,7 @@
       src.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
-          
+
           if (event.event === 'gateway_reload') {
             toast('Gateway policy hot-reloaded automatically', 'info');
             pollGatewayStatus();
@@ -2451,7 +2379,8 @@
           renderDlp(allEvents);
           renderInjections(allEvents);
           renderSemantic(allEvents);
-          
+          renderParamExplorer(allEvents);
+
           // Gateway FR-5 block log
           addGatewayBlockedCall(event);
         } catch { }

@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.18-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.19-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -51,7 +51,12 @@ irm https://vexasec.io/install.ps1 | iex
 agentwall.exe dev
 ```
 
-Open `http://127.0.0.1:8080` in your browser to inspect live traffic, shadow risk telemetry, MCP security scores, and interactive approval modals.
+Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.
+
+> 💡 **Generating Instant Test Telemetry**: The installer automatically includes `quickstart_agent.py` in your PATH. If you see *"No tool calls recorded yet"*, run the test script in a new terminal to populate the dashboard:
+> ```bash
+> python quickstart_agent.py
+> ```
 
 ### Team / Staging Control Hub (Docker Compose)
 

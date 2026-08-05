@@ -128,6 +128,12 @@ Real-time agent event monitoring is active. All traffic passing through the prox
 > [!NOTE]
 > **Shadow / Observation Mode:** In this mode, AgentWall **observes and logs** all traffic but does **not block** any tool calls. This lets you assess your agents' behavior before enabling enforcement.
 
+> [!TIP]
+> **Populating Test Telemetry:** `quickstart_agent.py` is automatically installed alongside the `agentwall` binary into your PATH. If your browser dashboard shows *"No tool calls recorded yet"*, run the test script in a separate terminal to populate all dashboard panels:
+> ```bash
+> python quickstart_agent.py
+> ```
+
 ---
 
 ### Step 2 — Route Agent HTTP Traffic Through Proxy

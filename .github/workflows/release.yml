@@ -75,6 +75,7 @@ jobs:
           else
             cp target/${{ matrix.target }}/release/agentwall release/bin/
           fi
+          cp quickstart_agent.py release/bin/
 
       - name: Create Zip (Unix)
         if: matrix.os != 'windows-latest'

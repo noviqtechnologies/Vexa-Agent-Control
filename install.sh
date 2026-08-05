@@ -92,6 +92,15 @@ echo "[*] Installing to $LOCALBIN..."
 mv "$BINARY_PATH" "${LOCALBIN}/agentwall"
 chmod +x "${LOCALBIN}/agentwall"
 
+QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
+if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
+  cp "$QUICKSTART_SRC" "${LOCALBIN}/quickstart_agent.py"
+  chmod +x "${LOCALBIN}/quickstart_agent.py"
+  echo "[✓] Installed quickstart_agent.py to ${LOCALBIN}/quickstart_agent.py"
+else
+  curl -sSL "https://raw.githubusercontent.com/${REPO}/${VERSION}/quickstart_agent.py" -o "${LOCALBIN}/quickstart_agent.py" 2>/dev/null && chmod +x "${LOCALBIN}/quickstart_agent.py" || true
+fi
+
 echo ""
 if [[ -n "$INSTALLED_VERSION" ]]; then
   echo "[✓] AgentWall upgraded from $INSTALLED_VERSION to ${VERSION} successfully!"

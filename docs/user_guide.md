@@ -44,9 +44,12 @@ curl -fsSL https://vexasec.io/install.sh | bash && agentwall dev
 
 # Windows (PowerShell)
 irm https://vexasec.io/install.ps1 | iex; .\agentwall.exe dev
+
+# Populate test traffic (if seeing "No tool calls recorded yet")
+python quickstart_agent.py
 ```
 
-→ **[Open Workstation Sidecar Guide](workstation_guide.md)**
+→ **[Open Workstation Sidecar Guide](workstation_guide.md)** | **[Open Quickstart Guide](quickstart.md)**
 
 ---
 

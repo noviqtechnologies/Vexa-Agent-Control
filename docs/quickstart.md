@@ -14,6 +14,8 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) i
   agentwall.exe --version
   ```
 
+*(The installer automatically places both the `agentwall` binary and the `quickstart_agent.py` test script into your executable PATH).*
+
 ---
 
 ## Step 1: Start the AgentWall Proxy
@@ -58,12 +60,31 @@ Open a **new, separate terminal window** and run the integration command:
 3. Ask Claude to perform a tool call. For example, type:
    > *"Can you list the files in my current workspace folder?"* or *"Can you inspect the files in my directory?"*
 
-*Alternatively, test stdio tool proxying directly from your terminal using standard MCP filesystem server:*
+*Alternatively, run the instant test demonstration script to populate all telemetry without configuring an IDE:*
 ```bash
-agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+python quickstart_agent.py
 ```
+*(This sends simulated AI tool calls through `http://127.0.0.1:8080` to populate the dashboard immediately if you see "No tool calls recorded yet").*
 
 Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see AgentWall logging these actions in real time!
+
+---
+
+## Understanding the Local Observability Dashboard
+
+When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard for monitoring agent activities—designed for non-security users to easily understand:
+
+| Panel | Purpose & Description (Plain English) |
+| :--- | :--- |
+| **01. Tool Inventory** | Overview of all AI tools/APIs your agent has called, tracking total calls, last execution time, and safety risk tiers. |
+| **02. Session Timeline** | Real-time live log of every single request, command, and tool call executed by your AI agent in chronological order. |
+| **03. Parameter Explorer** | Select any observed tool to inspect the exact input arguments, text strings, commands, or file paths passed by your agent, including inferred data types and detected data patterns. |
+| **04. Risk Flags** | Automatically flags high-risk tool operations (such as system file edits or command executions) requiring oversight. |
+| **05. Data Loss Prevention (DLP)** | Scans outgoing tool payloads to prevent accidental leakage of sensitive credentials, API keys, passwords, and personal information (PII). |
+| **06. Injection & Poisoning** | Detects prompt injection attempts and external data poisoning—where untrusted text tries to hijack agent instructions. |
+| **07. Semantic Scanner** | Uses behavioral analysis to flag unusual or out-of-context tool requests that differ from normal agent interaction patterns. |
+| **08. Generate Policy** | Automatically generates a baseline security policy (`agentwall-policy.yaml`) based on real observed agent traffic. |
+| **09. ADR Benchmark** | Standardized benchmark testing your agent's defense readiness against 303 security test cases across 17 attack categories. |
 
 ---
 
