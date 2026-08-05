@@ -293,9 +293,9 @@ AgentWall ships with **15 out-of-the-box safe-mode rules** that are active by de
 | **Persistence Mechanism Attempts** | Blocks modifications to startup scripts, cron jobs, and registry run keys |
 | **Network Exfiltration Patterns** | Blocks sequential file-read → HTTP-POST patterns indicative of data exfiltration |
 
-To view the full list of active safe-mode rules:
+To view wrapper status and gateway health:
 ```bash
-agentwall status --rules
+agentwall status
 ```
 
 To enable **enforcing (blocking) mode** after observation:

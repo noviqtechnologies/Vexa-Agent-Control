@@ -53,11 +53,17 @@ Open a **new, separate terminal window** and run the integration command:
 
 ## Step 3: Run a Real-World Scenario
 
-1. Open **Claude Desktop** on your computer.
-2. Ask Claude to do something harmless on your system. For example, type:
-   > *"Claude, can you run the `whoami` command in my terminal and tell me my username? Also, can you read the contents of a text file on my Desktop?"*
+1. Ensure standard filesystem / command MCP server tools are connected to Claude Desktop (or use standard file / search tools enabled in your IDE / agent).
+2. Open **Claude Desktop** on your computer.
+3. Ask Claude to perform a tool call. For example, type:
+   > *"Can you list the files in my current workspace folder?"* or *"Can you inspect the files in my directory?"*
 
-Claude will use its tools to execute the command and read the file. Meanwhile, in your first terminal window, you will see AgentWall logging these actions!
+*Alternatively, test stdio tool proxying directly from your terminal using standard MCP filesystem server:*
+```bash
+agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+```
+
+Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see AgentWall logging these actions in real time!
 
 ---
 
@@ -95,8 +101,7 @@ tools:
         required: true
         max_length: 128
         # AgentWall observed Claude ran "whoami" and automatically allowed it
-        enum:
-          - "whoami"
+        pattern: "^whoami$"
 
   - name: read_file
     action: allow

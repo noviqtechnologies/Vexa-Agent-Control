@@ -137,7 +137,7 @@ tools:
           properties:
             theme:
               type: string
-              enum: ["dark", "light"]
+              pattern: "^(dark|light)$"
             retries:
               type: integer
               minimum: 0
