@@ -217,7 +217,7 @@ agentwall identity audit --agent my-agent --verify
 
 ## 8. Local Dashboard & ADR Security Widgets (`agentwall dev`)
 
-AgentWall's Tier 1 embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentwall dev`. It now includes a dedicated **ADR Benchmark** tab and five real-time security widgets, all served offline with no external dependencies.
+AgentWall's Workstation Sidecar embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentwall dev`. It now includes a dedicated **ADR Benchmark** tab and five real-time security widgets, all served offline with no external dependencies.
 
 ### ADR Dashboard Widgets
 

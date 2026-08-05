@@ -8,10 +8,10 @@ This guide provides comprehensive instructions for deploying, configuring, secur
 
 ## Table of Contents
 
-1. [Getting Started for Each Deployment Tier](#1-getting-started-for-each-deployment-tier)
-   - [Tier 1: Developer / Workstation](#tier-1-developer--workstation)
-   - [Tier 2: Team / Staging](#tier-2-team--staging)
-   - [Tier 3: Enterprise Cloud / Production](#tier-3-enterprise-cloud--production)
+1. [Getting Started for Each Deployment Profile](#1-getting-started-for-each-deployment-profile)
+   - [Workstation Sidecar](#workstation-sidecar)
+   - [Team Control Hub](#team-control-hub)
+   - [Enterprise Fleet](#enterprise-fleet)
 2. [Writing YAML Policies (v2 Schema)](#2-writing-yaml-policies-v2-schema)
    - [v2 Policy Architecture](#v2-policy-architecture)
    - [Complete v2 Schema Reference & Example](#complete-v2-schema-reference--example)
@@ -58,23 +58,23 @@ This guide provides comprehensive instructions for deploying, configuring, secur
 
 ---
 
-## 1. Getting Started for Each Deployment Tier
+## 1. Getting Started for Each Deployment Profile
 
-AgentWall supports three graduated deployment tiers designed to fit seamlessly into any stage of development and enterprise rollout.
+AgentWall supports three graduated deployment profiles designed to fit seamlessly into any stage of development and enterprise rollout.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    DEPLOYMENT TIERS                                     │
+│                                  DEPLOYMENT PROFILES                                    │
 ├──────────────────────────┬──────────────────────────────┬───────────────────────────────┤
-│ Tier 1: Developer        │ Tier 2: Team / Staging        │ Tier 3: Enterprise Production │
+│ Workstation Sidecar      │ Team Control Hub              │ Enterprise Fleet              │
 │ Single Binary & Sidecar  │ Docker Compose Stack         │ Kubernetes + Helm Fleet       │
-│ Shadow Proxy + Local UI  │ Go API + React UI + Postgres │ TLS rustls + SIEM + OIDC SSO  │
+│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ TLS rustls + SIEM + OIDC SSO  │
 └──────────────────────────┴──────────────────────────────┴───────────────────────────────┘
 ```
 
-### Tier 1: Developer / Workstation
+### Workstation Sidecar
 
-The Developer Tier provides local observation, automatic policy generation, and Safe Mode protection without requiring external servers, Docker, or database setups.
+The Workstation Sidecar profile provides local observation, automatic policy generation, and Safe Mode protection without requiring external servers, Docker, or database setups.
 
 #### Prerequisites
 - **Operating System:** Linux, macOS, or Windows (WSL / PowerShell).
@@ -185,9 +185,9 @@ agentwall generate-policy --decay-window 30
 
 ---
 
-### Tier 2: Team / Staging
+### Team Control Hub
 
-The Team Tier introduces the self-hosted **Control Hub** (React Web Dashboard + Go REST API + PostgreSQL Database) running alongside local or shared gateway instances.
+The Team Control Hub profile introduces the self-hosted **Control Hub** (React Web Dashboard + Go REST API + PostgreSQL Database) running alongside local or shared gateway instances.
 
 #### Prerequisites
 
@@ -351,9 +351,9 @@ agentwall verify-log team-audit.log
 
 ---
 
-### Tier 3: Enterprise Cloud / Production
+### Enterprise Fleet
 
-The Enterprise Tier deploys AgentWall as a high-availability, cloud-native gateway fleet on Kubernetes, featuring memory-safe TLS (`rustls`), enterprise OIDC SSO, direct SIEM audit streaming, and zero-downtime policy distribution.
+The Enterprise Fleet profile deploys AgentWall as a high-availability, cloud-native gateway fleet on Kubernetes, featuring memory-safe TLS (`rustls`), enterprise OIDC SSO, direct SIEM audit streaming, and zero-downtime policy distribution.
 
 #### Production Prerequisites
 
