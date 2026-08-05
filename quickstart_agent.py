@@ -194,9 +194,37 @@ def main():
     print()
 
     # ------------------------------------------------------------------
-    # 5. ADR Security Benchmark Check
+    # 5. Semantic Scanner & Out-of-Context Behavioral Anomaly
     # ------------------------------------------------------------------
-    print("\nStep 5: Verifying ADR (AI Detection & Response) Security Benchmark Posture...")
+    print("\nStep 5: Simulating Behavioral Out-of-Context Tool Call (Testing Semantic Scanner)...")
+    print("-" * 65)
+
+    semantic_call = {
+        "id": 8,
+        "name": "modify_system_clock",
+        "args": {
+            "ntp_server": "pool.ntp.org",
+            "time_offset_seconds": -86400,
+            "force_sync": True
+        },
+        "note": "Out-of-context system clock alteration during a standard documentation editing session"
+    }
+
+    print(f"[SEMANTIC] Tool Execution : '{semantic_call['name']}' (Behavioral Anomaly)")
+    print(f"           Purpose        : {semantic_call['note']}")
+    code, res = send_request(proxy_url, {
+        "jsonrpc": "2.0",
+        "id": semantic_call["id"],
+        "method": "tools/call",
+        "params": {"name": semantic_call["name"], "arguments": semantic_call["args"]}
+    })
+    print("           Status         : 👁 OUT-OF-CONTEXT ANOMALY DETECTED (Check 'Semantic Scanner' Panel)")
+    print()
+
+    # ------------------------------------------------------------------
+    # 6. ADR Security Benchmark Check
+    # ------------------------------------------------------------------
+    print("\nStep 6: Verifying ADR (AI Detection & Response) Security Benchmark Posture...")
     print("-" * 65)
     code, bench_res = send_request(f"{proxy_url}/api/benchmark", method="GET")
     score = bench_res.get("score", 88.1) if isinstance(bench_res, dict) else 88.1
@@ -206,7 +234,7 @@ def main():
     print()
 
     # ------------------------------------------------------------------
-    # 6. Optional Control Hub Ingest Metadata
+    # 7. Optional Control Hub Ingest Metadata
     # ------------------------------------------------------------------
     now_ms = int(time.time() * 1000)
     credentials = [
@@ -232,10 +260,12 @@ def main():
     print("      • 01 Tool Inventory     : Overview of observed tools & call statistics")
     print("      • 02 Session Timeline   : Real-time chronological event log")
     print("      • 03 Parameter Explorer : Inferred types & sample values per tool")
-    print("      • 04 Risk Flags        : Shell command anomaly telemetry")
-    print("      • 05 DLP               : Redacted API keys & email PII findings")
-    print("      • 06 Injection Defense : Prompt override attack detection")
-    print("      • 07 ADR Benchmark     : 303 benchmark test cases across 17 attack classes")
+    print("      • 04 Risk Flags        : Shell command & process anomaly telemetry")
+    print("      • 05 DLP               : Redacted API keys & PII leakage findings")
+    print("      • 06 Injection Defense : Prompt override & memory poisoning detection")
+    print("      • 07 Semantic Scanner  : Behavioral out-of-context tool call flags")
+    print("      • 08 Generate Policy   : Auto-generated baseline security policy")
+    print("      • 09 ADR Benchmark     : 303 benchmark test cases across 17 attack classes")
     print("============================================================\n")
 
 if __name__ == "__main__":
