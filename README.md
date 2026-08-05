@@ -14,7 +14,7 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
-  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Container-HAR%20%3C100MB-2496ED.svg?style=flat-square" alt="Docker"></a>
+  <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-Hub-1f6feb.svg?style=flat-square" alt="Documentation"></a>
 </p>
 
 <p align="center">
@@ -25,7 +25,8 @@
   <a href="#security-and-control">Security & Control</a> ·
   <a href="#deployment-options">Deployment options</a> ·
   <a href="#management-consoles">Management consoles</a> ·
-  <a href="#configuration">Configuration</a>
+  <a href="#configuration">Configuration</a> ·
+  <a href="docs/README.md">Documentation</a>
 </p>
 
 ---
