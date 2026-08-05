@@ -1,16 +1,15 @@
-# Team Control Hub — User Guide
+# Team Control Hub — Deployment & User Guide
 
-> **Target Audience:** DevOps engineers, Engineering leads, and Security teams deploying centralized governance across engineering teams and staging environments.
-> Requires Docker Compose or Go + Node.js (bare-metal). No Kubernetes required.
+> **Target Audience:** DevOps engineers, Engineering leads, and Security teams deploying centralized AI governance across engineering teams, staging, and production environments.
 
 ---
 
 ## What This Profile Provides
 
-The **Team Control Hub** profile extends AgentWall governance beyond a single developer workstation. It introduces a self-hosted central control plane — a Go REST API, React Management Console, and PostgreSQL database — coordinating distributed gateway instances across your entire engineering team.
+The **Team Control Hub** profile extends AgentWall governance beyond a single developer workstation. It introduces a self-hosted central control plane — a Go REST API, React Management Console, and PostgreSQL database — coordinating distributed gateway instances across your entire organization.
 
 > [!NOTE]
-> All Workstation Sidecar capabilities (safe-mode rules, DLP scanning, prompt injection protection, IDE wrapping, ADR benchmark) are **fully included** in this profile. This guide covers the additional centralized capabilities.
+> All Workstation Sidecar capabilities (safe-mode rules, DLP scanning, prompt injection protection, IDE wrapping, ADR benchmark) are **fully included** in this profile. This guide covers centralized deployment and control capabilities.
 >
 > For Workstation Sidecar setup, see → [Workstation Sidecar Guide](workstation_guide.md).
 
@@ -24,16 +23,18 @@ The **Team Control Hub** profile extends AgentWall governance beyond a single de
 | **Spend Caps & Budget Ledger** | Enforce per-session token budgets, model pricing metrics, and concurrency limits |
 | **Loop Detection & Countermeasures** | Auto-detect stuck agents in repetitive failure loops and trigger `PivotError` corrections |
 | **Multi-Backend SIEM Export** | Stream structured JSON audit events to Splunk HEC, Datadog Logs, or OpenSearch |
-| **Team Management Console** | Centralized web dashboard at `http://localhost:8081` for policy admin and live telemetry |
+| **Team Management Console** | Centralized web dashboard for policy admin and live telemetry |
 
 ---
 
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Installation](#2-installation)
-   - [Option A — Docker Compose (Recommended)](#option-a--docker-compose-recommended)
-   - [Option B — Bare-Metal Binaries](#option-b--bare-metal-binaries)
+   - [Docker Deployment Requirements](#docker-deployment-requirements-devtestingpoc)
+   - [Kubernetes Deployment Requirements](#kubernetes-deployment-requirements-production)
+2. [Deployment Options](#2-deployment-options)
+   - [2.1 Docker Deployment (Local Dev, Testing & PoC)](#21-docker-deployment-local-dev-testing--poc)
+   - [2.2 Kubernetes Deployment (Production)](#22-kubernetes-deployment-production)
 3. [Post-Installation Verification](#3-post-installation-verification)
 4. [Centralized Policy Push (SSE)](#4-centralized-policy-push-sse)
 5. [OIDC Identity Binding](#5-oidc-identity-binding)
@@ -47,49 +48,73 @@ The **Team Control Hub** profile extends AgentWall governance beyond a single de
 
 ## 1. Prerequisites
 
-### Option A: Docker Compose (Recommended)
+### Docker Deployment Requirements (Dev/Testing/PoC)
 
-**Control Hub Server Host:**
-- **Docker Engine / Docker Desktop v24.0+** — installed and actively running (daemon active).
-- **Docker Compose v2.20+** — required to orchestrate PostgreSQL, API, and UI containers.
-- **Available network ports:** `8081` (Control Hub UI), `8400` (Control Hub API), `5433` (PostgreSQL).
+For running Team Hub locally or in test/evaluation scenarios:
 
-**Gateway Host(s) / Developer Workstations:**
-- Installed `agentwall` binary:
-  - Linux/macOS: `curl -fsSL https://vexasec.io/install.sh | bash`
-  - Windows: `irm https://vexasec.io/install.ps1 | iex`
-- Direct network connectivity to the Control Hub server on port `8400`.
+- **Docker Engine / Docker Desktop v24.0+** — installed and actively running.
+- **Docker Compose v2.20+** — required to orchestrate multi-container services.
+- **Available host network ports:**
+  - `8081`: Control Hub UI (React Console)
+  - `8400`: Control Hub API (Go REST API)
+  - `5433`: PostgreSQL Database
+  - `8080`: AgentWall Enforcement Gateway
 
-### Option B: Bare-Metal Binaries (No Docker)
+### Kubernetes Deployment Requirements (Production)
 
-1. **PostgreSQL Server v16+** running locally (port `5433` or `5432`) with database `agentwall` created and schema migrations executed from `control-plane/db/migrations/`.
-2. **Control Hub API binary (`dashboard-api`)** compiled or run via Go 1.21+ (`go run ./cmd/server`) with `DATABASE_URL` pointing to PostgreSQL.
-3. **Control Hub UI (`frontend`)** built or served via Node.js v18+ development server (`npm run dev` in `control-plane/ui`).
+For running Team Hub in high-availability production Kubernetes environments:
+
+- **Kubernetes 1.24+** cluster with worker nodes capable of running multi-replica deployments.
+- **Helm 3.10+** installed locally.
+- **Cluster CNI with NetworkPolicy support** (e.g., Calico, Cilium, Antrea) if enabling egress NetworkPolicy enforcement.
+- **Ingress Controller** or **LoadBalancer** for external TLS ingress routing.
+- **Persistent Volume provisioner** for PostgreSQL database storage.
 
 ---
 
-## 2. Installation
+## 2. Deployment Options
 
-### Option A — Docker Compose (Recommended)
+Choose the deployment method that fits your environment requirements:
 
-**Step 1: Deploy the Control Hub stack.**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Deployment Pathways                            │
+├─────────────────────────────────────┬───────────────────────────────────┤
+│ 1. Docker Deployment                │ 2. Kubernetes Deployment          │
+│    • Local Development              │    • Production Multi-Replica     │
+│    • Automated Testing              │    • High Availability            │
+│    • Proof-of-Concept (PoC)         │    • Helm & Operator Enforced     │
+└─────────────────────────────────────┴───────────────────────────────────┘
+```
+
+---
+
+### 2.1 Docker Deployment (Local Dev, Testing & PoC)
+
+Deploy AgentWall Team Hub using Docker Compose for local development, automated testing, and proof-of-concept (PoC) scenarios.
+
+#### Step 1: Navigate to the control plane directory
+
+```bash
+cd control-plane
+```
+
+#### Step 2: Launch the Control Hub container stack
 
 > [!IMPORTANT]
 > When running `docker compose up -d`, ensure `HTTP_PROXY` and `HTTPS_PROXY` are **not** set in your terminal session. Docker requires direct internet access to download base images.
 
 ```bash
-cd control-plane
 docker compose up -d --build
 ```
 
-This provisions:
+This provisions the complete local stack:
 - **Control Hub UI:** `http://localhost:8081`
 - **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
+- **PostgreSQL 16 Database:** `localhost:5433`
+- **Enforcement Gateway:** `http://localhost:8080`
 
-**Step 2: Start gateway instances connected to the Control Hub.**
-
-> [!IMPORTANT]
-> `agentwall start` runs in the **foreground**. Keep this terminal window open while the gateway is active. Run `curl` or `verify-log` commands in a separate terminal.
+#### Step 3: Start connected gateway instances
 
 **Linux / macOS:**
 ```bash
@@ -116,6 +141,103 @@ $env:GATEWAY_SECRET="local-dev-shared-secret-change-me"
 ```
 
 The gateway bootstraps its policy state from PostgreSQL via the Control Hub API and maintains a live SSE connection (`GET /api/v1/policy/subscribe`) for zero-downtime policy hot-reloading.
+
+---
+
+### 2.2 Kubernetes Deployment (Production)
+
+For production deployments, use Kubernetes and Helm (`./chart`) to deploy the high-availability gateway cluster, operator, Control Hub API, PostgreSQL database, and Web Console.
+
+#### Step 1: Create the target namespace
+
+```bash
+kubectl create namespace agentwall-system
+```
+
+#### Step 2: Configure TLS Secrets
+
+Create a Kubernetes TLS secret containing your domain's TLS certificate and private key:
+
+```bash
+kubectl create secret tls agentwall-gateway-tls \
+  --cert=path/to/tls.crt \
+  --key=path/to/tls.key \
+  -n agentwall-system
+```
+
+*(For dev/staging clusters without custom certificates, set `gateway.tls.createSelfSigned=true`).*
+
+#### Step 3: Install AgentWall via Helm
+
+Deploy the full Team Control Hub stack using Helm:
+
+```bash
+helm install agentwall ./chart \
+  --namespace agentwall-system \
+  --create-namespace \
+  --set gateway.tls.enabled=true \
+  --set gateway.tls.secretName=agentwall-gateway-tls \
+  --set gateway.replicas=3 \
+  --set dashboardApi.enabled=true \
+  --set dashboardDb.enabled=true \
+  --set dashboardFrontend.enabled=true \
+  --set dashboardApi.oidc.issuer=https://your-idp.example.com \
+  --set dashboardApi.oidc.clientId=agentwall-dashboard
+```
+
+#### Step 4: Apply `AgentWallPolicy` CRDs & Operator Reconciliation
+
+The Helm chart automatically registers the `AgentWallPolicy` Custom Resource Definition (CRD) and deploys `agentwall-operator`.
+
+Apply custom policy CR manifests:
+
+```yaml
+# policy.yaml
+apiVersion: agentwall.io/v1alpha1
+kind: AgentWallPolicy
+metadata:
+  name: team-production-policy
+  namespace: agentwall-system
+spec:
+  networkPolicyEnforced: true
+  policyYaml: |
+    version: "2.0"
+    mode: "enforce"
+    rules:
+      - name: "block-env-exfiltration"
+        match:
+          tools: ["read_file", "execute_shell"]
+        action: "block"
+```
+
+```bash
+kubectl apply -f policy.yaml
+```
+
+#### Step 5: Zero-Downtime Upgrades & Policy Hot-Reloading
+
+**Upgrading the Helm release:**
+```bash
+helm upgrade agentwall ./chart -n agentwall-system
+```
+*Rolling upgrades maintain request continuity when `gateway.replicas >= 2`.*
+
+**Triggering instant policy hot-reloads:**
+```bash
+# Method A: HTTP Endpoint
+kubectl exec -n agentwall-system deploy/agentwall-gateway -- \
+  wget -qO- --post-data '' http://localhost:8080/reload
+
+# Method B: SIGHUP Signal
+POD=$(kubectl get pod -n agentwall-system -l app.kubernetes.io/component=gateway -o name | head -1)
+kubectl exec -n agentwall-system $POD -- kill -HUP 1
+```
+
+#### Step 6: Uninstalling
+
+```bash
+helm uninstall agentwall -n agentwall-system
+```
 
 ---
 

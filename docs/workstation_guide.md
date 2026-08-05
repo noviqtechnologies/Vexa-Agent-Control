@@ -47,6 +47,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 |---|---|
 | **Operating System** | Linux, macOS, or Windows (PowerShell / WSL / Git Bash) |
 | **Network Utilities** | `curl` and `sh` for binary download (Linux/macOS/WSL) |
+| **Python (Optional)** | Python 3.8+ — required only for executing the quickstart telemetry generator script (`quickstart_agent.py`) |
 | **Node.js (Optional)** | `node` and `npx` v18+ — required only when wrapping stdio MCP servers (e.g., `@modelcontextprotocol/server-filesystem`) |
 | **Write Permissions** | Ability to write to `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows) |
 

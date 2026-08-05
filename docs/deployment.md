@@ -84,14 +84,19 @@ agentwall.exe --version
 agentwall.exe --help
 ```
 
+*(Optional: To run the demonstration test script `quickstart_agent.py`, Python 3.8+ is required):*
+```powershell
+python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+```
+
 ---
 
-## 🐳 Docker Deployment (For Production)
+## 🐳 Docker Deployment (For Dev, Testing & PoC)
 
-If you are a system administrator deploying AgentWall for a team, you can run the centralized Enforcement Gateway using Docker.
+For local development, testing, and proof-of-concept (PoC) scenarios, you can run AgentWall and the Team Control Hub stack using Docker or Docker Compose.
 
 ```bash
-# Start AgentWall Gateway using Docker
+# Option A: Standalone Gateway Container
 docker run -d \
   --name agentwall \
   -p 8080:8080 \
@@ -99,23 +104,19 @@ docker run -d \
   -v ./audit.log:/var/log/agentwall/audit.log \
   ghcr.io/noviqtechnologies/agentwall:latest \
   start --policy /etc/agentwall/policy.yaml --listen 0.0.0.0:8080
+
+# Option B: Complete Control Hub Stack (Compose)
+cd control-plane
+docker compose up -d --build
 ```
+
+For full details, see → [Team Control Hub Guide — Docker Deployment](team_hub_guide.md#21-docker-deployment-local-dev-testing--poc).
 
 ---
 
-## ☸️ Kubernetes / Helm Deployment
+## ☸️ Kubernetes Deployment (For Production)
 
-AgentWall includes a Helm chart with a Kubernetes operator that deploys the gateway, RBAC, CRDs, and optional NetworkPolicy enforcement.
-
-```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
-  --create-namespace \
-  --set gateway.tls.enabled=true \
-  --set gateway.tls.secretName=my-gateway-tls
-```
-
-To also deploy the SaaS Dashboard components alongside the gateway:
+For high-availability production deployments, AgentWall includes a complete Helm chart (`./chart`) with a Kubernetes operator, CRDs, multi-replica gateway gateway deployment, Control Hub API, PostgreSQL database, and optional NetworkPolicy enforcement.
 
 ```bash
 helm install agentwall ./chart \
@@ -130,4 +131,5 @@ helm install agentwall ./chart \
   --set dashboardApi.oidc.clientId=agentwall-dashboard
 ```
 
-See `chart/values.yaml` for the full reference of configurable values.
+For full details, see → [Team Control Hub Guide — Kubernetes Deployment](team_hub_guide.md#22-kubernetes-deployment-production) and `chart/values.yaml` for the full reference of configurable values.
+

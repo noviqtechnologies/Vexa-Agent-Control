@@ -14,7 +14,10 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) i
   agentwall.exe --version
   ```
 
-*(The installer automatically places both the `agentwall` binary and the `quickstart_agent.py` test script into your executable PATH).*
+*(The installer places the `agentwall` binary and the `quickstart_agent.py` test script into `~/.local/bin` / `%USERPROFILE%\.local\bin`).*
+
+> [!NOTE]
+> **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system.
 
 ---
 
@@ -60,10 +63,16 @@ Open a **new, separate terminal window** and run the integration command:
 3. Ask Claude to perform a tool call. For example, type:
    > *"Can you list the files in my current workspace folder?"* or *"Can you inspect the files in my directory?"*
 
-*Alternatively, run the instant test demonstration script to populate all telemetry without configuring an IDE:*
-```bash
-python quickstart_agent.py
-```
+*Alternatively, run the instant test demonstration script to populate all telemetry without configuring an IDE (requires **Python 3.8+**):*
+
+* **macOS / Linux / WSL:**
+  ```bash
+  python3 ~/.local/bin/quickstart_agent.py
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+  ```
 *(This sends simulated AI tool calls through `http://127.0.0.1:8080` to populate the dashboard immediately if you see "No tool calls recorded yet").*
 
 Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see AgentWall logging these actions in real time!

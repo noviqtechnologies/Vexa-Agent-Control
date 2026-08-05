@@ -53,9 +53,16 @@ agentwall.exe dev
 
 Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.
 
-> 💡 **Generating Instant Test Telemetry**: The installer automatically includes `quickstart_agent.py` in your PATH. If you see *"No tool calls recorded yet"*, run the test script in a new terminal to populate the dashboard:
+> 💡 **Generating Instant Test Telemetry**: Running the optional demonstration test script requires **Python 3.8+**. The installer places `quickstart_agent.py` in your local binary path (`~/.local/bin` / `%USERPROFILE%\.local\bin`). If you see *"No tool calls recorded yet"*, run the test script in a new terminal:
+> 
+> **macOS / Linux / WSL:**
 > ```bash
-> python quickstart_agent.py
+> python3 ~/.local/bin/quickstart_agent.py
+> ```
+> 
+> **Windows (PowerShell):**
+> ```powershell
+> python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 > ```
 
 ### Team / Staging Control Hub (Docker Compose)

@@ -185,6 +185,8 @@
     Write-Host "`nGet started by running:"
     Write-Host "  agentwall --version"
     Write-Host "  agentwall dev`n"
+    Write-Host "To run the demo test script (requires Python 3.8+):" -ForegroundColor $ColorCyan
+    Write-Host "  python `"$env:USERPROFILE\.local\bin\quickstart_agent.py`"`n" -ForegroundColor $ColorCyan
 
     Write-Host "Note: If you encounter 'Windows Protected Your PC', click 'More info' -> 'Run anyway'." -ForegroundColor $ColorYellow
     Write-Host "Note: Open a new terminal window if 'agentwall' is not found immediately." -ForegroundColor $ColorYellow

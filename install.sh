@@ -116,4 +116,7 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   echo ""
 fi
 
+echo "To run the demo test script (requires Python 3.8+):"
+echo "  python3 \$HOME/.local/bin/quickstart_agent.py"
+echo ""
 echo "Run 'agentwall --help' to get started."
