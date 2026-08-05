@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "[*] VEXA AgentWall Installer"
+echo "[*] AgentWall Installer"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -24,8 +24,39 @@ fi
 echo "[*] Detected OS: $OS"
 echo "[*] Detected Arch: $ARCH"
 
-VERSION="v1.0.16"
+REPO="noviqtechnologies/agentwall"
+
+# Fetch the latest release (including pre-releases) via /releases?per_page=1
+# NOTE: /releases/latest only returns stable releases and would skip pre-releases.
+echo "[*] Fetching latest release version..."
+VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" \
+  | grep '"tag_name"' \
+  | head -1 \
+  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
+if [[ -z "$VERSION" ]]; then
+  echo "[!] Failed to determine the latest release version."
+  exit 1
+fi
+
 echo "[*] Using version: $VERSION"
+
+# Check currently installed version
+LOCALBIN="$HOME/.local/bin"
+INSTALLED_VERSION=""
+if command -v agentwall &>/dev/null || [ -f "${LOCALBIN}/agentwall" ]; then
+  INSTALLED_VERSION=$("${LOCALBIN}/agentwall" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+fi
+
+if [[ -n "$INSTALLED_VERSION" && "v${INSTALLED_VERSION}" == "$VERSION" ]]; then
+  echo ""
+  echo "[✓] AgentWall $VERSION is already up to date. Nothing to do."
+  exit 0
+elif [[ -n "$INSTALLED_VERSION" ]]; then
+  echo "[*] Upgrading $INSTALLED_VERSION → ${VERSION}..."
+else
+  echo "[*] Fresh install of AgentWall $VERSION..."
+fi
 
 ASSET_NAME="agentwall-${VERSION}-${OS}-${ARCH}.zip"
 ASSET_URL="https://github.com/noviqtechnologies/agentwall/releases/download/${VERSION}/${ASSET_NAME}"
@@ -62,7 +93,11 @@ mv "$BINARY_PATH" "${LOCALBIN}/agentwall"
 chmod +x "${LOCALBIN}/agentwall"
 
 echo ""
-echo "[✓] AgentWall has been installed to ${LOCALBIN}/agentwall"
+if [[ -n "$INSTALLED_VERSION" ]]; then
+  echo "[✓] AgentWall upgraded from $INSTALLED_VERSION to ${VERSION} successfully!"
+else
+  echo "[✓] AgentWall $VERSION has been installed to ${LOCALBIN}/agentwall"
+fi
 echo ""
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then

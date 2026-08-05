@@ -111,7 +111,23 @@ impl DashboardClient {
             .json(&snapshot);
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            // Block current thread to complete request before CLI process terminates
+            let _ =
+                tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
+        } else if let Ok(rt) = tokio::runtime::Runtime::new() {
+            let _ = rt.block_on(async move { req.send().await });
+        }
+    }
+
+    /// Transmits a benchmark report payload synchronously to the dashboard ingestion endpoint.
+    pub fn send_benchmark_report(&self, report_payload: serde_json::Value) {
+        let url = format!("{}/api/v1/ingest/benchmark", self.base_url);
+        let req = self
+            .http
+            .post(&url)
+            .header("Authorization", &self.secret)
+            .json(&report_payload);
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let _ =
                 tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
         } else if let Ok(rt) = tokio::runtime::Runtime::new() {

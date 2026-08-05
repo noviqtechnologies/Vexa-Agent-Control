@@ -1,8 +1,167 @@
-# Vexa AgentWall — Detailed User Guide
+# Vexa AgentWall — User Guide
 
-Welcome to the detailed user guide for **Vexa AgentWall** — the enterprise LLM agent governance platform and default-deny security gateway.
+Welcome to the Vexa AgentWall documentation hub. AgentWall is an enterprise-grade, default-deny AI security gateway and firewall for MCP, HTTP, HTTPS, and WebSocket agent traffic.
 
-This guide provides comprehensive instructions for deploying, configuring, securing, and maintaining AgentWall across local development workstations, team staging environments, and production enterprise infrastructure.
+This page is the top-level navigation hub. Select the guide that matches your deployment profile to get started.
+
+---
+
+## Choose Your Deployment Profile
+
+AgentWall supports three graduated deployment profiles. Pick the one that matches your environment:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                  DEPLOYMENT PROFILES                                    │
+├──────────────────────────┬──────────────────────────────┬───────────────────────────────┤
+│ Workstation Sidecar      │ Team Control Hub              │ Enterprise Fleet              │
+│ Single Binary & Sidecar  │ Docker Compose Stack         │ Kubernetes + Helm Fleet       │
+│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ TLS rustls + SIEM + OIDC SSO  │
+└──────────────────────────┴──────────────────────────────┴───────────────────────────────┘
+```
+
+---
+
+### 🖥️ [Workstation Sidecar Guide](workstation_guide.md)
+
+> **Best for:** Individual developers securing AI agent tool calls on a local workstation.
+> No Docker, no database, no external servers required.
+
+**What you get:**
+- Default-deny policy engine with 15 out-of-the-box safe-mode rules
+- 9 active prompt injection scanners
+- 21 built-in DLP detectors (AWS keys, SSH keys, PII, API tokens)
+- Passive shadow AI discovery & Risk Delta Reports
+- MCP Security Scoring Engine (`agentwall scan`)
+- Local developer web console at `http://127.0.0.1:8080`
+- One-command IDE wrapping for Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE
+- ADR Security Benchmark (303 tasks across 17 attack categories)
+
+**Quick start:**
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://vexasec.io/install.sh | bash && agentwall dev
+
+# Windows (PowerShell)
+irm https://vexasec.io/install.ps1 | iex; .\agentwall.exe dev
+```
+
+→ **[Open Workstation Sidecar Guide](workstation_guide.md)**
+
+---
+
+### 🏢 [Team Control Hub Guide](team_hub_guide.md)
+
+> **Best for:** DevOps engineers and Engineering leads extending governance across an entire engineering team or staging environment.
+> Requires Docker Compose (or Go + Node.js bare-metal).
+
+**What you get (in addition to all Workstation capabilities):**
+- Centralized policy push via SSE — hot-swap policies across all gateways without restarts
+- OIDC identity binding (Okta, Keycloak, Entra ID, Auth0, Ping)
+- Multi-tenant policy sharding (`agent_project_id`, `agent_task_id`)
+- Vault & LLM provider API key custody — agents never hold raw keys
+- Async HITL approval queue (Slack, Teams, Webhooks)
+- Spend caps, token budgets & concurrency limits
+- Loop detection & PivotError countermeasures
+- Multi-backend SIEM export (Splunk, Datadog, OpenSearch)
+- Team management console at `http://localhost:8081`
+
+**Quick start:**
+```bash
+cd control-plane && docker compose up -d --build
+export DASHBOARD_API_URL="http://localhost:8400"
+export GATEWAY_SECRET="your-gateway-secret"
+agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
+```
+
+→ **[Open Team Control Hub Guide](team_hub_guide.md)**
+
+---
+
+### ☁️ [Enterprise Fleet Guide](enterprise_guide.md)
+
+> **Best for:** Platform engineers and Security architects deploying high-availability, cloud-native gateway fleets on Kubernetes.
+> Requires Kubernetes v1.26+, Helm v3+, and a domain TLS certificate.
+
+**What you get (in addition to all Team Hub capabilities):**
+- Hardened Agent Container Runtime (HAR) — <100 MB Distroless/Alpine OCI sidecar
+- Hardened WebSocket egress tunneling (<5ms latency)
+- Real-time threat intelligence feed (live Vexa AI Malware signatures via SSE)
+- Zero-knowledge Customer-Managed Key (CMK) AES-256-GCM SIEM encryption
+- Pure-Rust TLS termination powered by `rustls`
+- Fleet-wide telemetry & Kubernetes monitoring
+
+**Quick start:**
+```bash
+kubectl create namespace agentwall-system
+kubectl create secret tls agentwall-tls --cert=tls.crt --key=tls.key -n agentwall-system
+helm install agentwall ./chart --namespace agentwall-system \
+  --set gateway.tls.enabled=true \
+  --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default"
+```
+
+→ **[Open Enterprise Fleet Guide](enterprise_guide.md)**
+
+---
+
+## Capabilities by Deployment Profile
+
+| Capability | Workstation Sidecar | Team Control Hub | Enterprise Fleet |
+|---|:---:|:---:|:---:|
+| Default-Deny Policy Engine | ✓ | ✓ | ✓ |
+| 15 Out-of-the-Box Safe Rules | ✓ | ✓ | ✓ |
+| 9 Prompt Injection Scanners | ✓ | ✓ | ✓ |
+| 21-Pattern Dual-Pass DLP | ✓ | ✓ | ✓ |
+| Passive Shadow AI Discovery | ✓ | ✓ | ✓ |
+| MCP Security Scoring Engine | ✓ | ✓ | ✓ |
+| IDE Auto-Wrapping Engine | ✓ | ✓ | ✓ |
+| ADR Security Benchmark | ✓ | ✓ | ✓ |
+| Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ |
+| Centralized Policy Push (SSE) | — | ✓ | ✓ |
+| OIDC Identity Binding | — | ✓ | ✓ |
+| Project & Task Policy Sharding | — | ✓ | ✓ |
+| Vault & API Key Custody | — | ✓ | ✓ |
+| Async HITL Webhook Queue | — | ✓ | ✓ |
+| Spend Caps & Token Ledger | — | ✓ | ✓ |
+| Loop Detection & PivotError | — | ✓ | ✓ |
+| Hardened Container Runtime (HAR) | — | — | ✓ |
+| WebSocket Egress Tunneling | — | — | ✓ |
+| Real-Time Threat Intel Feed | — | — | ✓ |
+| Zero-Knowledge CMK Encryption | — | — | ✓ |
+| Pure-Rust TLS Termination | — | — | ✓ |
+
+---
+
+## Shared Reference Sections
+
+These technical reference topics apply across all deployment profiles and are maintained in the [Common Reference Guide](common_guide.md):
+
+| Reference Topic | Description |
+|---|---|
+| [YAML Policy v2 Schema](common_guide.md#1-writing-yaml-policies-v2-schema) | Complete v2 schema reference with annotated example policy |
+| [DLP Configuration](common_guide.md#2-configuring-data-loss-prevention-dlp) | All 21 built-in detectors, custom patterns, entropy scanning |
+| [OIDC Identity Binding](common_guide.md#3-setting-up-oidc-identity-binding) | IdP setup, JWT validation, short-lived credential CLI |
+| [Control Hub Connectivity](common_guide.md#4-connecting-to-the-control-hub) | SSE event stream, API key custody, telemetry uploads |
+| [Audit Log Verification](common_guide.md#5-verifying-audit-logs) | HMAC chain verification, session reports, SIEM export |
+| [Sequence Rules (ADR)](common_guide.md#6-stateful-sequence-rules-adr-framework) | Multi-step attack detection engine and rule authoring |
+| [ADR Benchmark](common_guide.md#7-adr-security-benchmark) | 303-task benchmark suite, scoring, dashboard integration |
+| [Environment Variables](common_guide.md#8-environment-variables) | Complete environment variable reference |
+| [Troubleshooting](common_guide.md#10-troubleshooting-common-issues) | PATH errors, YAML validation, OIDC failures, IDE wrap issues |
+
+---
+
+## Additional Documentation
+
+| Document | Description |
+|---|---|
+| [quickstart.md](quickstart.md) | Step-by-step quickstart for local MCP servers, Claude Desktop, and Cursor |
+| [oidc_identity_binding.md](oidc_identity_binding.md) | Provider-specific OIDC setup (Okta, Keycloak, Entra ID, Auth0, Cognito, Ping) |
+| [adr_benchmark.md](adr_benchmark.md) | Full ADR benchmark reference (all 17 attack categories and scoring methodology) |
+| [agentwall_architecture.md](agentwall_architecture.md) | Detailed system architecture, 6-pass pipeline, and component interaction flows |
+| [configuration.md](configuration.md) | Deep-dive policy schema, DLP regex, spend caps, and environment variables |
+| [deployment.md](deployment.md) | Platform-specific installation reference (macOS, Linux, Windows, Docker, K8s, HAR) |
+| [integrations.md](integrations.md) | IDE wrappers, stdio proxies, Vault adapters, and SIEM exporters |
+| [comprehensive_guide.md](comprehensive_guide.md) | Command-line walkthroughs and scenario tutorials |
 
 ---
 
