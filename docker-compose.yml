@@ -19,10 +19,13 @@ version: "3.9"
 # AC-203-2: Enforcement is identical to production (same binary, same policy).
 # AC-203-4: This file is provided in the repository root per the spec.
 
+name: vexa-agentwall-dev
+
 services:
 
   # ── Mock OIDC Provider ──────────────────────────────────────────────────────
   mock-oidc:
+    container_name: vexa-agentwall-mock-oidc
     image: python:3.12-slim
     working_dir: /app
     volumes:
@@ -42,6 +45,7 @@ services:
 
   # ── Mock Splunk HEC ─────────────────────────────────────────────────────────
   mock-splunk:
+    container_name: vexa-agentwall-mock-splunk
     image: python:3.12-slim
     working_dir: /app
     volumes:
@@ -60,6 +64,7 @@ services:
 
   # ── HashiCorp Vault (FR-22) ─────────────────────────────────────────────────
   vault:
+    container_name: vexa-agentwall-vault
     image: hashicorp/vault:1.16
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: "root"
@@ -76,6 +81,7 @@ services:
 
   # ── Mock MCP Tool Server ────────────────────────────────────────────────────
   mock-mcp:
+    container_name: vexa-agentwall-mock-mcp
     build:
       context: ./test-tools/mock-mcp-server
       dockerfile: Dockerfile
@@ -92,6 +98,7 @@ services:
 
   # ── AgentWall Gateway ───────────────────────────────────────────────────────
   agentwall:
+    container_name: vexa-agentwall-gateway-dev
     build:
       context: .
       dockerfile: Dockerfile

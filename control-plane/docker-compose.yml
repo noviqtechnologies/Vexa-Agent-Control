@@ -1,5 +1,8 @@
+name: vexa-agentwall-control-plane
+
 services:
   postgres:
+    container_name: vexa-agentwall-postgres
     image: postgres:16
     environment:
       POSTGRES_USER: agentwall
@@ -27,6 +30,7 @@ services:
   # polled every POLICY_POLL_INTERVAL_SECS seconds for live admin updates.
   # No --policy YAML file is needed — the DB is the single source of truth.
   gateway:
+    container_name: vexa-agentwall-gateway
     build:
       context: ..        # workspace root — where Dockerfile and Cargo.toml live
       dockerfile: Dockerfile
@@ -68,6 +72,7 @@ services:
       start_period: 15s
 
   dashboard-api:
+    container_name: vexa-agentwall-dashboard-api
     build:
       context: ./api
     depends_on:
@@ -98,6 +103,7 @@ services:
       start_period: 5s
 
   frontend:
+    container_name: vexa-agentwall-frontend
     build:
       context: ./ui
     depends_on:
@@ -108,3 +114,4 @@ services:
 
 volumes:
   agentwall_pg_data:
+
