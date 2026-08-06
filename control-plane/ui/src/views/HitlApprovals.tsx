@@ -19,7 +19,7 @@ export const HitlApprovals: React.FC = () => {
     },
   ]);
 
-  const handleAction = (id: string, decision: 'ALLOW_ONCE' | 'PERMANENT_ALLOW' | 'DENY') => {
+  const handleAction = (id: string, _decision: 'ALLOW_ONCE' | 'PERMANENT_ALLOW' | 'DENY') => {
     setEscalations((prev) => prev.filter((item) => item.id !== id));
   };
 
