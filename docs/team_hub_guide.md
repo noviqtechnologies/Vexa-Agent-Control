@@ -50,9 +50,10 @@ The **Team Control Hub** profile extends AgentWall governance beyond a single de
 
 ### Docker Deployment Requirements (Dev/Testing/PoC)
 
-For running Team Hub locally or in test/evaluation scenarios:
+For running Team Hub locally or in test/evaluation scenarios across **Linux**, **macOS**, and **Windows**:
 
-- **Docker Engine / Docker Desktop v24.0+** — installed and actively running.
+- **Git v2.38+** — required to clone the AgentWall repository (if deploying from source).
+- **Docker Engine / Docker Desktop v24.0+** — installed and actively running (WSL2 backend required on Windows).
 - **Docker Compose v2.20+** — required to orchestrate multi-container services.
 - **Available host network ports:**
   - `8081`: Control Hub UI (React Console)
@@ -91,20 +92,53 @@ Choose the deployment method that fits your environment requirements:
 
 ### 2.1 Docker Deployment (Local Dev, Testing & PoC)
 
-Deploy AgentWall Team Hub using Docker Compose for local development, automated testing, and proof-of-concept (PoC) scenarios.
+Deploy AgentWall Team Hub using Docker Compose for local development, automated testing, and proof-of-concept (PoC) scenarios across Linux, macOS, and Windows.
 
-#### Step 1: Navigate to the control plane directory
+#### Step 1: Clone repository & navigate to the control plane directory
 
+**Linux / macOS (Bash / Zsh):**
 ```bash
-cd control-plane
+git clone https://github.com/noviqtechnologies/agentwall.git
+cd agentwall/control-plane
 ```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/noviqtechnologies/agentwall.git
+cd agentwall\control-plane
+```
+
+**Windows (Command Prompt - CMD):**
+```cmd
+git clone https://github.com/noviqtechnologies/agentwall.git
+cd agentwall\control-plane
+```
+
+> [!TIP]
+> **Already have the source code?** If you have already cloned or downloaded the AgentWall repository, simply open your terminal in the repository root folder and run `cd control-plane`.
 
 #### Step 2: Launch the Control Hub container stack
 
 > [!IMPORTANT]
 > When running `docker compose up -d`, ensure `HTTP_PROXY` and `HTTPS_PROXY` are **not** set in your terminal session. Docker requires direct internet access to download base images.
 
+**Linux / macOS (Bash / Zsh):**
 ```bash
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+docker compose up -d --build
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:HTTP_PROXY=""
+$env:HTTPS_PROXY=""
+docker compose up -d --build
+```
+
+**Windows (Command Prompt - CMD):**
+```cmd
+set HTTP_PROXY=
+set HTTPS_PROXY=
 docker compose up -d --build
 ```
 
