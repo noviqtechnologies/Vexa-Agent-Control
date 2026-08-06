@@ -249,22 +249,35 @@ curl.exe -X POST http://127.0.0.1:8080 `
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
+curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
 ```
+
+> [!NOTE]
+> **Expected Behavior:** If no upstream MCP server (e.g. at `http://127.0.0.1:3000`) is running, the gateway will evaluate policy, write the audit log entry, and return `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`. This upstream network error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
 
 #### Verify Audit Log Integrity:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
+# Option A: System installed binary (in PATH)
 agentwall verify-log ./team-audit.log
-# Or compiled binary:
+
+# Option B: Compiled binary (if inside control-plane directory)
+../target/debug/agentwall verify-log ./team-audit.log
+
+# Option C: Compiled binary (if inside repository root directory)
 ./target/debug/agentwall verify-log ./team-audit.log
 ```
 
 #### Windows (PowerShell / CMD):
 ```powershell
+# Option A: System installed binary (in PATH)
 agentwall.exe verify-log .\team-audit.log
-# Or compiled binary:
+
+# Option B: Compiled binary (if inside control-plane directory)
+..\target\debug\agentwall.exe verify-log .\team-audit.log
+
+# Option C: Compiled binary (if inside repository root directory)
 .\target\debug\agentwall.exe verify-log .\team-audit.log
 ```
 
