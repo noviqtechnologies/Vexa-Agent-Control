@@ -532,7 +532,7 @@ The Enterprise Fleet profile deploys AgentWall as a high-availability, cloud-nat
    - Domain TLS Certificate (`tls.crt`) and matching private key (`tls.key`) in PEM format.
 
 4. **Enterprise Identity & Audit Services (External Integrations):**
-   - **OIDC Provider:** Okta, Keycloak, Microsoft Entra ID (Azure AD), Auth0, or PingIdentity configured with an OIDC Discovery URL (`.well-known/openid-configuration`).
+   - **OIDC Provider:** Keycloak, Okta, Microsoft Entra ID (Azure AD), Auth0, or PingIdentity configured with an OIDC Discovery URL (`.well-known/openid-configuration`).
    - **SIEM Collector (Optional):** Splunk HEC, Datadog HTTP Intake, or OpenSearch endpoint and authentication token.
 
 #### Step-by-Step Installation
@@ -842,19 +842,19 @@ AgentWall binds agent sessions and tool call execution to cryptographic OIDC ide
 
 ### IdP Configuration
 
-In your YAML policy, define the `identity` configuration:
+In your YAML policy, define the `identity` configuration (for instance, connecting **Keycloak** or another OIDC provider):
 
 ```yaml
 identity:
   provider: "oidc"
-  issuer: "https://auth.yourorg.com/oauth2/default"
-  audience: "agentwall-gateway-prod"
-  group_claim_key: "groups"    # IdP-specific claim key (e.g., "cognito:groups", "memberOf")
+  issuer: "https://keycloak.corp.internal/realms/production"
+  audience: "agentwall-gateway"
+  group_claim_key: "groups"    # IdP-specific claim key (e.g. "groups", "cognito:groups", "memberOf")
 ```
 
 Or pass the discovery issuer via command line:
 ```bash
-agentwall start --policy policy.yaml --oidc-issuer https://auth.yourorg.com
+agentwall start --policy policy.yaml --oidc-issuer https://keycloak.corp.internal/realms/production
 ```
 
 ---
