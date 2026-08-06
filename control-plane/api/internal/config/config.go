@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
 )
 
 type Config struct {
@@ -23,6 +25,12 @@ type Config struct {
 	// GatewayURL is the internal URL of the AgentWall gateway (e.g.
 	// http://agentwall-gateway:8080). Used to proxy policy-read requests.
 	GatewayURL string
+
+	// ProviderKeyEncryptionSecret is the 32-byte key used to encrypt provider API keys in DB.
+	ProviderKeyEncryptionSecret []byte
+
+	// LicenseKey is the Ed25519-signed JWT license key for AgentWall Hub.
+	LicenseKey string
 
 	// DevMode disables auth requirements. Requires BOTH DEV_MODE=true AND
 	// ALLOW_DEV_MODE=true to activate — prevents accidental copy-paste of
@@ -50,6 +58,24 @@ func Load() (*Config, error) {
 	gatewaySecret := os.Getenv("GATEWAY_SECRET")
 	policyReadSecret := os.Getenv("POLICY_READ_SECRET")
 	gatewayURL := os.Getenv("GATEWAY_URL")
+	licenseKey := os.Getenv("AGENTWALL_HUB_LICENSE_KEY")
+
+	encryptionHex := os.Getenv("PROVIDER_KEY_ENCRYPTION_SECRET")
+	var encryptionSecret []byte
+	if encryptionHex != "" {
+		key, err := crypto.ParseMasterKey(encryptionHex)
+		if err != nil {
+			return nil, fmt.Errorf("PROVIDER_KEY_ENCRYPTION_SECRET error: %w", err)
+		}
+		encryptionSecret = key
+	} else if devMode {
+		// Default 32-byte key for local development when in devMode
+		key, _ := crypto.ParseMasterKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+		encryptionSecret = key
+	} else {
+		return nil, fmt.Errorf("PROVIDER_KEY_ENCRYPTION_SECRET is required (set DEV_MODE=true and ALLOW_DEV_MODE=true for dev fallback)")
+	}
+
 	if !devMode {
 		if gatewaySecret == "" {
 			return nil, fmt.Errorf("GATEWAY_SECRET is required (set DEV_MODE=true and ALLOW_DEV_MODE=true to disable auth for local development)")
@@ -57,11 +83,14 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:             port,
-		DatabaseURL:      dbURL,
-		GatewaySecret:    gatewaySecret,
-		PolicyReadSecret: policyReadSecret,
-		GatewayURL:       gatewayURL,
-		DevMode:          devMode,
+		Port:                        port,
+		DatabaseURL:                 dbURL,
+		GatewaySecret:               gatewaySecret,
+		PolicyReadSecret:            policyReadSecret,
+		GatewayURL:                  gatewayURL,
+		ProviderKeyEncryptionSecret: encryptionSecret,
+		LicenseKey:                  licenseKey,
+		DevMode:                     devMode,
 	}, nil
 }
+

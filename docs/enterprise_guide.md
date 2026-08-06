@@ -18,6 +18,11 @@ The **Enterprise Fleet** profile delivers the full AgentWall security stack on K
 | Capability | What You Get |
 |---|---|
 | **Hardened Agent Container Runtime (HAR)** | Pre-built <100 MB Distroless/Alpine OCI sidecar image for Kubernetes pod deployments |
+| **Provider Key AES-256-GCM Encryption** | AES-256-GCM encrypted database custody for LLM provider API keys using 32-byte master key |
+| **Offline Ed25519 Licensing & Seat Gating** | Ed25519-signed JWT licensing with zero telemetry and automatic seat enforcement (429 HTTP rejection) |
+| **Air-Gapped OIDC & JWKS Support** | Offline disk-based JWKS key loading (`auth.jwks_file`) and `agentwall identity export-jwks` CLI tool |
+| **Compliance Control Mapping & Evidence CLI** | Automated report generator (`agentwall compliance report`) mapped to SOC 2, ISO 27001, and NIST AI RMF |
+| **Centralized Hub SIEM Aggregation** | Multi-gateway log fan-in and batch export to Splunk HEC, Datadog Logs, or OpenSearch |
 | **Hardened WebSocket Egress Tunneling** | Secure WebSocket proxy connecting remote cloud agents to local on-premise MCP servers (<5ms latency) |
 | **Real-Time Threat Intelligence Feed** | Dynamically ingests Vexa AI Malware signature feeds via SSE — updates DLP patterns in-flight without downtime |
 | **Zero-Knowledge CMK Encryption** | Client-side AES-256-GCM encryption of audit streams using Customer-Managed Keys before SIEM egress |

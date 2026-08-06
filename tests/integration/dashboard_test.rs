@@ -30,7 +30,7 @@ async fn test_dashboard_api_endpoints() {
     );
 
     // Wait for server to start
-    sleep(Duration::from_secs(2)).await;
+    sleep(Duration::from_secs(4)).await;
 
     let client = Client::new();
 

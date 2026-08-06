@@ -28,8 +28,18 @@ use policy::loader::{load_policy, PolicyLoadResult};
 use policy::safe_mode::SafeModeScanner;
 use proxy::handler::ProxyState;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .build()
+        .expect("Failed to create Tokio runtime");
+
+    let exit_code = runtime.block_on(async_main());
+    std::process::exit(exit_code);
+}
+
+async fn async_main() -> i32 {
     let cli = Cli::parse();
 
     let is_dev_stdio = match &cli.command {
@@ -51,7 +61,11 @@ async fn main() {
         print_banner();
     }
 
-    let exit_code = match cli.command {
+    dispatch_command(Box::new(cli.command)).await
+}
+
+async fn dispatch_command(command: Box<Commands>) -> i32 {
+    match *command {
         Commands::Wrap {
             command,
             auto_detect,
@@ -231,6 +245,118 @@ async fn main() {
                     credential_id: credential,
                 })
             }
+            cli::IdentityCommands::ExportJwks { issuer, output } => {
+                let oidc_url = if issuer.ends_with('/') {
+                    format!("{}.well-known/openid-configuration", issuer)
+                } else {
+                    format!("{}/.well-known/openid-configuration", issuer)
+                };
+                let client = reqwest::Client::new();
+                match client.get(&oidc_url).send().await {
+                    Err(e) => {
+                        eprintln!("{} Failed to fetch OIDC config: {}", "✖".red(), e);
+                        1
+                    }
+                    Ok(resp) => match resp.json::<serde_json::Value>().await {
+                        Err(e) => {
+                            eprintln!("{} Failed to parse OIDC config JSON: {}", "✖".red(), e);
+                            1
+                        }
+                        Ok(config) => match config.get("jwks_uri").and_then(|v| v.as_str()) {
+                            None => {
+                                eprintln!("{} OIDC config missing jwks_uri", "✖".red());
+                                1
+                            }
+                            Some(jwks_uri) => match client.get(jwks_uri).send().await {
+                                Err(e) => {
+                                    eprintln!("{} Failed to fetch JWKS: {}", "✖".red(), e);
+                                    1
+                                }
+                                Ok(jwks_resp) => match jwks_resp.text().await {
+                                    Err(e) => {
+                                        eprintln!("{} Failed to read JWKS response: {}", "✖".red(), e);
+                                        1
+                                    }
+                                    Ok(jwks_text) => {
+                                        if let Err(e) = std::fs::write(&output, &jwks_text) {
+                                            eprintln!("{} Failed to write JWKS to {}: {}", "✖".red(), output, e);
+                                            1
+                                        } else {
+                                            println!("✓ Exported JWKS keys to {}", output);
+                                            0
+                                        }
+                                    }
+                                },
+                            },
+                        },
+                    },
+                }
+            }
+        },
+        Commands::License { command } => match command {
+            cli::LicenseCommands::Keygen { output } => {
+                match agentwall::license::generate_keypair(Path::new(&output)) {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        eprintln!("{} {}", "✖".red(), e);
+                        1
+                    }
+                }
+            }
+            cli::LicenseCommands::Generate {
+                org,
+                tier,
+                seats,
+                days,
+                signing_key,
+                features,
+            } => {
+                match agentwall::license::generate_license(
+                    &org,
+                    &tier,
+                    seats,
+                    days,
+                    Path::new(&signing_key),
+                    features,
+                ) {
+                    Ok(jwt) => {
+                        println!("{}", jwt);
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "✖".red(), e);
+                        1
+                    }
+                }
+            }
+        },
+        Commands::Compliance { command } => match command {
+            cli::ComplianceCommands::Report {
+                log_path,
+                format,
+                output,
+            } => {
+                match agentwall::compliance::generate_report(Path::new(&log_path), &format) {
+                    Ok(content) => {
+                        if let Some(out_path) = output {
+                            if let Err(e) = std::fs::write(&out_path, &content) {
+                                eprintln!("{} Failed to write report to {}: {}", "✖".red(), out_path, e);
+                                1
+                            } else {
+                                println!("✓ Wrote compliance report to {}", out_path);
+                                0
+                            }
+                        } else {
+                            println!("{}", content);
+                            0
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "✖".red(), e);
+                        1
+                    }
+                }
+            }
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
         Commands::Status => agentwall::wrap::run_status(),
@@ -294,9 +420,7 @@ async fn main() {
                 1
             }
         },
-    };
-
-    std::process::exit(exit_code);
+    }
 }
 
 fn print_banner() {
@@ -649,7 +773,7 @@ async fn run_start(
                 let license_key = match &caps.license_key {
                     Some(k) => k,
                     None => {
-                        eprintln!("{} spend_caps.enabled requires a valid license_key. Contact Noviq for a license.", "✖".red());
+                        eprintln!("{} spend_caps.enabled requires a valid license_key. Contact Vexa for a license at vexasec.io/pricing.", "✖".red());
                         std::process::exit(1);
                     }
                 };
@@ -695,7 +819,7 @@ async fn run_start(
                                 }),
                             );
                             println!(
-                                "{} License expires in {} days. Renew at noviq.com/license",
+                                "{} License expires in {} days. Renew at vexasec.io/pricing.",
                                 "⚠".yellow(),
                                 days_until_expiry
                             );
@@ -705,7 +829,7 @@ async fn run_start(
                         match e {
                             agentwall::license::LicenseError::Expired { expired_at } => {
                                 eprintln!(
-                                    "{} License expired at {}. Renew at noviq.com/license.",
+                                    "{} License expired at {}. Renew at vexasec.io/pricing.",
                                     "✖".red(),
                                     expired_at
                                 );

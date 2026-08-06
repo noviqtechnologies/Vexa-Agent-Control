@@ -418,10 +418,10 @@ fn compile_policy_yaml(
         .unwrap_or(0);
 
     let (oidc_issuer, oidc_audience, oidc_cache_ttl, group_claim_key) =
-        if let Some(auth_cfg) = policy_file.auth {
+        if let Some(ref auth_cfg) = policy_file.auth {
             (
-                Some(auth_cfg.issuer),
-                Some(auth_cfg.audience),
+                Some(auth_cfg.issuer.clone()),
+                Some(auth_cfg.audience.clone()),
                 auth_cfg.cache_ttl_minutes,
                 "groups".to_string(),
             )
@@ -438,15 +438,37 @@ fn compile_policy_yaml(
             (None, None, None, "groups".to_string())
         };
 
+    let jwks_file = policy_file.auth.as_ref().and_then(|a| a.jwks_file.clone());
+
     let identity_validator = if let (Some(issuer), Some(audience)) = (oidc_issuer, oidc_audience) {
         let final_issuer = issuer_override.unwrap_or(issuer);
-        let validator = super::identity::IdentityValidator::new(
+        let validator = super::identity::IdentityValidator::new_with_file(
             final_issuer,
             audience,
             oidc_cache_ttl,
             group_claim_key,
+            jwks_file,
         );
         validator.clone().start_background_rotation();
+
+        // FR-L07: Soft warning if > 2 OIDC IdPs configured without a Hub license key
+        if std::env::var("AGENTWALL_HUB_LICENSE_KEY").is_err() {
+            if let Some(auth_cfg) = &policy_file.auth {
+                let count = auth_cfg.issuers.as_ref().map(|i| i.len()).unwrap_or(1);
+                if count > 2 {
+                    logging::log_event(
+                        Level::Warn,
+                        "oidc_idp_limit_exceeded_community",
+                        serde_json::json!({
+                            "configured_issuers": count,
+                            "recommendation": "AgentWall Team Community supports 2 IdPs. Upgrade to VexaSec Team for unlimited enterprise SSO.",
+                            "action": "allowed_soft_warning"
+                        }),
+                    );
+                }
+            }
+        }
+
         Some(validator)
     } else {
         if let Some(issuer) = issuer_override {

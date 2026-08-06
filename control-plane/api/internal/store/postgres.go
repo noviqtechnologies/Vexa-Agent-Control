@@ -42,6 +42,20 @@ func (s *Store) UpsertAgent(ctx context.Context, agentID string) error {
 	return err
 }
 
+// CountDistinctAgents returns the total count of registered agents in the fleet.
+func (s *Store) CountDistinctAgents(ctx context.Context) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM agents`).Scan(&count)
+	return count, err
+}
+
+// AgentExists returns true if the specified agentID already exists in the agents table.
+func (s *Store) AgentExists(ctx context.Context, agentID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = $1)`, agentID).Scan(&exists)
+	return exists, err
+}
+
 // InsertEvent persists a redacted event. Caller must UpsertAgent first.
 func (s *Store) InsertEvent(ctx context.Context, e *model.RedactedEvent) error {
 	dlp, _ := json.Marshal(e.DlpFindings)

@@ -66,6 +66,8 @@ pub struct IdentityValidator {
     pub cache_ttl: Duration,
     /// FR-113: The JWT claim key to extract group membership from.
     pub group_claim_key: String,
+    /// Air-gapped local JWKS file path override.
+    pub jwks_file: Option<String>,
 }
 
 impl IdentityValidator {
@@ -74,6 +76,16 @@ impl IdentityValidator {
         audience: String,
         cache_ttl_minutes: Option<u64>,
         group_claim_key: String,
+    ) -> Arc<Self> {
+        Self::new_with_file(issuer, audience, cache_ttl_minutes, group_claim_key, None)
+    }
+
+    pub fn new_with_file(
+        issuer: String,
+        audience: String,
+        cache_ttl_minutes: Option<u64>,
+        group_claim_key: String,
+        jwks_file: Option<String>,
     ) -> Arc<Self> {
         let ttl_secs = cache_ttl_minutes.unwrap_or(15) * 60;
         let keys = DashMap::new();
@@ -94,24 +106,30 @@ impl IdentityValidator {
             client: reqwest::Client::new(),
             cache_ttl: Duration::from_secs(ttl_secs),
             group_claim_key,
+            jwks_file,
         })
     }
 
     /// Start the background JWK rotation task
     pub fn start_background_rotation(self: Arc<Self>) {
         let ttl = self.cache_ttl;
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(ttl).await;
-                if let Err(e) = self.refresh_keys().await {
-                    logging::log_event(
-                        Level::Error,
-                        "jwk_refresh_failed",
-                        serde_json::json!({"issuer": &self.issuer, "error": e.to_string()}),
-                    );
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(ttl).await;
+                    if let Err(e) = self.refresh_keys().await {
+                        logging::log_event(
+                            Level::Warn,
+                            "jwks_background_rotation_error",
+                            serde_json::json!({
+                                "error": e.to_string(),
+                                "issuer": self.issuer,
+                            }),
+                        );
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     async fn refresh_keys(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -119,23 +137,30 @@ impl IdentityValidator {
             return Ok(());
         }
 
-        // 1. Fetch OIDC Configuration
-        let oidc_url = if self.issuer.ends_with('/') {
-            format!("{}.well-known/openid-configuration", self.issuer)
+        // Air-gapped deployment path: read JWKS directly from local disk file
+        let jwks: JwksResponse = if let Some(jwks_path) = &self.jwks_file {
+            let content = std::fs::read_to_string(jwks_path)
+                .map_err(|e| format!("Air-gapped JWKS file error ({}): {}", jwks_path, e))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse JWKS JSON from {}: {}", jwks_path, e))?
         } else {
-            format!("{}/.well-known/openid-configuration", self.issuer)
+            // 1. Fetch OIDC Configuration
+            let oidc_url = if self.issuer.ends_with('/') {
+                format!("{}.well-known/openid-configuration", self.issuer)
+            } else {
+                format!("{}/.well-known/openid-configuration", self.issuer)
+            };
+
+            let oidc_config: OidcConfig = self.client.get(oidc_url).send().await?.json().await?;
+
+            // 2. Fetch JWKS
+            self.client
+                .get(oidc_config.jwks_uri)
+                .send()
+                .await?
+                .json()
+                .await?
         };
-
-        let oidc_config: OidcConfig = self.client.get(oidc_url).send().await?.json().await?;
-
-        // 2. Fetch JWKS
-        let jwks: JwksResponse = self
-            .client
-            .get(oidc_config.jwks_uri)
-            .send()
-            .await?
-            .json()
-            .await?;
 
         // 3. Update Cache
         for key in jwks.keys {
@@ -160,7 +185,7 @@ impl IdentityValidator {
         logging::log_event(
             Level::Info,
             "jwks_rotated",
-            serde_json::json!({"issuer": &self.issuer, "key_count": self.keys.len()}),
+            serde_json::json!({"issuer": &self.issuer, "key_count": self.keys.len(), "airgapped": self.jwks_file.is_some()}),
         );
 
         Ok(())

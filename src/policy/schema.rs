@@ -274,6 +274,8 @@ pub struct AuthConfig {
     pub jwks_uri: String,
     pub audience: String,
     pub issuer: String,
+    pub issuers: Option<Vec<String>>,
+    pub jwks_file: Option<String>,
     pub cache_ttl_minutes: Option<u64>,
 }
 

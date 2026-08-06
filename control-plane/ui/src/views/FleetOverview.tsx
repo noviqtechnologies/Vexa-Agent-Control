@@ -38,6 +38,7 @@ export default function FleetOverview() {
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [heatmap, setHeatmap] = useState<DecisionBreakdown[]>([])
   const [alerts, setAlerts] = useState<RedactedAlert[]>([])
+  const [licenseStatus, setLicenseStatus] = useState<import('../api/client').LicenseStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -46,11 +47,13 @@ export default function FleetOverview() {
       api.listAgents(),
       api.getHeatmap(),
       api.listRecentAlerts(),
-    ]).then(([s, a, h, al]) => {
+      api.getLicenseStatus().catch(() => null),
+    ]).then(([s, a, h, al, lic]) => {
       setStats(s)
       setAgents(a || [])
       setHeatmap(h || [])
       setAlerts(al || [])
+      setLicenseStatus(lic)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -110,6 +113,14 @@ export default function FleetOverview() {
             <div className="stat-value" style={{ color: 'var(--danger)' }}>{stats.critical_alerts}</div>
             <div className="stat-label">Critical</div>
           </div>
+          {licenseStatus && (
+            <div className="card stat-tile">
+              <div className="stat-value" style={{ color: licenseStatus.seats_remaining === 0 ? 'var(--danger)' : 'var(--accent)' }}>
+                {licenseStatus.seats_used} / {licenseStatus.max_seats}
+              </div>
+              <div className="stat-label">Seats Used ({licenseStatus.tier.toUpperCase()})</div>
+            </div>
+          )}
         </div>
       )}
 

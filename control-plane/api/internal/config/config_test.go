@@ -17,7 +17,7 @@ func clearDashboardEnv(t *testing.T) {
 	for _, k := range []string{
 		"DATABASE_URL", "DASHBOARD_PORT", "GATEWAY_SECRET",
 		"OIDC_ISSUER", "OIDC_CLIENT_ID", "DEV_MODE", "ALLOW_DEV_MODE",
-		"POLICY_READ_SECRET", "GATEWAY_URL",
+		"POLICY_READ_SECRET", "GATEWAY_URL", "PROVIDER_KEY_ENCRYPTION_SECRET", "AGENTWALL_HUB_LICENSE_KEY",
 	} {
 		os.Unsetenv(k)
 	}
@@ -25,10 +25,11 @@ func clearDashboardEnv(t *testing.T) {
 
 func productionEnv() map[string]string {
 	return map[string]string{
-		"DATABASE_URL":   "postgres://localhost:5432/test",
-		"GATEWAY_SECRET": "s3cret",
-		"OIDC_ISSUER":    "https://accounts.example.com",
-		"OIDC_CLIENT_ID": "dashboard-client",
+		"DATABASE_URL":                   "postgres://localhost:5432/test",
+		"GATEWAY_SECRET":                 "s3cret",
+		"OIDC_ISSUER":                    "https://accounts.example.com",
+		"OIDC_CLIENT_ID":                "dashboard-client",
+		"PROVIDER_KEY_ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
 }
 
@@ -82,8 +83,9 @@ func TestLoad_MissingGatewaySecret_NonDevMode(t *testing.T) {
 func TestLoad_MissingOIDC_NonDevMode(t *testing.T) {
 	clearDashboardEnv(t)
 	setEnv(t, map[string]string{
-		"DATABASE_URL":   "postgres://localhost:5432/test",
-		"GATEWAY_SECRET": "s3cret",
+		"DATABASE_URL":                   "postgres://localhost:5432/test",
+		"GATEWAY_SECRET":                 "s3cret",
+		"PROVIDER_KEY_ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	})
 
 	cfg, err := Load()

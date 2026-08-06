@@ -6,15 +6,17 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
 type ProviderKeysHandler struct {
-	store DataStore
+	store     DataStore
+	masterKey []byte
 }
 
-func NewProviderKeysHandler(s DataStore) *ProviderKeysHandler {
-	return &ProviderKeysHandler{store: s}
+func NewProviderKeysHandler(s DataStore, masterKey []byte) *ProviderKeysHandler {
+	return &ProviderKeysHandler{store: s, masterKey: masterKey}
 }
 
 // List GET /api/v1/providers/keys
@@ -57,10 +59,17 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 		masked = req.APIKey[:3] + "..."
 	}
 
+	// Encrypt the raw API key using AES-256-GCM before persisting to database
+	encryptedKey, err := crypto.Encrypt(h.masterKey, req.APIKey)
+	if err != nil {
+		http.Error(w, `{"error":"encryption failed"}`, http.StatusInternalServerError)
+		return
+	}
+
 	k := &store.ProviderKey{
 		Provider:        strings.ToLower(req.Provider),
 		APIKeyMasked:    masked,
-		APIKeyEncrypted: req.APIKey, // In a real app, encrypt this before saving to DB
+		APIKeyEncrypted: encryptedKey,
 	}
 
 	if err := h.store.InsertProviderKey(r.Context(), k); err != nil {

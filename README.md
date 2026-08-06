@@ -386,6 +386,11 @@ audit:
 | `AGENTWALL_TLS_CERT` | Path to TLS certificate PEM file (`rustls`) | — |
 | `AGENTWALL_TLS_KEY` | Path to TLS private key PEM file (`rustls`) | — |
 | `AGENTWALL_HITL_SECRET` | Cryptographic HMAC secret for HITL approval callbacks | — |
+| `PROVIDER_KEY_ENCRYPTION_SECRET` | AES-256-GCM 32-byte master key for provider API key storage | — |
+| `AGENTWALL_HUB_LICENSE_KEY` | Ed25519-signed enterprise license JWT for Control Hub | — |
+| `HUB_SIEM_BACKEND` | Centralized SIEM forwarder target (`splunk_hec`, `datadog_logs`, `opensearch`) | — |
+| `HUB_SIEM_ENDPOINT` | Centralized SIEM ingestion URL | — |
+| `HUB_SIEM_TOKEN` | Authentication token for centralized SIEM API | — |
 
 ---
 

@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.19"
+version = "1.0.20"
 edition = "2021"
 description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -67,7 +67,7 @@ jsonwebtoken = "9"
 dashmap = "5"
 
 # Signing (FR-204)
-ed25519-dalek = "2"
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 
 # UUID
 uuid = { version = "1", features = ["v4"] }

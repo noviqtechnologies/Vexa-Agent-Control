@@ -19,6 +19,8 @@ type DataStore interface {
 	ListCredentials(ctx context.Context, agentID string) ([]model.SanitizedCredentialMeta, error)
 
 	UpsertAgent(ctx context.Context, agentID string) error
+	CountDistinctAgents(ctx context.Context) (int, error)
+	AgentExists(ctx context.Context, agentID string) (bool, error)
 	InsertEvent(ctx context.Context, e *model.RedactedEvent) error
 	InsertAlert(ctx context.Context, a *model.RedactedAlert) error
 	UpsertCredential(ctx context.Context, c *model.SanitizedCredentialMeta) error
@@ -48,4 +50,6 @@ type DataStore interface {
 	InsertProviderKey(ctx context.Context, k *store.ProviderKey) error
 	ListProviderKeys(ctx context.Context) ([]store.ProviderKey, error)
 	DeleteProviderKey(ctx context.Context, id string) error
+	GetProviderKeyByProvider(ctx context.Context, provider string) (*store.ProviderKey, error)
 }
+

@@ -33,6 +33,9 @@ type mockStore struct {
 	getThreatSummaryFunc    func(ctx context.Context, hours int) (*store.ThreatSummary, error)
 	getThreatTimelineFunc   func(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error)
 	getTopThreatPatternsFunc func(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error)
+	countDistinctAgentsFunc  func(ctx context.Context) (int, error)
+	agentExistsFunc          func(ctx context.Context, agentID string) (bool, error)
+	getProviderKeyByProviderFunc func(ctx context.Context, provider string) (*store.ProviderKey, error)
 }
 
 func (m *mockStore) GetFleetStats(ctx context.Context) (*store.FleetStats, error) {
@@ -70,6 +73,18 @@ func (m *mockStore) UpsertAgent(ctx context.Context, agentID string) error {
 		return m.upsertAgentFunc(ctx, agentID)
 	}
 	return nil
+}
+func (m *mockStore) CountDistinctAgents(ctx context.Context) (int, error) {
+	if m.countDistinctAgentsFunc != nil {
+		return m.countDistinctAgentsFunc(ctx)
+	}
+	return 0, nil
+}
+func (m *mockStore) AgentExists(ctx context.Context, agentID string) (bool, error) {
+	if m.agentExistsFunc != nil {
+		return m.agentExistsFunc(ctx, agentID)
+	}
+	return false, nil
 }
 func (m *mockStore) InsertEvent(ctx context.Context, e *model.RedactedEvent) error {
 	if m.insertEventFunc != nil {
@@ -167,6 +182,12 @@ func (m *mockStore) ListProviderKeys(ctx context.Context) ([]store.ProviderKey, 
 }
 func (m *mockStore) DeleteProviderKey(ctx context.Context, id string) error {
 	return nil
+}
+func (m *mockStore) GetProviderKeyByProvider(ctx context.Context, provider string) (*store.ProviderKey, error) {
+	if m.getProviderKeyByProviderFunc != nil {
+		return m.getProviderKeyByProviderFunc(ctx, provider)
+	}
+	return nil, nil
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -384,7 +405,7 @@ func TestIngestHandler_PostEvent_Success(t *testing.T) {
 			return nil
 		},
 	}
-	h := NewIngestHandler(ms, sse.NewBroker())
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(validEventJSON()))
 	req.Header.Set("Content-Type", "application/json")
@@ -400,7 +421,7 @@ func TestIngestHandler_PostEvent_Success(t *testing.T) {
 }
 
 func TestIngestHandler_PostEvent_InvalidJSON(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(`{invalid`))
 	rr := httptest.NewRecorder()
@@ -412,7 +433,7 @@ func TestIngestHandler_PostEvent_InvalidJSON(t *testing.T) {
 }
 
 func TestIngestHandler_PostEvent_UnknownFields(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	body := `{"event_id":"evt-1","session_id":"s","agent_id":"a","tool_name":"t","decision":"allowed","secret":"oops"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(body))
@@ -425,7 +446,7 @@ func TestIngestHandler_PostEvent_UnknownFields(t *testing.T) {
 }
 
 func TestIngestHandler_PostEvent_FailsValidation(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	body := `{"event_id":"evt-1","session_id":"s","agent_id":"a","tool_name":"t","decision":"invalid_decision"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(body))
@@ -441,7 +462,7 @@ func TestIngestHandler_PostEvent_UpsertAgentError(t *testing.T) {
 	ms := &mockStore{
 		upsertAgentFunc: func(_ context.Context, _ string) error { return errStore },
 	}
-	h := NewIngestHandler(ms, sse.NewBroker())
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(validEventJSON()))
 	rr := httptest.NewRecorder()
@@ -456,7 +477,7 @@ func TestIngestHandler_PostEvent_InsertEventError(t *testing.T) {
 	ms := &mockStore{
 		insertEventFunc: func(_ context.Context, _ *model.RedactedEvent) error { return errStore },
 	}
-	h := NewIngestHandler(ms, sse.NewBroker())
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", strings.NewReader(validEventJSON()))
 	rr := httptest.NewRecorder()
@@ -472,7 +493,7 @@ func TestIngestHandler_PostAlert_Success(t *testing.T) {
 	ch, cleanup := broker.Subscribe()
 	defer cleanup()
 
-	h := NewIngestHandler(&mockStore{}, broker)
+	h := NewIngestHandler(&mockStore{}, broker, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/alerts", strings.NewReader(validAlertJSON()))
 	req.Header.Set("Content-Type", "application/json")
@@ -495,7 +516,7 @@ func TestIngestHandler_PostAlert_Success(t *testing.T) {
 }
 
 func TestIngestHandler_PostAlert_InvalidJSON(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/alerts", strings.NewReader(`not json`))
 	rr := httptest.NewRecorder()
@@ -507,7 +528,7 @@ func TestIngestHandler_PostAlert_InvalidJSON(t *testing.T) {
 }
 
 func TestIngestHandler_PostAlert_FailsValidation(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	body := `{"alert_id":"","severity":"critical","event":{"event_id":"e","session_id":"s","agent_id":"a","tool_name":"t","decision":"allowed"}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/alerts", strings.NewReader(body))
@@ -527,7 +548,7 @@ func TestIngestHandler_PostCredential_Success(t *testing.T) {
 			return nil
 		},
 	}
-	h := NewIngestHandler(ms, sse.NewBroker())
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/credentials", strings.NewReader(validCredentialJSON()))
 	req.Header.Set("Content-Type", "application/json")
@@ -543,7 +564,7 @@ func TestIngestHandler_PostCredential_Success(t *testing.T) {
 }
 
 func TestIngestHandler_PostCredential_MissingRequiredFields(t *testing.T) {
-	h := NewIngestHandler(&mockStore{}, sse.NewBroker())
+	h := NewIngestHandler(&mockStore{}, sse.NewBroker(), nil)
 
 	tests := []struct {
 		name string

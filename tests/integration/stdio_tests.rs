@@ -10,7 +10,16 @@ async fn test_stdio_bridge() {
 
     // Spawn agentwall in stdio mode
     let mut child = Command::new(bin)
-        .args(["dev", "--stdio", "--mcp-url", "http://127.0.0.1:3000"])
+        .args([
+            "dev",
+            "--stdio",
+            "--mcp-url",
+            "http://127.0.0.1:3000",
+            "--",
+            "python",
+            "-c",
+            "import sys; line = sys.stdin.readline(); print('{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'); sys.stdout.flush()",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

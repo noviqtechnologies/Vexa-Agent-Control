@@ -86,6 +86,8 @@ services:
       # Used by the dashboard to proxy self-healing requests back to the gateway.
       # Uses Docker DNS service name for inter-container communication.
       GATEWAY_URL: "http://gateway:8080"
+      # Master key for AES-256-GCM encryption of provider API keys
+      PROVIDER_KEY_ENCRYPTION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     ports:
       - "8400:8400"
     healthcheck:

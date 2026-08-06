@@ -24,6 +24,7 @@ self_healing:
 auth:
   provider: okta
   jwks_uri: https://your-org.okta.com/oauth2/default/v1/keys
+  jwks_file: /etc/agentwall/jwks.json # Air-gapped deployment path (overrides jwks_uri)
   audience: agentwall
   issuer: https://your-org.okta.com
 

@@ -51,7 +51,7 @@ impl std::fmt::Display for LicenseError {
     }
 }
 
-/// Evaluates Ed25519-signed enterprise license tokens against Noviq public keys.
+/// Evaluates Ed25519-signed enterprise license tokens against Vexa public keys.
 pub struct LicenseValidator {
     decoding_key: DecodingKey,
 }
@@ -59,9 +59,15 @@ pub struct LicenseValidator {
 impl LicenseValidator {
     /// Constructs a `LicenseValidator` using embedded Ed25519 public key bytes.
     pub fn new() -> Result<Self, String> {
-        let public_key_bytes = include_bytes!("../../keys/noviq_license.pub");
+        let public_key_bytes = include_bytes!("../../keys/vexa_license.pub");
         let decoding_key = DecodingKey::from_ed_der(public_key_bytes);
         Ok(Self { decoding_key })
+    }
+
+    /// Constructs a `LicenseValidator` using custom Ed25519 public key bytes.
+    pub fn from_public_key_bytes(bytes: &[u8]) -> Self {
+        let decoding_key = DecodingKey::from_ed_der(bytes);
+        Self { decoding_key }
     }
 
     /// Decodes and verifies the signature and expiry timestamp of a license JWT string.
@@ -122,8 +128,68 @@ pub fn is_license_valid(license_key: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
+    use ed25519_dalek::pkcs8::EncodePrivateKey;
+    use ed25519_dalek::SigningKey;
+    use rand::RngCore;
 
-    // TODO: Write tests with mock ed25519 keys
+    #[test]
+    fn test_license_validator_with_mock_key() {
+        let mut seed = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut seed);
+        let signing_key = SigningKey::from_bytes(&seed);
+        let verifying_key = signing_key.verifying_key();
+
+        let key_pkcs8 = signing_key.to_pkcs8_der().unwrap();
+
+        let validator = LicenseValidator::from_public_key_bytes(&verifying_key.to_bytes());
+
+        let now = Utc::now();
+        let claims = License {
+            org_id: "test-org".to_string(),
+            features: vec!["spend_caps".to_string(), "siem_aggregation".to_string()],
+            issued_at: now,
+            expires_at: now + chrono::Duration::days(30),
+        };
+
+        let mut header = jsonwebtoken::Header::new(Algorithm::EdDSA);
+        header.typ = Some("JWT".to_string());
+        let encoding_key = jsonwebtoken::EncodingKey::from_ed_der(key_pkcs8.as_bytes());
+        let token = jsonwebtoken::encode(&header, &claims, &encoding_key).unwrap();
+
+        let validated = validator.validate(&token).unwrap();
+        assert_eq!(validated.org_id, "test-org");
+        assert!(validator.has_feature(&validated, "spend_caps"));
+        assert!(!validator.has_feature(&validated, "non_existent"));
+    }
+
+    #[test]
+    fn test_expired_license_rejected() {
+        let mut seed = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut seed);
+        let signing_key = SigningKey::from_bytes(&seed);
+        let verifying_key = signing_key.verifying_key();
+
+        let key_pkcs8 = signing_key.to_pkcs8_der().unwrap();
+
+        let validator = LicenseValidator::from_public_key_bytes(&verifying_key.to_bytes());
+
+        let now = Utc::now();
+        let claims = License {
+            org_id: "expired-org".to_string(),
+            features: vec![],
+            issued_at: now - chrono::Duration::days(60),
+            expires_at: now - chrono::Duration::days(30),
+        };
+
+        let mut header = jsonwebtoken::Header::new(Algorithm::EdDSA);
+        header.typ = Some("JWT".to_string());
+        let encoding_key = jsonwebtoken::EncodingKey::from_ed_der(key_pkcs8.as_bytes());
+        let token = jsonwebtoken::encode(&header, &claims, &encoding_key).unwrap();
+
+        match validator.validate(&token) {
+            Err(LicenseError::Expired { .. }) => (),
+            res => panic!("Expected Expired error, got {:?}", res),
+        }
+    }
 }

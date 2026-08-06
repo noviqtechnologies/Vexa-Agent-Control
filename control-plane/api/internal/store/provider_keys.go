@@ -49,3 +49,14 @@ func (s *Store) DeleteProviderKey(ctx context.Context, id string) error {
 	_, err := s.pool.Exec(ctx, q, id)
 	return err
 }
+
+func (s *Store) GetProviderKeyByProvider(ctx context.Context, provider string) (*ProviderKey, error) {
+	q := `SELECT id, provider, api_key_masked, api_key_encrypted, created_at FROM provider_keys WHERE LOWER(provider) = LOWER($1)`
+	var k ProviderKey
+	err := s.pool.QueryRow(ctx, q, provider).Scan(&k.ID, &k.Provider, &k.APIKeyMasked, &k.APIKeyEncrypted, &k.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &k, nil
+}
+

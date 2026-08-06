@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 )
@@ -12,10 +13,14 @@ import (
 type IngestHandler struct {
 	store  DataStore
 	broker *sse.Broker
+	claims *license.Claims
 }
 
-func NewIngestHandler(s DataStore, b *sse.Broker) *IngestHandler {
-	return &IngestHandler{store: s, broker: b}
+func NewIngestHandler(s DataStore, b *sse.Broker, c *license.Claims) *IngestHandler {
+	if c == nil {
+		c = license.CommunityClaims()
+	}
+	return &IngestHandler{store: s, broker: b, claims: c}
 }
 
 // PostEvent handles POST /api/v1/ingest/events from the gateway.
@@ -35,6 +40,26 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	// Seat enforcement check: reject new agent registrations if seat cap reached
+	if h.claims != nil && h.claims.MaxSeats > 0 {
+		exists, err := h.store.AgentExists(ctx, event.AgentID)
+		if err == nil && !exists {
+			count, err := h.store.CountDistinctAgents(ctx)
+			if err == nil && count >= h.claims.MaxSeats {
+				log.Printf("seat limit reached (%d/%d), rejecting new agent %s", count, h.claims.MaxSeats, event.AgentID)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error":     "seat_limit_exceeded",
+					"max_seats": h.claims.MaxSeats,
+					"current":   count,
+				})
+				return
+			}
+		}
+	}
+
 	if err := h.store.UpsertAgent(ctx, event.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)

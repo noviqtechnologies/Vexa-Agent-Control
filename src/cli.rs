@@ -40,7 +40,7 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         no_browser: bool,
 
-        /// Enable active enforcement (FR-13 injection blocking, DLP blocking).
+        /// Enable active enforcement (prompt injection blocking, DLP blocking).
         /// By default dev runs in observation-only (shadow) mode.
         /// Pass --enforce to test blocking behaviour without a full `start` deployment.
         #[arg(long, default_value_t = false)]
@@ -131,7 +131,7 @@ pub enum Commands {
         #[arg(long)]
         rate_limit: Option<u32>,
 
-        /// OIDC issuer URL for identity binding (FR-202). Required for enterprise deployments.
+        /// OIDC issuer URL for identity binding. Required for enterprise deployments.
         #[arg(long, env = "AGENTWALL_OIDC_ISSUER")]
         oidc_issuer: Option<String>,
 
@@ -147,61 +147,61 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         strict: bool,
 
-        /// Enable response scanning for secret detection (FR-303b)
+        /// Enable response scanning for secret detection
         #[arg(long, default_value_t = false)]
         scan_responses: bool,
 
-        /// Block entire response on secret detection instead of redacting (FR-303b)
+        /// Block entire response on secret detection instead of redacting
         #[arg(long, default_value_t = false)]
         block_on_secrets: bool,
 
-        /// Maximum response size to scan in bytes (FR-303b, default: 1MB)
+        /// Maximum response size to scan in bytes (default: 1MB)
         #[arg(long, default_value_t = 1048576)]
         max_scan_bytes: usize,
 
-        // ── FR-104: SIEM Export ────────────────────────────────────────────
-        /// SIEM backend to export audit events to (FR-104).
+        // ── SIEM Export ────────────────────────────────────────────
+        /// SIEM backend to export audit events to.
         /// Supported values: splunk | datadog | opensearch | local
         /// Use 'local' (default) for disk-only operation without network export.
         #[arg(long, env = "AGENTWALL_SIEM_BACKEND", default_value = "local")]
         siem_backend: String,
 
-        /// SIEM ingestion endpoint URL (FR-104).
+        /// SIEM ingestion endpoint URL.
         /// Splunk:     https://splunk.corp.com:8088/services/collector/event
         /// Datadog:    https://http-intake.logs.datadoghq.com/api/v2/logs
         /// OpenSearch: https://opensearch.corp.com/agentwall-logs/_doc
         #[arg(long, env = "AGENTWALL_SIEM_ENDPOINT", default_value = "")]
         siem_endpoint: String,
 
-        /// SIEM authentication token (FR-104).
+        /// SIEM authentication token.
         /// Splunk: HEC token. Datadog: API key. OpenSearch: 'user:password' or Bearer token.
         #[arg(long, env = "AGENTWALL_SIEM_TOKEN", default_value = "")]
         siem_token: String,
 
-        /// SIEM export per-request timeout in seconds (FR-104, default: 2).
+        /// SIEM export per-request timeout in seconds (default: 2).
         /// Tool calls are not blocked beyond this timeout; SIEM failures fall back to local disk.
         #[arg(long, env = "AGENTWALL_SIEM_TIMEOUT", default_value_t = 2)]
         siem_timeout_secs: u64,
 
-        /// Include raw tool call parameters in the audit log (FR-104).
+        /// Include raw tool call parameters in the audit log.
         /// WARNING: may expose PII or secrets. Only enable in dedicated secure logging environments.
         /// Default: params are hashed (SHA-256) rather than stored in plaintext.
         #[arg(long, env = "AGENTWALL_INCLUDE_PARAMS", default_value_t = false)]
         include_params: bool,
 
-        /// Enable shadow mode (FR-2): observe all traffic without enforcement.
+        /// Enable shadow mode: observe all traffic without enforcement.
         /// All tool calls are forwarded unconditionally and logged to SQLite.
         /// Intended for audit/baselining before enabling enforcement.
         #[arg(long, env = "AGENTWALL_SHADOW_MODE", default_value_t = false)]
         shadow_mode: bool,
 
-        /// FR-5 v2.0: Upgrade credential scope mismatches from WARN to DENY.
+        /// Upgrade credential scope mismatches from WARN to DENY.
         ///
         /// When set, tool calls from agents that do not present the required
         /// X-AgentWall-Credential-Scope header (or present insufficient scopes)
         /// will be hard-denied with a 403 error instead of logged as a warning.
         ///
-        /// Requires FR-22 (Agent Identity Platform) for full scope validation.
+        /// Requires Agent Identity Platform for full scope validation.
         /// Default: false (WARN mode — log only, permit the call).
         #[arg(
             long,
@@ -210,8 +210,8 @@ pub enum Commands {
         )]
         strict_credential_scope: bool,
 
-        // ── FR-5 §5.5.6: TLS Configuration ─────────────────────────────────
-        /// TLS certificate chain PEM file for HTTPS listener (FR-5 §5.5.6).
+        // ── TLS Configuration ─────────────────────────────────
+        /// TLS certificate chain PEM file for HTTPS listener.
         ///
         /// The file should contain the leaf certificate first, followed by any
         /// intermediate CA certificates. Both --tls-cert and --tls-key must be
@@ -222,7 +222,7 @@ pub enum Commands {
         #[arg(long, env = "AGENTWALL_TLS_CERT")]
         tls_cert: Option<String>,
 
-        /// TLS private key PEM file for HTTPS listener (FR-5 §5.5.6).
+        /// TLS private key PEM file for HTTPS listener.
         ///
         /// Accepts PKCS#8 (BEGIN PRIVATE KEY), RSA (BEGIN RSA PRIVATE KEY),
         /// or EC (BEGIN EC PRIVATE KEY) formats.
@@ -236,7 +236,7 @@ pub enum Commands {
         centralized: bool,
     },
 
-    /// Validate a policy against a gateway instance using fixture test calls (FR-204)
+    /// Validate a policy against a gateway instance using fixture test calls
     ///
     /// ## v6.1 Behavior
     ///
@@ -268,7 +268,7 @@ pub enum Commands {
         oidc_token: Option<String>,
     },
 
-    /// Validate and sign a policy for production (FR-204)
+    /// Validate and sign a policy for production
     Promote {
         /// YAML policy file to promote
         #[arg(long)]
@@ -285,7 +285,7 @@ pub enum Commands {
         /// Audit log file path
         log_path: String,
 
-        /// Optional path to HMAC signing key file for full payload verification (ADR-007)
+        /// Optional path to HMAC signing key file for full payload verification
         #[arg(long, env = "AGENTWALL_KEY_FILE")]
         key_file: Option<String>,
     },
@@ -307,12 +307,12 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         report_include_params: bool,
 
-        /// Generate a Risk Delta summary report of hypothetical blocks/redactions from shadow mode (FR-301)
+        /// Generate a Risk Delta summary report of hypothetical blocks/redactions from shadow mode
         #[arg(long, default_value_t = false)]
         risk: bool,
     },
 
-    /// Run Vexa security scanner against local MCP server configurations (FR-502)
+    /// Run Vexa security scanner against local MCP server configurations
     Scan {
         /// Target policy or MCP configuration YAML file path
         #[arg(long, default_value = "agentwall-policy.yaml")]
@@ -323,7 +323,7 @@ pub enum Commands {
         format: String,
     },
 
-    /// Generate a YAML security policy draft from observed shadow-mode traffic (FR-4)
+    /// Generate a YAML security policy draft from observed shadow-mode traffic
     ///
     /// Reads all tool-call events recorded by `agentwall dev` (shadow mode) from the
     /// local SQLite database and produces a lint-passing `agentwall-policy.yaml` draft.
@@ -341,7 +341,7 @@ pub enum Commands {
         #[arg(long, default_value = "agentwall-policy.yaml")]
         output: String,
 
-        /// Decay window in days for self-healing behavioral learning (FR-4)
+        /// Decay window in days for self-healing behavioral learning
         #[arg(long, default_value_t = 30)]
         decay_window: u32,
     },
@@ -351,13 +351,25 @@ pub enum Commands {
         target: Option<InitTarget>,
     },
 
-    /// Agent Identity & Credential Governance (FR-22)
+    /// Agent Identity & Credential Governance
     Identity {
         #[command(subcommand)]
         command: IdentityCommands,
     },
 
-    /// Automatically wrap an existing agent command with AgentWall (FR-301, FR-302)
+    /// Enterprise License Management & Key Generation
+    License {
+        #[command(subcommand)]
+        command: LicenseCommands,
+    },
+
+    /// Generate compliance reports (SOC 2, ISO 27001, NIST AI RMF)
+    Compliance {
+        #[command(subcommand)]
+        command: ComplianceCommands,
+    },
+
+    /// Automatically wrap an existing agent command with AgentWall
     Wrap {
         /// The command to wrap (e.g. "npx @modelcontextprotocol/server-memory")
         #[arg(long)]
@@ -393,15 +405,15 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         strict: bool,
 
-        /// Enable response scanning for secret detection (FR-303b)
+        /// Enable response scanning for secret detection
         #[arg(long, default_value_t = false)]
         scan_responses: bool,
 
-        /// Block entire response on secret detection instead of redacting (FR-303b)
+        /// Block entire response on secret detection instead of redacting
         #[arg(long, default_value_t = false)]
         block_on_secrets: bool,
 
-        /// Maximum response size to scan in bytes (FR-303b, default: 1MB)
+        /// Maximum response size to scan in bytes (default: 1MB)
         #[arg(long, default_value_t = 1048576)]
         max_scan_bytes: usize,
 
@@ -417,7 +429,7 @@ pub enum Commands {
         target: UnwrapTarget,
     },
 
-    /// Internal command used by Claude Desktop to proxy tool calls (FR-304)
+    /// Internal command used by Claude Desktop to proxy tool calls
     #[command(name = "stdio-proxy", hide = true)]
     StdioProxy {
         /// Trailing arguments: -- <command> <args...>
@@ -437,7 +449,7 @@ pub enum Commands {
         max_scan_bytes: usize,
     },
 
-    /// Validate a tool call payload against a policy file locally (FR-202)
+    /// Validate a tool call payload against a policy file locally
     Validate {
         /// YAML policy file path
         #[arg(long)]
@@ -452,7 +464,7 @@ pub enum Commands {
         payload: String,
     },
 
-    /// Lint a policy YAML file for schema and security warnings (FR-203)
+    /// Lint a policy YAML file for schema and security warnings
     Lint {
         /// YAML policy file path
         policy: String,
@@ -491,13 +503,13 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum WrapTarget {
-    /// Wrap Claude Desktop MCP servers with AgentWall (FR-304)
+    /// Wrap Claude Desktop MCP servers with AgentWall
     Claude {
         /// Preview what would change without writing (safe)
         #[arg(long, default_value_t = false)]
         dry_run: bool,
 
-        /// Enable response scanning for secret detection (FR-303b)
+        /// Enable response scanning for secret detection
         #[arg(long, default_value_t = false)]
         scan_responses: bool,
 
@@ -544,7 +556,7 @@ pub enum WrapTarget {
 
 #[derive(Subcommand)]
 pub enum UnwrapTarget {
-    /// Restore Claude Desktop config from the most recent AgentWall backup (FR-304)
+    /// Restore Claude Desktop config from the most recent AgentWall backup
     Claude {
         /// Restore even if backup is missing — prints manual cleanup instructions
         #[arg(long, default_value_t = false)]
@@ -697,4 +709,71 @@ pub enum IdentityCommands {
         #[arg(long)]
         credential: String,
     },
+
+    /// Export JWKS keys from an OIDC provider for air-gapped deployment
+    ExportJwks {
+        /// OIDC discovery issuer URL
+        #[arg(long)]
+        issuer: String,
+
+        /// Output path for local jwks.json file
+        #[arg(long, default_value = "jwks.json")]
+        output: String,
+    },
 }
+
+#[derive(Subcommand)]
+pub enum LicenseCommands {
+    /// Generate an Ed25519 signing keypair for license issuance
+    Keygen {
+        /// Output directory to write vexa_license.key and vexa_license.pub
+        #[arg(long, default_value = "./keys")]
+        output: String,
+    },
+
+    /// Issue an Ed25519-signed JWT license token
+    Generate {
+        /// Organization identifier (e.g. "acme-corp")
+        #[arg(long)]
+        org: String,
+
+        /// License tier ("community", "team", "enterprise")
+        #[arg(long, default_value = "team")]
+        tier: String,
+
+        /// Maximum allowed seats / devices
+        #[arg(long, default_value_t = 25)]
+        seats: usize,
+
+        /// License validity period in days
+        #[arg(long, default_value_t = 365)]
+        days: i64,
+
+        /// Path to the Ed25519 private signing key file
+        #[arg(long, default_value = "./keys/vexa_license.key")]
+        signing_key: String,
+
+        /// Optional custom feature flags (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        features: Option<Vec<String>>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ComplianceCommands {
+    /// Generate SOC 2 / ISO 27001 / NIST AI RMF compliance evidence report
+    Report {
+        /// Audit log file path
+        #[arg(long, default_value = "audit.log")]
+        log_path: String,
+
+        /// Output format ("markdown" or "json")
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        /// Output file path (defaults to stdout if omitted)
+        #[arg(long)]
+        output: Option<String>,
+    },
+}
+

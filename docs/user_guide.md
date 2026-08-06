@@ -1394,3 +1394,62 @@ Then click **ADR Benchmark** in the sidebar to view your security score ring and
 
 For the full benchmark reference including all 17 attack categories and scoring methodology, see the [ADR Security Benchmark Guide](adr_benchmark.md).
 
+---
+
+## 11. Air-Gapped Operations, Licensing & Compliance (v2.1)
+
+### Offline Licensing & Key Generation
+AgentWall provides offline Ed25519-signed licensing for Control Hub deployments without external phone-home telemetry:
+
+```bash
+# 1. Generate Ed25519 keypair for license signing
+agentwall license keygen --output ./keys
+
+# 2. Issue a signed JWT license for an organization
+agentwall license generate \
+  --org "acme-corp" \
+  --tier "team" \
+  --seats 25 \
+  --days 365 \
+  --signing-key ./keys/vexa_license.key
+```
+
+Configure `AGENTWALL_HUB_LICENSE_KEY` on the Control Hub API container to enable licensed features and enforce seat limits.
+
+### Air-Gapped OIDC & JWKS Export
+For isolated environments lacking outbound internet connectivity, export JWKS keys from your OIDC provider and load them directly from local disk:
+
+```bash
+# Export JWKS keys from an OIDC provider (run on connected host)
+agentwall identity export-jwks --issuer "https://auth.corp.com" --output ./jwks.json
+```
+
+In your `agentwall-policy.yaml`:
+```yaml
+auth:
+  provider: "okta"
+  issuer: "https://auth.corp.com"
+  audience: "agentwall-prod"
+  jwks_file: "/etc/agentwall/jwks.json" # Bypasses HTTP discovery
+```
+
+### Provider API Key Encryption (AES-256-GCM)
+Provider LLM API keys stored in the Control Hub PostgreSQL database are encrypted at rest using AES-256-GCM with random 12-byte nonces:
+
+```bash
+# Set 32-byte master encryption secret for Control Hub API
+export PROVIDER_KEY_ENCRYPTION_SECRET="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+```
+
+### Automated Compliance Evidence Reporting
+Generate audit evidence reports mapped to SOC 2 Type II, ISO 27001, and NIST AI RMF 1.0:
+
+```bash
+# Print Markdown summary report to stdout
+agentwall compliance report --log audit.log
+
+# Export JSON evidence report for auditors
+agentwall compliance report --log audit.log --format json --output soc2_evidence.json
+```
+
+

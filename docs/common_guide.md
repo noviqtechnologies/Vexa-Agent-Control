@@ -754,6 +754,48 @@ docker build -f Dockerfile.har -t agentwall-har:v2.0 .
 
 ---
 
+## 2.5 CLI Tooling Reference (License & Compliance)
+
+### License Key Tooling (`agentwall license`)
+
+AgentWall Team & Enterprise licensing utilizes Ed25519-signed JWT license tokens.
+
+```bash
+# 1. Generate an Ed25519 signing keypair for license issuance
+agentwall license keygen --output /path/to/license_key
+
+# 2. Generate a signed license JWT token for an organization
+agentwall license generate \
+  --org "AcmeCorp" \
+  --tier "team" \
+  --seats 25 \
+  --days 365 \
+  --signing-key /path/to/license_key.priv \
+  --features spend_caps,siem_aggregation
+```
+
+### Compliance Report Generator (`agentwall compliance`)
+
+Generate automated compliance mapping reports (SOC2, ISO 27001, NIST SP 800-207, EU AI Act, HIPAA) directly from audit logs:
+
+```bash
+# Generate markdown compliance report
+agentwall compliance report --log-path ./audit.log --format markdown --output ./compliance_report.md
+
+# Output JSON report to stdout
+agentwall compliance report --log-path ./audit.log --format json
+```
+
+### Identity JWKS Export (`agentwall identity export-jwks`)
+
+Export public JWKS keys from an OIDC issuer for air-gapped or offline gateway deployments:
+
+```bash
+agentwall identity export-jwks --issuer https://auth.yourorg.com --output ./jwks.json
+```
+
+---
+
 ### OIDC & JWT Authorization Failures
 
 #### Error 401 `IDENTITY_REQUIRED` / `TOKEN_EXPIRED`

@@ -122,7 +122,20 @@ export interface GatewayInfo {
   connected: boolean
 }
 
+export interface LicenseStatus {
+  org_id: string
+  tier: string
+  max_seats: number
+  seats_used: number
+  seats_remaining: number
+  features: string[]
+  expires_at?: string
+}
+
 export const api = {
+  // License
+  getLicenseStatus: () => get<LicenseStatus>('/license/status'),
+
   // Gateways
   listGateways: () => get<{ gateways: GatewayInfo[] }>('/gateways'),
   rotateProviderKey: (provider: string, newKey: string) =>

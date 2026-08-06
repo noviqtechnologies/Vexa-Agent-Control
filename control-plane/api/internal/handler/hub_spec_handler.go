@@ -9,20 +9,23 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
 type HubSpecHandler struct {
-	store  *store.Store
-	broker *sse.Broker
+	store     *store.Store
+	broker    *sse.Broker
+	masterKey []byte
 }
 
-func NewHubSpecHandler(s *store.Store, b *sse.Broker) *HubSpecHandler {
+func NewHubSpecHandler(s *store.Store, b *sse.Broker, masterKey []byte) *HubSpecHandler {
 	return &HubSpecHandler{
-		store:  s,
-		broker: b,
+		store:     s,
+		broker:    b,
+		masterKey: masterKey,
 	}
 }
 
@@ -278,11 +281,32 @@ func (h *HubSpecHandler) GetProviderCredential(w http.ResponseWriter, r *http.Re
 		provider = "openai"
 	}
 
+	var rawKey string
+	if h.store != nil {
+		k, err := h.store.GetProviderKeyByProvider(r.Context(), provider)
+		if err == nil && k != nil && k.APIKeyEncrypted != "" {
+			if crypto.IsEncrypted(k.APIKeyEncrypted) && len(h.masterKey) == 32 {
+				decrypted, err := crypto.Decrypt(h.masterKey, k.APIKeyEncrypted)
+				if err == nil {
+					rawKey = decrypted
+				} else {
+					rawKey = k.APIKeyEncrypted
+				}
+			} else {
+				rawKey = k.APIKeyEncrypted
+			}
+		}
+	}
+
+	if rawKey == "" {
+		rawKey = "test_ciphertext_dummy"
+	}
+
 	resp := map[string]interface{}{
 		"provider":         provider,
 		"credential_id":    fmt.Sprintf("cred-%s-1", provider),
-		"key_ciphertext":   "dGVzdF9jaXBoZXJ0ZXh0X2R1bW15",
-		"key_nonce":        "dGVzdF9ub25jZV9kdW1teQ==",
+		"api_key":          rawKey,
+		"key_ciphertext":   rawKey,
 		"rotation_version": 1,
 	}
 

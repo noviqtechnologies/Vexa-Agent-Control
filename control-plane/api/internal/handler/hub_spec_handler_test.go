@@ -13,7 +13,7 @@ import (
 
 func TestHubSpecHandler_GetBootstrap(t *testing.T) {
 	broker := sse.NewBroker()
-	h := NewHubSpecHandler(nil, broker)
+	h := NewHubSpecHandler(nil, broker, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap?gateway_id=gw-test1", nil)
 	rr := httptest.NewRecorder()
@@ -36,7 +36,7 @@ func TestHubSpecHandler_GetBootstrap(t *testing.T) {
 
 func TestHubSpecHandler_CreatePolicy_ValidYAML(t *testing.T) {
 	broker := sse.NewBroker()
-	h := NewHubSpecHandler(nil, broker)
+	h := NewHubSpecHandler(nil, broker, nil)
 
 	body := map[string]string{
 		"name":           "test-policy",
@@ -64,7 +64,7 @@ func TestHubSpecHandler_CreatePolicy_ValidYAML(t *testing.T) {
 
 func TestHubSpecHandler_CreatePolicy_InvalidYAML(t *testing.T) {
 	broker := sse.NewBroker()
-	h := NewHubSpecHandler(nil, broker)
+	h := NewHubSpecHandler(nil, broker, nil)
 
 	body := map[string]string{
 		"name":           "bad-policy",
@@ -85,7 +85,7 @@ func TestHubSpecHandler_CreatePolicy_InvalidYAML(t *testing.T) {
 
 func TestHubSpecHandler_RotateCredential(t *testing.T) {
 	broker := sse.NewBroker()
-	h := NewHubSpecHandler(nil, broker)
+	h := NewHubSpecHandler(nil, broker, nil)
 
 	body := map[string]string{
 		"provider": "openai",
@@ -111,7 +111,7 @@ func TestHubSpecHandler_RotateCredential(t *testing.T) {
 }
 
 func TestHubSpecHandler_ListGateways(t *testing.T) {
-	h := NewHubSpecHandler(nil, nil)
+	h := NewHubSpecHandler(nil, nil, nil)
 
 	r := chi.NewRouter()
 	r.Get("/api/v1/gateways", h.ListGateways)

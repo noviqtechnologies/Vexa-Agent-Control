@@ -14,6 +14,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/handler"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
@@ -40,7 +41,28 @@ func main() {
 
 	broker := sse.NewBroker()
 
-	ingestH := handler.NewIngestHandler(db, broker)
+	var activeClaims *license.Claims
+	if cfg.LicenseKey != "" {
+		v, err := license.NewValidatorFromEnv()
+		if err == nil {
+			c, err := v.Validate(cfg.LicenseKey)
+			if err == nil {
+				activeClaims = c
+				log.Printf("license verified: org=%s tier=%s seats=%d", c.OrgID, c.Tier, c.MaxSeats)
+			} else {
+				log.Printf("WARNING: license validation failed (%v), falling back to Community mode (10 seats)", err)
+				activeClaims = license.CommunityClaims()
+			}
+		} else {
+			activeClaims = license.CommunityClaims()
+		}
+	} else {
+		log.Println("no AGENTWALL_HUB_LICENSE_KEY provided, running in Community mode (10 seats)")
+		activeClaims = license.CommunityClaims()
+	}
+
+	licenseH := handler.NewLicenseHandler(db, activeClaims)
+	ingestH := handler.NewIngestHandler(db, broker, activeClaims)
 	fleetH := handler.NewFleetHandler(db)
 	identityH := handler.NewIdentityHandler(db)
 	mcpServersH := handler.NewMcpServersHandler(db)
@@ -60,8 +82,8 @@ func main() {
 
 	groupPolicyH := handler.NewHandler(db)
 	gatewayH := handler.NewGatewayHandler()
-	providerKeysH := handler.NewProviderKeysHandler(db)
-	hubSpecH := handler.NewHubSpecHandler(db, broker)
+	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret)
+	hubSpecH := handler.NewHubSpecHandler(db, broker, cfg.ProviderKeyEncryptionSecret)
 
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
@@ -108,6 +130,7 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
 
+		r.Get("/license/status", licenseH.GetStatus)
 		r.Get("/gateways", hubSpecH.ListGateways)
 		r.Get("/fleet/overview", fleetH.GetOverview)
 		r.Get("/fleet/agents", fleetH.ListAgents)
