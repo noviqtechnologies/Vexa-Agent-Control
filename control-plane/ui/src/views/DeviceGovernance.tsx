@@ -52,9 +52,16 @@ export default function DeviceGovernance() {
     }
   }
 
+function generateSecureToken(): string {
+  const bytes = new Uint8Array(16)
+  window.crypto.getRandomValues(bytes)
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+  return `TOK-${hex}`
+}
+
   const handleGenerateToken = async (e: React.FormEvent) => {
     e.preventDefault()
-    const tokenVal = rawTokenValue || `TOK-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+    const tokenVal = rawTokenValue || generateSecureToken()
     try {
       const tok = await createEnrollmentToken(tokenVal, maxUses, ttlHours)
       setGeneratedToken({ ...tok, token_hash: tokenVal })
@@ -79,7 +86,7 @@ export default function DeviceGovernance() {
           className="btn btn-primary"
           onClick={() => {
             setGeneratedToken(null)
-            setRawTokenValue(`TOK-${Math.random().toString(36).substring(2, 10).toUpperCase()}`)
+            setRawTokenValue(generateSecureToken())
             setShowTokenModal(true)
           }}
         >

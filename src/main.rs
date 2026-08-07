@@ -42,13 +42,13 @@ fn main() {
 async fn async_main() -> i32 {
     let cli = Cli::parse();
 
-    let is_dev_stdio = match &cli.command {
+    let is_dev_stdio = match &*cli.command {
         Commands::Dev { stdio, .. } => *stdio,
         _ => false,
     };
 
     let suppress_banner = is_dev_stdio || matches!(
-        &cli.command,
+        &*cli.command,
         Commands::Report { .. }
             | Commands::Test { .. }
             | Commands::Wrap { .. }
@@ -61,44 +61,33 @@ async fn async_main() -> i32 {
         print_banner();
     }
 
-    dispatch_command(Box::new(cli.command)).await
+    dispatch_command(cli.command).await
 }
 
 async fn dispatch_command(command: Box<Commands>) -> i32 {
     match *command {
-        Commands::Wrap {
-            command,
-            auto_detect,
-            policy,
-            dry_run,
-            kill_mode,
-            log_path,
-            balanced: _,
-            strict: _,
-            scan_responses,
-            block_on_secrets,
-            max_scan_bytes,
-            target,
-        } => {
-            if let Some(target) = target {
+        Commands::Wrap(args) => {
+            if args.all {
+                agentwall::wrap::run_wrap_all(args.dry_run, args.scan_responses)
+            } else if let Some(target) = args.target {
                 agentwall::wrap::run_wrap_target(&target)
             } else {
                 run_wrap(
-                    command,
-                    auto_detect,
-                    policy,
-                    dry_run,
-                    kill_mode,
-                    log_path,
-                    scan_responses,
-                    block_on_secrets,
-                    max_scan_bytes,
+                    args.command,
+                    args.auto_detect,
+                    args.policy,
+                    args.dry_run,
+                    args.kill_mode,
+                    args.log_path,
+                    args.scan_responses,
+                    args.block_on_secrets,
+                    args.max_scan_bytes,
                 )
                 .await
             }
         }
         Commands::Enroll { token, hub_url } => {
-            agentwall::identity::device::run_enroll(&token, &hub_url)
+            agentwall::identity::device::run_enroll(&token, &hub_url).await
         }
         Commands::Service { action } => {
             let act = match action {
@@ -118,61 +107,33 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             };
             agentwall::service::run_service(act)
         }
-        Commands::Start {
-            policy,
-            listen,
-            log_path,
-            mcp_url,
-            agent_pid,
-            agent_pid_file,
-            kill_mode,
-            dry_run,
-            rate_limit,
-            log_max_bytes,
-            oidc_issuer,
-            report_path,
-            balanced: _,
-            strict: _,
-            scan_responses,
-            block_on_secrets,
-            max_scan_bytes,
-            siem_backend,
-            siem_endpoint,
-            siem_token,
-            siem_timeout_secs,
-            include_params,
-            shadow_mode,
-            strict_credential_scope,
-            tls_cert,
-            tls_key,
-            centralized,
-        } => {
+        Commands::Start(args) => {
             run_start(
-                policy,
-                listen,
-                log_path,
-                mcp_url,
-                agent_pid,
-                agent_pid_file,
-                kill_mode,
-                dry_run,
-                rate_limit,
-                log_max_bytes,
-                oidc_issuer,
-                report_path,
-                scan_responses,
-                block_on_secrets,
-                max_scan_bytes,
-                siem_backend,
-                siem_endpoint,
-                siem_token,
-                siem_timeout_secs,
-                include_params,
-                shadow_mode,
-                strict_credential_scope,
-                tls_cert,
-                tls_key,
-                centralized,
+                args.policy,
+                args.listen,
+                args.log_path,
+                args.mcp_url,
+                args.agent_pid,
+                args.agent_pid_file,
+                args.kill_mode,
+                args.dry_run,
+                args.rate_limit,
+                args.log_max_bytes,
+                args.oidc_issuer,
+                args.report_path,
+                args.scan_responses,
+                args.block_on_secrets,
+                args.max_scan_bytes,
+                args.siem_backend,
+                args.siem_endpoint,
+                args.siem_token,
+                args.siem_timeout_secs,
+                args.include_params,
+                args.shadow_mode,
+                args.strict_credential_scope,
+                args.tls_cert,
+                args.tls_key,
+                args.centralized,
             )
             .await
         }
@@ -445,13 +406,14 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
 }
 
 fn print_banner() {
-    println!("{}", "=".repeat(60).cyan());
+    let version = env!("CARGO_PKG_VERSION");
+    println!("┌────────────────────────────────────────────────────────────┐");
     println!(
-        "{} {}",
-        " VEXA AgentWall ".bold().white().on_cyan(),
-        "MCP Security Proxy".cyan()
+        "│  {}  {}  │",
+        "AgentWall Enterprise MCP Gateway".bold().cyan(),
+        format!("v{}", version).dimmed()
     );
-    println!("{}", "=".repeat(60).cyan());
+    println!("└────────────────────────────────────────────────────────────┘");
 }
 
 #[allow(deprecated)]

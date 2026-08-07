@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Box<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -100,158 +100,10 @@ pub enum Commands {
     },
 
     /// Run the gateway server
-    Start {
-        /// YAML policy file path
-        #[arg(long, env = "AGENTWALL_POLICY_PATH")]
-        policy: Option<String>,
+    Start(Box<StartArgs>),
 
-        /// Gateway listen address
-        #[arg(long, env = "AGENTWALL_LISTEN", default_value = "127.0.0.1:8080")]
-        listen: String,
-
-        /// Audit log output path
-        #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
-        log_path: String,
-
-        /// Upstream MCP server URL
-        #[arg(
-            long,
-            env = "AGENTWALL_MCP_URL",
-            default_value = "http://127.0.0.1:3000"
-        )]
-        mcp_url: String,
-
-        /// Agent PID (ignored in v6.1 — process kill is removed)
-        #[arg(long, env = "AGENTWALL_AGENT_PID", hide = true)]
-        agent_pid: Option<u32>,
-
-        /// Read agent PID from file (ignored in v6.1 — process kill is removed)
-        #[arg(long, env = "AGENTWALL_AGENT_PID_FILE", hide = true)]
-        agent_pid_file: Option<String>,
-
-        /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
-        ///
-        /// 'process' and 'both' have been removed. The gateway enforces security at
-        /// the MCP connection boundary. Remove this flag; 'connection' is the default.
-        #[arg(long, default_value = "connection")]
-        kill_mode: String,
-
-        /// Maximum log size in bytes before rotation (default 100MB)
-        #[arg(long, default_value_t = 104857600)]
-        log_max_bytes: u64,
-
-        /// Dry-run mode: log violations but allow calls
-        #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
-        dry_run: bool,
-
-        /// Max tool calls per second (overrides policy)
-        #[arg(long)]
-        rate_limit: Option<u32>,
-
-        /// OIDC issuer URL for identity binding. Required for enterprise deployments.
-        #[arg(long, env = "AGENTWALL_OIDC_ISSUER")]
-        oidc_issuer: Option<String>,
-
-        /// Write session report on shutdown
-        #[arg(long, env = "AGENTWALL_REPORT_PATH")]
-        report_path: Option<String>,
-
-        /// Enable balanced security profile (placeholder for future graduated security)
-        #[arg(long, default_value_t = false)]
-        balanced: bool,
-
-        /// Enable strict security profile (placeholder for future graduated security)
-        #[arg(long, default_value_t = false)]
-        strict: bool,
-
-        /// Enable response scanning for secret detection
-        #[arg(long, default_value_t = false)]
-        scan_responses: bool,
-
-        /// Block entire response on secret detection instead of redacting
-        #[arg(long, default_value_t = false)]
-        block_on_secrets: bool,
-
-        /// Maximum response size to scan in bytes (default: 1MB)
-        #[arg(long, default_value_t = 1048576)]
-        max_scan_bytes: usize,
-
-        // ── SIEM Export ────────────────────────────────────────────
-        /// SIEM backend to export audit events to.
-        /// Supported values: splunk | datadog | opensearch | local
-        /// Use 'local' (default) for disk-only operation without network export.
-        #[arg(long, env = "AGENTWALL_SIEM_BACKEND", default_value = "local")]
-        siem_backend: String,
-
-        /// SIEM ingestion endpoint URL.
-        /// Splunk:     https://splunk.corp.com:8088/services/collector/event
-        /// Datadog:    https://http-intake.logs.datadoghq.com/api/v2/logs
-        /// OpenSearch: https://opensearch.corp.com/agentwall-logs/_doc
-        #[arg(long, env = "AGENTWALL_SIEM_ENDPOINT", default_value = "")]
-        siem_endpoint: String,
-
-        /// SIEM authentication token.
-        /// Splunk: HEC token. Datadog: API key. OpenSearch: 'user:password' or Bearer token.
-        #[arg(long, env = "AGENTWALL_SIEM_TOKEN", default_value = "")]
-        siem_token: String,
-
-        /// SIEM export per-request timeout in seconds (default: 2).
-        /// Tool calls are not blocked beyond this timeout; SIEM failures fall back to local disk.
-        #[arg(long, env = "AGENTWALL_SIEM_TIMEOUT", default_value_t = 2)]
-        siem_timeout_secs: u64,
-
-        /// Include raw tool call parameters in the audit log.
-        /// WARNING: may expose PII or secrets. Only enable in dedicated secure logging environments.
-        /// Default: params are hashed (SHA-256) rather than stored in plaintext.
-        #[arg(long, env = "AGENTWALL_INCLUDE_PARAMS", default_value_t = false)]
-        include_params: bool,
-
-        /// Enable shadow mode: observe all traffic without enforcement.
-        /// All tool calls are forwarded unconditionally and logged to SQLite.
-        /// Intended for audit/baselining before enabling enforcement.
-        #[arg(long, env = "AGENTWALL_SHADOW_MODE", default_value_t = false)]
-        shadow_mode: bool,
-
-        /// Upgrade credential scope mismatches from WARN to DENY.
-        ///
-        /// When set, tool calls from agents that do not present the required
-        /// X-AgentWall-Credential-Scope header (or present insufficient scopes)
-        /// will be hard-denied with a 403 error instead of logged as a warning.
-        ///
-        /// Requires Agent Identity Platform for full scope validation.
-        /// Default: false (WARN mode — log only, permit the call).
-        #[arg(
-            long,
-            env = "AGENTWALL_STRICT_CREDENTIAL_SCOPE",
-            default_value_t = false
-        )]
-        strict_credential_scope: bool,
-
-        // ── TLS Configuration ─────────────────────────────────
-        /// TLS certificate chain PEM file for HTTPS listener.
-        ///
-        /// The file should contain the leaf certificate first, followed by any
-        /// intermediate CA certificates. Both --tls-cert and --tls-key must be
-        /// provided together; the gateway fails to start if only one is given.
-        ///
-        /// When omitted, the gateway listens on plain HTTP (not recommended for
-        /// production — use a reverse proxy or provide certs directly).
-        #[arg(long, env = "AGENTWALL_TLS_CERT")]
-        tls_cert: Option<String>,
-
-        /// TLS private key PEM file for HTTPS listener.
-        ///
-        /// Accepts PKCS#8 (BEGIN PRIVATE KEY), RSA (BEGIN RSA PRIVATE KEY),
-        /// or EC (BEGIN EC PRIVATE KEY) formats.
-        ///
-        /// Must be provided together with --tls-cert.
-        #[arg(long, env = "AGENTWALL_TLS_KEY")]
-        tls_key: Option<String>,
-
-        /// Run in centralized mode: binds to 0.0.0.0 by default, enables Hub credential management.
-        #[arg(long, env = "AGENTWALL_CENTRALIZED", default_value_t = false)]
-        centralized: bool,
-    },
+    /// Automatically wrap an existing agent command with AgentWall
+    Wrap(Box<WrapArgs>),
 
     /// Validate a policy against a gateway instance using fixture test calls
     ///
@@ -386,59 +238,6 @@ pub enum Commands {
         command: ComplianceCommands,
     },
 
-    /// Automatically wrap an existing agent command with AgentWall
-    Wrap {
-        /// The command to wrap (e.g. "npx @modelcontextprotocol/server-memory")
-        #[arg(long)]
-        command: Option<String>,
-
-        /// Automatically detect and wrap known agents
-        #[arg(long, default_value_t = false)]
-        auto_detect: bool,
-
-        /// YAML policy file path
-        #[arg(long)]
-        policy: Option<String>,
-
-        /// Dry-run mode: log violations but allow calls
-        #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
-        dry_run: bool,
-
-        /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
-        ///
-        /// 'process' and 'both' have been removed. Remove this flag from your configuration.
-        #[arg(long, default_value = "connection")]
-        kill_mode: String,
-
-        /// Audit log output path
-        #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
-        log_path: String,
-
-        /// Enable balanced security profile (placeholder for future graduated security)
-        #[arg(long, default_value_t = false)]
-        balanced: bool,
-
-        /// Enable strict security profile (placeholder for future graduated security)
-        #[arg(long, default_value_t = false)]
-        strict: bool,
-
-        /// Enable response scanning for secret detection
-        #[arg(long, default_value_t = false)]
-        scan_responses: bool,
-
-        /// Block entire response on secret detection instead of redacting
-        #[arg(long, default_value_t = false)]
-        block_on_secrets: bool,
-
-        /// Maximum response size to scan in bytes (default: 1MB)
-        #[arg(long, default_value_t = 1048576)]
-        max_scan_bytes: usize,
-
-        /// Target to wrap (e.g. claude)
-        #[command(subcommand)]
-        target: Option<WrapTarget>,
-    },
-
     /// Restore AgentWall wrappers
     Unwrap {
         /// Target to unwrap (e.g. claude)
@@ -518,7 +317,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum WrapTarget {
     /// Wrap Claude Desktop MCP servers with AgentWall
     Claude {
@@ -569,6 +368,11 @@ pub enum WrapTarget {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
+    /// Wrap ChatGPT Codex with AgentWall
+    Codex {
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -614,6 +418,11 @@ pub enum UnwrapTarget {
         #[arg(long, default_value_t = false)]
         force: bool,
     },
+    /// Restore Codex config
+    Codex {
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -628,20 +437,22 @@ pub enum WatchTarget {
         #[arg(long, default_value_t = false)]
         block_on_secrets: bool,
     },
-    /// Watch Cursor IDE config (⚠ path unverified — excluded from --all)
+    /// Watch Cursor IDE config
     Cursor,
-    /// Watch VS Code config (⚠ path unverified — excluded from --all)
+    /// Watch VS Code config
     Vscode,
-    /// Watch JetBrains config (⚠ path unverified — excluded from --all)
+    /// Watch JetBrains config
     Jetbrains,
-    /// Watch Zed Editor config (⚠ path unverified — excluded from --all)
+    /// Watch Zed Editor config
     Zed,
-    /// Watch Cline extension config (⚠ path unverified — excluded from --all)
+    /// Watch Cline extension config
     Cline,
-    /// Watch OpenCode config (⚠ path unverified — excluded from --all)
+    /// Watch OpenCode config
     Opencode,
-    /// Watch Antigravity IDE config (⚠ path unverified — excluded from --all)
+    /// Watch Antigravity IDE config
     Antigravity,
+    /// Watch Codex config
+    Codex,
 }
 
 #[derive(Subcommand)]
@@ -814,5 +625,179 @@ pub enum ServiceCliAction {
     Uninstall,
     /// Display current OS background service status
     Status,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct StartArgs {
+    /// YAML policy file path
+    #[arg(long, env = "AGENTWALL_POLICY_PATH")]
+    pub policy: Option<String>,
+
+    /// Gateway listen address
+    #[arg(long, env = "AGENTWALL_LISTEN", default_value = "127.0.0.1:8080")]
+    pub listen: String,
+
+    /// Audit log output path
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    pub log_path: String,
+
+    /// Upstream MCP server URL
+    #[arg(
+        long,
+        env = "AGENTWALL_MCP_URL",
+        default_value = "http://127.0.0.1:3000"
+    )]
+    pub mcp_url: String,
+
+    /// Agent PID (ignored in v6.1 — process kill is removed)
+    #[arg(long, env = "AGENTWALL_AGENT_PID", hide = true)]
+    pub agent_pid: Option<u32>,
+
+    /// Read agent PID from file (ignored in v6.1 — process kill is removed)
+    #[arg(long, env = "AGENTWALL_AGENT_PID_FILE", hide = true)]
+    pub agent_pid_file: Option<String>,
+
+    /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
+    #[arg(long, default_value = "connection")]
+    pub kill_mode: String,
+
+    /// Maximum log size in bytes before rotation (default 100MB)
+    #[arg(long, default_value_t = 104857600)]
+    pub log_max_bytes: u64,
+
+    /// Dry-run mode: log violations but allow calls
+    #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
+    pub dry_run: bool,
+
+    /// Max tool calls per second (overrides policy)
+    #[arg(long)]
+    pub rate_limit: Option<u32>,
+
+    /// OIDC issuer URL for identity binding. Required for enterprise deployments.
+    #[arg(long, env = "AGENTWALL_OIDC_ISSUER")]
+    pub oidc_issuer: Option<String>,
+
+    /// Write session report on shutdown
+    #[arg(long, env = "AGENTWALL_REPORT_PATH")]
+    pub report_path: Option<String>,
+
+    /// Enable balanced security profile
+    #[arg(long, default_value_t = false)]
+    pub balanced: bool,
+
+    /// Enable strict security profile
+    #[arg(long, default_value_t = false)]
+    pub strict: bool,
+
+    /// Enable response scanning for secret detection
+    #[arg(long, default_value_t = false)]
+    pub scan_responses: bool,
+
+    /// Block entire response on secret detection instead of redacting
+    #[arg(long, default_value_t = false)]
+    pub block_on_secrets: bool,
+
+    /// Maximum response size to scan in bytes (default: 1MB)
+    #[arg(long, default_value_t = 1048576)]
+    pub max_scan_bytes: usize,
+
+    /// SIEM backend to export audit events to
+    #[arg(long, env = "AGENTWALL_SIEM_BACKEND", default_value = "local")]
+    pub siem_backend: String,
+
+    /// SIEM ingestion endpoint URL
+    #[arg(long, env = "AGENTWALL_SIEM_ENDPOINT", default_value = "")]
+    pub siem_endpoint: String,
+
+    /// SIEM authentication token
+    #[arg(long, env = "AGENTWALL_SIEM_TOKEN", default_value = "")]
+    pub siem_token: String,
+
+    /// SIEM export per-request timeout in seconds (default: 2)
+    #[arg(long, env = "AGENTWALL_SIEM_TIMEOUT", default_value_t = 2)]
+    pub siem_timeout_secs: u64,
+
+    /// Include raw tool call parameters in the audit log
+    #[arg(long, env = "AGENTWALL_INCLUDE_PARAMS", default_value_t = false)]
+    pub include_params: bool,
+
+    /// Enable shadow mode: observe all traffic without enforcement
+    #[arg(long, env = "AGENTWALL_SHADOW_MODE", default_value_t = false)]
+    pub shadow_mode: bool,
+
+    /// Upgrade credential scope mismatches from WARN to DENY
+    #[arg(
+        long,
+        env = "AGENTWALL_STRICT_CREDENTIAL_SCOPE",
+        default_value_t = false
+    )]
+    pub strict_credential_scope: bool,
+
+    /// TLS certificate chain PEM file for HTTPS listener
+    #[arg(long, env = "AGENTWALL_TLS_CERT")]
+    pub tls_cert: Option<String>,
+
+    /// TLS private key PEM file for HTTPS listener
+    #[arg(long, env = "AGENTWALL_TLS_KEY")]
+    pub tls_key: Option<String>,
+
+    /// Run in centralized mode: binds to 0.0.0.0 by default, enables Hub credential management.
+    #[arg(long, env = "AGENTWALL_CENTRALIZED", default_value_t = false)]
+    pub centralized: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WrapArgs {
+    /// The command to wrap (e.g. "npx @modelcontextprotocol/server-memory")
+    #[arg(long)]
+    pub command: Option<String>,
+
+    /// Automatically detect and wrap known agents
+    #[arg(long, default_value_t = false)]
+    pub auto_detect: bool,
+
+    /// Wrap all installed IDE configurations at once
+    #[arg(long, default_value_t = false)]
+    pub all: bool,
+
+    /// YAML policy file path
+    #[arg(long)]
+    pub policy: Option<String>,
+
+    /// Dry-run mode: log violations but allow calls
+    #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
+    pub dry_run: bool,
+
+    /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
+    #[arg(long, default_value = "connection")]
+    pub kill_mode: String,
+
+    /// Audit log output path
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    pub log_path: String,
+
+    /// Enable balanced security profile
+    #[arg(long, default_value_t = false)]
+    pub balanced: bool,
+
+    /// Enable strict security profile
+    #[arg(long, default_value_t = false)]
+    pub strict: bool,
+
+    /// Enable response scanning for secret detection
+    #[arg(long, default_value_t = false)]
+    pub scan_responses: bool,
+
+    /// Block entire response on secret detection instead of redacting
+    #[arg(long, default_value_t = false)]
+    pub block_on_secrets: bool,
+
+    /// Maximum response size to scan in bytes (default: 1MB)
+    #[arg(long, default_value_t = 1048576)]
+    pub max_scan_bytes: usize,
+
+    /// Target to wrap (e.g. claude)
+    #[command(subcommand)]
+    pub target: Option<WrapTarget>,
 }
 

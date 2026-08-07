@@ -13,6 +13,7 @@ pub mod transformer;
 pub mod watch;
 
 use crate::cli::{UnwrapTarget, WatchTarget, WrapTarget};
+use colored::*;
 
 /// Errors from wrap/unwrap operations.
 #[derive(Debug)]
@@ -89,15 +90,97 @@ pub fn run_wrap_target(target: &WrapTarget) -> i32 {
         WrapTarget::Antigravity { dry_run } => config_path::antigravity_config_path()
             .and_then(|p| generic_ide::wrap_generic("Antigravity", p, *dry_run))
             .map(|r| generic_ide::print_wrap_summary_generic("Antigravity", &r)),
+        WrapTarget::Codex { dry_run } => config_path::codex_config_path()
+            .and_then(|p| generic_ide::wrap_generic("Codex", p, *dry_run))
+            .map(|r| generic_ide::print_wrap_summary_generic("Codex", &r)),
     };
 
     match result {
         Ok(_) => 0,
+        Err(WrapError::ConfigNotFound(path)) => {
+            // For single target commands, inform user.
+            eprintln!("{} Config file not found: {}", "ℹ".blue(), path);
+            1
+        }
         Err(e) => {
             eprintln!("Error wrapping IDE: {}", e);
             2
         }
     }
+}
+
+/// Executes wrapping for all supported IDE targets.
+pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
+    let targets = vec![
+        ("Claude Desktop", WrapTarget::Claude { dry_run, scan_responses, block_on_secrets: false }),
+        ("Cursor", WrapTarget::Cursor { dry_run }),
+        ("Codex", WrapTarget::Codex { dry_run }),
+        ("VS Code", WrapTarget::Vscode { dry_run }),
+        ("JetBrains", WrapTarget::Jetbrains { dry_run }),
+        ("Zed", WrapTarget::Zed { dry_run }),
+        ("Cline", WrapTarget::Cline { dry_run }),
+        ("OpenCode", WrapTarget::Opencode { dry_run }),
+        ("Antigravity", WrapTarget::Antigravity { dry_run }),
+    ];
+
+    println!("{} Scanning & Wrapping all IDE configurations...", "●".cyan().bold());
+    let mut wrapped_count = 0;
+    let mut already_wrapped_count = 0;
+    let mut not_found_count = 0;
+
+    for (name, target) in targets {
+        let res = match &target {
+            WrapTarget::Claude { dry_run, scan_responses, .. } => {
+                claude::wrap_claude(*dry_run, *scan_responses)
+            }
+            WrapTarget::Cursor { dry_run } => config_path::cursor_config_path()
+                .and_then(|p| generic_ide::wrap_generic("Cursor", p, *dry_run)),
+            WrapTarget::Codex { dry_run } => config_path::codex_config_path()
+                .and_then(|p| generic_ide::wrap_generic("Codex", p, *dry_run)),
+            WrapTarget::Vscode { dry_run } => config_path::vscode_config_path()
+                .and_then(|p| generic_ide::wrap_generic("VS Code", p, *dry_run)),
+            WrapTarget::Jetbrains { dry_run } => config_path::jetbrains_config_path()
+                .and_then(|p| generic_ide::wrap_generic("JetBrains", p, *dry_run)),
+            WrapTarget::Zed { dry_run } => config_path::zed_config_path()
+                .and_then(|p| generic_ide::wrap_generic("Zed", p, *dry_run)),
+            WrapTarget::Cline { dry_run } => config_path::cline_config_path()
+                .and_then(|p| generic_ide::wrap_generic("Cline", p, *dry_run)),
+            WrapTarget::Opencode { dry_run } => config_path::opencode_config_path()
+                .and_then(|p| generic_ide::wrap_generic("OpenCode", p, *dry_run)),
+            WrapTarget::Antigravity { dry_run } => config_path::antigravity_config_path()
+                .and_then(|p| generic_ide::wrap_generic("Antigravity", p, *dry_run)),
+        };
+
+        match res {
+            Ok(r) => {
+                wrapped_count += 1;
+                println!("  ✔ {}: Wrapped {} MCP server(s)", name.bold(), r.servers_wrapped);
+            }
+            Err(WrapError::AlreadyWrapped) => {
+                already_wrapped_count += 1;
+                println!("  ℹ {}: Already wrapped", name.dimmed());
+            }
+            Err(WrapError::NoMcpServers) => {
+                already_wrapped_count += 1;
+                println!("  ℹ {}: Config exists, no mcpServers configured", name.dimmed());
+            }
+            Err(WrapError::ConfigNotFound(_)) => {
+                not_found_count += 1;
+            }
+            Err(e) => {
+                eprintln!("  ✖ {}: {}", name.red(), e);
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "✔ Interception Sweep Complete — Newly Intercepted: {}, Protected Environments: {}, Unconfigured/Not Installed: {}",
+        wrapped_count.to_string().bold(),
+        already_wrapped_count.to_string().bold(),
+        not_found_count.to_string().dimmed()
+    );
+    0
 }
 
 /// Executes the `agentwall unwrap` command for a specific IDE target.
@@ -133,6 +216,9 @@ pub fn run_unwrap_target(target: &UnwrapTarget) -> i32 {
         UnwrapTarget::Antigravity { force } => config_path::antigravity_config_path()
             .and_then(|p| generic_ide::unwrap_generic("Antigravity", p, *force))
             .map(|r| generic_ide::print_unwrap_summary_generic("Antigravity", &r)),
+        UnwrapTarget::Codex { force } => config_path::codex_config_path()
+            .and_then(|p| generic_ide::unwrap_generic("Codex", p, *force))
+            .map(|r| generic_ide::print_unwrap_summary_generic("Codex", &r)),
     };
 
     match result {

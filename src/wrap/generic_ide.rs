@@ -17,79 +17,151 @@ pub fn wrap_generic(
         return Err(WrapError::ConfigNotFound(config_path.display().to_string()));
     }
 
+    let is_toml = config_path.extension().and_then(|e| e.to_str()) == Some("toml");
     let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
-    let config: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
-
-    if config.get("mcpServers").is_none() {
-        return Err(WrapError::NoMcpServers);
-    }
 
     let agentwall_bin = std::env::current_exe()
         .map_err(|e| WrapError::NoBinaryPath(e.to_string()))?
         .to_string_lossy()
         .to_string();
 
-    let servers = config["mcpServers"]
-        .as_object()
-        .ok_or(WrapError::NoMcpServers)?;
-    if !servers.is_empty() && servers.values().all(transformer::is_already_wrapped) {
-        return Err(WrapError::AlreadyWrapped);
-    }
+    if is_toml {
+        let mut toml_val: toml::Value =
+            toml::from_str(&raw).map_err(|e| WrapError::InvalidJson(format!("invalid TOML: {}", e)))?;
 
-    let mut modified = config.clone();
-    let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentwall_bin)?;
+        let table = toml_val
+            .get_mut("mcp_servers")
+            .and_then(|v| v.as_table_mut())
+            .ok_or(WrapError::NoMcpServers)?;
 
-    if dry_run {
-        println!(
-            "{} {}",
-            "🔍".blue(),
-            format!("DRY-RUN MODE — no changes will be written for {}", ide_name)
-                .yellow()
-                .bold()
-        );
-        println!(
-            "{} Config: {}",
-            "  →".dimmed(),
-            config_path.display().to_string().cyan()
-        );
-        println!(
-            "{} Servers that would be wrapped: {}",
-            "  →".dimmed(),
-            wrapped_count.to_string().green()
-        );
-        return Ok(WrapResult {
+        if table.is_empty() {
+            return Err(WrapError::NoMcpServers);
+        }
+
+        let mut wrapped_count = 0;
+        for (_name, server) in table.iter_mut() {
+            if let Some(srv_table) = server.as_table_mut() {
+                let current_cmd = srv_table.get("command").and_then(|c| c.as_str()).unwrap_or("");
+                if current_cmd.to_lowercase().contains("agentwall") {
+                    continue; // already wrapped
+                }
+
+                let orig_args = srv_table.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+                let mut new_args = vec![toml::Value::String("stdio-proxy".to_string()), toml::Value::String("--".to_string()), toml::Value::String(current_cmd.to_string())];
+                for arg in orig_args {
+                    new_args.push(arg);
+                }
+
+                srv_table.insert("command".to_string(), toml::Value::String(agentwall_bin.clone()));
+                srv_table.insert("args".to_string(), toml::Value::Array(new_args));
+                wrapped_count += 1;
+            }
+        }
+
+        if wrapped_count == 0 {
+            return Err(WrapError::AlreadyWrapped);
+        }
+
+        if dry_run {
+            println!(
+                "{} {}",
+                "🔍".blue(),
+                format!("DRY-RUN MODE — no changes will be written for {}", ide_name)
+                    .yellow()
+                    .bold()
+            );
+            return Ok(WrapResult {
+                config_path,
+                backup_path: PathBuf::from("<dry-run: no backup created>"),
+                servers_wrapped: wrapped_count,
+                scan_responses: false,
+            });
+        }
+
+        let backup_path = backup::create_backup(&config_path)?;
+        if let Some(dir) = config_path.parent() {
+            let _ = backup::prune_backups(dir, 5);
+        }
+
+        let output_str = toml::to_string_pretty(&toml_val)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        atomic_write(&config_path, &output_str)?;
+
+        Ok(WrapResult {
             config_path,
-            backup_path: PathBuf::from("<dry-run: no backup created>"),
+            backup_path,
             servers_wrapped: wrapped_count,
             scan_responses: false,
-        });
+        })
+    } else {
+        let config: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+
+        if config.get("mcpServers").is_none() {
+            return Err(WrapError::NoMcpServers);
+        }
+
+        let servers = config["mcpServers"]
+            .as_object()
+            .ok_or(WrapError::NoMcpServers)?;
+        if !servers.is_empty() && servers.values().all(transformer::is_already_wrapped) {
+            return Err(WrapError::AlreadyWrapped);
+        }
+
+        let mut modified = config.clone();
+        let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentwall_bin)?;
+
+        if dry_run {
+            println!(
+                "{} {}",
+                "🔍".blue(),
+                format!("DRY-RUN MODE — no changes will be written for {}", ide_name)
+                    .yellow()
+                    .bold()
+            );
+            println!(
+                "{} Config: {}",
+                "  →".dimmed(),
+                config_path.display().to_string().cyan()
+            );
+            println!(
+                "{} Servers that would be wrapped: {}",
+                "  →".dimmed(),
+                wrapped_count.to_string().green()
+            );
+            return Ok(WrapResult {
+                config_path,
+                backup_path: PathBuf::from("<dry-run: no backup created>"),
+                servers_wrapped: wrapped_count,
+                scan_responses: false,
+            });
+        }
+
+        let backup_path = backup::create_backup(&config_path)?;
+
+        if let Some(dir) = config_path.parent() {
+            let _ = backup::prune_backups(dir, 5);
+        }
+
+        let output_str = serde_json::to_string_pretty(&modified)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        serde_json::from_str::<serde_json::Value>(&output_str).map_err(|e| {
+            let _ = fs::copy(&backup_path, &config_path);
+            WrapError::InvalidJson(format!(
+                "Transform produced invalid JSON: {}. Restored from backup.",
+                e
+            ))
+        })?;
+
+        atomic_write(&config_path, &output_str)?;
+
+        Ok(WrapResult {
+            config_path,
+            backup_path,
+            servers_wrapped: wrapped_count,
+            scan_responses: false,
+        })
     }
-
-    let backup_path = backup::create_backup(&config_path)?;
-
-    if let Some(dir) = config_path.parent() {
-        let _ = backup::prune_backups(dir, 5);
-    }
-
-    let output_str = serde_json::to_string_pretty(&modified)
-        .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
-    serde_json::from_str::<serde_json::Value>(&output_str).map_err(|e| {
-        let _ = fs::copy(&backup_path, &config_path);
-        WrapError::InvalidJson(format!(
-            "Transform produced invalid JSON: {}. Restored from backup.",
-            e
-        ))
-    })?;
-
-    atomic_write(&config_path, &output_str)?;
-
-    Ok(WrapResult {
-        config_path,
-        backup_path,
-        servers_wrapped: wrapped_count,
-        scan_responses: false,
-    })
 }
 
 pub fn unwrap_generic(

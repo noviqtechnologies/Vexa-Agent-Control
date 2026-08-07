@@ -49,13 +49,41 @@ pub fn claude_config_path() -> Result<PathBuf, WrapError> {
 }
 
 pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
-    let base = match std::env::consts::OS {
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")),
-        "linux" => dirs::config_dir().map(|d| d.join("cursor/mcp.json")), // hypothetical standard path
-        "windows" => dirs::data_dir().map(|d| d.join("Cursor\\User\\globalStorage\\rooveterinaryinc.roo-cline\\settings\\cline_mcp_settings.json")),
+    let candidates = match std::env::consts::OS {
+        "macos" => vec![
+            dirs::home_dir().map(|h| h.join(".cursor/mcp.json")),
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/mcp.json")),
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")),
+        ],
+        "linux" => vec![
+            dirs::home_dir().map(|h| h.join(".cursor/mcp.json")),
+            dirs::config_dir().map(|d| d.join("cursor/mcp.json")),
+        ],
+        "windows" => vec![
+            dirs::home_dir().map(|h| h.join(".cursor\\mcp.json")),
+            dirs::data_dir().map(|d| d.join("Cursor\\mcp.json")),
+            dirs::data_dir().map(|d| d.join("Cursor\\User\\globalStorage\\rooveterinaryinc.roo-cline\\settings\\cline_mcp_settings.json")),
+        ],
         other => return Err(WrapError::UnsupportedOs(other.to_string())),
     };
-    base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+
+    for candidate in candidates.into_iter().flatten() {
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    // Default to ~/.cursor/mcp.json if none exist yet
+    if let Some(home) = dirs::home_dir() {
+        let default_path = if std::env::consts::OS == "windows" {
+            home.join(".cursor\\mcp.json")
+        } else {
+            home.join(".cursor/mcp.json")
+        };
+        return Ok(default_path);
+    }
+
+    Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
 }
 
 pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
@@ -110,16 +138,44 @@ pub fn opencode_config_path() -> Result<PathBuf, WrapError> {
 }
 
 pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
-    let base = match std::env::consts::OS {
-        "macos" => {
-            dirs::home_dir().map(|h| h.join("Library/Application Support/Antigravity/mcp.json"))
-        }
-        "linux" => dirs::config_dir().map(|d| d.join("antigravity/mcp.json")),
-        "windows" => dirs::data_dir().map(|d| d.join("Antigravity\\mcp.json")),
+    let candidates = match std::env::consts::OS {
+        "macos" => vec![
+            dirs::home_dir().map(|h| h.join(".gemini/config/mcp_config.json")),
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Antigravity/mcp.json")),
+        ],
+        "linux" => vec![
+            dirs::home_dir().map(|h| h.join(".gemini/config/mcp_config.json")),
+            dirs::config_dir().map(|d| d.join("antigravity/mcp.json")),
+        ],
+        "windows" => vec![
+            dirs::home_dir().map(|h| h.join(".gemini\\config\\mcp_config.json")),
+            dirs::data_dir().map(|d| d.join("Antigravity\\mcp.json")),
+        ],
         other => return Err(WrapError::UnsupportedOs(other.to_string())),
     };
+
+    for candidate in candidates.into_iter().flatten() {
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        let default_path = if std::env::consts::OS == "windows" {
+            home.join(".gemini\\config\\mcp_config.json")
+        } else {
+            home.join(".gemini/config/mcp_config.json")
+        };
+        return Ok(default_path);
+    }
+
+    Err(WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+}
+
+pub fn codex_config_path() -> Result<PathBuf, WrapError> {
+    let base = dirs::home_dir().map(|h| h.join(".codex").join("config.toml"));
     base.ok_or_else(|| {
-        WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string())
+        WrapError::ConfigNotFound("Cannot resolve Codex config path (~/.codex/config.toml)".to_string())
     })
 }
 

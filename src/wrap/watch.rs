@@ -308,6 +308,16 @@ fn resolve_single_target(target: WatchTarget) -> Result<Vec<ActiveTarget>, Strin
         WatchTarget::Antigravity => {
             make_unverified("Antigravity", config_path::antigravity_config_path())
         }
+        WatchTarget::Codex => {
+            let path = config_path::codex_config_path()
+                .map_err(|e| format!("Cannot resolve Codex config path: {}", e))?;
+            Ok(vec![ActiveTarget {
+                name: "Codex",
+                config_path: path,
+                verified: true,
+                claude_flags: None,
+            }])
+        }
     }
 }
 

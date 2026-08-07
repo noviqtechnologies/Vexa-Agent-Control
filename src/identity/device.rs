@@ -210,14 +210,19 @@ struct EnrollApiResponse {
 }
 
 /// Executes the `agentwall enroll` command.
-pub fn run_enroll(token: &str, hub_url: &str) -> i32 {
+pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     if token.is_empty() {
         eprintln!("{} Enrollment token is required (--token or AGENTWALL_ENROLLMENT_TOKEN)", "✖".red());
         return 1;
     }
 
     println!("{} AgentWall PKI Device Enrollment", "●".green().bold());
-    println!("  Connecting to Control Hub: {}", hub_url.cyan());
+    let masked_token = if token.len() > 8 {
+        format!("{}...{}", &token[..4], &token[token.len() - 4..])
+    } else {
+        "***".to_string()
+    };
+    println!("  Connecting to Control Hub: {} (token: {})", hub_url.cyan(), masked_token.dimmed());
 
     let identity = match DeviceIdentity::load_or_create() {
         Ok(id) => id,
@@ -245,7 +250,7 @@ pub fn run_enroll(token: &str, hub_url: &str) -> i32 {
         agentwall_version: pkg_ver,
     };
 
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build();
 
@@ -258,11 +263,11 @@ pub fn run_enroll(token: &str, hub_url: &str) -> i32 {
     };
 
     let enroll_endpoint = format!("{}/api/v1/enroll", hub_url.trim_end_matches('/'));
-    let response = client.post(&enroll_endpoint).json(&payload).send();
+    let response = client.post(&enroll_endpoint).json(&payload).send().await;
 
     match response {
         Ok(res) if res.status().is_success() => {
-            if let Ok(body) = res.json::<EnrollApiResponse>() {
+            if let Ok(body) = res.json::<EnrollApiResponse>().await {
                 if let Err(e) = save_device_token(&body.device_token) {
                     eprintln!("{} Failed to save device token: {}", "⚠".yellow(), e);
                 }
@@ -277,7 +282,7 @@ pub fn run_enroll(token: &str, hub_url: &str) -> i32 {
         }
         Ok(res) => {
             let status = res.status();
-            let err_text = res.text().unwrap_or_default();
+            let err_text = res.text().await.unwrap_or_default();
             eprintln!("{} Enrollment failed (HTTP {}): {}", "✖".red(), status, err_text);
             1
         }

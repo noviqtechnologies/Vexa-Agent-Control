@@ -36,8 +36,13 @@ fn gather_all() -> Vec<TargetInfo> {
         ),
         (
             "Cursor",
-            PathVerification::Unverified,
+            PathVerification::Verified,
             config_path::cursor_config_path(),
+        ),
+        (
+            "Codex",
+            PathVerification::Verified,
+            config_path::codex_config_path(),
         ),
         (
             "VS Code",
@@ -66,7 +71,7 @@ fn gather_all() -> Vec<TargetInfo> {
         ),
         (
             "Antigravity",
-            PathVerification::Unverified,
+            PathVerification::Verified,
             config_path::antigravity_config_path(),
         ),
     ];
@@ -85,21 +90,42 @@ fn gather_all() -> Vec<TargetInfo> {
 /// Returns (total_servers, wrapped_servers).
 fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
     let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let config: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("invalid JSON: {}", e))?;
 
-    let servers = match config.get("mcpServers").and_then(|v| v.as_object()) {
-        Some(s) => s,
-        None => return Ok((0, 0)),
-    };
+    if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+        let val: toml::Value = toml::from_str(&raw).map_err(|e| format!("invalid TOML: {}", e))?;
+        let servers = match val.get("mcp_servers").and_then(|v| v.as_table()) {
+            Some(s) => s,
+            None => return Ok((0, 0)),
+        };
+        let total = servers.len();
+        let wrapped = servers
+            .values()
+            .filter(|v| {
+                if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
+                    cmd.to_lowercase().contains("agentwall")
+                } else {
+                    false
+                }
+            })
+            .count();
+        Ok((total, wrapped))
+    } else {
+        let config: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| format!("invalid JSON: {}", e))?;
 
-    let total = servers.len();
-    let wrapped = servers
-        .values()
-        .filter(|v| transformer::is_already_wrapped(v))
-        .count();
+        let servers = match config.get("mcpServers").and_then(|v| v.as_object()) {
+            Some(s) => s,
+            None => return Ok((0, 0)),
+        };
 
-    Ok((total, wrapped))
+        let total = servers.len();
+        let wrapped = servers
+            .values()
+            .filter(|v| transformer::is_already_wrapped(v))
+            .count();
+
+        Ok((total, wrapped))
+    }
 }
 
 /// Print the status table for all 8 targets to stdout.

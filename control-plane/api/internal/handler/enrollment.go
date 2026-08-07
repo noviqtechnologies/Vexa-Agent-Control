@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -69,7 +72,7 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 		req.OSArch = "unknown"
 	}
 	if req.AgentWallVersion == "" {
-		req.AgentWallVersion = "1.0.21"
+		req.AgentWallVersion = "1.0.22"
 	}
 
 	dev := model.Device{
@@ -136,8 +139,12 @@ func (h *EnrollmentHandler) PostCreateToken(w http.ResponseWriter, r *http.Reque
 	}
 
 	if req.RawToken == "" {
-		http.Error(w, `{"error":{"code":"INVALID_REQUEST","message":"raw_token is required"}}`, http.StatusUnprocessableEntity)
-		return
+		bytes := make([]byte, 16)
+		if _, err := rand.Read(bytes); err != nil {
+			http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"failed to generate secure token"}}`, http.StatusInternalServerError)
+			return
+		}
+		req.RawToken = "TOK-" + strings.ToUpper(hex.EncodeToString(bytes))
 	}
 	if req.TokenID == "" {
 		req.TokenID = "tok-" + time.Now().Format("20060102150405")
