@@ -118,7 +118,7 @@ fi
 
 # Automated Enterprise Enrollment & OS Service Registration
 HUB_URL="${AGENTWALL_HUB_URL:-http://localhost:8400}"
-TOKEN="${AGENTWALL_TOKEN:-$1}"
+TOKEN="${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-$1}}"
 
 if [[ -n "$TOKEN" ]]; then
   echo "[*] Initializing Enterprise Device Governance..."

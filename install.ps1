@@ -2,7 +2,13 @@
 .SYNOPSIS
     AgentWall Binary Installer for Windows.
     Usage: irm https://vexasec.io/install.ps1 | iex
+           .\install.ps1 -Token <OTET_TOKEN> [-HubUrl <URL>]
 #>
+
+param(
+    [string]$Token = $env:AGENTWALL_TOKEN,
+    [string]$HubUrl = $env:AGENTWALL_HUB_URL
+)
 
 & {
     $ErrorActionPreference = "Stop"
@@ -63,7 +69,7 @@
     }
 
     if ($InstalledVersion -and $InstalledVersion -eq $Version) {
-        Write-Host "`n✔ AgentWall v$Version is already up to date. Nothing to do." -ForegroundColor $ColorGreen
+        Write-Host "`n[+] AgentWall v$Version is already up to date. Nothing to do." -ForegroundColor $ColorGreen
         return
     } elseif ($InstalledVersion) {
         Write-Host "Upgrading $InstalledVersion -> $Version..." -ForegroundColor $ColorCyan
@@ -177,8 +183,8 @@
     Remove-Item $TempDir -Recurse -Force | Out-Null
 
     # Automated Enterprise Enrollment & Windows SCM Service Registration
-    $Token = $env:AGENTWALL_TOKEN
-    $HubUrl = if ($env:AGENTWALL_HUB_URL) { $env:AGENTWALL_HUB_URL } else { "http://localhost:8400" }
+    if (-not $Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
+    if (-not $HubUrl) { $HubUrl = "http://localhost:8400" }
 
     if ($Token) {
         Write-Host "`n[*] Initializing Enterprise Device Governance..." -ForegroundColor $ColorCyan
@@ -190,19 +196,20 @@
 
         Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan
         & $FinalBinaryPath wrap --all
-        Write-Host "`n✔ Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
+        Write-Host "`n[+] Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
     }
 
     if ($InstalledVersion) {
-        Write-Host "`n✔ AgentWall upgraded from $InstalledVersion to $Version successfully!" -ForegroundColor $ColorGreen
+        Write-Host "`n[+] AgentWall upgraded from $InstalledVersion to $Version successfully!" -ForegroundColor $ColorGreen
     } else {
-        Write-Host "`n✔ AgentWall $Version installed successfully!" -ForegroundColor $ColorGreen
+        Write-Host "`n[+] AgentWall $Version installed successfully!" -ForegroundColor $ColorGreen
     }
-    Write-Host "`nGet started by running:"
+    Write-Host "Get started by running:"
     Write-Host "  agentwall --version"
-    Write-Host "  agentwall dev`n"
+    Write-Host "  agentwall dev"
+    Write-Host ""
     Write-Host "To run the demo test script (requires Python 3.8+):" -ForegroundColor $ColorCyan
-    Write-Host "  python `"$env:USERPROFILE\.local\bin\quickstart_agent.py`"`n" -ForegroundColor $ColorCyan
+    Write-Host "  python '$env:USERPROFILE\.local\bin\quickstart_agent.py'" -ForegroundColor $ColorCyan
 
     Write-Host "Note: If you encounter 'Windows Protected Your PC', click 'More info' -> 'Run anyway'." -ForegroundColor $ColorYellow
     Write-Host "Note: Open a new terminal window if 'agentwall' is not found immediately." -ForegroundColor $ColorYellow
