@@ -14,6 +14,13 @@ const IDE_INTEGRATIONS = [
     description: 'Patches Cursor IDE configuration to use AgentWall as an MCP proxy.',
   },
   {
+    id: 'codex',
+    name: 'ChatGPT Codex',
+    wrapCmd: 'agentwall wrap codex',
+    unwrapCmd: 'agentwall unwrap codex',
+    description: 'Intercepts ChatGPT Codex agent environment configuration.',
+  },
+  {
     id: 'vscode',
     name: 'VS Code',
     wrapCmd: 'agentwall wrap vscode',
@@ -87,14 +94,13 @@ export default function IdeConnections() {
         </p>
       </div>
 
-      <div className="card" style={{ marginBottom: 20, padding: '14px 20px' }}>
+      <div className="card" style={{ marginBottom: 20, padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Start AgentWall in shadow mode first (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>agentwall dev</code>), then run the wrap command.
-            All IDE integrations are reversible with the unwrap command.
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+            Start AgentWall in shadow mode first (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>agentwall dev</code>), then run individual target wrap commands or run bulk sweep: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--success)' }}>agentwall wrap --all</code>.
           </p>
         </div>
       </div>

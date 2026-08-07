@@ -31,6 +31,7 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
     let targets = [
         ("claude_desktop", crate::wrap::config_path::claude_config_path()),
         ("cursor", crate::wrap::config_path::cursor_config_path()),
+        ("codex", crate::wrap::config_path::codex_config_path()),
         ("vscode", crate::wrap::config_path::vscode_config_path()),
         ("jetbrains", crate::wrap::config_path::jetbrains_config_path()),
         ("zed", crate::wrap::config_path::zed_config_path()),
@@ -49,7 +50,22 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                     checksums.insert(name.to_string(), hash_hex);
 
                     if let Ok(raw) = String::from_utf8(bytes) {
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+                            if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
+                                if let Some(servers) = val.get("mcp_servers").and_then(|s| s.as_table()) {
+                                    total_servers += servers.len();
+                                    wrapped_servers += servers
+                                        .values()
+                                        .filter(|v| {
+                                            v.get("command")
+                                                .and_then(|c| c.as_str())
+                                                .map(|cmd| cmd.to_lowercase().contains("agentwall"))
+                                                .unwrap_or(false)
+                                        })
+                                        .count();
+                                }
+                            }
+                        } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
                             if let Some(servers) = v.get("mcpServers").and_then(|s| s.as_object()) {
                                 total_servers += servers.len();
                                 wrapped_servers += servers
@@ -129,12 +145,16 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
 
         let mut req = client.post(&heartbeat_url).json(&payload);
 
-        // Attach device token if available, otherwise gateway secret
-        if let Some(token) = crate::identity::device::load_device_token() {
-            req = req.header("Authorization", format!("Bearer {}", token));
+        // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint
+        let auth_token = if !secret.is_empty() {
+            secret.clone()
+        } else if let Some(token) = crate::identity::device::load_device_token() {
+            token
         } else {
-            req = req.header("Authorization", format!("Bearer {}", secret));
-        }
+            "local-dev-shared-secret-change-me".to_string()
+        };
+
+        req = req.header("Authorization", format!("Bearer {}", auth_token));
 
         match req.send().await {
             Ok(res) if res.status().is_success() => {

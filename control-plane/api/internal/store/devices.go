@@ -106,8 +106,11 @@ func (s *Store) RegisterDevice(ctx context.Context, d *model.Device) error {
 			mcp_servers_total   = EXCLUDED.mcp_servers_total,
 			mcp_servers_wrapped = EXCLUDED.mcp_servers_wrapped,
 			ide_checksums       = EXCLUDED.ide_checksums,
+			is_revoked          = FALSE,
+			revoked_at          = NULL,
+			compliance_status   = 'COMPLIANT',
 			last_heartbeat_at   = NOW(),
-			updated_at         = NOW()
+			updated_at          = NOW()
 	`, d.DeviceID, d.Hostname, d.OSArch, d.OSFamily, d.PublicKey, d.AgentWallVersion,
 		d.MCPServersTotal, d.MCPServersWrapped, checksumsJSON)
 

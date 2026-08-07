@@ -72,7 +72,7 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 		req.OSArch = "unknown"
 	}
 	if req.AgentWallVersion == "" {
-		req.AgentWallVersion = "1.0.22"
+		req.AgentWallVersion = "1.0.23"
 	}
 
 	dev := model.Device{

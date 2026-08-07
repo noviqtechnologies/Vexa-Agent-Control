@@ -41,14 +41,7 @@ use crate::cli::WatchTarget;
 /// Debounce window: wait this long after the last event before acting.
 const DEBOUNCE_MS: u64 = 300;
 
-/// Targets that have verified, correct config paths.
-/// All others are known-wrong or hypothetical guesses.
-const VERIFIED_TARGETS: &[VerifiedTarget] = &[VerifiedTarget::Claude];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum VerifiedTarget {
-    Claude,
-}
 
 // ─── Public entry point ────────────────────────────────────────────────────────
 
@@ -107,6 +100,9 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     );
     println!("  {} Press {} to stop.", "ℹ".blue(), "Ctrl-C".bold());
     println!();
+
+    // Transmit initial MCP server snapshot to Control Hub on daemon startup
+    super::status::gather_and_send_mcp_servers_snapshot();
 
     // Set up per-target last-own-hash store (suppresses self-write re-triggers).
     // Key: canonical config path string.
@@ -264,19 +260,48 @@ fn resolve_active_targets(
 }
 
 fn resolve_all_verified() -> Result<Vec<ActiveTarget>, String> {
-    // Only VERIFIED_TARGETS are included. Currently just Claude.
-    let _ = VERIFIED_TARGETS; // suppress unused warning
-    let path = config_path::claude_config_path()
-        .map_err(|e| format!("Cannot resolve Claude Desktop config path: {}", e))?;
-    Ok(vec![ActiveTarget {
-        name: "Claude Desktop",
-        config_path: path,
-        verified: true,
-        claude_flags: Some(ClaudeFlags {
-            scan_responses: false,
-            block_on_secrets: false,
-        }),
-    }])
+    let mut targets = Vec::new();
+
+    if let Ok(path) = config_path::claude_config_path() {
+        targets.push(ActiveTarget {
+            name: "Claude Desktop",
+            config_path: path,
+            verified: true,
+            claude_flags: Some(ClaudeFlags {
+                scan_responses: false,
+                block_on_secrets: false,
+            }),
+        });
+    }
+
+    if let Ok(path) = config_path::cursor_config_path() {
+        targets.push(ActiveTarget {
+            name: "Cursor",
+            config_path: path,
+            verified: true,
+            claude_flags: None,
+        });
+    }
+
+    if let Ok(path) = config_path::codex_config_path() {
+        targets.push(ActiveTarget {
+            name: "Codex",
+            config_path: path,
+            verified: true,
+            claude_flags: None,
+        });
+    }
+
+    if let Ok(path) = config_path::antigravity_config_path() {
+        targets.push(ActiveTarget {
+            name: "Antigravity",
+            config_path: path,
+            verified: true,
+            claude_flags: None,
+        });
+    }
+
+    Ok(targets)
 }
 
 fn resolve_single_target(target: WatchTarget) -> Result<Vec<ActiveTarget>, String> {

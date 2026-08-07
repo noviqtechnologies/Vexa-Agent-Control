@@ -209,11 +209,14 @@ Control Hub tracks heartbeat checkins emitted every 60 seconds from background S
 | **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped servers detected | SIEM & Slack alerts dispatched |
 | **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device |
 
-### 3. Single-Device Revocation
+### 3. Single-Device Revocation & Re-enrollment
 To revoke a compromised or lost device instantly:
 1. Navigate to **Device Governance** in the Web Console.
 2. Locate the device ID and click **Revoke**.
-3. All subsequent heartbeats, telemetry, and policy pulls from that hardware key are blocked immediately without affecting other team members.
+3. All subsequent heartbeats, telemetry, and policy pulls from that hardware key are blocked immediately (returning 401 Unauthorized) without affecting other team members.
+
+> **Restoring Revoked Devices:**
+> To re-authorize a revoked device, generate a new **Enrollment Token** in the Web Console and run `agentwall enroll --token <NEW_TOKEN> --hub-url <HUB_URL>`. Re-enrollment automatically clears the revocation flag and restores the device to **`COMPLIANT`**.
 
 ---
 

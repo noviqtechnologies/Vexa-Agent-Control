@@ -260,7 +260,28 @@ pub fn gather_servers_for_snapshot(
         if let Ok(path) = t.path_result {
             if path.exists() {
                 if let Ok(raw) = std::fs::read_to_string(&path) {
-                    if let Ok(config) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+                        if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
+                            if let Some(servers) = val.get("mcp_servers").and_then(|v| v.as_table()) {
+                                for (name, val) in servers {
+                                    let wrapped = val
+                                        .get("command")
+                                        .and_then(|c| c.as_str())
+                                        .map(|cmd| cmd.to_lowercase().contains("agentwall"))
+                                        .unwrap_or(false);
+                                    let path_verified = t.verification == PathVerification::Verified;
+                                    servers_meta.push(
+                                        control_plane_proto::mcp_server::SanitizedMcpServerMeta {
+                                            ide_target: t.name.to_string(),
+                                            server_name: name.to_string(),
+                                            wrapped,
+                                            path_verified,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    } else if let Ok(config) = serde_json::from_str::<serde_json::Value>(&raw) {
                         if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object())
                         {
                             for (name, val) in servers {
@@ -302,5 +323,26 @@ pub fn gather_and_send_mcp_servers_snapshot() {
         });
         let snapshot = gather_servers_for_snapshot(agent_id);
         client.send_mcp_server_snapshot(snapshot);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_wrap_status_toml() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"
+[mcp_servers.test_server]
+command = "agentwall"
+args = ["stdio-proxy", "--", "node", "server.js"]
+"#;
+        std::fs::write(&config_path, content).unwrap();
+
+        let (total, wrapped) = check_wrap_status(&config_path).unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(wrapped, 1);
     }
 }

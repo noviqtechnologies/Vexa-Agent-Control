@@ -74,6 +74,11 @@ Copy and paste the following 1-line command into PowerShell and press `Enter`:
 irm https://vexasec.io/install.ps1 | iex
 ```
 
+> **Important — Installer Elevation & Administrator Permissions:**
+> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO deployment tasks run under **`NT AUTHORITY\SYSTEM`** with full administrative privileges. **`agentwall service install` runs automatically without user interaction.**
+> - **Manual Script Execution (`install.ps1`):** Executing `install.ps1` in a standard user PowerShell session installs the binary. **Installing the SCM Service (`agentwall service install`) requires opening PowerShell with "Run as Administrator".**
+> - **Non-Admin Fallback:** Users without administrative privileges can run the sentry daemon interactively using **`agentwall watch`** in a standard user terminal.
+
 *(Alternatively, download the ZIP archive manually):*
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
