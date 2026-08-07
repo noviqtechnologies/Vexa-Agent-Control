@@ -202,12 +202,15 @@ curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
 ### 2. Device Compliance State Machine
 Control Hub tracks heartbeat checkins emitted every 60 seconds from background Sentry daemons:
 
-| Status Badge | State Criteria | Automated System Action |
-|---|---|---|
-| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$ & all MCP servers wrapped | Device active, full API access granted |
-| **`UNREACHABLE`** (Yellow) | $3\text{ min} < \text{Heartbeat} \le 10\text{ min}$ | Warning logged, retry polling |
-| **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped servers detected | SIEM & Slack alerts dispatched |
-| **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device |
+| Status Badge | State Criteria | System Security Action | Operational Meaning |
+|---|---|---|---|
+| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$ AND $100\%$ MCP servers wrapped | Device active, full API & proxy access granted | Workstation is fully governed. All tool calls pass through AgentWall DLP & policy proxy. |
+| **`UNREACHABLE`** (Yellow) | $3\text{ min} < \text{Heartbeat} \le 10\text{ min}$ | Warning logged, retry polling | Machine is idle, asleep, offline, or sentry daemon connection was temporarily interrupted. |
+| **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped tools detected ($\text{wrapped} < \text{total}$) | SIEM & Slack alerts dispatched, compliance violation logged | **Zero-Trust Breach**: At least 1 unwrapped MCP server exists that bypasses prompt filtering & audit logs. |
+| **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device | Hardware certificate invalidated; all telemetry & gateway requests blocked. |
+
+#### Why Unwrapped MCP Tools Trigger `NON_COMPLIANT`
+AgentWall enforces a Zero-Trust security posture. If an LLM extension or developer installs an MCP tool that is not wrapped by AgentWall (`agentwall wrap`), tool executions (file reads, bash commands, DB queries) bypass the proxy without prompt redacting or DLP audit logging. To preserve enterprise security integrity, the entire workstation is marked **`NON_COMPLIANT`** until `agentwall wrap` is executed.
 
 ### 3. Single-Device Revocation & Re-enrollment
 To revoke a compromised or lost device instantly:
