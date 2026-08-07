@@ -11,9 +11,13 @@ You can find the Terminal app by pressing `Cmd + Space` (Spotlight Search), typi
 Copy the following command, paste it into your Terminal window, and press `Return`:
 
 ```bash
+# Standard local developer mode
 curl -fsSL https://vexasec.io/install.sh | bash
+
+# Automated enterprise enrollment & persistent system daemon installation
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" bash
 ```
-*This script safely downloads the AgentWall application and places it in a hidden folder on your computer (`~/.local/bin`).*
+*This script safely downloads the AgentWall application, places it in `~/.local/bin`, and optionally registers the persistent system daemon (`systemd` / `launchd`).*
 
 ### Step 3: Make AgentWall accessible
 To ensure you can run the `agentwall` command from anywhere, you need to add it to your system path. Paste this into your Terminal and press `Return`:

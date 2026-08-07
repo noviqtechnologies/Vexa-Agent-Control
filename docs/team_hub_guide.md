@@ -181,7 +181,43 @@ The HITL queue is also visible in the Team Management Console under **Approvals*
 
 ---
 
-## 6. Shared Reference Sections
+## 6. Central Device Governance & Fleet Health
+
+Control Hub provides a dedicated **Device Governance** portal (`/admin/devices`) for managing developer endpoints across macOS, Windows, Linux, and WSL.
+
+### 1. Generating One-Time Enrollment Tokens (OTET)
+Admins generate short-lived enrollment tokens in the Web Console or REST API:
+```bash
+curl -X POST http://localhost:8400/api/v1/admin/enrollment-tokens \
+  -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
+```
+
+Developers use the generated command to onboard:
+```bash
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
+```
+
+### 2. Device Compliance State Machine
+Control Hub tracks heartbeat checkins emitted every 60 seconds from background Sentry daemons:
+
+| Status Badge | State Criteria | Automated System Action |
+|---|---|---|
+| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$ & all MCP servers wrapped | Device active, full API access granted |
+| **`UNREACHABLE`** (Yellow) | $3\text{ min} < \text{Heartbeat} \le 10\text{ min}$ | Warning logged, retry polling |
+| **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped servers detected | SIEM & Slack alerts dispatched |
+| **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device |
+
+### 3. Single-Device Revocation
+To revoke a compromised or lost device instantly:
+1. Navigate to **Device Governance** in the Web Console.
+2. Locate the device ID and click **Revoke**.
+3. All subsequent heartbeats, telemetry, and policy pulls from that hardware key are blocked immediately without affecting other team members.
+
+---
+
+## 7. Shared Reference Sections
 
 The following technical reference sections are maintained in the shared [Common Reference Guide](common_guide.md):
 

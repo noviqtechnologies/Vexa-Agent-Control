@@ -56,6 +56,7 @@ pub mod audit;
 pub mod audit_log;
 pub mod create;
 pub mod credential;
+pub mod device;
 pub mod inspect;
 pub mod rotate;
 pub mod scope;

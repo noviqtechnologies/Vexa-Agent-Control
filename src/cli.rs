@@ -22,6 +22,23 @@ pub struct Cli {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Perform PKI Device Enrollment with Control Hub
+    Enroll {
+        /// One-Time Enrollment Token (OTET)
+        #[arg(long, env = "AGENTWALL_ENROLLMENT_TOKEN")]
+        token: String,
+
+        /// Control Hub API URL
+        #[arg(long, env = "DASHBOARD_API_URL", default_value = "http://localhost:8400")]
+        hub_url: String,
+    },
+
+    /// Manage AgentWall persistent OS Sentry Service Daemon
+    Service {
+        #[command(subcommand)]
+        action: ServiceCliAction,
+    },
+
     /// Start local shadow proxy (observation only, no enforcement)
     Dev {
         /// Listen address for HTTP mode (default: 127.0.0.1:8080)
@@ -775,5 +792,27 @@ pub enum ComplianceCommands {
         #[arg(long)]
         output: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum ServiceCliAction {
+    /// Install and register AgentWall as a persistent OS background service
+    Install {
+        /// Control Hub API URL
+        #[arg(long, env = "DASHBOARD_API_URL", default_value = "http://localhost:8400")]
+        hub_url: String,
+
+        /// Gateway shared secret
+        #[arg(long, env = "GATEWAY_SECRET", default_value = "local-dev-shared-secret-change-me")]
+        gateway_secret: String,
+
+        /// Policy read secret
+        #[arg(long, env = "POLICY_READ_SECRET", default_value = "local-dev-policy-read-secret")]
+        policy_read_secret: String,
+    },
+    /// Remove the persistent OS background service
+    Uninstall,
+    /// Display current OS background service status
+    Status,
 }
 

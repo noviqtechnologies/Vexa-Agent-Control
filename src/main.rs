@@ -97,6 +97,27 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 .await
             }
         }
+        Commands::Enroll { token, hub_url } => {
+            agentwall::identity::device::run_enroll(&token, &hub_url)
+        }
+        Commands::Service { action } => {
+            let act = match action {
+                agentwall::cli::ServiceCliAction::Install {
+                    hub_url,
+                    gateway_secret,
+                    policy_read_secret,
+                } => agentwall::service::ServiceAction::Install {
+                    hub_url,
+                    gateway_secret,
+                    policy_read_secret,
+                },
+                agentwall::cli::ServiceCliAction::Uninstall => {
+                    agentwall::service::ServiceAction::Uninstall
+                }
+                agentwall::cli::ServiceCliAction::Status => agentwall::service::ServiceAction::Status,
+            };
+            agentwall::service::run_service(act)
+        }
         Commands::Start {
             policy,
             listen,
@@ -1122,6 +1143,11 @@ async fn run_start(
             .await;
         });
     }
+
+    // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)
+    tokio::spawn(async move {
+        agentwall::control_plane_client::heartbeat::start_heartbeat_loop(60).await;
+    });
 
     if shadow_mode {
         println!(

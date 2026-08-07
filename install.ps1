@@ -174,8 +174,24 @@
         Write-Host "Added $InstallDir to your PATH. Restart your terminal." -ForegroundColor $ColorYellow
     }
 
-    # Cleanup
     Remove-Item $TempDir -Recurse -Force | Out-Null
+
+    # Automated Enterprise Enrollment & Windows SCM Service Registration
+    $Token = $env:AGENTWALL_TOKEN
+    $HubUrl = if ($env:AGENTWALL_HUB_URL) { $env:AGENTWALL_HUB_URL } else { "http://localhost:8400" }
+
+    if ($Token) {
+        Write-Host "`n[*] Initializing Enterprise Device Governance..." -ForegroundColor $ColorCyan
+        Write-Host "[*] Step 1/3: PKI Device Enrollment..." -ForegroundColor $ColorCyan
+        & $FinalBinaryPath enroll --token $Token --hub-url $HubUrl
+
+        Write-Host "[*] Step 2/3: Installing Persistent Windows SCM Service Daemon..." -ForegroundColor $ColorCyan
+        & $FinalBinaryPath service install --hub-url $HubUrl
+
+        Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan
+        & $FinalBinaryPath wrap --all
+        Write-Host "`n✔ Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
+    }
 
     if ($InstalledVersion) {
         Write-Host "`n✔ AgentWall upgraded from $InstalledVersion to $Version successfully!" -ForegroundColor $ColorGreen

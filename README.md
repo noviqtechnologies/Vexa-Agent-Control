@@ -5,12 +5,12 @@
 </p>
 
 <p align="center">
-  Vexa AgentWall intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets. It features inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, passive shadow discovery mode with Risk Delta reporting, verified MCP security scoring, Human-in-the-Loop policy escalation with HMAC-signed webhook callbacks, hardened WebSocket egress tunneling, real-time AI threat intelligence feed integration, multi-tenant project and task policy sharding, zero-knowledge customer-managed-key SIEM export, a pre-built Hardened Agent Container Runtime (HAR) for Kubernetes deployments, and a built-in ADR (AI Detection & Response) security benchmark suite.
+  Vexa AgentWall intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets. It features persistent OS Sentry daemon watching, hardware-bound Ed25519 PKI device enrollment, continuous <300ms self-healing file re-wrapping, inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, passive shadow discovery mode with Risk Delta reporting, verified MCP security scoring, Human-in-the-Loop policy escalation with HMAC-signed webhook callbacks, hardened WebSocket egress tunneling, real-time AI threat intelligence feed integration, multi-tenant project and task policy sharding, zero-knowledge customer-managed-key SIEM export, a pre-built Hardened Agent Container Runtime (HAR) for Kubernetes deployments, and a built-in ADR (AI Detection & Response) security benchmark suite.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.21-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.22-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -41,14 +41,22 @@ Install the statically-linked `agentwall` binary and launch the shadow gateway w
 
 **macOS / Linux / WSL:**
 ```bash
+# Standard local developer mode
 curl -fsSL https://vexasec.io/install.sh | bash
 agentwall dev
+
+# Automated enterprise enrollment & Sentry daemon installation (optional token flag)
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
+# Standard local developer mode
 irm https://vexasec.io/install.ps1 | iex
 agentwall.exe dev
+
+# Automated enterprise enrollment & Sentry daemon installation (optional token variable)
+$env:AGENTWALL_TOKEN="TOK-YOUR-TOKEN"; irm https://vexasec.io/install.ps1 | iex
 ```
 
 Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.
@@ -149,9 +157,12 @@ Vexa AgentWall scales seamlessly across three operational deployment profiles:
 | **Passive Shadow AI Discovery** | Observe traffic without blocking and generate pre-enforcement Risk Delta reports | ✓ | ✓ | ✓ |
 | **MCP Security Scoring Engine** | Evaluate local MCP server manifests and assign a 0–100 Vexa Security Score | ✓ | ✓ | ✓ |
 | **IDE Auto-Wrapping Engine** | Transparently route tool calls for Claude Desktop, Cursor, VS Code, JetBrains, and Zed | ✓ | ✓ | ✓ |
+| **Hardware PKI Device Enrollment** | Bind workstations to Control Hub using Ed25519 keys in OS Keychain / DPAPI (`agentwall enroll`) | ✓ | ✓ | ✓ |
+| **Persistent OS Sentry Daemon** | Always-on background daemon (`systemd`, `launchd`, Windows `SCM`) with <300ms self-healing | ✓ | ✓ | ✓ |
 | **ADR Security Benchmark** | Evaluate security posture against 303 tasks across 17 real-world AI attack categories | ✓ | ✓ | ✓ |
 | **Tamper-Evident HMAC Logging** | Cryptographically chained audit trail with local integrity verification (`agentwall verify-log`) | ✓ | ✓ | ✓ |
 | **Centralized Policy Push (SSE)** | Hot-swap policies across running proxy instances without service restarts | — | ✓ | ✓ |
+| **Central Device Governance** | Monitor 60s active heartbeats, IDE checksums, and revoke compromised devices in Web Console | — | ✓ | ✓ |
 | **OIDC Identity Binding** | Authenticate agent sessions and map JWT group claims (Okta, Keycloak, Entra ID) to policies | — | ✓ | ✓ |
 | **Project & Task Policy Sharding** | Dynamically resolve sub-millisecond policy scopes via `agent_project_id` and `agent_task_id` | — | ✓ | ✓ |
 | **Centralized Vault & API Keys** | Securely inject LLM provider keys at proxy boundary; agents never touch raw secrets | — | ✓ | ✓ |
@@ -169,6 +180,8 @@ Vexa AgentWall scales seamlessly across three operational deployment profiles:
 Provides individual developers with instant, zero-configuration security guardrails and complete traffic visibility on local workstations.
 
 - **Safe Mode & Default-Deny Guardrails** — Enforces zero-trust boundaries over MCP tool calls with 15 built-in safe mode rules.
+- **Hardware PKI Device Enrollment** — Keypair generation (`agentwall enroll`) bound to macOS Keychain Services, Windows DPAPI, or Linux Secret Service API.
+- **Persistent OS Sentry Daemon** — Install as an always-on background service (`agentwall service install`) with read-only file locks (`chmod 0444`, `chflags uchg`, Windows ACL Write Deny) and <300ms auto-rewrapping self-healing.
 - **Prompt Injection & Response Poisoning Protection** — Intercepts incoming tool responses for jailbreaks, instruction manipulation, and memory poisoning.
 - **Dual-Pass DLP Redaction** — Scans and redacts sensitive data (AWS keys, SSH private keys, PII) in real-time.
 - **Passive Shadow AI Discovery Mode** — Run `agentwall dev` or `agentwall start --shadow-mode` to observe agent behavior and generate a **Risk Delta Report** (`agentwall report --risk`).
@@ -181,6 +194,7 @@ Provides individual developers with instant, zero-configuration security guardra
 
 Extends governance across engineering teams and staging environments with centralized policy coordination, identity binding, and budget controls.
 
+- **Central Device Governance Portal** — Web Console view (`/admin/devices`) for OTET enrollment token generation, 60s heartbeat monitoring (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and single-device instant revocation.
 - **Centralized Policy Push (SSE)** — Broadcast versioned security policies from the Control Hub to distributed gateway instances in real-time via Server-Sent Events.
 - **OIDC Identity Binding** — Map corporate identity provider JWT group claims (Keycloak, Okta, Entra ID, Auth0, Ping) directly to dynamic policy rulesets.
 - **Multi-Tenant Policy Sharding** — Resolves and scopes policies dynamically based on `agent_project_id` and `agent_task_id` request context headers.
@@ -258,6 +272,8 @@ Every agent tool call and LLM egress payload traversing Vexa AgentWall passes se
 | **Claude Desktop** | `agentwall wrap claude` | Automated config patching, stdio tool proxying, real-time DLP |
 | **Cursor / VS Code** | `agentwall wrap cursor` | Native MCP config interception, shadow discovery, risk reporting |
 | **JetBrains / Zed** | `agentwall wrap jetbrains` | Transparent stdio proxying, default-deny policy enforcement |
+| **OS Background Sentry** | `agentwall service install` | Always-on background daemon (`systemd`, `launchd`, Windows `SCM`) with <300ms self-healing |
+| **PKI Enrollment** | `agentwall enroll` | Hardware Ed25519 identity generation in OS Keychain / DPAPI |
 | **Container Workloads** | HAR Sidecar Container | Entrypoint container proxying, OIDC binding, spend management |
 | **CLI & Custom Agents** | `agentwall dev --stdio -- <cmd>` | Native HTTP/HTTPS proxying, stdio stream wrapper, audit logging |
 | **Web Dashboard** | Native Browser | Live traffic inventory, HITL approval modals, ADR benchmark runner |
@@ -283,7 +299,7 @@ Vexa AgentWall adapts to your existing deployment infrastructure:
 
 | Deployment Profile | Orchestration & Deployment | Infrastructure & State Storage |
 |---|---|---|
-| **Workstation Local Sidecar** | Standalone Binary (`agentwall dev`) or IDE Wrapper (`agentwall wrap`) | Local workstation, embedded SQLite database, local disk audit logs |
+| **Workstation Local Sidecar** | Standalone Binary (`agentwall dev`), IDE Wrapper (`agentwall wrap`), or Sentry Daemon (`agentwall service`) | Local workstation, embedded SQLite database, local disk audit logs |
 | **Team Staging Control Hub** | Docker Compose (`docker compose up`) | Shared team host / VM, PostgreSQL database, central control API |
 | **Enterprise Fleet Production** | Kubernetes Helm Release (`helm install agentwall ./chart`) | Cloud Kubernetes cluster, HA database, external SIEM export |
 | **Hardened Agent Runtime (HAR)** | Distroless/Alpine OCI Image (`Dockerfile.har`) | Kubernetes pod sidecar, production agent containers (<100MB memory footprint) |
@@ -297,7 +313,7 @@ Vexa AgentWall provides dedicated management interfaces tailored to each operati
 | Console Profile | Access Endpoint | Core Capabilities & Telemetry |
 |---|---|---|
 | **Local Developer Console** | `http://127.0.0.1:8080` (`agentwall dev`) | Real-time traffic monitor, shadow mode Risk Delta reporting, Vexa Security Score view, HITL browser modal, ADR benchmark runner |
-| **Team Control Hub Console** | `http://localhost:8081` (Docker Compose) | Centralized policy editor, SSE hot-reload controller, async HITL approval queue, project/task policy sharding, team spend analytics |
+| **Team Control Hub Console** | `http://localhost:8081` (Docker Compose) | Centralized policy editor, Central Device Governance portal (`/admin/devices`), SSE hot-reload controller, async HITL queue, team spend analytics |
 | **Enterprise Control Hub Console** | Kubernetes Ingress / TLS Endpoint | HAR container pod telemetry, threat intelligence feed monitor, zero-knowledge CMK SIEM status, fleet security compliance overview |
 
 ---
@@ -371,6 +387,8 @@ audit:
 | Variable | Description | Default |
 |---|---|---|
 | `HTTP_PROXY` / `HTTPS_PROXY` | Standard HTTP proxy routing URLs for outbound agent traffic | — |
+| `AGENTWALL_TOKEN` | One-Time Enrollment Token (OTET) for automated workstation onboarding | — |
+| `AGENTWALL_HEARTBEAT_INTERVAL` | Background Sentry daemon health ping interval in seconds | `60` |
 | `AGENTWALL_LISTEN` | Gateway listen socket address | `127.0.0.1:8080` |
 | `AGENTWALL_POLICY_PATH` | Path to YAML policy configuration file | — |
 | `DASHBOARD_API_URL` | Control Hub API endpoint URL for centralized management | — |

@@ -116,6 +116,23 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   echo ""
 fi
 
+# Automated Enterprise Enrollment & OS Service Registration
+HUB_URL="${AGENTWALL_HUB_URL:-http://localhost:8400}"
+TOKEN="${AGENTWALL_TOKEN:-$1}"
+
+if [[ -n "$TOKEN" ]]; then
+  echo "[*] Initializing Enterprise Device Governance..."
+  echo "[*] Step 1/3: PKI Device Enrollment..."
+  "${LOCALBIN}/agentwall" enroll --token "$TOKEN" --hub-url "$HUB_URL" || true
+
+  echo "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..."
+  "${LOCALBIN}/agentwall" service install --hub-url "$HUB_URL" || true
+
+  echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
+  "${LOCALBIN}/agentwall" wrap --all || true
+  echo "[✓] Automated Enterprise Provisioning Completed!"
+fi
+
 echo "To run the demo test script (requires Python 3.8+):"
 echo "  python3 \$HOME/.local/bin/quickstart_agent.py"
 echo ""

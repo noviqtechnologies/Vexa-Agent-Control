@@ -21,6 +21,7 @@ import SpendLimits from './views/SpendLimits'
 import IncreaseRequests from './views/IncreaseRequests'
 import SpendStatus from './views/SpendStatus'
 import SpendVisualization from './views/SpendVisualization'
+import DeviceGovernance from './views/DeviceGovernance'
 
 
 interface NavSection {
@@ -73,6 +74,7 @@ const NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Device Governance', to: '/admin/devices' },
       { label: 'Users', to: '/admin/users' },
       { label: 'Auth Providers', to: '/admin/auth-providers' },
     ],
@@ -296,6 +298,7 @@ export default function App() {
                 <Route path="/audit" element={<AuditLogs />} />
                 <Route path="/admin/auth-providers" element={<AuthProviders />} />
                 <Route path="/admin/users" element={<Users />} />
+                <Route path="/admin/devices" element={<DeviceGovernance />} />
                 <Route path="/integrations/ide" element={<IdeConnections />} />
                 <Route path="/integrations/mcp-servers" element={
                   <RequireAdmin>

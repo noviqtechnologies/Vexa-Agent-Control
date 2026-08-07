@@ -118,9 +118,12 @@ helm install agentwall ./chart --namespace agentwall-system \
 | Passive Shadow AI Discovery | ✓ | ✓ | ✓ |
 | MCP Security Scoring Engine | ✓ | ✓ | ✓ |
 | IDE Auto-Wrapping Engine | ✓ | ✓ | ✓ |
+| Hardware PKI Device Enrollment | ✓ | ✓ | ✓ |
+| Persistent OS Sentry Daemon | ✓ | ✓ | ✓ |
 | ADR Security Benchmark | ✓ | ✓ | ✓ |
 | Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ |
 | Centralized Policy Push (SSE) | — | ✓ | ✓ |
+| Central Device Governance | — | ✓ | ✓ |
 | OIDC Identity Binding | — | ✓ | ✓ |
 | Project & Task Policy Sharding | — | ✓ | ✓ |
 | Vault & API Key Custody | — | ✓ | ✓ |

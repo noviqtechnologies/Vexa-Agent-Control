@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.21"
+version = "1.0.22"
 edition = "2021"
 description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -88,6 +88,9 @@ shlex = "1.3"
 # OS-specific dirs (FR-304: agentwall wrap)
 dirs = "5"
 
+# OS Keychain integration for PKI identity
+keyring = "2"
+
 # Filesystem events (FR-watch: agentwall watch daemon)
 notify = "6"
 
@@ -106,6 +109,12 @@ urlencoding = "2.1.3"
 tokio-rustls = "0.26"
 rustls-pemfile = "2"
 toml = "1.1.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.7"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

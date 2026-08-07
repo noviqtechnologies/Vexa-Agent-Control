@@ -869,6 +869,37 @@ Persist the installation directory in your shell configuration:
     agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
     ```
 
+### Environment Variables Reference
+
+| Environment Variable | Default Value | Description |
+|---|---|---|
+| `AGENTWALL_TOKEN` | *None* | One-Time Enrollment Token (OTET) for automated workstation onboarding |
+| `DASHBOARD_API_URL` | `http://localhost:8400` | Central Control Hub API endpoint |
+| `GATEWAY_SECRET` | *None* | Shared gateway bearer token for Control Hub API ingestion |
+| `POLICY_READ_SECRET` | *None* | Bearer secret for pulling remote policies from Control Hub |
+| `AGENTWALL_HEARTBEAT_INTERVAL` | `60` | Background Sentry daemon health ping interval in seconds |
+| `AGENTWALL_LOG_LEVEL` | `info` | Gateway logging verbosity (`trace`, `debug`, `info`, `warn`, `error`) |
+
+---
+
+### Multi-OS Troubleshooting & System Integration
+
+#### Linux DBus SecretService & Headless Fallback
+- **Issue:** On headless Linux servers (SSH/CI-CD) without an active X11/DBus session bus, `keyring` may fail to store Ed25519 device keys.
+- **Solution:** AgentWall automatically falls back to Machine-ID derived AES-256 encrypted file storage (`/etc/machine-id` or `/var/lib/dbus/machine-id`) at `~/.agentwall/device_identity.key` with restricted POSIX `0600` permissions.
+
+#### macOS Keychain Authorization Prompts
+- **Issue:** macOS prompts for keychain access approval when running `agentwall enroll`.
+- **Solution:** Click **Always Allow** to permit the `agentwall` binary to read and store the Ed25519 device private key in macOS Keychain Services (`security-framework`).
+
+#### Windows Session 0 Multi-User Profile Resolution
+- **Issue:** When running as a Windows Service under `NT AUTHORITY\SYSTEM` in Session 0, `%USERPROFILE%` evaluates to `C:\Windows\System32\config\systemprofile`.
+- **Solution:** AgentWall's Windows SCM engine automatically resolves all human user profile directories in `C:\Users\*` via `ProfileList` registry keys (`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList`), watching and locking IDE configs across all developer accounts on the machine.
+
+#### WSL / WSL2 Path Interop
+- **Issue:** Developer uses Cursor or Claude Desktop on Windows host while running agent scripts inside WSL2.
+- **Solution:** AgentWall in WSL automatically detects `/proc/sys/kernel/osrelease` containing `microsoft` and resolves Windows host paths (`/mnt/c/Users/<user>/AppData/Roaming/...`) alongside Linux native paths (`~/.config/`).
+
 ---
 
 ### IDE Wrapping & Watch Daemon Diagnostics

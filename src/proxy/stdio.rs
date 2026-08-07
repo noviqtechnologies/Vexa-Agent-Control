@@ -46,7 +46,7 @@ pub fn resolve_command(program: &str) -> (String, Vec<String>) {
 
         // Search common Node.js / nvm / Homebrew / macports binary locations if not found in PATH
         if program == "npx" || program == "node" || program == "npm" {
-            let mut extra_paths = vec![
+            let extra_paths = vec![
                 "/usr/local/bin",
                 "/opt/homebrew/bin",
                 "/opt/homebrew/share/npm/bin",

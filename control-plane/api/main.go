@@ -85,6 +85,10 @@ func main() {
 	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret)
 	hubSpecH := handler.NewHubSpecHandler(db, broker, cfg.ProviderKeyEncryptionSecret)
 
+	enrollmentH := handler.NewEnrollmentHandler(db, cfg.GatewaySecret)
+	heartbeatH := handler.NewHeartbeatHandler(db)
+	deviceAdminH := handler.NewDeviceAdminHandler(db)
+
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
@@ -95,6 +99,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Public PKI Enrollment route (Unauthenticated)
+	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
 
 	// Gateway API Spec endpoints (Gateway / Read Secret Auth)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/bootstrap", hubSpecH.GetBootstrap)
@@ -107,7 +114,7 @@ func main() {
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
-	// Ingest endpoints — gateway auth (shared secret), NOT OIDC.
+	// Ingest endpoints — gateway auth (shared secret / device JWT), NOT OIDC.
 	r.Route("/api/v1/ingest", func(r chi.Router) {
 		r.Use(middleware.GatewayAuth(cfg.GatewaySecret))
 		r.Post("/events", ingestH.PostEvent)
@@ -115,6 +122,8 @@ func main() {
 		r.Post("/credentials", ingestH.PostCredential)
 		r.Post("/mcp-servers", ingestH.PostMcpServers)
 		r.Post("/spend-snapshots", spendH.SyncSnapshot)
+		r.Post("/heartbeat", heartbeatH.PostHeartbeat)
+		r.Post("/tamper-log", deviceAdminH.PostTamperLog)
 	})
 
 	// Unauthenticated Auth Routes
@@ -203,6 +212,13 @@ func main() {
 			r.Post("/requests", spendH.SubmitIncreaseRequest)
 			r.Post("/requests/{id}/resolve", spendH.ResolveIncreaseRequest)
 		})
+
+		// Central Device Governance (Admin)
+		r.Route("/admin/devices", func(r chi.Router) {
+			r.Get("/", deviceAdminH.ListDevices)
+			r.Post("/{id}/revoke", deviceAdminH.RevokeDevice)
+		})
+		r.Post("/admin/enrollment-tokens", enrollmentH.PostCreateToken)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

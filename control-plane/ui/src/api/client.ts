@@ -273,6 +273,51 @@ export interface RotationResult {
   drain_seconds: number
 }
 
+// Central Device Governance
+export interface Device {
+  device_id: string
+  hostname: string
+  os_arch: string
+  os_family: string
+  public_key: string
+  agentwall_version: string
+  compliance_status: 'COMPLIANT' | 'UNREACHABLE' | 'NON_COMPLIANT'
+  mcp_servers_total: number
+  mcp_servers_wrapped: number
+  ide_checksums: Record<string, string>
+  first_enrolled_at: string
+  last_heartbeat_at: string
+  is_revoked: boolean
+  revoked_at?: string
+  updated_at: string
+}
+
+export interface EnrollmentToken {
+  token_id: string
+  token_hash: string
+  created_by: string
+  max_uses: number
+  current_uses: number
+  expires_at: string
+  created_at: string
+}
+
+export async function listDevices(osFamily = '', status = ''): Promise<{ devices: Device[]; total: number }> {
+  return get<{ devices: Device[]; total: number }>(`/admin/devices?os_family=${osFamily}&status=${status}`)
+}
+
+export async function revokeDevice(deviceId: string): Promise<{ device_id: string; status: string }> {
+  return postJSON<{ device_id: string; status: string }>(`/admin/devices/${deviceId}/revoke`, {})
+}
+
+export async function createEnrollmentToken(rawToken: string, maxUses = 10, ttlHours = 24): Promise<EnrollmentToken> {
+  return postJSON<EnrollmentToken>(`/admin/enrollment-tokens`, {
+    raw_token: rawToken,
+    max_uses: maxUses,
+    ttl_hours: ttlHours,
+  })
+}
+
 // SSE stream for real-time alerts (AC-23.2).
 export function subscribeAlerts(
   onAlert: (alert: RedactedAlert) => void,

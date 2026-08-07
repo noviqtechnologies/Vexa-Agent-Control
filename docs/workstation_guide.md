@@ -65,6 +65,23 @@ curl -fsSL https://vexasec.io/install.sh | bash
 agentwall --version
 ```
 
+### Persistent OS Sentry Daemon & File Locking
+
+Instead of manually running `agentwall start` in terminal, install AgentWall as an always-on background OS daemon with read-only file locks:
+
+```bash
+# Install persistent systemd (Linux) or launchd (macOS) service
+agentwall service install --hub-url "https://hub.corp.com"
+
+# Check daemon status
+agentwall service status
+```
+
+**How Sentry Protection Works:**
+- **Immutable File Locking:** Applies read-only attributes (`chmod 0444`, BSD `chflags uchg`, Windows ACL Write Deny) to `mcp.json` configs.
+- **Continuous Watcher:** File changes trigger <300ms auto-rewrapping and instant (<100ms) `TAMPER_DETECTED` alert dispatch.
+- **Windows Session 0 Scanning:** Automatically enumerates developer profile hives in `C:\Users\*` when running under `SYSTEM`.
+
 **Permanent PATH configuration (run once — survives terminal restarts):**
 
 - **Bash (Linux/WSL):**

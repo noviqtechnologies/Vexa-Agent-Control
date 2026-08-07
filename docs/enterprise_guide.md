@@ -218,6 +218,69 @@ spec:
         - name: policy-config
           mountPath: /etc/agentwall
   volumes:
+
+---
+
+## 5. Enterprise MDM Fleet Deployment Templates
+
+Enterprise security administrators can deploy AgentWall across developer fleets using MDM platforms (Jamf Pro, Kandji, Microsoft Intune, Ansible).
+
+### 1. macOS MDM Deployment (Jamf Pro / Kandji)
+
+**Script Payload (Jamf Script Editor / Kandji Custom Script):**
+```bash
+#!/bin/bash
+# Jamf Pro / Kandji Managed Deployment Script for AgentWall
+export AGENTWALL_TOKEN="TOK-ENTERPRISE-TOKEN-892A"
+export AGENTWALL_HUB_URL="https://agentwall.corp.com"
+
+# Install binary and run automated enrollment & daemon registration
+curl -fsSL https://agentwall.corp.com/install.sh | bash
+
+# Ensure system LaunchDaemon is active
+launchctl load -w /Library/LaunchDaemons/io.vexasec.agentwall.plist || true
+```
+
+### 2. Windows MDM Deployment (Microsoft Intune Win32App)
+
+**PowerShell Script (Intune Management Extension):**
+```powershell
+<#
+.SYNOPSIS
+    Microsoft Intune Win32App Deployment Script for AgentWall Sentry Service
+#>
+$env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN-892A"
+$env:AGENTWALL_HUB_URL = "https://agentwall.corp.com"
+
+irm https://agentwall.corp.com/install.ps1 | iex
+
+# Start AgentWall SCM Service
+Start-Service -Name "AgentWallSentry" -ErrorAction SilentlyContinue
+```
+
+### 3. Linux Fleet Ansible Playbook
+
+```yaml
+---
+- name: Deploy AgentWall Persistent Security Sentry Daemon
+  hosts: developer_workstations
+  become: yes
+  vars:
+    enrollment_token: "TOK-ENTERPRISE-TOKEN-892A"
+    hub_url: "https://agentwall.corp.com"
+
+  tasks:
+    - name: Download & install AgentWall binary
+      shell: "curl -fsSL https://agentwall.corp.com/install.sh | AGENTWALL_TOKEN='{{ enrollment_token }}' AGENTWALL_HUB_URL='{{ hub_url }}' bash"
+      args:
+        creates: /usr/local/bin/agentwall
+
+    - name: Ensure agentwall.service is enabled and running
+      systemd:
+        name: agentwall
+        state: started
+        enabled: yes
+```
     - name: policy-config
       configMap:
         name: agentwall-policy

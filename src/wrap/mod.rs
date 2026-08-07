@@ -6,6 +6,7 @@
 pub mod backup;
 pub mod claude;
 pub mod config_path;
+pub mod file_lock;
 pub mod generic_ide;
 pub mod status;
 pub mod transformer;

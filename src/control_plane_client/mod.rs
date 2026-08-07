@@ -2,4 +2,5 @@
 
 pub mod bridge;
 pub mod client;
+pub mod heartbeat;
 pub mod subscribe;

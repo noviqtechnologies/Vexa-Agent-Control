@@ -447,6 +447,9 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
         return;
     }
 
+    // Unlock file permissions prior to auto-rewrap
+    let _ = super::file_lock::unlock_config_file(config_path);
+
     let wrap_result = if let Some(flags) = &at.claude_flags {
         // Call wrap_claude directly (returns Result<WrapResult, WrapError>).
         claude::wrap_claude(false, flags.scan_responses)
@@ -457,8 +460,11 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
 
     match wrap_result {
         Ok(result) => {
+            // Re-apply read-only immutable file locks immediately
+            let _ = super::file_lock::lock_config_file(&result.config_path);
+
             println!(
-                "{} [watch] Wrapped {} MCP server(s) in {} — restart {} to apply.",
+                "{} [watch] [self-healing] Wrapped & locked {} MCP server(s) in {} — restart {} to apply.",
                 "✔".green().bold(),
                 result.servers_wrapped,
                 at.name.cyan(),
@@ -472,10 +478,14 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
                 own_hashes.lock().unwrap().insert(key, hash);
             }
 
+            // Dispatch instant <100ms TAMPER_DETECTED alert to Control Hub
+            send_instant_tamper_alert(at.name, &result.config_path);
+
             super::status::gather_and_send_mcp_servers_snapshot();
         }
         Err(WrapError::AlreadyWrapped) => {
-            // No-op (all servers already protected)
+            // Ensure file is locked even if already wrapped
+            let _ = super::file_lock::lock_config_file(config_path);
         }
         Err(WrapError::NoMcpServers) => {
             // No mcpServers in config, nothing to wrap
@@ -483,6 +493,32 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
         Err(e) => {
             eprintln!("{} [watch] Error wrapping {}: {}", "✖".red(), at.name, e);
         }
+    }
+}
+
+fn send_instant_tamper_alert(ide_name: &str, _path: &std::path::Path) {
+    if let Some(client) = crate::control_plane_client::client::DashboardClient::from_env() {
+        let device_id = crate::identity::device::DeviceIdentity::load_or_create()
+            .map(|id| id.device_id)
+            .unwrap_or_else(|_| "unknown-device".to_string());
+
+        let alert = control_plane_proto::alert::RedactedAlert {
+            alert_id: uuid::Uuid::new_v4(),
+            severity: control_plane_proto::alert::AlertSeverity::Critical,
+            event: control_plane_proto::event::RedactedEvent {
+                event_id: uuid::Uuid::new_v4(),
+                timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                session_id: format!("sess-sentry-{}", device_id),
+                agent_id: device_id,
+                tool_name: format!("ide_config_tamper:{}", ide_name.to_lowercase().replace(' ', "_")),
+                decision: control_plane_proto::event::RedactedDecision::Denied,
+                dlp_findings: vec![],
+                injection_findings: vec![],
+                semantic_findings: vec![],
+            },
+        };
+
+        client.send_alert(alert);
     }
 }
 
