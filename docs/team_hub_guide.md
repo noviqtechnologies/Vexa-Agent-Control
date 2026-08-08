@@ -32,19 +32,20 @@ The **Team Control Hub** profile extends AgentWall governance beyond a single de
 Choose the deployment method that fits your environment requirements:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          Deployment Guides                              │
-├─────────────────────────────────────┬───────────────────────────────────┤
-│ 1. Local Development Guide          │ 2. Kubernetes Deployment Guide    │
-│    • Local Dev & Testing            │    • Production Multi-Replica     │
-│    • Docker Compose Stack           │    • High Availability            │
-│    • Proof-of-Concept (PoC)         │    • Helm & Operator CRDs         │
-│    → [Local Dev Guide](team_hub_guide/local_development.md) │    → [K8s Deployment Guide](team_hub_guide/kubernetes_deployment.md) │
-└─────────────────────────────────────┴───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       Deployment Guides                                         │
+├──────────────────────────┬───────────────────────────────┬──────────────────────────────────────┤
+│ 1. Local Development     │ 2. Kubernetes Deployment      │ 3. AWS EKS Deployment                │
+│    • Local Dev & Testing │    • Production Multi-Replica │    • Production AWS Cloud            │
+│    • Docker Compose      │    • High Availability        │    • EKS, EBS CSI, ACM TLS           │
+│    • Proof-of-Concept    │    • Helm & Operator CRDs      │    • Step-by-Step Teardown           │
+│    → [Local Dev](team_hub_guide/local_development.md) │ → [K8s Guide](team_hub_guide/kubernetes_deployment.md) │ → [AWS EKS Guide](team_hub_guide/aws_eks_deployment.md) │
+└──────────────────────────┴───────────────────────────────┴──────────────────────────────────────┘
 ```
 
 - **[Local Development & Testing Guide](team_hub_guide/local_development.md)** — Step-by-step instructions for running Team Hub locally using Docker Compose (`docker compose up -d --build`), executing native gateways, connecting local agent workflows, and verifying audit logs.
 - **[Kubernetes Deployment Guide](team_hub_guide/kubernetes_deployment.md)** — Comprehensive documentation for deploying Team Hub to production Kubernetes clusters using Helm (`./chart`), managing TLS secrets, configuring `AgentWallPolicy` CRDs, and handling zero-downtime rolling upgrades.
+- **[AWS EKS Deployment & Uninstallation Guide](team_hub_guide/aws_eks_deployment.md)** — Step-by-step walkthrough for deploying, validating, and cleanly uninstalling Team Hub on AWS EKS using `eksctl`, Helm, AWS EBS CSI storage, and ACM ingress.
 
 ---
 

@@ -44,6 +44,7 @@ AgentWall is deployed in distinct modes depending on your operational needs:
 
 - [Detailed User Guide](user_guide.md)
 - [Team & Staging Control Hub Guide](team_hub_guide.md)
+- [AWS EKS Deployment & Uninstallation Guide](team_hub_guide/aws_eks_deployment.md)
 - [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md)
 - [Deployment & Installation](deployment.md)
 - [Quickstart Guide](quickstart.md)

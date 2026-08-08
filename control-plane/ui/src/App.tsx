@@ -22,7 +22,8 @@ import IncreaseRequests from './views/IncreaseRequests'
 import SpendStatus from './views/SpendStatus'
 import SpendVisualization from './views/SpendVisualization'
 import DeviceGovernance from './views/DeviceGovernance'
-
+import CommandPalette from './components/CommandPalette'
+import NotificationCenter from './components/NotificationCenter'
 
 interface NavSection {
   id: string
@@ -42,9 +43,8 @@ const NAV_SECTIONS: NavSection[] = [
     ),
     children: [
       { label: 'Active Policies', to: '/policy' },
-            { label: 'Policy Editor', to: '/policy/edit' },
+      { label: 'Policy Editor', to: '/policy/edit' },
       { label: 'Group Policies', to: '/policy/group' },
-
       { label: 'Safe Mode', to: '/policy/safe-mode' },
     ],
   },
@@ -127,7 +127,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   )
 }
 
-function Sidebar({ onLogout }: { onLogout: () => void }) {
+function Sidebar({ onLogout, onOpenCommandPalette }: { onLogout: () => void; onOpenCommandPalette: () => void }) {
   const location = useLocation()
 
   // Determine which sections should be open by default (those containing the active route)
@@ -164,6 +164,21 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
         </svg>
         Vexa <span>Agentwall</span>
       </div>
+
+      {/* Quick search command button in sidebar */}
+      <button
+        type="button"
+        className="sidebar-quick-search-btn"
+        onClick={onOpenCommandPalette}
+        title="Open Command Palette (Ctrl+K)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span>Search actions...</span>
+        <kbd className="sidebar-kbd">Ctrl K</kbd>
+      </button>
 
       {/* Dashboard — top-level single link */}
       <NavLink
@@ -268,55 +283,100 @@ function GlobalAuthBanner() {
   );
 }
 
+function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => void }) {
+  return (
+    <header className="soc-top-bar">
+      <div className="soc-top-bar-left">
+        <button
+          type="button"
+          className="soc-search-trigger"
+          onClick={onOpenCommandPalette}
+          aria-label="Open Command Palette"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span className="soc-search-text">Quick jump to policy, agent, or action...</span>
+          <kbd className="soc-search-kbd">Ctrl K</kbd>
+        </button>
+      </div>
+
+      <div className="soc-top-bar-right">
+        <div className="soc-gateway-status-pill">
+          <span className="status-dot-pulse" />
+          <span className="status-text">Gateway Active</span>
+          <span className="status-mode">Zero-Trust</span>
+        </div>
+
+        <NotificationCenter />
+      </div>
+    </header>
+  )
+}
+
 export default function App() {
   const { authenticated, logout } = useAuth()
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
 
   return (
-    <Routes>
-      <Route path="/login" element={authenticated ? <Navigate to="/fleet" /> : <Login />} />
+    <>
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
+      <Routes>
+        <Route path="/login" element={authenticated ? <Navigate to="/fleet" /> : <Login />} />
 
-      <Route path="*" element={
-        <RequireAuth>
-          <div className="app-shell">
-            <Sidebar onLogout={logout} />
+        <Route path="*" element={
+          <RequireAuth>
+            <div className="app-shell">
+              <Sidebar
+                onLogout={logout}
+                onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+              />
 
-            <main className="main-content">
-              <GlobalAuthBanner />
-              <Routes>
-                <Route path="/" element={<Navigate to="/fleet" replace />} />
-                <Route path="/fleet" element={<FleetOverview />} />
-                <Route path="/identity" element={<IdentityGovernance />} />
-                <Route path="/policy" element={<PolicyInsights />} />
-                                <Route path="/policy/edit" element={<PolicyEditor />} />
-                <Route path="/policy/group" element={<GroupPolicyEditor />} />
-                <Route path="/spend/limits" element={<SpendLimits />} />
-                <Route path="/spend/requests" element={<IncreaseRequests />} />
-                <Route path="/spend/status" element={<SpendStatus />} />
-                <Route path="/spend/visualization" element={<SpendVisualization />} />
-                <Route path="/policy/safe-mode" element={<SafeMode />} />
-                <Route path="/threats" element={<ThreatIntelligence />} />
-                <Route path="/audit" element={<AuditLogs />} />
-                <Route path="/admin/auth-providers" element={<AuthProviders />} />
-                <Route path="/admin/users" element={<Users />} />
-                <Route path="/admin/devices" element={<DeviceGovernance />} />
-                <Route path="/integrations/ide" element={<IdeConnections />} />
-                <Route path="/integrations/mcp-servers" element={
-                  <RequireAdmin>
-                    <McpServers />
-                  </RequireAdmin>
-                } />
-                <Route path="/integrations/llm-providers" element={
-                  <RequireAdmin>
-                    <LlmProviders />
-                  </RequireAdmin>
-                } />
-                {/* Legacy redirect */}
-                <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
-              </Routes>
-            </main>
-          </div>
-        </RequireAuth>
-      } />
-    </Routes>
+              <div className="main-viewport-wrapper">
+                <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
+                <main className="main-content">
+                  <GlobalAuthBanner />
+                  <Routes>
+                    <Route path="/" element={<Navigate to="/fleet" replace />} />
+                    <Route path="/fleet" element={<FleetOverview />} />
+                    <Route path="/identity" element={<IdentityGovernance />} />
+                    <Route path="/policy" element={<PolicyInsights />} />
+                    <Route path="/policy/edit" element={<PolicyEditor />} />
+                    <Route path="/policy/group" element={<GroupPolicyEditor />} />
+                    <Route path="/spend/limits" element={<SpendLimits />} />
+                    <Route path="/spend/requests" element={<IncreaseRequests />} />
+                    <Route path="/spend/status" element={<SpendStatus />} />
+                    <Route path="/spend/visualization" element={<SpendVisualization />} />
+                    <Route path="/policy/safe-mode" element={<SafeMode />} />
+                    <Route path="/threats" element={<ThreatIntelligence />} />
+                    <Route path="/audit" element={<AuditLogs />} />
+                    <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                    <Route path="/admin/users" element={<Users />} />
+                    <Route path="/admin/devices" element={<DeviceGovernance />} />
+                    <Route path="/integrations/ide" element={<IdeConnections />} />
+                    <Route path="/integrations/mcp-servers" element={
+                      <RequireAdmin>
+                        <McpServers />
+                      </RequireAdmin>
+                    } />
+                    <Route path="/integrations/llm-providers" element={
+                      <RequireAdmin>
+                        <LlmProviders />
+                      </RequireAdmin>
+                    } />
+                    {/* Legacy redirect */}
+                    <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
+                  </Routes>
+                </main>
+              </div>
+            </div>
+          </RequireAuth>
+        } />
+      </Routes>
+    </>
   )
 }
