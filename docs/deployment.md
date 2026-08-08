@@ -64,39 +64,63 @@ agentwall --help
 
 ## 🪟 Windows Installation
 
-### Step 1: Open PowerShell
-Press the `Windows` key on your keyboard, type `PowerShell`, and click **Windows PowerShell**.
+### Step 1: Open PowerShell or Command Prompt
+Press the `Windows` key on your keyboard, type `PowerShell` or `cmd`, and launch your preferred terminal.
 
 ### Step 2: Download and Install AgentWall
-Copy and paste the following 1-line command into PowerShell and press `Enter`:
 
-```powershell
-irm https://vexasec.io/install.ps1 | iex
-```
+* **Option A: PowerShell (Recommended)**
+  ```powershell
+  irm https://vexasec.io/install.ps1 | iex
+  ```
+
+* **Option B: Command Prompt (CMD)**
+  ```cmd
+  curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  ```
 
 > **Important — Installer Elevation & Administrator Permissions:**
 > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO deployment tasks run under **`NT AUTHORITY\SYSTEM`** with full administrative privileges. **`agentwall service install` runs automatically without user interaction.**
-> - **Manual Script Execution (`install.ps1`):** Executing `install.ps1` in a standard user PowerShell session installs the binary. **Installing the SCM Service (`agentwall service install`) requires opening PowerShell with "Run as Administrator".**
+> - **Manual Script Execution (`install.ps1`):** Executing `install.ps1` in a standard user PowerShell or CMD session installs the binary to `%USERPROFILE%\.local\bin`. **Installing the SCM Service (`agentwall service install`) requires opening PowerShell with "Run as Administrator".**
 > - **Non-Admin Fallback:** Users without administrative privileges can run the sentry daemon interactively using **`agentwall watch`** in a standard user terminal.
 
 *(Alternatively, download the ZIP archive manually):*
-```powershell
-Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
-Expand-Archive -Path "agentwall.zip" -DestinationPath "$env:USERPROFILE\.local" -Force
-$env:PATH += ";$env:USERPROFILE\.local\bin"
-```
+* **PowerShell:**
+  ```powershell
+  Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
+  Expand-Archive -Path "agentwall.zip" -DestinationPath "$env:USERPROFILE\.local" -Force
+  $env:PATH += ";$env:USERPROFILE\.local\bin"
+  ```
+* **Command Prompt (CMD):**
+  ```cmd
+  curl.exe -fsSL https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip -o agentwall.zip
+  tar -xf agentwall.zip -C "%USERPROFILE%\.local\bin"
+  set PATH=%PATH%;%USERPROFILE%\.local\bin
+  ```
 
 ### Step 3: Verify Installation
-Type the following and press `Enter`:
-```powershell
-agentwall.exe --version
-agentwall.exe --help
-```
+
+* **PowerShell:**
+  ```powershell
+  agentwall.exe --version
+  agentwall.exe --help
+  ```
+
+* **Command Prompt (CMD):**
+  ```cmd
+  agentwall.exe --version
+  agentwall.exe --help
+  ```
 
 *(Optional: To run the demonstration test script `quickstart_agent.py`, Python 3.8+ is required):*
-```powershell
-python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
-```
+* **PowerShell:**
+  ```powershell
+  python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+  ```
+* **Command Prompt (CMD):**
+  ```cmd
+  python "%USERPROFILE%\.local\bin\quickstart_agent.py"
+  ```
 
 ---
 

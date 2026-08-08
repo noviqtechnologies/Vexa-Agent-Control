@@ -79,13 +79,33 @@ Gateway                                               Control Hub API
 - `: ping` — Sent every 15 seconds. No ping within 30 seconds triggers a warning and exponential backoff reconnect.
 
 **Connecting gateways in centralized mode:**
-```bash
-export DASHBOARD_API_URL="https://hub.corp.com:8080"
-export POLICY_READ_SECRET="your-policy-read-secret"
-export GATEWAY_SECRET="your-gateway-secret"
 
-agentwall start --listen 0.0.0.0:8080 --centralized
-```
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  export DASHBOARD_API_URL="https://hub.corp.com:8080"
+  export POLICY_READ_SECRET="your-policy-read-secret"
+  export GATEWAY_SECRET="your-gateway-secret"
+
+  agentwall start --listen 0.0.0.0:8080 --centralized
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  $env:DASHBOARD_API_URL="https://hub.corp.com:8080"
+  $env:POLICY_READ_SECRET="your-policy-read-secret"
+  $env:GATEWAY_SECRET="your-gateway-secret"
+
+  agentwall.exe start --listen 0.0.0.0:8080 --centralized
+  ```
+
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  set DASHBOARD_API_URL=https://hub.corp.com:8080
+  set POLICY_READ_SECRET=your-policy-read-secret
+  set GATEWAY_SECRET=your-gateway-secret
+
+  agentwall.exe start --listen 0.0.0.0:8080 --centralized
+  ```
 
 ---
 
@@ -187,17 +207,48 @@ Control Hub provides a dedicated **Device Governance** portal (`/admin/devices`)
 
 ### 1. Generating One-Time Enrollment Tokens (OTET)
 Admins generate short-lived enrollment tokens in the Web Console or REST API:
-```bash
-curl -X POST http://localhost:8400/api/v1/admin/enrollment-tokens \
-  -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
-```
+
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  curl -X POST http://localhost:8400/api/v1/admin/enrollment-tokens \
+    -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" \
+    -H "Content-Type: application/json" \
+    -d '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  Invoke-RestMethod -Uri "http://localhost:8400/api/v1/admin/enrollment-tokens" `
+    -Method Post `
+    -Headers @{ "Authorization" = "Bearer <ADMIN_SESSION_TOKEN>" } `
+    -ContentType "application/json" `
+    -Body '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
+  ```
+
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  curl.exe -X POST http://localhost:8400/api/v1/admin/enrollment-tokens ^
+    -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" ^
+    -H "Content-Type: application/json" ^
+    -d "{\"raw_token\": \"TOK-892A-3F91\", \"max_uses\": 25, \"ttl_hours\": 24}"
+  ```
 
 Developers use the generated command to onboard:
-```bash
-curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
-```
+
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  $env:AGENTWALL_TOKEN="TOK-892A-3F91"; irm https://vexasec.io/install.ps1 | iex
+  ```
+
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  set AGENTWALL_TOKEN=TOK-892A-3F91 && curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  ```
 
 ### 2. Device Compliance State Machine
 Control Hub tracks heartbeat checkins emitted every 60 seconds from background Sentry daemons:

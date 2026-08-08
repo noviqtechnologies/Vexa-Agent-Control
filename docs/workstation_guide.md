@@ -207,7 +207,7 @@ Secure Model Context Protocol (MCP) tool calls and desktop AI applications by wr
 
 > **Prerequisites:** Node.js (`npx` v18+) installed and target directory created.
 
-**Linux / macOS:**
+**Linux / macOS (Bash / Zsh):**
 ```bash
 mkdir -p ~/workspace
 agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
@@ -216,7 +216,13 @@ agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/worksp
 **Windows (PowerShell):**
 ```powershell
 New-Item -ItemType Directory -Path "$HOME\workspace" -Force
-agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
+agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
+```
+
+**Windows (Command Prompt - CMD):**
+```cmd
+if not exist "%USERPROFILE%\workspace" mkdir "%USERPROFILE%\workspace"
+agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "%USERPROFILE%\workspace"
 ```
 
 > [!TIP]
@@ -243,9 +249,16 @@ AgentWall automatically patches the MCP configuration file of the target IDE —
 | OpenCode | `agentwall wrap opencode` |
 | Antigravity IDE | `agentwall wrap antigravity` |
 
+**Linux / macOS (Bash / Zsh):**
 ```bash
 agentwall wrap claude      # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
 agentwall status           # inspect active wrappers and proxy health
+```
+
+**Windows (PowerShell / CMD):**
+```powershell
+agentwall.exe wrap claude  # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
+agentwall.exe status       # inspect active wrappers and proxy health
 ```
 
 > [!IMPORTANT]
@@ -260,12 +273,18 @@ MCP tool calls (file manipulation, shell execution, etc.) are proxied and govern
 
 After running your agents or IDE tools, generate a YAML security policy derived from the observed traffic. This is a **one-time learning step** — run it after observation, not during.
 
+**Linux / macOS (Bash / Zsh):**
 ```bash
 agentwall generate-policy --decay-window 30
 ```
 
+**Windows (PowerShell / CMD):**
+```powershell
+agentwall.exe generate-policy --decay-window 30
+```
+
 **What You Will See:**
-Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentwall/events.db`.
+Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentwall/events.db` (or `%USERPROFILE%\.agentwall\events.db`).
 
 **What You Achieve:**
 A tailored, baseline security policy automatically crafted for your specific agent tools — without manual YAML writing.
@@ -281,8 +300,14 @@ For complete YAML policy authoring and the v2 schema reference, see → [Common 
 
 Evaluate how well your policy configuration detects and blocks 303 real-world AI attack tasks across 17 categories:
 
+**Linux / macOS (Bash / Zsh):**
 ```bash
 agentwall bench --full
+```
+
+**Windows (PowerShell / CMD):**
+```powershell
+agentwall.exe bench --full
 ```
 
 *(When building from source: `cargo run -- bench --full`)*
@@ -293,6 +318,7 @@ The benchmark completes in under 60 seconds and writes a report to `target/bench
 open target/benchmark-report.html            # macOS
 xdg-open target/benchmark-report.html       # Linux
 Start-Process target/benchmark-report.html  # Windows PowerShell
+start target\benchmark-report.html          # Windows Command Prompt (CMD)
 ```
 
 The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also renders the latest report interactively.

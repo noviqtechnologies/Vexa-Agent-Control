@@ -26,13 +26,22 @@ Without objective testing, it is difficult to know whether your policy covers th
 
 ### Command
 
-```bash
-# Run all 303 tasks across all 17 categories
-agentwall bench --full
+* **macOS / Linux (Bash / Zsh):**
+  ```bash
+  agentwall bench --full
+  ```
 
-# Equivalent when running from source
-cargo run -- bench --full
-```
+* **Windows (PowerShell):**
+  ```powershell
+  agentwall.exe bench --full
+  ```
+
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  agentwall.exe bench --full
+  ```
+
+*(When building from source: `cargo run -- bench --full`)*
 
 The benchmark typically completes in under 60 seconds on a standard developer workstation.
 
@@ -55,6 +64,9 @@ xdg-open target/benchmark-report.html
 
 # Windows (PowerShell)
 Start-Process target/benchmark-report.html
+
+# Windows (Command Prompt - CMD)
+start target\benchmark-report.html
 ```
 
 The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also renders the report interactively after you run `agentwall dev`.

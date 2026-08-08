@@ -21,7 +21,7 @@ agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem /workspa
 ### Route Agent Traffic
 Set standard proxy variables in your terminal before running your AI agent:
 
-**macOS / Linux:**
+**macOS / Linux (Bash / Zsh):**
 ```bash
 export HTTP_PROXY=http://localhost:8080
 export HTTPS_PROXY=http://localhost:8080
@@ -37,9 +37,18 @@ $env:AGENTWALL_PROXY_URL="http://localhost:8080"
 python my_agent.py
 ```
 
+**Windows Command Prompt (CMD):**
+```cmd
+set HTTP_PROXY=http://localhost:8080
+set HTTPS_PROXY=http://localhost:8080
+set AGENTWALL_PROXY_URL=http://localhost:8080
+python my_agent.py
+```
+
 ### Generate a Policy Draft
 Once your agent has been observed, automatically draft a YAML security policy:
-**All OS:**
+
+**macOS / Linux / Windows:**
 ```bash
 agentwall generate-policy --decay-window 30
 ```
@@ -51,7 +60,7 @@ agentwall generate-policy --decay-window 30
 The centralized gateway actively enforces security policies in production environments. It supports TLS, strict tool allowlisting, and Zero-Downtime Policy Hot-Reloads.
 
 ### Start the Enforcement Gateway
-**All OS:**
+**macOS / Linux / Windows:**
 ```bash
 agentwall start --policy agentwall-policy.yaml --listen 0.0.0.0:8080
 ```
@@ -64,14 +73,21 @@ When you update `agentwall-policy.yaml`, you can reload the gateway without drop
 kill -SIGHUP $(pidof agentwall)
 ```
 
-**Option B: Using the API Endpoint (Cross-Platform & Windows)**
-```bash
-# macOS / Linux / Git Bash
-curl -X POST http://localhost:8080/reload
+**Option B: Using the API Endpoint (Cross-Platform)**
+* **macOS / Linux (Bash / Zsh):**
+  ```bash
+  curl -X POST http://localhost:8080/reload
+  ```
 
-# Windows PowerShell
-Invoke-RestMethod -Uri "http://localhost:8080/reload" -Method Post
-```
+* **Windows PowerShell:**
+  ```powershell
+  Invoke-RestMethod -Uri "http://localhost:8080/reload" -Method Post
+  ```
+
+* **Windows Command Prompt (CMD):**
+  ```cmd
+  curl.exe -X POST http://localhost:8080/reload
+  ```
 
 ---
 

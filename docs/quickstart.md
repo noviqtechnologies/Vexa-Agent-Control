@@ -1,9 +1,10 @@
 ## Prerequisites & Installation
 
-Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) installed, along with the `agentwall` binary on your system:
+Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity IDE) installed, along with the `agentwall` binary on your system:
 
 ### Installing AgentWall
-* **macOS / Linux / WSL:**
+
+* **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
   curl -fsSL https://vexasec.io/install.sh | bash
   agentwall --version
@@ -11,6 +12,11 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) i
 * **Windows (PowerShell):**
   ```powershell
   irm https://vexasec.io/install.ps1 | iex
+  agentwall.exe --version
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   agentwall.exe --version
   ```
 
@@ -25,12 +31,16 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor/VS Code) i
 
 First, start AgentWall in **developer mode** (shadow proxy). In this mode, AgentWall watches the traffic between Claude Desktop and your computer without blocking calls yet:
 
-* **macOS / Linux:**
+* **macOS / Linux (Bash / Zsh):**
   ```bash
   agentwall dev
   ```
 * **Windows (PowerShell):**
   ```powershell
+  agentwall.exe dev
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
   agentwall.exe dev
   ```
 
@@ -42,13 +52,18 @@ First, start AgentWall in **developer mode** (shadow proxy). In this mode, Agent
 
 Open a **new, separate terminal window** and run the integration command:
 
-* **macOS / Linux:**
+* **macOS / Linux (Bash / Zsh):**
   ```bash
   agentwall wrap claude
   agentwall status
   ```
 * **Windows (PowerShell):**
   ```powershell
+  agentwall.exe wrap claude
+  agentwall.exe status
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
   agentwall.exe wrap claude
   agentwall.exe status
   ```
@@ -65,13 +80,17 @@ Open a **new, separate terminal window** and run the integration command:
 
 *Alternatively, run the instant test demonstration script to populate all telemetry without configuring an IDE (requires **Python 3.8+**):*
 
-* **macOS / Linux / WSL:**
+* **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
   python3 ~/.local/bin/quickstart_agent.py
   ```
 * **Windows (PowerShell):**
   ```powershell
   python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  python "%USERPROFILE%\.local\bin\quickstart_agent.py"
   ```
 *(This sends simulated AI tool calls through `http://127.0.0.1:8080` to populate the dashboard immediately if you see "No tool calls recorded yet").*
 
@@ -103,9 +122,18 @@ Now that AgentWall has seen what tools Claude needs to use, we can generate a se
 
 In your second terminal window, run:
 
-```bash
-agentwall generate-policy --decay-window 30
-```
+* **macOS / Linux / WSL (Bash / Zsh):**
+  ```bash
+  agentwall generate-policy --decay-window 30
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  agentwall.exe generate-policy --decay-window 30
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  agentwall.exe generate-policy --decay-window 30
+  ```
 
 This creates an `agentwall-policy.yaml` file in your current folder. If you open this file, you will see something like this:
 
@@ -154,9 +182,18 @@ Right now, you are running `agentwall dev` (observation mode). Let's switch to *
 1. Go to your first terminal (where `agentwall dev` is running) and press `Ctrl + C` to stop it.
 2. Start the gateway in enforcement mode using the policy we just generated:
 
-```bash
-agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
-```
+* **macOS / Linux / WSL (Bash / Zsh):**
+  ```bash
+  agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  agentwall.exe start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
+  ```
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  agentwall.exe start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
+  ```
 
 ### Test the Firewall
 
@@ -165,14 +202,19 @@ Ask Claude / your agent to perform an unapproved action, such as accessing a res
 
 *(Alternatively, send a test HTTP request to verify policy enforcement directly):*
 
-* **macOS / Linux / Command Prompt / `curl.exe`:**
+* **macOS / Linux (Bash / Zsh):**
   ```bash
-  curl.exe -X POST http://127.0.0.1:8080/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/etc/shadow\"}},\"id\":1}"
+  curl -X POST http://127.0.0.1:8080/mcp -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_file","arguments":{"path":"/etc/shadow"}},"id":1}'
   ```
 
 * **Windows (PowerShell):**
   ```powershell
   Invoke-RestMethod -Uri "http://127.0.0.1:8080/mcp" -Method Post -ContentType "application/json" -Body '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_file","arguments":{"path":"/etc/shadow"}},"id":1}'
+  ```
+
+* **Windows (Command Prompt - CMD):**
+  ```cmd
+  curl.exe -X POST http://127.0.0.1:8080/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/etc/shadow\"}},\"id\":1}"
   ```
 
 AgentWall will immediately intercept and **block** the tool request (`403 Forbidden` / default-deny policy rule match), preventing the agent call from executing. You have successfully secured your AI Agent!
@@ -183,6 +225,12 @@ AgentWall will immediately intercept and **block** the tool request (`403 Forbid
 
 If you ever want to remove AgentWall from Claude Desktop and return to normal, simply run:
 
-```bash
-agentwall unwrap claude
-```
+* **macOS / Linux (Bash / Zsh):**
+  ```bash
+  agentwall unwrap claude
+  ```
+* **Windows (PowerShell / CMD):**
+  ```powershell
+  agentwall.exe unwrap claude
+  ```
+

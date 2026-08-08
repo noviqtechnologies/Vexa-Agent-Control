@@ -43,8 +43,8 @@ You can generate structured compliance evidence reports directly from your produ
 
 ```bash
 # Output Markdown summary to stdout
-agentwall compliance report --log /var/log/agentwall/audit.log
+agentwall compliance report --log-path /var/log/agentwall/audit.log
 
 # Export JSON evidence report for auditors
-agentwall compliance report --log /var/log/agentwall/audit.log --format json --output soc2_evidence.json
+agentwall compliance report --log-path /var/log/agentwall/audit.log --format json --output soc2_evidence.json
 ```

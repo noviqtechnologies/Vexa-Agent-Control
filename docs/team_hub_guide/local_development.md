@@ -249,7 +249,7 @@ curl.exe -X POST http://127.0.0.1:8080 `
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
+curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
 ```
 
 > [!NOTE]

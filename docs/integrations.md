@@ -13,16 +13,31 @@ Instead of manually setting up environment variables, you can use the `agentwall
 ### Continuous Auto-Wrapping (`agentwall watch`)
 
 You can run the **Watch Daemon** to continuously monitor your IDE configuration directories. Whenever a new MCP server is added to your IDE, AgentWall will automatically detect and wrap it in real time:
-```bash
-agentwall watch
-```
+
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  agentwall watch
+  ```
+
+* **Windows (PowerShell / CMD):**
+  ```powershell
+  agentwall.exe watch
+  ```
 
 ### Telemetry & Fleet Visibility (`agentwall status`)
 
 Run the status command to view the existence and wrap status of all supported IDE configurations on your machine:
-```bash
-agentwall status
-```
+
+* **Linux / macOS (Bash / Zsh):**
+  ```bash
+  agentwall status
+  ```
+
+* **Windows (PowerShell / CMD):**
+  ```powershell
+  agentwall.exe status
+  ```
+
 When connected to an AgentWall Dashboard, this command also sends an **MCP Server Inventory Snapshot**, providing Administrators with centralized, per-client visibility into which MCP servers are being used across the fleet.
 
 ## Supported Targets

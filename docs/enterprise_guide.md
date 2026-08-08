@@ -157,7 +157,7 @@ This validates TLS binding, OIDC provider discovery, and SIEM telemetry streamin
 ### Step 3 — Execute Automated Policy Smoke Test
 
 ```bash
-agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com
+agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com fixtures/smoke_test.json
 ```
 
 **Expected output:** A terminal test report summarizing passed assertions and policy enforcement checks.
