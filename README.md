@@ -194,7 +194,7 @@ Provides individual developers with instant, zero-configuration security guardra
 
 Extends governance across engineering teams and staging environments with centralized policy coordination, identity binding, and budget controls.
 
-- **Central Device Governance Portal** — Web Console view (`/admin/devices`) for OTET enrollment token generation, 60s heartbeat monitoring (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and single-device instant revocation.
+- **[Central Device Governance Portal](docs/team_hub_guide.md#6-central-device-governance--fleet-health)** — Web Console view (`/admin/devices`) for OTET enrollment token generation, 60s heartbeat monitoring (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and single-device instant revocation.
 - **Centralized Policy Push (SSE)** — Broadcast versioned security policies from the Control Hub to distributed gateway instances in real-time via Server-Sent Events.
 - **OIDC Identity Binding** — Map corporate identity provider JWT group claims (Keycloak, Okta, Entra ID, Auth0, Ping) directly to dynamic policy rulesets.
 - **Multi-Tenant Policy Sharding** — Resolves and scopes policies dynamically based on `agent_project_id` and `agent_task_id` request context headers.

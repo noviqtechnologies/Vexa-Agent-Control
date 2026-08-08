@@ -123,7 +123,7 @@ helm install agentwall ./chart --namespace agentwall-system \
 | ADR Security Benchmark | ✓ | ✓ | ✓ |
 | Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ |
 | Centralized Policy Push (SSE) | — | ✓ | ✓ |
-| Central Device Governance | — | ✓ | ✓ |
+| [Central Device Governance](team_hub_guide.md#6-central-device-governance--fleet-health) | — | ✓ | ✓ |
 | OIDC Identity Binding | — | ✓ | ✓ |
 | Project & Task Policy Sharding | — | ✓ | ✓ |
 | Vault & API Key Custody | — | ✓ | ✓ |

@@ -359,3 +359,53 @@ The report includes:
 - **Recommendations** for which policy rules to add to improve your score
 
 The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also displays the latest report interactively.
+
+---
+
+## 11. Central Device Governance & Fleet Health
+
+AgentWall Control Hub provides a dedicated **Device Governance** portal (`/admin/devices`) for registering developer endpoints, tracking active Sentry daemon heartbeats, and enforcing endpoint compliance across macOS, Windows, Linux, and WSL.
+
+For complete API specifications and enrollment token parameters, see the [Team & Staging Control Hub Guide](team_hub_guide.md#6-central-device-governance--fleet-health).
+
+### Generating One-Time Enrollment Tokens (OTET)
+Admins can generate short-lived enrollment tokens via the Web Console (`+ Generate Enrollment Token`) or REST API:
+
+**Linux / macOS (Bash / Zsh):**
+```bash
+curl -X POST http://localhost:8400/api/v1/admin/enrollment-tokens \
+  -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8400/api/v1/admin/enrollment-tokens" `
+  -Method Post `
+  -Headers @{ "Authorization" = "Bearer <ADMIN_SESSION_TOKEN>" } `
+  -ContentType "application/json" `
+  -Body '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
+```
+
+### Onboarding Developer Workstations
+Developers run the onboarding script with the generated token:
+
+**Linux / macOS (Bash):**
+```bash
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:AGENTWALL_TOKEN="TOK-892A-3F91"; irm https://vexasec.io/install.ps1 | iex
+```
+
+### Heartbeat Compliance States
+
+| Status Badge | State Criteria | Operational Meaning |
+|---|---|---|
+| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$ AND $100\%$ MCP servers wrapped | Device active, full proxy & API access granted. |
+| **`UNREACHABLE`** (Yellow) | $3\text{ min} < \text{Heartbeat} \le 10\text{ min}$ | Workstation is idle, asleep, or temporarily disconnected. |
+| **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped tools detected | **Zero-Trust Breach**: Unwrapped MCP server detected or device compromised/revoked. |
+

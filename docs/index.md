@@ -20,6 +20,7 @@ AgentWall intercepts outbound traffic from your agent, surfacing patterns in a l
 - **Stateful Sequence Rules:** Sliding-window session tracker and deterministic sequence engine enforce multi-step attack detection across tool call chains (e.g., block `exec` always following `read`).
 - **Agent Identity & Credential Governance:** Per-agent short-lived credential provisioning, rotation, and per-tool-call scoping to eliminate long-lived secret sprawl.
 - **SaaS Dashboard (FR-23):** Optional self-hosted web dashboard for fleet-wide visibility into agent activity, identity governance, policy insights, and Per-Client MCP Server Visibility (Admin-Only).
+- **Central Device Governance:** OTET enrollment tokens, 60s background sentry heartbeats (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and instant device revocation.
 - **Compliance & Auditing:** HMAC-chained audit logs with direct export to SIEMs like Splunk and Datadog.
 - **ADR Security Benchmark (`agentwall bench`):** Built-in 303-task benchmark suite measuring security posture across 17 AI attack categories (prompt injection, exfiltration, SSRF, privilege escalation, etc.) with an A/B/C grade and an HTML report.
 
@@ -42,6 +43,7 @@ AgentWall is deployed in distinct modes depending on your operational needs:
 ## Documentation Index
 
 - [Detailed User Guide](user_guide.md)
+- [Team & Staging Control Hub Guide](team_hub_guide.md)
 - [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md)
 - [Deployment & Installation](deployment.md)
 - [Quickstart Guide](quickstart.md)
