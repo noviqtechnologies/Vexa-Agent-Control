@@ -1,0 +1,30 @@
+/* Users Page — reuses ap-* modal classes from AuthProviders.css */
+
+.users-page {
+  max-width: 1100px;
+}
+
+.users-provider-badge {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.users-badge-user {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.users-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Inherit .ap-overlay, .ap-modal, .ap-modal-form etc from AuthProviders.css */
+/* These classes must be loaded via AuthProviders.css import in the same bundle */

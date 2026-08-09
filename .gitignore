@@ -23,11 +23,13 @@ session-report.json
 report.json
 matrix_results.json
 
-# HTML & CSS (local dashboard html is tracked)
+# HTML & CSS (local dashboard html & control-plane UI are tracked)
 *.html
 !src/dashboard/dashboard.html
 !src/local_dashboard/local_dashboard.html
+!control-plane/ui/**/*.html
 *.css
+!control-plane/ui/**/*.css
 
 # IDEs and OS
 .idea/

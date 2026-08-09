@@ -1,0 +1,85 @@
+.policy-editor-page {
+  padding: 24px;
+}
+
+.message-banner {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.message-banner.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.message-banner.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  height: calc(100vh - 200px);
+}
+
+.editor-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-sidebar h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.info-block {
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--bg-color);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.editor-main {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.editor-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.editor-header h3 {
+  margin: 0;
+}
+
+.code-editor {
+  flex: 1;
+  width: 100%;
+  padding: 24px;
+  background: #1e1e1e; /* VSCode-like dark bg */
+  color: #d4d4d4;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  border: none;
+  resize: none;
+  outline: none;
+}
+
+.code-editor:focus {
+  outline: none;
+}
