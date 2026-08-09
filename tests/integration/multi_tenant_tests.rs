@@ -55,6 +55,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
             agentwall::policy::semantic::SemanticConfig::default(),
         )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
+        schema_drift_detector: Arc::new(agentwall::policy::schema_drift::SchemaDriftDetector::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(AtomicU64::new(0)),
@@ -85,6 +86,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -169,6 +171,7 @@ async fn test_rate_limiting_isolation() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -282,6 +285,7 @@ async fn test_cycle_detection_isolation() {
         }),
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -380,6 +384,7 @@ async fn test_hot_reload_policy_isolation() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     // Policy 2 (Denies everything)
@@ -394,6 +399,7 @@ async fn test_hot_reload_policy_isolation() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy_v1.clone()));
@@ -483,6 +489,7 @@ async fn test_dynamic_tool_history_max() {
         }),
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -537,6 +544,7 @@ async fn test_session_ttl_expiry() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let session = SessionContext::new(

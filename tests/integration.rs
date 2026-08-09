@@ -9,5 +9,6 @@ mod integration {
     mod phase_1_1_tests;
     mod promotion_tests;
     mod proxy_test;
+    mod schema_drift_integration_test;
     mod stdio_tests;
 }

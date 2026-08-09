@@ -32,4 +32,20 @@ fn test_dashboard_html_is_embedded() {
         html.contains("panel-policy"),
         "Dashboard HTML should contain policy view"
     );
+    assert!(
+        html.contains("panel-gateway"),
+        "Dashboard HTML should contain gateway controls view"
+    );
+    assert!(
+        html.contains("panel-self-healing"),
+        "Dashboard HTML should contain self-healing view"
+    );
+    assert!(
+        html.contains("panel-egress"),
+        "Dashboard HTML should contain egress view"
+    );
+    assert!(
+        html.contains("panel-prometheus"),
+        "Dashboard HTML should contain prometheus view"
+    );
 }

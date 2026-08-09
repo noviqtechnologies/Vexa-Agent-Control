@@ -26,6 +26,17 @@ impl McpScorer {
         allow_egress: bool,
         input_schema_complexity: u8,
     ) -> McpSecurityScore {
+        Self::evaluate_server_with_drift(server_name, allowed_paths, allow_egress, input_schema_complexity, false)
+    }
+
+    /// Evaluates an MCP server configuration including schema drift penalty (FR-601).
+    pub fn evaluate_server_with_drift(
+        server_name: &str,
+        allowed_paths: &[String],
+        allow_egress: bool,
+        input_schema_complexity: u8,
+        schema_drift_detected: bool,
+    ) -> McpSecurityScore {
         let mut score: i16 = 100;
         let mut flags = Vec::new();
 
@@ -60,13 +71,20 @@ impl McpScorer {
             flags.push("HIGH_SCHEMA_COMPLEXITY_PROMPT_INJECTION_SURFACE".to_string());
         }
 
+        // 4. Schema drift penalty (FR-601)
+        if schema_drift_detected {
+            score -= 25;
+            flags.push("SCHEMA_DRIFT_DETECTED_AGAINST_BASELINE".to_string());
+        }
+
         let final_score = score.clamp(0, 100) as u8;
         let risk_level = match final_score {
             80..=100 => "LOW",
             60..=79 => "MEDIUM",
             40..=59 => "HIGH",
             _ => "CRITICAL",
-        }.to_string();
+        }
+        .to_string();
 
         McpSecurityScore {
             server_name: server_name.to_string(),

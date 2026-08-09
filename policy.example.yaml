@@ -81,3 +81,10 @@ firewall:
   cycle_detection:
     max_attempts: 3
     action: pivot_error  # Options: pivot_error, block, pause_interactive
+
+# FR-601: MCP Schema-Drift Detection (Detects altered tool definitions across sessions)
+schema_drift:
+  enabled: true
+  action: warn          # Options: warn, block, downgrade_score
+  baseline_path: "./schema_baselines.json" # Optional persistent storage
+

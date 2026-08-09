@@ -143,6 +143,80 @@ export default function IdeConnections() {
           </div>
         ))}
       </div>
+
+      {/* Programmatic Client SDKs */}
+      <div className="page-header" style={{ marginTop: 40 }}>
+        <h2>Programmatic Client SDKs (Thin Proxy Mode)</h2>
+        <p>
+          Govern custom agent runtimes (LangChain, CrewAI, AutoGen, or native scripts) by routing tool calls through the out-of-process AgentWall proxy.
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
+        {/* Python SDK */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(56,189,248,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8', fontWeight: 700, fontSize: 16 }}>
+              Py
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Python Client SDK (<code>agentwall</code>)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>MIT-licensed lightweight proxy client with <code>@client.governed</code> decorator</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#38bdf8' }}>pip install agentwall</code>
+            <button
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '2px 6px' }}
+              onClick={() => navigator.clipboard?.writeText('pip install agentwall')}
+              title="Copy"
+            >
+              Copy
+            </button>
+          </div>
+
+          <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '12px', fontSize: 12, fontFamily: 'var(--font-mono)', overflowX: 'auto', color: 'var(--text-secondary)' }}>
+            <span style={{ color: '#ec4899' }}>from</span> agentwall <span style={{ color: '#ec4899' }}>import</span> AgentWallClient, AgentWallDenied<br/><br/>
+            client = AgentWallClient()  <span style={{ color: 'var(--text-muted)' }}># Connects to 127.0.0.1:8080</span><br/><br/>
+            <span style={{ color: '#38bdf8' }}>@client.governed</span><br/>
+            <span style={{ color: '#ec4899' }}>def</span> <span style={{ color: '#22c55e' }}>execute_query</span>(sql: <span style={{ color: '#eab308' }}>str</span>):<br/>
+            &nbsp;&nbsp;<span style={{ color: '#ec4899' }}>return</span> db.run(sql)<br/>
+          </div>
+        </div>
+
+        {/* TypeScript SDK */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(49,120,198,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa', fontWeight: 700, fontSize: 16 }}>
+              TS
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>TypeScript Client SDK (<code>@vexa/agentwall</code>)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Zero-dependency TypeScript/Node.js client for AI agent pipelines</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#60a5fa' }}>npm install @vexa/agentwall</code>
+            <button
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '2px 6px' }}
+              onClick={() => navigator.clipboard?.writeText('npm install @vexa/agentwall')}
+              title="Copy"
+            >
+              Copy
+            </button>
+          </div>
+
+          <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '12px', fontSize: 12, fontFamily: 'var(--font-mono)', overflowX: 'auto', color: 'var(--text-secondary)' }}>
+            <span style={{ color: '#ec4899' }}>import</span> &#123; AgentWallClient &#125; <span style={{ color: '#ec4899' }}>from</span> <span style={{ color: '#a78bfa' }}>"@vexa/agentwall"</span>;<br/><br/>
+            <span style={{ color: '#ec4899' }}>const</span> client = <span style={{ color: '#ec4899' }}>new</span> AgentWallClient();<br/><br/>
+            <span style={{ color: '#ec4899' }}>const</span> governedTool = client.governed(<span style={{ color: '#a78bfa' }}>"read_file"</span>, <span style={{ color: '#ec4899' }}>async</span> (args) =&gt; &#123;<br/>
+            &nbsp;&nbsp;<span style={{ color: '#ec4899' }}>return</span> fs.readFile(args.path, <span style={{ color: '#a78bfa' }}>"utf-8"</span>);<br/>
+            &#125;);
+          </div>
+        </div>
+      </div>
     </>
   )
 }

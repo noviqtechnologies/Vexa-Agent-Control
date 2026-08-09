@@ -236,11 +236,16 @@ pub async fn run_stdio_bridge(
                 match msg {
                     Some(Ok(json)) => {
                         // FR-303b: Extract tool name before forwarding
-                        let tool_name = json.get("params")
-                            .and_then(|p| p.get("name"))
-                            .and_then(|n| n.as_str())
-                            .unwrap_or("")
-                            .to_string();
+                        let method = json.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                        let tool_name = if method == "tools/list" {
+                            "tools/list".to_string()
+                        } else {
+                            json.get("params")
+                                .and_then(|p| p.get("name"))
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("")
+                                .to_string()
+                        };
 
                         let action = evaluate_jsonrpc(&state, &local_session, &json).await;
                         match action {
@@ -596,6 +601,77 @@ async fn stdio_scan_response(
         Ok(crate::policy::injection::ScanResult::Clean) => {}
     }
 
+    // FR-601: MCP Schema-Drift Evaluation on discovery responses
+    if tool_name == "tools/list" {
+        let drift_cfg = state
+            .policy
+            .read()
+            .ok()
+            .and_then(|p| p.as_ref().and_then(|pol| pol.schema_drift.clone()));
+        let drift_result = state
+            .schema_drift_detector
+            .evaluate_catalog("stdio", response, drift_cfg.as_ref());
+        match drift_result {
+            crate::policy::schema_drift::DriftResult::Drift {
+                server_name,
+                action,
+                added_tools,
+                removed_tools,
+                modified_tools,
+                ..
+            } => {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "schema_drift_detected",
+                        tool_name,
+                        None,
+                        Some(format!(
+                            "server={} action={:?} added={:?} removed={:?} modified={:?}",
+                            server_name, action, added_tools, removed_tools, modified_tools
+                        )),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Warn,
+                    "schema_drift_detected",
+                    serde_json::json!({
+                        "server": server_name,
+                        "action": format!("{:?}", action),
+                        "added": added_tools,
+                        "removed": removed_tools,
+                        "modified": modified_tools,
+                    }),
+                );
+                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
+                    let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    return serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32002,
+                            "message": "MCP schema drift violation: tool catalog modified from baseline",
+                            "data": {
+                                "server": server_name,
+                                "added": added_tools,
+                                "removed": removed_tools,
+                                "modified": modified_tools
+                            }
+                        }
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
     // 2. Secret Response Scanner (FR-303b)
     let scan_config = match state.response_scan_config.read() {
         Ok(guard) => guard.clone(),
@@ -862,12 +938,16 @@ pub async fn run_stdio_to_http_bridge(
 
                         match response {
                             Ok(resp) => {
-                                let tool_name = json
-                                    .get("params")
-                                    .and_then(|p| p.get("name"))
-                                    .and_then(|n| n.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
+                                let method = json.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                                let tool_name = if method == "tools/list" {
+                                    "tools/list".to_string()
+                                } else {
+                                    json.get("params")
+                                        .and_then(|p| p.get("name"))
+                                        .and_then(|n| n.as_str())
+                                        .unwrap_or("")
+                                        .to_string()
+                                };
                                 let processed = stdio_scan_response(
                                     &state,
                                     &local_session.session_id,

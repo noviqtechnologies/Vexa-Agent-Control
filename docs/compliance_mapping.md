@@ -1,6 +1,8 @@
 # AgentWall Compliance Control Mapping Guide
 
-This document maps AgentWall security capabilities to major enterprise security & governance frameworks: **SOC 2 Type II**, **ISO/IEC 27001:2022**, and **NIST AI Risk Management Framework (AI RMF 1.0)**.
+This document maps AgentWall security capabilities to major enterprise security & governance frameworks: **OWASP Agentic Top 10 (ASI 2026)**, **SOC 2 Type II**, **ISO/IEC 27001:2022**, and **NIST AI Risk Management Framework (AI RMF 1.0)**.
+
+> 📖 **Dedicated OWASP ASI Document**: For in-depth vulnerability coverage, code evidence links, and threat mitigations, see the [OWASP Agentic Top 10 Architecture Guide](./owasp_agentic_top10.md).
 
 ---
 

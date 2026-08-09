@@ -21,6 +21,8 @@ These are the primary entry points for operators at each deployment tier. Each g
 | Guide / Specification | What it covers |
 |---|---|
 | [quickstart.md](quickstart.md) | Step-by-step tutorial for securing local MCP servers, Claude Desktop, and Cursor IDE |
+| [owasp_agentic_top10.md](owasp_agentic_top10.md) | **OWASP Top 10 for Agentic Applications (ASI 2026)** architectural security mapping, evidence, and mitigations |
+| [compliance_mapping.md](compliance_mapping.md) | Multi-framework compliance mapping (OWASP ASI 2026, SOC 2, ISO 27001, NIST AI RMF) |
 | [oidc_identity_binding.md](oidc_identity_binding.md) | OIDC identity provider integration guide (Okta, Keycloak, Entra ID, Auth0, AWS Cognito, PingIdentity) |
 | [adr_benchmark.md](adr_benchmark.md) | ADR (AI Detection & Response) security benchmark suite reference (303 tasks across 17 attack classes) |
 | [agentwall_architecture.md](agentwall_architecture.md) | Detailed system architecture specification, 6-pass security pipeline, and component interaction flows |

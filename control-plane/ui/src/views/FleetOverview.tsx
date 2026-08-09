@@ -122,22 +122,22 @@ export default function FleetOverview() {
       {/* Stat tiles */}
       {stats && (
         <div className="stats-grid soc-stats-grid">
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/identity')} title="Click to view Agent Identity Governance">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to view Central Device Governance">
             <div className="stat-header-row">
-              <div className="stat-label">Total Agents</div>
+              <div className="stat-label">Total Devices</div>
               <span className="soc-delta-badge delta-neutral">Fleet</span>
             </div>
             <div className="stat-value">{stats.total_agents}</div>
-            <div className="stat-subtext">Workstations & Daemons</div>
+            <div className="stat-subtext">Enrolled Machines</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/identity')} title="Click to view Active Agents">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices?status=COMPLIANT')} title="Click to view Compliant Active Devices">
             <div className="stat-header-row">
-              <div className="stat-label">Active</div>
-              <span className="soc-delta-badge delta-success">Online</span>
+              <div className="stat-label">Active Devices</div>
+              <span className="soc-delta-badge delta-success">Compliant</span>
             </div>
             <div className="stat-value" style={{ color: 'var(--success)' }}>{stats.active_agents}</div>
-            <div className="stat-subtext">Enforcing Zero-Trust</div>
+            <div className="stat-subtext">Compliant & Enforcing Zero-Trust</div>
           </div>
 
           <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/audit')} title="Click to view Audit Event Stream">
@@ -177,7 +177,7 @@ export default function FleetOverview() {
           </div>
 
           {licenseStatus && (
-            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/users')} title="Click to manage Seat Allocations">
+            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to manage Device Seat Allocations">
               <div className="stat-header-row">
                 <div className="stat-label">Seats Used ({licenseStatus.tier.toUpperCase()})</div>
                 <span className="soc-delta-badge delta-neutral">{licenseStatus.seats_remaining} left</span>

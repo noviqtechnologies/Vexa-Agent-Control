@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.23"
+version = "1.0.24"
 edition = "2021"
 description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -150,5 +150,8 @@ opt-level = 2
 debug = false
 
 [profile.release]
+opt-level = 3
 lto = "thin"
-codegen-units = 16
+codegen-units = 1
+panic = "abort"
+strip = true

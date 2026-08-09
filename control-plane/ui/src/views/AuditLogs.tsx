@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, type RedactedEvent } from '../api/client'
 
 const DECISION_CLASS: Record<string, string> = {
@@ -17,13 +18,20 @@ function formatTs(ms: number): string {
 const LIMIT = 200
 
 export default function AuditLogs() {
+  const [searchParams] = useSearchParams()
   const [events, setEvents] = useState<RedactedEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterDecision, setFilterDecision] = useState<string>('all')
+  const [filterDecision, setFilterDecision] = useState<string>(searchParams.get('decision') || 'all')
   const [filterAgent, setFilterAgent] = useState('')
   const [filterTool, setFilterTool] = useState('')
   const [downloading, setDownloading] = useState(false)
   const tableRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (searchParams.get('decision')) {
+      setFilterDecision(searchParams.get('decision')!)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     api.listEvents(LIMIT)
@@ -104,6 +112,7 @@ export default function AuditLogs() {
               <option value="allowed">Allowed</option>
               <option value="denied">Denied</option>
               <option value="warned">Warned</option>
+              <option value="drift">Schema Drift Detected</option>
             </select>
           </div>
           <div style={{ flex: '1 1 160px' }}>

@@ -104,6 +104,25 @@ describe('FleetOverview', () => {
     expect(screen.getByText('15')).toBeInTheDocument()
   })
 
+  it('navigates to device governance when Total Agents or Active stat tiles are clicked', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('Total Agents')).toBeInTheDocument()
+    })
+
+    const totalAgentsTile = screen.getByText('Total Agents').closest('.stat-tile')!
+    const activeTile = screen.getByText('Active').closest('.stat-tile')!
+
+    expect(totalAgentsTile.getAttribute('title')).toBe('Click to view Central Device Governance')
+    expect(activeTile.getAttribute('title')).toBe('Click to view Active Devices')
+  })
+
   it('renders agent table', async () => {
     vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
     vi.mocked(api.listAgents).mockResolvedValue(mockAgents)

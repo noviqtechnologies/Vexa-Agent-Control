@@ -29,6 +29,7 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     }
 }
 

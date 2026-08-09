@@ -104,6 +104,7 @@ mod tests {
             spend_caps: None,
             llm: None,
             sequence_rules: vec![],
+            schema_drift: None,
         }
     }
 

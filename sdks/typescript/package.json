@@ -1,0 +1,45 @@
+{
+  "name": "@vexa/agentwall",
+  "version": "1.0.0",
+  "description": "Zero-dependency TypeScript client SDK for Vexa AgentWall AI security gateway & firewall",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "mcp",
+    "security",
+    "guardrails",
+    "firewall",
+    "governance",
+    "typescript"
+  ],
+  "author": "VexaSec / NoviqTech <security@vexasec.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noviqtechnologies/agentwall.git",
+    "directory": "sdks/typescript"
+  },
+  "homepage": "https://vexasec.io",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

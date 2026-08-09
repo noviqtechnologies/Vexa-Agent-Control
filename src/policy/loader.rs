@@ -600,6 +600,7 @@ fn compile_policy_yaml(
             spend_caps: policy_file.spend_caps,
             llm: policy_file.llm,
             sequence_rules: compiled_sequence_rules,
+            schema_drift: policy_file.schema_drift,
         },
         raw_hash,
         warnings,

@@ -526,6 +526,9 @@ async fn run_stdio_proxy(
             agentwall::policy::injection::InjectionScanner::new()
                 .expect("Failed to compile Injection regexes"),
         ),
+        schema_drift_detector: std::sync::Arc::new(
+            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -1013,7 +1016,7 @@ async fn run_start(
     );
 
     let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(compiled_policy),
+        policy: std::sync::RwLock::new(compiled_policy.clone()),
         audit_logger: audit_logger.clone(),
         session_id: session_id.clone(),
         kill_mode: kill_mode.clone(),
@@ -1038,6 +1041,14 @@ async fn run_start(
         injection_scanner: std::sync::Arc::new(
             agentwall::policy::injection::InjectionScanner::new()
                 .expect("Failed to compile Injection regexes"),
+        ),
+        schema_drift_detector: std::sync::Arc::new(
+            agentwall::policy::schema_drift::SchemaDriftDetector::new(
+                compiled_policy
+                    .as_ref()
+                    .and_then(|p| p.schema_drift.as_ref())
+                    .and_then(|sd| sd.baseline_path.as_ref().map(std::path::PathBuf::from)),
+            ),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -1693,7 +1704,7 @@ async fn run_wrap(
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
 
     let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(compiled_policy),
+        policy: std::sync::RwLock::new(compiled_policy.clone()),
         audit_logger,
         session_id,
         kill_mode: match kill_mode.as_str() {
@@ -1723,6 +1734,14 @@ async fn run_wrap(
         injection_scanner: std::sync::Arc::new(
             agentwall::policy::injection::InjectionScanner::new()
                 .expect("Failed to compile Injection regexes"),
+        ),
+        schema_drift_detector: std::sync::Arc::new(
+            agentwall::policy::schema_drift::SchemaDriftDetector::new(
+                compiled_policy
+                    .as_ref()
+                    .and_then(|p| p.schema_drift.as_ref())
+                    .and_then(|sd| sd.baseline_path.as_ref().map(std::path::PathBuf::from)),
+            ),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -1931,6 +1950,9 @@ async fn run_dev(
         injection_scanner: std::sync::Arc::new(
             agentwall::policy::injection::InjectionScanner::new()
                 .expect("Failed to compile Injection regexes"),
+        ),
+        schema_drift_detector: std::sync::Arc::new(
+            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),

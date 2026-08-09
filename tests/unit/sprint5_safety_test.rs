@@ -51,6 +51,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
             agentwall::policy::semantic::SemanticConfig::default(),
         )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
+        schema_drift_detector: Arc::new(agentwall::policy::schema_drift::SchemaDriftDetector::default()),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(AtomicU64::new(0)),
@@ -104,6 +105,7 @@ async fn test_us100_loop_prevention_pivot_error() {
         firewall: Some(firewall_cfg),
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -176,6 +178,7 @@ async fn test_us100_loop_prevention_different_params_not_blocked() {
         firewall: Some(firewall_cfg),
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -240,6 +243,7 @@ async fn test_us101_spend_cap_enforcement_licensed_vs_unlicensed() {
         firewall: None,
         spend_caps: Some(spend_caps_cfg),
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -303,6 +307,7 @@ async fn test_us103_credential_scope_strict_mode() {
         firewall: None,
         spend_caps: None,
         llm: None,
+        schema_drift: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));

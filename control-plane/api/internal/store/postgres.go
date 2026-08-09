@@ -42,10 +42,10 @@ func (s *Store) UpsertAgent(ctx context.Context, agentID string) error {
 	return err
 }
 
-// CountDistinctAgents returns the total count of registered agents in the fleet.
+// CountDistinctAgents returns the total count of registered devices consuming license seats.
 func (s *Store) CountDistinctAgents(ctx context.Context) (int, error) {
 	var count int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM agents`).Scan(&count)
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices`).Scan(&count)
 	return count, err
 }
 
@@ -169,8 +169,8 @@ func (s *Store) GetFleetStats(ctx context.Context) (*FleetStats, error) {
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM agents),
-			(SELECT COUNT(*) FROM agents WHERE status = 'active'),
+			(SELECT COUNT(*) FROM devices),
+			(SELECT COUNT(*) FROM devices WHERE NOT is_revoked AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes' AND mcp_servers_wrapped >= mcp_servers_total),
 			(SELECT COUNT(*) FROM telemetry_events),
 			(SELECT COUNT(*) FROM telemetry_events WHERE decision = 'denied'),
 			(SELECT COUNT(*) FROM alerts),

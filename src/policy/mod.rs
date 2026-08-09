@@ -16,6 +16,7 @@ pub mod remote;
 pub mod response_scanner;
 pub mod safe_mode;
 pub mod schema;
+pub mod schema_drift;
 pub mod semantic;
 pub mod sharding;
 pub mod threat_intel;

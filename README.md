@@ -10,22 +10,23 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.23-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.24-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
+  <a href="docs/owasp_agentic_top10.md"><img src="https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square" alt="OWASP ASI 2026"></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-Hub-1f6feb.svg?style=flat-square" alt="Documentation"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
+  <a href="#client-sdks">Client SDKs</a> ·
   <a href="#why-vexa-agentwall">Why Vexa AgentWall</a> ·
   <a href="#capabilities-by-operating-profile">Capabilities</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#security-and-control">Security & Control</a> ·
+  <a href="#owasp-agentic-top-10-asi-2026-compliance">OWASP Compliance</a> ·
   <a href="#deployment-options">Deployment options</a> ·
-  <a href="#management-consoles">Management consoles</a> ·
-  <a href="#configuration">Configuration</a> ·
   <a href="docs/README.md">Documentation</a>
 </p>
 
@@ -72,6 +73,39 @@ Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter 
 > ```powershell
 > python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 > ```
+
+### Client SDKs (Python & TypeScript)
+
+Integrate your AI agents directly with AgentWall's out-of-process security proxy:
+
+**Python (`agentwall`):**
+```python
+# pip install agentwall
+from agentwall import AgentWallClient, AgentWallDenied
+
+client = AgentWallClient() # Auto-discovers local proxy on 127.0.0.1:8080
+
+@client.governed
+def read_project_file(path: str) -> str:
+    with open(path, "r") as f:
+        return f.read()
+
+try:
+    content = read_project_file("/workspace/README.md")
+except AgentWallDenied as e:
+    print(f"Blocked by policy: {e.rule_name} — {e.reason}")
+```
+
+**TypeScript / Node.js (`@vexa/agentwall`):**
+```typescript
+// npm install @vexa/agentwall
+import { AgentWallClient, AgentWallDenied } from "@vexa/agentwall";
+
+const client = new AgentWallClient();
+const governedReadFile = client.governed("read_file", async (args: { path: string }) => {
+  return await fs.promises.readFile(args.path, "utf-8");
+});
+```
 
 ### Team / Staging Control Hub (Docker Compose)
 
@@ -290,6 +324,31 @@ Vexa AgentWall enforces security controls at the network and runtime boundaries 
 - **Zero-Knowledge CMK SIEM Export** — Audit data is encrypted with client-side AES-256-GCM using Customer-Managed Keys prior to external SIEM transmission.
 - **Memory-Safe Pure-Rust Architecture** — Built with Rust and `rustls` to eliminate memory corruption bugs, buffer overflows, and C-library vulnerabilities.
 - **Real-Time Threat Intelligence Integration** — Subscribes to live Vexa threat feeds via SSE, updating DLP pattern signatures on-the-fly without downtime.
+
+---
+
+## OWASP Agentic Top 10 (ASI 2026) Compliance
+
+Vexa AgentWall provides explicit out-of-process security controls designed specifically for the **OWASP Top 10 for Agentic Applications (ASI 2026)** threat matrix. Rather than relying on soft system prompts or probabilistic LLM guardrails, AgentWall intercepts, audits, and enforces deterministic runtime boundaries on all tool calls and egress traffic.
+
+### OWASP ASI 2026 Coverage Matrix
+
+| Risk ID | Vulnerability Title | Status | Primary Enforcement Mechanism | Code / Doc Reference |
+|---|---|:---:|---|---|
+| **ASI01** | **Agent Goal Hijack** | ✅ **Full** | 6-Pass normalizer, 9 prompt injection scanners & response sanitization | [`src/policy/injection.rs`](src/policy/injection.rs) |
+| **ASI02** | **Tool Misuse and Exploitation** | ✅ **Full** | Default-deny engine, compiled JSON schema bounds & path traversal rejection | [`src/policy/engine.rs`](src/policy/engine.rs) |
+| **ASI03** | **Identity and Privilege Abuse** | ✅ **Full** | OIDC JWT validation, group claim policy mapping & credential scope binding | [`src/policy/identity.rs`](src/policy/identity.rs) |
+| **ASI04** | **Agentic Supply Chain Vulnerabilities** | ✅ **Full** | Manifest Vexa Security Score (0–100) & cross-session schema-drift detection | [`src/policy/mcp_score.rs`](src/policy/mcp_score.rs) |
+| **ASI05** | **Unexpected Code Execution (RCE)** | ✅ **Full** | Safe mode command blocking (`rm -rf`, `curl\|bash`) & self-healing file locks | [`src/policy/safe_mode.rs`](src/policy/safe_mode.rs) |
+| **ASI06** | **Memory and Context Poisoning** | ⚠️ **Partial** | Response poisoning interceptors & HMAC-chained tamper-evident audit logs | [`src/audit/logger.rs`](src/audit/logger.rs) |
+| **ASI07** | **Insecure Inter-Agent Communication** | ❌ **Scoped Gap** | Org-local OIDC identity boundary (requires upstream cross-tenant IdP federation) | [`docs/LIMITATIONS.md`](PRD/LIMITATIONS.md) |
+| **ASI08** | **Cascading Agent Failures** | ✅ **Full** | Cycle & loop detector (`PivotError`), rate limits & session spend caps | [`src/proxy/handler.rs`](src/proxy/handler.rs) |
+| **ASI09** | **Human-Agent Trust Exploitation** | ✅ **Full** | Real-time browser approval modals & HMAC-signed Slack/Teams webhook escalation | [`src/policy/hitl.rs`](src/policy/hitl.rs) |
+| **ASI10** | **Rogue Agents & Unauthorized Egress** | ✅ **Full** | Background Sentry daemon (<300ms self-healing), PKI enrollment & egress tunnel | [`src/service/`](src/service) |
+
+**Official Scorecard:** **8/10 Full Coverage, 1/10 Partial, 1/10 Scoped Gap.**
+
+> 📄 **Detailed Documentation & Automated Verification**: Read the complete [OWASP Agentic Top 10 Specification](docs/owasp_agentic_top10.md) for detailed technical analysis, evidence mappings, and automated CLI verification commands (`agentwall report --compliance`).
 
 ---
 

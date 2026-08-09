@@ -13,7 +13,26 @@
 use serde::Deserialize;
 
 /// The supported policy schema versions.
-pub const SUPPORTED_VERSIONS: &[&str] = &["1", "2", "2.1"];
+pub const SUPPORTED_VERSIONS: &[&str] = &["1", "2", "2.1", "2.2"];
+
+/// FR-601: MCP Schema-Drift Detection configuration (Schema v2.2)
+#[derive(Debug, Clone, serde::Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaDriftConfig {
+    /// Whether schema drift detection is active. Default: false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Action on drift detection: "block", "warn", or "downgrade_score".
+    /// Default: "warn".
+    #[serde(default = "default_drift_action")]
+    pub action: String,
+    /// Optional filesystem path to persist baseline hashes across restarts.
+    pub baseline_path: Option<String>,
+}
+
+fn default_drift_action() -> String {
+    "warn".to_string()
+}
 
 /// ADR multi-step stateful sequence rule specification (Schema v2.1)
 #[derive(Debug, Clone, serde::Serialize, Deserialize)]
@@ -32,7 +51,7 @@ pub struct SequenceRuleSpec {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyFile {
-    /// Required. Must be "1", "2", or "2.1". Any other value = fatal error.
+    /// Required. Must be "1", "2", "2.1", or "2.2". Any other value = fatal error.
     pub version: String,
 
     /// Required. Must be "deny" or "allow". Absent = fatal error.
@@ -76,6 +95,9 @@ pub struct PolicyFile {
 
     /// LLM API governance configuration (providers, models, DLP).
     pub llm: Option<LlmConfig>,
+
+    /// FR-601: MCP schema-drift detection configuration (v2.2).
+    pub schema_drift: Option<SchemaDriftConfig>,
 }
 
 /// LLM API configuration block.

@@ -48,17 +48,23 @@ export default function ThreatIntelligence() {
             <h1>Threat Intelligence</h1>
             <p>DLP violations, injection attempts, and semantic anomalies</p>
           </div>
-          <select
-            className="refresh-btn"
-            value={hours}
-            onChange={(e) => setHours(Number(e.target.value))}
-          >
-            <option value={6}>Last 6h</option>
-            <option value={24}>Last 24h</option>
-            <option value={72}>Last 3d</option>
-            <option value={168}>Last 7d</option>
-            <option value={720}>Last 30d</option>
-          </select>
+          <div className="soc-time-toggle" role="group" aria-label="Telemetry Time Range">
+            {[
+              { label: '6H', val: 6 },
+              { label: '24H', val: 24 },
+              { label: '7D', val: 168 },
+              { label: '30D', val: 720 },
+            ].map((r) => (
+              <button
+                key={r.val}
+                type="button"
+                className={`soc-time-btn ${hours === r.val ? 'active' : ''}`}
+                onClick={() => setHours(r.val)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

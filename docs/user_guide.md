@@ -1452,14 +1452,104 @@ export PROVIDER_KEY_ENCRYPTION_SECRET="0123456789abcdef0123456789abcdef012345678
 ```
 
 ### Automated Compliance Evidence Reporting
-Generate audit evidence reports mapped to SOC 2 Type II, ISO 27001, and NIST AI RMF 1.0:
+Generate audit evidence reports mapped to OWASP ASI 2026, SOC 2 Type II, ISO 27001, and NIST AI RMF 1.0:
 
 ```bash
 # Print Markdown summary report to stdout
 agentwall compliance report --log audit.log
 
 # Export JSON evidence report for auditors
-agentwall compliance report --log audit.log --format json --output soc2_evidence.json
+agentwall compliance report --log audit.log --format json --output owasp_soc2_evidence.json
 ```
+
+---
+
+## 12. MCP Schema-Drift Detection & Client SDKs (v2.2)
+
+### MCP Schema-Drift Detection (ADR-011)
+
+Tool-poisoning and "rug pull" attacks occur when an MCP server modifies its tool descriptions, parameter schemas, or advertised capabilities after initial policy approval. AgentWall detects cross-session schema drift by deterministically hashing the tool catalog on discovery:
+
+```yaml
+# agentwall-policy.yaml
+version: "2.2"
+default_action: deny
+
+schema_drift:
+  enabled: true
+  action: warn          # Options: warn, block, downgrade_score
+  baseline_path: "/var/lib/agentwall/schema_baselines.json"
+```
+
+- **`action: warn`**: Logs a structured `schema_drift_detected` audit event detailing added, removed, and modified tools, allowing execution to proceed.
+- **`action: block`**: Immediately denies sessions with tampered tool catalogs (JSON-RPC error `-32002`).
+- **`action: downgrade_score`**: Deducts 25 points from the MCP server's Vexa Security Score and surfaces warning telemetry.
+
+---
+
+### Python Client SDK (`agentwall`)
+
+The lightweight, MIT-licensed Python SDK enables programmatic agent governance without running policy logic inside your agent process:
+
+```bash
+pip install agentwall
+```
+
+```python
+from agentwall import AgentWallClient, AgentWallDenied, AgentWallApprovalPending
+
+client = AgentWallClient() # Connects to local proxy at 127.0.0.1:8080
+
+# Decorator for existing tool functions
+@client.governed
+def delete_database_record(record_id: str) -> bool:
+    # Executes ONLY if AgentWall policy permits
+    return db.delete(record_id)
+
+try:
+    delete_database_record("rec_123")
+except AgentWallDenied as e:
+    print(f"Policy block: {e.rule_name} — {e.reason}")
+except AgentWallApprovalPending as e:
+    print(f"Requires human approval: {e.approval_url}")
+```
+
+---
+
+### TypeScript Client SDK (`@vexa/agentwall`)
+
+The zero-dependency TypeScript SDK provides seamless integration for Node.js and TypeScript agent ecosystems:
+
+```bash
+npm install @vexa/agentwall
+```
+
+```typescript
+import { AgentWallClient, AgentWallDenied } from "@vexa/agentwall";
+
+const client = new AgentWallClient();
+
+// Wrapped tool function
+const governedReadFile = client.governed("read_file", async (args: { path: string }) => {
+  const fs = await import("fs/promises");
+  return fs.readFile(args.path, "utf-8");
+});
+
+try {
+  const data = await governedReadFile({ path: "/workspace/config.json" });
+  console.log("File content:", data);
+} catch (err) {
+  if (err instanceof AgentWallDenied) {
+    console.error(`Blocked by policy [${err.ruleName}]: ${err.message}`);
+  }
+}
+```
+
+---
+
+### OWASP Agentic Top 10 (ASI 2026) Compliance
+
+For full security architecture mappings, threat mitigations, and code evidence across all 10 OWASP Agentic risks (ASI01–ASI10), see the [OWASP Agentic Top 10 Guide](./owasp_agentic_top10.md).
+
 
 

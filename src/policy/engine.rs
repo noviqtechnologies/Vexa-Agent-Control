@@ -24,6 +24,8 @@ pub struct CompiledPolicy {
     pub llm: Option<super::schema::LlmConfig>,
     /// ADR stateful sequence rules (v2.1)
     pub sequence_rules: Vec<CompiledSequenceRule>,
+    /// FR-601: MCP schema-drift detection configuration
+    pub schema_drift: Option<super::schema::SchemaDriftConfig>,
 }
 
 impl std::fmt::Debug for CompiledPolicy {
@@ -45,6 +47,7 @@ impl std::fmt::Debug for CompiledPolicy {
             .field("spend_caps", &self.spend_caps)
             .field("llm", &self.llm)
             .field("sequence_rules", &self.sequence_rules)
+            .field("schema_drift", &self.schema_drift)
             .finish()
     }
 }

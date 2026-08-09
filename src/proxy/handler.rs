@@ -101,6 +101,8 @@ pub struct ProxyState {
     pub semantic_scanner: Arc<crate::policy::semantic::SemanticScanner>,
     /// FR-13: Injection & Poisoning Detector
     pub injection_scanner: Arc<crate::policy::injection::InjectionScanner>,
+    /// FR-601: Cross-session MCP Schema-Drift Detector
+    pub schema_drift_detector: Arc<crate::policy::schema_drift::SchemaDriftDetector>,
     /// FR-306: Sliding window of recent tool call fingerprints (bounded to 5).
     pub tool_history: std::sync::Mutex<Vec<ToolCallFingerprint>>,
 

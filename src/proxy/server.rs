@@ -1437,6 +1437,77 @@ async fn scan_and_process_response(
         }
     }
 
+    // FR-601: MCP Schema-Drift Evaluation on discovery responses
+    if tool_name == "tools/list" {
+        let drift_cfg = state
+            .policy
+            .read()
+            .ok()
+            .and_then(|p| p.as_ref().and_then(|pol| pol.schema_drift.clone()));
+        let drift_result = state
+            .schema_drift_detector
+            .evaluate_catalog("http_upstream", response, drift_cfg.as_ref());
+        match drift_result {
+            crate::policy::schema_drift::DriftResult::Drift {
+                server_name,
+                action,
+                added_tools,
+                removed_tools,
+                modified_tools,
+                ..
+            } => {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "schema_drift_detected",
+                        tool_name,
+                        None,
+                        Some(format!(
+                            "server={} action={:?} added={:?} removed={:?} modified={:?}",
+                            server_name, action, added_tools, removed_tools, modified_tools
+                        )),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Warn,
+                    "schema_drift_detected",
+                    serde_json::json!({
+                        "server": server_name,
+                        "action": format!("{:?}", action),
+                        "added": added_tools,
+                        "removed": removed_tools,
+                        "modified": modified_tools,
+                    }),
+                );
+                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
+                    let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    return serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32002,
+                            "message": "MCP schema drift violation: tool catalog modified from baseline",
+                            "data": {
+                                "server": server_name,
+                                "added": added_tools,
+                                "removed": removed_tools,
+                                "modified": modified_tools
+                            }
+                        }
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
     // 2. DLP/Secrets Scanning
     let scan_config = match state.response_scan_config.read() {
         Ok(guard) => guard.clone(),

@@ -423,7 +423,10 @@ The following technical reference sections apply across all deployment profiles 
 
 | Reference Topic | Link |
 |---|---|
-| Writing YAML Policies (v2 Schema) | [common_guide.md → YAML Policies](common_guide.md#writing-yaml-policies-v2-schema) |
+| Writing YAML Policies (v2.2 Schema) | [common_guide.md → YAML Policies](common_guide.md#writing-yaml-policies-v2-schema) |
+| MCP Schema-Drift Detection (FR-601) | [user_guide.md → Schema Drift](user_guide.md#12-mcp-schema-drift-detection--client-sdks-v22) |
+| Python SDK (`agentwall`) & TypeScript SDK (`@vexa/agentwall`) | [user_guide.md → Client SDKs](user_guide.md#python-client-sdk-agentwall) |
+| OWASP Agentic Top 10 (ASI 2026) Architecture | [owasp_agentic_top10.md](owasp_agentic_top10.md) |
 | Configuring Data Loss Prevention (DLP) | [common_guide.md → DLP](common_guide.md#configuring-data-loss-prevention-dlp) |
 | Setting Up OIDC Identity Binding | [common_guide.md → OIDC](common_guide.md#setting-up-oidc-identity-binding) |
 | Verifying Audit Logs | [common_guide.md → Audit Logs](common_guide.md#verifying-audit-logs) |

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   listDevices, revokeDevice, createEnrollmentToken,
   type Device, type EnrollmentToken
@@ -16,10 +17,11 @@ function timeAgo(iso: string): string {
 }
 
 export default function DeviceGovernance() {
+  const [searchParams] = useSearchParams()
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
-  const [osFilter, setOsFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [osFilter, setOsFilter] = useState(searchParams.get('os') || '')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [showTokenModal, setShowTokenModal] = useState(false)
   const [generatedToken, setGeneratedToken] = useState<EnrollmentToken | null>(null)
   const [rawTokenValue, setRawTokenValue] = useState('')
@@ -27,8 +29,23 @@ export default function DeviceGovernance() {
   const [ttlHours, setTtlHours] = useState(24)
   const [copiedField, setCopiedField] = useState<'unix' | 'win' | null>(null)
 
+  const [allDevices, setAllDevices] = useState<Device[]>([])
+
+  useEffect(() => {
+    setStatusFilter(searchParams.get('status') || '')
+    setOsFilter(searchParams.get('os') || '')
+  }, [searchParams])
+
   const fetchDevices = () => {
     setLoading(true)
+    // Fetch overall device fleet for accurate stat tiles
+    listDevices('', '')
+      .then((res) => {
+        setAllDevices(res.devices || [])
+      })
+      .catch(() => {})
+
+    // Fetch filtered devices for table display
     listDevices(osFilter, statusFilter)
       .then((res) => {
         setDevices(res.devices || [])
@@ -70,10 +87,10 @@ function generateSecureToken(): string {
     }
   }
 
-  const totalDevices = devices.length
-  const compliantCount = devices.filter(d => d.compliance_status === 'COMPLIANT').length
-  const nonCompliantCount = devices.filter(d => d.compliance_status === 'NON_COMPLIANT').length
-  const unreachableCount = devices.filter(d => d.compliance_status === 'UNREACHABLE').length
+  const totalDevices = allDevices.length
+  const compliantCount = allDevices.filter(d => d.compliance_status === 'COMPLIANT').length
+  const nonCompliantCount = allDevices.filter(d => d.compliance_status === 'NON_COMPLIANT').length
+  const unreachableCount = allDevices.filter(d => d.compliance_status === 'UNREACHABLE').length
 
   return (
     <div style={{ padding: '24px' }}>
@@ -96,19 +113,19 @@ function generateSecureToken(): string {
 
       {/* Stats Summary Tiles */}
       <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setStatusFilter('')} style={{ cursor: 'pointer' }}>
           <div className="stat-value">{totalDevices}</div>
           <div className="stat-label">Total Enrolled Devices</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setStatusFilter('COMPLIANT')} style={{ cursor: 'pointer' }}>
           <div className="stat-value" style={{ color: '#22c55e' }}>{compliantCount}</div>
           <div className="stat-label">Compliant</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setStatusFilter('UNREACHABLE')} style={{ cursor: 'pointer' }}>
           <div className="stat-value" style={{ color: '#f59e0b' }}>{unreachableCount}</div>
           <div className="stat-label">Unreachable (3-10m)</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setStatusFilter('NON_COMPLIANT')} style={{ cursor: 'pointer' }}>
           <div className="stat-value" style={{ color: '#ef4444' }}>{nonCompliantCount}</div>
           <div className="stat-label">Non-Compliant / Revoked</div>
         </div>
@@ -136,26 +153,47 @@ function generateSecureToken(): string {
       </div>
 
       {/* Filters */}
-      <div className="card" style={{ padding: '16px', marginBottom: '24px', display: 'flex', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>OS Family</label>
-          <select value={osFilter} onChange={(e) => setOsFilter(e.target.value)} className="input">
-            <option value="">All Operating Systems</option>
-            <option value="macos">macOS</option>
-            <option value="windows">Windows</option>
-            <option value="linux">Linux</option>
-            <option value="wsl">WSL / WSL2</option>
-          </select>
+      <div className="card" style={{ padding: '16px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>OS Family</label>
+            <select value={osFilter} onChange={(e) => setOsFilter(e.target.value)} className="input">
+              <option value="">All Operating Systems</option>
+              <option value="macos">macOS</option>
+              <option value="windows">Windows</option>
+              <option value="linux">Linux</option>
+              <option value="wsl">WSL / WSL2</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Compliance Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input">
+              <option value="">All Statuses (Show All)</option>
+              <option value="COMPLIANT">COMPLIANT</option>
+              <option value="UNREACHABLE">UNREACHABLE</option>
+              <option value="NON_COMPLIANT">NON_COMPLIANT</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Compliance Status</label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input">
-            <option value="">All Statuses</option>
-            <option value="COMPLIANT">COMPLIANT</option>
-            <option value="UNREACHABLE">UNREACHABLE</option>
-            <option value="NON_COMPLIANT">NON_COMPLIANT</option>
-          </select>
-        </div>
+
+        {(statusFilter || osFilter) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(59, 130, 246, 0.1)', padding: '8px 14px', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+            <span style={{ fontSize: '13px', color: '#93c5fd' }}>
+              Filtering by: <strong>{statusFilter || 'All Statuses'}</strong> {osFilter ? `(${osFilter})` : ''} — Showing {devices.length} of {allDevices.length} total enrolled devices.
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '12px', padding: '4px 10px', height: 'auto' }}
+              onClick={() => {
+                setStatusFilter('')
+                setOsFilter('')
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Devices Table */}
@@ -163,8 +201,26 @@ function generateSecureToken(): string {
         {loading ? (
           <div className="loading" style={{ padding: '24px' }}>Loading fleet devices...</div>
         ) : devices.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
-            No enrolled devices found matching filters. Generate an Enrollment Token above to onboard machines.
+          <div style={{ padding: '32px', textAlign: 'center', color: '#a1a1aa' }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '14px' }}>
+              No enrolled devices found matching filter {statusFilter ? `"${statusFilter}"` : ''} {osFilter ? `(${osFilter})` : ''}.
+            </p>
+            {statusFilter || osFilter ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setStatusFilter('')
+                  setOsFilter('')
+                }}
+              >
+                Clear Filters (Show All {allDevices.length} Devices)
+              </button>
+            ) : (
+              <p style={{ margin: 0, fontSize: '13px', color: '#71717a' }}>
+                Generate an Enrollment Token above to onboard machines.
+              </p>
+            )}
           </div>
         ) : (
           <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>

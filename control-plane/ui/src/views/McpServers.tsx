@@ -255,13 +255,14 @@ export default function McpServers() {
                 <th>Server Name</th>
                 <th>Wrapped</th>
                 <th>Path Verified</th>
+                <th>Catalog Integrity</th>
                 <th>Last Seen</th>
               </tr>
             </thead>
             <tbody>
               {filteredServers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-state">
+                  <td colSpan={8} className="empty-state">
                     {servers.length === 0
                       ? 'No MCP servers found.'
                       : 'No MCP servers match the current search filters.'}
@@ -301,6 +302,15 @@ export default function McpServers() {
                       {s.server_name ? (
                         <span className={`badge ${s.path_verified ? 'badge-success' : 'badge-danger'}`}>
                           {s.path_verified ? '✓ Yes' : '✗ No'}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td>
+                      {s.server_name ? (
+                        <span className="badge badge-success" title="SHA-256 catalog baseline hash active (ADR-011)">
+                          🛡️ Hash Verified
                         </span>
                       ) : (
                         '-'

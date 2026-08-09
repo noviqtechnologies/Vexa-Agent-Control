@@ -59,6 +59,20 @@ __pycache__/
 # Tooling artifacts
 test-tools/**/target/
 node_modules/
+**/node_modules/
+
+# SDK Build Artifacts (Python & TypeScript)
+sdks/**/dist/
+sdks/**/build/
+sdks/**/*.egg-info/
+sdks/**/.pytest_cache/
+*.tsbuildinfo
+
+# MCP Schema Drift baselines & compliance evidence exports
+schema_baselines.json
+schema_baselines.json.bak
+baselines.json
+*evidence.json
 
 # Environment variables
 .env
@@ -70,4 +84,4 @@ tests/PHASE1_VERIFICATION_TEST_PLAN.md
 tests/fixtures/README.md
 test-cert.pem 
 test-key.pem 
-.claude/ 
+.claude/

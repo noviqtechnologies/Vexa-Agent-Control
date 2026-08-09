@@ -148,6 +148,17 @@ export default function PolicyInsights() {
         </div>
       )}
 
+      {/* Engine Architecture & How It Works Banner */}
+      <div className="card" style={{ padding: '16px 20px', marginBottom: 24, backgroundColor: '#18181b', borderColor: '#27272a' }}>
+        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#f4f4f5' }}>
+          🧠 How the Self-Healing Engine Works
+        </h4>
+        <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: '1.5' }}>
+          The Self-Healing Engine monitors MCP tools invoked by AI agents through the proxy.
+          As agents invoke tools, confidence decay values update over a 30-day window. If anomalous tool arguments or unexpected egress behavior are detected, automated policy suggestions appear below for administrator approval.
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
         {/* Tool confidence */}
         <div className="card">
@@ -263,6 +274,49 @@ export default function PolicyInsights() {
         ) : (
           <div className="empty-state">No policy suggestions — baseline is clean</div>
         )}
+      </div>
+
+      {/* OWASP Agentic Top 10 (ASI 2026) Compliance Scorecard */}
+      <div className="card" style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              🛡️ OWASP Agentic Top 10 (ASI 2026) Security Readiness
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+              Architectural alignment against the OWASP Agentic System Security Standard.
+            </p>
+          </div>
+          <span className="badge badge-success" style={{ fontSize: 12, padding: '4px 10px' }}>
+            8/10 Full · 1/10 Partial · 1/10 Scoped
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+          {[
+            { id: 'ASI01', name: 'Agent Goal Hijacking', status: 'Protected', coverage: 'Full', desc: '9 active prompt injection scanners & Safe Mode' },
+            { id: 'ASI02', name: 'Tool Misuse & Exploitation', status: 'Enforcing', coverage: 'Full', desc: 'Default-deny AST policy engine & parameter regex' },
+            { id: 'ASI03', name: 'Identity & Privilege Abuse', status: 'Enforcing', coverage: 'Full', desc: 'OIDC JWT validation & scoped credential binding' },
+            { id: 'ASI04', name: 'Supply Chain & Schema Drift', status: 'Monitored', coverage: 'Full', desc: 'Cross-session tool catalog SHA-256 baseline hashing' },
+            { id: 'ASI05', name: 'Unexpected Execution (RCE)', status: 'Enforcing', coverage: 'Full', desc: 'Safe-mode pipe-to-shell block & OS Sentry daemon' },
+            { id: 'ASI06', name: 'Memory & Context Poisoning', status: 'Monitored', coverage: 'Partial', desc: 'Tamper-evident audit trail & response DLP scanner' },
+            { id: 'ASI07', name: 'Inter-Agent Communication', status: 'Disclosed', coverage: 'Scoped', desc: 'Org-local OIDC claims (Cross-tenant requires IdP federation)' },
+            { id: 'ASI08', name: 'Cascading Failures / Loops', status: 'Enforcing', coverage: 'Full', desc: 'Sliding-window cycle detection & spend caps' },
+            { id: 'ASI09', name: 'Human Trust Exploitation', status: 'Enforcing', coverage: 'Full', desc: 'HMAC-signed Human-in-the-Loop approval webhooks' },
+            { id: 'ASI10', name: 'Rogue Egress / Shadow Traffic', status: 'Enforcing', coverage: 'Full', desc: 'Hardware-bound PKI daemon & persistent watch loops' },
+          ].map(item => (
+            <div key={item.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{item.id}</span>
+                <span className={`badge badge-${item.coverage === 'Full' ? 'success' : item.coverage === 'Partial' ? 'warning' : 'info'}`} style={{ fontSize: 10 }}>
+                  {item.coverage}
+                </span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   )

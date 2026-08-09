@@ -141,3 +141,31 @@ agentwall bench --full
 ```
 
 For a complete description of all 17 attack categories, scoring methodology, and policy recommendations, see the [ADR Security Benchmark Guide](adr_benchmark.md).
+
+## MCP Schema-Drift Detection (FR-601, ADR-011)
+
+The `schema_drift` stanza enables cross-session detection of tool catalog tampering ("rug pulls"). When an MCP server alters tool definitions, parameter schemas, or descriptions post-approval, AgentWall detects the hash mismatch and applies the configured action.
+
+```yaml
+schema_drift:
+  enabled: true
+  action: warn          # Options: warn, block, downgrade_score
+  baseline_path: "./schema_baselines.json" # Optional persistent storage
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Enables cross-session schema drift evaluation on `tools/list` responses. |
+| `action` | string | `"warn"` | Action to take upon drift: `warn` (audit log only), `block` (reject session with error `-32002`), or `downgrade_score` (reduce Vexa Security Score by 25 points). |
+| `baseline_path` | string | `null` | Optional filesystem path to persist tool catalog baseline hashes across gateway restarts. |
+
+## Client SDK Environment Variables
+
+Thin proxy client SDKs ([Python](../sdks/python) and [TypeScript](../sdks/typescript)) automatically configure themselves using environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `AGENTWALL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote AgentWall security gateway. |
+| `AGENTWALL_AUTH_TOKEN` | `null` | Corporate OIDC JWT or bearer token for authenticated gateway clusters. |
+| `AGENTWALL_SESSION_ID` | Auto-generated UUID | Explicit session context identifier for multi-agent tracing. |
+

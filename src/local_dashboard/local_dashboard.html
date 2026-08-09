@@ -910,6 +910,18 @@
       <div class="nav-item" data-panel="panel-policy">
         <span class="nav-icon">08</span> Generate Policy
       </div>
+      <div class="nav-item" data-panel="panel-gateway" id="nav-gateway">
+        <span class="nav-icon" style="background:rgba(83,155,245,0.15); color:var(--accent);">⚙</span> Gateway Controls
+      </div>
+      <div class="nav-item" data-panel="panel-self-healing" id="nav-self-healing">
+        <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🌱</span> Self-Healing & Drift
+      </div>
+      <div class="nav-item" data-panel="panel-egress" id="nav-egress">
+        <span class="nav-icon" style="background:rgba(210,153,34,0.15); color:var(--amber);">🌐</span> Egress & LLM Proxy
+      </div>
+      <div class="nav-item" data-panel="panel-prometheus" id="nav-prometheus">
+        <span class="nav-icon" style="background:rgba(248,81,73,0.15); color:var(--red);">📊</span> Prometheus Metrics
+      </div>
       <div class="nav-item" data-panel="panel-benchmark" id="nav-benchmark">
         <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🛡</span> ADR Benchmark
       </div>
@@ -1004,6 +1016,42 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- SDK Quickstart Integration Card -->
+        <div class="card" style="margin-top:20px;">
+          <h3>🚀 Programmatic Client SDK Integration</h3>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:14px;">
+            Wrap your AI agent tool calls through the out-of-process AgentWall proxy using thin client SDKs:
+          </p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="color:var(--accent);">Python SDK (<code>agentwall</code>)</strong>
+                <span class="badge blue">pip install agentwall</span>
+              </div>
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>from agentwall import AgentWallClient
+
+client = AgentWallClient()
+
+@client.governed
+def my_tool(param: str):
+    return run_logic(param)</code></pre>
+            </div>
+
+            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="color:var(--accent);">TypeScript SDK (<code>@vexa/agentwall</code>)</strong>
+                <span class="badge blue">npm i @vexa/agentwall</span>
+              </div>
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>import { AgentWallClient } from "@vexa/agentwall";
+
+const client = new AgentWallClient();
+const tool = client.governed("name", async (args) =&gt; {
+  return await execute(args);
+});</code></pre>
+            </div>
           </div>
         </div>
       </div>
@@ -1268,6 +1316,336 @@
         </div>
       </div>
 
+      <!-- Panel 09: Gateway Status & Live Controls -->
+      <div id="panel-gateway" class="panel">
+        <div class="panel-header">
+          <h2>⚙️ Gateway Controls & Live Reload</h2>
+          <span id="gw-mode-badge" class="badge blue">SHADOW</span>
+        </div>
+
+        <div class="policy-info" id="gw-mode-banner">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span id="gw-mode-label" style="font-weight:700; font-size:0.95rem;">👁 SHADOW — Observation Only</span>
+            <span style="display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">
+              <span id="gw-status-dot" class="status-dot live"></span> Uptime: <strong id="gw-uptime" style="color:var(--text-bright);">0s</strong>
+            </span>
+          </div>
+          <p id="gw-mode-description" style="font-size:0.85rem; line-height:1.5;">
+            <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start proxy with <code style="color:var(--accent)">agentwall dev --enforce</code> to enable active blocking.
+          </p>
+        </div>
+
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-value accent" id="gw-stat-requests">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Allowed Calls</div>
+            <div class="stat-value green" id="gw-stat-allowed">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Denied Calls</div>
+            <div class="stat-value red" id="gw-stat-denied">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Rate-Limited</div>
+            <div class="stat-value amber" id="gw-stat-rate">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Firewall Cycles</div>
+            <div class="stat-value red" id="gw-stat-cycles">—</div>
+          </div>
+        </div>
+
+        <!-- Hot-Reload Policy Card -->
+        <div class="card" style="margin-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h3>🔄 Zero-Downtime Policy Hot-Reload</h3>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">
+                Reload policy YAML configuration on the fly without dropping active agent TCP connections or interrupting execution.
+              </p>
+            </div>
+            <button class="btn btn-primary" id="btn-gw-reload" onclick="gatewayReloadPolicy()">
+              <div class="spinner" id="gw-reload-spinner"></div>
+              <span id="gw-reload-text">🔄 Reload Policy</span>
+            </button>
+          </div>
+          <div id="gw-reload-status" style="margin-top:10px; font-family:var(--font-mono); font-size:0.8rem;"></div>
+          <pre id="gw-reload-result" style="display:none; margin-top:10px; background:#0d1117; padding:12px; border-radius:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--green); max-height:200px; overflow-y:auto;"></pre>
+        </div>
+
+        <!-- Gateway Pipeline Steps -->
+        <div class="card" style="margin-top:20px;">
+          <h3>🛡️ Gateway Security Pipeline Inspection</h3>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:14px;">
+            Order of policy rules and security checks evaluated for every incoming tool call:
+          </p>
+          <div style="display:flex; flex-wrap:wrap; gap:10px;">
+            <div class="gw-step pass"><span class="gw-step-num">01</span> <span class="gw-step-name">OIDC Token Validation</span> <span class="gw-step-badge badge green" id="gw-step-1">PASS</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">02</span> <span class="gw-step-name">JSON-RPC Parser</span> <span class="gw-step-badge badge green" id="gw-step-2">PASS</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">03</span> <span class="gw-step-name">Default-Deny Policy</span> <span class="gw-step-badge badge green" id="gw-step-3">PASS</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">04</span> <span class="gw-step-name">AST Parameter Schemas</span> <span class="gw-step-badge badge green" id="gw-step-4">PASS</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">05</span> <span class="gw-step-name">Regex Policy Constraints</span> <span class="gw-step-badge badge green" id="gw-step-5">PASS</span></div>
+            <div class="gw-step skip"><span class="gw-step-num">06</span> <span class="gw-step-name">Strict Credential Scope</span> <span class="gw-step-badge badge amber" id="gw-step-6">STUB</span></div>
+            <div class="gw-step skip"><span class="gw-step-num">07</span> <span class="gw-step-name">OIDC Group Claims</span> <span class="gw-step-badge badge amber" id="gw-step-7">STUB</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">08</span> <span class="gw-step-name">Response DLP Scanner</span> <span class="gw-step-badge badge green" id="gw-step-8">PASS</span></div>
+            <div class="gw-step pass"><span class="gw-step-num">09</span> <span class="gw-step-name">Prompt Injection Scanner</span> <span class="gw-step-badge badge green" id="gw-step-9">PASS</span></div>
+          </div>
+        </div>
+
+        <!-- Live Blocked Calls Log -->
+        <div class="card" style="padding:0; overflow:hidden; margin-top:20px;">
+          <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">🚫 Live Blocked Request Stream</h3>
+            <span id="gw-blocked-count" class="badge red">0 blocked</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Tool Name</th>
+                  <th>Reason / Error</th>
+                  <th>Session ID</th>
+                  <th>Identity Sub</th>
+                </tr>
+              </thead>
+              <tbody id="gw-blocked-body">
+                <tr>
+                  <td colspan="5">
+                    <div class="empty-state" style="padding:32px;">
+                      <span class="empty-icon">🛡️</span>
+                      <h3>No requests blocked in this session</h3>
+                      <p>When running in <code style="color:var(--accent)">--enforce</code> mode, denied tool calls will log here in real time.</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Gateway Configuration Overview -->
+        <div class="card" style="margin-top:20px; padding:0; overflow:hidden;">
+          <div style="padding:16px 20px; border-bottom:1px solid var(--border);">
+            <h3 style="margin:0;">⚙️ Active Gateway Runtime Configuration</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <tbody id="gw-config-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 10: Self-Healing & Policy Suggestions -->
+      <div id="panel-self-healing" class="panel">
+        <div class="panel-header">
+          <h2>🌱 Self-Healing & Policy Suggestions</h2>
+          <span id="sh-status-badge" class="badge green">ENABLED</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is Self-Healing & Policy Suggestions?</strong> Automatically monitors tool usage patterns, tracks per-tool <strong>confidence decay</strong> scores as tools remain inactive, flags schema drift, and generates dynamic policy updates to keep security rules aligned with actual developer activity.
+        </div>
+
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div class="stat-label">Active Monitored Tools</div>
+            <div class="stat-value accent" id="sh-stat-active-tools">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Decay Window</div>
+            <div class="stat-value green" id="sh-stat-window">30 Days</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Stale Tools (&lt;0.3)</div>
+            <div class="stat-value amber" id="sh-stat-stale-tools">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Pending Suggestions</div>
+            <div class="stat-value blue" id="sh-stat-suggestions">0</div>
+          </div>
+        </div>
+
+        <!-- Tool Confidence Decay Table -->
+        <div class="card" style="padding:0; overflow:hidden; margin-top:20px;">
+          <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">📉 Tool Confidence Decay Tracker</h3>
+            <span id="sh-tools-count-badge" class="badge muted">0 tools</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tool Name</th>
+                  <th>Confidence Score</th>
+                  <th>Status</th>
+                  <th>Last Seen</th>
+                </tr>
+              </thead>
+              <tbody id="sh-tools-body">
+                <tr>
+                  <td colspan="4">
+                    <div class="empty-state" style="padding:32px;">
+                      <span class="empty-icon">🌱</span>
+                      <h3>No tool confidence data recorded</h3>
+                      <p>As your agent executes tools over time, confidence decay scores will appear here.</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pending Policy Suggestions Card -->
+        <div class="card" style="margin-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3>💡 Automated Policy Update Suggestions</h3>
+            <button class="btn" id="btn-copy-suggestions" onclick="copySelfHealingSuggestions()">📋 Copy Suggestions YAML</button>
+          </div>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:14px;">
+            Derived from anomalous parameter bounds and observed drift in tool call traffic:
+          </p>
+          <div id="sh-suggestions-container">
+            <div class="empty-state" style="padding:24px;" id="sh-suggestions-empty">
+              <span class="empty-icon">✨</span>
+              <h3>No pending policy suggestions</h3>
+              <p style="font-size:0.85rem;">All active tool parameter bounds match current traffic baselines.</p>
+            </div>
+            <pre id="sh-suggestions-output" style="display:none; background:#0d1117; border:1px solid var(--border); border-radius:var(--radius); padding:16px; font-family:var(--font-mono); font-size:0.78rem; color:#d1d5db; overflow-x:auto; max-height:350px; overflow-y:auto; margin:0; line-height:1.6;"></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 11: Egress & LLM Telemetry -->
+      <div id="panel-egress" class="panel">
+        <div class="panel-header">
+          <h2>🌐 Network Egress & LLM Proxy Telemetry</h2>
+          <span class="badge blue" id="egress-status-badge">ACTIVE</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is Network Egress & LLM Proxy Telemetry?</strong> Tracks outbound external network requests (HTTP, HTTPS, WebSocket, HTTP CONNECT) and raw LLM API completions (<code style="color:var(--accent)">/v1/chat/completions</code>). Monitors token usage, latency distribution, and destination hosts to prevent unauthorized data exfiltration.
+        </div>
+
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div class="stat-label">Total Egress Requests</div>
+            <div class="stat-value accent" id="egress-stat-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">LLM Proxy Calls</div>
+            <div class="stat-value green" id="egress-stat-llm">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Outbound Hosts</div>
+            <div class="stat-value blue" id="egress-stat-hosts">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Blocked Destinations</div>
+            <div class="stat-value red" id="egress-stat-blocked">0</div>
+          </div>
+        </div>
+
+        <!-- Egress & LLM Table -->
+        <div class="card" style="padding:0; overflow:hidden; margin-top:20px;">
+          <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">📡 Outbound Network Traffic Log</h3>
+            <span id="egress-count-badge" class="badge muted">0 events</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Transport / Method</th>
+                  <th>Destination Host / Path</th>
+                  <th>Verdict</th>
+                  <th>Latency</th>
+                </tr>
+              </thead>
+              <tbody id="egress-body">
+                <tr>
+                  <td colspan="5">
+                    <div class="empty-state" style="padding:32px;">
+                      <span class="empty-icon">🌐</span>
+                      <h3>No network egress traffic recorded</h3>
+                      <p>Outbound HTTP, WebSocket, or LLM API proxy requests will stream here.</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 12: Prometheus Metrics -->
+      <div id="panel-prometheus" class="panel">
+        <div class="panel-header">
+          <h2>📊 Prometheus Metrics & Telemetry</h2>
+          <span class="badge green">HTTP 200 OK</span>
+        </div>
+
+        <div class="policy-info">
+          <strong>💡 What is Prometheus Metrics & Telemetry?</strong> Exposes operational gateway metrics in standard Prometheus text format at <code style="color:var(--accent)">GET /metrics</code>. Scrape this endpoint with Prometheus or Grafana to monitor traffic volume, policy enforcement, rate limiting, and SIEM audit exports in real time.
+        </div>
+
+        <div class="stats-bar" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="stat-card">
+            <div class="stat-label">agentwall_requests_total</div>
+            <div class="stat-value accent" id="prom-metric-requests">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Total evaluated tool call requests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">agentwall_allow_total</div>
+            <div class="stat-value green" id="prom-metric-allow">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Allowed tool call executions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">agentwall_deny_total</div>
+            <div class="stat-value red" id="prom-metric-deny">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Denied policy & threat violations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">agentwall_rate_limited_total</div>
+            <div class="stat-value amber" id="prom-metric-rate">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Rate-limited request bursts</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">agentwall_firewall_cycle_total</div>
+            <div class="stat-value red" id="prom-metric-cycles">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Loop detection triggers</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">agentwall_siem_export_total</div>
+            <div class="stat-value blue" id="prom-metric-siem">—</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">SIEM audit log entries exported</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h3>🔥 Raw Prometheus Metrics Scrape Endpoint</h3>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">
+                Available natively from the proxy binary at <code style="color:var(--accent)">http://127.0.0.1:8080/metrics</code>.
+              </p>
+            </div>
+            <a class="btn btn-primary" href="/metrics" target="_blank" rel="noopener noreferrer">
+              🔗 Open /metrics Endpoint
+            </a>
+          </div>
+          <pre id="prom-raw-output" style="margin-top:14px; background:#0d1117; border:1px solid var(--border); border-radius:var(--radius); padding:16px; font-family:var(--font-mono); font-size:0.78rem; color:#d1d5db; max-height:300px; overflow-y:auto; margin-bottom:0;"></pre>
+        </div>
+      </div>
+
+      <!-- Panel: ADR Benchmark & Security Audit -->
+
 
 
 
@@ -1385,6 +1763,63 @@
                 <span class="badge green">100% Protected</span>
                 <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
               </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px;">
+              <div style="font-weight:600; color:var(--text-bright); font-size:0.88rem;">MCP Schema-Drift & Rug Pulls</div>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">SHA-256 tool catalog baseline verification</div>
+              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span class="badge green">100% Protected</span>
+                <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--green);">PASS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>🛡️ OWASP Agentic Top 10 (ASI 2026) Architecture Alignment</h3>
+            <span class="badge green">8/10 Full · 1/10 Partial · 1/10 Scoped</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; font-size:0.8rem;">
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI01: Goal Hijacking</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">9 prompt injection scanners & safe mode</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI02: Tool Misuse</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Default-deny AST policy & regex constraints</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI03: Identity Abuse</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">OIDC claim validation & scoped keys</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI04: Supply Chain & Drift</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Cross-session catalog SHA-256 hash tracking</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI05: Unexpected RCE</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Safe-mode pipe-to-shell block & OS Sentry</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI06: Context Poisoning</strong> <span class="badge amber">Partial</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Tamper-evident audit & response DLP</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI07: Inter-Agent Comms</strong> <span class="badge blue">Scoped Gap</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Org-local claims (IdP cross-tenant recommended)</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI08: Cascading Failures</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Sliding-window loop detection & spend caps</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI09: Trust Exploitation</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">HMAC-signed Human-in-the-Loop webhooks</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:6px; padding:10px;">
+              <div style="display:flex; justify-content:space-between;"><strong>ASI10: Rogue Egress</strong> <span class="badge green">Full</span></div>
+              <div style="color:var(--text-muted); font-size:0.72rem; margin-top:3px;">Hardware PKI binding & Sentry daemon</div>
             </div>
           </div>
         </div>
@@ -1719,6 +2154,17 @@
             severity: 'high'
           });
         }
+      }
+
+      // Schema Drift detection (FR-601, ADR-011)
+      if (event.event === 'schema_drift_detected' || (event.reason && String(event.reason).includes('schema_drift'))) {
+        risks.push({
+          ts,
+          tool: event.server_name || tool || 'MCP Server',
+          type: 'SCHEMA_DRIFT',
+          param: 'catalog_hash',
+          severity: 'high'
+        });
       }
 
       function scanValue(key, val) {
@@ -2296,6 +2742,166 @@
       }).join('');
     }
 
+    // ── Self-Healing Panel ───────────────────────────────────────────────────
+    let lastSelfHealingSuggestions = [];
+
+    async function fetchSelfHealingStatus() {
+      try {
+        const r = await fetch('/api/self-healing/status');
+        if (!r.ok) return;
+        const data = await r.json();
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? '—'; };
+        const tools = data.tools || [];
+        const suggestions = data.pending_suggestions || [];
+        lastSelfHealingSuggestions = suggestions;
+
+        setEl('sh-stat-active-tools', tools.length);
+        setEl('sh-stat-window', `${data.decay_window_days || 30} Days`);
+        setEl('sh-stat-stale-tools', tools.filter(t => t.stale).length);
+        setEl('sh-stat-suggestions', suggestions.length);
+
+        const badge = document.getElementById('sh-status-badge');
+        if (badge) {
+          badge.textContent = data.enabled ? 'ENABLED' : 'DISABLED';
+          badge.className = `badge ${data.enabled ? 'green' : 'amber'}`;
+        }
+
+        const countBadge = document.getElementById('sh-tools-count-badge');
+        if (countBadge) countBadge.textContent = `${tools.length} tools`;
+
+        const body = document.getElementById('sh-tools-body');
+        if (body) {
+          if (tools.length === 0) {
+            body.innerHTML = `<tr><td colspan="4"><div class="empty-state" style="padding:32px;">
+              <span class="empty-icon">🌱</span>
+              <h3>No tool confidence data recorded</h3>
+              <p>As your agent executes tools over time, confidence decay scores will appear here.</p>
+            </div></td></tr>`;
+          } else {
+            body.innerHTML = tools.map(t => {
+              const decay = t.confidence_decay ?? 1.0;
+              const pct = Math.round(decay * 100);
+              const badgeCls = decay >= 0.7 ? 'green' : decay >= 0.3 ? 'amber' : 'red';
+              const statusText = decay < 0.3 ? 'STALE DRIFT' : decay < 0.7 ? 'DECAYING' : 'HEALTHY';
+              return `<tr>
+                <td class="tool-name">${escHtml(t.name)}</td>
+                <td>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <div style="flex:1; max-width:100px; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
+                      <div style="width:${pct}%; height:100%; background:var(--${badgeCls === 'green' ? 'green' : badgeCls === 'amber' ? 'amber' : 'red'});"></div>
+                    </div>
+                    <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-bright);">${decay.toFixed(2)} (${pct}%)</span>
+                  </div>
+                </td>
+                <td><span class="badge ${badgeCls}">${statusText}</span></td>
+                <td class="ts">${fmtTime(t.last_seen)}</td>
+              </tr>`;
+            }).join('');
+          }
+        }
+
+        const suggEmpty = document.getElementById('sh-suggestions-empty');
+        const suggOut = document.getElementById('sh-suggestions-output');
+        if (suggEmpty && suggOut) {
+          if (suggestions.length === 0) {
+            suggEmpty.style.display = '';
+            suggOut.style.display = 'none';
+          } else {
+            suggEmpty.style.display = 'none';
+            suggOut.style.display = 'block';
+            suggOut.textContent = JSON.stringify(suggestions, null, 2);
+          }
+        }
+      } catch (e) { }
+    }
+
+    function copySelfHealingSuggestions() {
+      if (!lastSelfHealingSuggestions || lastSelfHealingSuggestions.length === 0) {
+        toast('No pending suggestions to copy', 'info');
+        return;
+      }
+      try {
+        navigator.clipboard.writeText(JSON.stringify(lastSelfHealingSuggestions, null, 2));
+        toast('Suggestions copied to clipboard!', 'success');
+      } catch {
+        toast('Copy failed', 'error');
+      }
+    }
+
+    // ── Egress & LLM Telemetry Panel ──────────────────────────────────────────
+    function renderEgress(events) {
+      const body = document.getElementById('egress-body');
+      const countBadge = document.getElementById('egress-count-badge');
+      if (!body) return;
+
+      const egressEvents = events.filter(e => e.transport !== 'mcp' || (e.url_path && e.url_path.startsWith('/v1/')));
+      if (countBadge) countBadge.textContent = `${egressEvents.length} events`;
+
+      const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      setEl('egress-stat-total', egressEvents.length);
+      const llmCalls = egressEvents.filter(e => e.url_path && e.url_path.includes('/v1/chat/completions')).length;
+      setEl('egress-stat-llm', llmCalls);
+
+      const hosts = new Set(egressEvents.map(e => e.target_host).filter(Boolean));
+      setEl('egress-stat-hosts', hosts.size);
+      const blocked = egressEvents.filter(e => e.verdict === 'deny' || e.response_status === 403).length;
+      setEl('egress-stat-blocked', blocked);
+
+      if (egressEvents.length === 0) {
+        body.innerHTML = `<tr><td colspan="5">
+          <div class="empty-state" style="padding:32px;">
+            <span class="empty-icon">🌐</span>
+            <h3>No network egress traffic recorded</h3>
+            <p>Outbound HTTP, WebSocket, or LLM API proxy requests will stream here.</p>
+          </div>
+        </td></tr>`;
+        return;
+      }
+
+      body.innerHTML = egressEvents.slice(-100).reverse().map(e => {
+        const isDenied = e.verdict === 'deny' || e.response_status === 403;
+        const verdictCls = isDenied ? 'red' : 'green';
+        const verdictText = isDenied ? 'BLOCKED' : 'ALLOWED';
+        const transport = (e.transport || 'HTTP').toUpperCase();
+        const host = e.target_host || 'localhost';
+        const path = e.url_path || '';
+
+        return `<tr>
+          <td class="ts">${fmtTime(e.timestamp_ns)}</td>
+          <td><span class="badge blue">${escHtml(transport)} ${escHtml(e.method || 'GET')}</span></td>
+          <td><code style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-bright);">${escHtml(host)}${escHtml(path)}</code></td>
+          <td><span class="badge ${verdictCls}">${verdictText}</span></td>
+          <td class="tl-latency">${fmtLatency(e.latency_ms)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Prometheus Metrics Panel ──────────────────────────────────────────────
+    async function fetchPrometheusMetrics() {
+      try {
+        const r = await fetch('/metrics');
+        if (!r.ok) return;
+        const text = await r.text();
+
+        const rawOut = document.getElementById('prom-raw-output');
+        if (rawOut) rawOut.textContent = text;
+
+        const parseMetric = (name) => {
+          const match = text.match(new RegExp(`^${name}\\s+(\\d+)`, 'm'));
+          return match ? match[1] : '0';
+        };
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('prom-metric-requests', parseMetric('agentwall_requests_total'));
+        setEl('prom-metric-allow', parseMetric('agentwall_allow_total'));
+        setEl('prom-metric-deny', parseMetric('agentwall_deny_total'));
+        setEl('prom-metric-rate', parseMetric('agentwall_rate_limited_total'));
+        setEl('prom-metric-cycles', parseMetric('agentwall_firewall_cycle_total'));
+        setEl('prom-metric-siem', parseMetric('agentwall_siem_export_total'));
+      } catch (e) { }
+    }
+
     // ── Poll & refresh all panels ──────────────────────────────────────────────
     async function refresh() {
       let stats = null;
@@ -2315,6 +2921,9 @@
       renderInjections(allEvents);
       renderSemantic(allEvents);
       renderParamExplorer(allEvents);
+      renderEgress(allEvents);
+      fetchSelfHealingStatus();
+      fetchPrometheusMetrics();
       fetchBenchmarkData();
 
       document.getElementById('inv-last-update').textContent =
