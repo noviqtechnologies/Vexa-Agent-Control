@@ -7,7 +7,7 @@ Routes AI agent tool calls and LLM egress through the out-of-process AgentWall p
 ## Installation
 
 ```bash
-pip install agentwall
+pip install vexaagentwall
 ```
 
 ## Quick Start

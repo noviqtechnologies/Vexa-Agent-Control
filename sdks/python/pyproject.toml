@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentwall"
+name = "vexaagentwall"
 version = "1.0.0"
 description = "Python client SDK for Vexa AgentWall AI security gateway & firewall"
 readme = "README.md"
