@@ -85,7 +85,7 @@ resource "aws_route_table_association" "b" {
 
 resource "aws_security_group" "ecs" {
   name        = "agentwall-ecs-sg"
-  description = "Allow HTTP inbound to AgentWall ECS Fargate tasks"
+  description = "Allow HTTP inbound to AgentWall ECS Fargate tasks and ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -95,11 +95,61 @@ resource "aws_security_group" "ecs" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ─── Application Load Balancer (ALB) ──────────────────────────────────────────
+
+resource "aws_lb" "alb" {
+  name               = "agentwall-ecs-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.ecs.id]
+  subnets            = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+
+  tags = { Name = "agentwall-ecs-alb" }
+}
+
+resource "aws_lb_target_group" "alb_tg" {
+  name        = "agentwall-ecs-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    path                = "/healthz"
+    port                = "8080"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 15
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = "8080"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.alb_tg.arn
   }
 }
 
@@ -169,7 +219,7 @@ resource "aws_ecs_task_definition" "agentwall" {
   ])
 }
 
-# ─── ECS Service (Runs in Public Subnets without NAT GW) ─────────────────────
+# ─── ECS Service (Runs in Public Subnets with ALB) ───────────────────────────
 
 resource "aws_ecs_service" "agentwall" {
   name            = "agentwall-service"
@@ -183,6 +233,24 @@ resource "aws_ecs_service" "agentwall" {
     security_groups  = [aws_security_group.ecs.id]
     assign_public_ip = true
   }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.alb_tg.arn
+    container_name   = "gateway"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.http]
+}
+
+output "dashboard_url" {
+  description = "Direct HTTP URL to AgentWall Gateway & Dashboard"
+  value       = "http://${aws_lb.alb.dns_name}:8080"
+}
+
+output "health_url" {
+  description = "Health check endpoint URL"
+  value       = "http://${aws_lb.alb.dns_name}:8080/healthz"
 }
 
 output "ecs_cluster_name" {
@@ -196,3 +264,4 @@ output "ecs_service_name" {
 output "container_image_in_use" {
   value = var.container_image
 }
+
