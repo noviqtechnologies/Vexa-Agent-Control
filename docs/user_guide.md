@@ -11,13 +11,13 @@ This page is the top-level navigation hub. Select the guide that matches your de
 AgentWall supports three graduated deployment profiles. Pick the one that matches your environment:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  DEPLOYMENT PROFILES                                    │
-├──────────────────────────┬──────────────────────────────┬───────────────────────────────┤
-│ Workstation Sidecar      │ Team Control Hub              │ Enterprise Fleet              │
-│ Single Binary & Sidecar  │ Docker Compose Stack         │ Kubernetes + Helm Fleet       │
-│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ TLS rustls + SIEM + OIDC SSO  │
-└──────────────────────────┴──────────────────────────────┴───────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                           DEPLOYMENT PROFILES                                           │
+├──────────────────────────┬──────────────────────────────┬───────────────────────────────┬───────────────┤
+│ Workstation Sidecar      │ Team Control Hub              │ Cloud Serverless (Terraform)  │ Enterprise    │
+│ Single Binary & Sidecar  │ Docker Compose Stack         │ AWS / Azure / GCP (~$0–$25/mo)│ K8s + Helm    │
+│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ Auto-TLS & Scale-to-Zero      │ Pure-Rust TLS │
+└──────────────────────────┴──────────────────────────────┴───────────────────────────────┴───────────────┘
 ```
 
 ---
@@ -81,6 +81,34 @@ agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.lo
 
 ---
 
+### 🌐 [Cloud Serverless Infrastructure Guide (Terraform)](../infra/README.md)
+
+> **Best for:** Engineering teams and cloud platform engineers seeking production-ready, ultra cost-effective (~$0–$25/month) serverless cloud deployments with zero node maintenance.
+> Supports AWS ECS Fargate, Azure Container Apps, and Google Cloud Run (v2).
+
+**What you get (in addition to all Control Hub capabilities):**
+- One-click Terraform provisioning with zero manual cloud console configuration
+- Built-in HTTPS/TLS termination and custom domain support
+- Dev mode scale-to-zero compute (`min_replicas = 0` / `min_instances = 0`)
+- Multi-container PostgreSQL database integration with auto-migrated schemas
+- Native cloud logging (AWS CloudWatch, Azure Log Analytics, Google Cloud Logging)
+
+**Quick start:**
+```bash
+# AWS ECS Fargate
+cd infra/aws/ecs && terraform init && terraform apply
+
+# Azure Container Apps
+cd infra/azure && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply
+
+# Google Cloud Run (v2)
+cd infra/gcp && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply
+```
+
+→ **[Open Cloud Infrastructure Guide](../infra/README.md)** | **[AWS Guide](../infra/aws/README.md)** | **[Azure Guide](../infra/azure/README.md)** | **[GCP Guide](../infra/gcp/README.md)**
+
+---
+
 ### ☁️ [Enterprise Fleet Guide](enterprise_guide.md)
 
 > **Best for:** Platform engineers and Security architects deploying high-availability, cloud-native gateway fleets on Kubernetes.
@@ -109,32 +137,34 @@ helm install agentwall ./chart --namespace agentwall-system \
 
 ## Capabilities by Deployment Profile
 
-| Capability | Workstation Sidecar | Team Control Hub | Enterprise Fleet |
-|---|:---:|:---:|:---:|
-| Default-Deny Policy Engine | ✓ | ✓ | ✓ |
-| 15 Out-of-the-Box Safe Rules | ✓ | ✓ | ✓ |
-| 9 Prompt Injection Scanners | ✓ | ✓ | ✓ |
-| 21-Pattern Dual-Pass DLP | ✓ | ✓ | ✓ |
-| Passive Shadow AI Discovery | ✓ | ✓ | ✓ |
-| MCP Security Scoring Engine | ✓ | ✓ | ✓ |
-| IDE Auto-Wrapping Engine | ✓ | ✓ | ✓ |
-| Hardware PKI Device Enrollment | ✓ | ✓ | ✓ |
-| Persistent OS Sentry Daemon | ✓ | ✓ | ✓ |
-| ADR Security Benchmark | ✓ | ✓ | ✓ |
-| Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ |
-| Centralized Policy Push (SSE) | — | ✓ | ✓ |
-| [Central Device Governance](team_hub_guide.md#6-central-device-governance--fleet-health) | — | ✓ | ✓ |
-| OIDC Identity Binding | — | ✓ | ✓ |
-| Project & Task Policy Sharding | — | ✓ | ✓ |
-| Vault & API Key Custody | — | ✓ | ✓ |
-| Async HITL Webhook Queue | — | ✓ | ✓ |
-| Spend Caps & Token Ledger | — | ✓ | ✓ |
-| Loop Detection & PivotError | — | ✓ | ✓ |
-| Hardened Container Runtime (HAR) | — | — | ✓ |
-| WebSocket Egress Tunneling | — | — | ✓ |
-| Real-Time Threat Intel Feed | — | — | ✓ |
-| Zero-Knowledge CMK Encryption | — | — | ✓ |
-| Pure-Rust TLS Termination | — | — | ✓ |
+| Capability | Workstation Sidecar | Team Control Hub | Cloud Serverless (Terraform) | Enterprise Fleet |
+|---|:---:|:---:|:---:|:---:|
+| Default-Deny Policy Engine | ✓ | ✓ | ✓ | ✓ |
+| 15 Out-of-the-Box Safe Rules | ✓ | ✓ | ✓ | ✓ |
+| 9 Prompt Injection Scanners | ✓ | ✓ | ✓ | ✓ |
+| 21-Pattern Dual-Pass DLP | ✓ | ✓ | ✓ | ✓ |
+| Passive Shadow AI Discovery | ✓ | ✓ | ✓ | ✓ |
+| MCP Security Scoring Engine | ✓ | ✓ | ✓ | ✓ |
+| IDE Auto-Wrapping Engine | ✓ | ✓ | ✓ | ✓ |
+| Hardware PKI Device Enrollment | ✓ | ✓ | ✓ | ✓ |
+| Persistent OS Sentry Daemon | ✓ | ✓ | ✓ | ✓ |
+| ADR Security Benchmark | ✓ | ✓ | ✓ | ✓ |
+| Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ | ✓ |
+| Centralized Policy Push (SSE) | — | ✓ | ✓ | ✓ |
+| [Central Device Governance](team_hub_guide.md#6-central-device-governance--fleet-health) | — | ✓ | ✓ | ✓ |
+| OIDC Identity Binding | — | ✓ | ✓ | ✓ |
+| Project & Task Policy Sharding | — | ✓ | ✓ | ✓ |
+| Vault & API Key Custody | — | ✓ | ✓ | ✓ |
+| Async HITL Webhook Queue | — | ✓ | ✓ | ✓ |
+| Spend Caps & Token Ledger | — | ✓ | ✓ | ✓ |
+| Loop Detection & PivotError | — | ✓ | ✓ | ✓ |
+| Cloud Scale-to-Zero ($0 Idle) | — | — | ✓ | — |
+| Native Cloud Ingress & TLS | — | — | ✓ | Ingress |
+| Hardened Container Runtime (HAR) | — | — | — | ✓ |
+| WebSocket Egress Tunneling | — | — | — | ✓ |
+| Real-Time Threat Intel Feed | — | — | — | ✓ |
+| Zero-Knowledge CMK Encryption | — | — | — | ✓ |
+| Pure-Rust TLS Termination | — | — | — | ✓ |
 
 ---
 
@@ -161,11 +191,15 @@ These technical reference topics apply across all deployment profiles and are ma
 | Document | Description |
 |---|---|
 | [quickstart.md](quickstart.md) | Step-by-step quickstart for local MCP servers, Claude Desktop, and Cursor |
+| [infra/README.md](../infra/README.md) | **Multi-Cloud Terraform Infrastructure Guide (AWS, Azure, GCP)** |
+| [infra/aws/README.md](../infra/aws/README.md) | AWS ECS Fargate & ALB Terraform deployment guide |
+| [infra/azure/README.md](../infra/azure/README.md) | Azure Container Apps (ACA) Terraform deployment guide |
+| [infra/gcp/README.md](../infra/gcp/README.md) | Google Cloud Run (v2) Terraform deployment guide |
 | [oidc_identity_binding.md](oidc_identity_binding.md) | Provider-specific OIDC setup (Okta, Keycloak, Entra ID, Auth0, Cognito, Ping) |
 | [adr_benchmark.md](adr_benchmark.md) | Full ADR benchmark reference (all 17 attack categories and scoring methodology) |
 | [agentwall_architecture.md](agentwall_architecture.md) | Detailed system architecture, 6-pass pipeline, and component interaction flows |
 | [configuration.md](configuration.md) | Deep-dive policy schema, DLP regex, spend caps, and environment variables |
-| [deployment.md](deployment.md) | Platform-specific installation reference (macOS, Linux, Windows, Docker, K8s, HAR) |
+| [deployment.md](deployment.md) | Platform-specific installation reference (macOS, Linux, Windows, Docker, K8s, HAR, Cloud Terraform) |
 | [integrations.md](integrations.md) | IDE wrappers, stdio proxies, Vault adapters, and SIEM exporters |
 | [comprehensive_guide.md](comprehensive_guide.md) | Command-line walkthroughs and scenario tutorials |
 
@@ -176,6 +210,7 @@ These technical reference topics apply across all deployment profiles and are ma
 1. [Getting Started for Each Deployment Profile](#1-getting-started-for-each-deployment-profile)
    - [Workstation Sidecar](#workstation-sidecar)
    - [Team Control Hub](#team-control-hub)
+   - [Cloud Serverless (Terraform)](#cloud-serverless-terraform)
    - [Enterprise Fleet](#enterprise-fleet)
 2. [Writing YAML Policies (v2 Schema)](#2-writing-yaml-policies-v2-schema)
    - [v2 Policy Architecture](#v2-policy-architecture)
@@ -220,6 +255,13 @@ These technical reference topics apply across all deployment profiles and are ma
     - [WebSocket Egress Tunneling](#websocket-egress-tunneling)
     - [Human-in-the-Loop (HITL) Webhooks](#human-in-the-loop-hitl-webhooks)
     - [Hardened Agent Containers (HAR)](#hardened-agent-containers-har)
+11. [Cloud Infrastructure & Terraform Deployments (AWS, Azure, GCP)](#11-cloud-infrastructure--terraform-deployments-aws-azure-gcp)
+    - [Cross-Platform Prerequisites](#cross-platform-prerequisites)
+    - [AWS ECS Fargate Deployment](#aws-ecs-fargate-deployment)
+    - [Azure Container Apps Deployment](#azure-container-apps-deployment)
+    - [Google Cloud Run (v2) Deployment](#google-cloud-run-v2-deployment)
+    - [Verification, Logging & Health Checks](#verification-logging--health-checks)
+    - [Teardown & Clean Up](#teardown--clean-up)
 
 ---
 
@@ -520,6 +562,48 @@ agentwall verify-log team-audit.log
 * **Prerequisites:** Audit log file (`team-audit.log`) generated by active gateway sessions.
 * **What You Will See:** Terminal verification report: `Audit log verification complete: Hash chain intact. 0 tampered entries.`
 * **What You Achieve:** Guarantees cryptographic audit log compliance and tamper evidence.
+
+---
+
+### Cloud Serverless (Terraform)
+
+The Cloud Serverless profile deploys the complete AgentWall stack (Rust Gateway + Control Plane UI + Dashboard API + PostgreSQL database) across **AWS ECS Fargate**, **Azure Container Apps (ACA)**, or **Google Cloud Run (v2)** with zero VM management and costs starting from **$0 to $25/month**.
+
+#### Prerequisites
+- **Terraform** (`>= 1.6.0`): `winget install HashiCorp.Terraform` (Windows) / `brew install terraform` (macOS) / `sudo apt-get install terraform` (Linux).
+- **Target Cloud CLI**:
+  - **AWS:** AWS CLI v2 (`aws configure`)
+  - **Azure:** Azure CLI (`az login` & `az account set --subscription <id>`)
+  - **GCP:** Google Cloud SDK (`gcloud auth login` & `gcloud auth application-default login`)
+
+#### Step-by-Step Installation
+
+##### 🅰️ AWS ECS Fargate
+```bash
+cd infra/aws/ecs
+terraform init
+terraform apply
+```
+* **Endpoints:** Gateway on `:8080`, Control Plane UI on `:8081` via Application Load Balancer (ALB).
+
+##### 🅱️ Azure Container Apps (ACA)
+```bash
+cd infra/azure
+cp terraform.tfvars.example terraform.tfvars # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
+terraform init
+terraform apply
+```
+* **Endpoints:** Gateway & UI on public HTTPS URLs with automatic free TLS certificates.
+
+##### 🅲 Google Cloud Run (v2)
+```bash
+cd infra/gcp
+cp terraform.tfvars.example terraform.tfvars # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
+# Set your gcp_project_id in terraform.tfvars
+terraform init
+terraform apply
+```
+* **Endpoints:** Gateway & UI on auto-provisioned HTTPS `.run.app` endpoints with scale-to-zero support.
 
 ---
 
@@ -1550,6 +1634,253 @@ try {
 ### OWASP Agentic Top 10 (ASI 2026) Compliance
 
 For full security architecture mappings, threat mitigations, and code evidence across all 10 OWASP Agentic risks (ASI01–ASI10), see the [OWASP Agentic Top 10 Guide](./owasp_agentic_top10.md).
+
+---
+
+## 11. Cloud Infrastructure & Terraform Deployments (AWS, Azure, GCP)
+
+AgentWall includes production-ready, cross-platform **Terraform modules** allowing you to deploy the full AgentWall stack (Rust Gateway, React Control Plane UI, Go REST API, and PostgreSQL database) to **Amazon Web Services**, **Microsoft Azure**, or **Google Cloud Platform** in minutes with monthly costs starting from **$0 to $25/month**.
+
+### Cloud Architecture & Sizing Comparison
+
+| Feature / Metric | 🅰️ AWS (ECS Fargate) | 🅱️ Microsoft Azure (Container Apps) | 🅲 Google Cloud (Cloud Run v2) |
+| :--- | :--- | :--- | :--- |
+| **Compute Architecture** | AWS Fargate Task (1.0 vCPU, 2 GiB) | 4 × Container Apps (0.25 vCPU, 0.5 GiB each) | Multi-Container Revision (API + Postgres Sidecar) |
+| **Ingress & TLS** | AWS ALB (HTTP:8080 & :8081) | Built-in Envoy Ingress (**Free Auto-TLS**) | Built-in Google Cloud Ingress (**Free Auto-TLS**) |
+| **Idle Scale-to-Zero** | Manual replica scaling | **Supported natively (`min_replicas = 0`)** | **Supported natively (`min_instances = 0`)** |
+| **Monthly Free Allowance** | Standard AWS Free Tier rules | **180k vCPU-s & 360k GiB-s free** | **2M reqs, 360k GB-s, 180k vCPU-s free** |
+| **Logging Service** | AWS CloudWatch Logs (`/ecs/agentwall`) | Azure Log Analytics Workspace | Google Cloud Logging |
+| **ESTIMATED MONTHLY COST** | **~$15 – $25 / month** | **~$0 – $20 / month** | **~$0 – $15 / month** |
+| **Target Path** | [`infra/aws/ecs/`](../infra/aws/README.md) | [`infra/azure/`](../infra/azure/README.md) | [`infra/gcp/`](../infra/gcp/README.md) |
+
+---
+
+### Cross-Platform Prerequisites
+
+Before deploying to any cloud provider, install **Terraform** and the corresponding **Cloud CLI** on your workstation:
+
+#### 1. Install Terraform (`>= 1.6.0`)
+- **Windows (PowerShell / winget / choco):**
+  ```powershell
+  winget install HashiCorp.Terraform
+  # or: choco install terraform
+  ```
+- **macOS (Homebrew):**
+  ```bash
+  brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+  ```
+- **Linux (Debian / Ubuntu):**
+  ```bash
+  sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
+  curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+  sudo apt-get update && sudo apt-get install terraform
+  ```
+
+#### 2. Cloud CLI Installation & Authentication
+
+- **AWS:**
+  ```bash
+  # Install AWS CLI (Windows: winget install Amazon.AWSCLI | macOS: brew install awscli)
+  aws configure
+  # Set AWS Access Key, Secret Key, and Region (e.g. eu-west-1 or us-east-1)
+  ```
+
+- **Microsoft Azure:**
+  ```bash
+  # Install Azure CLI (Windows: winget install Microsoft.AzureCLI | macOS: brew install azure-cli)
+  az login
+  az account set --subscription "<your-subscription-id-or-name>"
+  # Register required providers (one-time):
+  az provider register --namespace Microsoft.App
+  az provider register --namespace Microsoft.OperationalInsights
+  az provider register --namespace Microsoft.ContainerRegistry
+  ```
+
+- **Google Cloud Platform (GCP):**
+  ```bash
+  # Install Google Cloud SDK (Windows: winget install Google.CloudSDK | macOS: brew install --cask google-cloud-sdk)
+  gcloud auth login
+  gcloud auth application-default login
+  gcloud config set project <your-gcp-project-id>
+  ```
+
+---
+
+### AWS ECS Fargate Deployment
+
+Deploy AgentWall on AWS ECS Fargate with an Application Load Balancer (ALB) and CloudWatch logging:
+
+#### On Windows (PowerShell):
+```powershell
+cd infra/aws/ecs
+terraform init
+terraform plan
+terraform apply
+```
+
+#### On Linux or macOS (Bash / Zsh):
+```bash
+cd infra/aws/ecs
+terraform init
+terraform plan
+terraform apply
+```
+
+* **Outputs:**
+  - `health_url`: `http://<ALB-DNS-NAME>:8080/healthz`
+  - `control_plane_url`: `http://<ALB-DNS-NAME>:8081`
+
+---
+
+### Azure Container Apps Deployment
+
+Deploy AgentWall on Azure Container Apps (ACA) with automatic free TLS certificates and optional scale-to-zero:
+
+#### On Windows (PowerShell):
+```powershell
+cd infra/azure
+Copy-Item terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+terraform apply
+```
+
+#### On Linux or macOS (Bash / Zsh):
+```bash
+cd infra/azure
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+terraform apply
+```
+
+* **Outputs:**
+  - `gateway_url`: `https://agentwall-gateway.<env-id>.<region>.azurecontainerapps.io`
+  - `control_plane_ui_url`: `https://agentwall-ui.<env-id>.<region>.azurecontainerapps.io`
+
+---
+
+### Google Cloud Run (v2) Deployment
+
+Deploy AgentWall on Google Cloud Run (v2) with multi-container revisions, sidecar database, and automatic HTTPS:
+
+#### On Windows (PowerShell):
+```powershell
+cd infra/gcp
+Copy-Item terraform.tfvars.example terraform.tfvars
+# Update gcp_project_id in terraform.tfvars
+terraform init
+terraform plan
+terraform apply
+```
+
+#### On Linux or macOS (Bash / Zsh):
+```bash
+cd infra/gcp
+cp terraform.tfvars.example terraform.tfvars
+# Update gcp_project_id in terraform.tfvars
+terraform init
+terraform plan
+terraform apply
+```
+
+* **Outputs:**
+  - `gateway_url`: `https://agentwall-dev-gateway-xxxxxx-uc.a.run.app`
+  - `control_plane_ui_url`: `https://agentwall-dev-ui-xxxxxx-uc.a.run.app`
+
+---
+
+### Post-Deployment Validation Suite (Across All OS Types)
+
+Follow these multi-step verification checks to validate gateway health, active policy enforcement, web dashboard connectivity, and live telemetry ingestion on **Windows (PowerShell / CMD)**, **Linux (Bash)**, and **macOS (Zsh)**.
+
+#### Step 1: Verify Gateway Health Check
+
+- **Windows (PowerShell):**
+  ```powershell
+  # AWS ECS
+  Invoke-RestMethod -Uri "http://<ALB-DNS-NAME>:8080/healthz"
+  # Azure ACA
+  Invoke-RestMethod -Uri "https://<gateway-fqdn>/healthz"
+  # GCP Cloud Run
+  Invoke-RestMethod -Uri "https://<gateway-url>/healthz"
+  ```
+
+- **Linux / macOS (Bash / Zsh) & Windows CMD:**
+  ```bash
+  # AWS ECS
+  curl -i http://<ALB-DNS-NAME>:8080/healthz
+  # Azure ACA
+  curl -i https://<gateway-fqdn>/healthz
+  # GCP Cloud Run
+  curl -i https://<gateway-url>/healthz
+  ```
+*Expected response: `HTTP 200 OK`*
+
+#### Step 2: Validate Policy Interception & Security Guardrails
+
+Send test JSON-RPC MCP tool calls to the cloud gateway endpoint:
+
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Test blocked dangerous tool call (Default-Deny / Safe Mode)
+  $blockedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
+  Invoke-RestMethod -Uri "http://<GATEWAY-ENDPOINT>:8080" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $blockedBody
+
+  # 2. Test safe authorized tool call
+  $safeBody = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
+  Invoke-RestMethod -Uri "http://<GATEWAY-ENDPOINT>:8080" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $safeBody
+  ```
+
+- **Linux / macOS (Bash / Zsh):**
+  ```bash
+  # 1. Test blocked dangerous tool call
+  curl -X POST http://<GATEWAY-ENDPOINT>:8080 \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer test-token" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
+
+  # 2. Test safe authorized tool call
+  curl -X POST http://<GATEWAY-ENDPOINT>:8080 \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer test-token" \
+    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
+  ```
+
+#### Step 3: Access Enterprise Control Plane UI
+Open your browser and navigate to the web console URL from your Terraform outputs:
+- **AWS ECS:** `http://<ALB-DNS-NAME>:8081`
+- **Azure ACA:** `https://<ui-fqdn>`
+- **GCP Cloud Run:** `https://<ui-url>`
+
+#### Step 4: Stream Live Cloud Container Logs
+
+- **AWS CloudWatch (Windows / macOS / Linux):**
+  ```bash
+  aws logs tail /ecs/agentwall --follow --format short
+  ```
+
+- **Azure Container Apps (Windows / macOS / Linux):**
+  ```bash
+  az containerapp logs show --name agentwall-gateway --resource-group <resource-group-name> --follow
+  ```
+
+- **Google Cloud Run (Windows / macOS / Linux):**
+  ```bash
+  gcloud run services logs tail agentwall-dev-gateway --region <region>
+  ```
+
+---
+
+### Teardown & Clean Up
+
+To destroy all provisioned cloud infrastructure cleanly and avoid unexpected charges:
+
+```bash
+# From within the target cloud directory (infra/aws/ecs, infra/azure, or infra/gcp):
+terraform destroy
+```
 
 
 

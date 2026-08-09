@@ -14,6 +14,7 @@ The **Enterprise Fleet** profile delivers the full AgentWall security stack on K
 >
 > - Workstation Sidecar setup → [Workstation Sidecar Guide](workstation_guide.md)
 > - Team Control Hub setup → [Team Control Hub Guide](team_hub_guide.md)
+> - Serverless Cloud Deployments (AWS, Azure, GCP) → [Multi-Cloud Terraform Guide](../infra/README.md)
 
 | Capability | What You Get |
 |---|---|

@@ -83,10 +83,31 @@ This Terraform deployment runs seamlessly across **Windows**, **Linux**, and **m
   ```
 
 ### 2. Install Azure CLI (`az`) & Authenticate
-```bash
-az login
-az account set --subscription "<your-subscription-id-or-name>"
-```
+- **Windows (PowerShell / winget):**
+  ```powershell
+  winget install Microsoft.AzureCLI
+  ```
+- **macOS (Homebrew):**
+  ```bash
+  brew install azure-cli
+  ```
+- **Linux (Debian / Ubuntu):**
+  ```bash
+  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  ```
+
+- **Login & Set Subscription:**
+  ```bash
+  az login
+  az account set --subscription "<your-subscription-id-or-name>"
+  ```
+
+- **Register Resource Providers (One-Time):**
+  ```bash
+  az provider register --namespace Microsoft.App
+  az provider register --namespace Microsoft.OperationalInsights
+  az provider register --namespace Microsoft.ContainerRegistry
+  ```
 
 ---
 
@@ -128,7 +149,7 @@ terraform apply
 
 ---
 
-## 🔍 Verification & Health Checks
+## 🔍 Post-Deployment Validation Suite (Across All OS Types)
 
 Once `terraform apply` finishes, the outputs will display the public HTTPS URLs:
 
@@ -142,20 +163,57 @@ health_check_url     = "https://agentwall-gateway.<environment-id>.<region>.azur
 quick_verify_command = "curl -i https://agentwall-gateway.<environment-id>.<region>.azurecontainerapps.io/healthz"
 ```
 
-### 1. Verify Gateway Health
-```bash
-curl -i https://<gateway-fqdn>/healthz
-```
-*Expected response: HTTP 200 OK*
+### Step 1: Verify Gateway Health Check
 
-### 2. Access the Enterprise Control Plane UI
+- **Windows (PowerShell):**
+  ```powershell
+  Invoke-RestMethod -Uri "https://<gateway-fqdn>/healthz"
+  ```
+- **Linux / macOS (Bash / Zsh) & Windows CMD:**
+  ```bash
+  curl -i https://<gateway-fqdn>/healthz
+  ```
+*Expected response: `HTTP 200 OK`*
+
+### Step 2: Validate Policy Interception & Security Guardrails
+
+Send test JSON-RPC MCP tool calls to the Azure Container Apps gateway endpoint:
+
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Test blocked dangerous tool call (Default-Deny / Safe Mode)
+  $blockedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
+  Invoke-RestMethod -Uri "https://<gateway-fqdn>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $blockedBody
+
+  # 2. Test safe authorized tool call
+  $safeBody = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
+  Invoke-RestMethod -Uri "https://<gateway-fqdn>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $safeBody
+  ```
+
+- **Linux / macOS (Bash / Zsh):**
+  ```bash
+  # 1. Test blocked dangerous tool call
+  curl -X POST https://<gateway-fqdn> \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer test-token" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
+
+  # 2. Test safe authorized tool call
+  curl -X POST https://<gateway-fqdn> \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer test-token" \
+    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
+  ```
+
+### Step 3: Access the Enterprise Control Plane UI
 Open your browser and navigate to:
 ```text
 https://<control-plane-ui-fqdn>
 ```
 
-### 3. Stream Live Container Logs (Azure CLI)
+### Step 4: Stream Live Container Logs (Azure CLI)
 ```bash
+# Windows PowerShell, macOS, or Linux
 az containerapp logs show \
   --name agentwall-gateway \
   --resource-group rg-agentwall-dev-westeurope \

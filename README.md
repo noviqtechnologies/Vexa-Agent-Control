@@ -21,6 +21,7 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#client-sdks">Client SDKs</a> ·
+  <a href="#cloud-serverless-deployments-terraform">Cloud (AWS/Azure/GCP)</a> ·
   <a href="#why-vexa-agentwall">Why Vexa AgentWall</a> ·
   <a href="#capabilities-by-operating-profile">Capabilities</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -137,6 +138,40 @@ helm install agentwall ./chart \
 docker build -f Dockerfile.har -t agentwall-har:2.0 .
 docker run -e AGENTWALL_POLICY_PATH=/etc/agentwall/policy.yaml agentwall-har:2.0
 ```
+
+### Cloud Serverless Deployments (Terraform)
+
+Deploy the complete AgentWall stack (Gateway + Control Plane UI + Dashboard API + PostgreSQL) to your preferred cloud provider for **~$0–$25/month** using our pre-built, cross-platform Terraform modules:
+
+#### Prerequisites
+- **Terraform** (`>= 1.6.0`): Install via `winget install HashiCorp.Terraform` (Windows), `brew install terraform` (macOS), or `sudo apt-get install terraform` (Linux).
+- **Authenticated Cloud CLI**: AWS CLI (`aws configure`), Azure CLI (`az login`), or Google Cloud SDK (`gcloud auth login`).
+
+#### 🅰️ Deploy to AWS ECS Fargate
+```bash
+cd infra/aws/ecs
+terraform init && terraform apply
+```
+* **Cost:** ~$15–$25/mo | **Details:** → [AWS Deployment Guide](infra/aws/README.md)
+
+#### 🅱️ Deploy to Azure Container Apps (ACA)
+```bash
+cd infra/azure
+cp terraform.tfvars.example terraform.tfvars   # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
+terraform init && terraform apply
+```
+* **Cost:** ~$0–$20/mo (Free Auto-TLS & Scale-to-Zero) | **Details:** → [Azure Deployment Guide](infra/azure/README.md)
+
+#### 🅲 Deploy to Google Cloud Run (v2)
+```bash
+cd infra/gcp
+cp terraform.tfvars.example terraform.tfvars   # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
+# Edit terraform.tfvars with your gcp_project_id
+terraform init && terraform apply
+```
+* **Cost:** ~$0–$15/mo (Free Auto-TLS & Scale-to-Zero) | **Details:** → [GCP Deployment Guide](infra/gcp/README.md)
+
+> 📖 **Multi-Cloud Architecture & Comparison**: See the full [Multi-Cloud Terraform Documentation](infra/README.md) for architectural comparisons and advanced enterprise configurations.
 
 ### Build from Source
 
@@ -345,12 +380,15 @@ Vexa AgentWall provides explicit out-of-process security controls designed speci
 
 Vexa AgentWall adapts to your existing deployment infrastructure:
 
-| Deployment Profile | Orchestration & Deployment | Infrastructure & State Storage |
-|---|---|---|
-| **Workstation Local Sidecar** | Standalone Binary (`agentwall dev`), IDE Wrapper (`agentwall wrap`), or Sentry Daemon (`agentwall service`) | Local workstation, embedded SQLite database, local disk audit logs |
-| **Team Staging Control Hub** | Docker Compose (`docker compose up`) | Shared team host / VM, PostgreSQL database, central control API |
-| **Enterprise Fleet Production** | Kubernetes Helm Release (`helm install agentwall ./chart`) | Cloud Kubernetes cluster, HA database, external SIEM export |
-| **Hardened Agent Runtime (HAR)** | Distroless/Alpine OCI Image (`Dockerfile.har`) | Kubernetes pod sidecar, production agent containers (<100MB memory footprint) |
+| Deployment Profile | Orchestration & Deployment | Infrastructure & State Storage | Monthly Cost |
+|---|---|---|:---:|
+| **Workstation Local Sidecar** | Standalone Binary (`agentwall dev`), IDE Wrapper (`agentwall wrap`), or Sentry Daemon (`agentwall service`) | Local workstation, embedded SQLite database, local disk audit logs | **$0.00** |
+| **Team Staging Control Hub** | Docker Compose (`docker compose up`) | Shared team host / VM, PostgreSQL database, central control API | Self-hosted |
+| **AWS ECS Fargate** | Terraform (`cd infra/aws/ecs && terraform apply`) | AWS Fargate serverless containers, ALB, CloudWatch, PostgreSQL | **~$15 – $25/mo** |
+| **Azure Container Apps** | Terraform (`cd infra/azure && terraform apply`) | Azure Container Apps, Envoy Ingress (Auto-TLS), Log Analytics | **~$0 – $20/mo** |
+| **Google Cloud Run (v2)** | Terraform (`cd infra/gcp && terraform apply`) | Cloud Run multi-container revisions, Auto-TLS, Cloud Logging | **~$0 – $15/mo** |
+| **Enterprise Fleet Production** | Kubernetes Helm Release (`helm install agentwall ./chart`) | Cloud Kubernetes cluster, HA database, external SIEM export | Cloud cluster |
+| **Hardened Agent Runtime (HAR)** | Distroless/Alpine OCI Image (`Dockerfile.har`) | Kubernetes pod sidecar, production agent containers (<100MB memory footprint) | Integrated |
 
 ---
 
@@ -362,6 +400,7 @@ Vexa AgentWall provides dedicated management interfaces tailored to each operati
 |---|---|---|
 | **Local Developer Console** | `http://127.0.0.1:8080` (`agentwall dev`) | Real-time traffic monitor, shadow mode Risk Delta reporting, Vexa Security Score view, HITL browser modal, ADR benchmark runner |
 | **Team Control Hub Console** | `http://localhost:8081` (Docker Compose) | Centralized policy editor, Central Device Governance portal (`/admin/devices`), SSE hot-reload controller, async HITL queue, team spend analytics |
+| **Cloud Serverless Consoles** | `http(s)://<cloud-endpoint>:8081` or `:80` (AWS / Azure / GCP) | Cloud-hosted Control Hub UI, centralized policy push, multi-gateway observability, real-time cloud logging integration |
 | **Enterprise Control Hub Console** | Kubernetes Ingress / TLS Endpoint | HAR container pod telemetry, threat intelligence feed monitor, zero-knowledge CMK SIEM status, fleet security compliance overview |
 
 ---
