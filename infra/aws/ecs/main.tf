@@ -243,11 +243,6 @@ resource "aws_ecs_service" "agentwall" {
   depends_on = [aws_lb_listener.http]
 }
 
-output "dashboard_url" {
-  description = "Direct HTTP URL to AgentWall Gateway & Dashboard"
-  value       = "http://${aws_lb.alb.dns_name}:8080"
-}
-
 output "control_plane_url" {
   description = "AgentWall Control Plane & Policy Management Endpoint"
   value       = "http://${aws_lb.alb.dns_name}:8080"
