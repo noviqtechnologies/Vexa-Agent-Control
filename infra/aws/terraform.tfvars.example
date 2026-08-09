@@ -1,0 +1,31 @@
+# ─── AgentWall AWS EKS Fargate Terraform — Variable Overrides ─────────────────
+#
+# Copy this file to terraform.tfvars and fill in your values.
+# Never commit terraform.tfvars to source control (it's in .gitignore).
+
+# ─── Region & naming ──────────────────────────────────────────────────────────
+aws_region      = "eu-west-1"
+environment     = "dev"
+cluster_name    = "agentwall-eks-cluster"
+cluster_version = "1.31"
+
+# ─── AgentWall application ────────────────────────────────────────────────────
+agentwall_namespace    = "agentwall-system"
+gateway_replicas       = 1
+mcp_url                = "http://mock-mcp:3000"
+
+# ─── ECR ──────────────────────────────────────────────────────────────────────
+ecr_enabled = true
+
+# ─── ACM & TLS ────────────────────────────────────────────────────────────────
+domain_name            = ""     # e.g. "example.com"
+acm_certificate_arn    = ""     # e.g. "arn:aws:acm:eu-west-1:123456789012:certificate/..."
+create_route53_records = false  # set true if Route 53 manages your domain
+route53_zone_id        = ""     # e.g. "Z1D633PJN98FT9"
+tls_create_self_signed = false  # true = self-signed cert on pod (dev only)
+
+# ─── Tagging ──────────────────────────────────────────────────────────────────
+tags = {
+  Team       = "platform"
+  CostCenter = "engineering"
+}

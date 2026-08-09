@@ -4,7 +4,14 @@ design/
 agentinfo/
 scratch/
 graphify-out/
-infra/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+*.tfvars
+!*.tfvars.example
 
 # Audit Logs and Backups (FR-104, FR-109)
 *.log
