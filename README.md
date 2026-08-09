@@ -78,9 +78,9 @@ Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter 
 
 Integrate your AI agents directly with AgentWall's out-of-process security proxy:
 
-**Python (`agentwall`):**
+**Python (`vexaagentwall`):**
 ```python
-# pip install agentwall
+# pip install vexaagentwall
 from agentwall import AgentWallClient, AgentWallDenied
 
 client = AgentWallClient() # Auto-discovers local proxy on 127.0.0.1:8080
