@@ -96,17 +96,6 @@ except AgentWallDenied as e:
     print(f"Blocked by policy: {e.rule_name} — {e.reason}")
 ```
 
-**TypeScript / Node.js (`@vexa/agentwall`):**
-```typescript
-// npm install @vexa/agentwall
-import { AgentWallClient, AgentWallDenied } from "@vexa/agentwall";
-
-const client = new AgentWallClient();
-const governedReadFile = client.governed("read_file", async (args: { path: string }) => {
-  return await fs.promises.readFile(args.path, "utf-8");
-});
-```
-
 ### Team / Staging Control Hub (Docker Compose)
 
 Deploy the self-hosted Control Hub stack (Go REST API, React Management Console, PostgreSQL database) alongside gateway instances:
