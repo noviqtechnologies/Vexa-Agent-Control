@@ -4,6 +4,7 @@ design/
 agentinfo/
 scratch/
 graphify-out/
+infra/
 
 # Audit Logs and Backups (FR-104, FR-109)
 *.log

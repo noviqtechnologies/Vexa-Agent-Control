@@ -74,7 +74,7 @@ Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter 
 > python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 > ```
 
-### Client SDKs (Python & TypeScript)
+### Client SDKs (Python)
 
 Integrate your AI agents directly with AgentWall's out-of-process security proxy:
 
