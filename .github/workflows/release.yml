@@ -189,12 +189,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Build and push Gateway image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:1.0.25,${{ env.IMAGE_NAME }}:v1.0.25
+
+      - name: Build and push Dashboard API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./control-plane/api
+          file: ./control-plane/api/Dockerfile
+          push: true
+          tags: ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest
+
+      - name: Build and push Dashboard Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./control-plane/ui
+          file: ./control-plane/ui/Dockerfile
+          push: true
+          tags: ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest
+
+      - name: Build and push Database image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./control-plane/db
+          file: ./control-plane/db/Dockerfile
+          push: true
+          tags: ghcr.io/noviqtechnologies/agentwall-db:latest
+
 

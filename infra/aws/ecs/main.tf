@@ -226,46 +226,92 @@ resource "aws_cloudwatch_log_group" "ecs" {
   retention_in_days = 7
 }
 
-# ─── ECS Task Definition (Gateway + Control Plane UI) ─────────────────────────
+# ─── ECS Task Definition (Full Control Plane Stack) ───────────────────────────
 
-variable "control_plane_image" {
+variable "control_plane_ui_image" {
   description = "Enterprise Control Plane UI container image"
   type        = string
   default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+}
+
+variable "control_plane_api_image" {
+  description = "Enterprise Control Plane API container image"
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+}
+
+variable "control_plane_db_image" {
+  description = "Control Plane PostgreSQL Database container image with migrations"
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall-db:latest"
 }
 
 resource "aws_ecs_task_definition" "agentwall" {
   family                   = "agentwall-gateway"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512" # 0.5 vCPU
-  memory                   = "1024" # 1024 MiB
+  cpu                      = "1024" # 1.0 vCPU
+  memory                   = "2048" # 2048 MiB
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
 
   container_definitions = jsonencode([
     {
-      name      = "gateway"
-      image     = var.container_image
+      name      = "postgres"
+      image     = var.control_plane_db_image
       essential = true
       portMappings = [
         {
-          containerPort = 8080
-          hostPort      = 8080
+          containerPort = 5432
+          hostPort      = 5432
         }
+      ]
+      environment = [
+        { name = "POSTGRES_USER", value = "agentwall" },
+        { name = "POSTGRES_PASSWORD", value = "devpassword" },
+        { name = "POSTGRES_DB", value = "agentwall" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "gateway"
+          "awslogs-stream-prefix" = "postgres"
+        }
+      }
+    },
+    {
+      name      = "dashboard-api"
+      image     = var.control_plane_api_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8400
+          hostPort      = 8400
+        }
+      ]
+      environment = [
+        { name = "DATABASE_URL", value = "postgres://agentwall:devpassword@127.0.0.1:5432/agentwall?sslmode=disable" },
+        { name = "DASHBOARD_PORT", value = "8400" },
+        { name = "DEV_MODE", value = "true" },
+        { name = "ALLOW_DEV_MODE", value = "true" },
+        { name = "GATEWAY_SECRET", value = "local-dev-shared-secret-change-me" },
+        { name = "POLICY_READ_SECRET", value = "local-dev-policy-read-secret" },
+        { name = "GATEWAY_URL", value = "http://127.0.0.1:8080" },
+        { name = "PROVIDER_KEY_ENCRYPTION_SECRET", value = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "dashboard-api"
         }
       }
     },
     {
       name      = "control-plane-ui"
-      image     = var.control_plane_image
-      essential = false
+      image     = var.control_plane_ui_image
+      essential = true
       portMappings = [
         {
           containerPort = 8081
@@ -278,6 +324,31 @@ resource "aws_ecs_task_definition" "agentwall" {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "control-plane-ui"
+        }
+      }
+    },
+    {
+      name      = "gateway"
+      image     = var.container_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+        }
+      ]
+      environment = [
+        { name = "AGENTWALL_LISTEN", value = "0.0.0.0:8080" },
+        { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" },
+        { name = "POLICY_READ_SECRET", value = "local-dev-policy-read-secret" },
+        { name = "GATEWAY_SECRET", value = "local-dev-shared-secret-change-me" }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "gateway"
         }
       }
     }
