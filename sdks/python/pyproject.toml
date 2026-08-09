@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vexaagentwall"
-version = "1.0.0"
+version = "1.0.25"
 description = "Python client SDK for Vexa AgentWall AI security gateway & firewall"
 readme = "README.md"
 license = "MIT"
