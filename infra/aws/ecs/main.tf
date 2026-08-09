@@ -243,8 +243,8 @@ resource "aws_ecs_service" "agentwall" {
   depends_on = [aws_lb_listener.http]
 }
 
-output "control_plane_url" {
-  description = "AgentWall Control Plane & Policy Management Endpoint"
+output "dashboard_url" {
+  description = "AgentWall Local Observability Dashboard & Proxy Endpoint"
   value       = "http://${aws_lb.alb.dns_name}:8080"
 }
 
