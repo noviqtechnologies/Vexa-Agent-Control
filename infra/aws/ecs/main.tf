@@ -248,6 +248,11 @@ output "dashboard_url" {
   value       = "http://${aws_lb.alb.dns_name}:8080"
 }
 
+output "control_plane_url" {
+  description = "AgentWall Control Plane & Policy Management Endpoint"
+  value       = "http://${aws_lb.alb.dns_name}:8080"
+}
+
 output "health_url" {
   description = "Health check endpoint URL"
   value       = "http://${aws_lb.alb.dns_name}:8080/healthz"
