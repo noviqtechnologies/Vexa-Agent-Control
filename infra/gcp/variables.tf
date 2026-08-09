@@ -1,0 +1,192 @@
+# ─── GCP Project & Region Configuration ───────────────────────────────────────
+
+variable "gcp_project_id" {
+  description = "The Google Cloud Project ID where all AgentWall resources will be deployed."
+  type        = string
+}
+
+variable "gcp_region" {
+  description = "Google Cloud region for Cloud Run services (e.g. us-central1, europe-west1, asia-east1)."
+  type        = string
+  default     = "us-central1"
+}
+
+variable "environment" {
+  description = "Deployment environment identifier (e.g. dev, staging, prod)."
+  type        = string
+  default     = "dev"
+}
+
+# ─── Container Images ─────────────────────────────────────────────────────────
+
+variable "container_image" {
+  description = "Container image for the AgentWall Gateway proxy."
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall:latest"
+}
+
+variable "control_plane_ui_image" {
+  description = "Container image for the AgentWall Enterprise Control Plane Frontend UI."
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+}
+
+variable "control_plane_api_image" {
+  description = "Container image for the AgentWall Enterprise Control Plane Dashboard API."
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+}
+
+variable "control_plane_db_image" {
+  description = "Container image for the AgentWall PostgreSQL Database with initial migrations."
+  type        = string
+  default     = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+}
+
+# ─── Sizing, Scaling & Concurrency ───────────────────────────────────────────
+
+variable "min_instances" {
+  description = "Minimum number of Cloud Run instances (set to 0 for dev scale-to-zero / $0 idle compute, or 1 for production always-on)."
+  type        = number
+  default     = 1
+}
+
+variable "max_instances" {
+  description = "Maximum number of container instances for auto-scaling under load."
+  type        = number
+  default     = 5
+}
+
+variable "gateway_cpu" {
+  description = "vCPU allocated to the Gateway container (e.g. '1', '2')."
+  type        = string
+  default     = "1"
+}
+
+variable "gateway_memory" {
+  description = "Memory allocated to the Gateway container (e.g. '512Mi', '1Gi', '2Gi')."
+  type        = string
+  default     = "512Mi"
+}
+
+variable "api_cpu" {
+  description = "vCPU allocated to the Dashboard API container."
+  type        = string
+  default     = "1"
+}
+
+variable "api_memory" {
+  description = "Memory allocated to the Dashboard API container."
+  type        = string
+  default     = "512Mi"
+}
+
+variable "ui_cpu" {
+  description = "vCPU allocated to the Control Plane UI container."
+  type        = string
+  default     = "1"
+}
+
+variable "ui_memory" {
+  description = "Memory allocated to the Control Plane UI container."
+  type        = string
+  default     = "512Mi"
+}
+
+variable "db_cpu" {
+  description = "vCPU allocated to the PostgreSQL sidecar container."
+  type        = string
+  default     = "1"
+}
+
+variable "db_memory" {
+  description = "Memory allocated to the PostgreSQL sidecar container."
+  type        = string
+  default     = "512Mi"
+}
+
+# ─── Access & Security ────────────────────────────────────────────────────────
+
+variable "allow_unauthenticated" {
+  description = "When true, enables public access to Gateway and Control Plane UI via Cloud Run IAM role roles/run.invoker for allUsers."
+  type        = bool
+  default     = true
+}
+
+# ─── Networking & VPC Integration ─────────────────────────────────────────────
+
+variable "enable_vpc" {
+  description = "When true, provisions a custom VPC and Serverless VPC Access Connector for private networking. When false, runs in Google-managed serverless network for maximum cost-effectiveness."
+  type        = bool
+  default     = false
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the custom VPC (used when enable_vpc = true)."
+  type        = string
+  default     = "10.10.0.0/16"
+}
+
+variable "connector_cidr" {
+  description = "CIDR block for the Serverless VPC Access connector (must be an unused /28 block)."
+  type        = string
+  default     = "10.10.8.0/28"
+}
+
+# ─── Google Artifact Registry (GAR) ───────────────────────────────────────────
+
+variable "gar_enabled" {
+  description = "When true, provisions a dedicated Google Artifact Registry Docker repository for private container images."
+  type        = bool
+  default     = false
+}
+
+# ─── Secrets & Database Credentials ───────────────────────────────────────────
+
+variable "gateway_secret" {
+  description = "Shared secret authenticating telemetry pushes from the CLI to the API. If left empty, an auto-generated random token is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "policy_read_secret" {
+  description = "Shared secret used by the Gateway to pull active policies from the API. If left empty, an auto-generated random token is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "encryption_secret" {
+  description = "Master 32-byte hex encryption key (64 hex characters) for provider API key storage. If left empty, an auto-generated 64-char key is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "postgres_user" {
+  description = "PostgreSQL username for the control plane database."
+  type        = string
+  default     = "agentwall"
+}
+
+variable "postgres_password" {
+  description = "PostgreSQL password for the control plane database. If left empty, an auto-generated password is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "postgres_db" {
+  description = "PostgreSQL database name for AgentWall."
+  type        = string
+  default     = "agentwall"
+}
+
+# ─── Custom Labels ────────────────────────────────────────────────────────────
+
+variable "labels" {
+  description = "Custom Google Cloud labels merged with default deployment labels."
+  type        = map(string)
+  default     = {}
+}
