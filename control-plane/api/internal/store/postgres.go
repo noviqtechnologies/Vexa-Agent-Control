@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,10 +21,28 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connect to postgres: %w", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("ping postgres: %w", err)
+
+	var pingErr error
+	maxRetries := 15
+	for i := 1; i <= maxRetries; i++ {
+		pingErr = pool.Ping(ctx)
+		if pingErr == nil {
+			if i > 1 {
+				log.Printf("successfully connected to postgres on attempt %d", i)
+			}
+			return &Store{pool: pool}, nil
+		}
+		log.Printf("waiting for postgres to be ready (attempt %d/%d): %v", i, maxRetries, pingErr)
+		select {
+		case <-ctx.Done():
+			pool.Close()
+			return nil, ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
 	}
-	return &Store{pool: pool}, nil
+
+	pool.Close()
+	return nil, fmt.Errorf("ping postgres after %d retries: %w", maxRetries, pingErr)
 }
 
 func (s *Store) Close() {

@@ -270,6 +270,13 @@ resource "aws_ecs_task_definition" "agentwall" {
         { name = "POSTGRES_PASSWORD", value = "devpassword" },
         { name = "POSTGRES_DB", value = "agentwall" }
       ]
+      healthCheck = {
+        command     = ["CMD-SHELL", "pg_isready -U agentwall -d agentwall"]
+        interval    = 5
+        timeout     = 5
+        retries     = 5
+        startPeriod = 10
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -299,6 +306,12 @@ resource "aws_ecs_task_definition" "agentwall" {
         { name = "GATEWAY_URL", value = "http://127.0.0.1:8080" },
         { name = "PROVIDER_KEY_ENCRYPTION_SECRET", value = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }
       ]
+      dependsOn = [
+        {
+          containerName = "postgres"
+          condition     = "HEALTHY"
+        }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -316,6 +329,12 @@ resource "aws_ecs_task_definition" "agentwall" {
         {
           containerPort = 8081
           hostPort      = 8081
+        }
+      ]
+      dependsOn = [
+        {
+          containerName = "dashboard-api"
+          condition     = "START"
         }
       ]
       logConfiguration = {
@@ -342,6 +361,12 @@ resource "aws_ecs_task_definition" "agentwall" {
         { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" },
         { name = "POLICY_READ_SECRET", value = "local-dev-policy-read-secret" },
         { name = "GATEWAY_SECRET", value = "local-dev-shared-secret-change-me" }
+      ]
+      dependsOn = [
+        {
+          containerName = "dashboard-api"
+          condition     = "START"
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
