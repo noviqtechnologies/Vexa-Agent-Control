@@ -2,12 +2,12 @@
 //! Asynchronous escalation engine for dangerous P0 commands, managing webhooks
 //! and verifying HMAC signed authorization responses.
 
+use hmac::{Hmac, Mac};
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -58,7 +58,11 @@ impl HitlManager {
     }
 
     pub fn process_callback(&self, response: &EscalationResponse) -> Result<bool, String> {
-        if !self.verify_signature(&response.request_id, &response.decision, &response.signed_hmac) {
+        if !self.verify_signature(
+            &response.request_id,
+            &response.decision,
+            &response.signed_hmac,
+        ) {
             return Err("Invalid HMAC signature on escalation callback".to_string());
         }
 

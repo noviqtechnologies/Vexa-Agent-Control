@@ -51,11 +51,20 @@ pub fn resolve_all_profile_ide_configs(ide_filename: &str) -> Vec<PathBuf> {
         let appdata_roaming = profile.join("AppData").join("Roaming");
         if appdata_roaming.exists() {
             let target = match ide_filename {
-                "claude" => appdata_roaming.join("Claude").join("claude_desktop_config.json"),
-                "cursor" => appdata_roaming.join("Cursor").join("User").join("globalStorage").join("storage.json"),
-                "vscode" => appdata_roaming.join("Code").join("User").join("settings.json"),
-                "cline"  => appdata_roaming.join("Cline").join("mcp_settings.json"),
-                "zed"    => appdata_roaming.join("Zed").join("settings.json"),
+                "claude" => appdata_roaming
+                    .join("Claude")
+                    .join("claude_desktop_config.json"),
+                "cursor" => appdata_roaming
+                    .join("Cursor")
+                    .join("User")
+                    .join("globalStorage")
+                    .join("storage.json"),
+                "vscode" => appdata_roaming
+                    .join("Code")
+                    .join("User")
+                    .join("settings.json"),
+                "cline" => appdata_roaming.join("Cline").join("mcp_settings.json"),
+                "zed" => appdata_roaming.join("Zed").join("settings.json"),
                 _ => appdata_roaming.join(ide_filename).join("mcp_config.json"),
             };
             results.push(target);
@@ -71,12 +80,18 @@ mod tests {
     #[test]
     fn test_enumerate_user_profiles() {
         let profiles = enumerate_user_profiles();
-        assert!(!profiles.is_empty(), "Should resolve at least one user profile home dir");
+        assert!(
+            !profiles.is_empty(),
+            "Should resolve at least one user profile home dir"
+        );
     }
 
     #[test]
     fn test_resolve_all_profile_ide_configs() {
         let configs = resolve_all_profile_ide_configs("claude");
-        assert!(!configs.is_empty(), "Should return IDE config path candidates across profile hives");
+        assert!(
+            !configs.is_empty(),
+            "Should return IDE config path candidates across profile hives"
+        );
     }
 }

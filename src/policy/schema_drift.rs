@@ -249,7 +249,10 @@ impl SchemaDriftDetector {
     }
 
     /// Save baseline map to disk atomically.
-    fn save_to_disk(path: &Path, baselines: &HashMap<String, SchemaCatalogHash>) -> Result<(), String> {
+    fn save_to_disk(
+        path: &Path,
+        baselines: &HashMap<String, SchemaCatalogHash>,
+    ) -> Result<(), String> {
         let json = serde_json::to_string_pretty(baselines)
             .map_err(|e| format!("Serialization error: {}", e))?;
 
@@ -265,8 +268,7 @@ impl SchemaDriftDetector {
 
     /// Load baseline map from disk.
     fn load_from_disk(path: &Path) -> Result<HashMap<String, SchemaCatalogHash>, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Read error: {}", e))?;
+        let content = std::fs::read_to_string(path).map_err(|e| format!("Read error: {}", e))?;
         serde_json::from_str(&content).map_err(|e| format!("Deserialization error: {}", e))
     }
 }
@@ -280,8 +282,11 @@ fn diff_catalogs(
     let mut removed = Vec::new();
     let mut modified = Vec::new();
 
-    let base_map: HashMap<&str, &ToolSummary> =
-        baseline.tools.iter().map(|t| (t.name.as_str(), t)).collect();
+    let base_map: HashMap<&str, &ToolSummary> = baseline
+        .tools
+        .iter()
+        .map(|t| (t.name.as_str(), t))
+        .collect();
     let curr_map: HashMap<&str, &ToolSummary> =
         current.tools.iter().map(|t| (t.name.as_str(), t)).collect();
 
@@ -365,7 +370,11 @@ mod tests {
         // 1. Initial evaluation records baseline
         let res1 = detector.evaluate_catalog("fs_server", &tools_response, None);
         match res1 {
-            DriftResult::BaselineRecorded { server_name, tool_count, .. } => {
+            DriftResult::BaselineRecorded {
+                server_name,
+                tool_count,
+                ..
+            } => {
                 assert_eq!(server_name, "fs_server");
                 assert_eq!(tool_count, 2);
             }

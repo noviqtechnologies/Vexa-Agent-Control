@@ -1,8 +1,8 @@
 //! macOS LaunchDaemon / LaunchAgent Service Installer module.
 
+use colored::*;
 use std::fs;
 use std::process::Command;
-use colored::*;
 
 pub fn install_macos_service(
     bin_path: &str,
@@ -56,7 +56,10 @@ pub fn install_macos_service(
         (agent_plist, false)
     };
 
-    println!("  Writing macOS launchd plist to {}", target_path.display().to_string().cyan());
+    println!(
+        "  Writing macOS launchd plist to {}",
+        target_path.display().to_string().cyan()
+    );
     fs::write(&target_path, plist_content)
         .map_err(|e| format!("failed to write launchd plist file: {}", e))?;
 
@@ -68,29 +71,44 @@ pub fn install_macos_service(
         return Err(format!("failed to execute launchctl load: {}", e));
     }
 
-    let mode_str = if is_daemon { "LaunchDaemon" } else { "LaunchAgent" };
-    println!("{} AgentWall macOS {} installed and loaded!", "✔".green().bold(), mode_str);
+    let mode_str = if is_daemon {
+        "LaunchDaemon"
+    } else {
+        "LaunchAgent"
+    };
+    println!(
+        "{} AgentWall macOS {} installed and loaded!",
+        "✔".green().bold(),
+        mode_str
+    );
     Ok(())
 }
 
 pub fn uninstall_macos_service() -> Result<(), String> {
     let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
-    let agent_plist = dirs::home_dir()
-        .map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
+    let agent_plist =
+        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
 
     if std::path::Path::new(daemon_plist).exists() {
-        let _ = Command::new("launchctl").args(["unload", "-w", daemon_plist]).output();
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", daemon_plist])
+            .output();
         let _ = fs::remove_file(daemon_plist);
     }
 
     if let Some(path) = agent_plist {
         if path.exists() {
-            let _ = Command::new("launchctl").args(["unload", "-w", &path.display().to_string()]).output();
+            let _ = Command::new("launchctl")
+                .args(["unload", "-w", &path.display().to_string()])
+                .output();
             let _ = fs::remove_file(path);
         }
     }
 
-    println!("{} AgentWall macOS service uninstalled.", "✔".green().bold());
+    println!(
+        "{} AgentWall macOS service uninstalled.",
+        "✔".green().bold()
+    );
     Ok(())
 }
 

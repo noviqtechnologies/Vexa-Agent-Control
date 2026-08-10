@@ -12,7 +12,9 @@ use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
-fn create_test_state_with_drift(drift_config: Option<SchemaDriftConfig>) -> (Arc<ProxyState>, tempfile::TempDir) {
+fn create_test_state_with_drift(
+    drift_config: Option<SchemaDriftConfig>,
+) -> (Arc<ProxyState>, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let log_path = dir.path().join("audit-drift-integration.log");
 
@@ -60,8 +62,12 @@ fn create_test_state_with_drift(drift_config: Option<SchemaDriftConfig>) -> (Arc
         safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
         ready: true,
         db_manager,
-        response_scanner: Arc::new(agentwall::policy::response_scanner::ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(agentwall::policy::response_scanner::ResponseScanConfig::default()),
+        response_scanner: Arc::new(
+            agentwall::policy::response_scanner::ResponseScanner::new().unwrap(),
+        ),
+        response_scan_config: std::sync::RwLock::new(
+            agentwall::policy::response_scanner::ResponseScanConfig::default(),
+        ),
         dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
         semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
             agentwall::policy::semantic::SemanticConfig::default(),
@@ -138,9 +144,23 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
         }
     });
 
-    let drift_cfg = state.policy.read().unwrap().as_ref().unwrap().schema_drift.clone();
-    let res1 = state.schema_drift_detector.evaluate_catalog("sensor_server", &catalog_v1, drift_cfg.as_ref());
-    assert!(matches!(res1, agentwall::policy::schema_drift::DriftResult::BaselineRecorded { .. }));
+    let drift_cfg = state
+        .policy
+        .read()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .schema_drift
+        .clone();
+    let res1 = state.schema_drift_detector.evaluate_catalog(
+        "sensor_server",
+        &catalog_v1,
+        drift_cfg.as_ref(),
+    );
+    assert!(matches!(
+        res1,
+        agentwall::policy::schema_drift::DriftResult::BaselineRecorded { .. }
+    ));
 
     // 3. Subsequent session with modified tool description triggers Drift
     let catalog_v2_tampered = json!({
@@ -157,7 +177,11 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
         }
     });
 
-    let res2 = state.schema_drift_detector.evaluate_catalog("sensor_server", &catalog_v2_tampered, drift_cfg.as_ref());
+    let res2 = state.schema_drift_detector.evaluate_catalog(
+        "sensor_server",
+        &catalog_v2_tampered,
+        drift_cfg.as_ref(),
+    );
     match res2 {
         agentwall::policy::schema_drift::DriftResult::Drift {
             server_name,

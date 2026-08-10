@@ -2,10 +2,10 @@
 //! Implements a secure, high-performance WebSocket tunnel to bridge cloud-hosted agents
 //! with local MCP servers, subjecting tunneled traffic to the 6-pass normalizer and DLP engine.
 
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use serde::{Deserialize, Serialize};
 
 /// Egress Tunnel Metrics for telemetry and dashboard monitoring.
 #[derive(Debug, Default)]
@@ -18,9 +18,11 @@ pub struct TunnelMetrics {
 impl TunnelMetrics {
     pub fn record_frame(&self, latency_us: u64, redacted: bool) {
         self.frames_processed.fetch_add(1, Ordering::Relaxed);
-        self.total_latency_microseconds.fetch_add(latency_us, Ordering::Relaxed);
+        self.total_latency_microseconds
+            .fetch_add(latency_us, Ordering::Relaxed);
         if redacted {
-            self.pii_redactions_inside_tunnel.fetch_add(1, Ordering::Relaxed);
+            self.pii_redactions_inside_tunnel
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -68,7 +70,10 @@ impl HardenedEgressTunnel {
             // Run basic PII / secret pattern scanning
             if frame.payload.contains("sk-") || frame.payload.contains("AKIA") {
                 if self.shadow_mode {
-                    eprintln!("[SHADOW_MODE] WOULD_REDACT: Secret pattern detected in tunneled frame {}", frame.session_id);
+                    eprintln!(
+                        "[SHADOW_MODE] WOULD_REDACT: Secret pattern detected in tunneled frame {}",
+                        frame.session_id
+                    );
                 } else {
                     frame.payload = frame.payload.replace("sk-", "[REDACTED_API_KEY]");
                     frame.payload = frame.payload.replace("AKIA", "[REDACTED_AWS_KEY]");

@@ -47,15 +47,16 @@ async fn async_main() -> i32 {
         _ => false,
     };
 
-    let suppress_banner = is_dev_stdio || matches!(
-        &*cli.command,
-        Commands::Report { .. }
-            | Commands::Test { .. }
-            | Commands::Wrap { .. }
-            | Commands::StdioProxy { .. }
-            | Commands::Status
-            | Commands::Watch { .. }
-    );
+    let suppress_banner = is_dev_stdio
+        || matches!(
+            &*cli.command,
+            Commands::Report { .. }
+                | Commands::Test { .. }
+                | Commands::Wrap { .. }
+                | Commands::StdioProxy { .. }
+                | Commands::Status
+                | Commands::Watch { .. }
+        );
 
     if !suppress_banner {
         print_banner();
@@ -103,7 +104,9 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 agentwall::cli::ServiceCliAction::Uninstall => {
                     agentwall::service::ServiceAction::Uninstall
                 }
-                agentwall::cli::ServiceCliAction::Status => agentwall::service::ServiceAction::Status,
+                agentwall::cli::ServiceCliAction::Status => {
+                    agentwall::service::ServiceAction::Status
+                }
             };
             agentwall::service::run_service(act)
         }
@@ -152,15 +155,25 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             eprintln!("[vexa-scan] Scanning MCP configuration: {}", path);
             let score = McpScorer::evaluate_server(&path, &[], false, 0);
             match format.as_str() {
-                "json" => println!("{}", serde_json::to_string_pretty(&score).unwrap_or_default()),
+                "json" => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&score).unwrap_or_default()
+                ),
                 _ => {
-                    println!("Vexa Security Score for '{}': {}/100 [{}]", score.server_name, score.score, score.risk_level);
+                    println!(
+                        "Vexa Security Score for '{}': {}/100 [{}]",
+                        score.server_name, score.score, score.risk_level
+                    );
                     for flag in &score.vulnerability_flags {
                         println!("  ⚠ {}", flag);
                     }
                 }
             }
-            if score.score < 60 { 1 } else { 0 }
+            if score.score < 60 {
+                1
+            } else {
+                0
+            }
         }
         Commands::Init { target } => init::run_init(&target),
         // FR-22: Identity subcommand dispatch
@@ -242,12 +255,21 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                                 }
                                 Ok(jwks_resp) => match jwks_resp.text().await {
                                     Err(e) => {
-                                        eprintln!("{} Failed to read JWKS response: {}", "✖".red(), e);
+                                        eprintln!(
+                                            "{} Failed to read JWKS response: {}",
+                                            "✖".red(),
+                                            e
+                                        );
                                         1
                                     }
                                     Ok(jwks_text) => {
                                         if let Err(e) = std::fs::write(&output, &jwks_text) {
-                                            eprintln!("{} Failed to write JWKS to {}: {}", "✖".red(), output, e);
+                                            eprintln!(
+                                                "{} Failed to write JWKS to {}: {}",
+                                                "✖".red(),
+                                                output,
+                                                e
+                                            );
                                             1
                                         } else {
                                             println!("✓ Exported JWKS keys to {}", output);
@@ -303,28 +325,31 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 log_path,
                 format,
                 output,
-            } => {
-                match agentwall::compliance::generate_report(Path::new(&log_path), &format) {
-                    Ok(content) => {
-                        if let Some(out_path) = output {
-                            if let Err(e) = std::fs::write(&out_path, &content) {
-                                eprintln!("{} Failed to write report to {}: {}", "✖".red(), out_path, e);
-                                1
-                            } else {
-                                println!("✓ Wrote compliance report to {}", out_path);
-                                0
-                            }
+            } => match agentwall::compliance::generate_report(Path::new(&log_path), &format) {
+                Ok(content) => {
+                    if let Some(out_path) = output {
+                        if let Err(e) = std::fs::write(&out_path, &content) {
+                            eprintln!(
+                                "{} Failed to write report to {}: {}",
+                                "✖".red(),
+                                out_path,
+                                e
+                            );
+                            1
                         } else {
-                            println!("{}", content);
+                            println!("✓ Wrote compliance report to {}", out_path);
                             0
                         }
-                    }
-                    Err(e) => {
-                        eprintln!("{} {}", "✖".red(), e);
-                        1
+                    } else {
+                        println!("{}", content);
+                        0
                     }
                 }
-            }
+                Err(e) => {
+                    eprintln!("{} {}", "✖".red(), e);
+                    1
+                }
+            },
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
         Commands::Status => agentwall::wrap::run_status(),

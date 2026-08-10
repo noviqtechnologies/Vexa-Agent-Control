@@ -22,7 +22,7 @@ impl DeviceIdentity {
     /// Load existing device identity from OS Keyring or fallback file, or generate a new one.
     pub fn load_or_create() -> Result<Self, String> {
         let hostname = get_hostname();
-        
+
         // 1. Try loading private key bytes from OS Keyring
         if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
             if let Ok(secret_hex) = entry.get_password() {
@@ -212,7 +212,10 @@ struct EnrollApiResponse {
 /// Executes the `agentwall enroll` command.
 pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     if token.is_empty() {
-        eprintln!("{} Enrollment token is required (--token or AGENTWALL_ENROLLMENT_TOKEN)", "✖".red());
+        eprintln!(
+            "{} Enrollment token is required (--token or AGENTWALL_ENROLLMENT_TOKEN)",
+            "✖".red()
+        );
         return 1;
     }
 
@@ -222,12 +225,20 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     } else {
         "***".to_string()
     };
-    println!("  Connecting to Control Hub: {} (token: {})", hub_url.cyan(), masked_token.dimmed());
+    println!(
+        "  Connecting to Control Hub: {} (token: {})",
+        hub_url.cyan(),
+        masked_token.dimmed()
+    );
 
     let identity = match DeviceIdentity::load_or_create() {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("{} Failed to load or generate device identity: {}", "✖".red(), e);
+            eprintln!(
+                "{} Failed to load or generate device identity: {}",
+                "✖".red(),
+                e
+            );
             return 1;
         }
     };
@@ -283,11 +294,21 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         Ok(res) => {
             let status = res.status();
             let err_text = res.text().await.unwrap_or_default();
-            eprintln!("{} Enrollment failed (HTTP {}): {}", "✖".red(), status, err_text);
+            eprintln!(
+                "{} Enrollment failed (HTTP {}): {}",
+                "✖".red(),
+                status,
+                err_text
+            );
             1
         }
         Err(e) => {
-            eprintln!("{} Cannot connect to Control Hub at {}: {}", "✖".red(), enroll_endpoint, e);
+            eprintln!(
+                "{} Cannot connect to Control Hub at {}: {}",
+                "✖".red(),
+                enroll_endpoint,
+                e
+            );
             1
         }
     }

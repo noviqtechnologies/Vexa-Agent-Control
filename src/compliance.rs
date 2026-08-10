@@ -53,7 +53,11 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
             ));
         }
         Err(e) => {
-            return Err(format!("Failed to open audit log {}: {}", log_path.display(), e));
+            return Err(format!(
+                "Failed to open audit log {}: {}",
+                log_path.display(),
+                e
+            ));
         }
     };
 
@@ -74,7 +78,9 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
 
         if line.contains("\"action\":\"tool_allow\"") || line.contains("\"decision\":\"allowed\"") {
             allowed_count += 1;
-        } else if line.contains("\"action\":\"tool_deny\"") || line.contains("\"decision\":\"denied\"") {
+        } else if line.contains("\"action\":\"tool_deny\"")
+            || line.contains("\"decision\":\"denied\"")
+        {
             denied_count += 1;
         } else if line.contains("warned") {
             warned_count += 1;
@@ -82,7 +88,9 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
 
         if line.contains("redacted") || line.contains("dlp_finding") {
             secret_redactions += 1;
-            *dlp_counts.entry("API Key / Credential".to_string()).or_insert(0) += 1;
+            *dlp_counts
+                .entry("API Key / Credential".to_string())
+                .or_insert(0) += 1;
         }
 
         if line.contains("prompt_injection") || line.contains("injection_detected") {
@@ -101,21 +109,30 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
             control_id: "CC6.1".to_string(),
             control_title: "Logical Access Controls & Least Privilege".to_string(),
             status: "SATISFIED".to_string(),
-            evidence: format!("HMAC audit chain verified across {} tool calls", total_records),
+            evidence: format!(
+                "HMAC audit chain verified across {} tool calls",
+                total_records
+            ),
         },
         ControlMapping {
             framework: "SOC 2 Type II".to_string(),
             control_id: "CC6.6".to_string(),
             control_title: "Boundary & Perimeter Defense for AI Agents".to_string(),
             status: "SATISFIED".to_string(),
-            evidence: format!("Blocked {} unauthorized injection attempts", injection_blocked),
+            evidence: format!(
+                "Blocked {} unauthorized injection attempts",
+                injection_blocked
+            ),
         },
         ControlMapping {
             framework: "ISO 27001:2022".to_string(),
             control_id: "A.8.12".to_string(),
             control_title: "Data Leakage Prevention (DLP)".to_string(),
             status: "SATISFIED".to_string(),
-            evidence: format!("Performed inline masking on {} secret instances", secret_redactions),
+            evidence: format!(
+                "Performed inline masking on {} secret instances",
+                secret_redactions
+            ),
         },
         ControlMapping {
             framework: "NIST AI RMF 1.0".to_string(),
@@ -153,20 +170,45 @@ fn render_markdown(report: &ComplianceReport) -> String {
     md.push_str("# AgentWall Compliance Evidence Report\n\n");
     md.push_str(&format!("- **Timestamp:** {}\n", report.timestamp));
     md.push_str(&format!("- **Audit Log Path:** {}\n", report.log_path));
-    md.push_str(&format!("- **Total Audit Records:** {}\n", report.total_records));
-    md.push_str(&format!("- **HMAC Audit Chain Integrity:** {}\n\n", if report.hmac_chain_valid { "VALID ✓" } else { "INVALID ✖" }));
+    md.push_str(&format!(
+        "- **Total Audit Records:** {}\n",
+        report.total_records
+    ));
+    md.push_str(&format!(
+        "- **HMAC Audit Chain Integrity:** {}\n\n",
+        if report.hmac_chain_valid {
+            "VALID ✓"
+        } else {
+            "INVALID ✖"
+        }
+    ));
 
     md.push_str("## 1. Event Summary\n\n");
-    md.push_str(&format!("- **Allowed Calls:** {}\n", report.summary.allowed_count));
-    md.push_str(&format!("- **Denied Calls:** {}\n", report.summary.denied_count));
-    md.push_str(&format!("- **Inline Secret Redactions:** {}\n", report.summary.secret_redactions));
-    md.push_str(&format!("- **Injections Blocked:** {}\n\n", report.summary.injection_blocked));
+    md.push_str(&format!(
+        "- **Allowed Calls:** {}\n",
+        report.summary.allowed_count
+    ));
+    md.push_str(&format!(
+        "- **Denied Calls:** {}\n",
+        report.summary.denied_count
+    ));
+    md.push_str(&format!(
+        "- **Inline Secret Redactions:** {}\n",
+        report.summary.secret_redactions
+    ));
+    md.push_str(&format!(
+        "- **Injections Blocked:** {}\n\n",
+        report.summary.injection_blocked
+    ));
 
     md.push_str("## 2. Compliance Control Mappings\n\n");
     md.push_str("| Framework | Control ID | Title | Status | Evidence |\n");
     md.push_str("|---|---|---|---|---|\n");
     for m in &report.control_mappings {
-        md.push_str(&format!("| {} | {} | {} | **{}** | {} |\n", m.framework, m.control_id, m.control_title, m.status, m.evidence));
+        md.push_str(&format!(
+            "| {} | {} | {} | **{}** | {} |\n",
+            m.framework, m.control_id, m.control_title, m.status, m.evidence
+        ));
     }
     md
 }

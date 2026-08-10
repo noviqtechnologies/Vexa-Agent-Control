@@ -29,7 +29,11 @@ pub enum Commands {
         token: String,
 
         /// Control Hub API URL
-        #[arg(long, env = "DASHBOARD_API_URL", default_value = "http://localhost:8400")]
+        #[arg(
+            long,
+            env = "DASHBOARD_API_URL",
+            default_value = "http://localhost:8400"
+        )]
         hub_url: String,
     },
 
@@ -610,15 +614,27 @@ pub enum ServiceCliAction {
     /// Install and register AgentWall as a persistent OS background service
     Install {
         /// Control Hub API URL
-        #[arg(long, env = "DASHBOARD_API_URL", default_value = "http://localhost:8400")]
+        #[arg(
+            long,
+            env = "DASHBOARD_API_URL",
+            default_value = "http://localhost:8400"
+        )]
         hub_url: String,
 
         /// Gateway shared secret
-        #[arg(long, env = "GATEWAY_SECRET", default_value = "local-dev-shared-secret-change-me")]
+        #[arg(
+            long,
+            env = "GATEWAY_SECRET",
+            default_value = "local-dev-shared-secret-change-me"
+        )]
         gateway_secret: String,
 
         /// Policy read secret
-        #[arg(long, env = "POLICY_READ_SECRET", default_value = "local-dev-policy-read-secret")]
+        #[arg(
+            long,
+            env = "POLICY_READ_SECRET",
+            default_value = "local-dev-policy-read-secret"
+        )]
         policy_read_secret: String,
     },
     /// Remove the persistent OS background service
@@ -800,4 +816,3 @@ pub struct WrapArgs {
     #[command(subcommand)]
     pub target: Option<WrapTarget>,
 }
-

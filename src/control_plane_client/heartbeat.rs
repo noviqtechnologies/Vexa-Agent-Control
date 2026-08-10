@@ -3,11 +3,11 @@
 //! Transmits OS metadata, IDE config SHA-256 hashes, wrapped MCP server counts,
 //! and uptime to `POST /api/v1/ingest/heartbeat` every 60 seconds.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use colored::*;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize)]
 pub struct HeartbeatPayload {
@@ -29,15 +29,24 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
     let mut wrapped_servers = 0;
 
     let targets = [
-        ("claude_desktop", crate::wrap::config_path::claude_config_path()),
+        (
+            "claude_desktop",
+            crate::wrap::config_path::claude_config_path(),
+        ),
         ("cursor", crate::wrap::config_path::cursor_config_path()),
         ("codex", crate::wrap::config_path::codex_config_path()),
         ("vscode", crate::wrap::config_path::vscode_config_path()),
-        ("jetbrains", crate::wrap::config_path::jetbrains_config_path()),
+        (
+            "jetbrains",
+            crate::wrap::config_path::jetbrains_config_path(),
+        ),
         ("zed", crate::wrap::config_path::zed_config_path()),
         ("cline", crate::wrap::config_path::cline_config_path()),
         ("opencode", crate::wrap::config_path::opencode_config_path()),
-        ("antigravity", crate::wrap::config_path::antigravity_config_path()),
+        (
+            "antigravity",
+            crate::wrap::config_path::antigravity_config_path(),
+        ),
     ];
 
     for (name, path_res) in targets {
@@ -52,7 +61,9 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                     if let Ok(raw) = String::from_utf8(bytes) {
                         if path.extension().and_then(|e| e.to_str()) == Some("toml") {
                             if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
-                                if let Some(servers) = val.get("mcp_servers").and_then(|s| s.as_table()) {
+                                if let Some(servers) =
+                                    val.get("mcp_servers").and_then(|s| s.as_table())
+                                {
                                     total_servers += servers.len();
                                     wrapped_servers += servers
                                         .values()
@@ -115,7 +126,11 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
     let client = match client {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("{} Failed to build HTTP client for heartbeat: {}", "⚠".yellow(), e);
+            eprintln!(
+                "{} Failed to build HTTP client for heartbeat: {}",
+                "⚠".yellow(),
+                e
+            );
             return;
         }
     };
@@ -138,8 +153,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             uptime_seconds,
         };
 
-        let base_url = std::env::var("DASHBOARD_API_URL").unwrap_or_else(|_| "http://localhost:8400".to_string());
-        let secret = std::env::var("GATEWAY_SECRET").unwrap_or_else(|_| "local-dev-shared-secret-change-me".to_string());
+        let base_url = std::env::var("DASHBOARD_API_URL")
+            .unwrap_or_else(|_| "http://localhost:8400".to_string());
+        let secret = std::env::var("GATEWAY_SECRET")
+            .unwrap_or_else(|_| "local-dev-shared-secret-change-me".to_string());
 
         let heartbeat_url = format!("{}/api/v1/ingest/heartbeat", base_url.trim_end_matches('/'));
 

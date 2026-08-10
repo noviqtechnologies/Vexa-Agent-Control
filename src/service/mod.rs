@@ -34,16 +34,34 @@ pub fn run_service(action: ServiceAction) -> i32 {
             gateway_secret,
             policy_read_secret,
         } => {
-            println!("{} Installing AgentWall Persistent Sentry Daemon", "●".green().bold());
+            println!(
+                "{} Installing AgentWall Persistent Sentry Daemon",
+                "●".green().bold()
+            );
             println!("  Binary path: {}", current_exe.cyan());
             println!("  Hub URL: {}", hub_url.cyan());
 
             let res = if cfg!(target_os = "windows") {
-                windows::install_windows_service(&current_exe, &hub_url, &gateway_secret, &policy_read_secret)
+                windows::install_windows_service(
+                    &current_exe,
+                    &hub_url,
+                    &gateway_secret,
+                    &policy_read_secret,
+                )
             } else if cfg!(target_os = "macos") {
-                macos::install_macos_service(&current_exe, &hub_url, &gateway_secret, &policy_read_secret)
+                macos::install_macos_service(
+                    &current_exe,
+                    &hub_url,
+                    &gateway_secret,
+                    &policy_read_secret,
+                )
             } else {
-                linux::install_linux_service(&current_exe, &hub_url, &gateway_secret, &policy_read_secret)
+                linux::install_linux_service(
+                    &current_exe,
+                    &hub_url,
+                    &gateway_secret,
+                    &policy_read_secret,
+                )
             };
 
             match res {
@@ -55,7 +73,10 @@ pub fn run_service(action: ServiceAction) -> i32 {
             }
         }
         ServiceAction::Uninstall => {
-            println!("{} Uninstalling AgentWall Persistent Sentry Daemon...", "●".yellow().bold());
+            println!(
+                "{} Uninstalling AgentWall Persistent Sentry Daemon...",
+                "●".yellow().bold()
+            );
 
             let res = if cfg!(target_os = "windows") {
                 windows::uninstall_windows_service()

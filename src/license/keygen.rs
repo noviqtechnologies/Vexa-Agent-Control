@@ -9,8 +9,13 @@ use std::path::Path;
 /// Generate an Ed25519 keypair and save the signing key and public key to disk.
 pub fn generate_keypair(output_dir: &Path) -> Result<(), String> {
     if !output_dir.exists() {
-        fs::create_dir_all(output_dir)
-            .map_err(|e| format!("Failed to create output directory {}: {}", output_dir.display(), e))?;
+        fs::create_dir_all(output_dir).map_err(|e| {
+            format!(
+                "Failed to create output directory {}: {}",
+                output_dir.display(),
+                e
+            )
+        })?;
     }
 
     let mut seed = [0u8; 32];
@@ -29,12 +34,22 @@ pub fn generate_keypair(output_dir: &Path) -> Result<(), String> {
     let pub_path = output_dir.join("vexa_license.pub");
 
     // Write private signing key PKCS8 DER bytes
-    fs::write(&key_path, key_pkcs8.as_bytes())
-        .map_err(|e| format!("Failed to write private key to {}: {}", key_path.display(), e))?;
+    fs::write(&key_path, key_pkcs8.as_bytes()).map_err(|e| {
+        format!(
+            "Failed to write private key to {}: {}",
+            key_path.display(),
+            e
+        )
+    })?;
 
     // Write public verification key SPKI DER bytes
-    fs::write(&pub_path, pub_spki.as_bytes())
-        .map_err(|e| format!("Failed to write public key to {}: {}", pub_path.display(), e))?;
+    fs::write(&pub_path, pub_spki.as_bytes()).map_err(|e| {
+        format!(
+            "Failed to write public key to {}: {}",
+            pub_path.display(),
+            e
+        )
+    })?;
 
     println!("✓ Successfully generated Ed25519 license keypair:");
     println!("  Private signing key: {}", key_path.display());

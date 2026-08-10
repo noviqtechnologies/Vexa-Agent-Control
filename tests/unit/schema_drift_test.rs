@@ -27,7 +27,11 @@ fn test_baseline_recording_on_first_discovery() {
 
     let res = detector.evaluate_catalog("math_mcp", &catalog, None);
     match res {
-        DriftResult::BaselineRecorded { server_name, tool_count, catalog_hash } => {
+        DriftResult::BaselineRecorded {
+            server_name,
+            tool_count,
+            catalog_hash,
+        } => {
             assert_eq!(server_name, "math_mcp");
             assert_eq!(tool_count, 1);
             assert_ne!(catalog_hash, 0);

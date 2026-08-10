@@ -112,7 +112,14 @@ pub fn run_wrap_target(target: &WrapTarget) -> i32 {
 /// Executes wrapping for all supported IDE targets.
 pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
     let targets = vec![
-        ("Claude Desktop", WrapTarget::Claude { dry_run, scan_responses, block_on_secrets: false }),
+        (
+            "Claude Desktop",
+            WrapTarget::Claude {
+                dry_run,
+                scan_responses,
+                block_on_secrets: false,
+            },
+        ),
         ("Cursor", WrapTarget::Cursor { dry_run }),
         ("Codex", WrapTarget::Codex { dry_run }),
         ("VS Code", WrapTarget::Vscode { dry_run }),
@@ -123,16 +130,21 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
         ("Antigravity", WrapTarget::Antigravity { dry_run }),
     ];
 
-    println!("{} Scanning & Wrapping all IDE configurations...", "●".cyan().bold());
+    println!(
+        "{} Scanning & Wrapping all IDE configurations...",
+        "●".cyan().bold()
+    );
     let mut wrapped_count = 0;
     let mut already_wrapped_count = 0;
     let mut not_found_count = 0;
 
     for (name, target) in targets {
         let res = match &target {
-            WrapTarget::Claude { dry_run, scan_responses, .. } => {
-                claude::wrap_claude(*dry_run, *scan_responses)
-            }
+            WrapTarget::Claude {
+                dry_run,
+                scan_responses,
+                ..
+            } => claude::wrap_claude(*dry_run, *scan_responses),
             WrapTarget::Cursor { dry_run } => config_path::cursor_config_path()
                 .and_then(|p| generic_ide::wrap_generic("Cursor", p, *dry_run)),
             WrapTarget::Codex { dry_run } => config_path::codex_config_path()
@@ -154,7 +166,11 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
         match res {
             Ok(r) => {
                 wrapped_count += 1;
-                println!("  ✔ {}: Wrapped {} MCP server(s)", name.bold(), r.servers_wrapped);
+                println!(
+                    "  ✔ {}: Wrapped {} MCP server(s)",
+                    name.bold(),
+                    r.servers_wrapped
+                );
             }
             Err(WrapError::AlreadyWrapped) => {
                 already_wrapped_count += 1;
@@ -162,7 +178,10 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
             }
             Err(WrapError::NoMcpServers) => {
                 already_wrapped_count += 1;
-                println!("  ℹ {}: Config exists, no mcpServers configured", name.dimmed());
+                println!(
+                    "  ℹ {}: Config exists, no mcpServers configured",
+                    name.dimmed()
+                );
             }
             Err(WrapError::ConfigNotFound(_)) => {
                 not_found_count += 1;

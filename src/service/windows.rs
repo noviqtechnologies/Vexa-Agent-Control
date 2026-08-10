@@ -11,16 +11,19 @@ pub fn install_windows_service(
     policy_read_secret: &str,
 ) -> Result<(), String> {
     use std::ffi::OsStr;
-    use windows_service::{
-        service::*,
-        service_manager::*,
-    };
+    use windows_service::{service::*, service_manager::*};
 
     println!("  Connecting to Windows Service Control Manager (SCM)...");
     let manager = ServiceManager::local_computer(
         None::<&str>,
         ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
-    ).map_err(|e| format!("failed to connect to Windows SCM (Administrator permissions required?): {}", e))?;
+    )
+    .map_err(|e| {
+        format!(
+            "failed to connect to Windows SCM (Administrator permissions required?): {}",
+            e
+        )
+    })?;
 
     println!("  Creating service entry {}...", "AgentWallSentry".cyan());
 
@@ -40,16 +43,21 @@ pub fn install_windows_service(
         account_password: None,
     };
 
-    let service = manager.create_service(
-        &service_info,
-        ServiceAccess::ALL_ACCESS,
-    ).map_err(|e| format!("failed to create Windows service: {}", e))?;
+    let service = manager
+        .create_service(&service_info, ServiceAccess::ALL_ACCESS)
+        .map_err(|e| format!("failed to create Windows service: {}", e))?;
 
     if let Err(e) = service.start::<&std::ffi::OsStr>(&[]) {
-        println!("  Note: Service created, but auto-start attempt returned: {}", e);
+        println!(
+            "  Note: Service created, but auto-start attempt returned: {}",
+            e
+        );
     }
 
-    println!("{} AgentWall Windows SCM Service installed successfully!", "✔".green().bold());
+    println!(
+        "{} AgentWall Windows SCM Service installed successfully!",
+        "✔".green().bold()
+    );
     println!("  To set persistent environment variables for System service:");
     println!("    setx /M DASHBOARD_API_URL \"{}\"", hub_url);
     println!("    setx /M GATEWAY_SECRET \"{}\"", gateway_secret);
@@ -71,25 +79,27 @@ pub fn install_windows_service(
 #[cfg(windows)]
 pub fn uninstall_windows_service() -> Result<(), String> {
     use std::ffi::OsStr;
-    use windows_service::{
-        service::*,
-        service_manager::*,
-    };
+    use windows_service::{service::*, service_manager::*};
 
-    let manager = ServiceManager::local_computer(
-        None::<&str>,
-        ServiceManagerAccess::CONNECT,
-    ).map_err(|e| format!("failed to connect to Windows SCM: {}", e))?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .map_err(|e| format!("failed to connect to Windows SCM: {}", e))?;
 
-    let service = manager.open_service(
-        OsStr::new("AgentWallSentry"),
-        ServiceAccess::STOP | ServiceAccess::DELETE,
-    ).map_err(|e| format!("failed to open AgentWallSentry service: {}", e))?;
+    let service = manager
+        .open_service(
+            OsStr::new("AgentWallSentry"),
+            ServiceAccess::STOP | ServiceAccess::DELETE,
+        )
+        .map_err(|e| format!("failed to open AgentWallSentry service: {}", e))?;
 
     let _ = service.stop();
-    service.delete().map_err(|e| format!("failed to delete Windows service: {}", e))?;
+    service
+        .delete()
+        .map_err(|e| format!("failed to delete Windows service: {}", e))?;
 
-    println!("{} AgentWall Windows SCM service uninstalled.", "✔".green().bold());
+    println!(
+        "{} AgentWall Windows SCM service uninstalled.",
+        "✔".green().bold()
+    );
     Ok(())
 }
 
@@ -136,10 +146,11 @@ pub mod service_dispatcher_handler {
             }
         };
 
-        let status_handle = match service_control_handler::register("AgentWallSentry", event_handler) {
-            Ok(handle) => handle,
-            Err(_) => return,
-        };
+        let status_handle =
+            match service_control_handler::register("AgentWallSentry", event_handler) {
+                Ok(handle) => handle,
+                Err(_) => return,
+            };
 
         let _ = status_handle.set_service_status(ServiceStatus {
             service_type: ServiceType::OWN_PROCESS,
@@ -199,4 +210,3 @@ where
 {
     None
 }
-

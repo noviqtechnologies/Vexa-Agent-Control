@@ -41,8 +41,6 @@ use crate::cli::WatchTarget;
 /// Debounce window: wait this long after the last event before acting.
 const DEBOUNCE_MS: u64 = 300;
 
-
-
 // ─── Public entry point ────────────────────────────────────────────────────────
 
 /// Run the watch daemon.
@@ -545,7 +543,10 @@ fn send_instant_tamper_alert(ide_name: &str, _path: &std::path::Path) {
                 timestamp_ms: chrono::Utc::now().timestamp_millis(),
                 session_id: format!("sess-sentry-{}", device_id),
                 agent_id: device_id,
-                tool_name: format!("ide_config_tamper:{}", ide_name.to_lowercase().replace(' ', "_")),
+                tool_name: format!(
+                    "ide_config_tamper:{}",
+                    ide_name.to_lowercase().replace(' ', "_")
+                ),
                 decision: control_plane_proto::event::RedactedDecision::Denied,
                 dlp_findings: vec![],
                 injection_findings: vec![],

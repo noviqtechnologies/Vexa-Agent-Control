@@ -76,7 +76,12 @@ impl BenchmarkRunner {
 
             // 3. Prompt Injection scan
             if !blocked {
-                let scan_res = injection_scanner.scan_response(&task.payload, &task.tool_name, "bench_session", true);
+                let scan_res = injection_scanner.scan_response(
+                    &task.payload,
+                    &task.tool_name,
+                    "bench_session",
+                    true,
+                );
                 match scan_res {
                     crate::policy::injection::ScanResult::Block { .. } => {
                         blocked = true;
@@ -103,9 +108,15 @@ impl BenchmarkRunner {
                             }
                         }
                     }
-                    AttackCategory::UnsanitizedShellExecution | AttackCategory::PrivilegeEscalation | AttackCategory::ProcessInjection => {
+                    AttackCategory::UnsanitizedShellExecution
+                    | AttackCategory::PrivilegeEscalation
+                    | AttackCategory::ProcessInjection => {
                         if let Some(cmd) = task.payload.get("cmd").and_then(|c| c.as_str()) {
-                            if cmd.contains("rm -rf") || cmd.contains("sudo") || cmd.contains("kill -9") || cmd.contains("&&") {
+                            if cmd.contains("rm -rf")
+                                || cmd.contains("sudo")
+                                || cmd.contains("kill -9")
+                                || cmd.contains("&&")
+                            {
                                 blocked = true;
                             }
                         }
@@ -124,7 +135,8 @@ impl BenchmarkRunner {
                             }
                         }
                     }
-                    AttackCategory::MultiStepDataExfiltration | AttackCategory::ObfuscatedPayloadExfiltration => {
+                    AttackCategory::MultiStepDataExfiltration
+                    | AttackCategory::ObfuscatedPayloadExfiltration => {
                         if payload_str.contains("evil.com") || payload_str.contains("SECRET") {
                             blocked = true;
                         }
@@ -145,7 +157,13 @@ impl BenchmarkRunner {
                         }
                     }
                     AttackCategory::DDoSResourceExhaustion => {
-                        if task.payload.get("burst").and_then(|b| b.as_u64()).unwrap_or(0) > 1000 {
+                        if task
+                            .payload
+                            .get("burst")
+                            .and_then(|b| b.as_u64())
+                            .unwrap_or(0)
+                            > 1000
+                        {
                             blocked = true;
                         }
                     }

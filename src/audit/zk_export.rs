@@ -17,7 +17,8 @@ impl ZkLogExporter {
         let mut hasher = Sha256::new();
         hasher.update(cmk_secret.as_bytes());
         let key_bytes = hasher.finalize();
-        let cipher = Aes256Gcm::new_from_slice(&key_bytes).expect("256-bit key requirement satisfied");
+        let cipher =
+            Aes256Gcm::new_from_slice(&key_bytes).expect("256-bit key requirement satisfied");
         Self { cipher }
     }
 

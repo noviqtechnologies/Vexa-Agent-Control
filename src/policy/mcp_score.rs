@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpSecurityScore {
     pub server_name: String,
-    pub score: u8, // 0 to 100 (100 is safest)
+    pub score: u8,          // 0 to 100 (100 is safest)
     pub risk_level: String, // "LOW", "MEDIUM", "HIGH", "CRITICAL"
     pub path_access_depth: u8,
     pub network_egress_required: bool,
@@ -26,7 +26,13 @@ impl McpScorer {
         allow_egress: bool,
         input_schema_complexity: u8,
     ) -> McpSecurityScore {
-        Self::evaluate_server_with_drift(server_name, allowed_paths, allow_egress, input_schema_complexity, false)
+        Self::evaluate_server_with_drift(
+            server_name,
+            allowed_paths,
+            allow_egress,
+            input_schema_complexity,
+            false,
+        )
     }
 
     /// Evaluates an MCP server configuration including schema drift penalty (FR-601).
@@ -113,13 +119,11 @@ mod tests {
         assert_eq!(res.score, 100);
         assert_eq!(res.risk_level, "LOW");
 
-        let dangerous = McpScorer::evaluate_server(
-            "untrusted_mcp",
-            &vec!["/".to_string()],
-            true,
-            15,
-        );
+        let dangerous =
+            McpScorer::evaluate_server("untrusted_mcp", &vec!["/".to_string()], true, 15);
         assert!(dangerous.score < 50);
-        assert!(dangerous.vulnerability_flags.contains(&"UNRESTRICTED_ROOT_OR_TRAVERSAL_PATH".to_string()));
+        assert!(dangerous
+            .vulnerability_flags
+            .contains(&"UNRESTRICTED_ROOT_OR_TRAVERSAL_PATH".to_string()));
     }
 }

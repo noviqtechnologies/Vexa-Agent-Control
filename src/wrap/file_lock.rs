@@ -5,9 +5,9 @@
 //! - macOS: `chmod 0444` + `chflags uchg`
 //! - Windows: `attrib +R` + `icacls deny write`
 
+use colored::*;
 use std::path::Path;
 use std::process::Command;
-use colored::*;
 
 /// Apply read-only permissions and OS-native immutable file locks.
 pub fn lock_config_file(path: &Path) -> Result<(), String> {
@@ -30,22 +30,28 @@ pub fn lock_config_file(path: &Path) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         {
             // BSD chflags uchg (user immutable flag)
-            let output = Command::new("chflags")
-                .args(["uchg", &path_str])
-                .output();
+            let output = Command::new("chflags").args(["uchg", &path_str]).output();
             if let Err(e) = output {
-                eprintln!("{} Failed to apply chflags uchg on {}: {}", "⚠".yellow(), path_str, e);
+                eprintln!(
+                    "{} Failed to apply chflags uchg on {}: {}",
+                    "⚠".yellow(),
+                    path_str,
+                    e
+                );
             }
         }
 
         #[cfg(target_os = "linux")]
         {
             // Linux chattr +i (immutable attribute)
-            let output = Command::new("chattr")
-                .args(["+i", &path_str])
-                .output();
+            let output = Command::new("chattr").args(["+i", &path_str]).output();
             if let Err(e) = output {
-                eprintln!("{} Failed to apply chattr +i on {}: {}", "⚠".yellow(), path_str, e);
+                eprintln!(
+                    "{} Failed to apply chattr +i on {}: {}",
+                    "⚠".yellow(),
+                    path_str,
+                    e
+                );
             }
         }
     }
@@ -53,16 +59,19 @@ pub fn lock_config_file(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         // Set read-only attribute via attrib +R
-        let _ = Command::new("attrib")
-            .args(["+R", &path_str])
-            .output();
+        let _ = Command::new("attrib").args(["+R", &path_str]).output();
 
         // Win32 icacls: Deny Write to Everyone (*S-1-1-0)
         let output = Command::new("icacls")
             .args([&path_str, "/deny", "*S-1-1-0:(W)"])
             .output();
         if let Err(e) = output {
-            eprintln!("{} Failed to apply icacls deny write on {}: {}", "⚠".yellow(), path_str, e);
+            eprintln!(
+                "{} Failed to apply icacls deny write on {}: {}",
+                "⚠".yellow(),
+                path_str,
+                e
+            );
         }
     }
 
@@ -100,7 +109,9 @@ pub fn unlock_config_file(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         let _ = Command::new("attrib").args(["-R", &path_str]).output();
-        let _ = Command::new("icacls").args([&path_str, "/remove:d", "*S-1-1-0"]).output();
+        let _ = Command::new("icacls")
+            .args([&path_str, "/remove:d", "*S-1-1-0"])
+            .output();
     }
 
     Ok(())

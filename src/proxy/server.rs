@@ -929,7 +929,6 @@ async fn handle_request(
         }
     }
 
-
     // Policy Generation endpoint
     if method == hyper::Method::POST && path == "/api/generate-policy" {
         // Fix AW-BUG-002: use get_all_events (ASC order, oldest first) to match
@@ -1444,9 +1443,11 @@ async fn scan_and_process_response(
             .read()
             .ok()
             .and_then(|p| p.as_ref().and_then(|pol| pol.schema_drift.clone()));
-        let drift_result = state
-            .schema_drift_detector
-            .evaluate_catalog("http_upstream", response, drift_cfg.as_ref());
+        let drift_result = state.schema_drift_detector.evaluate_catalog(
+            "http_upstream",
+            response,
+            drift_cfg.as_ref(),
+        );
         match drift_result {
             crate::policy::schema_drift::DriftResult::Drift {
                 server_name,
@@ -1487,7 +1488,10 @@ async fn scan_and_process_response(
                     }),
                 );
                 if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
-                    let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let id = response
+                        .get("id")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
                     return serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,

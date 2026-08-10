@@ -608,9 +608,10 @@ async fn stdio_scan_response(
             .read()
             .ok()
             .and_then(|p| p.as_ref().and_then(|pol| pol.schema_drift.clone()));
-        let drift_result = state
-            .schema_drift_detector
-            .evaluate_catalog("stdio", response, drift_cfg.as_ref());
+        let drift_result =
+            state
+                .schema_drift_detector
+                .evaluate_catalog("stdio", response, drift_cfg.as_ref());
         match drift_result {
             crate::policy::schema_drift::DriftResult::Drift {
                 server_name,
@@ -651,7 +652,10 @@ async fn stdio_scan_response(
                     }),
                 );
                 if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
-                    let id = response.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let id = response
+                        .get("id")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
                     return serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
@@ -938,7 +942,8 @@ pub async fn run_stdio_to_http_bridge(
 
                         match response {
                             Ok(resp) => {
-                                let method = json.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                                let method =
+                                    json.get("method").and_then(|m| m.as_str()).unwrap_or("");
                                 let tool_name = if method == "tools/list" {
                                     "tools/list".to_string()
                                 } else {

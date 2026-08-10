@@ -34,8 +34,13 @@ pub fn generate_license(
     signing_key_path: &Path,
     custom_features: Option<Vec<String>>,
 ) -> Result<String, String> {
-    let key_bytes = fs::read(signing_key_path)
-        .map_err(|e| format!("Failed to read signing key from {}: {}", signing_key_path.display(), e))?;
+    let key_bytes = fs::read(signing_key_path).map_err(|e| {
+        format!(
+            "Failed to read signing key from {}: {}",
+            signing_key_path.display(),
+            e
+        )
+    })?;
 
     let encoding_key = if key_bytes.len() == 32 {
         use ed25519_dalek::pkcs8::EncodePrivateKey;
@@ -63,10 +68,7 @@ pub fn generate_license(
                 "airgap_oidc".to_string(),
                 "compliance_reports".to_string(),
             ],
-            "team" => vec![
-                "siem_aggregation".to_string(),
-                "spend_caps".to_string(),
-            ],
+            "team" => vec!["siem_aggregation".to_string(), "spend_caps".to_string()],
             _ => vec![],
         },
     };

@@ -19,13 +19,13 @@ pub mod promote;
 pub mod proxy;
 pub mod report;
 pub mod self_healing;
+pub mod service;
 pub mod validate;
 pub mod wrap;
-pub mod service;
 
+pub mod compliance;
 pub mod license;
 pub mod spend;
-pub mod compliance;
 
 pub mod bench;
 pub mod detector;

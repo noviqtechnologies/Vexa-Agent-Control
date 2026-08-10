@@ -9,8 +9,8 @@ mod unit {
     mod p1_features_tests;
     mod policy_loader_tests;
     mod policy_tests;
-    mod siem_tests;
     mod schema_drift_test;
+    mod siem_tests;
     mod sprint5_safety_test;
     mod us003_us005_tests;
     mod validator_tests;

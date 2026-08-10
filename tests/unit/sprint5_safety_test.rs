@@ -51,7 +51,9 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
             agentwall::policy::semantic::SemanticConfig::default(),
         )),
         injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(agentwall::policy::schema_drift::SchemaDriftDetector::default()),
+        schema_drift_detector: Arc::new(
+            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
+        ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
         metrics_requests_total: Arc::new(AtomicU64::new(0)),

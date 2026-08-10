@@ -26,8 +26,8 @@ pub fn wrap_generic(
         .to_string();
 
     if is_toml {
-        let mut toml_val: toml::Value =
-            toml::from_str(&raw).map_err(|e| WrapError::InvalidJson(format!("invalid TOML: {}", e)))?;
+        let mut toml_val: toml::Value = toml::from_str(&raw)
+            .map_err(|e| WrapError::InvalidJson(format!("invalid TOML: {}", e)))?;
 
         let table = toml_val
             .get_mut("mcp_servers")
@@ -41,18 +41,32 @@ pub fn wrap_generic(
         let mut wrapped_count = 0;
         for (_name, server) in table.iter_mut() {
             if let Some(srv_table) = server.as_table_mut() {
-                let current_cmd = srv_table.get("command").and_then(|c| c.as_str()).unwrap_or("");
+                let current_cmd = srv_table
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
                 if current_cmd.to_lowercase().contains("agentwall") {
                     continue; // already wrapped
                 }
 
-                let orig_args = srv_table.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
-                let mut new_args = vec![toml::Value::String("stdio-proxy".to_string()), toml::Value::String("--".to_string()), toml::Value::String(current_cmd.to_string())];
+                let orig_args = srv_table
+                    .get("args")
+                    .and_then(|a| a.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let mut new_args = vec![
+                    toml::Value::String("stdio-proxy".to_string()),
+                    toml::Value::String("--".to_string()),
+                    toml::Value::String(current_cmd.to_string()),
+                ];
                 for arg in orig_args {
                     new_args.push(arg);
                 }
 
-                srv_table.insert("command".to_string(), toml::Value::String(agentwall_bin.clone()));
+                srv_table.insert(
+                    "command".to_string(),
+                    toml::Value::String(agentwall_bin.clone()),
+                );
                 srv_table.insert("args".to_string(), toml::Value::Array(new_args));
                 wrapped_count += 1;
             }
@@ -83,8 +97,8 @@ pub fn wrap_generic(
             let _ = backup::prune_backups(dir, 5);
         }
 
-        let output_str = toml::to_string_pretty(&toml_val)
-            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        let output_str =
+            toml::to_string_pretty(&toml_val).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
         atomic_write(&config_path, &output_str)?;
 
         Ok(WrapResult {

@@ -83,7 +83,9 @@ pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
         return Ok(default_path);
     }
 
-    Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+    Err(WrapError::ConfigNotFound(
+        "Cannot resolve Cursor config path".to_string(),
+    ))
 }
 
 pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
@@ -169,13 +171,17 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
         return Ok(default_path);
     }
 
-    Err(WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+    Err(WrapError::ConfigNotFound(
+        "Cannot resolve Antigravity config path".to_string(),
+    ))
 }
 
 pub fn codex_config_path() -> Result<PathBuf, WrapError> {
     let base = dirs::home_dir().map(|h| h.join(".codex").join("config.toml"));
     base.ok_or_else(|| {
-        WrapError::ConfigNotFound("Cannot resolve Codex config path (~/.codex/config.toml)".to_string())
+        WrapError::ConfigNotFound(
+            "Cannot resolve Codex config path (~/.codex/config.toml)".to_string(),
+        )
     })
 }
 

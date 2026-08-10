@@ -262,14 +262,16 @@ pub fn gather_servers_for_snapshot(
                 if let Ok(raw) = std::fs::read_to_string(&path) {
                     if path.extension().and_then(|e| e.to_str()) == Some("toml") {
                         if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
-                            if let Some(servers) = val.get("mcp_servers").and_then(|v| v.as_table()) {
+                            if let Some(servers) = val.get("mcp_servers").and_then(|v| v.as_table())
+                            {
                                 for (name, val) in servers {
                                     let wrapped = val
                                         .get("command")
                                         .and_then(|c| c.as_str())
                                         .map(|cmd| cmd.to_lowercase().contains("agentwall"))
                                         .unwrap_or(false);
-                                    let path_verified = t.verification == PathVerification::Verified;
+                                    let path_verified =
+                                        t.verification == PathVerification::Verified;
                                     servers_meta.push(
                                         control_plane_proto::mcp_server::SanitizedMcpServerMeta {
                                             ide_target: t.name.to_string(),
