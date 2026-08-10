@@ -108,6 +108,15 @@ docker compose up -d --build
 - **PostgreSQL 16 Database:** `localhost:5433`
 - **Enforcement Gateway (Containerized):** `http://localhost:8080`
 
+> [!NOTE]
+> **Expected startup warning.** The containerized gateway logs a rejected heartbeat shortly after boot:
+>
+> ```json
+> {"event":"heartbeat_rejected","level":"warn","status":404}
+> ```
+>
+> This is **expected** and harmless. The heartbeat loop reports to Central Device Governance, which only accepts enrolled devices, and a gateway started by Docker Compose has not gone through `agentwall enroll`. Policy enforcement, SSE policy push, and audit logging are unaffected. To exercise device governance, enroll the host explicitly — see [Team Hub Guide → Central Device Governance](../team_hub_guide.md#6-central-device-governance--fleet-health).
+
 ---
 
 ### Step 3: (Optional) Build Native Rust Binary from Source
@@ -225,6 +234,24 @@ Open `http://localhost:8081` in your browser.
 - **Username:** `admin`
 - **Password:** `admin` (or any string in local dev mode)
 
+> [!NOTE]
+> When calling the login endpoint directly rather than using the browser form, the JSON field is **`email`**, not `username`:
+>
+> ```bash
+> curl -X POST http://localhost:8400/api/v1/auth/login \
+>      -H "Content-Type: application/json" \
+>      -d '{"email":"admin","password":"admin"}' -c cookie.txt
+> ```
+>
+> Posting `{"username":"admin",...}` leaves `email` empty and fails with `401 local auth not enabled`, which is misleading — `DEV_MODE` is active, the field name is simply wrong.
+>
+> `DEV_MODE` is what accepts `admin` with any password. With `DEV_MODE=false` and no auth provider configured, the API instead prints a one-time bootstrap credential to its own logs (`docker compose logs dashboard-api`) — use `admin` plus that token as the password:
+>
+> ```
+> INFO: NO AUTH PROVIDERS CONFIGURED.
+> INFO: Bootstrap Token: xzmfS_Kfzro
+> ```
+
 ---
 
 ### Step 3 — Send MCP Tool Request & Verify Audit Log Cryptographic Integrity
@@ -253,7 +280,17 @@ curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-sess
 ```
 
 > [!NOTE]
-> **Expected Behavior:** If no upstream MCP server (e.g. at `http://127.0.0.1:3000`) is running, the gateway will evaluate policy, write the audit log entry, and return `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`. This upstream network error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
+> **Expected Behavior:** If no upstream MCP server is running, the gateway still evaluates policy, writes the audit log entry, and then reports that it could not reach the upstream:
+>
+> ```json
+> {"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)"}}
+> ```
+>
+> This upstream network error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
+>
+> The URL in the message is whichever upstream the gateway was configured with. A native binary started as above reports `http://127.0.0.1:3000/`; the containerized gateway from Docker Compose reports `http://mock-mcp:3000/`.
+>
+> A response of `{"error":{"code":-32001,...,"message":"Policy violation: reason=not_in_policy"}}` instead means the tool is not in the active policy's allowlist — that is enforcement working, not a failure.
 
 #### Verify Audit Log Integrity:
 
@@ -281,7 +318,15 @@ agentwall.exe verify-log .\team-audit.log
 .\target\debug\agentwall.exe verify-log .\team-audit.log
 ```
 
-**Expected Output:** `Audit log verification complete: Hash chain intact. 0 tampered entries.`
+**Expected Output:**
+
+```
+ℹ Verifying HMAC chain and payload integrity for ./team-audit.log (key: ~/.AgentWall/audit.key)... VALID
+  ✓ 1 entries verified with HMAC key, cryptographic chain and payloads intact.
+```
+
+The entry count reflects how many requests the gateway has processed. Any
+tampering breaks the HMAC chain and reports `INVALID` with the offending entry index.
 
 ---
 

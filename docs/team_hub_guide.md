@@ -56,8 +56,9 @@ Choose the deployment method that fits your environment requirements:
 3. [Vault & API Key Custody](#3-vault--api-key-custody)
 4. [Spend Caps & Loop Detection](#4-spend-caps--loop-detection)
 5. [Async HITL Approval Queue](#5-async-hitl-approval-queue)
-6. [Shared Reference Sections](#6-shared-reference-sections)
-7. [Upgrading to Enterprise Fleet](#7-upgrading-to-enterprise-fleet)
+6. [Central Device Governance & Fleet Health](#6-central-device-governance--fleet-health)
+7. [Shared Reference Sections](#7-shared-reference-sections)
+8. [Upgrading to Enterprise Fleet](#8-upgrading-to-enterprise-fleet)
 
 ---
 
@@ -75,9 +76,14 @@ Gateway                                               Control Hub API
 ```
 
 **Event Handlers:**
-- `policy_update` — Atomic in-memory hot-swap (`ArcSwap`) of gateway policy without dropping active TCP connections.
+- `policy_update` — In-memory hot-swap of the gateway's compiled policy, guarded by a read-write lock, without dropping active TCP connections.
 - `credential_rotation` — Signals a provider API key rotation; gateway fetches updated ciphertext from `GET /api/v1/credentials/:provider`.
 - `: ping` — Sent every 15 seconds. No ping within 30 seconds triggers a warning and exponential backoff reconnect.
+
+> [!IMPORTANT]
+> **Scope of a hot-swap.** A pushed policy takes effect for agent sessions created *after* it arrives. Each session captures the active policy when it is established and evaluates against that snapshot for its lifetime, so a session already in flight continues under the ruleset it started with.
+>
+> This matters when tightening policy during an incident: revoking a tool does not interrupt agents already running. To force immediate effect everywhere, restart the gateway (`docker compose restart gateway`) or have agents open a new session.
 
 **Connecting gateways in centralized mode:**
 
@@ -294,7 +300,7 @@ The following technical reference sections are maintained in the shared [Common 
 
 ---
 
-## 7. Upgrading to Enterprise Fleet
+## 8. Upgrading to Enterprise Fleet
 
 When you are ready for Kubernetes high-availability, pure-Rust TLS termination, zero-knowledge CMK SIEM encryption, real-time threat intelligence feeds, and Hardened Agent Container Runtime (HAR):
 
