@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.25-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.28-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -47,8 +47,8 @@ Install the statically-linked `agentwall` binary and launch the shadow gateway w
 curl -fsSL https://vexasec.io/install.sh | bash
 agentwall dev
 
-# Automated enterprise enrollment & Sentry daemon installation (with Hub URL)
-curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" AGENTWALL_HUB_URL="https://hub.yourdomain.com:8081" bash
+# Automated enterprise enrollment & Sentry daemon installation (with Hub URL & Custom Port)
+curl -fsSL https://vexasec.io/install.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 ```
 
 **Windows (PowerShell):**
@@ -59,7 +59,7 @@ agentwall.exe dev
 
 # Automated enterprise enrollment & Sentry daemon installation (with Hub URL)
 $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-$env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+$env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 irm https://vexasec.io/install.ps1 | iex
 ```
 

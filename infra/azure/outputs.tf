@@ -10,6 +10,11 @@ output "control_plane_ui_url" {
   value       = "https://${azurerm_container_app.ui.ingress[0].fqdn}"
 }
 
+output "control_plane_url" {
+  description = "Alias for control_plane_ui_url — matches AWS ECS and GCP output naming convention for cross-platform consistency."
+  value       = "https://${azurerm_container_app.ui.ingress[0].fqdn}"
+}
+
 output "dashboard_api_url" {
   description = "Public HTTPS endpoint for the Control Plane Dashboard API."
   value       = "https://${azurerm_container_app.api.ingress[0].fqdn}"
@@ -40,6 +45,11 @@ output "log_analytics_workspace_name" {
 output "acr_login_server" {
   description = "Azure Container Registry login server (when acr_enabled = true)."
   value       = var.acr_enabled ? azurerm_container_registry.acr[0].login_server : "disabled"
+}
+
+output "container_image_in_use" {
+  description = "Gateway container image deployed in this environment. Useful for CI/CD pipeline verification."
+  value       = var.container_image
 }
 
 # ─── Cross-Platform Verification & Diagnostic Helpers ─────────────────────────

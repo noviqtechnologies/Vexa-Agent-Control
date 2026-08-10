@@ -36,11 +36,19 @@ resource "azurerm_container_app" "db" {
         value = var.postgres_db
       }
 
+      startup_probe {
+        transport               = "TCP"
+        port                    = 5432
+        interval_seconds        = 5
+        timeout                 = 5
+        failure_count_threshold = 12
+      }
+
       readiness_probe {
         transport               = "TCP"
         port                    = 5432
         interval_seconds        = 10
-        timeout                 = 3
+        timeout                 = 5
         failure_count_threshold = 3
       }
 

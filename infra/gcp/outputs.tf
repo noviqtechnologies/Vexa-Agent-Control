@@ -10,6 +10,11 @@ output "control_plane_ui_url" {
   value       = google_cloud_run_v2_service.ui.uri
 }
 
+output "control_plane_url" {
+  description = "Alias for control_plane_ui_url — matches AWS ECS output naming convention for cross-platform consistency."
+  value       = google_cloud_run_v2_service.ui.uri
+}
+
 output "dashboard_api_url" {
   description = "Public HTTPS endpoint for the Control Plane Dashboard API."
   value       = google_cloud_run_v2_service.api.uri
@@ -55,6 +60,11 @@ output "api_service_name" {
 output "artifact_registry_repo" {
   description = "Google Artifact Registry Docker repo URL (when gar_enabled = true)."
   value       = var.gar_enabled ? "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${local.gar_repo_name}" : "disabled"
+}
+
+output "container_image_in_use" {
+  description = "Gateway container image deployed in this environment. Useful for CI/CD pipeline verification."
+  value       = var.container_image
 }
 
 # ─── Cross-Platform Verification & Diagnostic Helpers ─────────────────────────

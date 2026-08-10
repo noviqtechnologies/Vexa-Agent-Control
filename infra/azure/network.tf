@@ -41,7 +41,7 @@ resource "azurerm_network_security_group" "aca_nsg" {
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_ranges     = ["80", "443", "8080", "8081"]
+    destination_port_ranges     = ["80", "443", "8080", "8081", "8400"]
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }

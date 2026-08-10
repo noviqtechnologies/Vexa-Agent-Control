@@ -410,7 +410,7 @@ resource "aws_ecs_service" "agentwall" {
   depends_on = [aws_lb_listener.http, aws_lb_listener.control_plane]
 }
 
-output "dashboard_url" {
+output "gateway_url" {
   description = "AgentWall Local Observability Proxy Endpoint (Port 8080)"
   value       = "http://${aws_lb.alb.dns_name}:8080"
 }
@@ -418,6 +418,11 @@ output "dashboard_url" {
 output "control_plane_url" {
   description = "AgentWall Enterprise Control Plane & SOC Dashboard (Port 8081)"
   value       = "http://${aws_lb.alb.dns_name}:8081"
+}
+
+output "dashboard_api_url" {
+  description = "AgentWall Dashboard API internal endpoint (Port 8400 — container-internal only, no public ALB listener). Gateway and UI containers communicate with this via 127.0.0.1:8400 inside the Fargate task."
+  value       = "http://127.0.0.1:8400"
 }
 
 output "health_url" {
