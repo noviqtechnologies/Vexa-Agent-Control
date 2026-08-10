@@ -1548,7 +1548,7 @@ agentwall compliance report --log audit.log --format json --output owasp_soc2_ev
 
 ---
 
-## 12. MCP Schema-Drift Detection & Client SDKs (v2.2)
+## 12. MCP Schema-Drift Detection (v2.2)
 
 ### MCP Schema-Drift Detection (ADR-011)
 
@@ -1569,8 +1569,7 @@ schema_drift:
 - **`action: block`**: Immediately denies sessions with tampered tool catalogs (JSON-RPC error `-32002`).
 - **`action: downgrade_score`**: Deducts 25 points from the MCP server's Vexa Security Score and surfaces warning telemetry.
 
----
-
+<!--
 ### Python Client SDK (`agentwall`)
 
 The lightweight, MIT-licensed Python SDK enables programmatic agent governance without running policy logic inside your agent process:
@@ -1628,6 +1627,7 @@ try {
   }
 }
 ```
+-->
 
 ---
 

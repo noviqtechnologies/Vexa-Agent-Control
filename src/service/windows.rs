@@ -40,10 +40,14 @@ pub fn install_windows_service(
         account_password: None,
     };
 
-    let _service = manager.create_service(
+    let service = manager.create_service(
         &service_info,
         ServiceAccess::ALL_ACCESS,
     ).map_err(|e| format!("failed to create Windows service: {}", e))?;
+
+    if let Err(e) = service.start::<&std::ffi::OsStr>(&[]) {
+        println!("  Note: Service created, but auto-start attempt returned: {}", e);
+    }
 
     println!("{} AgentWall Windows SCM Service installed successfully!", "✔".green().bold());
     println!("  To set persistent environment variables for System service:");
@@ -93,3 +97,106 @@ pub fn uninstall_windows_service() -> Result<(), String> {
 pub fn uninstall_windows_service() -> Result<(), String> {
     Err("Windows SCM service uninstallation is only supported on Windows OS.".to_string())
 }
+
+#[cfg(windows)]
+pub mod service_dispatcher_handler {
+    use std::ffi::OsString;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+    use windows_service::{
+        define_windows_service,
+        service::{
+            ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
+            ServiceType,
+        },
+        service_control_handler::{self, ServiceControlHandlerResult},
+        service_dispatcher,
+    };
+
+    define_windows_service!(ffi_service_main, my_service_main);
+
+    static SHUTDOWN_FLAG: AtomicBool = AtomicBool::new(false);
+    static SERVICE_RUNNER: std::sync::Mutex<Option<Box<dyn FnOnce() -> i32 + Send + 'static>>> =
+        std::sync::Mutex::new(None);
+    static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+    pub fn is_shutdown_requested() -> bool {
+        SHUTDOWN_FLAG.load(Ordering::Relaxed)
+    }
+
+    fn my_service_main(_arguments: Vec<OsString>) {
+        let event_handler = move |control_event| -> ServiceControlHandlerResult {
+            match control_event {
+                ServiceControl::Stop | ServiceControl::Shutdown => {
+                    SHUTDOWN_FLAG.store(true, Ordering::SeqCst);
+                    ServiceControlHandlerResult::NoError
+                }
+                ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
+                _ => ServiceControlHandlerResult::NotImplemented,
+            }
+        };
+
+        let status_handle = match service_control_handler::register("AgentWallSentry", event_handler) {
+            Ok(handle) => handle,
+            Err(_) => return,
+        };
+
+        let _ = status_handle.set_service_status(ServiceStatus {
+            service_type: ServiceType::OWN_PROCESS,
+            current_state: ServiceState::Running,
+            controls_accepted: ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN,
+            exit_code: ServiceExitCode::Win32(0),
+            checkpoint: 0,
+            wait_hint: Duration::default(),
+            process_id: None,
+        });
+
+        if let Ok(mut guard) = SERVICE_RUNNER.lock() {
+            if let Some(runner) = guard.take() {
+                let code = runner();
+                EXIT_CODE.store(code, Ordering::SeqCst);
+            }
+        }
+
+        let _ = status_handle.set_service_status(ServiceStatus {
+            service_type: ServiceType::OWN_PROCESS,
+            current_state: ServiceState::Stopped,
+            controls_accepted: ServiceControlAccept::empty(),
+            exit_code: ServiceExitCode::Win32(0),
+            checkpoint: 0,
+            wait_hint: Duration::default(),
+            process_id: None,
+        });
+    }
+
+    pub fn run_service<F>(run_fn: F) -> Result<i32, windows_service::Error>
+    where
+        F: FnOnce() -> i32 + Send + 'static,
+    {
+        if let Ok(mut guard) = SERVICE_RUNNER.lock() {
+            *guard = Some(Box::new(run_fn));
+        }
+        service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        Ok(EXIT_CODE.load(Ordering::SeqCst))
+    }
+}
+
+#[cfg(windows)]
+pub fn run_as_windows_service_if_present<F>(run_fn: F) -> Option<i32>
+where
+    F: FnOnce() -> i32 + Send + 'static,
+{
+    match service_dispatcher_handler::run_service(run_fn) {
+        Ok(code) => Some(code),
+        Err(_) => None,
+    }
+}
+
+#[cfg(not(windows))]
+pub fn run_as_windows_service_if_present<F>(_run_fn: F) -> Option<i32>
+where
+    F: FnOnce() -> i32 + Send + 'static,
+{
+    None
+}
+

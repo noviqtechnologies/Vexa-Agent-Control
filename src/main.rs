@@ -108,34 +108,20 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentwall::service::run_service(act)
         }
         Commands::Start(args) => {
-            run_start(
-                args.policy,
-                args.listen,
-                args.log_path,
-                args.mcp_url,
-                args.agent_pid,
-                args.agent_pid_file,
-                args.kill_mode,
-                args.dry_run,
-                args.rate_limit,
-                args.log_max_bytes,
-                args.oidc_issuer,
-                args.report_path,
-                args.scan_responses,
-                args.block_on_secrets,
-                args.max_scan_bytes,
-                args.siem_backend,
-                args.siem_endpoint,
-                args.siem_token,
-                args.siem_timeout_secs,
-                args.include_params,
-                args.shadow_mode,
-                args.strict_credential_scope,
-                args.tls_cert,
-                args.tls_key,
-                args.centralized,
-            )
-            .await
+            #[cfg(target_os = "windows")]
+            {
+                let args_clone = args.clone();
+                let maybe_code = tokio::task::block_in_place(|| {
+                    agentwall::service::windows::run_as_windows_service_if_present(move || {
+                        let handle = tokio::runtime::Handle::current();
+                        handle.block_on(dispatch_start(*args_clone))
+                    })
+                });
+                if let Some(code) = maybe_code {
+                    return code;
+                }
+            }
+            dispatch_start(*args).await
         }
         Commands::Test {
             policy,
@@ -584,6 +570,37 @@ async fn run_stdio_proxy(
     }
 
     0
+}
+
+async fn dispatch_start(args: cli::StartArgs) -> i32 {
+    run_start(
+        args.policy,
+        args.listen,
+        args.log_path,
+        args.mcp_url,
+        args.agent_pid,
+        args.agent_pid_file,
+        args.kill_mode,
+        args.dry_run,
+        args.rate_limit,
+        args.log_max_bytes,
+        args.oidc_issuer,
+        args.report_path,
+        args.scan_responses,
+        args.block_on_secrets,
+        args.max_scan_bytes,
+        args.siem_backend,
+        args.siem_endpoint,
+        args.siem_token,
+        args.siem_timeout_secs,
+        args.include_params,
+        args.shadow_mode,
+        args.strict_credential_scope,
+        args.tls_cert,
+        args.tls_key,
+        args.centralized,
+    )
+    .await
 }
 
 #[allow(deprecated, clippy::too_many_arguments)]

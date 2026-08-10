@@ -193,6 +193,12 @@ param(
 
         Write-Host "[*] Step 2/3: Installing Persistent Windows SCM Service Daemon..." -ForegroundColor $ColorCyan
         & $FinalBinaryPath service install --hub-url $HubUrl
+        try {
+            Start-Service -Name "AgentWallSentry" -ErrorAction Stop
+            Write-Host "[*] Started AgentWallSentry service successfully." -ForegroundColor $ColorGreen
+        } catch {
+            Write-Host "[!] Note: Could not start service automatically: $_" -ForegroundColor $ColorYellow
+        }
 
         Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan
         & $FinalBinaryPath wrap --all

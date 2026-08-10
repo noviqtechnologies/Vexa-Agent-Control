@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
-  <a href="#client-sdks">Client SDKs</a> ·
+  <!-- <a href="#client-sdks">Client SDKs</a> · -->
   <a href="#cloud-serverless-deployments-terraform">Cloud (AWS/Azure/GCP)</a> ·
   <a href="#why-vexa-agentwall">Why Vexa AgentWall</a> ·
   <a href="#capabilities-by-operating-profile">Capabilities</a> ·
@@ -75,6 +75,7 @@ Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter 
 > python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 > ```
 
+<!--
 ### Client SDKs (Python)
 
 Integrate your AI agents directly with AgentWall's out-of-process security proxy:
@@ -96,6 +97,7 @@ try:
 except AgentWallDenied as e:
     print(f"Blocked by policy: {e.rule_name} — {e.reason}")
 ```
+-->
 
 ### Team / Staging Control Hub (Docker Compose)
 
