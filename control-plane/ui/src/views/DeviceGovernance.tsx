@@ -361,7 +361,7 @@ function generateSecureToken(): string {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#22c55e', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="{generatedToken.token_hash}" bash
+                    curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="{generatedToken.token_hash}" AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
                   </pre>
                 </div>
                 <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
@@ -372,7 +372,8 @@ function generateSecureToken(): string {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token_hash}"; irm https://vexasec.io/install.ps1 | iex`
+                        const hubUrl = window.location.origin;
+                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token_hash}"; $env:AGENTWALL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install.ps1 | iex`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('win')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -382,7 +383,7 @@ function generateSecureToken(): string {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#3b82f6', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    $env:AGENTWALL_TOKEN="{generatedToken.token_hash}"; irm https://vexasec.io/install.ps1 | iex
+                    $env:AGENTWALL_TOKEN="{generatedToken.token_hash}"; $env:AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install.ps1 | iex
                   </pre>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -114,9 +114,9 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             #[cfg(target_os = "windows")]
             {
                 let args_clone = args.clone();
+                let handle = tokio::runtime::Handle::current();
                 let maybe_code = tokio::task::block_in_place(|| {
                     agentwall::service::windows::run_as_windows_service_if_present(move || {
-                        let handle = tokio::runtime::Handle::current();
                         handle.block_on(dispatch_start(*args_clone))
                     })
                 });
@@ -1284,6 +1284,20 @@ async fn run_start(
         );
         let _ = shutdown_tx_clone.send(true);
     });
+
+    #[cfg(target_os = "windows")]
+    {
+        let shutdown_tx_win = shutdown_tx.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                if agentwall::service::windows::service_dispatcher_handler::is_shutdown_requested() {
+                    let _ = shutdown_tx_win.send(true);
+                    break;
+                }
+            }
+        });
+    }
 
     // FR-5 AC-5.6: SIGHUP handler for policy hot-reload.
     //
