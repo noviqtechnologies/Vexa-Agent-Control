@@ -100,17 +100,24 @@ agentwall service status
 ### Windows (PowerShell)
 
 ```powershell
+# Standard local developer mode
 irm https://vexasec.io/install.ps1 | iex
+
+# Or automated enterprise enrollment with remote Control Hub:
+$env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN"
+$env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+irm https://vexasec.io/install.ps1 | iex
+
 agentwall.exe --version
 ```
 
 > **Important — Installer Elevation & Administrator Permissions:**
 > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentwall service install` runs automatically without user interaction.**
 > - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in a standard PowerShell session installs the binary to `%USERPROFILE%\.local\bin`. **To install the persistent SCM Service (`agentwall service install`), PowerShell must be opened with "Run as Administrator".**
-> - **Windows Task Scheduler Background Daemon (Recommended Alternative):** To run the background gateway service & heartbeat loop on system startup without SCM control function errors:
+> - **Windows Task Scheduler Background Daemon (Alternative):** To run the background gateway service & heartbeat loop on system startup:
 >   ```cmd
->   setx /M DASHBOARD_API_URL "http://localhost:8080"
->   SchTasks /Create /TN "AgentWallSentry" /TR "C:\AgentWall\agentwall\target\debug\agentwall.exe start --listen 127.0.0.1:8080" /SC ONSTART /RU SYSTEM /F
+>   setx /M DASHBOARD_API_URL "https://hub.yourdomain.com:8081"
+>   SchTasks /Create /TN "AgentWallSentry" /TR "%USERPROFILE%\.local\bin\agentwall.exe start --centralized" /SC ONSTART /RU SYSTEM /F
 >   SchTasks /Run /TN "AgentWallSentry"
 >   ```
 > - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentwall watch --all`** in a standard user terminal.

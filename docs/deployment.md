@@ -71,6 +71,12 @@ Press the `Windows` key on your keyboard, type `PowerShell` or `cmd`, and launch
 
 * **Option A: PowerShell (Recommended)**
   ```powershell
+  # Standard local developer mode
+  irm https://vexasec.io/install.ps1 | iex
+
+  # Or automated enterprise enrollment with remote Control Hub:
+  $env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN"
+  $env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
   irm https://vexasec.io/install.ps1 | iex
   ```
 

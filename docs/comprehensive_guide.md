@@ -389,16 +389,18 @@ Invoke-RestMethod -Uri "http://localhost:8400/api/v1/admin/enrollment-tokens" `
 ```
 
 ### Onboarding Developer Workstations
-Developers run the onboarding script with the generated token:
+Developers run the onboarding script with the generated token and Hub URL:
 
 **Linux / macOS (Bash):**
 ```bash
-curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" AGENTWALL_HUB_URL="http://hub.yourdomain.com:8081" bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-$env:AGENTWALL_TOKEN="TOK-892A-3F91"; irm https://vexasec.io/install.ps1 | iex
+$env:AGENTWALL_TOKEN = "TOK-892A-3F91"
+$env:AGENTWALL_HUB_URL = "http://hub.yourdomain.com:8081"
+irm https://vexasec.io/install.ps1 | iex
 ```
 
 ### Heartbeat Compliance States

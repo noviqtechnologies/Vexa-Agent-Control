@@ -234,21 +234,23 @@ Admins generate short-lived enrollment tokens in the Web Console or REST API:
     -d "{\"raw_token\": \"TOK-892A-3F91\", \"max_uses\": 25, \"ttl_hours\": 24}"
   ```
 
-Developers use the generated command to onboard:
+Developers use the generated command to onboard against your Control Hub instance:
 
 * **Linux / macOS (Bash / Zsh):**
   ```bash
-  curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" bash
+  curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-892A-3F91" AGENTWALL_HUB_URL="http://hub.yourdomain.com:8081" bash
   ```
 
 * **Windows (PowerShell):**
   ```powershell
-  $env:AGENTWALL_TOKEN="TOK-892A-3F91"; irm https://vexasec.io/install.ps1 | iex
+  $env:AGENTWALL_TOKEN = "TOK-892A-3F91"
+  $env:AGENTWALL_HUB_URL = "http://hub.yourdomain.com:8081"
+  irm https://vexasec.io/install.ps1 | iex
   ```
 
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  set AGENTWALL_TOKEN=TOK-892A-3F91 && curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  set AGENTWALL_TOKEN=TOK-892A-3F91 && set AGENTWALL_HUB_URL=http://hub.yourdomain.com:8081 && curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   ```
 
 ### 2. Device Compliance State Machine

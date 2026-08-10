@@ -47,8 +47,8 @@ Install the statically-linked `agentwall` binary and launch the shadow gateway w
 curl -fsSL https://vexasec.io/install.sh | bash
 agentwall dev
 
-# Automated enterprise enrollment & Sentry daemon installation (optional token flag)
-curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" bash
+# Automated enterprise enrollment & Sentry daemon installation (with Hub URL)
+curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" AGENTWALL_HUB_URL="https://hub.yourdomain.com:8081" bash
 ```
 
 **Windows (PowerShell):**
@@ -57,8 +57,10 @@ curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" bash
 irm https://vexasec.io/install.ps1 | iex
 agentwall.exe dev
 
-# Automated enterprise enrollment & Sentry daemon installation (optional token variable)
-$env:AGENTWALL_TOKEN="TOK-YOUR-TOKEN"; irm https://vexasec.io/install.ps1 | iex
+# Automated enterprise enrollment & Sentry daemon installation (with Hub URL)
+$env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
+$env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+irm https://vexasec.io/install.ps1 | iex
 ```
 
 Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.

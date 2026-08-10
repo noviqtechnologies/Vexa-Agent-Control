@@ -302,14 +302,21 @@ The Workstation Sidecar profile provides local observation, automatic policy gen
 
 * **Windows (PowerShell / CMD / Git Bash):**
   ```powershell
+  # Standard local developer mode
   irm https://vexasec.io/install.ps1 | iex
+
+  # Or automated enterprise enrollment with remote Control Hub:
+  $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
+  $env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+  irm https://vexasec.io/install.ps1 | iex
+
   agentwall.exe --version
   ```
   > **Important — Installer Elevation & Administrator Permissions:**
   > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages execute under **`NT AUTHORITY\SYSTEM`** with administrative rights, allowing **`agentwall service install` to complete automatically.**
   > - **Manual PowerShell Execution:** Running `install.ps1` in a standard session installs the binary. **Installing the SCM Service (`agentwall service install`) requires launching PowerShell with "Run as Administrator".**
   > - **Windows Task Scheduler Background Daemon:** To run the background gateway and heartbeat daemon automatically on boot:
-  >   `SchTasks /Create /TN "AgentWallSentry" /TR "C:\AgentWall\agentwall\target\debug\agentwall.exe start --listen 127.0.0.1:8080" /SC ONSTART /RU SYSTEM /F`
+  >   `SchTasks /Create /TN "AgentWallSentry" /TR "%USERPROFILE%\.local\bin\agentwall.exe start --centralized" /SC ONSTART /RU SYSTEM /F`
   > - **Non-Admin Execution:** Without administrative privileges, run **`agentwall watch --all`** in a standard user terminal to run the Sentry watcher daemon interactively.
 
   > **Permanent PATH Configuration (Set Once Across Terminals):**
