@@ -1293,7 +1293,8 @@ async fn run_start(
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                if agentwall::service::windows::service_dispatcher_handler::is_shutdown_requested() {
+                if agentwall::service::windows::service_dispatcher_handler::is_shutdown_requested()
+                {
                     let _ = shutdown_tx_win.send(true);
                     break;
                 }

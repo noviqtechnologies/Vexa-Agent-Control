@@ -13,7 +13,12 @@ pub fn install_macos_service(
 ) -> Result<(), String> {
     // Build optional AGENT_ID plist entry
     let agent_id_plist = agent_id
-        .map(|id| format!("        <key>AGENT_ID</key>\n        <string>{}</string>\n", id))
+        .map(|id| {
+            format!(
+                "        <key>AGENT_ID</key>\n        <string>{}</string>\n",
+                id
+            )
+        })
         .unwrap_or_default();
 
     let plist_content = format!(
