@@ -9,7 +9,13 @@ pub fn install_linux_service(
     hub_url: &str,
     gateway_secret: &str,
     policy_read_secret: &str,
+    agent_id: Option<&str>,
 ) -> Result<(), String> {
+    // Build optional AGENT_ID environment line
+    let agent_id_line = agent_id
+        .map(|id| format!("Environment=AGENT_ID=\"{}\"\n", id))
+        .unwrap_or_default();
+
     let service_content = format!(
         r#"[Unit]
 Description=AgentWall Sentry Endpoint Security Service
@@ -23,11 +29,11 @@ RestartSec=5s
 Environment=DASHBOARD_API_URL="{}"
 Environment=GATEWAY_SECRET="{}"
 Environment=POLICY_READ_SECRET="{}"
-
+{}
 [Install]
 WantedBy=multi-user.target
 "#,
-        bin_path, hub_url, gateway_secret, policy_read_secret
+        bin_path, hub_url, gateway_secret, policy_read_secret, agent_id_line
     );
 
     let unit_path = "/etc/systemd/system/agentwall.service";

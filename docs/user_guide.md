@@ -307,16 +307,23 @@ The Workstation Sidecar profile provides local observation, automatic policy gen
 
   # Or automated enterprise enrollment with remote Control Hub:
   $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-  $env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+  $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
   irm https://vexasec.io/install.ps1 | iex
 
   agentwall.exe --version
   ```
   > **Important — Installer Elevation & Administrator Permissions:**
-  > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages execute under **`NT AUTHORITY\SYSTEM`** with administrative rights, allowing **`agentwall service install` to complete automatically.**
-  > - **Manual PowerShell Execution:** Running `install.ps1` in a standard session installs the binary. **Installing the SCM Service (`agentwall service install`) requires launching PowerShell with "Run as Administrator".**
-  > - **Windows Task Scheduler Background Daemon:** To run the background gateway and heartbeat daemon automatically on boot:
-  >   `SchTasks /Create /TN "AgentWallSentry" /TR "%USERPROFILE%\.local\bin\agentwall.exe start --centralized" /SC ONSTART /RU SYSTEM /F`
+  > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages execute under **`NT AUTHORITY\SYSTEM`** with administrative rights, setting all secrets at machine scope.
+  > - **Manual PowerShell Execution:** After running `install.ps1` in an elevated Administrator session, run `agentwall service install` with your real secrets:
+  >   ```powershell
+  >   # Run in an elevated (Administrator) PowerShell session:
+  >   agentwall.exe service install `
+  >     --hub-url            "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8081" `
+  >     --gateway-secret     "<GATEWAY_SECRET>" `
+  >     --policy-read-secret "<POLICY_READ_SECRET>" `
+  >     --agent-id           "wasim-win11"   # optional
+  >   ```
+  >   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the `AgentWallSentry` service, ensuring Sentry reads the correct secrets on first boot.
   > - **Non-Admin Execution:** Without administrative privileges, run **`agentwall watch --all`** in a standard user terminal to run the Sentry watcher daemon interactively.
 
   > **Permanent PATH Configuration (Set Once Across Terminals):**

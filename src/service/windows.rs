@@ -9,6 +9,7 @@ pub fn install_windows_service(
     hub_url: &str,
     gateway_secret: &str,
     policy_read_secret: &str,
+    agent_id: Option<&str>,
 ) -> Result<(), String> {
     use std::ffi::OsStr;
     use windows_service::{service::*, service_manager::*};
@@ -24,6 +25,25 @@ pub fn install_windows_service(
             e
         )
     })?;
+
+    // ── Write machine-scope env vars to HKLM BEFORE creating/starting the service ──
+    // setx /M writes to HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment.
+    // New processes (including the SCM-spawned service) inherit these immediately.
+    // Doing this before service.start() ensures Sentry reads the correct secrets on first boot.
+    let _ = std::process::Command::new("setx")
+        .args(&["/M", "DASHBOARD_API_URL", hub_url])
+        .output();
+    let _ = std::process::Command::new("setx")
+        .args(&["/M", "GATEWAY_SECRET", gateway_secret])
+        .output();
+    let _ = std::process::Command::new("setx")
+        .args(&["/M", "POLICY_READ_SECRET", policy_read_secret])
+        .output();
+    if let Some(id) = agent_id {
+        let _ = std::process::Command::new("setx")
+            .args(&["/M", "AGENT_ID", id])
+            .output();
+    }
 
     println!("  Creating service entry {}...", "AgentWallSentry".cyan());
 
@@ -58,10 +78,13 @@ pub fn install_windows_service(
         "{} AgentWall Windows SCM Service installed successfully!",
         "✔".green().bold()
     );
-    println!("  To set persistent environment variables for System service:");
-    println!("    setx /M DASHBOARD_API_URL \"{}\"", hub_url);
-    println!("    setx /M GATEWAY_SECRET \"{}\"", gateway_secret);
-    println!("    setx /M POLICY_READ_SECRET \"{}\"", policy_read_secret);
+    println!("  Configured persistent environment variables (HKLM system scope):");
+    println!("    DASHBOARD_API_URL   = \"{}\"", hub_url);
+    println!("    GATEWAY_SECRET      = \"{}\"", gateway_secret);
+    println!("    POLICY_READ_SECRET  = \"{}\"", policy_read_secret);
+    if let Some(id) = agent_id {
+        println!("    AGENT_ID            = \"{}\"", id);
+    }
 
     Ok(())
 }
@@ -72,6 +95,7 @@ pub fn install_windows_service(
     _hub_url: &str,
     _gateway_secret: &str,
     _policy_read_secret: &str,
+    _agent_id: Option<&str>,
 ) -> Result<(), String> {
     Err("Windows SCM service installation is only supported on Windows OS.".to_string())
 }

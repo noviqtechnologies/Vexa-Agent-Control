@@ -821,6 +821,13 @@ agentwall identity export-jwks --issuer https://auth.yourorg.com --output ./jwks
 - **Cause:** Gateway cannot connect to the Control Hub SSE endpoint (`/api/v1/events`).
 - **Solution:** Check network routing and verify `DASHBOARD_API_URL` and `POLICY_READ_SECRET`. The gateway automatically falls back to local policy disk files until connection is re-established.
 
+#### Error 405 `Method Not Allowed` when fetching remote policy
+```
+{"error":"Dashboard API returned HTTP 405 Method Not Allowed for http://...:8080/api/v1/policy/active: Method Not Allowed","event":"policy_fetch_remote_failed","level":"error"}
+```
+- **Cause:** `DASHBOARD_API_URL` was pointed to the Gateway proxy ingress port (port `8080`) instead of the Control Plane API port (port `8081`).
+- **Solution:** Ensure `DASHBOARD_API_URL` uses port `8081` (e.g. `http://<alb-domain>:8081` or `http://127.0.0.1:8081`), not the gateway proxy port `8080`.
+
 ---
 
 ### Executable & PATH Troubleshooting

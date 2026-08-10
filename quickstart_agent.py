@@ -20,6 +20,8 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+import argparse
+
 def send_request(url, payload=None, headers=None, method="POST"):
     if headers is None:
         headers = {"Content-Type": "application/json"}
@@ -42,10 +44,108 @@ def send_request(url, payload=None, headers=None, method="POST"):
     except Exception as e:
         return 0, {"error": str(e)}
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Vexa AgentWall — Interactive Demonstration Workflow Client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  python quickstart_agent.py agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
+  python quickstart_agent.py http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
+  python quickstart_agent.py agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com --proxy-port 8080 --dashboard-port 8081
+"""
+    )
+    parser.add_argument(
+        "endpoint",
+        nargs="?",
+        default=None,
+        help="Target host or endpoint URL (e.g. agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com)"
+    )
+    parser.add_argument(
+        "proxy_port_pos",
+        nargs="?",
+        default=None,
+        help="Proxy Security Endpoint Port (e.g. 8080)"
+    )
+    parser.add_argument(
+        "dashboard_port_pos",
+        nargs="?",
+        default=None,
+        help="Control Hub API Ingest Port (e.g. 8081)"
+    )
+    parser.add_argument(
+        "-u", "--url", "--proxy-url",
+        dest="proxy_url_flag",
+        default=None,
+        help="Proxy security endpoint URL"
+    )
+    parser.add_argument(
+        "-p", "--port", "--proxy-port",
+        dest="proxy_port_flag",
+        default=None,
+        help="Proxy security endpoint port"
+    )
+    parser.add_argument(
+        "-d", "--dashboard-url",
+        dest="dashboard_url_flag",
+        default=None,
+        help="Control Hub API Ingest endpoint URL"
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        dest="dashboard_port_flag",
+        default=None,
+        help="Control Hub API Ingest endpoint port"
+    )
+    return parser.parse_args()
+
+def normalize_url(url_str, port_override=None, path=""):
+    if not url_str:
+        return ""
+    url_str = url_str.strip()
+    if not url_str.startswith("http://") and not url_str.startswith("https://"):
+        url_str = f"http://{url_str}"
+    
+    url_str = url_str.rstrip("/")
+
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(url_str)
+    netloc = parsed.netloc
+
+    if port_override:
+        host_only = netloc.split(":")[0]
+        netloc = f"{host_only}:{port_override}"
+        url_str = urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+    if path:
+        url_str = url_str.rstrip("/") + path
+    return url_str
+
 def main():
-    # Use 127.0.0.1 loopback for reliable IPv4 binding across Windows, macOS, Linux, and WSL
-    proxy_url = os.environ.get("AGENTWALL_PROXY_URL", "http://127.0.0.1:8080")
-    dashboard_api_url = os.environ.get("DASHBOARD_API_URL", "http://127.0.0.1:8081/api/v1/ingest")
+    args = parse_args()
+
+    # Determine input proxy port from positional or flag
+    proxy_port = args.proxy_port_flag or args.proxy_port_pos
+    dashboard_port = args.dashboard_port_flag or args.dashboard_port_pos
+
+    # Determine input endpoint from positional arg, flag, or environment variable
+    input_endpoint = args.proxy_url_flag or args.endpoint or os.environ.get("AGENTWALL_PROXY_URL", "http://127.0.0.1:8080")
+    proxy_url = normalize_url(input_endpoint, port_override=proxy_port)
+
+    if args.dashboard_url_flag:
+        dashboard_api_url = normalize_url(args.dashboard_url_flag, port_override=dashboard_port)
+    elif os.environ.get("DASHBOARD_API_URL"):
+        dashboard_api_url = normalize_url(os.environ.get("DASHBOARD_API_URL"), port_override=dashboard_port)
+    else:
+        # Construct dashboard ingest URL using input URL host + specified dashboard port
+        from urllib.parse import urlparse
+        parsed = urlparse(proxy_url)
+        scheme = parsed.scheme or "http"
+        host_only = parsed.netloc.split(":")[0]
+        
+        target_dashboard_port = dashboard_port or (parsed.netloc.split(":")[1] if ":" in parsed.netloc and parsed.netloc.split(":")[1] != "8080" else "8081")
+        netloc = f"{host_only}:{target_dashboard_port}" if target_dashboard_port else host_only
+        dashboard_api_url = f"{scheme}://{netloc}/api/v1/ingest"
+
     gateway_secret = os.environ.get("GATEWAY_SECRET", "local-dev-shared-secret-change-me")
     ingest_headers = {
         "Content-Type": "application/json",

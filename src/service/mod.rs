@@ -14,6 +14,7 @@ pub enum ServiceAction {
         hub_url: String,
         gateway_secret: String,
         policy_read_secret: String,
+        agent_id: Option<String>,
     },
     Uninstall,
     Status,
@@ -33,6 +34,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
             hub_url,
             gateway_secret,
             policy_read_secret,
+            agent_id,
         } => {
             println!(
                 "{} Installing AgentWall Persistent Sentry Daemon",
@@ -47,6 +49,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
                     &hub_url,
                     &gateway_secret,
                     &policy_read_secret,
+                    agent_id.as_deref(),
                 )
             } else if cfg!(target_os = "macos") {
                 macos::install_macos_service(
@@ -54,6 +57,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
                     &hub_url,
                     &gateway_secret,
                     &policy_read_secret,
+                    agent_id.as_deref(),
                 )
             } else {
                 linux::install_linux_service(
@@ -61,6 +65,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
                     &hub_url,
                     &gateway_secret,
                     &policy_read_secret,
+                    agent_id.as_deref(),
                 )
             };
 

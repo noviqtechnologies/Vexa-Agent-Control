@@ -9,8 +9,8 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
   # Local developer mode
   curl -fsSL https://vexasec.io/install.sh | bash
 
-  # Or automated enterprise enrollment with remote Control Hub:
-  curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="TOK-YOUR-TOKEN" AGENTWALL_HUB_URL="https://hub.yourdomain.com:8081" bash
+  # Or automated enterprise enrollment with remote Control Hub (Custom URL & Port):
+  curl -fsSL https://vexasec.io/install.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 
   agentwall --version
   ```
@@ -19,9 +19,9 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
   # Local developer mode
   irm https://vexasec.io/install.ps1 | iex
 
-  # Or automated enterprise enrollment with remote Control Hub:
+  # Or automated enterprise enrollment with remote Control Hub (Custom URL & Port):
   $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-  $env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+  $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
   irm https://vexasec.io/install.ps1 | iex
 
   agentwall.exe --version

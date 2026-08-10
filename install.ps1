@@ -184,15 +184,25 @@ param(
 
     # Automated Enterprise Enrollment & Windows SCM Service Registration
     if (-not $Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
+    if (-not $HubUrl) { $HubUrl = $env:DASHBOARD_API_URL }
     if (-not $HubUrl) { $HubUrl = "http://localhost:8400" }
 
     if ($Token) {
         Write-Host "`n[*] Initializing Enterprise Device Governance..." -ForegroundColor $ColorCyan
+        Write-Host "[*] Setting machine environment variable DASHBOARD_API_URL=$HubUrl..." -ForegroundColor $ColorCyan
+        [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, [EnvironmentVariableTarget]::Machine)
+
         Write-Host "[*] Step 1/3: PKI Device Enrollment..." -ForegroundColor $ColorCyan
         & $FinalBinaryPath enroll --token $Token --hub-url $HubUrl
 
         Write-Host "[*] Step 2/3: Installing Persistent Windows SCM Service Daemon..." -ForegroundColor $ColorCyan
         & $FinalBinaryPath service install --hub-url $HubUrl
+
+        # Ensure service type is set to non-interactive 'own'
+        try {
+            sc.exe config AgentWallSentry type= own | Out-Null
+        } catch { }
+
         try {
             Start-Service -Name "AgentWallSentry" -ErrorAction Stop
             Write-Host "[*] Started AgentWallSentry service successfully." -ForegroundColor $ColorGreen

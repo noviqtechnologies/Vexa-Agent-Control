@@ -96,10 +96,12 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     hub_url,
                     gateway_secret,
                     policy_read_secret,
+                    agent_id,
                 } => agentwall::service::ServiceAction::Install {
                     hub_url,
                     gateway_secret,
                     policy_read_secret,
+                    agent_id,
                 },
                 agentwall::cli::ServiceCliAction::Uninstall => {
                     agentwall::service::ServiceAction::Uninstall

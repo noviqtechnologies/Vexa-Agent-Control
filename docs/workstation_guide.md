@@ -71,11 +71,19 @@ Instead of manually running `agentwall start` in terminal, install AgentWall as 
 
 ```bash
 # Install persistent systemd (Linux) or launchd (macOS) service
-agentwall service install --hub-url "https://hub.corp.com"
+# All three flags are required — they must match your Control Plane API configuration.
+agentwall service install \
+  --hub-url       "https://hub.corp.com" \
+  --gateway-secret    "<GATEWAY_SECRET>" \
+  --policy-read-secret "<POLICY_READ_SECRET>" \
+  --agent-id      "dev-$(hostname)"   # optional: sets a friendly name in the dashboard
 
 # Check daemon status
 agentwall service status
 ```
+
+> [!IMPORTANT]
+> The `--gateway-secret` and `--policy-read-secret` values **must exactly match** the `GATEWAY_SECRET` and `POLICY_READ_SECRET` environment variables configured on your Control Plane API. Mismatched secrets cause HTTP 401 errors on every policy fetch. There are no safe defaults — you must supply real values.
 
 **How Sentry Protection Works:**
 - **Immutable File Locking:** Applies read-only attributes (`chmod 0444`, BSD `chflags uchg`, Windows ACL Write Deny) to `mcp.json` configs.
@@ -105,21 +113,24 @@ irm https://vexasec.io/install.ps1 | iex
 
 # Or automated enterprise enrollment with remote Control Hub:
 $env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN"
-$env:AGENTWALL_HUB_URL = "https://hub.yourdomain.com:8081"
+$env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 irm https://vexasec.io/install.ps1 | iex
 
 agentwall.exe --version
 ```
 
 > **Important — Installer Elevation & Administrator Permissions:**
-> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentwall service install` runs automatically without user interaction.**
-> - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in a standard PowerShell session installs the binary to `%USERPROFILE%\.local\bin`. **To install the persistent SCM Service (`agentwall service install`), PowerShell must be opened with "Run as Administrator".**
-> - **Windows Task Scheduler Background Daemon (Alternative):** To run the background gateway service & heartbeat loop on system startup:
->   ```cmd
->   setx /M DASHBOARD_API_URL "https://hub.yourdomain.com:8081"
->   SchTasks /Create /TN "AgentWallSentry" /TR "%USERPROFILE%\.local\bin\agentwall.exe start --centralized" /SC ONSTART /RU SYSTEM /F
->   SchTasks /Run /TN "AgentWallSentry"
+> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentwall service install` runs automatically and sets all secrets at System scope.**
+> - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in an elevated Administrator session installs the binary and configures the `AgentWallSentry` SCM Service. Run `agentwall service install` afterwards with your real secrets:
+>   ```powershell
+>   # Run in an elevated (Administrator) PowerShell session:
+>   agentwall.exe service install `
+>     --hub-url            "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8081" `
+>     --gateway-secret     "<GATEWAY_SECRET>" `
+>     --policy-read-secret "<POLICY_READ_SECRET>" `
+>     --agent-id           "wasim-win11"   # optional
 >   ```
+>   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the service, so Sentry reads the correct secrets on first boot.
 > - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentwall watch --all`** in a standard user terminal.
 
 

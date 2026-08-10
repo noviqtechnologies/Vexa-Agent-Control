@@ -143,7 +143,8 @@ Apply complete! Resources: 18 added, 0 changed, 0 destroyed.
 Outputs:
 
 control_plane_url      = "http://agentwall-ecs-alb-123456789.eu-west-1.elb.amazonaws.com:8081"
-dashboard_url          = "http://agentwall-ecs-alb-123456789.eu-west-1.elb.amazonaws.com:8080"
+dashboard_api_url      = "http://agentwall-ecs-alb-123456789.eu-west-1.elb.amazonaws.com:8081"
+gateway_url            = "http://agentwall-ecs-alb-123456789.eu-west-1.elb.amazonaws.com:8080"
 health_url             = "http://agentwall-ecs-alb-123456789.eu-west-1.elb.amazonaws.com:8080/healthz"
 ecs_cluster_name       = "agentwall-cluster"
 ecs_service_name       = "agentwall-service"
@@ -192,11 +193,27 @@ Send test JSON-RPC MCP tool calls to the AWS ALB gateway endpoint:
     -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
   ```
 
-### Step 3: Access Enterprise Control Plane UI
+### Step 3: Access Enterprise Control Plane UI & Connect Workstation Agent
 Open your browser and navigate to:
 ```text
 http://<ALB-DNS-NAME>:8081
 ```
+
+To point local workstation agents to the central AWS ECS Control Plane API, set `DASHBOARD_API_URL` to port **`:8081`** (`dashboard_api_url` / `control_plane_url`):
+
+- **Windows (PowerShell):**
+  ```powershell
+  $env:DASHBOARD_API_URL="http://<ALB-DNS-NAME>:8081"
+  agentwall.exe start --centralized
+  ```
+- **macOS / Linux (Bash/Zsh):**
+  ```bash
+  export DASHBOARD_API_URL="http://<ALB-DNS-NAME>:8081"
+  agentwall start --centralized
+  ```
+
+> [!IMPORTANT]
+> Always use port **`:8081`** (Control Plane API) for `DASHBOARD_API_URL`. Port **`:8080`** is reserved for the AgentWall Gateway proxy ingress.
 
 ### Step 4: Stream Live CloudWatch Container Logs (AWS CLI)
 ```bash

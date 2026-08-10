@@ -9,7 +9,13 @@ pub fn install_macos_service(
     hub_url: &str,
     gateway_secret: &str,
     policy_read_secret: &str,
+    agent_id: Option<&str>,
 ) -> Result<(), String> {
+    // Build optional AGENT_ID plist entry
+    let agent_id_plist = agent_id
+        .map(|id| format!("        <key>AGENT_ID</key>\n        <string>{}</string>\n", id))
+        .unwrap_or_default();
+
     let plist_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -35,11 +41,11 @@ pub fn install_macos_service(
         <string>{}</string>
         <key>POLICY_READ_SECRET</key>
         <string>{}</string>
-    </dict>
+{}    </dict>
 </dict>
 </plist>
 "#,
-        bin_path, hub_url, gateway_secret, policy_read_secret
+        bin_path, hub_url, gateway_secret, policy_read_secret, agent_id_plist
     );
 
     let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
