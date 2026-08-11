@@ -795,8 +795,8 @@ async fn handle_request(
         match &state.policy_path {
             None => {
                 let err = serde_json::json!({
-                    "error": "No policy file path configured. Start the gateway with the --policy <path> flag to enable hot-reloading.",
-                    "hint": "agentwall start --policy agentwall-policy.yaml"
+                    "error": "No policy file path configured. Pass --policy <path> when starting the gateway to enable hot-reloading.",
+                    "hint": "agentwall protect --policy agentwall-policy.yaml"
                 });
                 return Ok(json_response(StatusCode::BAD_REQUEST, &err));
             }

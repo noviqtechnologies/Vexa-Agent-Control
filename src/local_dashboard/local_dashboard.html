@@ -1038,6 +1038,15 @@
       <div class="nav-item" data-panel="panel-policy">
         <span class="nav-icon">08</span> Generate Policy
       </div>
+      <div class="nav-item" data-panel="panel-gateway" id="nav-gateway">
+        <span class="nav-icon" style="background:rgba(83,155,245,0.15); color:var(--accent);">⚙</span> Gateway Controls
+      </div>
+      <div class="nav-item" data-panel="panel-self-healing" id="nav-self-healing">
+        <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🌱</span> Self-Healing & Drift
+      </div>
+      <div class="nav-item" data-panel="panel-egress" id="nav-egress">
+        <span class="nav-icon" style="background:rgba(210,153,34,0.15); color:var(--amber);">🌐</span> Egress & LLM Proxy
+      </div>
       <div style="padding:14px 16px; margin-top:10px; border-top:1px solid var(--border);">
         <button class="btn btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openPolicyWizard()">
           <span>✨ Live Policy Wizard</span>
@@ -1504,7 +1513,7 @@ const tool = client.governed("name", async (args) =&gt; {
             </span>
           </div>
           <p id="gw-mode-description" style="font-size:0.85rem; line-height:1.5;">
-            <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start proxy with <code style="color:var(--accent)">agentwall dev --enforce</code> to enable active blocking.
+            <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start proxy with <code style="color:var(--accent)">agentwall protect --enforce</code> to enable active blocking.
           </p>
         </div>
 
@@ -1546,6 +1555,8 @@ const tool = client.governed("name", async (args) =&gt; {
             </button>
           </div>
           <div id="gw-reload-status" style="margin-top:10px; font-family:var(--font-mono); font-size:0.8rem;"></div>
+          <!-- Pre-flight notice: shown by JS when no --policy path was passed at startup -->
+          <div id="gw-reload-notice" style="display:none; margin-top:10px; padding:10px 14px; border-radius:8px; background:rgba(210,153,34,0.08); border:1px solid rgba(210,153,34,0.25); font-size:0.82rem; line-height:1.6; color:var(--text-secondary);"></div>
           <pre id="gw-reload-result" style="display:none; margin-top:10px; background:#0d1117; padding:12px; border-radius:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--green); max-height:200px; overflow-y:auto;"></pre>
         </div>
 
@@ -2147,6 +2158,30 @@ const tool = client.governed("name", async (args) =&gt; {
           `<tr><td style="font-weight:600; color:var(--text-muted); font-size:0.8rem; width:200px; padding:8px 14px;">${escHtml(k)}</td>
                 <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-bright); padding:8px 14px;">${escHtml(String(v))}</td></tr>`
         ).join('');
+      }
+
+      // ── Hot-Reload pre-flight gate ──────────────────────────────────────────
+      // Disable the Reload Policy button and show a clear notice when no policy
+      // path was passed at startup — avoids click → ✗ error UX.
+      const reloadBtn = document.getElementById('btn-gw-reload');
+      const reloadNotice = document.getElementById('gw-reload-notice');
+      if (s.policy_path) {
+        // Policy path is configured — enable button, clear any notice
+        if (reloadBtn) { reloadBtn.disabled = false; reloadBtn.style.opacity = ''; reloadBtn.title = ''; }
+        if (reloadNotice) reloadNotice.style.display = 'none';
+      } else {
+        // No policy path — disable button, show amber notice
+        if (reloadBtn) {
+          reloadBtn.disabled = true;
+          reloadBtn.style.opacity = '0.4';
+          reloadBtn.title = 'Pass --policy <path> when running agentwall protect to enable hot-reload';
+        }
+        if (reloadNotice) {
+          reloadNotice.style.display = '';
+          reloadNotice.innerHTML = `<span style="color:var(--amber);">⚠</span> No policy file configured.
+            Run <code style="color:var(--accent);">agentwall protect --policy agentwall-policy.yaml</code>
+            to enable hot-reloading, or use the <strong>✨ Live Policy Wizard</strong> to generate one.`;
+        }
       }
     }
 
