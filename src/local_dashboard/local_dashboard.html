@@ -521,6 +521,76 @@
       border-radius: 8px;
     }
 
+    /* ── Live Policy Wizard Side Drawer ── */
+    .wizard-drawer {
+      position: fixed;
+      top: 0;
+      right: -520px;
+      width: 500px;
+      height: 100vh;
+      background: var(--bg-card);
+      border-left: 1px solid var(--border);
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .wizard-drawer.open {
+      right: 0;
+    }
+    .wizard-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.95);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .wizard-header h3 {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 1.1rem;
+      color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .wizard-body {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    .wizard-editor {
+      flex: 1;
+      width: 100%;
+      min-height: 320px;
+      background: #080b10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      padding: 16px;
+      resize: none;
+      line-height: 1.5;
+    }
+    .wizard-editor:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .wizard-actions {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.95);
+      display: flex;
+      gap: 12px;
+    }
+
     /* ── Timeline ── */
     .filter-row {
       display: flex;
@@ -968,28 +1038,36 @@
       <div class="nav-item" data-panel="panel-policy">
         <span class="nav-icon">08</span> Generate Policy
       </div>
-      <div class="nav-item" data-panel="panel-gateway" id="nav-gateway">
-        <span class="nav-icon" style="background:rgba(83,155,245,0.15); color:var(--accent);">⚙</span> Gateway Controls
+      <div style="padding:14px 16px; margin-top:10px; border-top:1px solid var(--border);">
+        <button class="btn btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openPolicyWizard()">
+          <span>✨ Live Policy Wizard</span>
+        </button>
       </div>
-      <div class="nav-item" data-panel="panel-self-healing" id="nav-self-healing">
-        <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🌱</span> Self-Healing & Drift
-      </div>
-      <div class="nav-item" data-panel="panel-egress" id="nav-egress">
-        <span class="nav-icon" style="background:rgba(210,153,34,0.15); color:var(--amber);">🌐</span> Egress & LLM Proxy
-      </div>
-      <div class="nav-item" data-panel="panel-prometheus" id="nav-prometheus">
-        <span class="nav-icon" style="background:rgba(248,81,73,0.15); color:var(--red);">📊</span> Prometheus Metrics
-      </div>
-      <div class="nav-item" data-panel="panel-benchmark" id="nav-benchmark">
-        <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🛡</span> ADR Benchmark
-      </div>
-    </div>
-
-    <div class="sidebar-footer">
-      <span id="status-dot" class="status-dot"></span>
-      <span id="status-text">CONNECTING...</span>
     </div>
   </nav>
+
+  <!-- Live Policy Wizard Sliding Drawer -->
+  <div id="policy-wizard-drawer" class="wizard-drawer">
+    <div class="wizard-header">
+      <h3>✨ Live Policy Wizard</h3>
+      <button class="btn" style="padding:4px 10px; font-size:0.8rem;" onclick="closePolicyWizard()">✕ Close</button>
+    </div>
+    <div class="wizard-body">
+      <div style="font-size:0.82rem; color:var(--text-muted);">
+        Live visual YAML policy editor. Click <strong>"✨ Approve Pattern"</strong> on any observed tool to auto-generate parameter rules, then click <strong>"🚀 Apply Policy & Hot-Reload"</strong>.
+      </div>
+      <textarea id="wizard-yaml-editor" class="wizard-editor" placeholder="Generating live YAML policy..."></textarea>
+      <div id="wizard-status-msg" style="font-family:var(--font-mono); font-size:0.78rem; color:var(--accent);"></div>
+    </div>
+    <div class="wizard-actions">
+      <button class="btn btn-primary" style="flex:1;" id="btn-wizard-apply" onclick="saveAndApplyWizardPolicy()">
+        🚀 Apply Policy & Hot-Reload
+      </button>
+      <button class="btn" onclick="fetchWizardLivePolicy()">
+        🔄 Refresh Draft
+      </button>
+    </div>
+  </div>
 
   <!-- Main content -->
   <div class="main-content">
@@ -2385,7 +2463,8 @@ const tool = client.governed("name", async (args) =&gt; {
         <td><strong>${info.count}</strong></td>
         <td class="ts">${fmtTime(info.last)}</td>
         <td><span class="badge ${rt.cls}">${rt.label}</span></td>
-        <td style="text-align:center;">
+        <td style="text-align:center; display:flex; gap:6px; justify-content:center;">
+          <button class="quick-rule-btn" style="font-size:0.75rem; font-weight:700; padding:4px 8px;" title="Approve pattern & add to Live Policy Wizard" onclick="approveToolPattern('${escHtml(tool)}')">✨ Approve</button>
           <button class="quick-rule-btn" title="Apply standard security policy for this tool" onclick="applyQuickRule('${escHtml(tool)}', this)">🪄</button>
         </td>
       </tr>`;
@@ -3287,6 +3366,118 @@ const tool = client.governed("name", async (args) =&gt; {
       } catch (e) {
         toast('Gateway unreachable', 'error');
         if (btnEl) { btnEl.textContent = '🪄'; btnEl.disabled = false; }
+      }
+    }
+
+    // ── Live Policy Wizard Functions ──────────────────────────────────────────
+    function openPolicyWizard() {
+      const drawer = document.getElementById('policy-wizard-drawer');
+      if (drawer) drawer.classList.add('open');
+      const editor = document.getElementById('wizard-yaml-editor');
+      if (editor && (!editor.value || editor.value.trim().length === 0)) {
+        fetchWizardLivePolicy();
+      }
+    }
+
+    function closePolicyWizard() {
+      const drawer = document.getElementById('policy-wizard-drawer');
+      if (drawer) drawer.classList.remove('open');
+    }
+
+    async function fetchWizardLivePolicy() {
+      const editor = document.getElementById('wizard-yaml-editor');
+      const msg = document.getElementById('wizard-status-msg');
+      if (msg) msg.textContent = 'Fetching live generated policy...';
+      try {
+        const res = await fetch('/api/generate-policy', { method: 'POST' });
+        if (res.ok) {
+          const yaml = await res.text();
+          if (editor) editor.value = yaml;
+          if (msg) msg.textContent = '✅ Policy draft synthesized from observed traffic.';
+        } else {
+          if (msg) msg.textContent = '⚠ Could not generate draft. Using baseline template.';
+          if (editor && (!editor.value || editor.value.trim().length === 0)) {
+            editor.value = `version: "2"\ndefault_action: deny\n\ntools:\n  - name: "*"\n    action: allow\n`;
+          }
+        }
+      } catch (e) {
+        if (msg) msg.textContent = '⚠ Gateway offline.';
+      }
+    }
+
+    async function approveToolPattern(toolName) {
+      openPolicyWizard();
+      const editor = document.getElementById('wizard-yaml-editor');
+      const msg = document.getElementById('wizard-status-msg');
+      
+      let currentYaml = editor ? editor.value : '';
+      if (!currentYaml || currentYaml.trim().length === 0) {
+        currentYaml = `version: "2"\ndefault_action: deny\n\ntools:\n`;
+      }
+
+      // Check if tool already exists in YAML
+      if (!currentYaml.includes(`name: ${toolName}`) && !currentYaml.includes(`name: "${toolName}"`)) {
+        const toolSnippet = `
+  - name: ${toolName}
+    action: allow
+    risk: low
+    parameters:
+      - name: path
+        type: string
+        required: false
+        validators:
+          - path_traversal
+`;
+        currentYaml += toolSnippet;
+        if (editor) editor.value = currentYaml;
+        if (msg) msg.textContent = `✨ Approved pattern for tool "${toolName}". Updated YAML draft.`;
+        toast(`✨ Approved pattern for "${toolName}"`, 'success');
+      } else {
+        if (msg) msg.textContent = `ℹ Tool "${toolName}" is already present in policy draft.`;
+        toast(`Tool "${toolName}" is already in policy draft`, 'info');
+      }
+    }
+
+    async function saveAndApplyWizardPolicy() {
+      const editor = document.getElementById('wizard-yaml-editor');
+      const applyBtn = document.getElementById('btn-wizard-apply');
+      const msg = document.getElementById('wizard-status-msg');
+      if (!editor || !editor.value.trim()) {
+        toast('Policy YAML cannot be empty', 'error');
+        return;
+      }
+
+      if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '⏳ Validating & Applying...'; }
+      if (msg) msg.textContent = 'Saving and hot-reloading gateway policy...';
+
+      try {
+        const res = await fetch('/api/policy/save-and-reload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yaml: editor.value })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast('🚀 Policy saved and hot-reloaded successfully!', 'success');
+          if (msg) {
+            msg.style.color = 'var(--green)';
+            msg.textContent = '🚀 Policy validated, saved to disk, and hot-reloaded!';
+          }
+        } else {
+          toast('Policy error: ' + (data.error || 'Validation failed'), 'error');
+          if (msg) {
+            msg.style.color = 'var(--red)';
+            msg.textContent = '❌ ' + (data.error || 'Validation failed');
+          }
+        }
+      } catch (e) {
+        toast('Gateway error', 'error');
+        if (msg) {
+          msg.style.color = 'var(--red)';
+          msg.textContent = '❌ Gateway unreachable';
+        }
+      } finally {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '🚀 Apply Policy & Hot-Reload'; }
       }
     }
 

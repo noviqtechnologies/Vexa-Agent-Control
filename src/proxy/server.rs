@@ -1024,6 +1024,61 @@ async fn handle_request(
         return Ok(json_response(StatusCode::BAD_REQUEST, &err));
     }
 
+    // Save and Hot-Reload Policy Endpoint (Live Policy Wizard)
+    if method == hyper::Method::POST && path == "/api/policy/save-and-reload" {
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                if let Some(yaml_content) = val.get("yaml").and_then(|y| y.as_str()) {
+                    // 1. Validate YAML syntax using crate::policy::engine::CompiledPolicy
+                    match crate::policy::engine::CompiledPolicy::from_yaml_str(yaml_content) {
+                        Ok(new_policy) => {
+                            // 2. Save YAML to active policy file or fallback default
+                            let target_path = state.policy_path.as_deref().unwrap_or("agentwall-policy.yaml");
+                            if let Err(e) = std::fs::write(target_path, yaml_content) {
+                                let err = serde_json::json!({"error": format!("Failed to write policy file: {}", e)});
+                                return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
+                            }
+
+                            // 3. Hot-reload in-memory policy engine
+                            {
+                                if let Ok(mut policy_guard) = state.policy.write() {
+                                    *policy_guard = Some(new_policy);
+                                }
+                            }
+                            state.policy_loaded.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                            // 4. Broadcast policy_reloaded event over SSE
+                            let event_json = serde_json::json!({
+                                "event": "policy_reloaded",
+                                "type": "policy_reloaded",
+                                "path": target_path
+                            });
+                            if let Ok(s) = serde_json::to_string(&event_json) {
+                                let _ = state.event_tx.send(s);
+                            }
+
+                            return Ok(json_response(
+                                StatusCode::OK,
+                                &serde_json::json!({
+                                    "status": "ok",
+                                    "message": format!("Policy successfully saved to {} and hot-reloaded", target_path),
+                                    "path": target_path
+                                }),
+                            ));
+                        }
+                        Err(e) => {
+                            let err = serde_json::json!({"error": format!("Policy YAML Validation Error: {}", e)});
+                            return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+                        }
+                    }
+                }
+            }
+        }
+        let err = serde_json::json!({"error": "Invalid payload. Expected {\"yaml\": \"...\"}"});
+        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+    }
+
     // Only accept POST for JSON-RPC
     if method != hyper::Method::POST {
         return Ok(Response::builder()

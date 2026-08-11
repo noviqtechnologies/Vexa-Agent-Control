@@ -291,3 +291,41 @@ mod api_mode_toggle_tests {
         assert!(is_enforce, "enforce payload must map to enforce=true");
     }
 }
+
+// ── API: Live Policy Wizard & Hot-Reload tests ────────────────────────────
+
+#[cfg(test)]
+mod api_policy_wizard_tests {
+    use agentwall::policy::engine::CompiledPolicy;
+
+    #[test]
+    fn valid_wizard_yaml_compiles_successfully() {
+        let valid_yaml = r#"
+version: "2"
+default_action: deny
+
+tools:
+  - name: read_file
+    action: allow
+    risk: low
+    parameters:
+      - name: path
+        type: string
+        required: true
+        validators:
+          - path_traversal
+"#;
+        let res = CompiledPolicy::from_yaml_str(valid_yaml);
+        assert!(res.is_ok(), "Valid wizard YAML policy must compile without errors");
+    }
+
+    #[test]
+    fn invalid_wizard_yaml_fails_compilation() {
+        let invalid_yaml = r#"
+version: "INVALID_VERSION"
+default_action: unknown_action
+"#;
+        let res = CompiledPolicy::from_yaml_str(invalid_yaml);
+        assert!(res.is_err(), "Invalid wizard YAML policy must fail compilation with descriptive error");
+    }
+}
