@@ -249,6 +249,45 @@ pub enum Commands {
         target: UnwrapTarget,
     },
 
+    /// Automatically discover IDEs, atomically wrap MCP configs, start gateway, and open dashboard
+    Protect {
+        /// Preview changes without writing to disk or starting gateway
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Disable automatic opening of local dashboard in browser
+        #[arg(long, default_value_t = false)]
+        no_browser: bool,
+
+        /// Listen address for gateway proxy (default: 127.0.0.1:8080)
+        #[arg(long, default_value = "127.0.0.1:8080")]
+        listen: String,
+
+        /// Upstream HTTP MCP server URL (default: http://127.0.0.1:3000)
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        mcp_url: String,
+
+        /// Enable active enforcement mode (default: false / shadow mode)
+        #[arg(long, default_value_t = false)]
+        enforce: bool,
+
+        /// YAML policy file path
+        #[arg(long, default_value = "agentwall-policy.yaml")]
+        policy: String,
+    },
+
+    /// One-command reversion — restore all IDE configurations from backups and verify integrity
+    Unprotect {
+        /// Preview unprotect operations without modifying disk
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Force restoration even if backup integrity warning is issued
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
+
     /// Internal command used by Claude Desktop to proxy tool calls
     #[command(name = "stdio-proxy", hide = true)]
     StdioProxy {

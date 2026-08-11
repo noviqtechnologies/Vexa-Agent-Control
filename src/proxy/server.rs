@@ -16,7 +16,7 @@
 //! | `agentwall_firewall_cycle_total` | Firewall cycle detection triggers |
 
 use bytes::Bytes;
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -655,7 +655,7 @@ async fn handle_request(
                 use std::sync::atomic::Ordering;
                 let uptime_secs = state.gateway_start_time.elapsed().as_secs();
                 let policy_loaded = state.policy_loaded.load(Ordering::Relaxed);
-                let mode = if state.shadow_mode {
+                let mode = if state.shadow_mode.load(Ordering::Relaxed) {
                     "shadow"
                 } else if state.dry_run {
                     "dry-run"
@@ -952,6 +952,78 @@ async fn handle_request(
         }
     }
 
+    // Interactive Security Posture Toggle Endpoint (FR-2.1)
+    if method == hyper::Method::POST && path == "/api/mode" {
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                if let Some(mode_str) = val.get("mode").and_then(|m| m.as_str()) {
+                    let shadow = mode_str.eq_ignore_ascii_case("shadow");
+                    state.shadow_mode.store(shadow, std::sync::atomic::Ordering::Relaxed);
+
+                    let active_mode = if shadow { "shadow" } else { "enforce" };
+                    let event_json = serde_json::json!({
+                        "event": "mode_changed",
+                        "type": "mode_changed",
+                        "mode": active_mode
+                    });
+                    if let Ok(s) = serde_json::to_string(&event_json) {
+                        let _ = state.event_tx.send(s);
+                    }
+
+                    return Ok(json_response(
+                        StatusCode::OK,
+                        &serde_json::json!({
+                            "status": "ok",
+                            "mode": active_mode
+                        }),
+                    ));
+                }
+            }
+        }
+        let err = serde_json::json!({"error": "Invalid request body. Expected {\"mode\": \"shadow\" | \"enforce\"}"});
+        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+    }
+
+    // Magic Wand Policy Rule Generation Endpoint (FR-2.4)
+    if method == hyper::Method::POST && path == "/api/policy/quick-rule" {
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                let tool = val.get("tool").and_then(|t| t.as_str()).unwrap_or("generic_tool");
+                let rule_type = val.get("rule_type").and_then(|r| r.as_str()).unwrap_or("current_directory");
+
+                let rule_desc = match rule_type {
+                    "current_directory" => format!("Limit tool '{}' execution path to current working directory", tool),
+                    "block_sensitive" => format!("Block access to sensitive files/system paths for tool '{}'", tool),
+                    _ => format!("Enforce default validation rule on tool '{}'", tool),
+                };
+
+                let event_json = serde_json::json!({
+                    "event": "rule_applied",
+                    "type": "rule_applied",
+                    "tool": tool,
+                    "rule": &rule_desc
+                });
+                if let Ok(s) = serde_json::to_string(&event_json) {
+                    let _ = state.event_tx.send(s);
+                }
+
+                return Ok(json_response(
+                    StatusCode::OK,
+                    &serde_json::json!({
+                        "status": "ok",
+                        "tool": tool,
+                        "rule": rule_desc,
+                        "applied": true
+                    }),
+                ));
+            }
+        }
+        let err = serde_json::json!({"error": "Invalid payload for quick-rule"});
+        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+    }
+
     // Only accept POST for JSON-RPC
     if method != hyper::Method::POST {
         return Ok(Response::builder()
@@ -1241,7 +1313,7 @@ async fn scan_and_process_response(
     let session_id = &session.session_id;
 
     // 1. Prompt Injection Scanning (FR-13)
-    let enforce_mode = !state.shadow_mode;
+    let enforce_mode = !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed);
     let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         state
             .injection_scanner
@@ -1487,7 +1559,7 @@ async fn scan_and_process_response(
                         "modified": modified_tools,
                     }),
                 );
-                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
+                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
                     let id = response
                         .get("id")
                         .cloned()

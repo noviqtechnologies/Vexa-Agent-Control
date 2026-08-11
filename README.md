@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.28-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.29-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -43,24 +43,24 @@ Install the statically-linked `agentwall` binary and launch the shadow gateway w
 
 **macOS / Linux / WSL:**
 ```bash
-# Standard local developer mode
-curl -fsSL https://vexasec.io/install.sh | bash
-agentwall dev
+# Standalone CLI Developer Workstation
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash
+agentwall protect
 
-# Automated enterprise enrollment & Sentry daemon installation (with Hub URL & Custom Port)
-curl -fsSL https://vexasec.io/install.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+# Enterprise Team OTET Provisioning (Enrollment & Sentry Daemon)
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 ```
 
 **Windows (PowerShell):**
 ```powershell
-# Standard local developer mode
-irm https://vexasec.io/install.ps1 | iex
-agentwall.exe dev
+# Standalone CLI Developer Workstation
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex
+agentwall.exe protect
 
-# Automated enterprise enrollment & Sentry daemon installation (with Hub URL)
+# Enterprise Team OTET Provisioning (Enrollment & Sentry Daemon)
 $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
 $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-irm https://vexasec.io/install.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
 ```
 
 Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.
@@ -76,6 +76,43 @@ Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter 
 > ```powershell
 > python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 > ```
+
+### One-Command IDE Protection (`agentwall protect`)
+
+After installing AgentWall, you can secure your entire AI development environment in a single command. `agentwall protect` automatically discovers all supported IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity), creates timestamped config backups, injects the proxy, starts the gateway, and opens the Local Dashboard in your browser:
+
+**macOS / Linux:**
+```bash
+agentwall protect
+
+# Preview all changes before writing (dry run)
+agentwall protect --dry-run
+
+# Start immediately in enforce (active blocking) mode
+agentwall protect --enforce
+```
+
+**Windows (PowerShell):**
+```powershell
+agentwall.exe protect
+agentwall.exe protect --dry-run
+agentwall.exe protect --enforce
+```
+
+To restore all IDE configurations from their backups:
+```bash
+agentwall unprotect           # macOS / Linux
+agentwall.exe unprotect       # Windows
+agentwall.exe unprotect --force  # Skip backup integrity check (emergency recovery)
+```
+
+**Local Dashboard highlights** (auto-opens at `http://127.0.0.1:8080`):
+- 🔄 **Shadow ↔ Enforce toggle** — switch security posture live without restarting
+- 💰 **Live Spend** — real-time LLM token cost accumulator
+- 🛡 **Risks Blocked** — live count of denied injections, sensitive reads, and policy violations
+- 🎯 **Mission Mode** — guided test: ask your AI to read `/etc/shadow` to prove real-time blocking
+- 🪄 **Quick Policy** — one-click security rule generator per tool in the inventory table
+
 
 <!--
 ### Client SDKs (Python)

@@ -6,29 +6,29 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
-  # Local developer mode
-  curl -fsSL https://vexasec.io/install.sh | bash
+  # Standalone CLI Developer Workstation
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash
 
-  # Or automated enterprise enrollment with remote Control Hub (Custom URL & Port):
-  curl -fsSL https://vexasec.io/install.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+  # Or automated Team OTET enterprise enrollment with remote Control Hub:
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
 
   agentwall --version
   ```
 * **Windows (PowerShell):**
   ```powershell
-  # Local developer mode
-  irm https://vexasec.io/install.ps1 | iex
+  # Standalone CLI Developer Workstation
+  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex
 
-  # Or automated enterprise enrollment with remote Control Hub (Custom URL & Port):
+  # Or automated Team OTET enterprise enrollment with remote Control Hub:
   $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
   $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-  irm https://vexasec.io/install.ps1 | iex
+  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
 
   agentwall.exe --version
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  curl.exe -fsSL https://vexasec.io/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 -o cli.ps1 && powershell -ExecutionPolicy Bypass -File cli.ps1
   agentwall.exe --version
   ```
 
@@ -39,24 +39,27 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
 
 ---
 
-## Step 1: Start the AgentWall Proxy
+## Step 1: Secure Your IDE & Start Gateway
 
-First, start AgentWall in **developer mode** (shadow proxy). In this mode, AgentWall watches the traffic between Claude Desktop and your computer without blocking calls yet:
+Run `agentwall protect` to automatically discover and wrap your installed AI IDEs, start the local gateway proxy, and open the embedded dashboard in your default browser:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
-  agentwall dev
+  agentwall protect
   ```
 * **Windows (PowerShell):**
   ```powershell
-  agentwall.exe dev
+  agentwall.exe protect
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  agentwall.exe dev
+  agentwall.exe protect
   ```
 
-*AgentWall is now running and listening on `http://127.0.0.1:8080` (and opens the embedded browser dashboard at `http://127.0.0.1:8080`).*
+*AgentWall is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
+
+> [!NOTE]
+> **Advanced Usage (`agentwall dev`):** To run the shadow proxy server manually without auto-wrapping your IDE configurations, use `agentwall dev`. See [Advanced Usage](#advanced-usage-manual-testing-with-agentwall-dev).
 
 ---
 
@@ -80,6 +83,15 @@ Open a **new, separate terminal window** and run the integration command:
   agentwall.exe status
   ```
 *(This command updates Claude Desktop's configuration file so its MCP tool traffic routes through the proxy. Running `agentwall status` verifies the wrapping status).*
+
+> [!TIP]
+> **New one-command option:** Instead of wrapping individual IDEs, you can use `agentwall protect` to auto-discover and wrap all supported IDEs simultaneously, start the gateway, and open the dashboard in one step:
+> ```bash
+> agentwall protect          # macOS / Linux
+> agentwall.exe protect      # Windows
+> agentwall protect --dry-run  # Preview all changes without writing
+> ```
+> To undo everything at once: `agentwall unprotect`
 
 ---
 
@@ -116,7 +128,7 @@ When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard 
 
 | Panel | Purpose & Description (Plain English) |
 | :--- | :--- |
-| **01. Tool Inventory** | Overview of all AI tools/APIs your agent has called, tracking total calls, last execution time, and safety risk tiers. |
+| **01. Tool Inventory** | Overview of all AI tools/APIs your agent has called, tracking total calls, last execution time, and safety risk tiers. Each tool has a 🪄 **Quick Policy** button to apply a standard security rule instantly. |
 | **02. Session Timeline** | Real-time live log of every single request, command, and tool call executed by your AI agent in chronological order. |
 | **03. Parameter Explorer** | Select any observed tool to inspect the exact input arguments, text strings, commands, or file paths passed by your agent, including inferred data types and detected data patterns. |
 | **04. Risk Flags** | Automatically flags high-risk tool operations (such as system file edits or command executions) requiring oversight. |
@@ -125,6 +137,12 @@ When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard 
 | **07. Semantic Scanner** | Uses behavioral analysis to flag unusual or out-of-context tool requests that differ from normal agent interaction patterns. |
 | **08. Generate Policy** | Automatically generates a baseline security policy (`agentwall-policy.yaml`) based on real observed agent traffic. |
 | **09. ADR Benchmark** | Standardized benchmark testing your agent's defense readiness against 303 security test cases across 17 attack categories. |
+
+**Dashboard highlights:**
+- **Security Posture Toggle** — Use the SHADOW ↔ ENFORCE switch in the sidebar to enable active blocking without restarting the proxy.
+- **Live Spend** — Tracks estimated LLM token cost in real-time (`$0.000` initially, accumulates as tool calls flow through).
+- **Risks Blocked** — Live counter of denied tool calls (injections, sensitive path reads, policy violations).
+- **Mission Mode Banner** — Guided test: ask your AI to read `/etc/shadow` to prove real-time detection and blocking.
 
 ---
 
@@ -233,16 +251,41 @@ AgentWall will immediately intercept and **block** the tool request (`403 Forbid
 
 ---
 
+## Advanced Usage: Manual Testing with `agentwall dev`
+
+The `agentwall dev` command starts the standalone shadow proxy server on `http://127.0.0.1:8080` without triggering automated IDE discovery or configuration wrapping. Use `agentwall dev` when:
+- Testing custom HTTP/stdio agents directly with environment variables (`AGENTWALL_PROXY_URL=http://127.0.0.1:8080`)
+- Wrapping an isolated stdio command line (`agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace`)
+- Running interactive shadow observation sessions without modifying disk configs
+
+```bash
+# Start standalone shadow proxy on 127.0.0.1:8080
+agentwall dev
+
+# Wrap a single stdio tool process directly
+agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+```
+
+---
+
 ## Step 6: Clean Up (Optional)
 
 If you ever want to remove AgentWall from Claude Desktop and return to normal, simply run:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
+  # Remove from a single IDE:
   agentwall unwrap claude
+
+  # Or restore ALL IDEs at once (if you used 'agentwall protect'):
+  agentwall unprotect
   ```
 * **Windows (PowerShell / CMD):**
   ```powershell
   agentwall.exe unwrap claude
+  # Or:
+  agentwall.exe unprotect
   ```
 
+> [!NOTE]
+> `agentwall unprotect` verifies backup integrity before restoring each config. Use `--force` to skip verification if you need emergency recovery.

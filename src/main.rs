@@ -374,6 +374,39 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             },
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
+        Commands::Protect {
+            dry_run,
+            no_browser,
+            listen,
+            mcp_url,
+            enforce,
+            policy,
+        } => {
+            let code = agentwall::wrap::run_protect_orchestration(
+                dry_run,
+                no_browser,
+                &listen,
+                &mcp_url,
+                enforce,
+                &policy,
+            );
+            if code != 0 || dry_run {
+                return code;
+            }
+            run_dev(
+                listen,
+                mcp_url,
+                false,
+                true,
+                enforce,
+                false,
+                false,
+                "http://localhost:11434".to_string(),
+                vec![],
+            )
+            .await
+        }
+        Commands::Unprotect { dry_run, force } => agentwall::wrap::run_unprotect_all(dry_run, force),
         Commands::Status => agentwall::wrap::run_status(),
         Commands::Watch { all, target } => agentwall::wrap::run_watch(all, target),
         Commands::StdioProxy {
@@ -540,7 +573,7 @@ async fn run_stdio_proxy(
         agent_pid: None,
         upstream_url: "".to_string(),
         dry_run: false,
-        shadow_mode: false,
+        shadow_mode: std::sync::atomic::AtomicBool::new(false),
         policy_loaded: std::sync::atomic::AtomicBool::new(false),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
@@ -1087,7 +1120,7 @@ async fn run_start(
         agent_pid: resolved_pid,
         upstream_url: mcp_url,
         dry_run,
-        shadow_mode,
+        shadow_mode: std::sync::atomic::AtomicBool::new(shadow_mode),
         policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(rate_limit_val),
         http_client: reqwest::Client::new(),
@@ -1795,7 +1828,7 @@ async fn run_wrap(
         agent_pid: None,
         upstream_url: "".to_string(), // Not used in stdio proxy
         dry_run,
-        shadow_mode: false,
+        shadow_mode: std::sync::atomic::AtomicBool::new(false),
         policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
@@ -2011,7 +2044,7 @@ async fn run_dev(
         dry_run: false,
         // When --enforce is passed, shadow_mode is false → injection/DLP scanners block.
         // Default (no --enforce) keeps the original observation-only behaviour.
-        shadow_mode: !enforce,
+        shadow_mode: std::sync::atomic::AtomicBool::new(!enforce),
         policy_loaded: std::sync::atomic::AtomicBool::new(false),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),

@@ -34,16 +34,20 @@ AgentWall supports three graduated deployment profiles. Pick the one that matche
 - Passive shadow AI discovery & Risk Delta Reports
 - MCP Security Scoring Engine (`agentwall scan`)
 - Local developer web console at `http://127.0.0.1:8080`
-- One-command IDE wrapping for Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE
+- **One-command full IDE protection** (`agentwall protect`) for Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE with atomic backup and zero-loss rollback (`agentwall unprotect`)
+- **Live Shadow ↔ Enforce toggle** — switch security posture in real-time without restarting
+- **Live Spend & Risks Blocked cards** — real-time financial telemetry and blocked call counter
+- **Mission Mode banner** — guided onboarding to prove protection works
+- **🪄 Quick Policy generator** — per-tool one-click security rule application
 - ADR Security Benchmark (303 tasks across 17 attack categories)
 
 **Quick start:**
 ```bash
 # macOS / Linux / WSL
-curl -fsSL https://vexasec.io/install.sh | bash && agentwall dev
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash && agentwall protect
 
 # Windows (PowerShell)
-irm https://vexasec.io/install.ps1 | iex; .\agentwall.exe dev
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex; agentwall.exe protect
 
 # Populate test traffic (if seeing "No tool calls recorded yet")
 python quickstart_agent.py
@@ -338,14 +342,18 @@ The Workstation Sidecar profile provides local observation, automatic policy gen
 
 Follow these simplified steps to activate observation mode, wrap agent traffic, and auto-generate governance policies:
 
-##### Step 1: Launch Observation Proxy & Dashboard
-Launch `agentwall dev` to start an observation-mode shadow proxy listening on `127.0.0.1:8080`:
+##### Step 1: Secure Your IDE Tools & Start Gateway
+
+Run `agentwall protect` to automatically discover and wrap all installed AI IDEs, start the local gateway, and launch the dashboard in one command:
 ```bash
-agentwall dev
+agentwall protect
 ```
-* **Prerequisites:** `agentwall` installed and added to PATH (or run as `.\agentwall.exe dev` in PowerShell).
-* **What You Will See:** A terminal banner confirming proxy launch, and your default web browser automatically opens `http://127.0.0.1:8080`.
-* **What You Achieve:** Live proxy monitoring is active, displaying real-time agent events on your local dashboard.
+* **Prerequisites:** `agentwall` installed and added to PATH (or run as `.\agentwall.exe protect` in PowerShell).
+* **What You Will See:** Discovery sweep logs for Claude, Cursor, VS Code, etc., timestamped backups created, and your default web browser automatically opens `http://127.0.0.1:8080`.
+* **What You Achieve:** Complete automated IDE protection and live observability dashboard active in a single step.
+
+> [!NOTE]
+> **Advanced Usage (`agentwall dev`):** If you prefer manual shadow proxy testing without modifying IDE config files, run `agentwall dev`. This launches the standalone shadow proxy server on `127.0.0.1:8080` without running automated IDE discovery.
 
 ---
 

@@ -187,6 +187,9 @@ if [[ -n "$TOKEN" ]]; then
   echo "[✓] Automated Enterprise Provisioning Completed!"
 fi
 
+echo "To secure all your AI IDE tools and start the gateway:"
+echo "  agentwall protect"
+echo ""
 echo "To run the demo test script (requires Python 3.8+):"
 echo "  python3 \$HOME/.local/bin/quickstart_agent.py"
 echo ""

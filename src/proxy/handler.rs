@@ -82,7 +82,7 @@ pub struct ProxyState {
     pub agent_pid: Option<u32>,
     pub upstream_url: String,
     pub dry_run: bool,
-    pub shadow_mode: bool,
+    pub shadow_mode: std::sync::atomic::AtomicBool,
     /// FR-113: Whether a policy file was successfully loaded
     pub policy_loaded: std::sync::atomic::AtomicBool,
     pub rate_limiter: RateLimiter,
@@ -482,7 +482,7 @@ pub async fn evaluate_jsonrpc(
     let params_str = tool_params.to_string();
     let dlp_findings = state.dlp_scanner.scan_content(&params_str);
     if !dlp_findings.is_empty() {
-        if state.shadow_mode {
+        if state.shadow_mode.load(Ordering::Relaxed) {
             logging::log_event(
                 Level::Warn,
                 "dlp_finding",
@@ -586,7 +586,7 @@ pub async fn evaluate_jsonrpc(
         let session_id_clone = session.session_id.clone();
         let semantic_scanner = state.semantic_scanner.clone();
         let db_manager = state.db_manager.clone();
-        let shadow_mode = state.shadow_mode;
+        let shadow_mode = state.shadow_mode.load(Ordering::Relaxed);
 
         // Fire and forget async evaluation
         tokio::spawn(async move {
@@ -625,7 +625,7 @@ pub async fn evaluate_jsonrpc(
     // Scope header comes from the MCP agent via X-AgentWall-Credential-Scope.
     // In WARN mode (default): mismatches are logged and the call continues.
     // In STRICT mode (--strict-credential-scope): mismatches cause hard DENY.
-    if !state.shadow_mode {
+    if !state.shadow_mode.load(Ordering::Relaxed) {
         let required_scopes: Vec<String> = {
             let policy_guard = state.policy.read().unwrap_or_else(|e| e.into_inner());
             policy_guard

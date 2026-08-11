@@ -867,6 +867,57 @@
         grid-template-columns: repeat(2, 1fr);
       }
     }
+
+    /* ── FR-2.1: Mode Toggle Switch ── */
+    .mode-toggle-switch {
+      position: relative; display: inline-block;
+      width: 40px; height: 20px; cursor: pointer;
+    }
+    .mode-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .mode-toggle-slider {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .mode-toggle-slider::before {
+      content: ''; position: absolute;
+      height: 14px; width: 14px;
+      left: 2px; top: 2px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.3s, background 0.3s;
+    }
+    .mode-toggle-switch input:checked + .mode-toggle-slider {
+      background: rgba(248,81,73,0.25);
+      border-color: var(--red);
+    }
+    .mode-toggle-switch input:checked + .mode-toggle-slider::before {
+      transform: translateX(20px);
+      background: var(--red);
+    }
+
+    /* ── FR-2.4: Quick-rule Wand Button ── */
+    .quick-rule-btn {
+      background: rgba(83,155,245,0.1);
+      border: 1px solid rgba(83,155,245,0.25);
+      border-radius: 6px; padding: 3px 8px;
+      font-size: 1rem; cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+      color: var(--accent);
+    }
+    .quick-rule-btn:hover {
+      background: rgba(83,155,245,0.25);
+      transform: scale(1.15) rotate(-10deg);
+    }
+    .quick-rule-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* ── FR-2.3: Mission Banner pulse ── */
+    @keyframes missionPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(83,155,245,0.0); }
+      50% { box-shadow: 0 0 0 4px rgba(83,155,245,0.15); }
+    }
   </style>
 </head>
 
@@ -878,10 +929,17 @@
       <div class="logo-vexa">VEXA</div>
       <div class="logo-name">AgentWall</div>
       <div class="logo-tag">Local Observability Proxy</div>
-      <div class="shadow-badge"
-        title="Shadow Mode: Tool calls and security policies are audited without blocking agent traffic. Run with --enforce to enable active blocking.">
-        <span class="shadow-dot"></span>
-        SHADOW MODE
+      <!-- FR-2.1: Interactive Security Posture Toggle -->
+      <div id="mode-toggle-wrap" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span id="mode-toggle-label" style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);">SHADOW</span>
+          <label class="mode-toggle-switch" title="Toggle between Shadow (audit-only) and Enforce (active blocking) mode">
+            <input type="checkbox" id="mode-toggle-input" onchange="toggleSecurityMode(this.checked)">
+            <span class="mode-toggle-slider"></span>
+          </label>
+          <span style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);">ENFORCE</span>
+        </div>
+        <div id="mode-toggle-status" style="font-size:0.68rem; color:var(--text-muted);">Audit-only — no blocking active</div>
       </div>
     </div>
 
@@ -966,6 +1024,16 @@
             <div class="stat-label">Risk Flags</div>
             <div class="stat-value red" id="stat-risks">—</div>
           </div>
+          <!-- FR-2.2: Risks Blocked counter -->
+          <div class="stat-card" style="border-color:rgba(248,81,73,0.35); background:rgba(248,81,73,0.07);">
+            <div class="stat-label" style="color:#f86161;">🛡 Risks Blocked</div>
+            <div class="stat-value red" id="stat-risks-blocked">0</div>
+          </div>
+          <!-- FR-2.2: Live Spend card -->
+          <div class="stat-card" style="border-color:rgba(210,153,34,0.35); background:rgba(210,153,34,0.07);">
+            <div class="stat-label" style="color:var(--amber);">💰 Live Spend</div>
+            <div class="stat-value" id="stat-live-spend" style="color:var(--amber);">$0.000</div>
+          </div>
           <div class="stat-card">
             <div class="stat-label">Risk Delta (Shadow)</div>
             <div class="stat-value yellow" id="stat-shadow-delta">0</div>
@@ -992,6 +1060,32 @@
           </div>
         </div>
 
+        <!-- FR-2.3: Mission Mode Guided Onboarding Banner -->
+        <div id="mission-banner" style="
+          display:flex; align-items:flex-start; gap:14px;
+          margin-bottom:16px; padding:16px 20px;
+          background:linear-gradient(135deg,rgba(83,155,245,0.12),rgba(130,80,255,0.10));
+          border:1px solid rgba(83,155,245,0.35); border-radius:10px;
+          animation: missionPulse 3s ease-in-out infinite;
+        ">
+          <div style="font-size:1.6rem; line-height:1;">🎯</div>
+          <div style="flex:1;">
+            <div style="font-weight:700; font-size:0.85rem; color:var(--accent); letter-spacing:0.05em; margin-bottom:4px;">MISSION MODE — Prove AgentWall Works</div>
+            <div style="font-size:0.8rem; color:var(--text-bright); line-height:1.5;">
+              Open Cursor or Claude Desktop and ask your AI assistant to <strong style="color:#ffe066;">"read the file /etc/shadow"</strong>. AgentWall should detect and block the sensitive path traversal in real-time.
+            </div>
+            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+              <span class="badge blue" style="font-size:0.68rem;">STEP 1</span> <span style="font-size:0.75rem; color:var(--text-muted);">Ask AI to read /etc/shadow</span>
+              <span class="badge amber" style="font-size:0.68rem;">STEP 2</span> <span style="font-size:0.75rem; color:var(--text-muted);">Watch Risks Blocked counter increment</span>
+              <span class="badge green" style="font-size:0.68rem;">STEP 3</span> <span style="font-size:0.75rem; color:var(--text-muted);">Switch to ENFORCE to actively block</span>
+            </div>
+          </div>
+          <button onclick="document.getElementById('mission-banner').style.display='none'" style="
+            background:transparent; border:none; color:var(--text-muted); font-size:1.1rem;
+            cursor:pointer; padding:2px 6px; border-radius:4px; flex-shrink:0;
+          " title="Dismiss">✕</button>
+        </div>
+
         <div class="card" style="padding: 0; overflow: hidden;">
           <div class="table-wrap">
             <table id="tbl-inventory">
@@ -1001,11 +1095,12 @@
                   <th>Calls</th>
                   <th>Last Called</th>
                   <th>Risk Tier</th>
+                  <th style="text-align:center;">Quick Policy</th>
                 </tr>
               </thead>
               <tbody id="inv-body">
                 <tr>
-                  <td colspan="4">
+                  <td colspan="5">
                     <div class="empty-state">
                       <span class="empty-icon">👁</span>
                       <h3>Awaiting incoming tool calls</h3>
@@ -1839,6 +1934,10 @@ const tool = client.governed("name", async (args) =&gt; {
     let retryTimer = null;
     let tlFilterText = '';
 
+    // FR-2.2: Financial telemetry state
+    let risksBlockedCount = 0;
+    let liveSpendUsd = 0.0;
+
     // ── FR-5 Gateway Panel State ───────────────────────────────────────────────
     let gwBlockedCalls = [];
     let gwStatusPollTimer = null;
@@ -2267,7 +2366,7 @@ const tool = client.governed("name", async (args) =&gt; {
 
       const body = document.getElementById('inv-body');
       if (Object.keys(toolMap).length === 0) {
-        body.innerHTML = `<tr><td colspan="4"><div class="empty-state">
+        body.innerHTML = `<tr><td colspan="5"><div class="empty-state">
       <span class="empty-icon">👁</span>
       <h3>No tool calls recorded yet</h3>
       <p>Start your AI agent and point it to the proxy.</p>
@@ -2280,11 +2379,15 @@ const tool = client.governed("name", async (args) =&gt; {
         .sort((a, b) => b[1].count - a[1].count)
         .map(([tool, info]) => {
           const rt = riskTier(tool);
+          // FR-2.4: Magic Wand quick-policy button
           return `<tr>
         <td class="tool-name">${escHtml(tool)}</td>
         <td><strong>${info.count}</strong></td>
         <td class="ts">${fmtTime(info.last)}</td>
         <td><span class="badge ${rt.cls}">${rt.label}</span></td>
+        <td style="text-align:center;">
+          <button class="quick-rule-btn" title="Apply standard security policy for this tool" onclick="applyQuickRule('${escHtml(tool)}', this)">🪄</button>
+        </td>
       </tr>`;
         }).join('');
       body.innerHTML = rows;
@@ -2980,6 +3083,29 @@ const tool = client.governed("name", async (args) =&gt; {
             return;
           }
 
+          // FR-2.1: Real-time mode toggle sync via WebSocket/SSE
+          if (event.event === 'mode_changed') {
+            const isEnforce = event.mode === 'enforce';
+            const toggle = document.getElementById('mode-toggle-input');
+            if (toggle) toggle.checked = isEnforce;
+            updateModeToggleUI(isEnforce, /*fromServer=*/true);
+            return;
+          }
+
+          // FR-2.2: Accumulate risks blocked from denied events
+          if (event.verdict === 'deny') {
+            risksBlockedCount++;
+            const el = document.getElementById('stat-risks-blocked');
+            if (el) el.textContent = risksBlockedCount;
+          }
+
+          // FR-2.2: Accumulate live spend from token usage
+          if (event.token_cost_usd != null) {
+            liveSpendUsd += parseFloat(event.token_cost_usd) || 0;
+            const el = document.getElementById('stat-live-spend');
+            if (el) el.textContent = '$' + liveSpendUsd.toFixed(3);
+          }
+
           addTimelineRow(event);
           // Also update allEvents for other panels
           allEvents.push(event);
@@ -3100,6 +3226,70 @@ const tool = client.governed("name", async (args) =&gt; {
     });
 
 
+    // ── FR-2.1: Mode Toggle Functions ─────────────────────────────────────────
+    async function toggleSecurityMode(isEnforce) {
+      updateModeToggleUI(isEnforce, false);
+      try {
+        const res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: isEnforce ? 'enforce' : 'shadow' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(isEnforce ? '🛡 ENFORCE mode active — blocking enabled' : '👁 SHADOW mode — audit only', isEnforce ? 'error' : 'info');
+          pollGatewayStatus();
+        } else {
+          toast('Mode switch failed: ' + (data.error || res.status), 'error');
+          // Revert toggle on failure
+          const toggle = document.getElementById('mode-toggle-input');
+          if (toggle) { toggle.checked = !isEnforce; updateModeToggleUI(!isEnforce, false); }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        const toggle = document.getElementById('mode-toggle-input');
+        if (toggle) { toggle.checked = !isEnforce; updateModeToggleUI(!isEnforce, false); }
+      }
+    }
+
+    function updateModeToggleUI(isEnforce, fromServer) {
+      const statusEl = document.getElementById('mode-toggle-status');
+      const labelEl = document.getElementById('mode-toggle-label');
+      const wrapEl = document.getElementById('mode-toggle-wrap');
+      if (isEnforce) {
+        if (statusEl) { statusEl.textContent = '🛡 Active blocking — ENFORCE'; statusEl.style.color = 'var(--red)'; }
+        if (labelEl) { labelEl.style.color = 'var(--text-muted)'; }
+        if (wrapEl) wrapEl.style.borderLeft = '2px solid var(--red)';
+      } else {
+        if (statusEl) { statusEl.textContent = 'Audit-only — no blocking active'; statusEl.style.color = 'var(--text-muted)'; }
+        if (labelEl) { labelEl.style.color = 'var(--text-muted)'; }
+        if (wrapEl) wrapEl.style.borderLeft = '2px solid var(--border)';
+      }
+    }
+
+    // ── FR-2.4: Magic Wand Quick-Policy Generator ──────────────────────────────
+    async function applyQuickRule(toolName, btnEl) {
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
+      try {
+        const res = await fetch('/api/policy/quick-rule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(`✅ Security rule applied for "${toolName}"`, 'success');
+          if (btnEl) { btnEl.textContent = '✅'; btnEl.style.color = 'var(--green)'; }
+        } else {
+          toast('Quick rule failed: ' + (data.error || res.status), 'error');
+          if (btnEl) { btnEl.textContent = '🪄'; btnEl.disabled = false; }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        if (btnEl) { btnEl.textContent = '🪄'; btnEl.disabled = false; }
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
     (async function init() {
       await refresh();
@@ -3107,6 +3297,8 @@ const tool = client.governed("name", async (args) =&gt; {
       connectSSE();
       // Render initial timeline
       renderTimeline(allEvents);
+      // Init toggle UI to shadow
+      updateModeToggleUI(false, false);
     })();
   </script>
 </body>

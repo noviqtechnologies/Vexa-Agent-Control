@@ -41,7 +41,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         agent_pid: None,
         upstream_url: "".to_string(),
         dry_run: false,
-        shadow_mode: false,
+        shadow_mode: std::sync::atomic::AtomicBool::new(false),
         policy_loaded: AtomicBool::new(true),
         rate_limiter: RateLimiter::new(0),
         http_client: reqwest::Client::new(),

@@ -178,7 +178,7 @@ pub async fn run_stdio_bridge(
 
     let mut child = command.spawn()?;
 
-    if state.shadow_mode {
+    if state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
         let mut child_stdin = child.stdin.take().expect("Failed to open stdin");
         let mut child_stdout = child.stdout.take().expect("Failed to open stdout");
         let mut agent_stdin = tokio::io::stdin();
@@ -339,7 +339,7 @@ async fn stdio_scan_response(
     tool_name: &str,
 ) -> serde_json::Value {
     // 1. Injection & Poisoning Scan (FR-13)
-    let enforce_mode = !state.shadow_mode;
+    let enforce_mode = !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed);
     let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         state
             .injection_scanner
@@ -651,7 +651,7 @@ async fn stdio_scan_response(
                         "modified": modified_tools,
                     }),
                 );
-                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode {
+                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
                     let id = response
                         .get("id")
                         .cloned()

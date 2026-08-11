@@ -228,8 +228,8 @@ param(
         Write-Host "`n[+] AgentWall $Version installed successfully!" -ForegroundColor $ColorGreen
     }
     Write-Host "Get started by running:"
+    Write-Host "  agentwall protect" -ForegroundColor $ColorGreen
     Write-Host "  agentwall --version"
-    Write-Host "  agentwall dev"
     Write-Host ""
     Write-Host "To run the demo test script (requires Python 3.8+):" -ForegroundColor $ColorCyan
     Write-Host "  python '$env:USERPROFILE\.local\bin\quickstart_agent.py'" -ForegroundColor $ColorCyan

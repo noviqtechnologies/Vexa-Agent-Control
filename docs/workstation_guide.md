@@ -61,7 +61,12 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://vexasec.io/install.sh | bash
+# Standalone CLI Developer Workstation
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash
+
+# Or automated Team OTET enterprise enrollment:
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-ENTERPRISE-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+
 agentwall --version
 ```
 
@@ -108,13 +113,13 @@ agentwall service status
 ### Windows (PowerShell)
 
 ```powershell
-# Standard local developer mode
-irm https://vexasec.io/install.ps1 | iex
+# Standalone CLI Developer Workstation
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex
 
-# Or automated enterprise enrollment with remote Control Hub:
+# Or automated Team OTET enterprise enrollment:
 $env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN"
 $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-irm https://vexasec.io/install.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
 
 agentwall.exe --version
 ```
@@ -256,16 +261,26 @@ agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "%US
 
 AgentWall automatically patches the MCP configuration file of the target IDE — no manual JSON editing required. Supported targets:
 
-| IDE / Client | Wrap Command |
-|---|---|
-| Claude Desktop | `agentwall wrap claude` |
-| Cursor | `agentwall wrap cursor` |
-| VS Code | `agentwall wrap vscode` |
-| JetBrains IDEs | `agentwall wrap jetbrains` |
-| Zed | `agentwall wrap zed` |
-| Cline | `agentwall wrap cline` |
-| OpenCode | `agentwall wrap opencode` |
-| Antigravity IDE | `agentwall wrap antigravity` |
+> [!TIP]
+> **One-command protection:** Instead of wrapping IDEs one by one, use `agentwall protect` to discover and wrap **all** supported IDEs simultaneously, start the gateway, and open the dashboard:
+> ```bash
+> agentwall protect             # macOS / Linux — wraps all IDEs in one pass
+> agentwall.exe protect         # Windows
+> agentwall protect --dry-run   # Preview changes without writing to disk
+> agentwall protect --enforce   # Start immediately in active-blocking mode
+> ```
+> To restore every IDE to its original config: `agentwall unprotect` (verifies backup integrity before restoring).
+
+| IDE / Client | Wrap Command | Unprotect |
+|---|---|---|
+| Claude Desktop | `agentwall wrap claude` | `agentwall unwrap claude` |
+| Cursor | `agentwall wrap cursor` | `agentwall unwrap cursor` |
+| VS Code | `agentwall wrap vscode` | `agentwall unwrap vscode` |
+| JetBrains IDEs | `agentwall wrap jetbrains` | `agentwall unwrap jetbrains` |
+| Zed | `agentwall wrap zed` | `agentwall unwrap zed` |
+| Cline | `agentwall wrap cline` | `agentwall unwrap cline` |
+| OpenCode | `agentwall wrap opencode` | `agentwall unwrap opencode` |
+| Antigravity IDE | `agentwall wrap antigravity` | `agentwall unwrap antigravity` |
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
