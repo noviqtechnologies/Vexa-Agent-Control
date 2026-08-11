@@ -411,7 +411,8 @@ Gateway                                               Control Hub API
 
 | Event | Handler Behavior |
 |---|---|
-| `policy_update` | Atomic in-memory hot-swap (`ArcSwap`) without dropping active agent TCP connections |
+| `policy_update` | Atomic in-memory policy swap (via `RwLock<Option<CompiledPolicy>>`); **new sessions** immediately evaluate against the updated ruleset; in-flight sessions complete under the prior policy |
+
 | `credential_rotation` | Signals key rotation — gateway fetches updated ciphertext from `GET /api/v1/credentials/:provider` |
 | `: ping` | Sent every 15 seconds. No ping within 30 seconds triggers warning and exponential backoff reconnect |
 

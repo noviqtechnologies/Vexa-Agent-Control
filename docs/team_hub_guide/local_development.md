@@ -222,8 +222,11 @@ curl.exe -i http://localhost:8400/healthz
 Open `http://localhost:8081` in your browser.
 
 **Local Development Credentials (`DEV_MODE`):**
-- **Username:** `admin`
+- **Email:** `admin`
 - **Password:** `admin` (or any string in local dev mode)
+
+> [!NOTE]
+> The login API expects an `email` field (not `username`). Using any other field name returns 401 even with the correct value.
 
 ---
 
@@ -253,7 +256,13 @@ curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-sess
 ```
 
 > [!NOTE]
-> **Expected Behavior:** If no upstream MCP server (e.g. at `http://127.0.0.1:3000`) is running, the gateway will evaluate policy, write the audit log entry, and return `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`. This upstream network error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
+> **Expected Behavior:** If no upstream MCP server is running, the gateway will evaluate policy, write the audit log entry, and return an upstream network error. The exact URL in the error differs by deployment mode:
+> - **Native gateway** (running on the host): `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`
+> - **Containerised gateway** (Docker Compose `gateway` service): the upstream URL uses the Docker DNS name configured by `AGENTWALL_LISTEN`, e.g. `http://0.0.0.0:8080/`
+>
+> Either way, the upstream error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
+>
+> **Heartbeat 404 note:** A native gateway connecting to the Compose stack's `/api/v1/ingest/heartbeat` may return **404** if the gateway's `GATEWAY_SECRET` does not match the stack's secret. This is expected when running without a valid OTET-enrolled device token — the audit log entry is still recorded.
 
 #### Verify Audit Log Integrity:
 
@@ -281,7 +290,12 @@ agentwall.exe verify-log .\team-audit.log
 .\target\debug\agentwall.exe verify-log .\team-audit.log
 ```
 
-**Expected Output:** `Audit log verification complete: Hash chain intact. 0 tampered entries.`
+**Expected Output:**
+```text
+ℹ Verifying log chain integrity for team-audit.log... VALID
+  ✓ N entries found, cryptographic chain intact.
+```
+*(Where `N` is the number of MCP tool-call audit entries recorded during the session.)*
 
 ---
 
