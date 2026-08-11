@@ -187,6 +187,13 @@ param(
     if (-not $HubUrl) { $HubUrl = $env:DASHBOARD_API_URL }
     if (-not $HubUrl) { $HubUrl = "http://localhost:8400" }
 
+    # Clean and normalize HubUrl (strip duplicate schemas and trailing slashes)
+    $HubUrl = $HubUrl.Trim()
+    while ($HubUrl -match '^https?:\/\/(https?:\/\/.*)$') {
+        $HubUrl = $matches[1]
+    }
+    $HubUrl = $HubUrl.TrimEnd('/')
+
     if ($Token) {
         Write-Host "`n[*] Initializing Enterprise Device Governance..." -ForegroundColor $ColorCyan
         Write-Host "[*] Setting machine environment variable DASHBOARD_API_URL=$HubUrl..." -ForegroundColor $ColorCyan
@@ -204,10 +211,10 @@ param(
         } catch { }
 
         try {
-            Start-Service -Name "AgentWallSentry" -ErrorAction Stop
+            Restart-Service -Name "AgentWallSentry" -Force -ErrorAction Stop
             Write-Host "[*] Started AgentWallSentry service successfully." -ForegroundColor $ColorGreen
         } catch {
-            Write-Host "[!] Note: Could not start service automatically: $_" -ForegroundColor $ColorYellow
+            Write-Host "[!] Note: Could not restart service automatically: $_" -ForegroundColor $ColorYellow
         }
 
         Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan

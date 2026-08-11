@@ -762,6 +762,40 @@ pub struct StartArgs {
     pub centralized: bool,
 }
 
+impl StartArgs {
+    pub fn centralized_default() -> Self {
+        Self {
+            policy: None,
+            listen: "127.0.0.1:8080".to_string(),
+            log_path: "audit.log".to_string(),
+            mcp_url: "http://127.0.0.1:3000".to_string(),
+            agent_pid: None,
+            agent_pid_file: None,
+            kill_mode: "connection".to_string(),
+            log_max_bytes: 104857600,
+            dry_run: false,
+            rate_limit: None,
+            oidc_issuer: None,
+            report_path: None,
+            balanced: false,
+            strict: false,
+            scan_responses: false,
+            block_on_secrets: false,
+            max_scan_bytes: 1048576,
+            siem_backend: "local".to_string(),
+            siem_endpoint: String::new(),
+            siem_token: String::new(),
+            siem_timeout_secs: 2,
+            include_params: false,
+            shadow_mode: false,
+            strict_credential_scope: false,
+            tls_cert: None,
+            tls_key: None,
+            centralized: true,
+        }
+    }
+}
+
 #[derive(clap::Args, Debug, Clone)]
 pub struct WrapArgs {
     /// The command to wrap (e.g. "npx @modelcontextprotocol/server-memory")

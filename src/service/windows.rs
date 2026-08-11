@@ -3,6 +3,23 @@
 #[cfg(windows)]
 use colored::*;
 
+fn sanitize_url(url: &str) -> String {
+    let mut s = url.trim().to_string();
+    while s.starts_with("http://http://") {
+        s = s.replacen("http://http://", "http://", 1);
+    }
+    while s.starts_with("https://https://") {
+        s = s.replacen("https://https://", "https://", 1);
+    }
+    while s.starts_with("http://https://") {
+        s = s.replacen("http://https://", "https://", 1);
+    }
+    while s.starts_with("https://http://") {
+        s = s.replacen("https://http://", "http://", 1);
+    }
+    s.trim_end_matches('/').to_string()
+}
+
 #[cfg(windows)]
 pub fn install_windows_service(
     bin_path: &str,
@@ -13,6 +30,8 @@ pub fn install_windows_service(
 ) -> Result<(), String> {
     use std::ffi::OsStr;
     use windows_service::{service::*, service_manager::*};
+
+    let clean_hub_url = sanitize_url(hub_url);
 
     println!("  Connecting to Windows Service Control Manager (SCM)...");
     let manager = ServiceManager::local_computer(
@@ -31,7 +50,7 @@ pub fn install_windows_service(
     // New processes (including the SCM-spawned service) inherit these immediately.
     // Doing this before service.start() ensures Sentry reads the correct secrets on first boot.
     let _ = std::process::Command::new("setx")
-        .args(&["/M", "DASHBOARD_API_URL", hub_url])
+        .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
         .output();
     let _ = std::process::Command::new("setx")
         .args(&["/M", "GATEWAY_SECRET", gateway_secret])
@@ -202,6 +221,30 @@ pub mod service_dispatcher_handler {
             wait_hint: Duration::default(),
             process_id: None,
         });
+    }
+
+    pub fn try_register_scm_runner<F>(run_fn: F) -> bool
+    where
+        F: FnOnce() -> i32 + Send + 'static,
+    {
+        if let Ok(mut guard) = SERVICE_RUNNER.lock() {
+            *guard = Some(Box::new(run_fn));
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_start_and_wait() -> Result<i32, windows_service::Error> {
+        service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        Ok(EXIT_CODE.load(Ordering::SeqCst))
+    }
+
+    pub fn start_and_wait() -> i32 {
+        match try_start_and_wait() {
+            Ok(code) => code,
+            Err(_) => 1,
+        }
     }
 
     pub fn run_service<F>(run_fn: F) -> Result<i32, windows_service::Error>

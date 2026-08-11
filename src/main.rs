@@ -29,6 +29,37 @@ use policy::safe_mode::SafeModeScanner;
 use proxy::handler::ProxyState;
 
 fn main() {
+    // ── Windows SCM fast-path ──────────────────────────────────────────────
+    // service_dispatcher::start() MUST be called from the main thread before
+    // any heavy setup.  SCM will kill the process with Error 1053 (timeout)
+    // if we don't connect within ~30 s.  We detect the SCM environment by
+    // attempting to start the dispatcher; if it returns an error it means we
+    // are running interactively, so fall through to normal startup.
+    #[cfg(target_os = "windows")]
+    {
+        use agentwall::service::windows::service_dispatcher_handler;
+        let registered = service_dispatcher_handler::try_register_scm_runner(|| {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_stack_size(8 * 1024 * 1024)
+                .build()
+                .expect("Failed to build service Tokio runtime");
+            rt.block_on(async {
+                dispatch_command(Box::new(agentwall::cli::Commands::Start(Box::new(
+                    agentwall::cli::StartArgs::centralized_default(),
+                ))))
+                .await
+            })
+        });
+        if registered {
+            // Only exit if service_dispatcher::start actually succeeded in connecting to SCM.
+            // If it returns Err (e.g. error code 1063 when run interactively), fall through!
+            if let Ok(code) = service_dispatcher_handler::try_start_and_wait() {
+                std::process::exit(code);
+            }
+        }
+    }
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)
@@ -113,19 +144,8 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentwall::service::run_service(act)
         }
         Commands::Start(args) => {
-            #[cfg(target_os = "windows")]
-            {
-                let args_clone = args.clone();
-                let handle = tokio::runtime::Handle::current();
-                let maybe_code = tokio::task::block_in_place(|| {
-                    agentwall::service::windows::run_as_windows_service_if_present(move || {
-                        handle.block_on(dispatch_start(*args_clone))
-                    })
-                });
-                if let Some(code) = maybe_code {
-                    return code;
-                }
-            }
+            // When running interactively (not under Windows SCM), just run the
+            // centralized daemon directly.
             dispatch_start(*args).await
         }
         Commands::Test {
