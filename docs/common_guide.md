@@ -54,6 +54,17 @@
 
 AgentWall policies use strict, explicit YAML configuration files conforming to the **v2 schema**. AgentWall operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
 
+### Policy Marketplace ("No More Blank YAML")
+
+Writing security policies from scratch can be challenging. AgentWall includes a **Policy Marketplace** in the Web Console (`/policy/marketplace`) with **One-Click Templates**:
+
+- **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration sequences.
+- **Production Data Egress Control**: Locks outbound network requests to internal company domain wildcards, enables loop prevention firewalls, and enforces MCP schema-drift blocking.
+- **HIPAA & Healthcare Compliance**: Auto-redacts PHI, SSNs, Medical Record Numbers (MRN), and PII across LLM requests and agent responses.
+- **Full Defense in Depth**: Combines developer safety, egress boundaries, and LLM DLP redaction into a comprehensive posture.
+
+Users can preview YAML configurations, apply postures in a single click, or save custom organization templates to PostgreSQL.
+
 ### v2 Policy Architecture
 
 The v2 policy schema organizes security controls into distinct sections:

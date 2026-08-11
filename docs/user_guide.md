@@ -64,6 +64,7 @@ python quickstart_agent.py
 
 **What you get (in addition to all Workstation capabilities):**
 - Centralized policy push via SSE — hot-swap policies across all gateways without restarts
+- **Policy Marketplace & One-Click Templates** (`/policy/marketplace`) — Instant selection of Safe Cursor, Production Data Egress, and HIPAA PII postures
 - OIDC identity binding (Okta, Keycloak, Entra ID, Auth0, Ping)
 - Multi-tenant policy sharding (`agent_project_id`, `agent_task_id`)
 - Vault & LLM provider API key custody — agents never hold raw keys

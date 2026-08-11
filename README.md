@@ -250,6 +250,7 @@ Vexa AgentWall scales seamlessly across three operational deployment profiles:
 | Capability | What it gives you | Workstation Sidecar | Team Control Hub | Enterprise Fleet |
 |---|---|:---:|:---:|:---:|
 | **Default-Deny Policy Engine** | Block unauthorized tool calls and LLM egress unless permitted by policy rules | ✓ | ✓ | ✓ |
+| **Policy Marketplace (One-Click Templates)** | Pre-built security postures (Safe Cursor, Production Data, HIPAA, Enterprise) to eliminate blank YAML friction | ✓ | ✓ | ✓ |
 | **15 Out-of-the-Box Safe Rules** | Pre-configured detection for sensitive paths, exfiltration, persistence, and destructive commands | ✓ | ✓ | ✓ |
 | **9 Prompt Injection Scanners** | Active defense against jailbreaks, instruction overrides, memory poisoning, and tool poisoning | ✓ | ✓ | ✓ |
 | **Dual-Pass DLP Scanning** | Inline regex scanning and redaction for API tokens, private keys, PII, and secrets | ✓ | ✓ | ✓ |
@@ -293,6 +294,11 @@ Provides individual developers with instant, zero-configuration security guardra
 
 Extends governance across engineering teams and staging environments with centralized policy coordination, identity binding, and budget controls.
 
+- **Policy Marketplace ("No More Blank YAML")** — A visual One-Click Template library in the Web Console (`/policy/marketplace`) providing instant security postures:
+  - **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration chains.
+  - **Production Data Egress Control**: Locks outbound requests to internal company domain wildcards, enables cycle detection firewalls, and enforces MCP schema-drift blocking.
+  - **HIPAA & Healthcare Compliance**: Auto-redacts PHI, SSNs, Medical Record Numbers (MRN), and PII across LLM requests and agent responses.
+  - **Custom Team Presets**: Save, version, and persist custom security templates directly to PostgreSQL.
 - **[Central Device Governance Portal](docs/team_hub_guide.md#6-central-device-governance--fleet-health)** — Web Console view (`/admin/devices`) for OTET enrollment token generation, 60s heartbeat monitoring (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and single-device instant revocation.
 - **Centralized Policy Push (SSE)** — Broadcast versioned security policies from the Control Hub to distributed gateway instances in real-time via Server-Sent Events.
 - **OIDC Identity Binding** — Map corporate identity provider JWT group claims (Keycloak, Okta, Entra ID, Auth0, Ping) directly to dynamic policy rulesets.

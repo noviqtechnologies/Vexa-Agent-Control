@@ -150,6 +150,8 @@ When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard 
 
 Now that AgentWall has seen what tools Claude needs to use, we can generate a security policy (a firewall rule) that *only* allows those specific actions and blocks everything else.
 
+> 💡 **No More Blank YAML — Policy Marketplace**: Want to apply a pre-configured security posture instantly without generating or editing YAML? Open **Policy Marketplace** (`/policy/marketplace`) in the Control Hub to choose one-click templates like **Safe Cursor**, **Production Data Egress**, or **HIPAA Compliance**.
+
 In your second terminal window, run:
 
 * **macOS / Linux / WSL (Bash / Zsh):**

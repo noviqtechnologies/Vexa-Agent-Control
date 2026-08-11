@@ -1,19 +1,31 @@
 import { useState, useEffect } from 'react'
-import { api, type Policy } from '../api/client'
+import { useNavigate } from 'react-router-dom'
+import { api, type Policy, type PolicyTemplate } from '../api/client'
 import './PolicyEditor.css'
 
 export default function PolicyEditor() {
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [history, setHistory] = useState<Policy[]>([])
+  const [templates, setTemplates] = useState<PolicyTemplate[]>([])
   const [content, setContent] = useState('')
   const [version, setVersion] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null)
 
+  const navigate = useNavigate()
+
   useEffect(() => {
     fetchPolicy()
+    fetchTemplates()
   }, [])
+
+  const fetchTemplates = async () => {
+    try {
+      const tList = await api.listTemplates()
+      setTemplates(tList || [])
+    } catch { /* ignore */ }
+  }
 
   const fetchPolicy = async () => {
     try {
@@ -114,6 +126,18 @@ firewall:
     }
   }
 
+  const handleTemplateSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const tplId = e.target.value
+    if (!tplId) return
+    const selTpl = templates.find(t => t.id === tplId)
+    if (selTpl) {
+      setContent(selTpl.content)
+      setVersion(`v-${selTpl.id}`)
+      setMessage({ type: 'success', text: `Loaded "${selTpl.name}" template into editor.` })
+      setTimeout(() => setMessage(null), 3000)
+    }
+  }
+
   if (loading) {
     return <div className="loading">Loading policy...</div>
   }
@@ -125,9 +149,19 @@ firewall:
           <h1>Policy Editor</h1>
           <p>Edit the global AgentWall YAML policy for runtime evaluation.</p>
         </div>
-        <button className="btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save & Apply'}
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            id="btn-goto-marketplace"
+            className="btn-secondary" 
+            onClick={() => navigate('/policy-marketplace')}
+            style={{ padding: '10px 16px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}
+          >
+            🏪 Browse Marketplace
+          </button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save & Apply'}
+          </button>
+        </div>
       </header>
       
       {message && (
@@ -138,9 +172,25 @@ firewall:
 
       <div className="editor-layout">
         <div className="editor-sidebar card">
-          <h3>Metadata</h3>
-          
+          <h3>Metadata & Presets</h3>
+
           <div className="form-group">
+            <label style={{ color: '#38bdf8', fontWeight: 600 }}>Load One-Click Template</label>
+            <select 
+              id="select-policy-template"
+              onChange={handleTemplateSelect}
+              style={{ width: '100%', padding: '10px', background: 'var(--bg-elevated)', border: '1px solid #38bdf8', borderRadius: 'var(--radius-sm)', color: '#fff' }}
+            >
+              <option value="">-- Pick Security Posture Template --</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.category})
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="form-group" style={{ marginTop: 20 }}>
             <label>Load Historical Version</label>
             <select 
               onChange={handleHistorySelect}

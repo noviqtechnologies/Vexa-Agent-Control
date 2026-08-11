@@ -182,6 +182,12 @@ export const api = {
   listPolicies: () => get<Policy[]>('/policies'),
   getActivePolicy: () => get<Policy>('/policies/active?raw=true'),
   savePolicy: (policy: Partial<Policy>) => postJSON<Policy>('/policies', policy),
+  
+  // Policy Marketplace Templates
+  listTemplates: () => get<PolicyTemplate[]>('/policies/templates'),
+  getTemplate: (id: string) => get<PolicyTemplate>(`/policies/templates/${id}`),
+  createCustomTemplate: (tpl: Partial<PolicyTemplate>) => postJSON<PolicyTemplate>('/policies/templates', tpl),
+  deleteCustomTemplate: (id: string) => fetch(`${BASE}/policies/templates/${id}`, { method: 'DELETE', headers: authHeaders() }),
 }
 
 async function post<T>(path: string): Promise<T> {
@@ -236,6 +242,19 @@ export interface Policy {
   version: string
   content: string
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PolicyTemplate {
+  id: string
+  name: string
+  category: string
+  description: string
+  tags: string[]
+  icon: string
+  content: string
+  is_custom: boolean
   created_at: string
   updated_at: string
 }

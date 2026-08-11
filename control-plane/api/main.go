@@ -75,6 +75,7 @@ func main() {
 	authProviderH := handler.NewAuthProviderHandler(db)
 	userH := handler.NewUserHandler(db)
 	policyMgmtH := handler.NewPolicyMgmtHandler(db, broker)
+	templateH := handler.NewTemplateHandler(db)
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
 
@@ -181,6 +182,10 @@ func main() {
 		// Policy Management (Operator Auth)
 		r.Get("/policies", policyMgmtH.List)
 		r.Post("/policies", hubSpecH.CreatePolicy)
+		r.Get("/policies/templates", templateH.ListTemplates)
+		r.Get("/policies/templates/{id}", templateH.GetTemplate)
+		r.Post("/policies/templates", templateH.CreateCustomTemplate)
+		r.Delete("/policies/templates/{id}", templateH.DeleteCustomTemplate)
 
 		// Gateway Management (Phase 1 Mock)
 		r.Post("/gateways/register", gatewayH.Register)

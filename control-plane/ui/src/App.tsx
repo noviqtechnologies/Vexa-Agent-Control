@@ -6,6 +6,7 @@ import FleetOverview from './views/FleetOverview'
 import IdentityGovernance from './views/IdentityGovernance'
 import PolicyInsights from './views/PolicyInsights'
 import PolicyEditor from './views/PolicyEditor'
+import PolicyMarketplace from './views/PolicyMarketplace'
 import ThreatIntelligence from './views/ThreatIntelligence'
 import AuthProviders from './views/AuthProviders'
 import Users from './views/Users'
@@ -42,6 +43,7 @@ const NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Policy Marketplace', to: '/policy/marketplace' },
       { label: 'Active Policies', to: '/policy' },
       { label: 'Policy Editor', to: '/policy/edit' },
       { label: 'Group Policies', to: '/policy/group' },
@@ -345,6 +347,8 @@ export default function App() {
                     <Route path="/fleet" element={<FleetOverview />} />
                     <Route path="/identity" element={<IdentityGovernance />} />
                     <Route path="/policy" element={<PolicyInsights />} />
+                    <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
+                    <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
                     <Route path="/policy/edit" element={<PolicyEditor />} />
                     <Route path="/policy/group" element={<GroupPolicyEditor />} />
                     <Route path="/spend/limits" element={<SpendLimits />} />
