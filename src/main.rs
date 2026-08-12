@@ -380,14 +380,16 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             listen,
             mcp_url,
             enforce,
+            shadow,
             policy,
         } => {
+            let active_enforce = enforce && !shadow;
             let code = agentwall::wrap::run_protect_orchestration(
                 dry_run,
                 no_browser,
                 &listen,
                 &mcp_url,
-                enforce,
+                active_enforce,
                 &policy,
             );
             if code != 0 || dry_run {
@@ -398,11 +400,12 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 mcp_url,
                 false,
                 true,
-                enforce,
+                active_enforce,
                 false,
                 false,
                 "http://localhost:11434".to_string(),
                 vec![],
+                Some(policy),
             )
             .await
         }
@@ -436,6 +439,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 dual_agent,
                 local_llm_url,
                 args,
+                None,
             )
             .await
         }
@@ -476,7 +480,7 @@ fn print_banner() {
     println!("┌────────────────────────────────────────────────────────────┐");
     println!(
         "│  {}  {}  │",
-        "AgentWall Enterprise MCP Gateway".bold().cyan(),
+        "🛡 VEXA AGENTWALL — Local AI Firewall & Proxy".bold().cyan(),
         format!("v{}", version).dimmed()
     );
     println!("└────────────────────────────────────────────────────────────┘");
@@ -1936,6 +1940,7 @@ async fn run_dev(
     dual_agent: bool,
     local_llm_url: String,
     args: Vec<String>,
+    policy_path_opt: Option<String>,
 ) -> i32 {
     if learn {
         println!(
@@ -1961,6 +1966,32 @@ async fn run_dev(
         );
         detector.start();
     }
+
+    // Attempt to load policy YAML if path is specified or default exists
+    let (compiled_policy, policy_loaded, policy_path_str) = match policy_path_opt.as_deref() {
+        Some(path_str) => {
+            let p = std::path::Path::new(path_str);
+            if p.exists() {
+                match load_policy(p, None) {
+                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some(path_str.to_string())),
+                    _ => (None, false, None),
+                }
+            } else {
+                (None, false, None)
+            }
+        }
+        None => {
+            let default_p = std::path::Path::new("agentwall-policy.yaml");
+            if default_p.exists() {
+                match load_policy(default_p, None) {
+                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some("agentwall-policy.yaml".to_string())),
+                    _ => (None, false, None),
+                }
+            } else {
+                (None, false, None)
+            }
+        }
+    };
 
     // Generate session secret and ID
     let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
@@ -2035,17 +2066,16 @@ async fn run_dev(
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
 
     let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(None),
+        policy: std::sync::RwLock::new(compiled_policy),
         audit_logger,
         session_id,
         kill_mode: KillMode::Process,
         agent_pid: None,
         upstream_url: mcp_url,
         dry_run: false,
-        // When --enforce is passed, shadow_mode is false → injection/DLP scanners block.
-        // Default (no --enforce) keeps the original observation-only behaviour.
+        // When enforce is true, shadow_mode is false → injection/DLP scanners block.
         shadow_mode: std::sync::atomic::AtomicBool::new(!enforce),
-        policy_loaded: std::sync::atomic::AtomicBool::new(false),
+        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
         safe_mode_scanner,
@@ -2075,11 +2105,11 @@ async fn run_dev(
         metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
+        event_tx: tokio::sync::broadcast::channel(1024).0,
         credential_scope_validator: Arc::new(
             policy::credential_scope::CredentialScopeValidator::new(false),
         ),
-        policy_path: None,
+        policy_path: policy_path_str,
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: None,
         pricing_table: None,
@@ -2130,17 +2160,31 @@ async fn run_dev(
         }
     };
 
-    println!(
-        "{} {} {}",
-        "👁".blue(),
-        "Mode:".bold(),
-        "SHADOW (Observation Only — no enforcement)".cyan().bold()
-    );
-    println!(
-        "{} {}",
-        "ℹ".blue(),
-        "All tool calls forwarded and logged. Enforcement is OFF.".blue()
-    );
+    if !enforce {
+        println!(
+            "{} {} {}",
+            "👁".blue(),
+            "Mode:".bold(),
+            "SHADOW (Observation Only — no enforcement)".cyan().bold()
+        );
+        println!(
+            "{} {}",
+            "ℹ".blue(),
+            "All tool calls forwarded and logged. Enforcement is OFF.".blue()
+        );
+    } else {
+        println!(
+            "{} {} {}",
+            "🛡".green(),
+            "Mode:".bold(),
+            "ACTIVE ENFORCEMENT (DLP & Secret Shield ON)".green().bold()
+        );
+        println!(
+            "{} {}",
+            "ℹ".blue(),
+            "High-risk tool calls and secret leaks will be intercepted per policy.".blue()
+        );
+    }
     println!(
         "{} {} {}",
         "📡".blue(),

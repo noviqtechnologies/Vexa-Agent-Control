@@ -267,9 +267,13 @@ pub enum Commands {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         mcp_url: String,
 
-        /// Enable active enforcement mode (default: false / shadow mode)
-        #[arg(long, default_value_t = false)]
+        /// Enable active enforcement mode (default: true for protect)
+        #[arg(long, default_value_t = true)]
         enforce: bool,
+
+        /// Enable observation-only shadow mode without active blocking
+        #[arg(long, default_value_t = false)]
+        shadow: bool,
 
         /// YAML policy file path
         #[arg(long, default_value = "agentwall-policy.yaml")]
@@ -693,7 +697,7 @@ pub struct StartArgs {
     pub listen: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
     pub log_path: String,
 
     /// Upstream MCP server URL
@@ -806,7 +810,7 @@ impl StartArgs {
         Self {
             policy: None,
             listen: "127.0.0.1:8080".to_string(),
-            log_path: "audit.log".to_string(),
+            log_path: "~/.agentwall/audit.jsonl".to_string(),
             mcp_url: "http://127.0.0.1:3000".to_string(),
             agent_pid: None,
             agent_pid_file: None,
@@ -862,7 +866,7 @@ pub struct WrapArgs {
     pub kill_mode: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
     pub log_path: String,
 
     /// Enable balanced security profile

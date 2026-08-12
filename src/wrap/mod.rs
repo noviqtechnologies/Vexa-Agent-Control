@@ -373,12 +373,29 @@ pub fn run_protect_orchestration(
     listen: &str,
     _mcp_url: &str,
     _enforce: bool,
-    _policy: &str,
+    policy: &str,
 ) -> i32 {
     println!(
         "{} Initializing AgentWall One-Command Protection...",
         "🛡".cyan().bold()
     );
+
+    // Step 0: Ensure baseline policy exists
+    let policy_path = std::path::Path::new(policy);
+    if !policy_path.exists() {
+        if dry_run {
+            println!("  ℹ [DRY RUN] Would generate default baseline policy at {}", policy.cyan());
+        } else {
+            let default_policy = crate::generate_policy::generate_default_baseline_policy();
+            if let Err(e) = std::fs::write(policy_path, default_policy) {
+                eprintln!("  ⚠ Failed to auto-generate baseline policy file {}: {}", policy, e);
+            } else {
+                println!("  ✔ Auto-generated baseline security policy at {}", policy.cyan());
+            }
+        }
+    } else {
+        println!("  ✔ Loaded security policy from {}", policy.cyan());
+    }
 
     if dry_run {
         println!("  ℹ [DRY RUN] Scanning and previewing IDE configuration wraps without modifying disk or starting gateway.");
@@ -401,4 +418,5 @@ pub fn run_protect_orchestration(
 
     0
 }
+
 

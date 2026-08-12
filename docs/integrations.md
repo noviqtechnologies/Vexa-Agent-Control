@@ -10,11 +10,15 @@ Instead of manually setting up environment variables, you can use the `agentwall
 
 The `agentwall protect` command is the recommended way to secure your entire AI development environment in a single step. It automatically:
 
-1. **Discovers** all supported IDEs and their MCP server configurations on your machine
-2. **Creates timestamped backups** of every config before modifying it (atomic, zero-loss)
-3. **Injects the AgentWall proxy** into each discovered IDE configuration
-4. **Starts the local security gateway** on `http://127.0.0.1:8080`
-5. **Opens the Local Dashboard** in your default browser for instant observability
+1. **Auto-generates** a baseline `agentwall-policy.yaml` with P0 DLP secret rules if no policy exists in the current directory
+2. **Discovers** all supported IDEs and their MCP server configurations on your machine
+3. **Creates timestamped backups** of every config before modifying it (atomic, zero-loss)
+4. **Injects the AgentWall proxy** into each discovered IDE configuration
+5. **Starts the local security gateway** on `http://127.0.0.1:8080` (audit log → `~/.agentwall/audit.jsonl`)
+6. **Opens the Local Dashboard** in your default browser for instant observability
+
+> [!NOTE]
+> **`agentwall init` is deprecated.** All zero-config setup is now handled by `agentwall protect` in a single step.
 
 ```bash
 # macOS / Linux
@@ -31,6 +35,9 @@ agentwall protect --enforce
 
 # Use a custom listen address
 agentwall protect --listen 127.0.0.1:9090
+
+# Override default audit log path (~/.agentwall/audit.jsonl)
+agentwall protect --log-path /var/log/agentwall/audit.jsonl
 ```
 
 ### Reverting to Original Configuration (FR-1.4)
@@ -103,6 +110,7 @@ When connected to an AgentWall Dashboard, this command also sends an **MCP Serve
 | **Cline** | `agentwall wrap cline` | `agentwall unwrap cline` |
 | **OpenCode** | `agentwall wrap opencode` | `agentwall unwrap opencode` |
 | **Antigravity** | `agentwall wrap antigravity` | `agentwall unwrap antigravity` |
+| **Codex** | `agentwall wrap codex` | `agentwall unwrap codex` |
 
 > [!NOTE]
 > `agentwall protect` wraps **all** supported targets in one pass. Individual `wrap <target>` commands remain available for granular control.
@@ -120,6 +128,17 @@ After running `agentwall protect`, the Local Dashboard opens automatically at `h
 | **Risks Blocked Counter** (FR-2.2) | Live count of tool calls that were denied (injections, sensitive path reads, policy violations). |
 | **Mission Mode Banner** (FR-2.3) | Guided onboarding: asks you to test AgentWall by telling your AI to "read /etc/shadow", proving real-time blocking. |
 | **🪄 Quick Policy Button** (FR-2.4) | Per-tool wand button in the Tool Inventory table; calls `POST /api/policy/quick-rule` to apply a standard security rule for that tool instantly. |
+
+### REST & SSE API Endpoints (`/api/v1/`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/status` | Gateway health, version, posture mode, and active policy name |
+| `GET` | `/api/v1/telemetry/stream` | SSE stream of real-time tool call events |
+| `POST` | `/api/v1/hitl/respond` | Submit HITL approval or denial (`{"request_id": "...", "decision": "approve" \| "deny"}`) |
+
+> [!NOTE]
+> Legacy endpoints `/gateway/status` and `/api/events/stream` are preserved as aliases for backwards compatibility.
 
 ---
 

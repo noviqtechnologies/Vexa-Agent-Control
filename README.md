@@ -39,71 +39,64 @@ Vexa AgentWall can be deployed across multiple environments: as a zero-config st
 
 ### Standalone Developer CLI
 
-Install the statically-linked `agentwall` binary and launch the shadow gateway with an embedded web dashboard:
+Install the statically-linked `agentwall` binary and run `agentwall protect` to go from zero to full IDE protection in one command — no Docker, no database, no config files required.
 
-**macOS / Linux / WSL:**
+**macOS / Linux / WSL (Bash / Zsh):**
 ```bash
-# Standalone CLI Developer Workstation
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash
-agentwall protect
+# Install latest release (mandatory SHA-256 verified, strict error handling)
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
 
-# Enterprise Team OTET Provisioning (Enrollment & Sentry Daemon)
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+# One-command zero-config security
+agentwall protect
 ```
 
 **Windows (PowerShell):**
 ```powershell
-# Standalone CLI Developer Workstation
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex
-agentwall.exe protect
+# Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
 
-# Enterprise Team OTET Provisioning (Enrollment & Sentry Daemon)
-$env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-$env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
+# One-command zero-config security
+agentwall.exe protect
 ```
 
-Open `http://127.0.0.1:8080` in your browser to inspect live traffic, parameter schema telemetry, risk flags, DLP findings, and policy generator tools.
+**Windows (Command Prompt):**
+```cmd
+curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+agentwall.exe protect
+```
 
-> 💡 **Generating Instant Test Telemetry**: Running the optional demonstration test script requires **Python 3.8+**. The installer places `quickstart_agent.py` in your local binary path (`~/.local/bin` / `%USERPROFILE%\.local\bin`). If you see *"No tool calls recorded yet"*, run the test script in a new terminal:
-> 
-> **macOS / Linux / WSL:**
-> ```bash
-> python3 ~/.local/bin/quickstart_agent.py
-> ```
-> 
-> **Windows (PowerShell):**
-> ```powershell
-> python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
-> ```
+> [!NOTE]
+> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), install the binary and `quickstart_agent.py` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install dir to your user `PATH`.
 
-### One-Command IDE Protection (`agentwall protect`)
+**What `agentwall protect` does on first run:**
+1. 🛡 **Auto-generates** `agentwall-policy.yaml` with baseline P0 DLP secret rules (blocks `.env`, `.ssh/id_rsa`, `~/.aws/credentials` exfiltration) — if no policy exists
+2. 🔍 **Discovers** all installed AI IDEs — Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex — and atomically wraps their MCP configs (timestamped backups created before any change)
+3. 🚀 **Starts** the local security gateway on `127.0.0.1:8080` — audit log written to `~/.agentwall/audit.jsonl`
+4. 🌐 **Opens** the Local Dashboard in your browser at `http://127.0.0.1:8080`
 
-After installing AgentWall, you can secure your entire AI development environment in a single command. `agentwall protect` automatically discovers all supported IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity), creates timestamped config backups, injects the proxy, starts the gateway, and opens the Local Dashboard in your browser:
+> [!NOTE]
+> **`agentwall init` is deprecated.** `agentwall protect` is the recommended single-step entry point for all zero-config local setups.
 
-**macOS / Linux:**
+**Optional flags:**
 ```bash
-agentwall protect
-
-# Preview all changes before writing (dry run)
-agentwall protect --dry-run
-
-# Start immediately in enforce (active blocking) mode
-agentwall protect --enforce
+agentwall protect --dry-run                                   # Preview all changes without writing to disk
+agentwall protect --shadow                                    # Start in observation-only (shadow) mode without blocking
+agentwall protect --log-path /var/log/agentwall/audit.jsonl  # Override default audit log location
+agentwall protect --listen 127.0.0.1:9090                    # Use a custom listen address
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell) — optional flags:**
 ```powershell
-agentwall.exe protect
 agentwall.exe protect --dry-run
-agentwall.exe protect --enforce
+agentwall.exe protect --shadow
+agentwall.exe protect --log-path "$env:USERPROFILE\.agentwall\audit.jsonl"
 ```
 
-To restore all IDE configurations from their backups:
+**To restore all IDEs to their original configs:**
 ```bash
-agentwall unprotect           # macOS / Linux
-agentwall.exe unprotect       # Windows
-agentwall.exe unprotect --force  # Skip backup integrity check (emergency recovery)
+agentwall unprotect            # macOS / Linux — verifies backup integrity before restoring
+agentwall.exe unprotect        # Windows
+agentwall.exe unprotect --force  # Emergency: skip backup integrity check
 ```
 
 **Local Dashboard highlights** (auto-opens at `http://127.0.0.1:8080`):
@@ -112,6 +105,33 @@ agentwall.exe unprotect --force  # Skip backup integrity check (emergency recove
 - 🛡 **Risks Blocked** — live count of denied injections, sensitive reads, and policy violations
 - 🎯 **Mission Mode** — guided test: ask your AI to read `/etc/shadow` to prove real-time blocking
 - 🪄 **Quick Policy** — one-click security rule generator per tool in the inventory table
+
+> 💡 **Generating Instant Test Telemetry**: If the dashboard shows *"No tool calls recorded yet"*, run the included test script in a new terminal:
+>
+> **macOS / Linux / WSL:**
+> ```bash
+> python3 ~/.local/bin/quickstart_agent.py
+> ```
+>
+> **Windows (PowerShell):**
+> ```powershell
+> python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+> ```
+>
+> *(Requires Python 3.8+. The installer places `quickstart_agent.py` into `~/.local/bin` / `%USERPROFILE%\.local\bin`.)*
+
+**Enterprise Team OTET Provisioning** (enrollment + persistent Sentry daemon — use `team_otet.sh` / `team_otet.ps1`):
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+
+# Windows (PowerShell)
+$env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
+$env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
+```
+
+
 
 
 <!--
@@ -528,7 +548,7 @@ audit:
 | `DASHBOARD_API_URL` | Control Hub API endpoint URL for centralized management | — |
 | `POLICY_READ_SECRET` | Shared authentication secret for real-time policy hot-reloading | — |
 | `GATEWAY_SECRET` | Shared secret for publishing gateway telemetry events | — |
-| `AGENTWALL_LOG_PATH` | Path to durable audit log file | `audit.log` |
+| `AGENTWALL_LOG_PATH` | Path to durable JSONL audit log file (overrides `--log-path`) | `~/.agentwall/audit.jsonl` |
 | `AGENTWALL_OIDC_ISSUER` | OIDC issuer URL for identity binding and group claim mapping | — |
 | `AGENTWALL_SIEM_BACKEND` | SIEM backend target (`splunk`, `datadog`, `opensearch`, `local`) | `local` |
 | `AGENTWALL_SIEM_ENDPOINT` | External SIEM log ingestion endpoint URL | — |
@@ -543,6 +563,21 @@ audit:
 | `HUB_SIEM_BACKEND` | Centralized SIEM forwarder target (`splunk_hec`, `datadog_logs`, `opensearch`) | — |
 | `HUB_SIEM_ENDPOINT` | Centralized SIEM ingestion URL | — |
 | `HUB_SIEM_TOKEN` | Authentication token for centralized SIEM API | — |
+
+---
+
+## Local REST & SSE API Endpoints
+
+The local gateway exposes a versioned REST and Server-Sent Events API at `http://127.0.0.1:8080/api/v1/`:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/status` | Gateway health, version, posture mode, and active policy name |
+| `GET` | `/api/v1/telemetry/stream` | SSE stream of real-time tool call events (replaces `/api/events/stream`) |
+| `POST` | `/api/v1/hitl/respond` | Submit HITL approval or denial for a pending call (`{"request_id": "…", "decision": "approve" \| "deny"}`) |
+
+> [!NOTE]
+> Legacy endpoints `/gateway/status` and `/api/events/stream` are preserved as aliases for backwards compatibility.
 
 ---
 

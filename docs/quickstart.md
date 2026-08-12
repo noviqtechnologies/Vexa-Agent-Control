@@ -1,47 +1,46 @@
 ## Prerequisites & Installation
 
-Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity IDE) installed, along with the `agentwall` binary on your system:
+Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity IDE, Codex) installed, along with the `agentwall` binary on your system:
 
 ### Installing AgentWall
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
-  # Standalone CLI Developer Workstation
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash
-
-  # Or automated Team OTET enterprise enrollment with remote Control Hub:
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
+  # Install latest release (mandatory SHA-256 verified, strict error handling)
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
 
   agentwall --version
   ```
 * **Windows (PowerShell):**
   ```powershell
-  # Standalone CLI Developer Workstation
-  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex
-
-  # Or automated Team OTET enterprise enrollment with remote Control Hub:
-  $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-  $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
+  # Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
+  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
 
   agentwall.exe --version
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 -o cli.ps1 && powershell -ExecutionPolicy Bypass -File cli.ps1
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   agentwall.exe --version
   ```
 
-*(The installer places the `agentwall` binary and the `quickstart_agent.py` test script into `~/.local/bin` / `%USERPROFILE%\.local\bin`).*
+> [!NOTE]
+> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place the binary + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
 
 > [!NOTE]
 > **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system.
+
+> [!TIP]
+> **Enterprise Team enrollment?** Use the separate `team_otet.sh` / `team_otet.ps1` scripts instead. See the [Team Control Hub Guide](team_hub_guide.md).
+
+
+
 
 ---
 
 ## Step 1: Secure Your IDE & Start Gateway
 
-Run `agentwall protect` to automatically discover and wrap your installed AI IDEs, start the local gateway proxy, and open the embedded dashboard in your default browser:
+Run `agentwall protect` to automatically discover and wrap your installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), auto-generate a baseline `agentwall-policy.yaml` if missing, start the local gateway proxy (writing logs to `~/.agentwall/audit.jsonl`), and open the embedded dashboard in your default browser:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
@@ -59,7 +58,8 @@ Run `agentwall protect` to automatically discover and wrap your installed AI IDE
 *AgentWall is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
 
 > [!NOTE]
-> **Advanced Usage (`agentwall dev`):** To run the shadow proxy server manually without auto-wrapping your IDE configurations, use `agentwall dev`. See [Advanced Usage](#advanced-usage-manual-testing-with-agentwall-dev).
+> **One-Command Protection (`agentwall protect`):** Running `agentwall protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. `agentwall init` is deprecated.
+
 
 ---
 
@@ -207,30 +207,14 @@ tools:
 
 ---
 
-## Step 5: Enforce the Policy
+## Step 5: Enforce Policies & Observe DLP Shield
 
-Right now, you are running `agentwall dev` (observation mode). Let's switch to **enforcement mode** to actually block bad behavior.
-
-1. Go to your first terminal (where `agentwall dev` is running) and press `Ctrl + C` to stop it.
-2. Start the gateway in enforcement mode using the policy we just generated:
-
-* **macOS / Linux / WSL (Bash / Zsh):**
-  ```bash
-  agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
-  ```
-* **Windows (PowerShell):**
-  ```powershell
-  agentwall.exe start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
-  ```
-* **Windows (Command Prompt - CMD):**
-  ```cmd
-  agentwall.exe start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
-  ```
+`agentwall protect` runs in **Active Enforcement Mode** by default. All incoming tool calls and outgoing responses are checked against your `agentwall-policy.yaml` rules, instant secret DLP patterns, and dangerous path traversal checks.
 
 ### Test the Firewall
 
-Ask Claude / your agent to perform an unapproved action, such as accessing a restricted directory or unlisted path:
-> *"Can you read the file `/etc/shadow`?"* or *"Can you inspect `../sensitive.key`?"*
+Ask Claude / your agent to perform an unapproved action, such as accessing a restricted directory or sensitive file:
+> *"Can you read the file `/etc/shadow`?"* or *"Can you inspect `~/.ssh/id_rsa`?"*
 
 *(Alternatively, send a test HTTP request to verify policy enforcement directly):*
 
@@ -253,20 +237,17 @@ AgentWall will immediately intercept and **block** the tool request (`403 Forbid
 
 ---
 
-## Advanced Usage: Manual Testing with `agentwall dev`
+## Observation-Only Mode (`agentwall protect --shadow`)
 
-The `agentwall dev` command starts the standalone shadow proxy server on `http://127.0.0.1:8080` without triggering automated IDE discovery or configuration wrapping. Use `agentwall dev` when:
-- Testing custom HTTP/stdio agents directly with environment variables (`AGENTWALL_PROXY_URL=http://127.0.0.1:8080`)
-- Wrapping an isolated stdio command line (`agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace`)
-- Running interactive shadow observation sessions without modifying disk configs
+If you want to observe agent tool traffic without active blocking (for policy learning or risk auditing), pass the `--shadow` flag:
 
 ```bash
-# Start standalone shadow proxy on 127.0.0.1:8080
-agentwall dev
-
-# Wrap a single stdio tool process directly
-agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+agentwall protect --shadow          # macOS / Linux
+agentwall.exe protect --shadow      # Windows
 ```
+
+> [!NOTE]
+> `agentwall dev` is deprecated in favor of `agentwall protect` and `agentwall protect --shadow`.
 
 ---
 

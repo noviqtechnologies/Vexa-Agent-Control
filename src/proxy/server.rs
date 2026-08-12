@@ -100,7 +100,7 @@ pub async fn run_server(
                         let state = state.clone();
                         let client_ip = client_ip.clone();
                         async move {
-                            if req.uri().path() == "/api/events/stream" && req.method() == hyper::Method::GET {
+                            if (req.uri().path() == "/api/events/stream" || req.uri().path() == "/api/v1/telemetry/stream") && req.method() == hyper::Method::GET {
                                 let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(100);
                                 let mut bcast_rx = state.event_tx.subscribe();
                                 tokio::spawn(async move {
@@ -650,8 +650,8 @@ async fn handle_request(
                 return Ok(prometheus_metrics_response(&state));
             }
 
-            // FR-5 v2.0: Gateway status endpoint — mode, uptime, policy, metrics
-            "/gateway/status" => {
+            // FR-5 v2.0 & Spec v4.0: Gateway status endpoint — mode, uptime, policy, metrics
+            "/api/v1/status" | "/gateway/status" => {
                 use std::sync::atomic::Ordering;
                 let uptime_secs = state.gateway_start_time.elapsed().as_secs();
                 let policy_loaded = state.policy_loaded.load(Ordering::Relaxed);
@@ -663,6 +663,8 @@ async fn handle_request(
                     "enforce"
                 };
                 let status = serde_json::json!({
+                    "status": "active",
+                    "version": env!("CARGO_PKG_VERSION"),
                     "mode": mode,
                     "policy_loaded": policy_loaded,
                     "policy_path": state.policy_path,
@@ -678,9 +680,6 @@ async fn handle_request(
                         "siem_export_failed_total": state.metrics_siem_export_failed_total.load(Ordering::Relaxed),
                     },
                     "upstream_url": &state.upstream_url,
-                    "listen": "see --listen flag",
-                    "fr22_integration_pending": true,
-                    "note": "credential_scope validation is a stub — FR-22 Identity Platform integration pending"
                 });
                 return Ok(json_response(StatusCode::OK, &status));
             }
@@ -950,6 +949,40 @@ async fn handle_request(
                 return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
             }
         }
+    }
+
+    // Section 6: HITL approval response endpoint
+    if method == hyper::Method::POST && path == "/api/v1/hitl/respond" {
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                let request_id = val.get("request_id").and_then(|v| v.as_str()).unwrap_or_default();
+                let decision = val.get("decision").and_then(|v| v.as_str()).unwrap_or_default();
+
+                if request_id.is_empty() || decision.is_empty() {
+                    let err = serde_json::json!({"error": "Missing request_id or decision"});
+                    return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+                }
+
+                let sse_event = serde_json::json!({
+                    "event": "hitl_response",
+                    "request_id": request_id,
+                    "decision": decision
+                });
+                if let Ok(s) = serde_json::to_string(&sse_event) {
+                    let _ = state.event_tx.send(s);
+                }
+
+                let resp = serde_json::json!({
+                    "status": "processed",
+                    "request_id": request_id,
+                    "decision": decision
+                });
+                return Ok(json_response(StatusCode::OK, &resp));
+            }
+        }
+        let err = serde_json::json!({"error": "Invalid HITL request payload"});
+        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
     }
 
     // Interactive Security Posture Toggle Endpoint (FR-2.1)

@@ -16,6 +16,62 @@ use std::collections::{HashMap, HashSet};
 use crate::proxy::db::EgressEvent;
 use crate::self_healing::{AnomalyScorer, ConfidenceDecay};
 
+/// Generate a baseline default policy for zero-configuration local standalone execution.
+/// Includes P0 DLP secret protection rules (.env, .ssh/id_rsa, ~/.aws/credentials, API key redaction).
+pub fn generate_default_baseline_policy() -> String {
+    r#"# Vexa AgentWall — Zero-Configuration Baseline Security Policy
+# Generated automatically for local-first developer protection.
+
+version: "2.1"
+default_action: deny
+
+sequence_rules:
+  - name: auto_block_sensitive_exfiltration
+    window_size: 5
+    antecedent_tools:
+      - read_file
+      - view_file
+      - fetch_file
+    antecedent_param_regex: ".*(\\.env|id_rsa|aws/credentials).*"
+    consequent_tools:
+      - http_post
+      - fetch_url
+      - bash
+      - run_command
+      - exec_shell
+    action: block
+    message: "Security Refusal: Outbound communication blocked after reading sensitive credential file."
+
+tools:
+  - name: read_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        validators:
+          - path_traversal
+
+  - name: exec_shell
+    action: allow
+    parameters:
+      - name: command
+        type: string
+        required: true
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error
+
+schema_drift:
+  enabled: true
+  action: warn
+"#.to_string()
+}
+
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Internal aggregation types
 // ──────────────────────────────────────────────────────────────────────────────

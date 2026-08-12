@@ -43,15 +43,16 @@ AgentWall supports three graduated deployment profiles. Pick the one that matche
 
 **Quick start:**
 ```bash
-# macOS / Linux / WSL
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.sh | bash && agentwall protect
+# macOS / Linux / WSL (pinned release, mandatory SHA-256 verified)
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash && agentwall protect
 
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/cli.ps1 | iex; agentwall.exe protect
+# Windows (PowerShell) (pinned release, mandatory SHA-256 verified, auto-adds to PATH)
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex; agentwall.exe protect
 
 # Populate test traffic (if seeing "No tool calls recorded yet")
 python quickstart_agent.py
 ```
+
 
 → **[Open Workstation Sidecar Guide](workstation_guide.md)** | **[Open Quickstart Guide](quickstart.md)**
 

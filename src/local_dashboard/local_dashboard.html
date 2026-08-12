@@ -1004,12 +1004,12 @@
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <span id="mode-toggle-label" style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);">SHADOW</span>
           <label class="mode-toggle-switch" title="Toggle between Shadow (audit-only) and Enforce (active blocking) mode">
-            <input type="checkbox" id="mode-toggle-input" onchange="toggleSecurityMode(this.checked)">
+            <input type="checkbox" id="mode-toggle-input" checked="checked" onchange="toggleSecurityMode(this.checked)">
             <span class="mode-toggle-slider"></span>
           </label>
-          <span style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);">ENFORCE</span>
+          <span style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--green);">ENFORCE</span>
         </div>
-        <div id="mode-toggle-status" style="font-size:0.68rem; color:var(--text-muted);">Audit-only — no blocking active</div>
+        <div id="mode-toggle-status" style="font-size:0.68rem; color:var(--green);">Active enforcement — blocking active</div>
       </div>
     </div>
 
@@ -1080,7 +1080,7 @@
 
   <!-- Main content -->
   <div class="main-content">
-    <div id="offline-banner">
+    <div id="offline-banner" style="display:none;">
       ⚠ Proxy offline — retrying connection...
     </div>
 
@@ -1502,18 +1502,18 @@ const tool = client.governed("name", async (args) =&gt; {
       <div id="panel-gateway" class="panel">
         <div class="panel-header">
           <h2>⚙️ Gateway Controls & Live Reload</h2>
-          <span id="gw-mode-badge" class="badge blue">SHADOW</span>
+          <span id="gw-mode-badge" class="badge green">ENFORCE</span>
         </div>
 
-        <div class="policy-info" id="gw-mode-banner">
+        <div class="policy-info" id="gw-mode-banner" style="border-left-color: var(--green);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span id="gw-mode-label" style="font-weight:700; font-size:0.95rem;">👁 SHADOW — Observation Only</span>
+            <span id="gw-mode-label" style="font-weight:700; font-size:0.95rem; color:var(--green);">🛡 ENFORCEMENT — Active Blocking</span>
             <span style="display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">
               <span id="gw-status-dot" class="status-dot live"></span> Uptime: <strong id="gw-uptime" style="color:var(--text-bright);">0s</strong>
             </span>
           </div>
           <p id="gw-mode-description" style="font-size:0.85rem; line-height:1.5;">
-            <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start proxy with <code style="color:var(--accent)">agentwall protect --enforce</code> to enable active blocking.
+            <strong>Active Enforcement:</strong> Security policies, DLP secret leaks, and prompt injection attempts are actively evaluated and blocked with DENY responses.
           </p>
         </div>
 
@@ -2073,7 +2073,7 @@ const tool = client.governed("name", async (args) =&gt; {
           cls: 'blue',
           dotCls: 'live',
           bannerColor: 'var(--accent)',
-          desc: '<strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start with <code style="color:var(--accent)">--enforce</code> to enable active blocking.'
+          desc: '<strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Remove <code style="color:var(--accent)">--shadow</code> flag to restore active enforcement.'
         },
         'dry-run': {
           label: '📋 DRY-RUN — Logging Only',
@@ -2105,6 +2105,21 @@ const tool = client.governed("name", async (args) =&gt; {
 
       const banner = document.getElementById('gw-mode-banner');
       if (banner) banner.style.borderLeftColor = m.bannerColor;
+
+      // Synchronize Sidebar Mode Toggle Switch
+      const toggleInput = document.getElementById('mode-toggle-input');
+      const toggleStatus = document.getElementById('mode-toggle-status');
+      if (toggleInput && toggleStatus) {
+        if (mode === 'enforce') {
+          toggleInput.checked = true;
+          toggleStatus.textContent = 'Active enforcement — blocking active';
+          toggleStatus.style.color = 'var(--green)';
+        } else {
+          toggleInput.checked = false;
+          toggleStatus.textContent = 'Audit-only — no blocking active';
+          toggleStatus.style.color = 'var(--text-muted)';
+        }
+      }
 
       const uptime = document.getElementById('gw-uptime');
       if (uptime && s.uptime_secs != null) {
@@ -2401,27 +2416,37 @@ const tool = client.governed("name", async (args) =&gt; {
 
     // ── Data fetch ─────────────────────────────────────────────────────────────
     async function fetchEvents() {
-      const r = await fetch('/api/events?limit=200');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      try {
+        const r = await fetch('/api/events?limit=200');
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        return [];
+      }
     }
 
     async function fetchStats() {
-      const r = await fetch('/api/stats');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      try {
+        const r = await fetch('/api/stats');
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (e) {
+        return null;
+      }
     }
 
     function setOnline(online) {
-      document.getElementById('offline-banner').style.display = online ? 'none' : 'block';
+      const banner = document.getElementById('offline-banner');
+      if (banner) banner.style.display = online ? 'none' : 'block';
       const dot = document.getElementById('status-dot');
       const txt = document.getElementById('status-text');
       if (online) {
-        dot.className = 'status-dot live';
-        txt.textContent = 'LIVE';
+        if (dot) dot.className = 'status-dot live';
+        if (txt) txt.textContent = 'LIVE';
       } else {
-        dot.className = 'status-dot';
-        txt.textContent = 'OFFLINE';
+        if (dot) dot.className = 'status-dot';
+        if (txt) txt.textContent = 'OFFLINE';
       }
     }
 
@@ -2442,6 +2467,7 @@ const tool = client.governed("name", async (args) =&gt; {
 
       let injectionCount = 0;
       let dlpCount = 0;
+      let totalLiveSpend = 0.0;
       for (const e of events) {
         if (e.injection_findings) {
           try {
@@ -2459,9 +2485,24 @@ const tool = client.governed("name", async (args) =&gt; {
             if (parsed && parsed.findings) dlpCount += parsed.findings.length;
           } catch { dlpCount++; }
         }
+        // Live token spend calculation
+        if (e.request_body) {
+          try {
+            const body = JSON.parse(e.request_body);
+            if (body.estimated_cost_usd) {
+              totalLiveSpend += Number(body.estimated_cost_usd) || 0;
+            } else if (body.prompt_tokens || body.completion_tokens) {
+              const p = Number(body.prompt_tokens || 0);
+              const c = Number(body.completion_tokens || 0);
+              totalLiveSpend += (p * 0.000005) + (c * 0.000015);
+            }
+          } catch {}
+        }
       }
       document.getElementById('stat-injections').textContent = injectionCount;
       document.getElementById('stat-dlp').textContent = dlpCount;
+      const spendEl = document.getElementById('stat-live-spend');
+      if (spendEl) spendEl.textContent = '$' + totalLiveSpend.toFixed(3);
 
       const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
       const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60), s = elapsed % 60;
@@ -3516,15 +3557,48 @@ const tool = client.governed("name", async (args) =&gt; {
       }
     }
 
+    // ── Toggle Security Mode (FR-2.1) ─────────────────────────────────────────
+    async function toggleSecurityMode(isEnforce) {
+      const newMode = isEnforce ? 'enforce' : 'shadow';
+      const toggleStatus = document.getElementById('mode-toggle-status');
+      if (toggleStatus) {
+        toggleStatus.textContent = 'Switching…';
+        toggleStatus.style.color = 'var(--amber)';
+      }
+      try {
+        const res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: newMode })
+        });
+        if (res.ok) {
+          toast(isEnforce ? '🛡 Active Enforcement enabled' : '👁 Shadow Mode enabled', 'success');
+          pollGatewayStatus();
+        } else {
+          toast('Failed to switch mode', 'error');
+          // Revert toggle
+          const input = document.getElementById('mode-toggle-input');
+          if (input) input.checked = !isEnforce;
+          if (toggleStatus) {
+            toggleStatus.textContent = isEnforce ? 'Audit-only — no blocking active' : 'Active enforcement — blocking active';
+            toggleStatus.style.color = 'var(--text-muted)';
+          }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        const input = document.getElementById('mode-toggle-input');
+        if (input) input.checked = !isEnforce;
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
     (async function init() {
       await refresh();
       pollTimer = setInterval(refresh, 5000);
       connectSSE();
-      // Render initial timeline
       renderTimeline(allEvents);
-      // Init toggle UI to shadow
-      updateModeToggleUI(false, false);
+      // Sync sidebar toggle with actual gateway mode on first load
+      pollGatewayStatus();
     })();
   </script>
 </body>

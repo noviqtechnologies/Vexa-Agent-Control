@@ -241,3 +241,22 @@ fn test_large_event_set() {
         duration
     );
 }
+
+#[test]
+fn test_generate_default_baseline_policy() {
+    let yaml = agentwall::generate_policy::generate_default_baseline_policy();
+    assert!(yaml.contains("version: \"2.1\""));
+    assert!(yaml.contains("auto_block_sensitive_exfiltration"));
+    assert!(yaml.contains("read_file"));
+    assert!(yaml.contains("exec_shell"));
+    assert!(yaml.contains("firewall:"));
+
+    let file = write_temp_policy(&yaml);
+    let exit_code = agentwall::lint::execute(file.path().to_str().unwrap()).unwrap();
+    assert!(
+        exit_code == 0 || exit_code == 2,
+        "Baseline policy should be lint-passing, got: {}",
+        exit_code
+    );
+}
+

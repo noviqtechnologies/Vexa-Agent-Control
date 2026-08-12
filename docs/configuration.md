@@ -1,6 +1,13 @@
 # Configuration & Policies
 
-AgentWall's core enforcement logic is driven by Schema v2 YAML policy files. 
+AgentWall's core enforcement logic is driven by Schema v2 YAML policy files.
+
+## Zero-Configuration Default Policy & Audit Logging
+
+When running `agentwall protect` in a directory without an existing policy, AgentWall automatically generates a baseline `agentwall-policy.yaml` with out-of-the-box secret DLP rules:
+- **Sensitive File Protection:** Automatic sequence blocking when tool calls read `.env`, `.ssh/id_rsa`, or `~/.aws/credentials` followed by outbound execution.
+- **Path Traversal Shield:** Enforces canonical path verification on `read_file` and filesystem parameters.
+- **Default Audit Log Location:** Audit logs are saved to `~/.agentwall/audit.jsonl` by default (overridable via `--log-path` or `AGENTWALL_LOG_PATH`).
 
 ## Policy Structure
 

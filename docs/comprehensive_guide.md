@@ -231,9 +231,9 @@ agentwall identity audit --agent my-agent --verify
 
 ---
 
-## 8. Local Dashboard & ADR Security Widgets (`agentwall dev`)
+## 8. Local Dashboard & ADR Security Widgets (`agentwall protect`)
 
-AgentWall's Workstation Sidecar embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentwall dev`. It now includes a dedicated **ADR Benchmark** tab and five real-time security widgets, all served offline with no external dependencies.
+AgentWall's Workstation Sidecar embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentwall protect`. It includes dedicated **ADR Benchmark** tabs and real-time security widgets, all served offline with zero external dependencies.
 
 ### ADR Dashboard Widgets
 
@@ -248,9 +248,10 @@ AgentWall's Workstation Sidecar embedded local dashboard runs automatically at `
 ### Launch the Dashboard
 **All OS (macOS, Linux, Windows):**
 ```bash
-agentwall dev
-# Dashboard auto-opens at http://127.0.0.1:8080
-# Click the "ADR Benchmark" tab in the sidebar for the security posture report
+agentwall protect
+# Dashboard auto-opens at http://127.0.0.1:8080 in Active Enforcement Mode
+# Use 'agentwall protect --shadow' for observation-only mode
+# (Note: 'agentwall dev' is deprecated in favor of 'agentwall protect')
 ```
 
 ### Deploying the Full Stack Dashboard via Helm (Production)
