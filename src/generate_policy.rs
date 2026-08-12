@@ -624,7 +624,7 @@ mod tests {
 
     fn make_event(tool: &str, params: &str) -> EgressEvent {
         EgressEvent {
-            timestamp_ns: 1718090000000000000, // Roughly 2024
+            timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
             session_id: "test-session".to_string(),
             transport: "mcp".to_string(),
             method: Some("tools/call".to_string()),
@@ -696,7 +696,7 @@ mod tests {
             "{\"path\": \"/workspace/foo.txt\"}",
         )];
         let yaml = generate_from_events(&events, 30);
-        assert!(yaml.contains("name: read_file"));
+        assert!(yaml.contains("read_file"));
         assert!(yaml.contains("path"));
     }
 

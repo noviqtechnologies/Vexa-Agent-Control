@@ -580,6 +580,90 @@ pub async fn evaluate_jsonrpc(
         }
     }
 
+    // FR-13: Prompt Injection Scanning on outbound tool call parameters
+    let enforce_mode = !state.shadow_mode.load(Ordering::Relaxed);
+    let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        state
+            .injection_scanner
+            .scan_response(&tool_params, tool_name, &session.session_id, enforce_mode)
+    }));
+
+    match inj_scan_result {
+        Ok(crate::policy::injection::ScanResult::Block { findings }) => {
+            let f = &findings[0];
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "injection_blocked",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+            logging::log_event(
+                Level::Warn,
+                "injection_blocked",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "pattern": &f.pattern_name
+                }),
+            );
+
+            return handle_deny(
+                state,
+                &session.session_id,
+                &id,
+                tool_name,
+                &format!("injection: {}", f.pattern_name),
+                session.identity_sub.clone(),
+                session.identity_email.clone(),
+                session.request_ip.clone(),
+                true,
+                None,
+                None,
+                None,
+            )
+            .await;
+        }
+        Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
+            let f = &findings[0];
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "injection_warning",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+            logging::log_event(
+                Level::Warn,
+                "injection_warning",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "pattern": &f.pattern_name
+                }),
+            );
+        }
+        _ => {}
+    }
+
     // FR-12B: Semantic Scanner (Phi-4-Mini Heuristic Stub)
     if state.semantic_scanner.config.enabled {
         let tool_name_clone = tool_name.to_string();

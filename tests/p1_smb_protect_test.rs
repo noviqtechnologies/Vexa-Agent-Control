@@ -11,7 +11,7 @@ use serde_json::json;
 async fn test_p1_gateway_status_endpoint() {
     let status_json = json!({
         "status": "active",
-        "version": "1.0.31",
+        "version": "1.0.32",
         "mode": "enforce",
         "policy_loaded": true,
         "metrics": {
