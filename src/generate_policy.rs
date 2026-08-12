@@ -208,13 +208,17 @@ pub fn flatten_json(
 ///
 /// Returns `None` if fewer than 3 samples are present or no common prefix exists.
 fn derive_observed_pattern(values: &[String]) -> Option<String> {
-    if values.len() < 3 {
+    let single_line_vals: Vec<&String> = values
+        .iter()
+        .filter(|v| !v.contains('\n') && !v.contains('\r'))
+        .collect();
+    if single_line_vals.len() < 3 {
         return None;
     }
     // Find longest common prefix
-    let first = &values[0];
+    let first = single_line_vals[0];
     let mut common_prefix_len = first.len();
-    for v in &values[1..] {
+    for v in &single_line_vals[1..] {
         let common = first
             .chars()
             .zip(v.chars())
@@ -241,6 +245,23 @@ fn regex_escape(s: &str) -> String {
                 out.push('\\');
                 out.push(c);
             }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Safely escape a string for inclusion inside a double-quoted YAML string literal (`"..."`),
+/// ensuring newlines and special characters are escaped so they do not break line structure or YAML syntax.
+fn escape_yaml_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
             _ => out.push(c),
         }
     }
@@ -471,8 +492,8 @@ self_healing:
         };
 
         out.push_str(&format!(
-            "  - name: {}\n    action: allow\n    # risk_tier: {}  confidence: {}  ({} observations)\n    # confidence_decay: {:.2}  last_seen: {}  stale: {}\n",
-            tool_name, effective_risk_tier, confidence, call_count, decay, last_seen_str, stale
+            "  - name: \"{}\"\n    action: allow\n    # risk_tier: {}  confidence: {}  ({} observations)\n    # confidence_decay: {:.2}  last_seen: {}  stale: {}\n",
+            escape_yaml_string(tool_name), effective_risk_tier, confidence, call_count, decay, last_seen_str, stale
         ));
 
         if !analysis.params.is_empty() {
@@ -494,8 +515,8 @@ self_healing:
                 let required = stats.presence_count * 10 >= call_count * 9;
 
                 out.push_str(&format!(
-                    "      - name: {}\n        type: {}\n        required: {}\n",
-                    param_name, inferred_type, required
+                    "      - name: \"{}\"\n        type: {}\n        required: {}\n",
+                    escape_yaml_string(param_name), inferred_type, required
                 ));
 
                 // max_length for strings
@@ -522,13 +543,14 @@ self_healing:
                     out.push_str("        validators:\n          - path_traversal\n");
                 }
 
-                // enum: emit if ≤ 10 distinct string values observed
+                // enum: emit if ≤ 10 distinct short single-line string values observed
                 if inferred_type == "string" {
                     let unique_vals: Vec<String> = {
                         let mut seen: HashSet<&String> = HashSet::new();
                         let mut unique = Vec::new();
                         for v in &stats.string_values {
-                            if seen.insert(v) {
+                            // Enums must be short single-line values (no newlines/CRs, length <= 100)
+                            if !v.contains('\n') && !v.contains('\r') && v.len() <= 100 && seen.insert(v) {
                                 unique.push(v.clone());
                             }
                         }
@@ -537,10 +559,9 @@ self_healing:
                     if !unique_vals.is_empty() && unique_vals.len() <= 10 {
                         out.push_str("        # enum:\n");
                         for val in &unique_vals {
-                            // Escape quotes in enum values
                             out.push_str(&format!(
                                 "        #  - \"{}\"\n",
-                                val.replace('"', "\\\"")
+                                escape_yaml_string(val)
                             ));
                         }
                     }
@@ -549,7 +570,7 @@ self_healing:
                     if let Some(pattern) = derive_observed_pattern(&stats.string_values) {
                         out.push_str(&format!(
                             "        # observed_pattern: \"{}\"  # informational only\n",
-                            pattern
+                            escape_yaml_string(&pattern)
                         ));
                     }
 
@@ -561,11 +582,14 @@ self_healing:
                     for val in value_freq.keys() {
                         let score = scorer.score(tool_name, param_name, val);
                         if score > 0.9 {
-                            anomaly_lines.push(format!(
-                                "# - {}.{}: observed anomalous value \"{}\" (anomaly_score: {:.2})\n\
-                                 #   → Is this expected? Review before enabling enforcement.",
-                                tool_name, param_name, val, score
-                            ));
+                            let escaped_val = escape_yaml_string(val);
+                            let msg = format!(
+                                "- {}.{}: observed anomalous value \"{}\" (anomaly_score: {:.2})\n  → Is this expected? Review before enabling enforcement.",
+                                tool_name, param_name, escaped_val, score
+                            );
+                            for line in msg.lines() {
+                                anomaly_lines.push(format!("# {}", line));
+                            }
                         }
                     }
                 }

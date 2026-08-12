@@ -25,6 +25,7 @@ echo "[*] Detected OS: $OS"
 echo "[*] Detected Arch: $ARCH"
 
 VERSION="${AGENTWALL_VERSION:-}"
+MODE="${AGENTWALL_MODE:-solo}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,9 +33,14 @@ while [[ $# -gt 0 ]]; do
       VERSION="$2"
       shift 2
       ;;
+    -m|--mode|--edition)
+      MODE="$2"
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: install.sh [-v <version>]"
+      echo "Usage: install.sh [-v <version>] [-m <solo|team|enterprise>]"
       echo "  -v, --version         Version tag to install (default: latest)"
+      echo "  -m, --mode, --edition Edition mode: solo (default), team, enterprise"
       exit 0
       ;;
     *)
@@ -161,7 +167,15 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   echo ""
 fi
 
-echo "To secure all installed AI IDEs and start local protection:"
-echo "  agentwall protect"
+if [[ "$MODE" == "team" ]]; then
+  echo "Installing Vexa AgentWall: Team Edition..."
+  echo "To join your team workspace, run:"
+  echo "  agentwall join --token <YOUR_ORGANIZATION_TOKEN>"
+else
+  echo "Installing Vexa AgentWall: Standalone (Solo Edition)..."
+  echo "To secure all installed AI IDEs and start local protection:"
+  echo "  agentwall protect"
+fi
 echo ""
+
 

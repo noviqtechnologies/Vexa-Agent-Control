@@ -16,6 +16,24 @@ path = "src/main.rs"
 name = "agentwall"
 path = "src/lib.rs"
 
+[features]
+# The minimal set for individual developers (Local Safe Mode + Proxy)
+default = ["local-core"]
+
+# SMB / Team Edition (Adds Passport Model + SaaS Sync)
+team = ["local-core", "passport-injection", "saas-sync"]
+
+# Enterprise Edition (Adds OIDC, mTLS, and SIEM Export)
+enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]
+
+# Internal Functional Flags
+local-core = []
+passport-injection = []
+saas-sync = []
+oidc-auth = []
+mtls-identity = []
+siem-export = []
+
 [dependencies]
 # FR-23: Dashboard wire-boundary types
 control-plane-proto = { path = "control-plane/proto" }

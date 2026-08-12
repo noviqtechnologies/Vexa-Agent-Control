@@ -121,6 +121,20 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         Commands::Enroll { token, hub_url } => {
             agentwall::identity::device::run_enroll(&token, &hub_url).await
         }
+        #[cfg(feature = "team")]
+        Commands::Join { token, hub_url } => {
+            println!("Joining team workspace at {}...", hub_url);
+            match agentwall::identity::team::TeamIdentity::join(&hub_url, &token) {
+                Ok(_) => {
+                    println!("Successfully joined organization workspace!");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("Failed to join workspace: {}", e);
+                    1
+                }
+            }
+        }
         Commands::Service { action } => {
             let act = match action {
                 agentwall::cli::ServiceCliAction::Install {

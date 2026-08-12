@@ -52,6 +52,11 @@
 //!      │ 10. Validate JWT + credential scope before policy eval
 //! ```
 
+pub mod standalone;
+
+#[cfg(feature = "team")]
+pub mod team;
+
 pub mod audit;
 pub mod audit_log;
 pub mod create;

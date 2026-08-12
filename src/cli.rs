@@ -37,6 +37,18 @@ pub enum Commands {
         hub_url: String,
     },
 
+    /// Join organization / team workspace (SMB Feature)
+    #[cfg(feature = "team")]
+    Join {
+        /// Organization or workspace join token
+        #[arg(long)]
+        token: String,
+
+        /// Control Hub / SaaS URL
+        #[arg(long, default_value = "https://app.vexasec.io")]
+        hub_url: String,
+    },
+
     /// Manage AgentWall persistent OS Sentry Service Daemon
     Service {
         #[command(subcommand)]

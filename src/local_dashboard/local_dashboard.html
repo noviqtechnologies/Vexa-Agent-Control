@@ -3494,7 +3494,7 @@ const tool = client.governed("name", async (args) =&gt; {
       // Check if tool already exists in YAML
       if (!currentYaml.includes(`name: ${toolName}`) && !currentYaml.includes(`name: "${toolName}"`)) {
         const toolSnippet = `
-  - name: ${toolName}
+  - name: "${toolName}"
     action: allow
     risk: low
     parameters:
@@ -3504,6 +3504,9 @@ const tool = client.governed("name", async (args) =&gt; {
         validators:
           - path_traversal
 `;
+        if (!currentYaml.endsWith('\n')) {
+          currentYaml += '\n';
+        }
         currentYaml += toolSnippet;
         if (editor) editor.value = currentYaml;
         if (msg) msg.textContent = `✨ Approved pattern for tool "${toolName}". Updated YAML draft.`;
