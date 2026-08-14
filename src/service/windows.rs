@@ -55,11 +55,11 @@ pub fn install_windows_service(
             .output();
     }
 
-    println!("  Creating service entry {}...", "AgentWallSentry".cyan());
+    println!("  Creating service entry {}...", "AgentControlSentry".cyan());
 
     let service_info = ServiceInfo {
-        name: OsStr::new("AgentWallSentry").to_os_string(),
-        display_name: OsStr::new("AgentWall Sentry Endpoint Security Service").to_os_string(),
+        name: OsStr::new("AgentControlSentry").to_os_string(),
+        display_name: OsStr::new("Agent Control Sentry Endpoint Security Service").to_os_string(),
         service_type: ServiceType::OWN_PROCESS,
         start_type: ServiceStartType::AutoStart,
         error_control: ServiceErrorControl::Normal,
@@ -87,7 +87,7 @@ pub fn install_windows_service(
     }
 
     println!(
-        "{} AgentWall Windows SCM Service installed successfully!",
+        "{} Agent Control Windows SCM Service installed successfully!",
         "✔".green().bold()
     );
     println!("  Hub URL:            {}", hub_url.cyan());
@@ -119,20 +119,26 @@ pub fn uninstall_windows_service() -> Result<(), String> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
         .map_err(|e| format!("failed to connect to Windows SCM: {}", e))?;
 
-    let service = manager
-        .open_service(
-            OsStr::new("AgentWallSentry"),
-            ServiceAccess::STOP | ServiceAccess::DELETE,
-        )
-        .map_err(|e| format!("failed to open AgentWallSentry service: {}", e))?;
+    // Try deleting AgentControlSentry
+    if let Ok(service) = manager.open_service(
+        OsStr::new("AgentControlSentry"),
+        ServiceAccess::STOP | ServiceAccess::DELETE,
+    ) {
+        let _ = service.stop();
+        let _ = service.delete();
+    }
 
-    let _ = service.stop();
-    service
-        .delete()
-        .map_err(|e| format!("failed to delete Windows service: {}", e))?;
+    // Also clean up legacy AgentWallSentry if present
+    if let Ok(service) = manager.open_service(
+        OsStr::new("AgentWallSentry"),
+        ServiceAccess::STOP | ServiceAccess::DELETE,
+    ) {
+        let _ = service.stop();
+        let _ = service.delete();
+    }
 
     println!(
-        "{} AgentWall Windows SCM service uninstalled.",
+        "{} Agent Control Windows SCM service uninstalled.",
         "✔".green().bold()
     );
     Ok(())
@@ -182,9 +188,12 @@ pub mod service_dispatcher_handler {
         };
 
         let status_handle =
-            match service_control_handler::register("AgentWallSentry", event_handler) {
+            match service_control_handler::register("AgentControlSentry", event_handler) {
                 Ok(handle) => handle,
-                Err(_) => return,
+                Err(_) => match service_control_handler::register("AgentWallSentry", event_handler) {
+                    Ok(handle) => handle,
+                    Err(_) => return,
+                },
             };
 
         let _ = status_handle.set_service_status(ServiceStatus {
@@ -228,7 +237,9 @@ pub mod service_dispatcher_handler {
     }
 
     pub fn try_start_and_wait() -> Result<i32, windows_service::Error> {
-        service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        if let Err(_) = service_dispatcher::start("AgentControlSentry", ffi_service_main) {
+            service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        }
         Ok(EXIT_CODE.load(Ordering::SeqCst))
     }
 
@@ -246,7 +257,9 @@ pub mod service_dispatcher_handler {
         if let Ok(mut guard) = SERVICE_RUNNER.lock() {
             *guard = Some(Box::new(run_fn));
         }
-        service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        if let Err(_) = service_dispatcher::start("AgentControlSentry", ffi_service_main) {
+            service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        }
         Ok(EXIT_CODE.load(Ordering::SeqCst))
     }
 }

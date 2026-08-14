@@ -147,9 +147,10 @@ if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
   exit 1
 fi
 
-echo "[*] Installing binary to ${LOCALBIN}/agentwall..."
-mv "$BINARY_PATH" "${LOCALBIN}/agentwall"
-chmod +x "${LOCALBIN}/agentwall"
+echo "[*] Installing binary to ${LOCALBIN}/agentcontrol..."
+cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
+chmod +x "${LOCALBIN}/agentcontrol"
+ln -sf "${LOCALBIN}/agentcontrol" "${LOCALBIN}/agentwall" || cp "$BINARY_PATH" "${LOCALBIN}/agentwall"
 
 QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
 if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
@@ -158,23 +159,23 @@ if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
 fi
 
 echo ""
-echo "[✓] AgentWall $VERSION successfully installed to ${LOCALBIN}/agentwall"
+echo "[✓] Vexa Agent Control $VERSION successfully installed to ${LOCALBIN}/agentcontrol (and alias agentwall)"
 echo ""
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-  echo "[!] Note: Add $HOME/.local/bin to your PATH to run 'agentwall' directly:"
+  echo "[!] Note: Add $HOME/.local/bin to your PATH to run 'agentcontrol' directly:"
   echo '    export PATH="$HOME/.local/bin:$PATH"'
   echo ""
 fi
 
 if [[ "$MODE" == "team" ]]; then
-  echo "Installing Vexa AgentWall: Team Edition..."
+  echo "Installing Vexa Agent Control: Team Edition..."
   echo "To join your team workspace, run:"
-  echo "  agentwall join --token <YOUR_ORGANIZATION_TOKEN>"
+  echo "  agentcontrol join --token <YOUR_ORGANIZATION_TOKEN>"
 else
-  echo "Installing Vexa AgentWall: Standalone (Solo Edition)..."
+  echo "Installing Vexa Agent Control: Standalone (Solo Edition)..."
   echo "To secure all installed AI IDEs and start local protection:"
-  echo "  agentwall protect"
+  echo "  agentcontrol protect"
 fi
 echo ""
 

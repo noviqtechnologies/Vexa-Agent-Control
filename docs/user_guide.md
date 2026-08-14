@@ -1,4 +1,4 @@
-# Vexa AgentWall — Master User Guide
+# Vexa Agent Control — Master User Guide
 
 > **Enterprise-Grade AI Security Gateway & Firewall for MCP, HTTP, HTTPS, and WebSockets**  
 > Complete operational manual for Endpoint Users, Software Developers, DevOps Engineers, and Security Administrators.
@@ -27,7 +27,7 @@
 
 Autonomous AI agents possess powerful capabilities — reading files, running terminal commands, and interacting with external services over Model Context Protocol (MCP). Without deterministic runtime controls, agents are susceptible to prompt injection, credential exfiltration, infinite loops, and data leaks.
 
-**Vexa AgentWall** provides an out-of-process, default-deny security boundary around AI agent execution. Rather than relying on soft system prompts or probabilistic LLM guardrails, AgentWall intercepts, sandboxes, audits, and enforces cryptographic policy rules on all tool calls and LLM egress traffic.
+**Vexa Agent Control** provides an out-of-process, default-deny security boundary around AI agent execution. Rather than relying on soft system prompts or probabilistic LLM guardrails, Agent Control intercepts, sandboxes, audits, and enforces cryptographic policy rules on all tool calls and LLM egress traffic.
 
 ### The 6-Pass Security Pipeline
 

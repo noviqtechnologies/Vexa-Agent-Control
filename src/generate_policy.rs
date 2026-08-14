@@ -19,7 +19,7 @@ use crate::self_healing::{AnomalyScorer, ConfidenceDecay};
 /// Generate a baseline default policy for zero-configuration local standalone execution.
 /// Includes P0 DLP secret protection rules (.env, .ssh/id_rsa, ~/.aws/credentials, API key redaction).
 pub fn generate_default_baseline_policy() -> String {
-    r#"# Vexa AgentWall — Zero-Configuration Baseline Security Policy
+    r#"# Vexa Agent Control — Zero-Configuration Baseline Security Policy
 # Generated automatically for local-first developer protection.
 
 version: "2.1"

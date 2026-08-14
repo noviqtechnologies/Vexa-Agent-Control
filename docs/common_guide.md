@@ -1,6 +1,6 @@
-# Vexa AgentWall — Common Reference Guide
+# Vexa Agent Control — Common Reference Guide
 
-> This guide contains technical reference sections that apply equally across all three AgentWall deployment profiles:
+> This guide contains technical reference sections that apply equally across all three Agent Control deployment profiles:
 > [Workstation Sidecar](workstation_guide.md) · [Team Control Hub](team_hub_guide.md) · [Enterprise Fleet](enterprise_guide.md)
 
 ---

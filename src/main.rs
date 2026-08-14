@@ -494,7 +494,7 @@ fn print_banner() {
     println!("┌────────────────────────────────────────────────────────────┐");
     println!(
         "│  {}  {}  │",
-        "🛡 VEXA AGENTWALL — Local AI Firewall & Proxy".bold().cyan(),
+        "🛡 VEXA AGENT CONTROL — Local AI Firewall & Security Gateway".bold().cyan(),
         format!("v{}", version).dimmed()
     );
     println!("└────────────────────────────────────────────────────────────┘");
@@ -2338,7 +2338,7 @@ async fn run_bench(
     println!("{}", "=".repeat(60).cyan());
     println!(
         "{} {}",
-        " VEXA AgentWall ".bold().white().on_cyan(),
+        " VEXA Agent Control ".bold().white().on_cyan(),
         "ADR Security Benchmarking Subsystem".cyan()
     );
     println!("{}", "=".repeat(60).cyan());

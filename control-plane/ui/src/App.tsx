@@ -149,11 +149,11 @@ function Sidebar({ onLogout, onOpenCommandPalette }: { onLogout: () => void; onO
     <nav className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" style={{ flexShrink: 0 }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" style={{ flexShrink: 0 }}>
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           <path d="M9 12l2 2 4-4"/>
         </svg>
-        Vexa <span>Agentwall</span>
+        <span className="sidebar-brand-text">Vexa <span>Agent Control</span></span>
       </div>
 
       {/* Quick search command button in sidebar */}
@@ -256,7 +256,7 @@ function GlobalAuthBanner() {
       </div>
       <div className="ap-global-warning-content">
         <strong>No Auth Providers Configured!</strong>
-        <p>To finish setting up AgentWall, you'll need to configure an Auth Provider. Select one below to get started!</p>
+        <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
       </div>
     </div>
   );

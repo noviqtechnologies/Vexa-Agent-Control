@@ -64,7 +64,7 @@ export default function Login() {
               <path d="M9 12l2 2 4-4" />
             </svg>
           </div>
-          <h1 className="soc-brand-title">Vexa <span>Agentwall</span></h1>
+          <h1 className="soc-brand-title">Vexa <span>Agent Control</span></h1>
           <p className="soc-brand-tagline">Autonomous AI Security Gateway & Control Plane</p>
         </div>
 
@@ -84,8 +84,8 @@ export default function Login() {
         {/* Glassmorphic Login Card */}
         <div className="soc-login-card">
           <div className="soc-login-header">
-            <h2>SOC Dashboard Access</h2>
-            <p>Authenticate with workstation credentials or enterprise SSO</p>
+            <h2>Agent Control Console</h2>
+            <p>Authenticate with operator credentials or enterprise SSO</p>
           </div>
 
           {authError && (
@@ -158,7 +158,7 @@ export default function Login() {
                     className="soc-login-submit-btn"
                     disabled={submitting}
                   >
-                    {submitting ? 'Authenticating...' : 'Sign In to Control Plane →'}
+                    {submitting ? 'Authenticating...' : 'Sign In to Agent Control →'}
                   </button>
                 </form>
               )}
@@ -193,7 +193,7 @@ export default function Login() {
         <div className="soc-login-footer">
           <span>🔒 FIPS / HMAC Audit Chain Verified</span>
           <span>&bull;</span>
-          <span>Zero-Trust Control Plane v0.1.0</span>
+          <span>Zero-Trust Control Plane v1.0.33</span>
         </div>
       </div>
     </div>

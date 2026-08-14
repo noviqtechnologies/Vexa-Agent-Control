@@ -1,4 +1,4 @@
-# Vexa AgentWall v4.0 Operator Runbook
+# Vexa Agent Control v4.0 Operator Runbook
 
 **Target Audience:** Owner-Admins, Security Leads, and SaaS Operators  
 **Domain:** `console.vexasec.io` (GCP SaaS Hub)  

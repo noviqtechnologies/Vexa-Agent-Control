@@ -1,6 +1,6 @@
-# Vexa AgentWall Documentation
+# Vexa Agent Control Documentation
 
-**This directory contains the primary technical documentation, architecture specifications, deployment guides, and integration references for Vexa AgentWall.**
+**This directory contains the primary technical documentation, architecture specifications, deployment guides, and integration references for Vexa Agent Control.**
 
 New here? Start with the [Quickstart Guide](quickstart.md), then choose your deployment profile guide below.
 

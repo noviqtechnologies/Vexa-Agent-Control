@@ -11,7 +11,7 @@
 
 Autonomous AI agents introduce distinct security vulnerabilities that cannot be mitigated by traditional network firewalls or probabilistic prompt-level instructions. The **OWASP Agentic Security Initiative (ASI 2026)** defines the 10 primary threat vectors facing autonomous agent ecosystems.
 
-**Vexa AgentWall** implements deterministic, out-of-process runtime security at the network and transport boundary (MCP stdio, HTTP, HTTPS, WebSockets). This document provides an honest, evidence-backed mapping of AgentWall's controls against all 10 OWASP Agentic risks.
+**Vexa Agent Control** implements deterministic, out-of-process runtime security at the network and transport boundary (MCP stdio, HTTP, HTTPS, WebSockets). This document provides an honest, evidence-backed mapping of Agent Control's controls against all 10 OWASP Agentic risks.
 
 ---
 

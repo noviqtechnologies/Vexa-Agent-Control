@@ -72,10 +72,10 @@ export default function PolicyInsights() {
           {isGatewayDown ? (
             <>
               <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
-                AgentWall Gateway is not reachable
+                Agent Control Gateway is not reachable
               </div>
               <div style={{ color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                The Policy Insights page requires the AgentWall gateway to be running.
+                The Policy Insights page requires the Agent Control gateway to be running.
                 When using <code>run-demo.ps1</code> the gateway starts automatically as part of the stack.
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--surface-2)', padding: '10px 14px', borderRadius: 6 }}>

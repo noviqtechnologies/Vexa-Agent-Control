@@ -1,31 +1,31 @@
 ## Prerequisites & Installation
 
-Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity IDE, Codex) installed, along with the `agentwall` binary on your system:
+Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity IDE, Codex) installed, along with the `agentcontrol` binary on your system:
 
-### Installing AgentWall
+### Installing Vexa Agent Control
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
   # Install latest release (mandatory SHA-256 verified, strict error handling)
   curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
 
-  agentwall --version
+  agentcontrol --version
   ```
 * **Windows (PowerShell):**
   ```powershell
   # Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
   irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
 
-  agentwall.exe --version
+  agentcontrol.exe --version
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
   curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
-  agentwall.exe --version
+  agentcontrol.exe --version
   ```
 
 > [!NOTE]
-> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place the binary + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
+> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place `agentcontrol` and legacy alias `agentwall` + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
 
 > [!NOTE]
 > **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system.
@@ -33,49 +33,45 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
 > [!TIP]
 > **Enterprise Team enrollment?** Use the separate `team_otet.sh` / `team_otet.ps1` scripts instead. See the [Team Control Hub Guide](team_hub_guide.md).
 
-
-
-
 ---
 
 ## Step 1: Secure Your IDE & Start Gateway
 
-Run `agentwall protect` to automatically discover and wrap your installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), auto-generate a baseline `agentwall-policy.yaml` if missing, start the local gateway proxy (writing logs to `~/.agentwall/audit.jsonl`), and open the embedded dashboard in your default browser:
+Run `agentcontrol protect` to automatically discover and wrap your installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), auto-generate a baseline `agent-control-policy.yaml` if missing, start the local gateway proxy (writing logs to `~/.agent-control/audit.jsonl`), and open the embedded dashboard in your default browser:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
-  agentwall protect
+  agentcontrol protect
   ```
 * **Windows (PowerShell):**
   ```powershell
-  agentwall.exe protect
+  agentcontrol.exe protect
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  agentwall.exe protect
+  agentcontrol.exe protect
   ```
 
-*AgentWall is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
+*Vexa Agent Control is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
 
 > [!NOTE]
-> **One-Command Protection (`agentwall protect`):** Running `agentwall protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. `agentwall init` is deprecated.
-
+> **One-Command Protection (`agentcontrol protect`):** Running `agentcontrol protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. The legacy `agentwall` alias is also supported.
 
 ---
 
-## Step 2: Connect Claude Desktop to AgentWall
+## Step 2: Connect Claude Desktop to Agent Control
 
 Open a **new, separate terminal window** and run the integration command:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
-  agentwall wrap claude
-  agentwall status
+  agentcontrol wrap claude
+  agentcontrol status
   ```
 * **Windows (PowerShell):**
   ```powershell
-  agentwall.exe wrap claude
-  agentwall.exe status
+  agentcontrol.exe wrap claude
+  agentcontrol.exe status
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd

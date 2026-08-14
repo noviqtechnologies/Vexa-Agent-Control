@@ -319,7 +319,7 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
             <span><kbd>↵</kbd> to select</span>
             <span><kbd>ESC</kbd> to dismiss</span>
           </div>
-          <span className="footer-brand">Vexa Agentwall SOC</span>
+          <span className="footer-brand">Vexa Agent Control SOC</span>
         </div>
       </div>
     </div>

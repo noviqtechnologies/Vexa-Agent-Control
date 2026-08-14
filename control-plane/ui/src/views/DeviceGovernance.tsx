@@ -131,7 +131,7 @@ export default function DeviceGovernance() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', fontSize: '12px', color: '#a1a1aa' }}>
           <div style={{ padding: '10px', borderRadius: '6px', border: '1px solid rgba(34, 197, 94, 0.2)', backgroundColor: 'rgba(34, 197, 94, 0.05)' }}>
             <span style={{ color: '#22c55e', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● COMPLIANT</span>
-            Workstation daemon heartbeat active (≤ 3m) AND <strong>100% of detected IDE MCP servers are wrapped</strong> through AgentWall security proxy.
+            Workstation daemon heartbeat active (≤ 3m) AND <strong>100% of detected IDE MCP servers are wrapped</strong> through Agent Control security proxy.
           </div>
           <div style={{ padding: '10px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.2)', backgroundColor: 'rgba(245, 158, 11, 0.05)' }}>
             <span style={{ color: '#f59e0b', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● UNREACHABLE (3-10m)</span>

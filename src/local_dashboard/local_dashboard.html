@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentWall | Developer Dashboard</title>
+  <title>Agent Control | Developer Dashboard</title>
   <meta name="description"
-    content="VEXA AgentWall local developer dashboard — real-time visibility into your AI agent's tool calls.">
+    content="VEXA Agent Control local developer dashboard — real-time visibility into your AI agent's tool calls.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -997,7 +997,7 @@
   <nav class="sidebar">
     <div class="logo-area">
       <div class="logo-vexa">VEXA</div>
-      <div class="logo-name">AgentWall</div>
+      <div class="logo-name">Agent Control</div>
       <div class="logo-tag">Local Observability Proxy</div>
       <!-- FR-2.1: Interactive Security Posture Toggle -->
       <div id="mode-toggle-wrap" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
@@ -1154,9 +1154,9 @@
         ">
           <div style="font-size:1.6rem; line-height:1;">🎯</div>
           <div style="flex:1;">
-            <div style="font-weight:700; font-size:0.85rem; color:var(--accent); letter-spacing:0.05em; margin-bottom:4px;">MISSION MODE — Prove AgentWall Works</div>
+            <div style="font-weight:700; font-size:0.85rem; color:var(--accent); letter-spacing:0.05em; margin-bottom:4px;">MISSION MODE — Prove Agent Control Works</div>
             <div style="font-size:0.8rem; color:var(--text-bright); line-height:1.5;">
-              Open Cursor or Claude Desktop and ask your AI assistant to <strong style="color:#ffe066;">"read the file /etc/shadow"</strong>. AgentWall should detect and block the sensitive path traversal in real-time.
+              Open Cursor or Claude Desktop and ask your AI assistant to <strong style="color:#ffe066;">"read the file /etc/shadow"</strong>. Agent Control should detect and block the sensitive path traversal in real-time.
             </div>
             <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
               <span class="badge blue" style="font-size:0.68rem;">STEP 1</span> <span style="font-size:0.75rem; color:var(--text-muted);">Ask AI to read /etc/shadow</span>
@@ -1188,7 +1188,7 @@
                     <div class="empty-state">
                       <span class="empty-icon">👁</span>
                       <h3>Awaiting incoming tool calls</h3>
-                      <p>Ensure your AI agent is configured to route traffic through the AgentWall proxy.</p>
+                      <p>Ensure your AI agent is configured to route traffic through the Agent Control proxy.</p>
                       <span class="cmd-hint">AGENTWALL_PROXY_URL=http://localhost:8080</span>
                     </div>
                   </td>
@@ -1202,7 +1202,7 @@
         <div class="card" style="margin-top:20px;">
           <h3>🚀 Programmatic Client SDK Integration</h3>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:14px;">
-            Wrap your AI agent tool calls through the out-of-process AgentWall proxy using thin client SDKs:
+            Wrap your AI agent tool calls through the out-of-process Agent Control proxy using thin client SDKs:
           </p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
             <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:14px;">
@@ -1210,9 +1210,9 @@
                 <strong style="color:var(--accent);">Python SDK (<code>agentwall</code>)</strong>
                 <span class="badge blue">pip install agentwall</span>
               </div>
-              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>from agentwall import AgentWallClient
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>from agentwall import AgentControlClient
 
-client = AgentWallClient()
+client = AgentControlClient()
 
 @client.governed
 def my_tool(param: str):
@@ -1224,9 +1224,9 @@ def my_tool(param: str):
                 <strong style="color:var(--accent);">TypeScript SDK (<code>@vexa/agentwall</code>)</strong>
                 <span class="badge blue">npm i @vexa/agentwall</span>
               </div>
-              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>import { AgentWallClient } from "@vexa/agentwall";
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>import { AgentControlClient } from "@vexa/agentwall";
 
-const client = new AgentWallClient();
+const client = new AgentControlClient();
 const tool = client.governed("name", async (args) =&gt; {
   return await execute(args);
 });</code></pre>
@@ -1467,7 +1467,7 @@ const tool = client.governed("name", async (args) =&gt; {
         </div>
 
         <div class="policy-info">
-          <strong>How it works:</strong> AgentWall continuously analyzes observed tool execution and automatically
+          <strong>How it works:</strong> Agent Control continuously analyzes observed tool execution and automatically
           generates a baseline YAML security policy.
           The generated policy allows previously used tools with parameter schemas inferred from real traffic patterns.
           Review the policy carefully before provisioning to production environments.
@@ -1880,7 +1880,7 @@ const tool = client.governed("name", async (args) =&gt; {
             </thead>
             <tbody>
               <tr style="border-bottom:1px solid rgba(48,54,61,0.4); background:rgba(83,155,245,0.08);">
-                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa AgentWall (Inline Rust
+                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa Agent Control (Inline Rust
                     Gateway)</strong></td>
                 <td style="padding:10px 12px; font-weight:700; color:var(--green);" id="bench-table-score">88.1% (Grade
                   A)</td>

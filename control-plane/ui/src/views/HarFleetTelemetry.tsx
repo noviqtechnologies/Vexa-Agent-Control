@@ -34,7 +34,7 @@ export const HarFleetTelemetry: React.FC = () => {
       <div className="view-header">
         <h2>Hardened Agent Container Runtime (HAR) Telemetry</h2>
         <p className="subtitle">
-          FR-401 / NFR-302: Monitoring pre-configured OCI container sidecars running AgentWall entrypoints.
+          FR-401 / NFR-302: Monitoring pre-configured OCI container sidecars running Agent Control entrypoints.
         </p>
       </div>
 

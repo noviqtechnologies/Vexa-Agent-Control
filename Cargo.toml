@@ -5,8 +5,12 @@ members = [".", "control-plane/proto"]
 name = "agentwall"
 version = "1.0.33"
 edition = "2021"
-description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
+description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
+
+[[bin]]
+name = "agentcontrol"
+path = "src/main.rs"
 
 [[bin]]
 name = "agentwall"

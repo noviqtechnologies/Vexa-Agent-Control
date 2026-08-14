@@ -27,7 +27,7 @@ pub fn install_macos_service(
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>io.vexasec.agentwall</string>
+    <string>io.vexasec.agentcontrol</string>
     <key>ProgramArguments</key>
     <array>
         <string>{}</string>
@@ -51,9 +51,9 @@ pub fn install_macos_service(
         bin_path, hub_url, agent_id_plist
     );
 
-    let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
+    let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentcontrol.plist";
     let agent_plist = dirs::home_dir()
-        .map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"))
+        .map(|h| h.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist"))
         .unwrap_or_else(|| std::path::PathBuf::from(daemon_plist));
 
     let (target_path, is_daemon) = if fs::metadata("/Library/LaunchDaemons").is_ok() && is_root() {
@@ -86,7 +86,7 @@ pub fn install_macos_service(
         "LaunchAgent"
     };
     println!(
-        "{} AgentWall macOS {} installed and loaded!",
+        "{} Agent Control macOS {} installed and loaded!",
         "✔".green().bold(),
         mode_str
     );
@@ -94,9 +94,9 @@ pub fn install_macos_service(
 }
 
 pub fn uninstall_macos_service() -> Result<(), String> {
-    let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
+    let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentcontrol.plist";
     let agent_plist =
-        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
+        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist"));
 
     if std::path::Path::new(daemon_plist).exists() {
         let _ = Command::new("launchctl")
@@ -105,7 +105,27 @@ pub fn uninstall_macos_service() -> Result<(), String> {
         let _ = fs::remove_file(daemon_plist);
     }
 
-    if let Some(path) = agent_plist {
+    if let Some(path) = &agent_plist {
+        if path.exists() {
+            let _ = Command::new("launchctl")
+                .args(["unload", "-w", &path.display().to_string()])
+                .output();
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    // Clean up legacy io.vexasec.agentwall plists if present
+    let legacy_daemon = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
+    let legacy_agent =
+        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
+
+    if std::path::Path::new(legacy_daemon).exists() {
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", legacy_daemon])
+            .output();
+        let _ = fs::remove_file(legacy_daemon);
+    }
+    if let Some(path) = legacy_agent {
         if path.exists() {
             let _ = Command::new("launchctl")
                 .args(["unload", "-w", &path.display().to_string()])
@@ -115,7 +135,7 @@ pub fn uninstall_macos_service() -> Result<(), String> {
     }
 
     println!(
-        "{} AgentWall macOS service uninstalled.",
+        "{} Agent Control macOS service uninstalled.",
         "✔".green().bold()
     );
     Ok(())

@@ -185,9 +185,22 @@ pub fn codex_config_path() -> Result<PathBuf, WrapError> {
     })
 }
 
-/// Returns the path to the ~/.agentwall/ config directory.
+/// Returns the path to the ~/.agent-control/ config directory (with fallback to ~/.agentwall/).
+pub fn agent_control_config_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| {
+        let new_dir = h.join(".agent-control");
+        let old_dir = h.join(".agentwall");
+        if old_dir.exists() && !new_dir.exists() {
+            old_dir
+        } else {
+            new_dir
+        }
+    })
+}
+
+/// Backward-compatible alias for agent_control_config_dir.
 pub fn agentwall_config_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".agentwall"))
+    agent_control_config_dir()
 }
 
 #[cfg(test)]
@@ -209,9 +222,7 @@ mod tests {
     #[test]
     fn test_agentwall_config_dir_returns_path() {
         // Should return Some path under home dir
-        let dir = agentwall_config_dir();
-        if let Some(d) = dir {
-            assert!(d.to_string_lossy().contains(".agentwall"));
-        }
+        let dir = agent_control_config_dir();
+        assert!(dir.is_some());
     }
 }

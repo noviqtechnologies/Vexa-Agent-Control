@@ -10,9 +10,10 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "agentwall",
+    name = "agentcontrol",
+    bin_name = "agentcontrol",
     version,
-    about = "VEXA AgentWall — centralized enterprise security gateway for AI agent tool calls over MCP"
+    about = "VEXA Agent Control — centralized enterprise security gateway for AI agent tool calls over MCP"
 )]
 pub struct Cli {
     #[command(subcommand)]

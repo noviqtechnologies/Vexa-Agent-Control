@@ -300,7 +300,7 @@ schema_drift:
 
 export default function PolicyMarketplace() {
   const [templates, setTemplates] = useState<PolicyTemplate[]>(BUILTIN_TEMPLATES)
-  const [loading, setLoading] = useState(false)
+  const loading = false
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [previewTemplate, setPreviewTemplate] = useState<PolicyTemplate | null>(null)

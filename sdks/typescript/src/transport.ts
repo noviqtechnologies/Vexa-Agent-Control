@@ -18,6 +18,9 @@ function resolveProxyUrl(options?: ClientOptions): string {
     return options.proxyUrl.replace(/\/+$/, "");
   }
   if (typeof process !== "undefined" && process.env) {
+    if (process.env.AGENT_CONTROL_PROXY_URL) {
+      return process.env.AGENT_CONTROL_PROXY_URL.replace(/\/+$/, "");
+    }
     if (process.env.AGENTWALL_PROXY_URL) {
       return process.env.AGENTWALL_PROXY_URL.replace(/\/+$/, "");
     }
@@ -37,7 +40,9 @@ export class HttpTransport {
     this.proxyUrl = resolveProxyUrl(options);
     this.authToken =
       options?.authToken ||
-      (typeof process !== "undefined" ? process.env?.AGENTWALL_AUTH_TOKEN : undefined);
+      (typeof process !== "undefined"
+        ? process.env?.AGENT_CONTROL_AUTH_TOKEN || process.env?.AGENTWALL_AUTH_TOKEN
+        : undefined);
     this.timeoutMs = options?.timeoutMs ?? 30000;
   }
 

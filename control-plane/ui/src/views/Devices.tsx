@@ -293,7 +293,7 @@ export default function Devices() {
               </button>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>
-              Issue a single-use token (OTET) to securely onboard a developer workstation into AgentWall IDE Sentry Governance.
+              Issue a single-use token (OTET) to securely onboard a developer workstation into Agent Control IDE Sentry Governance.
             </p>
 
             {!generatedToken ? (

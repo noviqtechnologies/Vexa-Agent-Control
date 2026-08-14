@@ -70,12 +70,12 @@ param(
 
     $RawVer = $Version.TrimStart("v")
     if ($InstalledVersion -and $InstalledVersion -eq $RawVer) {
-        Write-Host "`n[+] AgentWall v$RawVer is already up to date. Nothing to do." -ForegroundColor $ColorGreen
+        Write-Host "`n[+] Vexa Agent Control v$RawVer is already up to date. Nothing to do." -ForegroundColor $ColorGreen
         return
     } elseif ($InstalledVersion) {
         Write-Host "Upgrading $InstalledVersion -> $RawVer..." -ForegroundColor $ColorCyan
     } else {
-        Write-Host "Fresh install of AgentWall $Version..." -ForegroundColor $ColorCyan
+        Write-Host "Fresh install of Vexa Agent Control $Version..." -ForegroundColor $ColorCyan
     }
 
     $AssetName = "agentwall-$Version-windows-$ArchTarget.zip"
@@ -151,8 +151,10 @@ param(
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     }
 
+    $AgentControlPath = Join-Path $InstallDir "agentcontrol.exe"
+    Copy-Item -Path $ExtractedBinary.FullName -Destination $AgentControlPath -Force
     Copy-Item -Path $ExtractedBinary.FullName -Destination $FinalBinaryPath -Force
-    Write-Host "Installed as agentwall.exe" -ForegroundColor $ColorGreen
+    Write-Host "Installed as agentcontrol.exe (and alias agentwall.exe)" -ForegroundColor $ColorGreen
 
     $QuickstartScript = Get-ChildItem -Path $ExtractDir -Recurse -Filter "quickstart_agent.py" | Select-Object -First 1
     $QuickstartTarget = Join-Path $InstallDir "quickstart_agent.py"
@@ -171,7 +173,7 @@ param(
 
     Remove-Item $TempDir -Recurse -Force | Out-Null
 
-    Write-Host "`n[+] AgentWall $Version installed successfully!" -ForegroundColor $ColorGreen
+    Write-Host "`n[+] Vexa Agent Control $Version installed successfully!" -ForegroundColor $ColorGreen
     Write-Host "To secure all AI IDEs and launch local protection:"
-    Write-Host "  agentwall protect" -ForegroundColor $ColorGreen
+    Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
 }

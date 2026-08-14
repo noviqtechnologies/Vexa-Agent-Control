@@ -21,7 +21,7 @@ type ModalStep = 'setup' | 'configure'
 const PROVIDER_META: Record<string, { label: string; description: string; isOAuth: boolean; isEnterprise?: boolean }> = {
   local: {
     label: 'Local Authentication',
-    description: 'Email and password managed directly in AgentWall. Ideal for development & initial setup.',
+    description: 'Email and password managed directly in Agent Control. Ideal for development & initial setup.',
     isOAuth: false,
   },
   google: {
@@ -222,7 +222,7 @@ export default function AuthProviders() {
       <div className="page-header">
         <h1>Auth Providers</h1>
         <p>
-          Authentication providers allow users to sign in to AgentWall. Configure at least one
+          Authentication providers allow users to sign in to Agent Control. Configure at least one
           provider before inviting users.
         </p>
       </div>
@@ -237,7 +237,7 @@ export default function AuthProviders() {
           </div>
           <div className="ap-global-warning-content">
             <strong>No Auth Providers Configured!</strong>
-            <p>To finish setting up AgentWall, you'll need to configure an Auth Provider. Select one below to get started!</p>
+            <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
           </div>
         </div>
       )}
@@ -308,7 +308,7 @@ export default function AuthProviders() {
                   <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
                 <p>
-                  Local authentication stores passwords in AgentWall and is intended for{' '}
+                  Local authentication stores passwords in Agent Control and is intended for{' '}
                   <strong>development or testing</strong>. For production, use an SSO provider
                   such as Google or GitHub.
                 </p>

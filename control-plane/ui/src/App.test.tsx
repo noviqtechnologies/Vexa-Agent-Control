@@ -69,8 +69,8 @@ describe('App routing', () => {
     expect(await screen.findByTestId('threat-intelligence')).toBeInTheDocument()
   })
 
-  it('shows AgentWall logo', async () => {
+  it('shows Agent Control logo', async () => {
     renderAt('/')
-    expect(await screen.findByText(/Agentwall/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Agent Control/i)).toBeInTheDocument()
   })
 })

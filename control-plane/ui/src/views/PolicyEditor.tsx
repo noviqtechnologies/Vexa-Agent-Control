@@ -161,7 +161,7 @@ export default function PolicyEditor() {
       <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1>Policy Editor</h1>
-          <p>Edit the global AgentWall YAML policy for runtime evaluation.</p>
+          <p>Edit the global Agent Control YAML policy for runtime evaluation.</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <button 

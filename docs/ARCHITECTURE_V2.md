@@ -1,4 +1,4 @@
-# Vexa AgentWall v4.0 System Architecture
+# Vexa Agent Control v4.0 System Architecture
 
 **Target Domain:** `vexasec.io` (GCP SaaS Hub)  
 **Contract Version:** 4.0  
