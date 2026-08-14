@@ -34,18 +34,17 @@ Choose the deployment method that fits your environment requirements:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                       Deployment Guides                                         │
-├──────────────────────────┬───────────────────────────────┬──────────────────────────────────────┤
-│ 1. Local Development     │ 2. Kubernetes Deployment      │ 3. AWS EKS Deployment                │
-│    • Local Dev & Testing │    • Production Multi-Replica │    • Production AWS Cloud            │
-│    • Docker Compose      │    • High Availability        │    • EKS, EBS CSI, ACM TLS           │
-│    • Proof-of-Concept    │    • Helm & Operator CRDs      │    • Step-by-Step Teardown           │
-│    → [Local Dev](team_hub_guide/local_development.md) │ → [K8s Guide](team_hub_guide/kubernetes_deployment.md) │ → [AWS EKS Guide](team_hub_guide/aws_eks_deployment.md) │
-└──────────────────────────┴───────────────────────────────┴──────────────────────────────────────┘
+├────────────────────────────────────────────────┬────────────────────────────────────────────────┤
+│ 1. Local Development & Testing                 │ 2. Kubernetes Production Fleet                 │
+│    • Local Dev & Testing                       │    • Production Multi-Replica                  │
+│    • Self-Hosted Docker Compose Stack          │    • High Availability Gateway Fleet           │
+│    • Go API, React Console, PostgreSQL         │    • Helm Chart (`./chart`) & Operator CRDs    │
+│    → [Local Dev](team_hub_guide/local_development.md) │ → [K8s Guide](team_hub_guide/kubernetes_deployment.md) │
+└────────────────────────────────────────────────┴────────────────────────────────────────────────┘
 ```
 
 - **[Local Development & Testing Guide](team_hub_guide/local_development.md)** — Step-by-step instructions for running Team Hub locally using Docker Compose (`docker compose up -d --build`), executing native gateways, connecting local agent workflows, and verifying audit logs.
 - **[Kubernetes Deployment Guide](team_hub_guide/kubernetes_deployment.md)** — Comprehensive documentation for deploying Team Hub to production Kubernetes clusters using Helm (`./chart`), managing TLS secrets, configuring `AgentWallPolicy` CRDs, and handling zero-downtime rolling upgrades.
-- **[AWS EKS Deployment & Uninstallation Guide](team_hub_guide/aws_eks_deployment.md)** — Step-by-step walkthrough for deploying, validating, and cleanly uninstalling Team Hub on AWS EKS using `eksctl`, Helm, AWS EBS CSI storage, and ACM ingress.
 
 ---
 
@@ -133,29 +132,46 @@ Configure provider keys via the Team Management Console at `http://localhost:808
 
 ---
 
-## 4. Spend Caps & Loop Detection
+## 4. Spend Caps & Authoritative Spend Ledger
 
-### Spend Caps
+AgentWall provides centralized, authoritative LLM spend governance backed by PostgreSQL to eliminate unbudgeted overages across all developer workstations and staging fleets.
 
-Enforce per-session token budgets via YAML policy:
+### Spend Architecture & Enforcement Model
 
-```yaml
-spend:
-  max_tokens_per_session: 100000
-  max_concurrent_sessions: 10
+```
+Agent Workload               Gateway Proxy (Rust)               Control Hub API (Go / PostgreSQL)
+     │                                │                                         │
+     │─── POST /v1/chat/completions ─►│                                         │
+     │    (model: gpt-4o)             │─── POST /api/v2/spend/authorize ───────►│  ← Lock budget windows FOR UPDATE
+     │                                │    (est tokens, max output tokens)      │  ← Check: reserved + settled + reserve <= limit
+     │                                │◄── 200 OK (allow, reservation_id) ──────│  ← Reserved in microcents ($1 = 100M µ¢)
+     │                                │                                         │
+     │                                │─── POST https://api.openai.com ────────►│  (Forward to provider)
+     │                                │◄── 200 OK (usage: prompt + comp tokens) │
+     │                                │                                         │
+     │                                │─── POST /api/v2/spend/settle ──────────►│  ← Convert reserve to actual settlement
+     │                                │◄── 200 OK (settled) ────────────────────│  ← Release unused reserve balance
+     │◄── 200 OK (LLM Response) ──────│                                         │
 ```
 
-**Error when exceeded:**
+### Key Capabilities & Invariants
+- **Integer Microcents Math**: All monetary amounts are represented as 64-bit integers in microcents (`1 USD = 100,000,000 µ¢`). Floating-point arithmetic is strictly prohibited in ledger operations.
+- **Preflight Bounded Reservations**: Before any upstream LLM call is dispatched, the gateway reserves the maximum possible cost based on prompt token estimates and `max_output_tokens`.
+- **Fail-Closed Hard Denial**: If `reserved + settled + reserve > limit`, the gateway denies the request immediately with HTTP 429 (`spend_budget_exhausted`). **Zero upstream tokens are consumed**.
+- **Immutable Financial Event Log**: Every authorization, settlement, release, and reversal is written to an append-only `spend_events` log with actor identity and timestamp.
+- **Operator Increase Requests**: Developers can submit increase requests via the Web Console (`/spend/status`), which administrators can approve or reject with automatic policy version creation in (`/spend/requests`).
+
+**Error Response when Budget is Exhausted:**
 ```json
 {
   "error": {
-    "code": "SPEND_LIMIT_EXCEEDED",
-    "message": "Token budget of 100,000 exceeded for current session"
+    "code": "spend_budget_exhausted",
+    "message": "LLM spend budget exceeded or preflight authorization denied",
+    "scope": "organization",
+    "reset_at": "2026-09-01T00:00:00Z"
   }
 }
 ```
-
-To reset or adjust, update the policy and push via the Control Hub (no gateway restart needed).
 
 ### Loop Detection
 
@@ -259,15 +275,17 @@ Control Hub tracks heartbeat checkins emitted every 60 seconds from background S
 
 | Status Badge | State Criteria | System Security Action | Operational Meaning |
 |---|---|---|---|
-| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$ AND $100\%$ MCP servers wrapped | Device active, full API & proxy access granted | Workstation is fully governed. All tool calls pass through AgentWall DLP & policy proxy. |
-| **`UNREACHABLE`** (Yellow) | $3\text{ min} < \text{Heartbeat} \le 10\text{ min}$ | Warning logged, retry polling | Machine is idle, asleep, offline, or sentry daemon connection was temporarily interrupted. |
-| **`NON_COMPLIANT`** (Red) | Heartbeat $> 10\text{ min}$ OR unwrapped tools detected ($\text{wrapped} < \text{total}$) | SIEM & Slack alerts dispatched, compliance violation logged | **Zero-Trust Breach**: At least 1 unwrapped MCP server exists that bypasses prompt filtering & audit logs. |
+| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$, IDE base URLs locked, AND $100\%$ MCP servers wrapped | Device active, full API & proxy access granted | Workstation is fully governed. All tool calls and LLM completions pass through AgentWall DLP & spend ledger. |
+| **`OFFLINE`** (Gray) | Heartbeat $> 3\text{ min}$ | Warning logged | Machine is idle, asleep, offline, or sentry daemon connection was temporarily interrupted. |
+| **`NON_COMPLIANT`** (Red) | IDE Base URL modified/bypassed OR unwrapped tools detected | Console alerts dispatched, compliance violation logged | **Zero-Trust Drift**: At least 1 IDE or MCP tool has bypassed the proxy. Sentry Daemon executes auto-healing. |
 | **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device | Hardware certificate invalidated; all telemetry & gateway requests blocked. |
 
-#### Why Unwrapped MCP Tools Trigger `NON_COMPLIANT`
-AgentWall enforces a Zero-Trust security posture. If an LLM extension or developer installs an MCP tool that is not wrapped by AgentWall (`agentwall wrap`), tool executions (file reads, bash commands, DB queries) bypass the proxy without prompt redacting or DLP audit logging. To preserve enterprise security integrity, the entire workstation is marked **`NON_COMPLIANT`** until `agentwall wrap` is executed.
+### 3. Fleet Devices & IDE Tamper Log Explorer
+In the Web Console:
+- **Fleet Devices (`/devices`)**: Real-time view of all enrolled developer workstations, hostnames, OS distribution, protected IDEs (Cursor, VS Code, Zed, Claude), 24h tamper counts, and compliance badges.
+- **IDE Tamper Log (`/devices/tamper-log`)**: Immutable audit log of all configuration tampering, proxy bypass attempts, and sub-500ms self-healing actions across developer machines.
 
-### 3. Single-Device Revocation & Re-enrollment
+### 4. Single-Device Revocation & Re-enrollment
 To revoke a compromised or lost device instantly:
 1. Navigate to **Device Governance** in the Web Console.
 2. Locate the device ID and click **Revoke**.

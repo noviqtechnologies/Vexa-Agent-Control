@@ -977,19 +977,34 @@ async fn run_start(
     };
     // ---------------------------------------------
 
-    // 2. Check log path writable
-    let mut log_dir = Path::new(&log_path).parent().unwrap_or(Path::new("."));
+    // 2. Resolve and ensure log path directory exists
+    let resolved_log_path = if log_path.starts_with("~/") || log_path.starts_with("~\\") {
+        if let Some(home) = dirs::home_dir() {
+            home.join(&log_path[2..]).to_string_lossy().to_string()
+        } else {
+            log_path.clone()
+        }
+    } else {
+        log_path.clone()
+    };
+
+    let log_path_obj = Path::new(&resolved_log_path);
+    let mut log_dir = log_path_obj.parent().unwrap_or(Path::new("."));
     if log_dir.as_os_str().is_empty() {
         log_dir = Path::new(".");
     }
     if !log_dir.exists() {
-        eprintln!(
-            "{} Log directory does not exist: {}",
-            "✖".red(),
-            log_dir.display()
-        );
-        return 1;
+        if let Err(e) = std::fs::create_dir_all(log_dir) {
+            eprintln!(
+                "{} Could not create log directory {}: {}",
+                "✖".red(),
+                log_dir.display(),
+                e
+            );
+            return 1;
+        }
     }
+    let log_path = resolved_log_path;
 
     // Override listen address for centralized mode if it's the default
     // Override listen address for centralized mode if it's the default

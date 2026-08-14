@@ -131,10 +131,10 @@ agentwall.exe --version
 >   ```powershell
 >   # Run in an elevated (Administrator) PowerShell session:
 >   agentwall.exe service install `
->     --hub-url            "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8081" `
+>     --hub-url            "http://localhost:8400" `
 >     --gateway-secret     "<GATEWAY_SECRET>" `
 >     --policy-read-secret "<POLICY_READ_SECRET>" `
->     --agent-id           "wasim-win11"   # optional
+>     --agent-id           "dev-workstation-01"   # optional
 >   ```
 >   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the service, so Sentry reads the correct secrets on first boot.
 > - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentwall watch --all`** in a standard user terminal.

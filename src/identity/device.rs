@@ -190,26 +190,101 @@ pub fn load_device_token() -> Option<String> {
 
 use colored::*;
 
+use crate::identity::keys::IdentityKeyManager;
+use crate::identity::transcript::TranscriptBuilder;
+
 #[derive(serde::Serialize)]
-struct EnrollApiRequest<'a> {
+struct StartEnrollmentPayload<'a> {
+    schema_version: &'a str,
     enrollment_token: &'a str,
-    device_id: &'a str,
-    hostname: &'a str,
-    os_arch: String,
+    stable_device_id: &'a str,
+    display_name: &'a str,
+    owner_subject: &'a str,
+    identity_public_key: IdentityPubKeyPayload<'a>,
+    mtls_csr: MtlsCsrPayload<'a>,
+    platform: PlatformPayload<'a>,
+    release: ReleasePayload<'a>,
+}
+
+#[derive(serde::Serialize)]
+struct IdentityPubKeyPayload<'a> {
+    algorithm: &'a str,
+    value: String,
+}
+
+#[derive(serde::Serialize)]
+struct MtlsCsrPayload<'a> {
+    algorithm: &'a str,
+    pem: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct PlatformPayload<'a> {
     os_family: &'a str,
-    public_key: &'a str,
-    agentwall_version: &'a str,
+    os_version_summary: &'a str,
+    architecture: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct ReleasePayload<'a> {
+    version: &'a str,
+    manifest_id: &'a str,
+}
+
+#[derive(serde::Deserialize)]
+struct StartEnrollmentApiResp {
+    transaction_id: String,
+    #[serde(default)]
+    tenant_id: String,
+    challenge: ChallengeBlock,
 }
 
 #[derive(serde::Deserialize)]
 #[allow(dead_code)]
-struct EnrollApiResponse {
-    device_id: String,
-    device_token: String,
-    expires_at_ms: i64,
+struct ChallengeBlock {
+    id: String,
+    nonce: String,
+    #[serde(default)]
+    context: String,
 }
 
-/// Executes the `agentwall enroll` command.
+#[derive(serde::Serialize)]
+struct CompleteEnrollmentPayload<'a> {
+    schema_version: &'a str,
+    transaction_id: &'a str,
+    challenge_id: &'a str,
+    enrollment_signature: SignaturePayload<'a>,
+    signed_payload_sha256: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct SignaturePayload<'a> {
+    algorithm: &'a str,
+    value: String,
+}
+
+#[derive(serde::Deserialize)]
+#[allow(dead_code)]
+struct CompleteEnrollmentApiResp {
+    device: DeviceBlock,
+    mtls_certificate: CertBlock,
+    #[serde(default)]
+    device_api_base: String,
+}
+
+#[derive(serde::Deserialize)]
+struct DeviceBlock {
+    id: String,
+    state: String,
+}
+
+#[derive(serde::Deserialize)]
+struct CertBlock {
+    serial: String,
+    pem_chain: String,
+}
+
+/// Executes the `agentwall enroll` command with dual-key cryptographic challenge-response proof.
 pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     if token.is_empty() {
         eprintln!(
@@ -219,7 +294,7 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         return 1;
     }
 
-    println!("{} AgentWall PKI Device Enrollment", "●".green().bold());
+    println!("{} AgentWall PKI Device Enrollment (v4.0 Protocol)", "●".green().bold());
     let masked_token = if token.len() > 8 {
         format!("{}...{}", &token[..4], &token[token.len() - 4..])
     } else {
@@ -231,41 +306,73 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         masked_token.dimmed()
     );
 
-    let identity = match DeviceIdentity::load_or_create() {
+    let home_dir = match dirs::home_dir() {
+        Some(h) => h.join(".agentwall"),
+        None => PathBuf::from(".agentwall"),
+    };
+    let key_mgr = IdentityKeyManager::new(&home_dir);
+
+    let hostname = get_hostname();
+    let device_identity = match DeviceIdentity::load_or_create() {
         Ok(id) => id,
         Err(e) => {
-            eprintln!(
-                "{} Failed to load or generate device identity: {}",
-                "✖".red(),
-                e
-            );
+            eprintln!("{} Failed to load or initialize device identity: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+    let stable_device_id = device_identity.device_id.clone();
+
+    println!("  Generating dual-key cryptographic credentials...");
+    let bundle = match key_mgr.generate_bundle_with_key(&stable_device_id, device_identity.signing_key) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{} Failed to generate cryptographic key bundle: {}", "✖".red(), e);
             return 1;
         }
     };
 
-    println!("  Device ID: {}", identity.device_id.bold());
-    println!("  Public Key: {}...", &identity.public_key_hex[..16]);
+    println!("  Device Identity: {}", stable_device_id.bold());
+    println!("  Ed25519 Fingerprint: {}...", &bundle.ed25519_fingerprint[..16]);
+    println!("  ECDSA P-256 CSR Hash: {}...", &bundle.csr_sha256[..16]);
 
-    let hostname = get_hostname();
-    let os_arch = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let ed25519_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        &bundle.ed25519_public_bytes,
+    );
+
     let os_family = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
     let pkg_ver = env!("CARGO_PKG_VERSION");
 
-    let payload = EnrollApiRequest {
+    let start_payload = StartEnrollmentPayload {
+        schema_version: "2.0",
         enrollment_token: token,
-        device_id: &identity.device_id,
-        hostname: &hostname,
-        os_arch,
-        os_family,
-        public_key: &identity.public_key_hex,
-        agentwall_version: pkg_ver,
+        stable_device_id: &stable_device_id,
+        display_name: &hostname,
+        owner_subject: "",
+        identity_public_key: IdentityPubKeyPayload {
+            algorithm: "Ed25519",
+            value: ed25519_b64,
+        },
+        mtls_csr: MtlsCsrPayload {
+            algorithm: "ECDSA-P256",
+            pem: &bundle.csr_pem,
+        },
+        platform: PlatformPayload {
+            os_family,
+            os_version_summary: os_family,
+            architecture: arch,
+        },
+        release: ReleasePayload {
+            version: pkg_ver,
+            manifest_id: "manifest-v4",
+        },
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build();
-
-    let client = match client {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+    {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{} Failed to build HTTP client: {}", "✖".red(), e);
@@ -273,45 +380,107 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         }
     };
 
-    let enroll_endpoint = format!("{}/api/v1/enroll", hub_url.trim_end_matches('/'));
-    let response = client.post(&enroll_endpoint).json(&payload).send().await;
-
-    match response {
-        Ok(res) if res.status().is_success() => {
-            if let Ok(body) = res.json::<EnrollApiResponse>().await {
-                if let Err(e) = save_device_token(&body.device_token) {
-                    eprintln!("{} Failed to save device token: {}", "⚠".yellow(), e);
-                }
-                println!();
-                println!("{} Device enrolled successfully!", "✔".green().bold());
-                println!("  Device Token saved to ~/.agentwall/device_token");
-                0
-            } else {
-                eprintln!("{} Invalid response format from Hub", "✖".red());
-                1
-            }
-        }
-        Ok(res) => {
-            let status = res.status();
-            let err_text = res.text().await.unwrap_or_default();
-            eprintln!(
-                "{} Enrollment failed (HTTP {}): {}",
-                "✖".red(),
-                status,
-                err_text
-            );
-            1
-        }
+    let clean_hub = hub_url.trim_end_matches('/');
+    let start_endpoint = format!("{}/api/v2/enrollment/start", clean_hub);
+    println!("  Step 1/2: Submitting enrollment start challenge request...");
+    
+    let start_res = match client.post(&start_endpoint).json(&start_payload).send().await {
+        Ok(res) => res,
         Err(e) => {
-            eprintln!(
-                "{} Cannot connect to Control Hub at {}: {}",
-                "✖".red(),
-                enroll_endpoint,
-                e
-            );
-            1
+            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), start_endpoint, e);
+            return 1;
         }
+    };
+
+    if !start_res.status().is_success() {
+        let status = start_res.status();
+        let body = start_res.text().await.unwrap_or_default();
+        eprintln!("{} Enrollment start failed (HTTP {}): {}", "✖".red(), status, body);
+        return 1;
     }
+
+    let start_data = match start_res.json::<StartEnrollmentApiResp>().await {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Invalid enrollment start response: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+
+    println!("  Step 2/2: Signing canonical transcript proof with Ed25519 private key...");
+    let tenant_id = if start_data.tenant_id.is_empty() {
+        "default-tenant"
+    } else {
+        &start_data.tenant_id
+    };
+
+    let transcript = TranscriptBuilder::new(
+        &start_data.transaction_id,
+        &start_data.challenge.id,
+        tenant_id,
+        &bundle.ed25519_fingerprint,
+        &bundle.csr_sha256,
+    );
+
+    let (sig_b64url, hash_hex) = transcript.sign(&bundle.ed25519_signing_key);
+
+    let complete_payload = CompleteEnrollmentPayload {
+        schema_version: "2.0",
+        transaction_id: &start_data.transaction_id,
+        challenge_id: &start_data.challenge.id,
+        enrollment_signature: SignaturePayload {
+            algorithm: "Ed25519",
+            value: sig_b64url,
+        },
+        signed_payload_sha256: &hash_hex,
+    };
+
+    let complete_endpoint = format!("{}/api/v2/enrollment/complete", clean_hub);
+    let complete_res = match client.post(&complete_endpoint).json(&complete_payload).send().await {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), complete_endpoint, e);
+            return 1;
+        }
+    };
+
+    if !complete_res.status().is_success() {
+        let status = complete_res.status();
+        let body = complete_res.text().await.unwrap_or_default();
+        eprintln!("{} Enrollment completion failed (HTTP {}): {}", "✖".red(), status, body);
+        return 1;
+    }
+
+    let complete_data = match complete_res.json::<CompleteEnrollmentApiResp>().await {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Invalid enrollment complete response: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+
+    // Save cryptographic keys & certificate
+    if let Err(e) = key_mgr.persist_bundle_securely(&bundle) {
+        eprintln!("{} Failed to save private keys securely: {}", "✖".red(), e);
+        return 1;
+    }
+
+    let cert_path = home_dir.join("device_cert.pem");
+    if let Err(e) = fs::write(&cert_path, &complete_data.mtls_certificate.pem_chain) {
+        eprintln!("{} Failed to write certificate chain: {}", "✖".red(), e);
+    }
+
+    let _ = save_device_token(&complete_data.device.id);
+
+    println!();
+    println!("{} Device enrolled successfully!", "✔".green().bold());
+    println!("  Device ID:          {}", complete_data.device.id.cyan());
+    println!("  Initial State:      {}", complete_data.device.state.yellow());
+    println!("  Certificate Serial: {}", complete_data.mtls_certificate.serial.bold());
+    println!("  Cert Location:      {}", cert_path.display());
+    println!();
+    println!("Next: Start AgentWall Sentry daemon to begin active policy enforcement & heartbeats.");
+    0
 }
 
 #[cfg(test)]

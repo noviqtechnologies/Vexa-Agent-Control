@@ -20,7 +20,7 @@ type UserClaims struct {
 }
 
 // PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
-// or the operator agentwall_session cookie.
+// or the operator agentwall_session cookie. Fails closed if secret is empty.
 func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +28,7 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 			auth := r.Header.Get("Authorization")
 			if strings.HasPrefix(auth, "Bearer ") {
 				token := strings.TrimPrefix(auth, "Bearer ")
-				if secret == "" || subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
 					next.ServeHTTP(w, r)
 					return
 				}
@@ -79,17 +79,17 @@ func DashboardAuth() func(http.Handler) http.Handler {
 		})
 	}
 }
-// GatewayAuth validates the shared HMAC secret the gateway uses for
-// ingest endpoints. Dashboard operators never use this path.
-func GatewayAuth(secret string) func(http.Handler) http.Handler {
-	if secret == "" {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
-	}
 
+// GatewayAuth validates the shared HMAC secret the gateway uses for
+// ingest endpoints. Fails closed if secret is empty.
+func GatewayAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if secret == "" {
+				http.Error(w, `{"error":"gateway authentication unconfigured"}`, http.StatusUnauthorized)
+				return
+			}
+
 			auth := r.Header.Get("Authorization")
 			if !strings.HasPrefix(auth, "Bearer ") {
 				http.Error(w, `{"error":"missing gateway token"}`, http.StatusUnauthorized)

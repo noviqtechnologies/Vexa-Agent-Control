@@ -56,6 +56,7 @@ vi.mock('../api/client', async () => {
       listAgents: vi.fn(),
       getHeatmap: vi.fn(),
       listRecentAlerts: vi.fn(),
+      getLicenseStatus: vi.fn().mockResolvedValue(null),
     },
     subscribeAlerts: vi.fn(() => vi.fn()),
   }
@@ -97,14 +98,14 @@ describe('FleetOverview', () => {
     await waitFor(() => {
       expect(screen.getByText('5')).toBeInTheDocument()
     })
-    expect(screen.getByText('Total Agents')).toBeInTheDocument()
+    expect(screen.getByText('Total Devices')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('Active')).toBeInTheDocument()
+    expect(screen.getByText('Active Devices')).toBeInTheDocument()
     expect(screen.getByText('200')).toBeInTheDocument()
     expect(screen.getByText('15')).toBeInTheDocument()
   })
 
-  it('navigates to device governance when Total Agents or Active stat tiles are clicked', async () => {
+  it('navigates to device governance when Total Devices or Active Devices stat tiles are clicked', async () => {
     vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
     vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
     vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
@@ -113,14 +114,14 @@ describe('FleetOverview', () => {
     renderView()
 
     await waitFor(() => {
-      expect(screen.getByText('Total Agents')).toBeInTheDocument()
+      expect(screen.getByText('Total Devices')).toBeInTheDocument()
     })
 
-    const totalAgentsTile = screen.getByText('Total Agents').closest('.stat-tile')!
-    const activeTile = screen.getByText('Active').closest('.stat-tile')!
+    const totalAgentsTile = screen.getByText('Total Devices').closest('.stat-tile')!
+    const activeTile = screen.getByText('Active Devices').closest('.stat-tile')!
 
-    expect(totalAgentsTile.getAttribute('title')).toBe('Click to view Central Device Governance')
-    expect(activeTile.getAttribute('title')).toBe('Click to view Active Devices')
+    expect(totalAgentsTile.getAttribute('title')).toBe('Click to view Device Governance')
+    expect(activeTile.getAttribute('title')).toBe('Click to view Compliant Active Devices')
   })
 
   it('renders agent table', async () => {

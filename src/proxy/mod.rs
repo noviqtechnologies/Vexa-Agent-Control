@@ -1,5 +1,6 @@
 //! Proxy server, TLS interception, JSON-RPC forwarding, STDIO transport, and egress tracking subsystem.
 
+pub mod broker_client;
 pub mod codec;
 pub mod db;
 pub mod egress;

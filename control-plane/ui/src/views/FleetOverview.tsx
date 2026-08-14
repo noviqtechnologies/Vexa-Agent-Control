@@ -112,7 +112,7 @@ export default function FleetOverview() {
           <button
             type="button"
             className="soc-btn-primary"
-            onClick={() => navigate('/admin/devices')}
+            onClick={() => navigate('/devices')}
           >
             + Enroll Device
           </button>
@@ -122,7 +122,7 @@ export default function FleetOverview() {
       {/* Stat tiles */}
       {stats && (
         <div className="stats-grid soc-stats-grid">
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to view Central Device Governance">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Device Governance">
             <div className="stat-header-row">
               <div className="stat-label">Total Devices</div>
               <span className="soc-delta-badge delta-neutral">Fleet</span>
@@ -131,7 +131,7 @@ export default function FleetOverview() {
             <div className="stat-subtext">Enrolled Machines</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices?status=COMPLIANT')} title="Click to view Compliant Active Devices">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Compliant Active Devices">
             <div className="stat-header-row">
               <div className="stat-label">Active Devices</div>
               <span className="soc-delta-badge delta-success">Compliant</span>
@@ -177,7 +177,7 @@ export default function FleetOverview() {
           </div>
 
           {licenseStatus && (
-            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to manage Device Seat Allocations">
+            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to manage Device Seat Allocations">
               <div className="stat-header-row">
                 <div className="stat-label">Seats Used ({licenseStatus.tier.toUpperCase()})</div>
                 <span className="soc-delta-badge delta-neutral">{licenseStatus.seats_remaining} left</span>
@@ -249,18 +249,18 @@ export default function FleetOverview() {
             <div className="soc-quickstart-box">
               <div className="soc-quickstart-header">
                 <span className="soc-qs-icon">⚡</span>
-                <strong>Quickstart: Connect Your First Agent Node</strong>
+                <strong>Quickstart: Protect Your First Workstation</strong>
               </div>
-              <p>Install the Agentwall sidecar daemon to automatically intercept MCP, HTTP, and LLM egress requests:</p>
+              <p>Install AgentWall and run <code>agentwall protect</code> to automatically govern AI IDEs (Cursor, VS Code, JetBrains, Claude Desktop):</p>
               
               <div className="soc-code-snippet-row">
                 <div className="soc-snippet-label">Linux / macOS:</div>
                 <div className="soc-code-box">
-                  <code>curl -fsSL https://get.agentwall.io/install.sh | bash</code>
+                  <code>curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash</code>
                   <button
                     type="button"
                     className="soc-btn-copy"
-                    onClick={() => copyToClipboard('curl -fsSL https://get.agentwall.io/install.sh | bash', 'linux')}
+                    onClick={() => copyToClipboard('curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash', 'linux')}
                   >
                     {copiedSnippet === 'linux' ? '✓ Copied' : 'Copy'}
                   </button>
@@ -270,11 +270,11 @@ export default function FleetOverview() {
               <div className="soc-code-snippet-row" style={{ marginTop: 8 }}>
                 <div className="soc-snippet-label">Windows (PowerShell):</div>
                 <div className="soc-code-box">
-                  <code>irm https://get.agentwall.io/install.ps1 | iex</code>
+                  <code>irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex</code>
                   <button
                     type="button"
                     className="soc-btn-copy"
-                    onClick={() => copyToClipboard('irm https://get.agentwall.io/install.ps1 | iex', 'windows')}
+                    onClick={() => copyToClipboard('irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex', 'windows')}
                   >
                     {copiedSnippet === 'windows' ? '✓ Copied' : 'Copy'}
                   </button>

@@ -88,19 +88,23 @@ chmod +x "${LOCALBIN}/agentwall"
 
 echo "[*] Initializing Enterprise Device Governance..."
 echo "[*] Step 1/3: PKI Device Enrollment..."
-"${LOCALBIN}/agentwall" enroll --token "$TOKEN" --hub-url "$HUB_URL" || true
+if ! "${LOCALBIN}/agentwall" enroll --token "$TOKEN" --hub-url "$HUB_URL"; then
+  echo "[!] Enrollment failed. Aborting provisioning."
+  exit 1
+fi
 
 echo "[*] Step 2/3: Installing Persistent OS Sentry Daemon..."
 if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
-  sudo "${LOCALBIN}/agentwall" service install --hub-url "$HUB_URL" || true
+  sudo "${LOCALBIN}/agentwall" service install --hub-url "$HUB_URL" || echo "[!] Note: Could not install machine-level system service without root."
 else
-  "${LOCALBIN}/agentwall" service install --hub-url "$HUB_URL" || true
+  "${LOCALBIN}/agentwall" service install --hub-url "$HUB_URL" || echo "[!] Note: Sentry service installation requires appropriate permissions."
 fi
 
 echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
 "${LOCALBIN}/agentwall" wrap --all || true
 
 echo ""
-echo "[✓] Automated Enterprise Provisioning Completed!"
-echo "Run 'agentwall protect' to start the local gateway."
+echo "[+] Automated Enterprise Provisioning Completed!"
+echo "Get started by running:"
+echo "  agentwall protect"
 echo ""

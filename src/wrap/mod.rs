@@ -8,6 +8,7 @@ pub mod claude;
 pub mod config_path;
 pub mod file_lock;
 pub mod generic_ide;
+pub mod ide_config;
 pub mod status;
 pub mod transformer;
 pub mod watch;

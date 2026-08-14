@@ -128,7 +128,7 @@ describe('IdentityGovernance', () => {
     renderView()
 
     await waitFor(() => {
-      expect(screen.getByText('No credentials registered')).toBeInTheDocument()
+      expect(screen.getByText('No agent credentials registered yet.')).toBeInTheDocument()
     })
   })
 })

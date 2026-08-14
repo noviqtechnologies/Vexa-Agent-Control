@@ -24,8 +24,8 @@ fn sanitize_url(url: &str) -> String {
 pub fn install_windows_service(
     bin_path: &str,
     hub_url: &str,
-    gateway_secret: &str,
-    policy_read_secret: &str,
+    _gateway_secret: &str,
+    _policy_read_secret: &str,
     agent_id: Option<&str>,
 ) -> Result<(), String> {
     use std::ffi::OsStr;
@@ -45,18 +45,9 @@ pub fn install_windows_service(
         )
     })?;
 
-    // ── Write machine-scope env vars to HKLM BEFORE creating/starting the service ──
-    // setx /M writes to HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment.
-    // New processes (including the SCM-spawned service) inherit these immediately.
-    // Doing this before service.start() ensures Sentry reads the correct secrets on first boot.
+    // ── Write non-secret Hub URL to HKLM BEFORE creating/starting the service ──
     let _ = std::process::Command::new("setx")
         .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
-        .output();
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "GATEWAY_SECRET", gateway_secret])
-        .output();
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "POLICY_READ_SECRET", policy_read_secret])
         .output();
     if let Some(id) = agent_id {
         let _ = std::process::Command::new("setx")
@@ -76,9 +67,11 @@ pub fn install_windows_service(
         launch_arguments: vec![
             OsStr::new("start").to_os_string(),
             OsStr::new("--centralized").to_os_string(),
+            OsStr::new("--listen").to_os_string(),
+            OsStr::new("127.0.0.1:8080").to_os_string(),
         ],
         dependencies: vec![],
-        account_name: None, // Runs under NT AUTHORITY\SYSTEM
+        account_name: None, // Runs under virtual/local service account
         account_password: None,
     };
 
@@ -97,12 +90,11 @@ pub fn install_windows_service(
         "{} AgentWall Windows SCM Service installed successfully!",
         "✔".green().bold()
     );
-    println!("  Configured persistent environment variables (HKLM system scope):");
-    println!("    DASHBOARD_API_URL   = \"{}\"", hub_url);
-    println!("    GATEWAY_SECRET      = \"{}\"", gateway_secret);
-    println!("    POLICY_READ_SECRET  = \"{}\"", policy_read_secret);
+    println!("  Hub URL:            {}", hub_url.cyan());
+    println!("  Authentication:     mTLS Hardware/OS Certificate Store");
+    println!("  Listener Binding:   127.0.0.1:8080 (Loopback Only)");
     if let Some(id) = agent_id {
-        println!("    AGENT_ID            = \"{}\"", id);
+        println!("  Device Principal:   {}", id);
     }
 
     Ok(())

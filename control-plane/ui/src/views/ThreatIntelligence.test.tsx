@@ -121,7 +121,8 @@ describe('ThreatIntelligence', () => {
     await waitFor(() => {
       expect(screen.getByText('Threat Intelligence')).toBeInTheDocument()
     })
-    expect(screen.getByRole('combobox')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /telemetry time range/i })).toBeInTheDocument()
+    expect(screen.getByText('24H')).toBeInTheDocument()
   })
 
   it('renders page header', async () => {

@@ -1,4 +1,10 @@
-//! Thread-safe SQLite token ledger for persistent spend tracking, budget caps, and request increase approvals.
+//! # LEGACY OBSERVATIONAL SPEND TELEMETRY PROTOTYPE
+//!
+//! **DEPRECATION NOTICE:**
+//! This local SQLite token ledger is retained for legacy read-only local telemetry during transition.
+//! Authoritative financial budgets and preflight reservation state live exclusively in the central
+//! PostgreSQL ledger via `/api/v2/spend/*`. This local counter must NOT be treated as central
+//! financial control truth or provider-invoice reconciled truth.
 
 use std::path::PathBuf;
 use std::sync::Arc;

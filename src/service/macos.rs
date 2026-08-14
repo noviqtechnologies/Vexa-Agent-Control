@@ -7,8 +7,8 @@ use std::process::Command;
 pub fn install_macos_service(
     bin_path: &str,
     hub_url: &str,
-    gateway_secret: &str,
-    policy_read_secret: &str,
+    _gateway_secret: &str,
+    _policy_read_secret: &str,
     agent_id: Option<&str>,
 ) -> Result<(), String> {
     // Build optional AGENT_ID plist entry
@@ -33,6 +33,8 @@ pub fn install_macos_service(
         <string>{}</string>
         <string>start</string>
         <string>--centralized</string>
+        <string>--listen</string>
+        <string>127.0.0.1:8080</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -42,15 +44,11 @@ pub fn install_macos_service(
     <dict>
         <key>DASHBOARD_API_URL</key>
         <string>{}</string>
-        <key>GATEWAY_SECRET</key>
-        <string>{}</string>
-        <key>POLICY_READ_SECRET</key>
-        <string>{}</string>
 {}    </dict>
 </dict>
 </plist>
 "#,
-        bin_path, hub_url, gateway_secret, policy_read_secret, agent_id_plist
+        bin_path, hub_url, agent_id_plist
     );
 
     let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";

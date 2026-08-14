@@ -26,6 +26,7 @@ pub mod wrap;
 pub mod compliance;
 pub mod license;
 pub mod spend;
+pub mod sentry;
 
 pub mod bench;
 pub mod detector;

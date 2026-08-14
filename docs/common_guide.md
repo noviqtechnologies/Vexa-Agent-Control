@@ -933,17 +933,19 @@ Persist the installation directory in your shell configuration:
 
 ### Spend Limit & Loop Detection Triggers
 
-#### Error 429 `SPEND_LIMIT_EXCEEDED`
+#### Error 429 `spend_budget_exhausted` (Authoritative PostgreSQL Ledger)
 ```json
 {
   "error": {
-    "code": "SPEND_LIMIT_EXCEEDED",
-    "message": "Token budget of 100,000 exceeded for current session"
+    "code": "spend_budget_exhausted",
+    "message": "LLM spend budget exceeded or preflight authorization denied",
+    "scope": "organization",
+    "reset_at": "2026-09-01T00:00:00Z"
   }
 }
 ```
-- **Cause:** The session token consumption exceeded `spend.max_tokens_per_session`.
-- **Solution:** Reset session spend metrics or adjust spend limits in `agentwall-policy.yaml`.
+- **Cause:** Pre-dispatch authorization checked active budget windows in PostgreSQL (`reserved + settled + reserve > limit`) and rejected the request to prevent financial overruns. Zero provider tokens were consumed.
+- **Solution:** Submit an increase request via the Web Console (`/spend/status`) or ask an administrator to publish an updated budget limit (`/spend/limits`).
 
 #### Error 429 `LOOP_DETECTED`
 ```json

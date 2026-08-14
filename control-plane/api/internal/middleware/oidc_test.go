@@ -73,7 +73,7 @@ func TestGatewayAuth_MalformedHeader(t *testing.T) {
 	}
 }
 
-func TestGatewayAuth_EmptySecret_Passthrough(t *testing.T) {
+func TestGatewayAuth_EmptySecret_FailsClosed(t *testing.T) {
 	mw := GatewayAuth("")
 	handler := mw(http.HandlerFunc(okHandler))
 
@@ -82,8 +82,8 @@ func TestGatewayAuth_EmptySecret_Passthrough(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Errorf("got status %d, want %d — empty secret should pass through", rr.Code, http.StatusOK)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got status %d, want %d — empty secret must fail closed", rr.Code, http.StatusUnauthorized)
 	}
 }
 

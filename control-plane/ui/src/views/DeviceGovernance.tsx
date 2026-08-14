@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  listDevices, revokeDevice, createEnrollmentToken,
-  type Device, type EnrollmentToken
+  listDevices, revokeDeviceV2, createEnrollmentTokenV2,
+  type Device, type EnrollmentTokenV2
 } from '../api/client'
 
 function timeAgo(iso: string): string {
@@ -23,9 +23,9 @@ export default function DeviceGovernance() {
   const [osFilter, setOsFilter] = useState(searchParams.get('os') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [showTokenModal, setShowTokenModal] = useState(false)
-  const [generatedToken, setGeneratedToken] = useState<EnrollmentToken | null>(null)
-  const [rawTokenValue, setRawTokenValue] = useState('')
-  const [maxUses, setMaxUses] = useState(10)
+  const [generatedToken, setGeneratedToken] = useState<EnrollmentTokenV2 | null>(null)
+  const [tokenReason, setTokenReason] = useState('Workstation Onboarding')
+  const [deviceLabel, setDeviceLabel] = useState('')
   const [ttlHours, setTtlHours] = useState(24)
   const [copiedField, setCopiedField] = useState<'unix' | 'win' | null>(null)
 
@@ -59,9 +59,10 @@ export default function DeviceGovernance() {
   }, [osFilter, statusFilter])
 
   const handleRevoke = async (deviceId: string) => {
-    if (confirm(`Are you sure you want to revoke device ${deviceId}? All future pings and API access will be blocked.`)) {
+    const reason = prompt(`Please enter a mandatory revocation reason for device ${deviceId}:`, 'Decommissioned / Offboarded')
+    if (reason && reason.trim()) {
       try {
-        await revokeDevice(deviceId)
+        await revokeDeviceV2(deviceId, reason.trim())
         fetchDevices()
       } catch (e: any) {
         alert(`Failed to revoke device: ${e.message}`)
@@ -69,19 +70,11 @@ export default function DeviceGovernance() {
     }
   }
 
-function generateSecureToken(): string {
-  const bytes = new Uint8Array(16)
-  window.crypto.getRandomValues(bytes)
-  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
-  return `TOK-${hex}`
-}
-
   const handleGenerateToken = async (e: React.FormEvent) => {
     e.preventDefault()
-    const tokenVal = rawTokenValue || generateSecureToken()
     try {
-      const tok = await createEnrollmentToken(tokenVal, maxUses, ttlHours)
-      setGeneratedToken({ ...tok, token_hash: tokenVal })
+      const tok = await createEnrollmentTokenV2(tokenReason || 'Workstation Onboarding', deviceLabel, '', ttlHours)
+      setGeneratedToken(tok)
     } catch (err: any) {
       alert(`Failed to create enrollment token: ${err.message}`)
     }
@@ -103,7 +96,6 @@ function generateSecureToken(): string {
           className="btn btn-primary"
           onClick={() => {
             setGeneratedToken(null)
-            setRawTokenValue(generateSecureToken())
             setShowTokenModal(true)
           }}
         >
@@ -299,28 +291,31 @@ function generateSecureToken(): string {
           <div className="card" style={{ width: '540px', padding: '24px' }}>
             <h3>Generate One-Time Enrollment Token (OTET)</h3>
             <p style={{ color: '#aaa', fontSize: '13px', marginBottom: '16px' }}>
-              Issue a token to enroll developer workstations into central PKI governance.
+              Issue a single-use token (OTET) to enroll a team workstation into cryptographic PKI governance.
             </p>
 
             {!generatedToken ? (
               <form onSubmit={handleGenerateToken}>
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Token Value</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Reason / Purpose *</label>
                   <input
                     type="text"
-                    value={rawTokenValue}
-                    onChange={(e) => setRawTokenValue(e.target.value)}
+                    value={tokenReason}
+                    onChange={(e) => setTokenReason(e.target.value)}
+                    required
+                    placeholder="e.g. Alice MacBook Pro Onboarding"
                     className="input"
-                    style={{ width: '100%', fontFamily: 'monospace' }}
+                    style={{ width: '100%' }}
                   />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Max Uses</label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Expected Device Label (Optional)</label>
                     <input
-                      type="number"
-                      value={maxUses}
-                      onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
+                      type="text"
+                      value={deviceLabel}
+                      onChange={(e) => setDeviceLabel(e.target.value)}
+                      placeholder="e.g. dev-macbook-alice"
                       className="input"
                       style={{ width: '100%' }}
                     />
@@ -338,11 +333,15 @@ function generateSecureToken(): string {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                   <button type="button" className="btn" onClick={() => setShowTokenModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Generate Token</button>
+                  <button type="submit" className="btn btn-primary">Generate Single-Use Token</button>
                 </div>
               </form>
             ) : (
               <div>
+                <div style={{ padding: '10px 12px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', marginBottom: '16px' }}>
+                  <span style={{ color: '#22c55e', fontWeight: 700, display: 'block', fontSize: '13px' }}>✔ One-Time Token Created</span>
+                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Single-use (max_uses=1), expires in {ttlHours} hours. Transmit via secure private channel.</span>
+                </div>
                 <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <div style={{ fontSize: '12px', color: '#888' }}>Enrollment Command (Linux / macOS):</div>
@@ -351,7 +350,8 @@ function generateSecureToken(): string {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'unix' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="${generatedToken.token_hash}" bash`
+                        const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
+                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="${generatedToken.token}" AGENTWALL_HUB_URL="${hubUrl}" bash`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('unix')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -361,7 +361,7 @@ function generateSecureToken(): string {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#22c55e', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    curl -fsSL https://vexasec.io/install.sh | AGENTWALL_TOKEN="{generatedToken.token_hash}" AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
+                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="{generatedToken.token}" AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
                   </pre>
                 </div>
                 <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
@@ -372,8 +372,8 @@ function generateSecureToken(): string {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const hubUrl = window.location.origin;
-                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token_hash}"; $env:AGENTWALL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install.ps1 | iex`
+                        const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
+                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token}"; $env:AGENTWALL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('win')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -383,7 +383,7 @@ function generateSecureToken(): string {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#3b82f6', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    $env:AGENTWALL_TOKEN="{generatedToken.token_hash}"; $env:AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install.ps1 | iex
+                    $env:AGENTWALL_TOKEN="{generatedToken.token}"; $env:AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install/team_otet.ps1 | iex
                   </pre>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -1,778 +1,324 @@
-# Vexa AgentWall — User Guide
+# Vexa AgentWall — Master User Guide
 
-Welcome to the Vexa AgentWall documentation hub. AgentWall is an enterprise-grade, default-deny AI security gateway and firewall for MCP, HTTP, HTTPS, and WebSocket agent traffic.
-
-This page is the top-level navigation hub. Select the guide that matches your deployment profile to get started.
-
----
-
-## Choose Your Deployment Profile
-
-AgentWall supports three graduated deployment profiles. Pick the one that matches your environment:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                           DEPLOYMENT PROFILES                                           │
-├──────────────────────────┬──────────────────────────────┬───────────────────────────────┬───────────────┤
-│ Workstation Sidecar      │ Team Control Hub              │ Cloud Serverless (Terraform)  │ Enterprise    │
-│ Single Binary & Sidecar  │ Docker Compose Stack         │ AWS / Azure / GCP (~$0–$25/mo)│ K8s + Helm    │
-│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ Auto-TLS & Scale-to-Zero      │ Pure-Rust TLS │
-└──────────────────────────┴──────────────────────────────┴───────────────────────────────┴───────────────┘
-```
-
----
-
-### 🖥️ [Workstation Sidecar Guide](workstation_guide.md)
-
-> **Best for:** Individual developers securing AI agent tool calls on a local workstation.
-> No Docker, no database, no external servers required.
-
-**What you get:**
-- Default-deny policy engine with 15 out-of-the-box safe-mode rules
-- 9 active prompt injection scanners
-- 21 built-in DLP detectors (AWS keys, SSH keys, PII, API tokens)
-- Passive shadow AI discovery & Risk Delta Reports
-- MCP Security Scoring Engine (`agentwall scan`)
-- Local developer web console at `http://127.0.0.1:8080`
-- **One-command full IDE protection** (`agentwall protect`) for Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE with atomic backup and zero-loss rollback (`agentwall unprotect`)
-- **Live Shadow ↔ Enforce toggle** — switch security posture in real-time without restarting
-- **Live Spend & Risks Blocked cards** — real-time financial telemetry and blocked call counter
-- **Mission Mode banner** — guided onboarding to prove protection works
-- **🪄 Quick Policy generator** — per-tool one-click security rule application
-- ADR Security Benchmark (303 tasks across 17 attack categories)
-
-**Quick start:**
-```bash
-# macOS / Linux / WSL (pinned release, mandatory SHA-256 verified)
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash && agentwall protect
-
-# Windows (PowerShell) (pinned release, mandatory SHA-256 verified, auto-adds to PATH)
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex; agentwall.exe protect
-
-# Populate test traffic (if seeing "No tool calls recorded yet")
-python quickstart_agent.py
-```
-
-
-→ **[Open Workstation Sidecar Guide](workstation_guide.md)** | **[Open Quickstart Guide](quickstart.md)**
-
----
-
-### 🏢 [Team Control Hub Guide](team_hub_guide.md)
-
-> **Best for:** DevOps engineers and Engineering leads extending governance across an entire engineering team or staging environment.
-> Requires Docker Compose (or Go + Node.js bare-metal).
-
-**What you get (in addition to all Workstation capabilities):**
-- Centralized policy push via SSE — hot-swap policies across all gateways without restarts
-- **Policy Marketplace & One-Click Templates** (`/policy/marketplace`) — Instant selection of Safe Cursor, Production Data Egress, and HIPAA PII postures
-- OIDC identity binding (Okta, Keycloak, Entra ID, Auth0, Ping)
-- Multi-tenant policy sharding (`agent_project_id`, `agent_task_id`)
-- Vault & LLM provider API key custody — agents never hold raw keys
-- Async HITL approval queue (Slack, Teams, Webhooks)
-- Spend caps, token budgets & concurrency limits
-- Loop detection & PivotError countermeasures
-- Multi-backend SIEM export (Splunk, Datadog, OpenSearch)
-- Team management console at `http://localhost:8081`
-
-**Quick start:**
-```bash
-cd control-plane && docker compose up -d --build
-export DASHBOARD_API_URL="http://localhost:8400"
-export GATEWAY_SECRET="your-gateway-secret"
-agentwall start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
-```
-
-→ **[Open Team Control Hub Guide](team_hub_guide.md)**
-
----
-
-### 🌐 [Cloud Serverless Infrastructure Guide (Terraform)](../infra/README.md)
-
-> **Best for:** Engineering teams and cloud platform engineers seeking production-ready, ultra cost-effective (~$0–$25/month) serverless cloud deployments with zero node maintenance.
-> Supports AWS ECS Fargate, Azure Container Apps, and Google Cloud Run (v2).
-
-**What you get (in addition to all Control Hub capabilities):**
-- One-click Terraform provisioning with zero manual cloud console configuration
-- Built-in HTTPS/TLS termination and custom domain support
-- Dev mode scale-to-zero compute (`min_replicas = 0` / `min_instances = 0`)
-- Multi-container PostgreSQL database integration with auto-migrated schemas
-- Native cloud logging (AWS CloudWatch, Azure Log Analytics, Google Cloud Logging)
-
-**Quick start:**
-```bash
-# AWS ECS Fargate
-cd infra/aws/ecs && terraform init && terraform apply
-
-# Azure Container Apps
-cd infra/azure && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply
-
-# Google Cloud Run (v2)
-cd infra/gcp && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply
-```
-
-→ **[Open Cloud Infrastructure Guide](../infra/README.md)** | **[AWS Guide](../infra/aws/README.md)** | **[Azure Guide](../infra/azure/README.md)** | **[GCP Guide](../infra/gcp/README.md)**
-
----
-
-### ☁️ [Enterprise Fleet Guide](enterprise_guide.md)
-
-> **Best for:** Platform engineers and Security architects deploying high-availability, cloud-native gateway fleets on Kubernetes.
-> Requires Kubernetes v1.26+, Helm v3+, and a domain TLS certificate.
-
-**What you get (in addition to all Team Hub capabilities):**
-- Hardened Agent Container Runtime (HAR) — <100 MB Distroless/Alpine OCI sidecar
-- Hardened WebSocket egress tunneling (<5ms latency)
-- Real-time threat intelligence feed (live Vexa AI Malware signatures via SSE)
-- Zero-knowledge Customer-Managed Key (CMK) AES-256-GCM SIEM encryption
-- Pure-Rust TLS termination powered by `rustls`
-- Fleet-wide telemetry & Kubernetes monitoring
-
-**Quick start:**
-```bash
-kubectl create namespace agentwall-system
-kubectl create secret tls agentwall-tls --cert=tls.crt --key=tls.key -n agentwall-system
-helm install agentwall ./chart --namespace agentwall-system \
-  --set gateway.tls.enabled=true \
-  --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default"
-```
-
-→ **[Open Enterprise Fleet Guide](enterprise_guide.md)**
-
----
-
-## Capabilities by Deployment Profile
-
-| Capability | Workstation Sidecar | Team Control Hub | Cloud Serverless (Terraform) | Enterprise Fleet |
-|---|:---:|:---:|:---:|:---:|
-| Default-Deny Policy Engine | ✓ | ✓ | ✓ | ✓ |
-| 15 Out-of-the-Box Safe Rules | ✓ | ✓ | ✓ | ✓ |
-| 9 Prompt Injection Scanners | ✓ | ✓ | ✓ | ✓ |
-| 21-Pattern Dual-Pass DLP | ✓ | ✓ | ✓ | ✓ |
-| Passive Shadow AI Discovery | ✓ | ✓ | ✓ | ✓ |
-| MCP Security Scoring Engine | ✓ | ✓ | ✓ | ✓ |
-| IDE Auto-Wrapping Engine | ✓ | ✓ | ✓ | ✓ |
-| Hardware PKI Device Enrollment | ✓ | ✓ | ✓ | ✓ |
-| Persistent OS Sentry Daemon | ✓ | ✓ | ✓ | ✓ |
-| ADR Security Benchmark | ✓ | ✓ | ✓ | ✓ |
-| Tamper-Evident HMAC Logging | ✓ | ✓ | ✓ | ✓ |
-| Centralized Policy Push (SSE) | — | ✓ | ✓ | ✓ |
-| [Central Device Governance](team_hub_guide.md#6-central-device-governance--fleet-health) | — | ✓ | ✓ | ✓ |
-| OIDC Identity Binding | — | ✓ | ✓ | ✓ |
-| Project & Task Policy Sharding | — | ✓ | ✓ | ✓ |
-| Vault & API Key Custody | — | ✓ | ✓ | ✓ |
-| Async HITL Webhook Queue | — | ✓ | ✓ | ✓ |
-| Spend Caps & Token Ledger | — | ✓ | ✓ | ✓ |
-| Loop Detection & PivotError | — | ✓ | ✓ | ✓ |
-| Cloud Scale-to-Zero ($0 Idle) | — | — | ✓ | — |
-| Native Cloud Ingress & TLS | — | — | ✓ | Ingress |
-| Hardened Container Runtime (HAR) | — | — | — | ✓ |
-| WebSocket Egress Tunneling | — | — | — | ✓ |
-| Real-Time Threat Intel Feed | — | — | — | ✓ |
-| Zero-Knowledge CMK Encryption | — | — | — | ✓ |
-| Pure-Rust TLS Termination | — | — | — | ✓ |
-
----
-
-## Shared Reference Sections
-
-These technical reference topics apply across all deployment profiles and are maintained in the [Common Reference Guide](common_guide.md):
-
-| Reference Topic | Description |
-|---|---|
-| [YAML Policy v2 Schema](common_guide.md#1-writing-yaml-policies-v2-schema) | Complete v2 schema reference with annotated example policy |
-| [DLP Configuration](common_guide.md#2-configuring-data-loss-prevention-dlp) | All 21 built-in detectors, custom patterns, entropy scanning |
-| [OIDC Identity Binding](common_guide.md#3-setting-up-oidc-identity-binding) | IdP setup, JWT validation, short-lived credential CLI |
-| [Control Hub Connectivity](common_guide.md#4-connecting-to-the-control-hub) | SSE event stream, API key custody, telemetry uploads |
-| [Audit Log Verification](common_guide.md#5-verifying-audit-logs) | HMAC chain verification, session reports, SIEM export |
-| [Sequence Rules (ADR)](common_guide.md#6-stateful-sequence-rules-adr-framework) | Multi-step attack detection engine and rule authoring |
-| [ADR Benchmark](common_guide.md#7-adr-security-benchmark) | 303-task benchmark suite, scoring, dashboard integration |
-| [Environment Variables](common_guide.md#8-environment-variables) | Complete environment variable reference |
-| [Troubleshooting](common_guide.md#10-troubleshooting-common-issues) | PATH errors, YAML validation, OIDC failures, IDE wrap issues |
-
----
-
-## Additional Documentation
-
-| Document | Description |
-|---|---|
-| [quickstart.md](quickstart.md) | Step-by-step quickstart for local MCP servers, Claude Desktop, and Cursor |
-| [infra/README.md](../infra/README.md) | **Multi-Cloud Terraform Infrastructure Guide (AWS, Azure, GCP)** |
-| [infra/aws/README.md](../infra/aws/README.md) | AWS ECS Fargate & ALB Terraform deployment guide |
-| [infra/azure/README.md](../infra/azure/README.md) | Azure Container Apps (ACA) Terraform deployment guide |
-| [infra/gcp/README.md](../infra/gcp/README.md) | Google Cloud Run (v2) Terraform deployment guide |
-| [oidc_identity_binding.md](oidc_identity_binding.md) | Provider-specific OIDC setup (Okta, Keycloak, Entra ID, Auth0, Cognito, Ping) |
-| [adr_benchmark.md](adr_benchmark.md) | Full ADR benchmark reference (all 17 attack categories and scoring methodology) |
-| [agentwall_architecture.md](agentwall_architecture.md) | Detailed system architecture, 6-pass pipeline, and component interaction flows |
-| [configuration.md](configuration.md) | Deep-dive policy schema, DLP regex, spend caps, and environment variables |
-| [deployment.md](deployment.md) | Platform-specific installation reference (macOS, Linux, Windows, Docker, K8s, HAR, Cloud Terraform) |
-| [integrations.md](integrations.md) | IDE wrappers, stdio proxies, Vault adapters, and SIEM exporters |
-| [comprehensive_guide.md](comprehensive_guide.md) | Command-line walkthroughs and scenario tutorials |
+> **Enterprise-Grade AI Security Gateway & Firewall for MCP, HTTP, HTTPS, and WebSockets**  
+> Complete operational manual for Endpoint Users, Software Developers, DevOps Engineers, and Security Administrators.
 
 ---
 
 ## Table of Contents
 
-1. [Getting Started for Each Deployment Profile](#1-getting-started-for-each-deployment-profile)
-   - [Workstation Sidecar](#workstation-sidecar)
-   - [Team Control Hub](#team-control-hub)
-   - [Cloud Serverless (Terraform)](#cloud-serverless-terraform)
-   - [Enterprise Fleet](#enterprise-fleet)
-2. [Writing YAML Policies (v2 Schema)](#2-writing-yaml-policies-v2-schema)
-   - [v2 Policy Architecture](#v2-policy-architecture)
-   - [Complete v2 Schema Reference & Example](#complete-v2-schema-reference--example)
-   - [Policy Rules & Parameter Validation](#policy-rules--parameter-validation)
-3. [Configuring Data Loss Prevention (DLP)](#3-configuring-data-loss-prevention-dlp)
-   - [Built-In Regex Detectors](#built-in-regex-detectors)
-   - [Custom Pattern Definitions](#custom-pattern-definitions)
-   - [Deep Scanning & Entropy Analysis](#deep-scanning--entropy-analysis)
-   - [Tool Response Secret Scanning](#tool-response-secret-scanning)
-4. [Setting Up OIDC Identity Binding](#4-setting-up-oidc-identity-binding)
-   - [IdP Configuration](#idp-configuration)
-   - [JWT Validation & Scope Matching](#jwt-validation--scope-matching)
-   - [Agent Short-Lived Credential CLI](#agent-short-lived-credential-cli)
-5. [Connecting to the Control Hub](#5-connecting-to-the-control-hub)
-   - [Hub Architecture & API Specifications](#hub-architecture--api-specifications)
-   - [Real-Time SSE Event Stream](#real-time-sse-event-stream)
-   - [Provider API Key Custody & Injection](#provider-api-key-custody--injection)
-   - [Telemetry Batch Uploads](#telemetry-batch-uploads)
-6. [Verifying Audit Logs](#6-verifying-audit-logs)
-   - [HMAC Cryptographic Hash Chaining](#hmac-cryptographic-hash-chaining)
-   - [Log Integrity Verification](#log-integrity-verification)
-   - [Session Reports & SIEM Export](#session-reports--siem-export)
-7. [Troubleshooting Common Issues](#7-troubleshooting-common-issues)
-   - [Gateway Startup & YAML Validation Errors](#gateway-startup--yaml-validation-errors)
-   - [Tool Call Denials & Safe Mode Interceptions](#tool-call-denials--safe-mode-interceptions)
-   - [OIDC & JWT Authorization Failures](#oidc--jwt-authorization-failures)
-   - [Control Hub Synchronization Issues](#control-hub-synchronization-issues)
-   - [IDE Wrapping & Watch Daemon Diagnostics](#ide-wrapping--watch-daemon-diagnostics)
-   - [Spend Limit & Loop Detection Triggers](#spend-limit--loop-detection-triggers)
-8. [Stateful Sequence Rules (ADR Framework)](#8-stateful-sequence-rules-adr-framework)
-   - [How the Sequence Engine Works](#how-the-sequence-engine-works)
-   - [Writing Sequence Rules](#writing-sequence-rules)
-   - [Sequence Rule Violations in Audit Logs](#sequence-rule-violations-in-audit-logs)
-9. [ADR Security Benchmark](#9-adr-security-benchmark)
-   - [Running the Benchmark](#running-the-benchmark)
-   - [Reading the Report](#reading-the-report)
-   - [Dashboard Integration](#dashboard-integration)
-10. [War Plan Strategic Features (v2.0)](#10-war-plan-strategic-features-v20)
-    - [Passive Shadow AI Risk Delta Reports](#passive-shadow-ai-risk-delta-reports)
-    - [Vexa Security Scanning (vexa-scan)](#vexa-security-scanning-vexa-scan)
-    - [WebSocket Egress Tunneling](#websocket-egress-tunneling)
-    - [Human-in-the-Loop (HITL) Webhooks](#human-in-the-loop-hitl-webhooks)
-    - [Hardened Agent Containers (HAR)](#hardened-agent-containers-har)
-11. [Cloud Infrastructure & Terraform Deployments (AWS, Azure, GCP)](#11-cloud-infrastructure--terraform-deployments-aws-azure-gcp)
-    - [Cross-Platform Prerequisites](#cross-platform-prerequisites)
-    - [AWS ECS Fargate Deployment](#aws-ecs-fargate-deployment)
-    - [Azure Container Apps Deployment](#azure-container-apps-deployment)
-    - [Google Cloud Run (v2) Deployment](#google-cloud-run-v2-deployment)
-    - [Verification, Logging & Health Checks](#verification-logging--health-checks)
-    - [Teardown & Clean Up](#teardown--clean-up)
+1. [Overview & Security Boundary](#1-overview--security-boundary)
+2. [Operating Profile Selection](#2-operating-profile-selection)
+3. [Master Capabilities Matrix](#3-master-capabilities-matrix)
+4. [Workstation Quickstart & Single-Command Protection](#4-workstation-quickstart--single-command-protection)
+5. [Multi-IDE Integration & File-Lock Management](#5-multi-ide-integration--file-lock-management)
+6. [Hardware PKI Enrollment & OS Sentry Service](#6-hardware-pki-enrollment--os-sentry-service)
+7. [Policy Configuration & Automated Rule Synthesis](#7-policy-configuration--automated-rule-synthesis)
+8. [Data Loss Prevention (DLP) & Prompt Injection Defense](#8-data-loss-prevention-dlp--prompt-injection-defense)
+9. [Authoritative LLM Spend Governance](#9-authoritative-llm-spend-governance)
+10. [Human-in-the-Loop (HITL) Action Escalation](#10-human-in-the-loop-hitl-action-escalation)
+11. [Tamper-Evident Audit Logging & Compliance Reporting](#11-tamper-evident-audit-logging--compliance-reporting)
+12. [Master CLI Command Reference](#12-master-cli-command-reference)
+13. [Specialist Documentation Links](#13-specialist-documentation-links)
 
 ---
 
-## 1. Getting Started for Each Deployment Profile
+## 1. Overview & Security Boundary
 
-AgentWall supports three graduated deployment profiles designed to fit seamlessly into any stage of development and enterprise rollout.
+Autonomous AI agents possess powerful capabilities — reading files, running terminal commands, and interacting with external services over Model Context Protocol (MCP). Without deterministic runtime controls, agents are susceptible to prompt injection, credential exfiltration, infinite loops, and data leaks.
+
+**Vexa AgentWall** provides an out-of-process, default-deny security boundary around AI agent execution. Rather than relying on soft system prompts or probabilistic LLM guardrails, AgentWall intercepts, sandboxes, audits, and enforces cryptographic policy rules on all tool calls and LLM egress traffic.
+
+### The 6-Pass Security Pipeline
+
+Every agent tool call and LLM egress payload traversing AgentWall passes sequentially through a 6-pass deterministic pipeline before reaching upstream servers:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  DEPLOYMENT PROFILES                                    │
-├──────────────────────────┬──────────────────────────────┬───────────────────────────────┤
-│ Workstation Sidecar      │ Team Control Hub              │ Enterprise Fleet              │
-│ Single Binary & Sidecar  │ Docker Compose Stack         │ Kubernetes + Helm Fleet       │
-│ Shadow Gateway + Local UI│ Go API + React UI + Postgres │ TLS rustls + SIEM + OIDC SSO  │
-└──────────────────────────┴──────────────────────────────┴───────────────────────────────┘
+  [ Operating Surfaces & IDEs ] ──► (Claude Desktop / Cursor / VS Code / Antigravity / CLI)
+             │
+             ▼
+ ┌───────────────────────────┐
+ │ 1. Session & Identity     │ ◄── OIDC JWT Claims & Multi-Tenant Project / Task Policy Sharding
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 2. MCP Scoring & Schema   │ ◄── Vexa Security Score (0-100) & Parameter JSON Schema Validation
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 3. Safe Mode & Injection  │ ◄── 15 Out-of-the-Box Safe Mode Rules & 9 Prompt Injection Detectors
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 4. Dual-Pass DLP Engine   │ ◄── Inline PII & Secret Redaction / Dynamic Threat Intel Feed
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 5. Spend & Loop Control   │ ◄── Repeat Failure Loop Intercept (PivotError) & Token Budget Ledger
+ └─────────────┬─────────────┘
+               ▼
+ ┌───────────────────────────┐
+ │ 6. HITL & Action Ladder   │ ◄── Default-Deny Evaluation & HMAC Webhook / Browser Escalation
+ └─────────────┬─────────────┘
+               │
+    [ Upstream MCP / LLM ]  ───►  Control Hub Telemetry & Zero-Knowledge Encrypted SIEM Export
 ```
-
-### Workstation Sidecar
-
-The Workstation Sidecar profile provides local observation, automatic policy generation, and Safe Mode protection without requiring external servers, Docker, or database setups.
-
-#### Prerequisites
-- **Operating System:** Linux, macOS, or Windows (WSL / PowerShell).
-- **Network / Utilities:** `curl` and `sh` installed for binary download.
-- **Node.js Environment (Optional):** Node.js (`node` & `npx` v18+) required if proxying stdio MCP servers like `@modelcontextprotocol/server-filesystem`.
-- **Permissions:** Execution permission to write to `/usr/local/bin` (or user `$PATH`).
-
-#### Step-by-Step Installation
-* **macOS / Linux / WSL:**
-  ```bash
-  curl -fsSL https://vexasec.io/install.sh | bash
-  agentwall --version
-  ```
-  > **Permanent PATH Configuration (Set Once Across Terminals):**
-  > - **Bash (Linux/WSL):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
-  > - **Zsh (macOS):** `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
-  > - **Fish:** `fish_add_path ~/.local/bin`
-
-* **Windows (PowerShell / CMD / Git Bash):**
-  ```powershell
-  # Standard local developer mode
-  irm https://vexasec.io/install.ps1 | iex
-
-  # Or automated enterprise enrollment with remote Control Hub:
-  $env:AGENTWALL_TOKEN = "TOK-YOUR-TOKEN"
-  $env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-  irm https://vexasec.io/install.ps1 | iex
-
-  agentwall.exe --version
-  ```
-  > **Important — Installer Elevation & Administrator Permissions:**
-  > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages execute under **`NT AUTHORITY\SYSTEM`** with administrative rights, setting all secrets at machine scope.
-  > - **Manual PowerShell Execution:** After running `install.ps1` in an elevated Administrator session, run `agentwall service install` with your real secrets:
-  >   ```powershell
-  >   # Run in an elevated (Administrator) PowerShell session:
-  >   agentwall.exe service install `
-  >     --hub-url            "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8081" `
-  >     --gateway-secret     "<GATEWAY_SECRET>" `
-  >     --policy-read-secret "<POLICY_READ_SECRET>" `
-  >     --agent-id           "wasim-win11"   # optional
-  >   ```
-  >   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the `AgentWallSentry` service, ensuring Sentry reads the correct secrets on first boot.
-  > - **Non-Admin Execution:** Without administrative privileges, run **`agentwall watch --all`** in a standard user terminal to run the Sentry watcher daemon interactively.
-
-  > **Permanent PATH Configuration (Set Once Across Terminals):**
-  > - **PowerShell (User Path):**
-  >   `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")`
-  > - **Command Prompt (CMD):**
-  >   `setx PATH "%PATH%;%USERPROFILE%\.local\bin"`
-  > - **Git Bash / MSYS2:**
-  >   `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile && source ~/.bash_profile`
-
-#### Post-Installation Activities & Verification
-
-Follow these simplified steps to activate observation mode, wrap agent traffic, and auto-generate governance policies:
-
-##### Step 1: Secure Your IDE Tools & Start Gateway
-
-Run `agentwall protect` to automatically discover and wrap all installed AI IDEs, start the local gateway, and launch the dashboard in one command:
-```bash
-agentwall protect
-```
-* **Prerequisites:** `agentwall` installed and added to PATH (or run as `.\agentwall.exe protect` in PowerShell).
-* **What You Will See:** Discovery sweep logs for Claude, Cursor, VS Code, etc., timestamped backups created, and your default web browser automatically opens `http://127.0.0.1:8080`.
-* **What You Achieve:** Complete automated IDE protection and live observability dashboard active in a single step.
 
 > [!NOTE]
-> **Advanced Usage (`agentwall dev`):** If you prefer manual shadow proxy testing without modifying IDE config files, run `agentwall dev`. This launches the standalone shadow proxy server on `127.0.0.1:8080` without running automated IDE discovery.
+> **Boundary of Protection:** AgentWall governs all tool calls and network egress routed through its local proxy and wrapped IDE configurations. It is designed to work in synergy with host EDR and OS security policies.
 
 ---
 
-##### Step 2: Route Agent HTTP Traffic Through Proxy
-Redirect HTTP/HTTPS requests from your AI agents or SDKs through AgentWall:
+## 2. Operating Profile Selection
 
-* **Linux / macOS (Bash / Zsh):**
+AgentWall adapts to your infrastructure across three operational deployment profiles:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   AgentWall Operating Profiles                                  │
+├──────────────────────────┬───────────────────────────────┬──────────────────────────────────────┤
+│ 1. Workstation Sidecar   │ 2. Team Control Hub           │ 3. Enterprise Fleet                  │
+│    • Individual Devs     │    • Engineering Teams        │    • Enterprise Production Fleet     │
+│    • Zero Configuration  │    • Central Docker Compose   │    • Kubernetes Helm Release         │
+│    • Embedded SQLite     │    • PostgreSQL Ledger        │    • HAR Container Sidecars          │
+│    • Local Dashboard     │    • OIDC Claim Binding       │    • WebSocket Egress Tunneling      │
+│    → [Workstation Guide] │    → [Team Hub Guide]         │    → [Enterprise Guide]              │
+└──────────────────────────┴───────────────────────────────┴──────────────────────────────────────┘
+```
+
+1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides one-command discovery and wrapping of all installed IDEs (`agentwall protect`), 15 out-of-the-box safe mode rules, inline DLP, passive shadow discovery, and an embedded browser dashboard on `http://127.0.0.1:8080`.
+2. **[Team Control Hub](team_hub_guide.md)** — Self-hosted centralized management plane deployed via Docker Compose (Go REST API on `:8400`, React Management Console on `:8081`, PostgreSQL database). Coordinates distributed gateways with real-time SSE policy push, OIDC identity binding, centralized provider key custody, and authoritative spend ledgers.
+3. **[Enterprise Fleet](enterprise_guide.md)** — High-availability Kubernetes Helm deployment (`./chart`) featuring the Hardened Agent Container Runtime (HAR) sidecar image (`Dockerfile.har`), hardened WebSocket egress tunneling, offline Ed25519 licensing, pure-Rust TLS (`rustls`), and zero-knowledge customer-managed key (CMK) SIEM export.
+
+---
+
+## 3. Master Capabilities Matrix
+
+| Capability | Workstation Sidecar | Team Control Hub | Enterprise Fleet | Primary Command / Interface |
+|---|:---:|:---:|:---:|---|
+| **Default-Deny Policy Engine** | ✓ | ✓ | ✓ | `agentwall start` / `agentwall protect` |
+| **Policy Marketplace (One-Click Templates)** | ✓ | ✓ | ✓ | Web Console `/policy/marketplace` |
+| **15 Out-of-the-Box Safe Rules** | ✓ | ✓ | ✓ | Active by default (no YAML needed) |
+| **9 Prompt Injection Scanners** | ✓ | ✓ | ✓ | Built-in 6-pass normalizer |
+| **Dual-Pass DLP Secret Redaction** | ✓ | ✓ | ✓ | 21 built-in regex detectors |
+| **Shadow AI Discovery & Risk Delta** | ✓ | ✓ | ✓ | `agentwall dev` / `agentwall report --risk` |
+| **MCP Security Scoring (0–100)** | ✓ | ✓ | ✓ | `agentwall scan` |
+| **Multi-IDE Auto-Wrapping (9 IDEs)** | ✓ | ✓ | ✓ | `agentwall protect` / `agentwall wrap` |
+| **Event-Driven Config Watcher Daemon** | ✓ | ✓ | ✓ | `agentwall watch --all` |
+| **Hardware PKI Device Enrollment** | ✓ | ✓ | ✓ | `agentwall enroll` |
+| **Persistent OS Sentry Service** | ✓ | ✓ | ✓ | `agentwall service install` |
+| **ADR Security Benchmark (303 Tasks)** | ✓ | ✓ | ✓ | `agentwall bench --full` |
+| **Automated Compliance Reports** | ✓ | ✓ | ✓ | `agentwall compliance report` |
+| **Zero Master Key Custody** | — | ✓ | ✓ | Centralized Vault / Hub Injection |
+| **Authoritative Spend Ledger** | — | ✓ | ✓ | Web Console `/spend/status` |
+| **Centralized SSE Policy Push** | — | ✓ | ✓ | SSE stream `/api/v1/policy/subscribe` |
+| **OIDC Identity & Group Claims** | — | ✓ | ✓ | `identity_binding` YAML block |
+| **Multi-Tenant Policy Sharding** | — | ✓ | ✓ | `agent_project_id` header routing |
+| **Async HITL Webhook Queue** | — | ✓ | ✓ | Slack / Teams HMAC callbacks |
+| **Hardened Agent Container (HAR)** | — | — | ✓ | `Dockerfile.har` OCI sidecar |
+| **Hardened WebSocket Tunneling** | — | — | ✓ | Bi-directional `<5ms` proxy |
+| **Real-Time Threat Intel Feed** | — | — | ✓ | SSE malware signature stream |
+| **Zero-Knowledge CMK Encryption** | — | — | ✓ | AES-256-GCM client-side export |
+| **Pure-Rust TLS Termination** | — | — | ✓ | `rustls` native HTTPS listener |
+
+---
+
+## 4. Workstation Quickstart & Single-Command Protection
+
+The fastest path to complete local AI security is **One-Command Protection** via `agentwall protect`.
+
+### Step 1: Install the AgentWall Binary
+
+* **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
-  export HTTP_PROXY=http://127.0.0.1:8080
-  export HTTPS_PROXY=http://127.0.0.1:8080
-  export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
   ```
+
 * **Windows (PowerShell):**
   ```powershell
-  $env:HTTP_PROXY="http://127.0.0.1:8080"
-  $env:HTTPS_PROXY="http://127.0.0.1:8080"
-  $env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
+  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
   ```
-* **Windows (Command Prompt / CMD):**
+
+* **Windows (Command Prompt):**
   ```cmd
-  set HTTP_PROXY=http://127.0.0.1:8080
-  set HTTPS_PROXY=http://127.0.0.1:8080
-  set AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   ```
-* **What You Will See:** Silent confirmation in the terminal; live HTTP requests from Python/Node AI scripts immediately appear in the browser dashboard (`http://127.0.0.1:8080`).
-* **What You Achieve:** All outgoing agent HTTP API calls (e.g., to OpenAI or Anthropic) are intercepted and recorded in `~/.agentwall/events.db`.
 
----
+### Step 2: Run One-Command Protection
 
-##### Step 3: Wrap Stdio Tools & Desktop IDEs
-Secure Model Context Protocol (MCP) tool calls and desktop AI applications (e.g., Claude Desktop, Cursor):
-
-* **Wrap Stdio MCP Server:**
-  > **Prerequisites:** Node.js (`npx` v18+) installed and target directory created.
-  * **Linux / macOS:**
-    ```bash
-    mkdir -p ~/workspace
-    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-    ```
-  * **Windows (PowerShell):**
-    ```powershell
-    New-Item -ItemType Directory -Path "$HOME\workspace" -Force
-    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
-    ```
-* **Wrap Desktop IDE & Check Health:**
-  ```bash
-  agentwall wrap claude
-  agentwall status
-  ```
-* **What You Will See:**
-  * For stdio wrapping: `AgentWall MCP Security Proxy` initialization header in your terminal.
-  * For `agentwall wrap claude`: Terminal confirmation that client configuration files (e.g., `claude_desktop_config.json`) were updated.
-  * For `agentwall status`: Diagnostic table listing active wrappers and proxy health.
-* **What You Achieve:** MCP tool calls (like file manipulation or shell execution) are proxied and governed by AgentWall.
-
----
-
-##### Step 4: Auto-Generate Security Policy
-After running your agents or IDE tools, generate a YAML security policy derived from observed traffic:
-```bash
-agentwall generate-policy --decay-window 30
-```
-* **What You Will See:** Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentwall/events.db`.
-* **What You Achieve:** A tailored, baseline security policy automatically crafted for your specific agent tools without manual YAML writing.
-
----
-
-### Team Control Hub
-
-The Team Control Hub profile introduces the self-hosted **Control Hub** (React Web Dashboard + Go REST API + PostgreSQL Database) running alongside local or shared gateway instances.
-
-#### Prerequisites
-
-##### Option A: Standard Control Hub Deployment (Docker Compose — Recommended)
-1. **Control Hub Server Host:**
-   - **Docker Engine / Docker Desktop (v24.0+):** Must be installed and **actively running** (daemon active).
-   - **Docker Compose (v2.20+):** Required to orchestrate PostgreSQL, API, and UI containers.
-   - **Available Network Ports:** `8081` (Control Hub UI), `8400` (Control Hub API), `5433` (PostgreSQL DB).
-2. **Gateway Host(s) / Developer Workstations:**
-   - Installed `agentwall` binary (`curl -fsSL https://vexasec.io/install.sh | bash` on Linux/macOS or `irm https://vexasec.io/install.ps1 | iex` on Windows).
-   - Direct network connectivity to the Control Hub server on port `8400`.
-
-##### Option B: Native / Non-Docker Local Deployment (Bare-Metal Binaries)
-If Docker is not running or available on your local environment:
-1. **PostgreSQL Server (v16+):** Running locally (e.g., port `5433` or `5432`) with database `agentwall` created and schema migrations executed from `control-plane/db/migrations/`.
-2. **Control Hub API Binary (`dashboard-api`):** Compiled or run via Go 1.21+ (`go run ./cmd/server`) with `DATABASE_URL` pointing to PostgreSQL.
-3. **Control Hub UI (`frontend`):** Built or served via Node.js (v18+) development server (`npm run dev` in `control-plane/ui`).
-
-
-#### Step-by-Step Installation
-1. **Deploy the Control Hub Stack via Docker Compose:**
-   Navigate to the `control-plane` directory and build the services:
-   ```bash
-   cd control-plane
-   docker compose up -d --build
-   ```
-   This provisions:
-   - **Control Hub UI:** `http://localhost:8081`
-   - **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
-
-2. **Start Gateway Instances Connected to the Control Hub:**
-   Configure shared bearer secrets and start gateway instances in centralized mode:
-
-   > [!IMPORTANT]
-   > **Long-Running Foreground Process:** `agentwall start` runs in the foreground. Keep this terminal window open while the gateway is active. Do not run `curl` or `verify-log` commands in this same window.
-   >
-   > **Proxy Environment Warning:** When running `docker compose up -d` for Step 1, ensure `HTTP_PROXY` and `HTTPS_PROXY` are **not** set in that terminal session, as Docker requires direct internet access to download base images.
-
-   * **Linux / macOS (Bash / Zsh):**
-     ```bash
-     export DASHBOARD_API_URL="http://localhost:8400"
-     export POLICY_READ_SECRET="local-dev-policy-read-secret"
-     export GATEWAY_SECRET="local-dev-shared-secret-change-me"
-
-     agentwall start \
-       --listen 127.0.0.1:8080 \
-       --centralized \
-       --log-path ./team-audit.log
-     ```
-   * **Windows (PowerShell):**
-     ```powershell
-     $env:DASHBOARD_API_URL="http://localhost:8400"
-     $env:POLICY_READ_SECRET="local-dev-policy-read-secret"
-     $env:GATEWAY_SECRET="local-dev-shared-secret-change-me"
-
-     .\agentwall.exe start `
-       --listen 127.0.0.1:8080 `
-       --centralized `
-       --log-path .\team-audit.log
-     ```
-   The gateway will bootstrap its policy state directly from PostgreSQL via the Control Hub API and maintain a live SSE connection (`GET /api/v1/policy/subscribe`) for zero-downtime policy hot-reloading.
-
-#### Post-Installation Activities & Verification
-
-Follow these steps to verify your Control Hub deployment and centralized team gateway:
-
-##### Step 1: Verify Control Hub API Backend Health
-Check that the Control Hub API service is running and accessible:
-```bash
-curl -i http://localhost:8400/healthz
-```
-* **Prerequisites:** Control Hub stack launched via Docker Compose (`docker compose up -d`).
-* **What You Will See:** HTTP `200 OK` response with JSON payload `{"status":"ok"}`.
-* **What You Achieve:** Confirms the centralized REST API and PostgreSQL database backend are operational.
-
----
-
-##### Step 2: Access & Inspect Team Dashboard
-Open `http://localhost:8081` in your web browser.
-
-* **Prerequisites:** Control Hub UI service running on port `8081`.
-* **Default Dashboard Credentials:**
-  - **Local Docker Compose (DEV_MODE):** Email: `admin` | Password: `admin` (or any string).
-  - **Production Mode:** Email: `admin` | Password: `<Bootstrap Token>` (found via `docker compose logs dashboard-api | grep "Bootstrap Token"`).
-
-  > [!NOTE]
-  > The login API expects the `email` field. Submitting a `username` field returns 401 even with the correct value.
-* **How to Populate Live Dashboard Data:**
-  - Connect your centralized gateway (`DASHBOARD_API_URL="http://localhost:8400"` and `GATEWAY_SECRET="local-dev-shared-secret-change-me"`).
-  - Wrap stdio MCP tools (`agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME"`).
-  - Or route agent HTTP traffic through `127.0.0.1:8080` (`export HTTP_PROXY=http://127.0.0.1:8080`).
-* **What You Will See:** The web dashboard displaying active gateways, real-time event telemetry stream, threat heatmaps, and active policy rules.
-* **What You Achieve:** Provides complete visual monitoring and team policy administration.
-
----
-
-##### Step 3: Verify Gateway Policy Bootstrap & Hot-Reloading
-Inspect stdout logs from your running `agentwall start --centralized` gateway instance in **Terminal 1**.
-* **What You Will See:** Gateway terminal output:
-  ```text
-  ℹ Fetching policy from dashboard API (http://localhost:8400)... OK
-  🔄 Connected to Hub for real-time policy push (SSE)
-  ```
-* **What You Achieve:** Confirms the gateway bootstrapped its policy from the Control Hub database and opened a live SSE stream to receive zero-downtime policy updates.
-
----
-
-##### Step 4: Generate MCP Traffic & Cryptographically Verify Audit Log Integrity
-Validate the tamper-evident cryptographic hash chain of the team audit log:
-
-> [!NOTE]
-> **Multi-Terminal Workflow:**
-> 1. **Terminal 1:** Keep the `agentwall start` gateway server running.
-> 2. **Terminal 2 (New Window):** Send MCP tool call traffic through the proxy to populate the audit log.
->
->    > **What Generates Audit Log Entries?** The audit log exclusively records **MCP `tools/call` JSON-RPC decisions** (allow, deny, rate-limit). Plain HTTP proxy requests (e.g. `curl --proxy`) establish a session and are tracked, but do **not** create audit log entries on their own. Route traffic from an actual AI agent or SDK (e.g. Python OpenAI SDK, Node.js Anthropic SDK) through the proxy to generate audit events.
->    >
->    > **Centralized Mode Auth Requirement:** All proxy requests require an `Authorization` header to identify the agent session. Any non-empty value is accepted as a session key when OIDC is not configured.
->
->    **Quick Connectivity Test (verifies session start, not audit):**
->    - **Linux/macOS:**
->      ```bash
->      curl --proxy http://127.0.0.1:8080 \
->           -H "Authorization: Bearer test-agent-session-1" \
->           http://localhost:8400/healthz
->      ```
->    - **Windows (PowerShell):**
->      ```powershell
->      curl.exe --proxy http://127.0.0.1:8080 `
->               -H "Authorization: Bearer test-agent-session-1" `
->               http://localhost:8400/healthz
->      ```
->
->    **Send an MCP Tool Call Directly to the Gateway (generates audit entries):**
->    Post a JSON-RPC `tools/call` request **directly to the gateway** on port `8080`. The gateway evaluates the policy and writes an audit entry before forwarding upstream.
->    - **Linux/macOS:**
->      ```bash
->      curl -X POST http://127.0.0.1:8080 \
->           -H "Authorization: Bearer test-agent-session-1" \
->           -H "Content-Type: application/json" \
->           -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_file","arguments":{"path":"/tmp/test.txt"}}}'
->      ```
->    - **Windows (PowerShell):**
->      ```powershell
->      curl.exe -X POST http://127.0.0.1:8080 `
->               -H "Authorization: Bearer test-agent-session-1" `
->               -H "Content-Type: application/json" `
->               -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}'
->      ```
->    > The gateway will evaluate the policy, write a cryptographic audit entry, then attempt to forward to the upstream MCP server. An upstream connection error is expected if no MCP server is running — the audit log entry is still written.
->
-> 3. **Terminal 2:** After agent traffic has flowed through the proxy, run the log verification command:
->    - **Linux/macOS:** `agentwall verify-log ./team-audit.log`
->    - **Windows:** `.\agentwall.exe verify-log .\team-audit.log`
->
-> *(Note: Running `verify-log` on an empty log file before any MCP tool call traffic has passed through the gateway will report `log file contains no audit entries`).*
+Execute `agentwall protect` in your terminal:
 
 ```bash
-agentwall verify-log team-audit.log
+# macOS / Linux
+agentwall protect
+
+# Windows (PowerShell / CMD)
+agentwall.exe protect
 ```
-* **Prerequisites:** Audit log file (`team-audit.log`) generated by active gateway sessions.
-* **What You Will See:**
-  ```text
-  ℹ Verifying log chain integrity for team-audit.log... VALID
-    ✓ N entries found, cryptographic chain intact.
-  ```
-  *(Where `N` is the number of MCP `tools/call` audit entries recorded.)*
-* **What You Achieve:** Guarantees cryptographic audit log compliance and tamper evidence.
 
----
+**What `agentwall protect` performs automatically:**
+1. 🛡 **Generates Baseline Policy:** Creates `agentwall-policy.yaml` with baseline P0 DLP rules (blocking `.env`, `.ssh/id_rsa`, `~/.aws/credentials`) if no policy file exists.
+2. 🔍 **Auto-Discovers Installed IDEs:** Scans for Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, and Codex.
+3. 🔒 **Atomically Wraps Configurations:** Updates MCP configs to route through the gateway while creating timestamped backups before writing.
+4. 🚀 **Starts Security Gateway:** Binds the local proxy to `127.0.0.1:8080` and streams structured JSONL logs to `~/.agentwall/audit.jsonl`.
+5. 🌐 **Launches Local Dashboard:** Automatically opens your default web browser to `http://127.0.0.1:8080`.
 
-### Cloud Serverless (Terraform)
-
-The Cloud Serverless profile deploys the complete AgentWall stack (Rust Gateway + Control Plane UI + Dashboard API + PostgreSQL database) across **AWS ECS Fargate**, **Azure Container Apps (ACA)**, or **Google Cloud Run (v2)** with zero VM management and costs starting from **$0 to $25/month**.
-
-#### Prerequisites
-- **Terraform** (`>= 1.6.0`): `winget install HashiCorp.Terraform` (Windows) / `brew install terraform` (macOS) / `sudo apt-get install terraform` (Linux).
-- **Target Cloud CLI**:
-  - **AWS:** AWS CLI v2 (`aws configure`)
-  - **Azure:** Azure CLI (`az login` & `az account set --subscription <id>`)
-  - **GCP:** Google Cloud SDK (`gcloud auth login` & `gcloud auth application-default login`)
-
-#### Step-by-Step Installation
-
-##### 🅰️ AWS ECS Fargate
 ```bash
-cd infra/aws/ecs
-terraform init
-terraform apply
+# Useful flags:
+agentwall protect --dry-run   # Preview all discovery & wrapping actions without modifying files
+agentwall protect --shadow    # Launch in passive observation mode (no active blocking)
+agentwall protect --no-browser # Start gateway without opening browser automatically
 ```
-* **Endpoints:** Gateway on `:8080`, Control Plane UI on `:8081` via Application Load Balancer (ALB).
 
-##### 🅱️ Azure Container Apps (ACA)
+### Step 3: Verify with Instant Telemetry
+
+If you have not connected an IDE yet, generate simulated tool calls to verify the dashboard:
+
 ```bash
-cd infra/azure
-cp terraform.tfvars.example terraform.tfvars # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
-terraform init
-terraform apply
-```
-* **Endpoints:** Gateway & UI on public HTTPS URLs with automatic free TLS certificates.
+# macOS / Linux / WSL
+python3 ~/.local/bin/quickstart_agent.py
 
-##### 🅲 Google Cloud Run (v2)
+# Windows (PowerShell)
+python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
+```
+
+### Step 4: Revert Anytime
+
+To cleanly restore all IDE configurations from their original backups:
+
 ```bash
-cd infra/gcp
-cp terraform.tfvars.example terraform.tfvars # (PowerShell: Copy-Item terraform.tfvars.example terraform.tfvars)
-# Set your gcp_project_id in terraform.tfvars
-terraform init
-terraform apply
+agentwall unprotect            # macOS / Linux (verifies backup integrity)
+agentwall.exe unprotect        # Windows
+agentwall.exe unprotect --force # Emergency recovery: force restore
 ```
-* **Endpoints:** Gateway & UI on auto-provisioned HTTPS `.run.app` endpoints with scale-to-zero support.
 
 ---
 
-### Enterprise Fleet
+## 5. Multi-IDE Integration & File-Lock Management
 
-The Enterprise Fleet profile deploys AgentWall as a high-availability, cloud-native gateway fleet on Kubernetes, featuring memory-safe TLS (`rustls`), enterprise OIDC SSO, direct SIEM audit streaming, and zero-downtime policy distribution.
+AgentWall natively discovers, wraps, and monitors 9 leading AI coding environments:
 
-#### Production Prerequisites
+| IDE / Target | Wrap Command | Config File Location | Interception Behavior |
+|---|---|---|---|
+| **Claude Desktop** | `agentwall wrap claude` | `claude_desktop_config.json` | Replaces stdio commands with AgentWall proxy wrapper |
+| **Cursor** | `agentwall wrap cursor` | Cursor `User/settings.json` | Intercepts MCP server registrations & tool invocations |
+| **VS Code** | `agentwall wrap vscode` | `.vscode/mcp.json` / Extension storage | Governs extension-based MCP tool calls |
+| **JetBrains** | `agentwall wrap jetbrains` | JetBrains AI assistant settings | Wraps external MCP servers with default-deny rules |
+| **Zed Editor** | `agentwall wrap zed` | `~/.config/zed/settings.json` | Injects security proxy into Zed language model config |
+| **Cline Extension** | `agentwall wrap cline` | Cline extension settings | Intercepts autonomous tool execution and shell commands |
+| **OpenCode** | `agentwall wrap opencode` | OpenCode configuration | Secures tool parameter payloads and audits activity |
+| **Antigravity IDE** | `agentwall wrap antigravity` | Antigravity settings / MCP config | Governs tool calls and surfaces interactive HITL modals |
+| **ChatGPT Codex** | `agentwall wrap codex` | Codex CLI / API settings | Scopes credentials and blocks prompt injections |
 
-1. **Target Kubernetes Cluster (Target Infrastructure):**
-   - Kubernetes cluster v1.26+ (AWS EKS, GCP GKE, Azure AKS, or On-Premise K8s).
-   - Ingress controller / Load Balancer configured for external TLS traffic.
-   - StorageClass available for persistent database storage (if deploying embedded PostgreSQL).
+### Checking Wrap Status
 
-2. **Admin Workstation / CI/CD Deployment Host:**
-   - `helm` CLI v3+ installed.
-   - `kubectl` CLI installed and configured with `cluster-admin` context permissions for the target cluster.
+Run `agentwall status` to inspect all 9 targets:
 
-3. **Security & Cryptography Assets:**
-   - Domain TLS Certificate (`tls.crt`) and matching private key (`tls.key`) in PEM format.
-
-4. **Enterprise Identity & Audit Services (External Integrations):**
-   - **OIDC Provider:** Keycloak, Okta, Microsoft Entra ID (Azure AD), Auth0, or PingIdentity configured with an OIDC Discovery URL (`.well-known/openid-configuration`).
-   - **SIEM Collector (Optional):** Splunk HEC, Datadog HTTP Intake, or OpenSearch endpoint and authentication token.
-
-#### Step-by-Step Installation
-
-1. **Create K8s Namespace & Secrets for TLS:**
-   Create a Kubernetes secret containing your TLS certificate and key in the target namespace:
-   ```bash
-   kubectl create namespace agentwall-system
-   kubectl create secret tls agentwall-tls \
-     --cert=/etc/certs/tls.crt \
-     --key=/etc/certs/tls.key \
-     -n agentwall-system
-   ```
-
-2. **Deploy AgentWall Stack via Helm:**
-   Deploy the AgentWall stack using the official Helm chart:
-   ```bash
-   helm install agentwall ./chart \
-     --namespace agentwall-system \
-     --set gateway.tls.enabled=true \
-     --set gateway.tls.secretName="agentwall-tls" \
-     --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default" \
-     --set gateway.siem.backend="splunk" \
-     --set gateway.siem.endpoint="https://splunk.corp.com:8088/services/collector/event" \
-     --set gateway.siem.token="${SPLUNK_HEC_TOKEN}" \
-     --set dashboardApi.enabled=true \
-     --set dashboardDb.enabled=true \
-     --set dashboardFrontend.enabled=true
-   ```
-
-#### Post-Installation Activities & Verification
-
-Follow these steps to verify your enterprise production deployment:
-
-##### Step 1: Verify Kubernetes Workload Health
-Confirm all gateway pods, control plane API, database, and frontend deployments are running:
 ```bash
-kubectl get pods -n agentwall-system -o wide
+agentwall status
 ```
-* **Prerequisites:** Helm deployment completed in the `agentwall-system` namespace.
-* **What You Will See:** Pod status table listing all deployments as `Running` and `1/1 Ready`.
-* **What You Achieve:** Confirms high-availability gateway pods and infrastructure services are healthy.
 
----
+Output:
+```text
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│ Target        Config File Path                                   Exists?   Wrapped?   │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│ Claude        C:\Users\dev\AppData\Roaming\Claude\config.json     YES       YES       │
+│ Cursor        C:\Users\dev\AppData\Roaming\Cursor\settings.json   YES       YES       │
+│ VS Code       C:\Users\dev\.vscode\mcp.json                       YES       YES       │
+│ JetBrains     C:\Users\dev\AppData\Roaming\JetBrains\mcp.json     NO        NO        │
+│ Zed           C:\Users\dev\.config\zed\settings.json              NO        NO        │
+│ Cline         C:\Users\dev\AppData\Roaming\Code\cline.json        YES       YES       │
+│ OpenCode      C:\Users\dev\.config\opencode\config.json           NO        NO        │
+│ Antigravity   C:\Users\dev\.gemini\antigravity\config.json        YES       YES       │
+│ Codex         C:\Users\dev\.codex\config.json                     NO        NO        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-##### Step 2: Inspect Gateway Container Logs
-Inspect gateway logs for clean startup and enterprise service connections:
+### Event-Driven Configuration Watcher Daemon
+
+AI IDEs or extensions may rewrite their configuration files. The AgentWall watcher daemon monitors configuration files via native OS filesystem events (`ReadDirectoryChangesW` on Windows, `FSEvents` on macOS, `inotify` on Linux):
+
 ```bash
-kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway --tail=100
+# Watch all verified IDE targets in the background:
+agentwall watch --all
+
+# Watch a specific IDE target:
+agentwall watch claude
+agentwall watch cursor
 ```
-* **What You Will See:** Clean startup log stream showing successful TLS certificate binding, OIDC provider discovery, and SIEM HTTP intake connection.
-* **What You Achieve:** Validates cryptographic identity integration, secure TLS listener setup, and SIEM telemetry streaming.
+
+When an unwrapped entry is detected, the watcher re-wraps the configuration within `<300ms` and records a security audit log.
 
 ---
 
-##### Step 3: Execute Automated Policy Smoke Test
-Run the CLI policy test suite against the live cluster ingress endpoint:
+## 6. Hardware PKI Enrollment & OS Sentry Service
+
+For team and enterprise environments, workstations are bound to the central Control Hub using cryptographic device enrollment and persistent OS background services.
+
+### Hardware-Bound Device Enrollment
+
 ```bash
-agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com
+agentwall enroll --token "TOK-ONE-TIME-TOKEN" --hub-url "http://localhost:8400"
 ```
-* **Prerequisites:** `agentwall` CLI installed and cluster ingress reachable at `https://agentwall.corp.com`.
-* **What You Will See:** Terminal test report summarizing passed assertions and policy enforcement checks.
-* **What You Achieve:** End-to-end empirical verification of governance policy enforcement across the active cloud gateway fleet.
+
+**Cryptographic Enrollment Flow:**
+1. Generates an **Ed25519 Device Keypair** bound to OS secure storage (Windows DPAPI / macOS Keychain / Linux Secret Service `0600`).
+2. Generates an **ECDSA P-256 Keypair** and submits a Certificate Signing Request (CSR) to the Control Hub.
+3. Exchanges proof-of-possession challenges and receives an authenticated short-lived mTLS device certificate.
+4. The one-time token is consumed immediately and never stored in plain text.
+
+### Persistent OS Sentry Background Daemon
+
+Install AgentWall as a system-level background daemon that boots with the operating system:
+
+```bash
+# Install Sentry Daemon (Windows SCM / macOS launchd / Linux systemd)
+agentwall service install \
+  --hub-url "http://localhost:8400" \
+  --gateway-secret "your-gateway-secret" \
+  --policy-read-secret "your-policy-read-secret" \
+  --agent-id "dev-workstation-01"
+
+# Check daemon health
+agentwall service status
+
+# Uninstall Sentry Daemon
+agentwall service uninstall
+```
+
+**Sentry Protection Mechanics:**
+- **Immutable File Locks:** Applies read-only attributes (`chmod 0444`, BSD `chflags uchg`, Windows ACL Write Deny) to prevent unauthorized tampering with MCP configurations.
+- **Continuous Tamper Detection:** Any manual tampering triggers `<300ms` auto-rewrapping and sends a real-time `TAMPER_DETECTED` alert to the Control Hub.
+- **Windows Session 0 Multi-User Enumeration:** When running as `SYSTEM` on Windows, automatically scans and protects developer profile hives in `C:\Users\*`.
 
 ---
 
-##### Step 4: Verify Enterprise SIEM & OIDC Audit Telemetry
-Check your enterprise SIEM dashboard (e.g., Splunk, Datadog) and OIDC Provider audit logs.
-* **What You Will See:** Real-time audit events indexed in your SIEM portal (e.g. index `security_events`) with valid OIDC subject claim bindings.
-* **What You Achieve:** Guarantees enterprise compliance reporting, automated SIEM alert triggers, and identity-bound audit trails.
+## 7. Policy Configuration & Automated Rule Synthesis
 
----
+AgentWall enforces zero-trust rules defined in `agentwall-policy.yaml` (Schema v2).
 
-## 2. Writing YAML Policies (v2 Schema)
-
-AgentWall policies use strict, explicit YAML configuration files conforming to the **v2 schema**. AgentWall operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
-
-### v2 Policy Architecture
-
-The v2 policy schema organizes security controls into distinct sections:
-- `identity_binding`: IdP discovery and claim mappings
-- `policy_bindings`: Role/group mapping to policy rulesets
-- `tools`: Tool call allowlists, parameter constraints, structural validators, and JSON schemas
-- `dlp`: Scannable tool definitions and DLP regex patterns
-- `spend`: Session token budgets and concurrency limits
-- `loop_detection`: Thresholds and actions for agent loop containment
-- `audit`: Local file output and SIEM export endpoints
-
----
-
-### Complete v2 Schema Reference & Example
-
-Below is a complete reference policy (`agentwall-policy.yaml`) demonstrating all v2 schema options:
+### Baseline Policy Structure
 
 ```yaml
 version: 2
 default_action: deny
 
-# 1. Identity & OIDC Binding
-identity_binding:
-  oidc_discovery_url: "https://auth.corp.com/.well-known/openid-configuration"
-  allowed_audiences: ["agentwall-gateway-prod"]
-  group_claim: "groups"
+# 1. Identity Provider Binding (Enterprise / Team)
+identity:
+  provider: "oidc"
+  issuer: "https://auth.corp.local/oauth2/default"
+  audience: "agentwall-gateway-prod"
+  group_claim_key: "groups"
 
-# 2. Policy Bindings (Group & Subject Mappings)
+# 2. Group Policy Bindings
 policy_bindings:
   - group: "secops-team"
     policy: "admin-unrestricted"
   - group: "dev-team"
     policy: "developer-standard"
-  - sub: "ci-agent@corp.com"
-    policy: "ci-restricted"
 
-# 3. Tool Rules & Parameter Validation
+# 3. Tool Allowlists & Parameter Schemas
 tools:
   - name: "read_file"
     action: allow
@@ -785,1134 +331,241 @@ tools:
         validators:
           - path_traversal
           - no_sensitive_paths
-        regex: "^/home/[a-z]+/projects/.*"
-        deny_patterns: ["\\.ssh", "\\.env", "\\.aws", "id_rsa"]
+        deny_patterns: ["\\.ssh", "\\.env", "\\.aws"]
 
-  - name: "write_file"
+  - name: "execute_command"
     action: allow
-    credential_scope: ["file:write"]
     parameters:
-      - name: "path"
+      - name: "command"
         type: string
         required: true
-        max_length: 512
-        validators:
-          - path_traversal
-          - no_sensitive_paths
-      - name: "content"
-        type: string
-        required: true
-        max_length: 1048576
-
-  - name: "configure_settings"
-    action: allow
-    credential_scope: ["settings:write"]
-    parameters:
-      - name: "options"
-        type: object
-        required: true
-        schema:
-          type: object
-          properties:
-            theme:
-              type: string
-              pattern: "^(dark|light)$"
-            retries:
-              type: integer
-              minimum: 0
-              maximum: 5
-          required: ["theme"]
+        deny_patterns: ["rm\\s+-rf", "mkfs", "dd\\s+if=", "curl.*\\|.*bash"]
 
 # 4. Data Loss Prevention (DLP)
 dlp:
-  scannable_tools: ["read_file", "write_file", "execute_command"]
+  scannable_tools: ["read_file", "execute_command"]
   safe_tools: ["list_directory"]
   patterns:
     - name: "aws_access_key"
       regex: "AKIA[0-9A-Z]{16}"
       action: block
-    - name: "credit_card"
-      regex: "\\b\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
+    - name: "generic_api_key"
+      regex: "(?i)(api_key|apikey|secret|token)\\s*[:=]\\s*['\"][a-zA-Z0-9_-]{16,}['\"]"
       action: redact
-    - name: "email_address"
-      regex: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
-      action: warn
 
-# 5. Spend Limits & Circuit Breakers
-spend:
-  max_tokens_per_session: 100000
-  max_concurrent_sessions: 10
-
-# 6. Loop Detection & Cycle Prevention
-loop_detection:
-  threshold: 3
-  action: PivotError
-
-# 7. Audit & SIEM Export
-audit:
-  log_file: "/var/log/agentwall/audit.jsonl"
-  siem_export:
-    type: "splunk_hec"
-    endpoint: "https://splunk.corp.com:8088/services/collector/event"
-    token: "${SPLUNK_HEC_TOKEN}"
-    index: "security_events"
-```
-
----
-
-### Policy Rules & Parameter Validation
-
-#### Parameter Types
-Parameters support `string`, `number`, `integer`, `boolean`, and `object`.
-
-#### Structural Validators
-AgentWall provides built-in structural validators:
-- `path_traversal`: Detects and blocks directory traversal attempts (e.g. `../`, `..\\`, `%2e%2e/`).
-- `no_sensitive_paths`: Blocks access to sensitive system paths (`/etc/shadow`, `C:\Windows\System32`, `.ssh`, `.env`, `.aws/credentials`).
-
-#### JSON Schema Validation
-For complex object parameters, supply standard JSON Schema contracts under the `schema:` property. The gateway enforces object properties, types, enums, min/max bounds, and required keys.
-
----
-
-## 3. Configuring Data Loss Prevention (DLP)
-
-AgentWall includes an inline DLP engine that scans MCP tool parameters, tool response payloads, and outbound LLM prompts for sensitive credentials, keys, and PII.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                DLP SCANNING PIPELINE                                    │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ Payload ──► 3-Pass Base64 Decode ──► 21 Built-in Regexes ──► Entropy (>4.5) ──► Action  │
-│                                                                                 (Block/ │
-│                                                                                 Redact) │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Built-In Regex Detectors
-
-AgentWall ships with **21 built-in regex detectors**:
-
-| Pattern Name | Description | Default Action |
-|---|---|---|
-| `aws_access_key` | AWS Access Key ID (`AKIA...`) | Block |
-| `aws_secret_key` | AWS Secret Access Key | Block |
-| `github_pat` | GitHub Personal Access Token (`ghp_...`, `github_pat_...`) | Block |
-| `openai_api_key` | OpenAI API Key (`sk-...`) | Block |
-| `anthropic_api_key` | Anthropic API Key (`sk-ant-...`) | Block |
-| `stripe_live_key` | Stripe Live Secret Key (`sk_live_...`) | Block |
-| `ssh_private_key` | PEM / OpenSSH Private Key Block | Block |
-| `azure_storage_key` | Azure Storage Account Key | Block |
-| `gcp_api_key` | Google Cloud API Key (`AIza...`) | Block |
-| `slack_bot_token` | Slack Bot Token (`xoxb-...`) | Block |
-| `sendgrid_api_key` | SendGrid API Key (`SG....`) | Block |
-| `database_uri` | Connection String (PostgreSQL, MongoDB, Redis) | Redact |
-| `credit_card` | Luhn-validated Credit Card Numbers | Redact |
-| `us_ssn` | US Social Security Number (`XXX-XX-XXXX`) | Redact |
-| `uae_emirates_id` | UAE Emirates ID (`784-XXXX-XXXXXXX-X`) | Redact |
-| `email_address` | Standard Email Address | Warn |
-
----
-
-### Custom Pattern Definitions
-
-Extend DLP capabilities by specifying custom patterns under the `dlp.patterns` block in your policy:
-
-```yaml
-dlp:
-  scannable_tools: ["read_file", "write_file", "execute_command"]
-  patterns:
-    - name: "internal_employee_id"
-      regex: "EMP-[0-9]{6}-[A-Z]{2}"
-      action: block
-    - name: "custom_bearer_token"
-      regex: "Bearer eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+"
-      action: redact
-```
-
----
-
-### Deep Scanning & Entropy Analysis
-
-In addition to regex patterns, AgentWall performs deep heuristic inspection:
-1. **Recursive Base64 Decoding:** Automatically decodes Base64 encoded payload segments up to 3 layers deep before applying DLP scanners.
-2. **Shannon Entropy Analysis:** Flags high-entropy random strings (entropy > 4.5 bits/char on strings longer than 32 characters), identifying obfuscated secret keys.
-3. **BIP-39 Mnemonic Validation:** Scans text payloads for 12/24-word cryptocurrency seed phrase combinations.
-
----
-
-### Tool Response Secret Scanning
-
-AgentWall can scan and redact secret leakage contained within incoming tool response payloads before returning them to the agent.
-
-Enable response scanning via CLI flags when launching the gateway or wrapper:
-```bash
-agentwall start \
-  --policy policy.yaml \
-  --scan-responses \
-  --block-on-secrets \
-  --max-scan-bytes 1048576
-```
-- `--scan-responses`: Enables response body scanning.
-- `--block-on-secrets`: Blocks the entire tool response with an error instead of inline redaction (`[REDACTED]`).
-- `--max-scan-bytes`: Configures the maximum payload size to scan (default: 1MB).
-
----
-
-## 4. Setting Up OIDC Identity Binding
-
-AgentWall binds agent sessions and tool call execution to cryptographic OIDC identities, ensuring zero-trust attribution and access enforcement.
-
-> [!NOTE]
-> For complete step-by-step configuration guides, claims mappings, and policy examples for **Okta**, **Keycloak**, **Microsoft Entra ID**, **Auth0**, **AWS Cognito**, **Google Workspace**, and **PingIdentity**, see the dedicated [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md) ([oidc_identity_binding.md](file:///c:/AgentWall/agentwall/docs/oidc_identity_binding.md)).
-
-### IdP Configuration
-
-In your YAML policy, define the `identity` configuration (for instance, connecting **Keycloak** or another OIDC provider):
-
-```yaml
-identity:
-  provider: "oidc"
-  issuer: "https://keycloak.corp.internal/realms/production"
-  audience: "agentwall-gateway"
-  group_claim_key: "groups"    # IdP-specific claim key (e.g. "groups", "cognito:groups", "memberOf")
-```
-
-Or pass the discovery issuer via command line:
-```bash
-agentwall start --policy policy.yaml --oidc-issuer https://keycloak.corp.internal/realms/production
-```
-
----
-
-### JWT Validation & Scope Matching
-
-1. **Bearer Token Extraction:** Agents pass their OIDC JWT Bearer token in the HTTP `Authorization: Bearer <jwt>` header.
-2. **Signature & Claim Verification:** The gateway fetches the IdP's JWKS public keys and verifies the signature, expiration (`exp`), issuer (`iss`), and audience (`aud`).
-3. **Scope Enforcement (`X-AgentWall-Credential-Scope`):** Each tool rule in the policy can mandate required credential scopes. The agent's token must match the required scope:
-   ```yaml
-   tools:
-     - name: "delete_database"
-       action: allow
-       credential_scope: ["db:admin"]
-   ```
-4. **Strict Scope Mode:** By default, scope mismatches log a warning. Upgrade scope mismatches to hard `403 Forbidden` denials by enabling strict mode:
-   ```bash
-   export AGENTWALL_STRICT_CREDENTIAL_SCOPE=true
-   agentwall start --policy policy.yaml
-   ```
-
----
-
-### Agent Short-Lived Credential CLI
-
-Manage short-lived agent credentials directly via the `agentwall identity` subcommand suite:
-
-#### 1. Provision Short-Lived Credential
-```bash
-agentwall identity create --agent financial-agent-01 --scope "file:read" --ttl 1h
-```
-
-#### 2. Rotate Agent Credentials
-Force zero-downtime rotation with a 30-second old credential drain period:
-```bash
-agentwall identity rotate --agent financial-agent-01 --drain-secs 30
-```
-
-#### 3. Configure Per-Tool Scoping Rules
-```bash
-agentwall identity scope --agent financial-agent-01 --tool execute_shell --deny
-```
-
-#### 4. Audit Identity History
-Display the HMAC-chained identity audit trail:
-```bash
-agentwall identity audit --agent financial-agent-01 --verify
-```
-
----
-
-## 5. Connecting to the Control Hub
-
-The **Control Hub** acts as the central control plane for AgentWall fleets, providing real-time policy hot-reloading, secret custody, and centralized telemetry aggregation.
-
-### Hub Architecture & API Specifications
-
-- **Base URL:** `https://{hub-host}:8080/api/v1` (or `:8081` in local dev)
-- **Protocol:** HTTP/2 over TLS with OIDC JWT Bearer Authentication
-
----
-
-### Real-Time SSE Event Stream
-
-Gateways maintain a persistent Server-Sent Events (SSE) connection to `GET /api/v1/events` (or `/api/v1/policy/subscribe`).
-
-```
-Gateway                                               Control Hub API
-   │                                                         │
-   │─── GET /api/v1/events (Accept: text/event-stream) ─────►│
-   │◄── event: policy_update (id: policy-v42) ───────────────│ (Hot-swaps policy in RAM)
-   │◄── event: credential_rotation (provider: openai) ───────│ (Refreshes cached API keys)
-   │◄── : ping (every 15s) ──────────────────────────────────│ (Keepalive ping)
-```
-
-#### Event Handlers:
-- `policy_update`: Triggers an atomic in-memory policy swap (via `RwLock<Option<CompiledPolicy>>`) without dropping active agent TCP connections. **New sessions** established after the swap evaluate against the updated ruleset immediately; in-flight sessions complete under the policy that was active when the session was created.
-- `credential_rotation`: Signals that a provider API key has been rotated, causing the gateway to fetch updated ciphertext from `GET /api/v1/credentials/:provider`.
-- `: ping`: Sent every 15 seconds. If no ping is received within 30 seconds, the gateway logs a warning and retries connection backoff.
-
-#### Connecting Gateways in Centralized Mode:
-```bash
-export DASHBOARD_API_URL="https://hub.corp.com:8080"
-export POLICY_READ_SECRET="your-policy-read-secret"
-export GATEWAY_SECRET="your-gateway-secret"
-
-agentwall start --listen 0.0.0.0:8080 --centralized
-```
-
----
-
-### Provider API Key Custody & Injection
-
-AgentWall eliminates the need to store long-lived LLM provider API keys (OpenAI, Anthropic) on developer machines or agent containers:
-
-1. **Central Custody:** API keys are encrypted with AES-256-GCM and stored centrally in the Hub database.
-2. **Gateway Ingestion:** Authorized gateways fetch encrypted key blocks via `GET /api/v1/credentials/:provider` during bootstrap.
-3. **Outbound Injection:** When an agent sends an LLM API request through the gateway, AgentWall verifies authorization, injects the real `Authorization: Bearer sk-...` key, and strips the agent's temporary credential before forwarding to OpenAI/Anthropic.
-
----
-
-### Telemetry Batch Uploads
-
-Gateways periodically flush audit logs to the Control Hub via `POST /api/v1/telemetry`.
-
-```json
-{
-  "gateway_id": "gw-prod-us-east-1a",
-  "events": [
-    {
-      "seq": 1042,
-      "ts": "2026-07-31T12:34:56.789Z",
-      "event": "policy.deny",
-      "request_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-      "tool": "read_file",
-      "action": "BLOCK",
-      "hmac_chain_hash": "7c2e4b8a91c..."
-    }
-  ]
-}
-```
-
-*Privacy Guarantee:* Raw parameter payloads and response content are hashed (SHA-256) or stripped before telemetry upload to guarantee zero payload leakage to the central dashboard.
-
----
-
-## 6. Verifying Audit Logs
-
-AgentWall records tamper-evident, cryptographically chained audit logs to ensure regulatory compliance and forensic accountability.
-
-### HMAC Cryptographic Hash Chaining
-
-Every audit event written to disk contains an HMAC hash calculated from its own payload combined with the HMAC hash of the preceding event:
-
-$$\text{HMAC}_n = \text{HMAC-SHA256}(K, \text{Payload}_n \parallel \text{HMAC}_{n-1})$$
-
-If an attacker attempts to modify, delete, or re-order any historical audit line, the hash chain breaks, causing verification tools to instantly detect the tamper point.
-
----
-
-### Log Integrity Verification
-
-To verify audit log integrity, run `agentwall verify-log`:
-
-```bash
-agentwall verify-log audit.log
-```
-
-With custom signing keys:
-```bash
-agentwall verify-log audit.log --key-file /etc/agentwall/audit.key
-```
-
-**Sample Output:**
-```
-[INFO] Verifying audit log: audit.log
-[INFO] Records checked: 4,821
-[SUCCESS] HMAC hash chain intact. Zero tampering detected.
-```
-
----
-
-### Session Reports & SIEM Export
-
-#### Generating Session Reports
-Generate structured JSON or text summaries from audit logs:
-```bash
-agentwall report audit.log --format json --output report.json
-```
-
-#### Direct SIEM Streaming
-Stream audit events directly to SIEM platforms in real time:
-
-**Splunk HEC:**
-```bash
-agentwall start \
-  --policy policy.yaml \
-  --siem-backend splunk \
-  --siem-endpoint https://splunk.corp.com:8088/services/collector/event \
-  --siem-token "${SPLUNK_HEC_TOKEN}"
-```
-
-**Datadog:**
-```bash
-agentwall start \
-  --policy policy.yaml \
-  --siem-backend datadog \
-  --siem-endpoint https://http-intake.logs.datadoghq.com/api/v2/logs \
-  --siem-token "${DATADOG_API_KEY}"
-```
-
-**OpenSearch:**
-```bash
-agentwall start \
-  --policy policy.yaml \
-  --siem-backend opensearch \
-  --siem-endpoint https://opensearch.corp.com/agentwall-logs/_doc \
-  --siem-token "user:password"
-```
-
-*Fail-Safe Redundancy:* If SIEM network requests time out (default: 2 seconds), the gateway automatically writes events to the local audit log (`audit.log`) to prevent data loss.
-
----
-
-## 7. Troubleshooting Common Issues
-
-### Gateway Startup & YAML Validation Errors
-
-#### Error: `POLICY_INVALID` / Unknown Fields Rejection
-```
-[ERROR] Failed to load policy: unknown field `allowed_tools` at line 14 column 3
-```
-- **Cause:** Schema v2 enforces `#[serde(deny_unknown_fields)]`. Obsolete v1 policy fields are rejected.
-- **Solution:** Run `agentwall lint agentwall-policy.yaml` to identify invalid syntax. Update tool definitions to conform to the v2 specification.
-
-#### Error: Missing TLS Certificate Pair
-```
-[ERROR] Both --tls-cert and --tls-key must be specified together
-```
-- **Cause:** Only one TLS flag was provided.
-- **Solution:** Supply both `--tls-cert` and `--tls-key` paths, or omit both for HTTP mode behind a reverse proxy.
-
----
-
-### Tool Call Denials & Safe Mode Interceptions
-
-#### Error 403 `POLICY_VIOLATION`
-```json
-{
-  "error": {
-    "code": "POLICY_VIOLATION",
-    "message": "Tool 'exec_shell' is not in the allowlist for group 'dev-team'"
-  }
-}
-```
-- **Cause:** The requested tool is not explicitly listed in `tools:` with `action: allow`.
-- **Solution:** Add the tool entry to `agentwall-policy.yaml` or use `agentwall identity scope --agent <name> --tool exec_shell --allow`.
-
-#### Error 403 `DLP_BLOCKED`
-```json
-{
-  "error": {
-    "code": "DLP_BLOCKED",
-    "message": "Content blocked by DLP pattern 'aws_access_key'"
-  }
-}
-```
-- **Cause:** A tool parameter or response contained a secret matching a DLP rule.
-- **Solution:** Check the tool parameter inputs. Ensure secrets are referenced via secure environment variables or provider key custody rather than raw text.
-
----
-
-### OIDC & JWT Authorization Failures
-
-#### Error 401 `IDENTITY_REQUIRED` / `TOKEN_EXPIRED`
-```json
-{
-  "error": {
-    "code": "IDENTITY_REQUIRED",
-    "message": "Missing or invalid OIDC JWT Bearer token"
-  }
-}
-```
-- **Cause:** The HTTP request lacked a valid `Authorization: Bearer <jwt>` header or the token expired.
-- **Solution:** Refresh the agent's OIDC JWT from your identity provider and pass it in the request header.
-
----
-
-### Control Hub Synchronization Issues
-
-#### Error 503 `HUB_UNAVAILABLE`
-```
-[WARN] Control Hub unreachable at https://hub.corp.com:8080. Retrying SSE connection...
-```
-- **Cause:** Gateway cannot connect to the Control Hub SSE endpoint (`/api/v1/events`).
-- **Solution:** Check network routing and verify `DASHBOARD_API_URL` and `POLICY_READ_SECRET`. The gateway automatically falls back to local policy disk files until connection is re-established.
-
----
-
-### Executable & PATH Troubleshooting
-
-#### Issue: `agentwall: command not found` or `agentwall --version` failing across terminal restarts
-
-To ensure `agentwall` works globally across **all future terminal sessions** without re-running `export PATH` manually, persist the installation directory in your shell/OS environment configuration:
-
-* **Linux / WSL (Bash):**
-  ```bash
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-  source ~/.bashrc
-  ```
-
-* **macOS / Linux (Zsh):**
-  ```bash
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-  source ~/.zshrc
-  ```
-
-* **Fish Shell (Linux / macOS):**
-  ```fish
-  fish_add_path ~/.local/bin
-  ```
-
-* **Windows (PowerShell):**
-  Persistently append `%USERPROFILE%\.local\bin` to the User `Path` environment variable:
-  ```powershell
-  [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin", "User")
-  ```
-  *(Note: Restart active PowerShell windows for the change to take effect).*
-
-* **Windows (Command Prompt / CMD):**
-  ```cmd
-  setx PATH "%PATH%;%USERPROFILE%\.local\bin"
-  ```
-  *(Note: Re-open Command Prompt for the change to take effect).*
-
-* **Windows (Git Bash / MSYS2):**
-  ```bash
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_profile
-  source ~/.bash_profile
-  ```
-
-#### Issue: `✖ Stdio proxy error: No such file or directory (os error 2)`
-
-- **Cause 1 (`npx` not in PATH environment):** On macOS, Node/nvm/brew/fnm binaries like `npx` may reside in a non-standard binary directory (e.g. `~/.nvm/versions/node/v20.x/bin/npx` or `/opt/homebrew/bin/npx`) that `agentwall` cannot resolve automatically if executed in a restricted shell context.
-  - **Solution:** Pass the full path using `$(which npx)`:
-    ```bash
-    agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
-    ```
-
-- **Cause 2 (Target directory missing or invalid path):** The target directory (e.g., `~/workspace`) does not exist.
-  - **Solution:** Ensure the path exists before running `agentwall dev --stdio`:
-    ```bash
-    mkdir -p ~/workspace
-    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
-    ```
-
----
-
-### IDE Wrapping & Watch Daemon Diagnostics
-
-#### Issue: IDE MCP tools not routing through AgentWall after `agentwall wrap`
-- **Cause:** IDE processes (Claude Desktop, Cursor, VS Code) read `mcpServers` configuration strictly at application startup.
-- **Solution:** Restart the IDE process completely after running `agentwall wrap <target>`.
-- **Diagnostic Tool:** Run `agentwall status` to inspect path resolution, file existence, and wrap status across all IDE targets.
-
----
-
-### Spend Limit & Loop Detection Triggers
-
-#### Error 429 `SPEND_LIMIT_EXCEEDED`
-```json
-{
-  "error": {
-    "code": "SPEND_LIMIT_EXCEEDED",
-    "message": "Token budget of 100,000 exceeded for current session"
-  }
-}
-```
-- **Cause:** The session token consumption exceeded `spend.max_tokens_per_session`.
-- **Solution:** Reset session spend metrics or adjust spend limits in `agentwall-policy.yaml`.
-
-#### Error 429 `LOOP_DETECTED`
-```json
-{
-  "error": {
-    "code": "LOOP_DETECTED",
-    "message": "Agent loop detected: tool 'read_file' repeated 3 times with identical parameters"
-  }
-}
-```
-- **Cause:** The agent invoked the exact same tool call and parameters repeatedly, tripping cycle detection.
-- **Solution:** AgentWall returned a `PivotError` instructing the agent to break out of its loop. Check agent prompt logic or adjust `loop_detection.threshold` in policy configuration.
-
----
-
-## 8. Stateful Sequence Rules (ADR Framework)
-
-> **ADR** stands for **AI Detection & Response** — a security framework that extends AgentWall with stateful multi-step attack detection, security benchmarking, and self-healing policy synthesis.
-
-Standard tool allowlisting evaluates each tool call in isolation. However, many real-world attacks unfold across multiple steps — a legitimate-looking `read_file` followed by an `http_post` to an external endpoint is an exfiltration chain that neither call reveals alone. AgentWall's **ADR Sequence Engine** solves this by maintaining a per-session sliding-window call history and evaluating multi-step pattern rules against it.
-
-### How the Sequence Engine Works
-
-1. The **`SessionTracker`** maintains a ring buffer of recent tool calls per session, keyed by session ID.
-2. On every incoming tool call, the **Sequence Engine** evaluates all configured `sequence_rules` against the trailing call window.
-3. If a rule's pattern matches (in order, within the configured `window`), the engine immediately returns a **`deny`** response and logs the violation with the rule ID.
-4. Violations appear as **Sequence Rule Violation Badges** in the local dashboard at `http://127.0.0.1:8080`.
-
-### Writing Sequence Rules
-
-Add a `sequence_rules` stanza to your `agentwall-policy.yaml`:
-
-```yaml
+# 5. Stateful Multi-Step Sequence Rules
 sequence_rules:
-  # Block the read_file → execute_command chain (common exfiltration pattern)
-  - id: "no-read-then-exec"
-    description: "Block shell execution that follows a file read"
-    window: 5          # Look back over the last 5 tool calls in this session
-    pattern:
-      - tool: read_file
-      - tool: execute_command
-    action: deny
-    message: "Exfiltration chain detected: read_file → execute_command"
+  - name: "block_credential_exfiltration"
+    window_size: 5
+    antecedent_tools: ["read_file", "view_file"]
+    antecedent_param_regex: ".*(\\.env|id_rsa|credentials).*"
+    consequent_tools: ["http_post", "fetch_url", "bash", "execute_command"]
+    action: block
+    message: "Security Refusal: Network egress blocked after reading sensitive credentials."
 
-  # Block repeated HTTP POSTs (data pump pattern)
-  - id: "no-repeated-http-post"
-    description: "Block more than 3 HTTP POSTs within a 10-call window"
-    window: 10
-    pattern:
-      - tool: http_post
-      - tool: http_post
-      - tool: http_post
-    action: deny
-    message: "Repeated POST pattern blocked"
-
-  # Detect credential file read followed by network call
-  - id: "no-cred-read-then-network"
-    description: "Block network calls after reading credential files"
-    window: 3
-    pattern:
-      - tool: read_file
-      - tool: http_post
-    action: deny
-    message: "Credential theft chain blocked: credential read → outbound network"
-```
-
-### Rule Fields Reference
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | Yes | Unique identifier, referenced in audit logs and dashboard badges |
-| `description` | string | No | Human-readable explanation of the attack pattern |
-| `window` | integer | Yes | Number of recent tool calls to examine in the session history |
-| `pattern` | list | Yes | Ordered list of `tool:` names forming the attack chain |
-| `action` | enum | Yes | `deny` — block and log; `log` — observe only |
-| `message` | string | No | Reason string returned to the agent and written to the audit log |
-
-### Sequence Rule Violations in Audit Logs
-
-When a sequence rule fires, the audit log entry includes:
-
-```json
-{
-  "event_type": "sequence_rule_violation",
-  "rule_id": "no-read-then-exec",
-  "matched_pattern": ["read_file", "execute_command"],
-  "session_id": "sess-abc123",
-  "blocked_tool": "execute_command",
-  "timestamp": "2026-08-04T09:00:00Z"
-}
-```
-
-Use `agentwall verify-log audit.log` to confirm the chain of custody for any sequence violation.
-
----
-
-## 9. ADR Security Benchmark
-
-The `agentwall bench` command runs an offline **303-task benchmark suite** against a local AgentWall gateway instance. It measures how well your current policy configuration detects and blocks 17 categories of AI attack patterns.
-
-### Running the Benchmark
-
-```bash
-# Run all 303 tasks across all 17 attack categories
-agentwall bench --full
-
-# Or when building from source
-cargo run -- bench --full
-```
-
-The benchmark completes in under 60 seconds and writes an HTML report to `target/benchmark-report.html`.
-
-```bash
-# Open the report
-open target/benchmark-report.html           # macOS
-xdg-open target/benchmark-report.html      # Linux
-Start-Process target/benchmark-report.html # Windows PowerShell
-```
-
-### Reading the Report
-
-The report shows:
-
-- **Overall security grade** (A ≥ 90%, B = 75–89%, C < 75%) with pass/fail counts
-- **Per-category pass rates** with plain-English descriptions of what each category tests
-- **Comparative baselines** against GuardAgent, LlamaFirewall, and ALRPHFS
-- **Policy recommendations** to address failing categories
-
-### Dashboard Integration
-
-The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) renders the latest benchmark report interactively. Launch the dashboard with:
-
-```bash
-agentwall dev
-```
-
----
-
-## 10. War Plan Strategic Features (v2.0)
-
-### Passive Shadow AI Risk Delta Reports
-Run AgentWall in non-blocking observation mode to audit agent traffic:
-```bash
-agentwall start --shadow-mode --log-path audit.log
-# Generate Risk Delta report summarizing hypothetical blocks and PII exfiltrations
-agentwall report audit.log --risk
-```
-
-### Vexa Security Scanning (vexa-scan)
-Scan MCP server definitions and security policy schemas before deployment:
-```bash
-agentwall scan --path agentwall-policy.yaml
-```
-
-### WebSocket Egress Tunneling
-Bridge cloud agents with local MCP tools over a secure Rust WebSocket tunnel with sub-5ms latency and inline DLP:
-```bash
-agentwall start --centralized --listen 0.0.0.0:8080
-```
-
-### Human-in-the-Loop (HITL) Webhooks
-Intercept dangerous commands and require HMAC-signed approval via Slack, Teams, or the Control Hub UI:
-```yaml
-hitl_escalation:
+# 6. Cycle & Loop Detection
+firewall:
   enabled: true
-  secret_key: "env:AGENTWALL_HITL_SECRET"
-  webhook_url: "https://hooks.slack.com/services/..."
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error
 ```
 
-### Hardened Agent Containers (HAR)
-Deploy AgentWall as an entrypoint proxy inside OCI container environments (Obot, Kubernetes) using the lightweight image (<100MB):
-```bash
-docker build -f Dockerfile.har -t agentwall-har:v2.0 .
-```
+### Auto-Synthesizing Policies from Shadow Traffic
 
-Then click **ADR Benchmark** in the sidebar to view your security score ring and per-category breakdown.
-
-For the full benchmark reference including all 17 attack categories and scoring methodology, see the [ADR Security Benchmark Guide](adr_benchmark.md).
-
----
-
-## 11. Air-Gapped Operations, Licensing & Compliance (v2.1)
-
-### Offline Licensing & Key Generation
-AgentWall provides offline Ed25519-signed licensing for Control Hub deployments without external phone-home telemetry:
+You don't need to write policies by hand. Run `agentwall dev` or `agentwall protect --shadow` during development to observe normal agent behavior, then synthesize a strict, lint-passing policy draft:
 
 ```bash
-# 1. Generate Ed25519 keypair for license signing
-agentwall license keygen --output ./keys
-
-# 2. Issue a signed JWT license for an organization
-agentwall license generate \
-  --org "acme-corp" \
-  --tier "team" \
-  --seats 25 \
-  --days 365 \
-  --signing-key ./keys/vexa_license.key
+# Synthesize policy from recorded shadow SQLite database
+agentwall generate-policy --decay-window 30 --output agentwall-policy.yaml
 ```
 
-Configure `AGENTWALL_HUB_LICENSE_KEY` on the Control Hub API container to enable licensed features and enforce seat limits.
-
-### Air-Gapped OIDC & JWKS Export
-For isolated environments lacking outbound internet connectivity, export JWKS keys from your OIDC provider and load them directly from local disk:
+### Policy Linting, Validation & CI/CD Testing
 
 ```bash
-# Export JWKS keys from an OIDC provider (run on connected host)
-agentwall identity export-jwks --issuer "https://auth.corp.com" --output ./jwks.json
-```
+# 1. Lint policy YAML for structural errors & security warnings
+agentwall lint agentwall-policy.yaml
 
-In your `agentwall-policy.yaml`:
-```yaml
-auth:
-  provider: "okta"
-  issuer: "https://auth.corp.com"
-  audience: "agentwall-prod"
-  jwks_file: "/etc/agentwall/jwks.json" # Bypasses HTTP discovery
-```
+# 2. Test a single tool call payload offline against the policy
+agentwall validate --policy agentwall-policy.yaml --tool read_file --payload payload.json
 
-### Provider API Key Encryption (AES-256-GCM)
-Provider LLM API keys stored in the Control Hub PostgreSQL database are encrypted at rest using AES-256-GCM with random 12-byte nonces:
+# 3. Validate policy fixtures against a running gateway in CI/CD pipelines
+agentwall test --policy agentwall-policy.yaml --gateway "http://127.0.0.1:8080" fixture.json
 
-```bash
-# Set 32-byte master encryption secret for Control Hub API
-export PROVIDER_KEY_ENCRYPTION_SECRET="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-```
-
-### Automated Compliance Evidence Reporting
-Generate audit evidence reports mapped to OWASP ASI 2026, SOC 2 Type II, ISO 27001, and NIST AI RMF 1.0:
-
-```bash
-# Print Markdown summary report to stdout
-agentwall compliance report --log audit.log
-
-# Export JSON evidence report for auditors
-agentwall compliance report --log audit.log --format json --output owasp_soc2_evidence.json
+# 4. Cryptographically sign policy with Ed25519 key for production promotion
+agentwall promote --policy agentwall-policy.yaml --key ./keys/prod.key
 ```
 
 ---
 
-## 12. MCP Schema-Drift Detection (v2.2)
+## 8. Data Loss Prevention (DLP) & Prompt Injection Defense
 
-### MCP Schema-Drift Detection (ADR-011)
+AgentWall acts as a dual-pass firewall examining both outbound tool arguments and inbound execution responses.
 
-Tool-poisoning and "rug pull" attacks occur when an MCP server modifies its tool descriptions, parameter schemas, or advertised capabilities after initial policy approval. AgentWall detects cross-session schema drift by deterministically hashing the tool catalog on discovery:
+### 21 Built-In Regex DLP Detectors
 
-```yaml
-# agentwall-policy.yaml
-version: "2.2"
-default_action: deny
+| Category | Patterns Covered | Action |
+|---|---|---|
+| **Cloud Provider Keys** | AWS Access Key (`AKIA...`), AWS Secret Key, GCP API Key, Azure Key Vault Secrets | Block / Redact |
+| **API & Service Tokens** | GitHub PAT, GitLab Token, Stripe API Keys, Slack Bot Tokens, OpenAI Keys, Anthropic Keys | Block / Redact |
+| **Private Keys & Certificates** | RSA Private Keys, OpenSSH Keys, Ed25519 Keys, EC Private Keys, PGP Private Keys | Block |
+| **PII & Financial Data** | Credit Card Numbers (Visa, Mastercard, Amex), US Social Security Numbers (SSN), IBAN | Redact |
+| **Authentication Secrets** | JWT Bearer Tokens, Database Connection Strings (`postgres://`, `mysql://`), Basic Auth URLs | Redact |
 
-schema_drift:
-  enabled: true
-  action: warn          # Options: warn, block, downgrade_score
-  baseline_path: "/var/lib/agentwall/schema_baselines.json"
+### 6-Pass Normalizer & Prompt Injection Scanners
+
+To prevent evasion through obfuscation, incoming payloads undergo 6 normalization passes before inspection:
+1. **NFKC Unicode Normalization** — Resolves homoglyphs and compatibility characters.
+2. **Zero-Width Character Stripping** — Removes hidden zero-width spaces (`\u200B`), non-breaking spaces, and directional marks.
+3. **Cyrillic & Unicode Homoglyph Mapping** — Canonicalizes spoofed characters to ASCII equivalents.
+4. **URL & Percent Decoding** — Recursively resolves URL encodings.
+5. **Base64 Payload Decoding** — Automatically inspects embedded Base64 strings.
+6. **Leetspeak & Case Normalization** — Maps common character substitutions (`3 -> e`, `1 -> l`, `@ -> a`).
+
+Normalized text is evaluated against 9 active injection scanners blocking:
+- **Jailbreak Attempts** (`DAN`, `Ignore previous instructions`, `Developer Mode`)
+- **System Prompt Overrides** (`You are now in unrestricted mode`)
+- **Context & Memory Poisoning** (Malicious instructions hidden inside retrieved web pages or file reads)
+- **Tool-Response Poisoning** (Indirect prompt injections embedded in SQL or API results)
+
+---
+
+## 9. Authoritative LLM Spend Governance
+
+AgentWall includes an authoritative PostgreSQL-backed spend management engine that prevents budget runaways and token exhaustion.
+
+```
+Agent Request ──► [ Preflight Reservation ] ──► (Sufficient Budget?)
+                         │                             │
+                   [ microcents ]                YES ──┴──► Forward to Provider
+                   ceiling math                        │
+                                                 NO  ─────► HTTP 429 Hard Deny
 ```
 
-- **`action: warn`**: Logs a structured `schema_drift_detected` audit event detailing added, removed, and modified tools, allowing execution to proceed.
-- **`action: block`**: Immediately denies sessions with tampered tool catalogs (JSON-RPC error `-32002`).
-- **`action: downgrade_score`**: Deducts 25 points from the MCP server's Vexa Security Score and surfaces warning telemetry.
+### Preflight Budget Invariants
+- **Integer Microcents Math:** All token calculations use integer microcents ($1.00 = 100,000,000 µ¢) to eliminate floating-point rounding errors.
+- **Pre-Dispatch Bounded Reservations:** Before forwarding a prompt to an LLM provider, AgentWall calculates maximum potential cost based on model pricing rules and reserves the amount.
+- **Fail-Closed Hard Deny:** If `active_reservations + settled_spend > limit`, the gateway rejects the request with HTTP 429 (`spend_budget_exhausted`). No upstream provider tokens are consumed.
 
-<!--
-### Python Client SDK (`agentwall`)
+### Requesting a Budget Increase
+1. Navigate to the **Spend Status** view in the Web Console (`/spend/status`).
+2. Review project budget limits, current window consumption, and active reservations.
+3. Submit a budget increase request with requested amount and business justification.
+4. Once approved by an operator in `/spend/requests`, the new limit takes effect immediately with zero downtime.
 
-The lightweight, MIT-licensed Python SDK enables programmatic agent governance without running policy logic inside your agent process:
+---
+
+## 10. Human-in-the-Loop (HITL) Action Escalation
+
+High-risk actions (e.g., database drops, production deployments, sensitive file access) can be routed for human authorization.
+
+### Real-Time Interactive Browser Modals
+When running locally (`agentwall protect` / `agentwall dev`), dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:8080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
+
+### Asynchronous Slack / MS Teams / Webhook Queue
+For team and enterprise deployments, the gateway dispatches an async webhook payload containing:
+- Request ID & Timestamp
+- Agent OIDC Identity & Project Context
+- Tool Name & Raw Parameters
+- Cryptographic HMAC-SHA256 Signature
+
+Approvers submit decisions via HTTP callback:
+```bash
+curl -X POST http://localhost:8080/api/v1/hitl/respond \
+  -H "Content-Type: application/json" \
+  -H "X-AgentWall-Signature: <HMAC_SIGNATURE>" \
+  -d '{"request_id": "req-9842", "decision": "approve"}'
+```
+
+---
+
+## 11. Tamper-Evident Audit Logging & Compliance Reporting
+
+Every tool call, policy evaluation, DLP finding, and administrative action is recorded in an immutable, cryptographically chained audit log.
+
+### HMAC-SHA256 Hash Chaining
+
+Each record in `~/.agentwall/audit.jsonl` contains the SHA-256 hash of the preceding record:
+$$\text{Hash}_n = \text{HMAC-SHA256}(\text{Record}_n \parallel \text{Hash}_{n-1}, K_{\text{audit}})$$
+
+If any record is altered or deleted, the hash chain breaks immediately.
+
+### Verifying Log Integrity
 
 ```bash
-pip install agentwall
+# Verify HMAC integrity across the entire audit log
+agentwall verify-log ~/.agentwall/audit.jsonl
+
+# Verify with custom HMAC key file
+agentwall verify-log ~/.agentwall/audit.jsonl --key-file ./keys/audit.key
 ```
 
-```python
-from agentwall import AgentWallClient, AgentWallDenied, AgentWallApprovalPending
+### Automated Compliance Evidence Generation
 
-client = AgentWallClient() # Connects to local proxy at 127.0.0.1:8080
-
-# Decorator for existing tool functions
-@client.governed
-def delete_database_record(record_id: str) -> bool:
-    # Executes ONLY if AgentWall policy permits
-    return db.delete(record_id)
-
-try:
-    delete_database_record("rec_123")
-except AgentWallDenied as e:
-    print(f"Policy block: {e.rule_name} — {e.reason}")
-except AgentWallApprovalPending as e:
-    print(f"Requires human approval: {e.approval_url}")
-```
-
----
-
-### TypeScript Client SDK (`@vexa/agentwall`)
-
-The zero-dependency TypeScript SDK provides seamless integration for Node.js and TypeScript agent ecosystems:
+Generate audit evidence reports mapped directly to **SOC 2 Type II**, **ISO 27001:2022**, and **NIST AI RMF 1.0**:
 
 ```bash
-npm install @vexa/agentwall
+# Generate Markdown compliance report
+agentwall compliance report --log-path ~/.agentwall/audit.jsonl --format markdown --output compliance-report.md
+
+# Output JSON structured report for automated compliance platforms
+agentwall compliance report --log-path ~/.agentwall/audit.jsonl --format json
 ```
 
-```typescript
-import { AgentWallClient, AgentWallDenied } from "@vexa/agentwall";
+### Compliance Framework Mappings
 
-const client = new AgentWallClient();
-
-// Wrapped tool function
-const governedReadFile = client.governed("read_file", async (args: { path: string }) => {
-  const fs = await import("fs/promises");
-  return fs.readFile(args.path, "utf-8");
-});
-
-try {
-  const data = await governedReadFile({ path: "/workspace/config.json" });
-  console.log("File content:", data);
-} catch (err) {
-  if (err instanceof AgentWallDenied) {
-    console.error(`Blocked by policy [${err.ruleName}]: ${err.message}`);
-  }
-}
-```
--->
+| Standard | Control ID | Control Title | AgentWall Verification Evidence |
+|---|---|---|---|
+| **SOC 2 Type II** | CC6.1 | Logical Access & Least Privilege | HMAC-chained audit log & tool parameter allowlists |
+| **SOC 2 Type II** | CC6.6 | Boundary Defense for AI Systems | Safe mode rules, injection scanners & cycle detection |
+| **ISO 27001:2022** | A.8.12 | Data Leakage Prevention (DLP) | 21 dual-pass regex detectors with secret redaction |
+| **NIST AI RMF 1.0** | MEASURE 2.2 | Input & Output Verification | 6-pass normalizer & stateful sequence rules |
+| **OWASP ASI 2026** | ASI01–ASI10 | OWASP Agentic Top 10 | Complete matrix alignment (8/10 Full, 1/10 Partial) |
 
 ---
 
-### OWASP Agentic Top 10 (ASI 2026) Compliance
+## 12. Master CLI Command Reference
 
-For full security architecture mappings, threat mitigations, and code evidence across all 10 OWASP Agentic risks (ASI01–ASI10), see the [OWASP Agentic Top 10 Guide](./owasp_agentic_top10.md).
-
----
-
-## 11. Cloud Infrastructure & Terraform Deployments (AWS, Azure, GCP)
-
-AgentWall includes production-ready, cross-platform **Terraform modules** allowing you to deploy the full AgentWall stack (Rust Gateway, React Control Plane UI, Go REST API, and PostgreSQL database) to **Amazon Web Services**, **Microsoft Azure**, or **Google Cloud Platform** in minutes with monthly costs starting from **$0 to $25/month**.
-
-### Cloud Architecture & Sizing Comparison
-
-| Feature / Metric | 🅰️ AWS (ECS Fargate) | 🅱️ Microsoft Azure (Container Apps) | 🅲 Google Cloud (Cloud Run v2) |
-| :--- | :--- | :--- | :--- |
-| **Compute Architecture** | AWS Fargate Task (1.0 vCPU, 2 GiB) | 4 × Container Apps (0.25 vCPU, 0.5 GiB each) | Multi-Container Revision (API + Postgres Sidecar) |
-| **Ingress & TLS** | AWS ALB (HTTP:8080 & :8081) | Built-in Envoy Ingress (**Free Auto-TLS**) | Built-in Google Cloud Ingress (**Free Auto-TLS**) |
-| **Idle Scale-to-Zero** | Manual replica scaling | **Supported natively (`min_replicas = 0`)** | **Supported natively (`min_instances = 0`)** |
-| **Monthly Free Allowance** | Standard AWS Free Tier rules | **180k vCPU-s & 360k GiB-s free** | **2M reqs, 360k GB-s, 180k vCPU-s free** |
-| **Logging Service** | AWS CloudWatch Logs (`/ecs/agentwall`) | Azure Log Analytics Workspace | Google Cloud Logging |
-| **ESTIMATED MONTHLY COST** | **~$15 – $25 / month** | **~$0 – $20 / month** | **~$0 – $15 / month** |
-| **Target Path** | [`infra/aws/ecs/`](../infra/aws/README.md) | [`infra/azure/`](../infra/azure/README.md) | [`infra/gcp/`](../infra/gcp/README.md) |
-
----
-
-### Cross-Platform Prerequisites
-
-Before deploying to any cloud provider, install **Terraform** and the corresponding **Cloud CLI** on your workstation:
-
-#### 1. Install Terraform (`>= 1.6.0`)
-- **Windows (PowerShell / winget / choco):**
-  ```powershell
-  winget install HashiCorp.Terraform
-  # or: choco install terraform
-  ```
-- **macOS (Homebrew):**
-  ```bash
-  brew tap hashicorp/tap && brew install hashicorp/tap/terraform
-  ```
-- **Linux (Debian / Ubuntu):**
-  ```bash
-  sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
-  curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-  echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-  sudo apt-get update && sudo apt-get install terraform
-  ```
-
-#### 2. Cloud CLI Installation & Authentication
-
-- **AWS:**
-  ```bash
-  # Install AWS CLI (Windows: winget install Amazon.AWSCLI | macOS: brew install awscli)
-  aws configure
-  # Set AWS Access Key, Secret Key, and Region (e.g. eu-west-1 or us-east-1)
-  ```
-
-- **Microsoft Azure:**
-  ```bash
-  # Install Azure CLI (Windows: winget install Microsoft.AzureCLI | macOS: brew install azure-cli)
-  az login
-  az account set --subscription "<your-subscription-id-or-name>"
-  # Register required providers (one-time):
-  az provider register --namespace Microsoft.App
-  az provider register --namespace Microsoft.OperationalInsights
-  az provider register --namespace Microsoft.ContainerRegistry
-  ```
-
-- **Google Cloud Platform (GCP):**
-  ```bash
-  # Install Google Cloud SDK (Windows: winget install Google.CloudSDK | macOS: brew install --cask google-cloud-sdk)
-  gcloud auth login
-  gcloud auth application-default login
-  gcloud config set project <your-gcp-project-id>
-  ```
+| Command | Arguments / Flags | Description |
+|---|---|---|
+| `agentwall protect` | `--dry-run`, `--shadow`, `--no-browser`, `--listen <ADDR>`, `--policy <PATH>` | Single-command automated discovery, atomic IDE wrapping, gateway launch, and dashboard opening |
+| `agentwall unprotect` | `--dry-run`, `--force` | Reverts all IDE configurations from backups and verifies integrity |
+| `agentwall status` | *(none)* | Displays active wrap state, paths, and existence for all 9 IDE targets |
+| `agentwall wrap <target>` | `claude`, `cursor`, `vscode`, `jetbrains`, `zed`, `cline`, `opencode`, `antigravity`, `codex`, or `--all` | Wraps specified IDE configuration(s) with timestamped backup creation |
+| `agentwall unwrap <target>` | `<target>`, `--force` | Restores specified IDE configuration from its backup |
+| `agentwall watch` | `--all`, or `<target>` | Starts the OS filesystem watcher daemon for auto-rewrapping on configuration drift |
+| `agentwall dev` | `--listen <ADDR>`, `--stdio`, `--enforce`, `--learn`, `--dual-agent`, `-- <cmd>` | Starts shadow observation proxy or stdio wrapper with learning mode |
+| `agentwall start` | `--policy <PATH>`, `--listen <ADDR>`, `--centralized`, `--tls-cert <CERT>`, `--tls-key <KEY>` | Runs the centralized production security gateway daemon |
+| `agentwall service` | `install`, `uninstall`, `status` | Manages persistent OS background Sentry service (Windows SCM, macOS launchd, Linux systemd) |
+| `agentwall enroll` | `--token <OTET>`, `--hub-url <URL>` | Performs hardware-bound Ed25519 PKI device enrollment with Control Hub |
+| `agentwall generate-policy` | `--decay-window <DAYS>`, `--output <PATH>` | Synthesizes a lint-passing `agentwall-policy.yaml` from recorded shadow traffic |
+| `agentwall scan` | `--path <PATH>`, `--format <text\|json>` | Audits local MCP configuration and assigns 0–100 Vexa Security Score |
+| `agentwall bench` | `--full`, `--compare-baselines`, `--visualize`, `--output <PATH>` | Runs 303-task ADR security benchmark across 17 attack categories |
+| `agentwall compliance report` | `--log-path <PATH>`, `--format <markdown\|json>`, `--output <PATH>` | Generates SOC 2, ISO 27001, and NIST AI RMF compliance evidence reports |
+| `agentwall identity create` | `--agent <NAME>`, `--scope <SCOPE>`, `--ttl <TTL>` | Provisions a scoped, short-lived credential for an agent |
+| `agentwall identity rotate` | `--agent <NAME>`, `--drain-secs <SECS>` | Rotates active agent credential with zero downtime |
+| `agentwall identity audit` | `--agent <NAME>`, `--verify` | Displays HMAC-chained credential lifecycle audit log |
+| `agentwall verify-log` | `<LOG_PATH>`, `--key-file <KEY>` | Verifies cryptographic HMAC-SHA256 hash chain of an audit log |
+| `agentwall report` | `<LOG_PATH>`, `--output <PATH>`, `--risk`, `--format <json\|text>` | Generates session summary report or shadow Risk Delta analysis |
+| `agentwall lint` | `<POLICY_PATH>` | Checks YAML policy syntax, parameter schemas, and security bounds |
+| `agentwall validate` | `--policy <PATH>`, `--tool <NAME>`, `--payload <JSON_FILE>` | Evaluates tool call payload offline against policy rules |
+| `agentwall test` | `--policy <PATH>`, `--gateway <URL>`, `--oidc-token <JWT>`, `<FIXTURE>` | Validates policy test fixtures in CI/CD pipeline against gateway |
+| `agentwall license keygen` | `--output <DIR>` | Generates Ed25519 keypair for enterprise license generation |
+| `agentwall license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
 
 ---
 
-### AWS ECS Fargate Deployment
+## 13. Specialist Documentation Links
 
-Deploy AgentWall on AWS ECS Fargate with an Application Load Balancer (ALB) and CloudWatch logging:
+For deep architectural specifications, protocol designs, and framework-specific guides, consult our specialist documentation:
 
-#### On Windows (PowerShell):
-```powershell
-cd infra/aws/ecs
-terraform init
-terraform plan
-terraform apply
-```
-
-#### On Linux or macOS (Bash / Zsh):
-```bash
-cd infra/aws/ecs
-terraform init
-terraform plan
-terraform apply
-```
-
-* **Outputs:**
-  - `health_url`: `http://<ALB-DNS-NAME>:8080/healthz`
-  - `control_plane_url`: `http://<ALB-DNS-NAME>:8081`
-
----
-
-### Azure Container Apps Deployment
-
-Deploy AgentWall on Azure Container Apps (ACA) with automatic free TLS certificates and optional scale-to-zero:
-
-#### On Windows (PowerShell):
-```powershell
-cd infra/azure
-Copy-Item terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-#### On Linux or macOS (Bash / Zsh):
-```bash
-cd infra/azure
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-* **Outputs:**
-  - `gateway_url`: `https://agentwall-gateway.<env-id>.<region>.azurecontainerapps.io`
-  - `control_plane_ui_url`: `https://agentwall-ui.<env-id>.<region>.azurecontainerapps.io`
-
----
-
-### Google Cloud Run (v2) Deployment
-
-Deploy AgentWall on Google Cloud Run (v2) with multi-container revisions, sidecar database, and automatic HTTPS:
-
-#### On Windows (PowerShell):
-```powershell
-cd infra/gcp
-Copy-Item terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-#### On Linux or macOS (Bash / Zsh):
-```bash
-cd infra/gcp
-cp terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-* **Outputs:**
-  - `gateway_url`: `https://agentwall-dev-gateway-xxxxxx-uc.a.run.app`
-  - `control_plane_ui_url`: `https://agentwall-dev-ui-xxxxxx-uc.a.run.app`
-
----
-
-### Post-Deployment Validation Suite (Across All OS Types)
-
-Follow these multi-step verification checks to validate gateway health, active policy enforcement, web dashboard connectivity, and live telemetry ingestion on **Windows (PowerShell / CMD)**, **Linux (Bash)**, and **macOS (Zsh)**.
-
-#### Step 1: Verify Gateway Health Check
-
-- **Windows (PowerShell):**
-  ```powershell
-  # AWS ECS
-  Invoke-RestMethod -Uri "http://<ALB-DNS-NAME>:8080/healthz"
-  # Azure ACA
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>/healthz"
-  # GCP Cloud Run
-  Invoke-RestMethod -Uri "https://<gateway-url>/healthz"
-  ```
-
-- **Linux / macOS (Bash / Zsh) & Windows CMD:**
-  ```bash
-  # AWS ECS
-  curl -i http://<ALB-DNS-NAME>:8080/healthz
-  # Azure ACA
-  curl -i https://<gateway-fqdn>/healthz
-  # GCP Cloud Run
-  curl -i https://<gateway-url>/healthz
-  ```
-*Expected response: `HTTP 200 OK`*
-
-#### Step 2: Validate Policy Interception & Security Guardrails
-
-Send test JSON-RPC MCP tool calls to the cloud gateway endpoint:
-
-- **Windows (PowerShell):**
-  ```powershell
-  # 1. Test blocked dangerous tool call (Default-Deny / Safe Mode)
-  $blockedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-  Invoke-RestMethod -Uri "http://<GATEWAY-ENDPOINT>:8080" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $blockedBody
-
-  # 2. Test safe authorized tool call
-  $safeBody = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
-  Invoke-RestMethod -Uri "http://<GATEWAY-ENDPOINT>:8080" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $safeBody
-  ```
-
-- **Linux / macOS (Bash / Zsh):**
-  ```bash
-  # 1. Test blocked dangerous tool call
-  curl -X POST http://<GATEWAY-ENDPOINT>:8080 \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-
-  # 2. Test safe authorized tool call
-  curl -X POST http://<GATEWAY-ENDPOINT>:8080 \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
-  ```
-
-#### Step 3: Access Enterprise Control Plane UI
-Open your browser and navigate to the web console URL from your Terraform outputs:
-- **AWS ECS:** `http://<ALB-DNS-NAME>:8081`
-- **Azure ACA:** `https://<ui-fqdn>`
-- **GCP Cloud Run:** `https://<ui-url>`
-
-#### Step 4: Stream Live Cloud Container Logs
-
-- **AWS CloudWatch (Windows / macOS / Linux):**
-  ```bash
-  aws logs tail /ecs/agentwall --follow --format short
-  ```
-
-- **Azure Container Apps (Windows / macOS / Linux):**
-  ```bash
-  az containerapp logs show --name agentwall-gateway --resource-group <resource-group-name> --follow
-  ```
-
-- **Google Cloud Run (Windows / macOS / Linux):**
-  ```bash
-  gcloud run services logs tail agentwall-dev-gateway --region <region>
-  ```
-
----
-
-### Teardown & Clean Up
-
-To destroy all provisioned cloud infrastructure cleanly and avoid unexpected charges:
-
-```bash
-# From within the target cloud directory (infra/aws/ecs, infra/azure, or infra/gcp):
-terraform destroy
-```
-
-
-
+- 📖 **[Workstation Sidecar User Guide](workstation_guide.md)** — Step-by-step developer tutorial for local execution.
+- 🏢 **[Team Control Hub Guide](team_hub_guide.md)** — Self-hosted Docker Compose control plane, PostgreSQL spend ledger, and fleet governance.
+- ☸️ **[Enterprise Fleet Guide](enterprise_guide.md)** — Kubernetes Helm release, HAR container sidecars, and pure-Rust TLS.
+- 📜 **[Common Reference Guide](common_guide.md)** — Schema v2 specification, all 21 DLP patterns, and environment variables.
+- 🛡️ **[OWASP Agentic Top 10 (ASI 2026)](owasp_agentic_top10.md)** — Architectural security mapping, evidence, and mitigations.
+- 🔑 **[OIDC Identity Binding Guide](oidc_identity_binding.md)** — Step-by-step setup for Okta, Keycloak, Entra ID, Auth0, and PingIdentity.
+- 📊 **[ADR Security Benchmark Guide](adr_benchmark.md)** — 303 benchmark scenarios and comparative evaluation methodology.
+- 🏗️ **[System Architecture Specification](agentwall_architecture.md)** — 6-pass security pipeline and internal component mechanics.
+- 🚀 **[Deployment & Installation Guide](deployment.md)** — Multi-platform installation reference across Linux, macOS, and Windows.
+- ⚡ **[Quickstart Guide](quickstart.md)** — 5-minute hands-on walkthrough.

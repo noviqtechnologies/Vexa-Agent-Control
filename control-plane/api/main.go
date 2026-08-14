@@ -12,10 +12,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/config"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/handler"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
@@ -39,7 +43,24 @@ func main() {
 	}
 	defer db.Close()
 
-	broker := sse.NewBroker()
+	// Initialize Spend v2 Store and Sweeper
+	spendStore := spend.NewStore(db.Pool())
+	if err := spendStore.EnsureSchema(ctx); err != nil {
+		log.Printf("[spend] schema initialization warning: %v", err)
+	}
+	spendSweeper := spend.NewSweeper(spendStore, 30*time.Second)
+	spendSweeper.Start(ctx)
+	defer spendSweeper.Stop()
+	spendV2H := handler.NewSpendV2Handler(spendStore)
+
+	// Initialize Device Governance Store & Handler
+	deviceStore := device.NewStore(db.Pool())
+	if err := deviceStore.EnsureSchema(ctx); err != nil {
+		log.Printf("[device] schema initialization warning: %v", err)
+	}
+	deviceH := handler.NewDeviceHandler(deviceStore)
+
+	sseBroker := sse.NewBroker()
 
 	var activeClaims *license.Claims
 	if cfg.LicenseKey != "" {
@@ -62,11 +83,11 @@ func main() {
 	}
 
 	licenseH := handler.NewLicenseHandler(db, activeClaims)
-	ingestH := handler.NewIngestHandler(db, broker, activeClaims)
+	ingestH := handler.NewIngestHandler(db, sseBroker, activeClaims)
 	fleetH := handler.NewFleetHandler(db)
 	identityH := handler.NewIdentityHandler(db)
 	mcpServersH := handler.NewMcpServersHandler(db)
-	alertH := handler.NewAlertHandler(db, broker)
+	alertH := handler.NewAlertHandler(db, sseBroker)
 	threatH := handler.NewThreatHandler(db)
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 	rotationH := handler.NewRotationHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
@@ -74,7 +95,7 @@ func main() {
 	authH := handler.NewAuthHandler(db)
 	authProviderH := handler.NewAuthProviderHandler(db)
 	userH := handler.NewUserHandler(db)
-	policyMgmtH := handler.NewPolicyMgmtHandler(db, broker)
+	policyMgmtH := handler.NewPolicyMgmtHandler(db, sseBroker)
 	templateH := handler.NewTemplateHandler(db)
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
@@ -84,22 +105,80 @@ func main() {
 	groupPolicyH := handler.NewHandler(db)
 	gatewayH := handler.NewGatewayHandler()
 	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret)
-	hubSpecH := handler.NewHubSpecHandler(db, broker, cfg.ProviderKeyEncryptionSecret)
+	hubSpecH := handler.NewHubSpecHandler(db, sseBroker, cfg.ProviderKeyEncryptionSecret)
 
 	enrollmentH := handler.NewEnrollmentHandler(db, cfg.GatewaySecret)
 	heartbeatH := handler.NewHeartbeatHandler(db)
 	deviceAdminH := handler.NewDeviceAdminHandler(db)
 
+	// Target Contract v4.0 (v2 API Handlers)
+	softwareCAS, err := crypto.NewSoftwareCASIssuer()
+	if err != nil {
+		log.Fatalf("failed to initialize CAS issuer: %v", err)
+	}
+	enrollmentV2H := handler.NewEnrollmentV2Handler(db, softwareCAS)
+	deviceV2H := handler.NewDeviceV2Handler(db)
+	genericProviderClient := broker.NewGenericProviderClient()
+	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient)
+	adminV2H := handler.NewAdminV2Handler(db)
+
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
+	r.Use(middleware.LegacyQuarantineGate())
 
 	// Health check — no auth.
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// === Target Contract v4.0 API Routes ===
+	// 1. Enrollment Handlers (Unauthenticated - OTET & Key Proof)
+	r.Route("/api/v2/enrollment", func(r chi.Router) {
+		r.Post("/start", enrollmentV2H.StartEnrollment)
+		r.Post("/complete", enrollmentV2H.CompleteEnrollment)
+	})
+
+	// 2. Admin Console v2 Handlers
+	r.Route("/api/v2/admin", func(r chi.Router) {
+		r.Post("/enrollment-tokens", adminV2H.CreateEnrollmentToken)
+		r.Post("/devices/{device_id}/revoke", adminV2H.RevokeDevice)
+		r.Post("/devices/{id}/revoke", adminV2H.RevokeDevice)
+	})
+
+	// 3. Strict Device Control API (Edge mTLS Header Validation)
+	r.Route("/api/v2/device", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceMTLS(db, ""))
+		r.Get("/bootstrap", deviceV2H.GetBootstrap)
+		r.Post("/heartbeats", deviceV2H.SubmitHeartbeat)
+		r.Get("/status", deviceV2H.GetDeviceStatus)
+	})
+
+	// 4. Provider LLM Broker (Edge mTLS Header Validation & Capability Gates)
+	r.Route("/api/v2/broker", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceMTLS(db, ""))
+		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
+	})
+
+	// 5. Authoritative Central Spend Ledger API v2
+	r.Route("/api/v2/spend", func(r chi.Router) {
+		r.Post("/authorize", spendV2H.Authorize)
+		r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
+		r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
+		r.Get("/effective", spendV2H.GetEffective)
+		r.Get("/events", spendV2H.ListEvents)
+		r.Get("/policies", spendV2H.ListPolicies)
+		r.Post("/policies", spendV2H.CreatePolicy)
+		r.Post("/policies/{id}/publish", spendV2H.PublishPolicy)
+		r.Get("/increase-requests", spendV2H.ListIncreaseRequests)
+		r.Post("/increase-requests", spendV2H.CreateIncreaseRequest)
+		r.Post("/increase-requests/{id}/decide", spendV2H.DecideIncreaseRequest)
+	})
+
+	// 6. Device Governance & Sentry Compliance API
+	deviceH.RegisterRoutes(r)
 
 	// Public PKI Enrollment route (Unauthenticated)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
@@ -181,6 +260,9 @@ func main() {
 		
 		// Policy Management (Operator Auth)
 		r.Get("/policies", policyMgmtH.List)
+		r.Get("/policies/active", policyMgmtH.GetActive)
+		r.Get("/policy/active", policyMgmtH.GetActive)
+		r.Get("/policies/{id}", hubSpecH.GetPolicyByID)
 		r.Post("/policies", hubSpecH.CreatePolicy)
 		r.Get("/policies/templates", templateH.ListTemplates)
 		r.Get("/policies/templates/{id}", templateH.GetTemplate)

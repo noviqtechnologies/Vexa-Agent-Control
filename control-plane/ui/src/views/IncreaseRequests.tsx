@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
-import { api, type IncreaseRequest } from '../api/client'
+import { api, type IncreaseRequestV2 } from '../api/client'
+
+function microcentsToUSD(microcents: number): string {
+  return (microcents / 100_000_000).toFixed(2)
+}
 
 export default function IncreaseRequests() {
-  const [requests, setRequests] = useState<IncreaseRequest[]>([])
+  const [requests, setRequests] = useState<IncreaseRequestV2[]>([])
   const [loading, setLoading] = useState(true)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
     fetchRequests()
@@ -12,8 +18,8 @@ export default function IncreaseRequests() {
   const fetchRequests = async () => {
     setLoading(true)
     try {
-      const res = await api.listIncreaseRequests()
-      setRequests(res || [])
+      const res = await api.listIncreaseRequestsV2()
+      setRequests(res.requests || [])
     } catch (e) {
       console.error(e)
     } finally {
@@ -21,21 +27,32 @@ export default function IncreaseRequests() {
     }
   }
 
-  const handleResolve = async (id: string, action: 'approve' | 'deny') => {
+  const handleResolve = async (id: string, decision: 'APPROVED' | 'REJECTED') => {
+    setResolvingId(id)
+    setMessage(null)
     try {
-      await api.resolveIncreaseRequest(id, { action })
+      await api.decideIncreaseRequestV2(id, decision, `Resolved by admin as ${decision}`)
+      setMessage({ type: 'success', text: `Request ${id.substring(0, 8)}... successfully ${decision.toLowerCase()}` })
       fetchRequests()
     } catch (e: any) {
-      alert(`Error: ${e.message}`)
+      setMessage({ type: 'error', text: e.message })
+    } finally {
+      setResolvingId(null)
     }
   }
 
   return (
     <div>
       <div className="page-header">
-        <h1>Limit Increase Requests</h1>
-        <p>Review and approve budget increase requests submitted by agents.</p>
+        <h1>Spend Limit Increase Requests</h1>
+        <p>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
       </div>
+
+      {message && (
+        <div style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)' }}>
+          {message.text}
+        </div>
+      )}
 
       <div className="card">
         {loading ? (
@@ -46,44 +63,54 @@ export default function IncreaseRequests() {
               <thead>
                 <tr>
                   <th>Request ID</th>
-                  <th>Agent ID</th>
+                  <th>Project / Scope</th>
                   <th>Requested Cap (USD)</th>
-                  <th>Reason</th>
+                  <th>Business Justification</th>
+                  <th>Submitted By</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.length === 0 && (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No increase requests found.</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No increase requests found.</td></tr>
                 )}
                 {requests.map(r => (
                   <tr key={r.request_id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>{r.request_id.slice(0,8)}...</td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{r.agent_id}</td>
-                    <td><strong style={{ color: 'var(--warning)' }}>${((r.new_cap || 0) / 100).toFixed(2)}</strong></td>
-                    <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>{r.reason}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{r.request_id.substring(0, 8)}...</td>
+                    <td><strong style={{ fontFamily: 'var(--font-mono)' }}>{r.project_id}</strong></td>
+                    <td><strong style={{ color: 'var(--warning)' }}>${microcentsToUSD(r.requested_limit_microcents)}</strong></td>
+                    <td style={{ maxWidth: 300, fontSize: 13 }}>{r.reason}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.created_by}</td>
                     <td>
-                      <span className={`badge ${r.status === 'pending' ? 'badge-warning' : r.status === 'approved' ? 'badge-success' : 'badge-danger'}`}>
+                      <span className={`badge ${r.status === 'APPROVED' ? 'badge-success' : r.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
                         {r.status}
                       </span>
                     </td>
                     <td>
-                      {r.status === 'pending' && (
+                      {r.status === 'PENDING' ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button 
-                            onClick={() => handleResolve(r.request_id, 'approve')}
-                            style={{ background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            className="btn-primary" 
+                            disabled={resolvingId === r.request_id}
+                            onClick={() => handleResolve(r.request_id, 'APPROVED')}
+                            style={{ padding: '6px 12px', fontSize: 12 }}
                           >
                             Approve
                           </button>
                           <button 
-                            onClick={() => handleResolve(r.request_id, 'deny')}
-                            style={{ background: 'var(--danger-dim)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            className="btn-secondary" 
+                            disabled={resolvingId === r.request_id}
+                            onClick={() => handleResolve(r.request_id, 'REJECTED')}
+                            style={{ padding: '6px 12px', fontSize: 12 }}
                           >
-                            Deny
+                            Reject
                           </button>
                         </div>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          Decided by {r.decided_by || 'admin'}
+                        </span>
                       )}
                     </td>
                   </tr>

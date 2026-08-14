@@ -58,6 +58,10 @@ Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
 
 Write-Host "[*] Step 1/3: PKI Device Enrollment..." -ForegroundColor $ColorCyan
 & $FinalBinaryPath enroll --token $Token --hub-url $HubUrl
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[!] Device enrollment failed. Aborting provisioning." -ForegroundColor $ColorRed
+    exit $LASTEXITCODE
+}
 
 Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
 try {

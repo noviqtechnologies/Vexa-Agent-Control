@@ -45,9 +45,11 @@ AgentWall is deployed in distinct modes depending on your operational needs:
 
 ## Documentation Index
 
-- [Detailed User Guide](user_guide.md)
+- [Master User Guide](user_guide.md)
+- [Workstation Sidecar User Guide](workstation_guide.md)
 - [Team & Staging Control Hub Guide](team_hub_guide.md)
-- [AWS EKS Deployment & Uninstallation Guide](team_hub_guide/aws_eks_deployment.md)
+- [Enterprise Fleet Production Guide](enterprise_guide.md)
+- [Common Reference Guide](common_guide.md)
 - [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md)
 - [Deployment & Installation](deployment.md)
 - [Quickstart Guide](quickstart.md)
@@ -55,3 +57,4 @@ AgentWall is deployed in distinct modes depending on your operational needs:
 - [Configuration & Policies](configuration.md)
 - [Ecosystem Integrations](integrations.md)
 - [ADR Security Benchmark Guide](adr_benchmark.md)
+- [OWASP Agentic Top 10 Specification](owasp_agentic_top10.md)
