@@ -108,6 +108,15 @@ docker compose up -d --build
 - **PostgreSQL 16 Database:** `localhost:5433`
 - **Enforcement Gateway (Containerized):** `http://localhost:8080`
 
+> [!NOTE]
+> **Expected startup warning.** The containerized gateway logs a rejected heartbeat shortly after boot:
+>
+> ```json
+> {"event":"heartbeat_rejected","level":"warn","status":404}
+> ```
+>
+> This is **expected** and harmless. The heartbeat loop reports to Central Device Governance, which only accepts enrolled devices, and a gateway started by Docker Compose has not gone through `agentwall enroll`. Policy enforcement, SSE policy push, and audit logging are unaffected. To exercise device governance, enroll the host explicitly — see [Team Hub Guide → Central Device Governance](../team_hub_guide.md#6-central-device-governance--fleet-health).
+
 ---
 
 ### Step 3: (Optional) Build Native Rust Binary from Source
@@ -226,7 +235,20 @@ Open `http://localhost:8081` in your browser.
 - **Password:** `admin` (or any string in local dev mode)
 
 > [!NOTE]
-> The login API expects an `email` field (not `username`). Using any other field name returns 401 even with the correct value.
+> The login API expects an `email` field (not `username`). Using any other field name returns 401 even with the correct value — specifically `401 local auth not enabled`, which is misleading: `DEV_MODE` is active, the field name is simply wrong.
+>
+> ```bash
+> curl -X POST http://localhost:8400/api/v1/auth/login \
+>      -H "Content-Type: application/json" \
+>      -d '{"email":"admin","password":"admin"}' -c cookie.txt
+> ```
+>
+> `DEV_MODE` is what accepts `admin` with any password. With `DEV_MODE=false` and no auth provider configured, the API instead prints a one-time bootstrap credential to its own logs (`docker compose logs dashboard-api`) — use `admin` plus that token as the password:
+>
+> ```
+> INFO: NO AUTH PROVIDERS CONFIGURED.
+> INFO: Bootstrap Token: xzmfS_Kfzro
+> ```
 
 ---
 
@@ -256,13 +278,13 @@ curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-sess
 ```
 
 > [!NOTE]
-> **Expected Behavior:** If no upstream MCP server is running, the gateway will evaluate policy, write the audit log entry, and return an upstream network error. The exact URL in the error differs by deployment mode:
+> **Expected Behavior:** If no upstream MCP server is running, the gateway still evaluates policy, writes the audit log entry, and then returns an upstream network error. The URL in the message is whichever upstream that gateway was configured with, so it differs by deployment mode:
 > - **Native gateway** (running on the host): `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`
-> - **Containerised gateway** (Docker Compose `gateway` service): the upstream URL uses the Docker DNS name configured by `AGENTWALL_LISTEN`, e.g. `http://0.0.0.0:8080/`
+> - **Containerised gateway** (Docker Compose `gateway` service): resolves the upstream over the Compose network, e.g. `Upstream error: Network error: error sending request for url (http://mock-mcp:3000/)`
 >
 > Either way, the upstream error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
 >
-> **Heartbeat 404 note:** A native gateway connecting to the Compose stack's `/api/v1/ingest/heartbeat` may return **404** if the gateway's `GATEWAY_SECRET` does not match the stack's secret. This is expected when running without a valid OTET-enrolled device token — the audit log entry is still recorded.
+> A response of `{"error":{"code":-32001,...,"message":"Policy violation: reason=not_in_policy"}}` instead means the tool is not in the active policy's allowlist — that is enforcement working, not a failure.
 
 #### Verify Audit Log Integrity:
 
@@ -292,10 +314,12 @@ agentwall.exe verify-log .\team-audit.log
 
 **Expected Output:**
 ```text
-ℹ Verifying log chain integrity for team-audit.log... VALID
-  ✓ N entries found, cryptographic chain intact.
+ℹ Verifying HMAC chain and payload integrity for ./team-audit.log (key: ~/.AgentWall/audit.key)... VALID
+  ✓ N entries verified with HMAC key, cryptographic chain and payloads intact.
 ```
 *(Where `N` is the number of MCP tool-call audit entries recorded during the session.)*
+
+Tampering with any entry breaks the HMAC chain and reports `INVALID` with the offending entry index.
 
 ---
 

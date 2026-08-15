@@ -53,10 +53,11 @@ Choose the deployment method that fits your environment requirements:
 1. [Centralized Policy Push (SSE)](#1-centralized-policy-push-sse)
 2. [OIDC Identity Binding](#2-oidc-identity-binding)
 3. [Vault & API Key Custody](#3-vault--api-key-custody)
-4. [Spend Caps & Loop Detection](#4-spend-caps--loop-detection)
+4. [Spend Caps & Authoritative Spend Ledger](#4-spend-caps--authoritative-spend-ledger)
 5. [Async HITL Approval Queue](#5-async-hitl-approval-queue)
-6. [Shared Reference Sections](#6-shared-reference-sections)
-7. [Upgrading to Enterprise Fleet](#7-upgrading-to-enterprise-fleet)
+6. [Central Device Governance & Fleet Health](#6-central-device-governance--fleet-health)
+7. [Shared Reference Sections](#7-shared-reference-sections)
+8. [Upgrading to Enterprise Fleet](#8-upgrading-to-enterprise-fleet)
 
 ---
 
@@ -75,9 +76,11 @@ Gateway                                               Control Hub API
 
 **Event Handlers:**
 - `policy_update` — Atomic in-memory policy swap (via `RwLock<Option<CompiledPolicy>>`) without dropping active TCP connections. **New sessions** pick up the updated policy immediately; in-flight sessions complete under the policy active when they were established.
-
 - `credential_rotation` — Signals a provider API key rotation; gateway fetches updated ciphertext from `GET /api/v1/credentials/:provider`.
 - `: ping` — Sent every 15 seconds. No ping within 30 seconds triggers a warning and exponential backoff reconnect.
+
+> [!IMPORTANT]
+> When tightening policy during an incident, remember that revoking a tool does not interrupt agents already running. To force immediate effect everywhere, restart the gateway (`docker compose restart gateway`) or have agents open a new session.
 
 **Connecting gateways in centralized mode:**
 
@@ -313,7 +316,7 @@ The following technical reference sections are maintained in the shared [Common 
 
 ---
 
-## 7. Upgrading to Enterprise Fleet
+## 8. Upgrading to Enterprise Fleet
 
 When you are ready for Kubernetes high-availability, pure-Rust TLS termination, zero-knowledge CMK SIEM encryption, real-time threat intelligence feeds, and Hardened Agent Container Runtime (HAR):
 
