@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 )
 
@@ -50,9 +51,10 @@ func (h *AlertHandler) Stream(w http.ResponseWriter, r *http.Request) {
 // ListRecent returns the last N alerts from the database (for initial page load,
 // before the SSE stream takes over for real-time updates).
 func (h *AlertHandler) ListRecent(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	limit := queryInt(r, "limit", 50)
 
-	alerts, err := h.store.ListRecentAlerts(r.Context(), limit)
+	alerts, err := h.store.ListRecentAlerts(r.Context(), tenantID, limit)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

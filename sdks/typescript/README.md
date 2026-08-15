@@ -1,6 +1,6 @@
-# @vexa/agentwall
+# Vexa Agent Control — TypeScript SDK
 
-Zero-dependency TypeScript/JavaScript client for [Vexa Agent Control](https://github.com/noviqtechnologies/agentwall) AI Security Gateway & Firewall.
+Zero-dependency TypeScript/JavaScript client for [Vexa Agent Control](https://github.com/noviqtechnologies/Vexa-Agent-Control) AI Security Gateway & Firewall.
 
 Routes AI agent tool calls and LLM egress through the out-of-process Agent Control proxy, enforcing default-deny policies, DLP secret redaction, prompt injection scanning, spend caps, and Human-in-the-Loop approvals.
 

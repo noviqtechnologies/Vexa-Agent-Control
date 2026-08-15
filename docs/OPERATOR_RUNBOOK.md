@@ -120,15 +120,60 @@ curl -X GET "https://console.vexasec.io/api/v2/spend/events?limit=50" \
 View the real-time compliance status of all developer machines:
 ```bash
 curl -X GET https://console.vexasec.io/api/v1/devices \
-  -H "X-Organization-ID: 00000000-0000-0000-0000-000000000001"
+  -H "Cookie: agentwall_session=<SESSION_COOKIE>"
 ```
 
 ### 2. Investigating Configuration Tampering Incidents
 Inspect the forensic tamper and self-healing log:
 ```bash
 curl -X GET https://console.vexasec.io/api/v1/devices/tamper-log \
-  -H "X-Organization-ID: 00000000-0000-0000-0000-000000000001"
+  -H "Cookie: agentwall_session=<SESSION_COOKIE>"
 ```
 Any developer attempt to clear `cursor.models.openaiBaseUrl` or point IDEs directly to public AI endpoints is automatically healed in $<500\text{ ms}$ and permanently recorded with event type `AUTO_HEALED` or `CONFIG_TAMPERED`.
 
+---
 
+## 7. Multi-Tenant Onboarding & Automated License Minting
+
+The SaaS Operator interface (`/operator/tenants`) automates tenant onboarding, free trials, and license key generation using Ed25519 signing keys from GCP Secret Manager.
+
+### 1. Secret Manager Key Setup (One-Time Infra Task)
+```bash
+# Store Ed25519 private signing seed in GCP Secret Manager
+gcloud secrets create vexa-prod-license-signing-key \
+  --project="vexa-prod" \
+  --replication-policy="automatic"
+
+echo -n "<64-hex-char-private-seed>" | gcloud secrets versions add vexa-prod-license-signing-key \
+  --project="vexa-prod" \
+  --data-file=-
+```
+
+### 2. Provisioning Tenant Orgs via Operator API
+```bash
+# Provision 15-day Free Trial
+curl -X POST https://console.vexasec.io/api/v1/operator/organizations \
+  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Health",
+    "slug": "acme-health",
+    "contact_email": "admin@acmehealth.com",
+    "license_tier": "enterprise",
+    "max_seats": 50,
+    "is_trial": true,
+    "trial_days": 15
+  }'
+```
+
+### 3. Extending Trials or Renewing Annual Contracts
+```bash
+# Renew for 365 days
+curl -X POST https://console.vexasec.io/api/v1/operator/organizations/<ORG_ID>/renew-license \
+  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "additional_days": 365,
+    "is_trial": false
+  }'
+```

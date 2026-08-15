@@ -15,8 +15,10 @@ type contextKey string
 const UserClaimsKey contextKey = "user_claims"
 
 type UserClaims struct {
-	UserID  string `json:"user_id"`
-	IsAdmin bool   `json:"is_admin"`
+	TenantID       string `json:"tenant_id"`
+	UserID         string `json:"user_id"`
+	IsAdmin        bool   `json:"is_admin"`
+	IsSaaSOperator bool   `json:"is_saas_operator"`
 }
 
 // PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
@@ -37,11 +39,13 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 			// Fallback to session cookie (dashboard operators)
 			cookie, err := r.Cookie("agentwall_session")
 			if err == nil {
-				userID, isAdmin, err := session.Validate(cookie.Value)
+				sess, err := session.Validate(cookie.Value)
 				if err == nil {
 					claims := UserClaims{
-						UserID:  userID,
-						IsAdmin: isAdmin,
+						TenantID:       sess.TenantID,
+						UserID:         sess.UserID,
+						IsAdmin:        sess.IsAdmin,
+						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 					next.ServeHTTP(w, r.WithContext(ctx))
@@ -64,15 +68,17 @@ func DashboardAuth() func(http.Handler) http.Handler {
 				return
 			}
 
-			userID, isAdmin, err := session.Validate(cookie.Value)
+			sess, err := session.Validate(cookie.Value)
 			if err != nil {
 				http.Error(w, `{"error":"invalid session"}`, http.StatusUnauthorized)
 				return
 			}
 
 			claims := UserClaims{
-				UserID:  userID,
-				IsAdmin: isAdmin,
+				TenantID:       sess.TenantID,
+				UserID:         sess.UserID,
+				IsAdmin:        sess.IsAdmin,
+				IsSaaSOperator: sess.IsSaaSOperator,
 			}
 			ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -118,12 +124,11 @@ func RequireAdmin() func(http.Handler) http.Handler {
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return
 			}
-			if !claims.IsAdmin {
+			if !claims.IsAdmin && !claims.IsSaaSOperator {
 				log.Printf("RequireAdmin denied: user_id=%s is_admin=%v", claims.UserID, claims.IsAdmin)
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return
 			}
-			log.Printf("RequireAdmin allowed: user_id=%s is_admin=%v", claims.UserID, claims.IsAdmin)
 			next.ServeHTTP(w, r)
 		})
 	}

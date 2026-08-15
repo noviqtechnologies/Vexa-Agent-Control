@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
+import RequireOperator from './auth/RequireOperator'
 import FleetOverview from './views/FleetOverview'
 import IdentityGovernance from './views/IdentityGovernance'
 import PolicyInsights from './views/PolicyInsights'
@@ -23,8 +24,10 @@ import SpendStatus from './views/SpendStatus'
 import SpendVisualization from './views/SpendVisualization'
 import Devices from './views/Devices'
 import TamperLog from './views/TamperLog'
+import SaaSOperator from './views/SaaSOperator'
 import CommandPalette from './components/CommandPalette'
 import NotificationCenter from './components/NotificationCenter'
+import SetInitialPasswordModal from './components/SetInitialPasswordModal'
 
 interface NavSection {
   id: string
@@ -34,6 +37,20 @@ interface NavSection {
 }
 
 const NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'operator',
+    label: 'Platform Operations',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+    ),
+    children: [
+      { label: 'Tenant Onboarding', to: '/operator/tenants' },
+    ],
+  },
   {
     id: 'team',
     label: 'Team & Fleet',
@@ -111,195 +128,307 @@ function ChevronIcon({ open }: { open: boolean }) {
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
-      style={{ transition: 'transform 0.2s ease', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}
+      style={{
+        transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+        flexShrink: 0,
+      }}
     >
-      <polyline points="9 18 15 12 9 6"/>
+      <polyline points="9 18 15 12 9 6" />
     </svg>
   )
 }
 
-function Sidebar({ onLogout, onOpenCommandPalette }: { onLogout: () => void; onOpenCommandPalette: () => void }) {
+function Sidebar({ onLogout }: { onLogout: () => void }) {
   const location = useLocation()
+  const { user, needsAuthProviderConfig } = useAuth()
+  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
 
-  // Determine which sections should be open by default (those containing the active route)
-  function getDefaultOpen(): Set<string> {
-    const open = new Set<string>()
-    for (const section of NAV_SECTIONS) {
-      if (section.children.some(c => location.pathname.startsWith(c.to))) {
-        open.add(section.id)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const state: Record<string, boolean> = {}
+    NAV_SECTIONS.forEach((s) => {
+      if (isEnforced && s.id === 'team') {
+        state[s.id] = false
+      } else {
+        const isCurrentSection = s.children.some((c) => location.pathname.startsWith(c.to))
+        state[s.id] = !isCurrentSection
       }
-    }
-    // Default: open all sections
-    if (open.size === 0) NAV_SECTIONS.forEach(s => open.add(s.id))
-    return open
-  }
-
-  const [openSections, setOpenSections] = useState<Set<string>>(getDefaultOpen)
+    })
+    return state
+  })
 
   function toggleSection(id: string) {
-    setOpenSections(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
+  // Filter out platform operator section if user is not authorized
+  const visibleSections = NAV_SECTIONS.filter((s) => {
+    if (s.id === 'operator') {
+      return !!user?.is_saas_operator
+    }
+    return true
+  })
+
   return (
-    <nav className="sidebar">
-      {/* Logo */}
-      <div className="sidebar-logo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" style={{ flexShrink: 0 }}>
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-        <span className="sidebar-brand-text">Vexa <span>Agent Control</span></span>
+    <aside className="app-sidebar">
+      {/* Brand / Logo header */}
+      <div className="sidebar-brand">
+        <NavLink to="/fleet" className="brand-link">
+          <div className="brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <div className="brand-text">
+            <span className="brand-name">Vexa Agent Control</span>
+            <span className="brand-tag">SOC Console</span>
+          </div>
+        </NavLink>
       </div>
 
-      {/* Quick search command button in sidebar */}
-      <button
-        type="button"
-        className="sidebar-quick-search-btn"
-        onClick={onOpenCommandPalette}
-        title="Open Command Palette (Ctrl+K)"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <span>Search actions...</span>
-        <kbd className="sidebar-kbd">Ctrl K</kbd>
-      </button>
-
-      {/* Dashboard — top-level single link */}
-      <NavLink
-        to="/fleet"
-        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-        </svg>
-        Dashboard
-      </NavLink>
-
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
-
-      {/* Accordion sections */}
-      {NAV_SECTIONS.map(section => {
-        const isOpen = openSections.has(section.id)
-        const hasActiveChild = section.children.some(c => location.pathname.startsWith(c.to))
-        return (
-          <div key={section.id} className="nav-section">
-            <button
-              className={`nav-section-header ${hasActiveChild ? 'nav-section-header--active' : ''}`}
-              onClick={() => toggleSection(section.id)}
-              aria-expanded={isOpen}
-            >
-              <span className="nav-section-icon">{section.icon}</span>
-              <span className="nav-section-label">{section.label}</span>
-              <ChevronIcon open={isOpen} />
-            </button>
-            {isOpen && (
-              <div className="nav-children">
-                {section.children.map(child => (
-                  <NavLink
-                    key={child.to}
-                    to={child.to}
-                    className={({ isActive }) => `nav-child-link ${isActive ? 'active' : ''}`}
-                    end
-                  >
-                    {child.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
+      {/* Top-level standalone Overview link */}
+      <div className="sidebar-top-nav">
+        {isEnforced ? (
+          <div className="sidebar-nav-item single-item disabled" title="Complete Authentication Setup to unlock Fleet Overview">
+            <span className="item-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </span>
+            <span className="item-label">Fleet Overview</span>
+            <span className="sidebar-lock-pill">Locked</span>
           </div>
-        )
-      })}
+        ) : (
+          <NavLink
+            to="/fleet"
+            className={({ isActive }) => `sidebar-nav-item single-item ${isActive ? 'active' : ''}`}
+          >
+            <span className="item-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+            </span>
+            <span className="item-label">Fleet Overview</span>
+          </NavLink>
+        )}
+      </div>
 
-      <div style={{ flex: 1 }} />
+      {/* Collapsible Section Groups */}
+      <nav className="sidebar-nav-groups">
+        {visibleSections.map((section) => {
+          const isOpen = isEnforced && section.id === 'team' ? true : !collapsed[section.id]
+          const isCurrentSection = section.children.some((c) => location.pathname.startsWith(c.to))
+          return (
+            <div key={section.id} className={`nav-section-group ${isCurrentSection ? 'has-active' : ''}`}>
+              <button
+                type="button"
+                className={`section-header-btn ${isOpen ? 'open' : ''}`}
+                onClick={() => toggleSection(section.id)}
+              >
+                <span className="section-icon">{section.icon}</span>
+                <span className="section-label">{section.label}</span>
+                <span className="section-arrow">
+                  <ChevronIcon open={isOpen} />
+                </span>
+              </button>
 
-      {/* Bottom Sign Out */}
-      <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
-      <button
-        className="nav-link"
-        onClick={onLogout}
-        style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', color: 'var(--text-muted)' }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        Sign Out
-      </button>
-    </nav>
+              {isOpen && (
+                <div className="section-children-list">
+                  {section.children.map((child) => {
+                    const isAuthProviders = child.to === '/admin/auth-providers'
+                    const isChildDisabled = isEnforced && !isAuthProviders
+
+                    if (isChildDisabled) {
+                      return (
+                        <div
+                          key={child.to}
+                          className="sidebar-nav-item child-item disabled"
+                          title="Complete Authentication Setup to unlock"
+                        >
+                          <span className="child-dot child-dot-locked">🔒</span>
+                          <span className="item-label">{child.label}</span>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        className={({ isActive }) => `sidebar-nav-item child-item ${isActive ? 'active' : ''} ${isAuthProviders && isEnforced ? 'action-required-pulse' : ''}`}
+                      >
+                        <span className="child-dot" />
+                        <span className="item-label">{child.label}</span>
+                        {isAuthProviders && isEnforced && (
+                          <span className="sidebar-action-pill">Setup Required</span>
+                        )}
+                      </NavLink>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </nav>
+
+      {/* Footer / Quick Search + User Identity Card + Logout */}
+      <div className="sidebar-footer">
+        {user && (
+          <div className="sidebar-user-card">
+            <div className="sidebar-user-meta">
+              <span className="sidebar-user-name" title={user.id}>{user.id}</span>
+              <span className="sidebar-tenant-name">
+                {user.is_saas_operator ? 'Root Operator' : (user.organization_name || 'Tenant Workspace')}
+              </span>
+            </div>
+            <span className={`soc-role-badge ${user.is_saas_operator ? 'role-operator' : user.is_admin ? 'role-tenant-admin' : 'role-user'}`}>
+              {user.is_saas_operator ? 'Operator' : 'Admin'}
+            </span>
+          </div>
+        )}
+
+        <button type="button" className="sidebar-logout-btn" onClick={onLogout} title="Sign Out">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
   )
 }
 
 function GlobalAuthBanner() {
-  const { needsAuthProviderConfig } = useAuth();
-  const location = useLocation();
+  const { needsAuthProviderConfig } = useAuth()
+  const location = useLocation()
 
-  if (!needsAuthProviderConfig) return null;
-  if (location.pathname === '/admin/auth-providers') return null;
+  if (!needsAuthProviderConfig || location.pathname.startsWith('/admin/auth-providers')) return null
 
   return (
-    <div className="ap-global-warning-banner" style={{ margin: '20px 20px 0', cursor: 'pointer' }} onClick={() => window.location.href = '/admin/auth-providers'}>
-      <div className="ap-global-warning-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    <div style={{
+      background: 'rgba(234, 179, 8, 0.15)',
+      border: '1px solid rgba(234, 179, 8, 0.3)',
+      color: '#eab308',
+      padding: '12px 16px',
+      margin: '16px 24px 0 24px',
+      borderRadius: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      fontSize: '13px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
+        <span>
+          <strong>Action Required:</strong> No Identity Providers are enabled. Local authentication or SSO must be configured to secure access.
+        </span>
       </div>
-      <div className="ap-global-warning-content">
-        <strong>No Auth Providers Configured!</strong>
-        <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
-      </div>
+      <NavLink 
+        to="/admin/auth-providers" 
+        style={{
+          background: '#eab308',
+          color: '#000',
+          padding: '4px 12px',
+          borderRadius: '4px',
+          fontWeight: 600,
+          textDecoration: 'none'
+        }}
+      >
+        Configure SSO
+      </NavLink>
     </div>
-  );
+  )
 }
 
 function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => void }) {
+  const { user, needsAuthProviderConfig } = useAuth()
+  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
+
+  const roleLabel = user?.is_saas_operator
+    ? 'Platform Super-Admin'
+    : user?.is_admin
+    ? 'Tenant Admin'
+    : 'User'
+
+  const roleClass = user?.is_saas_operator
+    ? 'role-operator'
+    : user?.is_admin
+    ? 'role-tenant-admin'
+    : 'role-user'
+
+  const workspaceLabel = user?.is_saas_operator
+    ? '🌐 Platform Management (Super-Admin)'
+    : `🏢 ${user?.organization_name || 'Organization Workspace'}`
+
   return (
-    <header className="soc-top-bar">
-      <div className="soc-top-bar-left">
+    <header className="top-header-bar">
+      <div className="header-breadcrumbs">
+        <span className="live-indicator-dot" title="Real-time SOC connection active" />
+        <span className="header-env-tag">{workspaceLabel}</span>
+        {isEnforced && (
+          <span className="soc-locked-banner-pill">
+            🔒 Initial Setup Required • Console Locked
+          </span>
+        )}
+      </div>
+      <div className="header-actions">
         <button
           type="button"
-          className="soc-search-trigger"
+          className="header-cmd-btn"
           onClick={onOpenCommandPalette}
-          aria-label="Open Command Palette"
+          title="Command Palette (Cmd+K)"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          <span className="soc-search-text">Quick jump to policy, agent, or action...</span>
-          <kbd className="soc-search-kbd">Ctrl K</kbd>
+          <span className="cmd-btn-label">Quick Search…</span>
+          <kbd>Ctrl+K</kbd>
         </button>
-      </div>
-
-      <div className="soc-top-bar-right">
-        <div className="soc-gateway-status-pill">
-          <span className="status-dot-pulse" />
-          <span className="status-text">Gateway Active</span>
-          <span className="status-mode">Zero-Trust</span>
-        </div>
 
         <NotificationCenter />
+
+        {/* User Identity Profile Pill */}
+        {user && (
+          <div className="soc-user-profile-pill">
+            <div className="soc-user-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+            <div className="soc-user-details">
+              <span className="soc-user-email" title={user.id}>{user.id}</span>
+              <span className={`soc-role-badge ${roleClass}`}>{roleLabel}</span>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   )
 }
 
 export default function App() {
-  const { authenticated, logout } = useAuth()
+  const { authenticated, logout, user, needsAuthProviderConfig, needsPasswordSetup } = useAuth()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
 
   return (
     <>
+      {authenticated && needsPasswordSetup && !user?.is_saas_operator && (
+        <SetInitialPasswordModal />
+      )}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
@@ -312,48 +441,59 @@ export default function App() {
             <div className="app-shell">
               <Sidebar
                 onLogout={logout}
-                onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
               />
 
               <div className="main-viewport-wrapper">
                 <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
                 <main className="main-content">
                   <GlobalAuthBanner />
-                  <Routes>
-                    <Route path="/" element={<Navigate to="/fleet" replace />} />
-                    <Route path="/fleet" element={<FleetOverview />} />
-                    <Route path="/identity" element={<IdentityGovernance />} />
-                    <Route path="/policy" element={<PolicyInsights />} />
-                    <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
-                    <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
-                    <Route path="/policy/edit" element={<PolicyEditor />} />
-                    <Route path="/policy/group" element={<GroupPolicyEditor />} />
-                    <Route path="/spend/limits" element={<SpendLimits />} />
-                    <Route path="/spend/requests" element={<IncreaseRequests />} />
-                    <Route path="/spend/status" element={<SpendStatus />} />
-                    <Route path="/spend/visualization" element={<SpendVisualization />} />
-                    <Route path="/policy/safe-mode" element={<SafeMode />} />
-                    <Route path="/threats" element={<ThreatIntelligence />} />
-                    <Route path="/audit" element={<AuditLogs />} />
-                    <Route path="/admin/auth-providers" element={<AuthProviders />} />
-                    <Route path="/admin/users" element={<Users />} />
-                    <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
-                    <Route path="/devices" element={<Devices />} />
-                    <Route path="/devices/tamper-log" element={<TamperLog />} />
-                    <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
-                    <Route path="/integrations/mcp-servers" element={
-                      <RequireAdmin>
-                        <McpServers />
-                      </RequireAdmin>
-                    } />
-                    <Route path="/integrations/llm-providers" element={
-                      <RequireAdmin>
-                        <LlmProviders />
-                      </RequireAdmin>
-                    } />
-                    {/* Legacy redirect */}
-                    <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
-                  </Routes>
+                  {isEnforced ? (
+                    <Routes>
+                      <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                      <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
+                    </Routes>
+                  ) : (
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/fleet" replace />} />
+                      <Route path="/fleet" element={<FleetOverview />} />
+                      <Route path="/identity" element={<IdentityGovernance />} />
+                      <Route path="/policy" element={<PolicyInsights />} />
+                      <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
+                      <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
+                      <Route path="/policy/edit" element={<PolicyEditor />} />
+                      <Route path="/policy/group" element={<GroupPolicyEditor />} />
+                      <Route path="/spend/limits" element={<SpendLimits />} />
+                      <Route path="/spend/requests" element={<IncreaseRequests />} />
+                      <Route path="/spend/status" element={<SpendStatus />} />
+                      <Route path="/spend/visualization" element={<SpendVisualization />} />
+                      <Route path="/policy/safe-mode" element={<SafeMode />} />
+                      <Route path="/threats" element={<ThreatIntelligence />} />
+                      <Route path="/audit" element={<AuditLogs />} />
+                      <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                      <Route path="/admin/users" element={<Users />} />
+                      <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
+                      <Route path="/devices" element={<Devices />} />
+                      <Route path="/devices/tamper-log" element={<TamperLog />} />
+                      <Route path="/operator/tenants" element={
+                        <RequireOperator>
+                          <SaaSOperator />
+                        </RequireOperator>
+                      } />
+                      <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
+                      <Route path="/integrations/mcp-servers" element={
+                        <RequireAdmin>
+                          <McpServers />
+                        </RequireAdmin>
+                      } />
+                      <Route path="/integrations/llm-providers" element={
+                        <RequireAdmin>
+                          <LlmProviders />
+                        </RequireAdmin>
+                      } />
+                      {/* Legacy redirect */}
+                      <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
+                    </Routes>
+                  )}
                 </main>
               </div>
             </div>

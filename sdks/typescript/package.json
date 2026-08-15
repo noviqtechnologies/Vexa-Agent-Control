@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/noviqtechnologies/agentwall.git",
+    "url": "https://github.com/noviqtechnologies/Vexa-Agent-Control.git",
     "directory": "sdks/typescript"
   },
   "homepage": "https://vexasec.io",

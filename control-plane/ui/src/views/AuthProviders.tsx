@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
+import { useAuth } from '../auth/AuthContext'
 import './AuthProviders.css'
 
 interface AuthProvider {
@@ -132,6 +133,7 @@ function TagInput({
 }
 
 export default function AuthProviders() {
+  const { checkSession } = useAuth()
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [editingProvider, setEditingProvider] = useState<AuthProvider | null>(null)
   const [modalStep, setModalStep] = useState<ModalStep>('setup')
@@ -202,6 +204,9 @@ export default function AuthProviders() {
       if (!res.ok) throw new Error(await res.text())
       setSuccessMsg(`${editingProvider.name} configured successfully.`)
       await fetchProviders()
+      if (checkSession) {
+        await checkSession()
+      }
       setTimeout(closeModal, 1200)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -228,16 +233,27 @@ export default function AuthProviders() {
       </div>
 
       {noProvidersConfigured && (
-        <div className="ap-global-warning-banner">
-          <div className="ap-global-warning-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        <div className="ap-enforcement-banner">
+          <div className="ap-enforcement-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
             </svg>
           </div>
-          <div className="ap-global-warning-content">
-            <strong>No Auth Providers Configured!</strong>
-            <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
+          <div className="ap-enforcement-body">
+            <div className="ap-enforcement-title-row">
+              <h3>Mandatory Initial Setup: Configure Authentication Method</h3>
+              <span className="ap-enforcement-badge">Action Required • Other Tabs Locked</span>
+            </div>
+            <p>
+              To complete customer onboarding and protect your organization workspace, you must enable at least one authentication provider below (Local Authentication or Enterprise SSO). Once configured, full access to Fleet Overview, Policy Governance, Spend Limits, and Devices will unlock automatically.
+            </p>
+            <div className="ap-enforcement-steps">
+              <span className="ap-step-pill">1. Select Local Auth or Enterprise SSO below</span>
+              <span className="ap-step-pill">2. Click "Setup" and Save Configuration</span>
+              <span className="ap-step-pill">3. Console Unlocks Immediately</span>
+            </div>
           </div>
         </div>
       )}
@@ -308,9 +324,7 @@ export default function AuthProviders() {
                   <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
                 <p>
-                  Local authentication stores passwords in Agent Control and is intended for{' '}
-                  <strong>development or testing</strong>. For production, use an SSO provider
-                  such as Google or GitHub.
+                  Local authentication manages credentials directly within your organization workspace. For enterprise deployments with centralized identity governance, configuring an SSO provider such as <strong>Google Workspace</strong> or <strong>Microsoft Entra ID</strong> is recommended.
                 </p>
               </div>
             )}

@@ -235,8 +235,8 @@ kubectl create secret tls agentwall-gateway-tls `
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 ```
 
 ---

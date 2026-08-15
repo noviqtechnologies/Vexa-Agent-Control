@@ -25,7 +25,7 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
     $ArchStr = "aarch64"
 }
 
-$Repo = "noviqtechnologies/agentwall"
+$Repo = "noviqtechnologies/Vexa-Agent-Control"
 $ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
 
 try {

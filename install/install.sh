@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-REPO="noviqtechnologies/agentwall"
+REPO="noviqtechnologies/Vexa-Agent-Control"
 
 if [[ -z "$VERSION" ]]; then
   echo "[*] Fetching latest release version from GitHub..."

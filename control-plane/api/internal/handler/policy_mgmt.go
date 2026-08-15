@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
@@ -20,7 +21,8 @@ func NewPolicyMgmtHandler(s *store.Store, b *sse.Broker) *PolicyMgmtHandler {
 }
 
 func (h *PolicyMgmtHandler) List(w http.ResponseWriter, r *http.Request) {
-	policies, err := h.store.ListPolicies(r.Context())
+	tenantID := middleware.TenantIDFromContext(r.Context())
+	policies, err := h.store.ListPolicies(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -34,13 +36,14 @@ func (h *PolicyMgmtHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	var policy *model.Policy
 	var err error
 	
 	if r.URL.Query().Get("raw") == "true" {
-		policy, err = h.store.GetRawActivePolicy(r.Context())
+		policy, err = h.store.GetRawActivePolicy(r.Context(), tenantID)
 	} else {
-		policy, err = h.store.GetActivePolicy(r.Context())
+		policy, err = h.store.GetActivePolicy(r.Context(), tenantID)
 	}
 
 	if err != nil {
@@ -58,6 +61,7 @@ func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	var p model.Policy
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -70,7 +74,7 @@ func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	p.IsActive = true
-	if err := h.store.SavePolicy(r.Context(), &p); err != nil {
+	if err := h.store.SavePolicy(r.Context(), tenantID, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -113,8 +117,9 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	clientChan, cleanup := h.broker.Subscribe()
 	defer cleanup()
 
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	// Send initial active policy if available
-	policy, err := h.store.GetActivePolicy(r.Context())
+	policy, err := h.store.GetActivePolicy(r.Context(), tenantID)
 	if err == nil && policy != nil {
 		w.Write(formatSSE("policy_update", policy.Content))
 		flusher.Flush()

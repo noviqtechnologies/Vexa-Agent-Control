@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
@@ -18,10 +20,14 @@ func NewSpendHandler(s DataStore) *SpendHandler {
 // GET /api/v1/spend/budgets
 func (h *SpendHandler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	budgets, err := h.store.ListSpendBudgets(ctx)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	budgets, err := h.store.ListSpendBudgets(ctx, tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
+	}
+	if budgets == nil {
+		budgets = []store.SpendBudget{}
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
@@ -37,7 +43,8 @@ func (h *SpendHandler) CreateBudget(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	ctx := r.Context()
-	if err := h.store.UpsertSpendBudget(ctx, &req); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+	if err := h.store.UpsertSpendBudget(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -50,10 +57,14 @@ func (h *SpendHandler) CreateBudget(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/spend/snapshots
 func (h *SpendHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	snapshots, err := h.store.ListSpendSnapshots(ctx)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	snapshots, err := h.store.ListSpendSnapshots(ctx, tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
+	}
+	if snapshots == nil {
+		snapshots = []store.SpendSnapshot{}
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
@@ -61,7 +72,6 @@ func (h *SpendHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/v1/spend/snapshots
-// Used by the local agentwall gateway to sync snapshots to the dashboard DB
 func (h *SpendHandler) SyncSnapshot(w http.ResponseWriter, r *http.Request) {
 	var req store.SpendSnapshot
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -70,7 +80,8 @@ func (h *SpendHandler) SyncSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	ctx := r.Context()
-	if err := h.store.UpsertSpendSnapshot(ctx, &req); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+	if err := h.store.UpsertSpendSnapshot(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -81,10 +92,14 @@ func (h *SpendHandler) SyncSnapshot(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/spend/requests
 func (h *SpendHandler) ListIncreaseRequests(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	reqs, err := h.store.ListIncreaseRequests(ctx)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	reqs, err := h.store.ListIncreaseRequests(ctx, tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
+	}
+	if reqs == nil {
+		reqs = []store.IncreaseRequest{}
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
@@ -101,7 +116,8 @@ func (h *SpendHandler) SubmitIncreaseRequest(w http.ResponseWriter, r *http.Requ
 	req.Status = "pending"
 	
 	ctx := r.Context()
-	if err := h.store.InsertIncreaseRequest(ctx, &req); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+	if err := h.store.InsertIncreaseRequest(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -111,7 +127,10 @@ func (h *SpendHandler) SubmitIncreaseRequest(w http.ResponseWriter, r *http.Requ
 
 // POST /api/v1/spend/requests/{id}/resolve
 func (h *SpendHandler) ResolveIncreaseRequest(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		id = r.PathValue("id")
+	}
 	if id == "" {
 		http.Error(w, `{"error":"missing request id"}`, http.StatusBadRequest)
 		return
@@ -128,7 +147,8 @@ func (h *SpendHandler) ResolveIncreaseRequest(w http.ResponseWriter, r *http.Req
 	}
 	
 	ctx := r.Context()
-	if err := h.store.ResolveIncreaseRequest(ctx, id, req.Status, req.ResolvedBy, req.NewCap); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+	if err := h.store.ResolveIncreaseRequest(ctx, tenantID, id, req.Status, req.ResolvedBy, req.NewCap); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}

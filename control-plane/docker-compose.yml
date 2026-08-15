@@ -1,8 +1,8 @@
-name: vexa-agentwall-control-plane
+name: vexa-agentcontrol-control-plane
 
 services:
   postgres:
-    container_name: vexa-agentwall-postgres
+    container_name: vexa-agentcontrol-postgres
     image: postgres:16
     environment:
       POSTGRES_USER: agentwall
@@ -11,7 +11,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - agentwall_pg_data:/var/lib/postgresql/data
+      - agentcontrol_pg_data:/var/lib/postgresql/data
       # All .sql files in this directory run automatically on first boot (alphabetical order).
       # 000001_init_schema     -> core tables
       # 000002_auth_and_policy -> auth providers + policies table
@@ -24,13 +24,14 @@ services:
       retries: 5
       start_period: 10s
 
-  # AgentWall Gateway
+  # AgentWall / AgentControl Gateway
   # The enforcement engine that proxies MCP tool calls through policy evaluation.
   # Policy is fetched from PostgreSQL via the dashboard API on startup, then
   # polled every POLICY_POLL_INTERVAL_SECS seconds for live admin updates.
   # No --policy YAML file is needed — the DB is the single source of truth.
   gateway:
-    container_name: vexa-agentwall-gateway
+    container_name: vexa-agentcontrol-gateway
+    image: vexa-agentcontrol-control-plane-gateway
     build:
       context: ..        # workspace root — where Dockerfile and Cargo.toml live
       dockerfile: Dockerfile
@@ -72,7 +73,8 @@ services:
       start_period: 15s
 
   dashboard-api:
-    container_name: vexa-agentwall-dashboard-api
+    container_name: vexa-agentcontrol-dashboard-api
+    image: vexa-agentcontrol-control-plane-dashboard-api
     build:
       context: ./api
     depends_on:
@@ -103,7 +105,8 @@ services:
       start_period: 5s
 
   frontend:
-    container_name: vexa-agentwall-frontend
+    container_name: vexa-agentcontrol-frontend
+    image: vexa-agentcontrol-control-plane-frontend
     build:
       context: ./ui
     depends_on:
@@ -119,5 +122,5 @@ services:
       AGENTWALL_API_UPSTREAM: "dashboard-api:8400"
 
 volumes:
-  agentwall_pg_data:
+  agentcontrol_pg_data:
 

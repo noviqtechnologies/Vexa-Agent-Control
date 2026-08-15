@@ -126,7 +126,7 @@ export default function Login() {
                   <div className="form-group">
                     <div className="label-row">
                       <label htmlFor="login-password">
-                        {noProviders ? 'Password or Bootstrap Token' : 'Password'}
+                        Password or Bootstrap Token
                       </label>
                       <button
                         type="button"

@@ -93,13 +93,13 @@ Press the `Windows` key on your keyboard, type `PowerShell` or `cmd`, and launch
 *(Alternatively, download the ZIP archive manually):*
 * **PowerShell:**
   ```powershell
-  Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
+  Invoke-WebRequest -Uri "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/latest/download/agentwall-windows-x86_64.zip" -OutFile "agentwall.zip"
   Expand-Archive -Path "agentwall.zip" -DestinationPath "$env:USERPROFILE\.local" -Force
   $env:PATH += ";$env:USERPROFILE\.local\bin"
   ```
 * **Command Prompt (CMD):**
   ```cmd
-  curl.exe -fsSL https://github.com/noviqtechnologies/agentwall/releases/latest/download/agentwall-windows-x86_64.zip -o agentwall.zip
+  curl.exe -fsSL https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/latest/download/agentwall-windows-x86_64.zip -o agentwall.zip
   tar -xf agentwall.zip -C "%USERPROFILE%\.local\bin"
   set PATH=%PATH%;%USERPROFILE%\.local\bin
   ```
@@ -165,8 +165,8 @@ If you prefer building AgentWall directly from source, you will need the Rust to
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 
 # 2. Compile release binary
 cargo build --release
@@ -243,7 +243,7 @@ To restore all IDE configurations and remove AgentWall binaries:
   agentwall service uninstall
 
   # 3. Run uninstaller script to remove binary and local files
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/uninstall.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
   ```
 
 * **Windows (PowerShell):**
@@ -255,7 +255,7 @@ To restore all IDE configurations and remove AgentWall binaries:
   agentwall.exe service uninstall
 
   # 3. Run uninstaller script
-  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/uninstall.ps1 | iex
+  irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
   ```
 
 ### Kubernetes Helm Uninstallation

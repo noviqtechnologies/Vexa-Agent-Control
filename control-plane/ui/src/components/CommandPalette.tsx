@@ -204,15 +204,15 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       id: 'act-copy-linux',
       title: 'Copy Linux / macOS Quickstart Script',
       category: 'Actions',
-      description: 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash',
-      action: () => copyToClipboard('curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash', 'Linux/macOS install script copied!'),
+      description: 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash',
+      action: () => copyToClipboard('curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash', 'Linux/macOS install script copied!'),
     },
     {
       id: 'act-copy-win',
       title: 'Copy Windows Quickstart Script',
       category: 'Actions',
-      description: 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex',
-      action: () => copyToClipboard('irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex', 'Windows install script copied!'),
+      description: 'irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex',
+      action: () => copyToClipboard('irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex', 'Windows install script copied!'),
     },
   ]
 

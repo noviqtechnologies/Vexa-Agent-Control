@@ -13,7 +13,7 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
     $ArchStr = "aarch64"
 }
 
-$Repo = "noviqtechnologies/agentwall"
+$Repo = "noviqtechnologies/Vexa-Agent-Control"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
 $ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"

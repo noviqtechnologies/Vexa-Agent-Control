@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     AgentWall Binary Installer for Windows (Standalone Developer Edition).
-    Usage: irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
+    Usage: irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
            .\install.ps1 [-Version <VERSION>]    # omit -Version to install the latest release
 #>
 
@@ -25,7 +25,7 @@ param(
     Write-Host "=============================================" -ForegroundColor $ColorCyan
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
-    $Repo = "noviqtechnologies/agentwall"
+    $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
     if (-not $Version) { $Version = $env:AGENTWALL_VERSION }

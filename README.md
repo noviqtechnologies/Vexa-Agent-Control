@@ -43,7 +43,7 @@ Install the statically-linked `agentcontrol` binary and run `agentcontrol protec
 **macOS / Linux / WSL (Bash / Zsh):**
 ```bash
 # Install latest release (mandatory SHA-256 verified, strict error handling)
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 
 # One-command zero-config security
 agentcontrol protect
@@ -52,7 +52,7 @@ agentcontrol protect
 **Windows (PowerShell):**
 ```powershell
 # Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
 
 # One-command zero-config security
 agentcontrol.exe protect
@@ -60,7 +60,7 @@ agentcontrol.exe protect
 
 **Windows (Command Prompt):**
 ```cmd
-curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
 agentcontrol.exe protect
 ```
 
@@ -122,12 +122,12 @@ agentcontrol.exe unprotect --force  # Emergency: skip backup integrity check
 **Enterprise Team OTET Provisioning** (enrollment + persistent Sentry daemon — use `team_otet.sh` / `team_otet.ps1`):
 ```bash
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://localhost:8400"
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://localhost:8400"
 
 # Windows (PowerShell)
 $env:AGENT_CONTROL_TOKEN = "TOK-YOUR-TOKEN"
 $env:DASHBOARD_API_URL = "http://localhost:8400"
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/team_otet.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/team_otet.ps1 | iex
 ```
 
 ### Team / Staging Control Hub (Docker Compose)
@@ -177,8 +177,8 @@ docker run -e AGENT_CONTROL_POLICY_PATH=/etc/agent-control/policy.yaml agent-con
 Requires Rust 1.89+ toolchain:
 
 ```bash
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 cargo build --release
 # Compiled binaries located at: ./target/release/agentcontrol (and alias ./target/release/agentwall)
 ```

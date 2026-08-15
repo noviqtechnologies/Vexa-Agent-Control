@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
@@ -55,6 +56,7 @@ type BootstrapConfig struct {
 
 // GET /api/v1/bootstrap
 func (h *HubSpecHandler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	gatewayID := r.URL.Query().Get("gateway_id")
 	if gatewayID == "" {
 		gatewayID = "gw-default"
@@ -62,12 +64,12 @@ func (h *HubSpecHandler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	// Track gateway registration / heartbeat if store available
 	if h.store != nil {
-		_ = h.store.UpsertAgent(r.Context(), gatewayID)
+		_ = h.store.UpsertAgent(r.Context(), tenantID, gatewayID)
 	}
 
 	policies := []BootstrapPolicy{}
 	if h.store != nil {
-		p, err := h.store.GetActivePolicy(r.Context())
+		p, err := h.store.GetActivePolicy(r.Context(), tenantID)
 		if err == nil && p != nil {
 			vNum, _ := strconv.Atoi(p.Version)
 			if vNum == 0 {
@@ -152,6 +154,7 @@ func (h *HubSpecHandler) GetEventsStream(w http.ResponseWriter, r *http.Request)
 
 // GET /api/v1/policies/{id}
 func (h *HubSpecHandler) GetPolicyByID(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	if h.store == nil {
 		http.Error(w, "store not available", http.StatusInternalServerError)
@@ -159,7 +162,7 @@ func (h *HubSpecHandler) GetPolicyByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var found *model.Policy
-	policies, err := h.store.ListPolicies(r.Context())
+	policies, err := h.store.ListPolicies(r.Context(), tenantID)
 	if err == nil {
 		for _, p := range policies {
 			if p.ID == id || p.Version == id {
@@ -171,7 +174,7 @@ func (h *HubSpecHandler) GetPolicyByID(w http.ResponseWriter, r *http.Request) {
 
 	if found == nil {
 		// Fallback to active policy
-		found, err = h.store.GetActivePolicy(r.Context())
+		found, err = h.store.GetActivePolicy(r.Context(), tenantID)
 	}
 
 	if err != nil || found == nil {
@@ -209,6 +212,7 @@ type CreatePolicyRequest struct {
 
 // POST /api/v1/policies
 func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	var req CreatePolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -248,7 +252,7 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.store != nil {
-		if err := h.store.SavePolicy(r.Context(), &p); err != nil {
+		if err := h.store.SavePolicy(r.Context(), tenantID, &p); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -296,6 +300,7 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/credentials/{provider}
 // Legacy credential metadata endpoint. Upholds provider key custody by never returning raw provider master keys.
 func (h *HubSpecHandler) GetProviderCredential(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	provider := chi.URLParam(r, "provider")
 	if provider == "" {
 		provider = "openai"
@@ -303,7 +308,7 @@ func (h *HubSpecHandler) GetProviderCredential(w http.ResponseWriter, r *http.Re
 
 	var maskedKey string
 	if h.store != nil {
-		k, err := h.store.GetProviderKeyByProvider(r.Context(), provider)
+		k, err := h.store.GetProviderKeyByProvider(r.Context(), tenantID, provider)
 		if err == nil && k != nil {
 			maskedKey = k.APIKeyMasked
 		}
@@ -378,10 +383,11 @@ func (h *HubSpecHandler) PostTelemetry(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/gateways
 func (h *HubSpecHandler) ListGateways(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	gatewaysList := []map[string]interface{}{}
 
 	if h.store != nil {
-		agents, err := h.store.ListAgents(r.Context(), 50, 0)
+		agents, err := h.store.ListAgents(r.Context(), tenantID, 50, 0)
 		if err == nil {
 			for _, a := range agents {
 				gatewaysList = append(gatewaysList, map[string]interface{}{

@@ -56,20 +56,20 @@ Follow the steps below to clone the repository from GitHub and spin up the Contr
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall/control-plane
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control/control-plane
 ```
 
 #### Windows (PowerShell):
 ```powershell
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall\control-plane
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control\control-plane
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall\control-plane
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control\control-plane
 ```
 
 > [!TIP]

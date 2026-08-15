@@ -20,172 +20,172 @@ import (
 var errStore = errors.New("store failure")
 
 type mockStore struct {
-	getFleetStatsFunc     func(ctx context.Context) (*store.FleetStats, error)
-	listAgentsFunc        func(ctx context.Context, limit, offset int) ([]store.AgentSummary, error)
-	getDecisionHeatmapFn  func(ctx context.Context, hours int) ([]store.DecisionBreakdown, error)
-	listRecentEventsFunc  func(ctx context.Context, agentID string, limit int) ([]store.RecentEvent, error)
-	listCredentialsFunc   func(ctx context.Context, agentID string) ([]model.SanitizedCredentialMeta, error)
-	upsertAgentFunc       func(ctx context.Context, agentID string) error
-	insertEventFunc       func(ctx context.Context, e *model.RedactedEvent) error
-	insertAlertFunc       func(ctx context.Context, a *model.RedactedAlert) error
-	upsertCredentialFunc  func(ctx context.Context, c *model.SanitizedCredentialMeta) error
-	listRecentAlertsFunc    func(ctx context.Context, limit int) ([]model.RedactedAlert, error)
-	getThreatSummaryFunc    func(ctx context.Context, hours int) (*store.ThreatSummary, error)
-	getThreatTimelineFunc   func(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error)
-	getTopThreatPatternsFunc func(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error)
-	countDistinctAgentsFunc  func(ctx context.Context) (int, error)
-	agentExistsFunc          func(ctx context.Context, agentID string) (bool, error)
-	getProviderKeyByProviderFunc func(ctx context.Context, provider string) (*store.ProviderKey, error)
+	getFleetStatsFunc     func(ctx context.Context, tenantID string) (*store.FleetStats, error)
+	listAgentsFunc        func(ctx context.Context, tenantID string, limit, offset int) ([]store.AgentSummary, error)
+	getDecisionHeatmapFn  func(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
+	listRecentEventsFunc  func(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
+	listCredentialsFunc   func(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error)
+	upsertAgentFunc       func(ctx context.Context, tenantID, agentID string) error
+	insertEventFunc       func(ctx context.Context, tenantID string, e *model.RedactedEvent) error
+	insertAlertFunc       func(ctx context.Context, tenantID string, a *model.RedactedAlert) error
+	upsertCredentialFunc  func(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
+	listRecentAlertsFunc    func(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error)
+	getThreatSummaryFunc    func(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
+	getThreatTimelineFunc   func(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error)
+	getTopThreatPatternsFunc func(ctx context.Context, tenantID string, hours int, limit int) ([]store.ThreatPattern, error)
+	countDistinctAgentsFunc  func(ctx context.Context, tenantID string) (int, error)
+	agentExistsFunc          func(ctx context.Context, tenantID, agentID string) (bool, error)
+	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
 }
 
-func (m *mockStore) GetFleetStats(ctx context.Context) (*store.FleetStats, error) {
+func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string) (*store.FleetStats, error) {
 	if m.getFleetStatsFunc != nil {
-		return m.getFleetStatsFunc(ctx)
+		return m.getFleetStatsFunc(ctx, tenantID)
 	}
 	return &store.FleetStats{}, nil
 }
-func (m *mockStore) ListAgents(ctx context.Context, limit, offset int) ([]store.AgentSummary, error) {
+func (m *mockStore) ListAgents(ctx context.Context, tenantID string, limit, offset int) ([]store.AgentSummary, error) {
 	if m.listAgentsFunc != nil {
-		return m.listAgentsFunc(ctx, limit, offset)
+		return m.listAgentsFunc(ctx, tenantID, limit, offset)
 	}
 	return nil, nil
 }
-func (m *mockStore) GetDecisionHeatmap(ctx context.Context, hours int) ([]store.DecisionBreakdown, error) {
+func (m *mockStore) GetDecisionHeatmap(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error) {
 	if m.getDecisionHeatmapFn != nil {
-		return m.getDecisionHeatmapFn(ctx, hours)
+		return m.getDecisionHeatmapFn(ctx, tenantID, hours)
 	}
 	return nil, nil
 }
-func (m *mockStore) ListRecentEvents(ctx context.Context, agentID string, limit int) ([]store.RecentEvent, error) {
+func (m *mockStore) ListRecentEvents(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error) {
 	if m.listRecentEventsFunc != nil {
-		return m.listRecentEventsFunc(ctx, agentID, limit)
+		return m.listRecentEventsFunc(ctx, tenantID, agentID, limit)
 	}
 	return nil, nil
 }
-func (m *mockStore) ListCredentials(ctx context.Context, agentID string) ([]model.SanitizedCredentialMeta, error) {
+func (m *mockStore) ListCredentials(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error) {
 	if m.listCredentialsFunc != nil {
-		return m.listCredentialsFunc(ctx, agentID)
+		return m.listCredentialsFunc(ctx, tenantID, agentID)
 	}
 	return nil, nil
 }
-func (m *mockStore) UpsertAgent(ctx context.Context, agentID string) error {
+func (m *mockStore) UpsertAgent(ctx context.Context, tenantID, agentID string) error {
 	if m.upsertAgentFunc != nil {
-		return m.upsertAgentFunc(ctx, agentID)
+		return m.upsertAgentFunc(ctx, tenantID, agentID)
 	}
 	return nil
 }
-func (m *mockStore) CountDistinctAgents(ctx context.Context) (int, error) {
+func (m *mockStore) CountDistinctAgents(ctx context.Context, tenantID string) (int, error) {
 	if m.countDistinctAgentsFunc != nil {
-		return m.countDistinctAgentsFunc(ctx)
+		return m.countDistinctAgentsFunc(ctx, tenantID)
 	}
 	return 0, nil
 }
-func (m *mockStore) AgentExists(ctx context.Context, agentID string) (bool, error) {
+func (m *mockStore) AgentExists(ctx context.Context, tenantID, agentID string) (bool, error) {
 	if m.agentExistsFunc != nil {
-		return m.agentExistsFunc(ctx, agentID)
+		return m.agentExistsFunc(ctx, tenantID, agentID)
 	}
 	return false, nil
 }
-func (m *mockStore) InsertEvent(ctx context.Context, e *model.RedactedEvent) error {
+func (m *mockStore) InsertEvent(ctx context.Context, tenantID string, e *model.RedactedEvent) error {
 	if m.insertEventFunc != nil {
-		return m.insertEventFunc(ctx, e)
+		return m.insertEventFunc(ctx, tenantID, e)
 	}
 	return nil
 }
-func (m *mockStore) InsertAlert(ctx context.Context, a *model.RedactedAlert) error {
+func (m *mockStore) InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error {
 	if m.insertAlertFunc != nil {
-		return m.insertAlertFunc(ctx, a)
+		return m.insertAlertFunc(ctx, tenantID, a)
 	}
 	return nil
 }
-func (m *mockStore) UpsertCredential(ctx context.Context, c *model.SanitizedCredentialMeta) error {
+func (m *mockStore) UpsertCredential(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error {
 	if m.upsertCredentialFunc != nil {
-		return m.upsertCredentialFunc(ctx, c)
+		return m.upsertCredentialFunc(ctx, tenantID, c)
 	}
 	return nil
 }
-func (m *mockStore) ListRecentAlerts(ctx context.Context, limit int) ([]model.RedactedAlert, error) {
+func (m *mockStore) ListRecentAlerts(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error) {
 	if m.listRecentAlertsFunc != nil {
-		return m.listRecentAlertsFunc(ctx, limit)
+		return m.listRecentAlertsFunc(ctx, tenantID, limit)
 	}
 	return nil, nil
 }
 
-func (m *mockStore) GetThreatSummary(ctx context.Context, hours int) (*store.ThreatSummary, error) {
+func (m *mockStore) GetThreatSummary(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error) {
 	if m.getThreatSummaryFunc != nil {
-		return m.getThreatSummaryFunc(ctx, hours)
+		return m.getThreatSummaryFunc(ctx, tenantID, hours)
 	}
 	return &store.ThreatSummary{}, nil
 }
 
-func (m *mockStore) GetThreatTimeline(ctx context.Context, hours int) ([]store.ThreatTimelinePoint, error) {
+func (m *mockStore) GetThreatTimeline(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error) {
 	if m.getThreatTimelineFunc != nil {
-		return m.getThreatTimelineFunc(ctx, hours)
+		return m.getThreatTimelineFunc(ctx, tenantID, hours)
 	}
 	return nil, nil
 }
 
-func (m *mockStore) GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]store.ThreatPattern, error) {
+func (m *mockStore) GetTopThreatPatterns(ctx context.Context, tenantID string, hours int, limit int) ([]store.ThreatPattern, error) {
 	if m.getTopThreatPatternsFunc != nil {
-		return m.getTopThreatPatternsFunc(ctx, hours, limit)
+		return m.getTopThreatPatternsFunc(ctx, tenantID, hours, limit)
 	}
 	return nil, nil
 }
 
-func (m *mockStore) UpsertMcpServer(ctx context.Context, agentID string, s *model.SanitizedMcpServerMeta) error {
+func (m *mockStore) UpsertMcpServer(ctx context.Context, tenantID, agentID string, s *model.SanitizedMcpServerMeta) error {
 	return nil
 }
-func (m *mockStore) ListMcpServersByAgent(ctx context.Context, agentID string) ([]store.McpServerInventoryRow, error) {
+func (m *mockStore) ListMcpServersByAgent(ctx context.Context, tenantID, agentID string) ([]store.McpServerInventoryRow, error) {
 	return nil, nil
 }
-func (m *mockStore) ListMcpServersFleetWide(ctx context.Context) ([]store.McpServerInventoryRow, error) {
+func (m *mockStore) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([]store.McpServerInventoryRow, error) {
 	return nil, nil
 }
 
-func (m *mockStore) UpsertSpendBudget(ctx context.Context, b *store.SpendBudget) error {
+func (m *mockStore) UpsertSpendBudget(ctx context.Context, tenantID string, b *store.SpendBudget) error {
 	return nil
 }
-func (m *mockStore) ListSpendBudgets(ctx context.Context) ([]store.SpendBudget, error) {
+func (m *mockStore) ListSpendBudgets(ctx context.Context, tenantID string) ([]store.SpendBudget, error) {
 	return nil, nil
 }
-func (m *mockStore) UpsertSpendSnapshot(ctx context.Context, snap *store.SpendSnapshot) error {
+func (m *mockStore) UpsertSpendSnapshot(ctx context.Context, tenantID string, snap *store.SpendSnapshot) error {
 	return nil
 }
-func (m *mockStore) ListSpendSnapshots(ctx context.Context) ([]store.SpendSnapshot, error) {
+func (m *mockStore) ListSpendSnapshots(ctx context.Context, tenantID string) ([]store.SpendSnapshot, error) {
 	return nil, nil
 }
-func (m *mockStore) InsertIncreaseRequest(ctx context.Context, r *store.IncreaseRequest) error {
+func (m *mockStore) InsertIncreaseRequest(ctx context.Context, tenantID string, r *store.IncreaseRequest) error {
 	return nil
 }
-func (m *mockStore) ResolveIncreaseRequest(ctx context.Context, id string, status string, resolvedBy string, newCap *int64) error {
+func (m *mockStore) ResolveIncreaseRequest(ctx context.Context, tenantID, id string, status string, resolvedBy string, newCap *int64) error {
 	return nil
 }
-func (m *mockStore) ListIncreaseRequests(ctx context.Context) ([]store.IncreaseRequest, error) {
+func (m *mockStore) ListIncreaseRequests(ctx context.Context, tenantID string) ([]store.IncreaseRequest, error) {
 	return nil, nil
 }
 
-func (m *mockStore) GetActiveGroupPolicy(ctx context.Context, groupID string) (*store.GroupPolicyVersion, error) {
+func (m *mockStore) GetActiveGroupPolicy(ctx context.Context, tenantID, groupID string) (*store.GroupPolicyVersion, error) {
 	return nil, nil
 }
-func (m *mockStore) PublishGroupPolicy(ctx context.Context, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*store.GroupPolicyVersion, error) {
+func (m *mockStore) PublishGroupPolicy(ctx context.Context, tenantID, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*store.GroupPolicyVersion, error) {
 	return nil, nil
 }
-func (m *mockStore) ListGroupPolicies(ctx context.Context) ([]*store.GroupPolicyVersion, error) {
+func (m *mockStore) ListGroupPolicies(ctx context.Context, tenantID string) ([]*store.GroupPolicyVersion, error) {
 	return nil, nil
 }
 
-func (m *mockStore) InsertProviderKey(ctx context.Context, k *store.ProviderKey) error {
+func (m *mockStore) InsertProviderKey(ctx context.Context, tenantID string, k *store.ProviderKey) error {
 	return nil
 }
-func (m *mockStore) ListProviderKeys(ctx context.Context) ([]store.ProviderKey, error) {
+func (m *mockStore) ListProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKey, error) {
 	return nil, nil
 }
-func (m *mockStore) DeleteProviderKey(ctx context.Context, id string) error {
+func (m *mockStore) DeleteProviderKey(ctx context.Context, tenantID, id string) error {
 	return nil
 }
-func (m *mockStore) GetProviderKeyByProvider(ctx context.Context, provider string) (*store.ProviderKey, error) {
+func (m *mockStore) GetProviderKeyByProvider(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error) {
 	if m.getProviderKeyByProviderFunc != nil {
-		return m.getProviderKeyByProviderFunc(ctx, provider)
+		return m.getProviderKeyByProviderFunc(ctx, tenantID, provider)
 	}
 	return nil, nil
 }
@@ -224,7 +224,7 @@ func validCredentialJSON() string {
 
 func TestFleetHandler_GetOverview_Success(t *testing.T) {
 	ms := &mockStore{
-		getFleetStatsFunc: func(_ context.Context) (*store.FleetStats, error) {
+		getFleetStatsFunc: func(_ context.Context, _ string) (*store.FleetStats, error) {
 			return &store.FleetStats{TotalAgents: 5, ActiveAgents: 3, TotalEvents: 100}, nil
 		},
 	}
@@ -249,7 +249,7 @@ func TestFleetHandler_GetOverview_Success(t *testing.T) {
 
 func TestFleetHandler_GetOverview_StoreError(t *testing.T) {
 	ms := &mockStore{
-		getFleetStatsFunc: func(_ context.Context) (*store.FleetStats, error) {
+		getFleetStatsFunc: func(_ context.Context, _ string) (*store.FleetStats, error) {
 			return nil, errStore
 		},
 	}
@@ -285,7 +285,7 @@ func TestFleetHandler_ListAgents_EmptyResult(t *testing.T) {
 func TestFleetHandler_ListAgents_Pagination(t *testing.T) {
 	var capturedLimit, capturedOffset int
 	ms := &mockStore{
-		listAgentsFunc: func(_ context.Context, limit, offset int) ([]store.AgentSummary, error) {
+		listAgentsFunc: func(_ context.Context, _ string, limit, offset int) ([]store.AgentSummary, error) {
 			capturedLimit = limit
 			capturedOffset = offset
 			return nil, nil
@@ -308,7 +308,7 @@ func TestFleetHandler_ListAgents_Pagination(t *testing.T) {
 func TestFleetHandler_GetHeatmap_CapsAt168Hours(t *testing.T) {
 	var capturedHours int
 	ms := &mockStore{
-		getDecisionHeatmapFn: func(_ context.Context, hours int) ([]store.DecisionBreakdown, error) {
+		getDecisionHeatmapFn: func(_ context.Context, _ string, hours int) ([]store.DecisionBreakdown, error) {
 			capturedHours = hours
 			return nil, nil
 		},
@@ -330,7 +330,7 @@ func TestFleetHandler_GetHeatmap_CapsAt168Hours(t *testing.T) {
 func TestFleetHandler_ListEvents_WithAgentID(t *testing.T) {
 	var capturedAgentID string
 	ms := &mockStore{
-		listRecentEventsFunc: func(_ context.Context, agentID string, _ int) ([]store.RecentEvent, error) {
+		listRecentEventsFunc: func(_ context.Context, _ string, agentID string, _ int) ([]store.RecentEvent, error) {
 			capturedAgentID = agentID
 			return nil, nil
 		},
@@ -353,7 +353,7 @@ func TestFleetHandler_ListEvents_WithAgentID(t *testing.T) {
 
 func TestIdentityHandler_ListCredentials_Success(t *testing.T) {
 	ms := &mockStore{
-		listCredentialsFunc: func(_ context.Context, agentID string) ([]model.SanitizedCredentialMeta, error) {
+		listCredentialsFunc: func(_ context.Context, _ string, agentID string) ([]model.SanitizedCredentialMeta, error) {
 			return []model.SanitizedCredentialMeta{
 				{CredentialID: "cred-1", AgentID: agentID, Scope: []string{"read"}},
 			}, nil
@@ -380,7 +380,7 @@ func TestIdentityHandler_ListCredentials_Success(t *testing.T) {
 
 func TestIdentityHandler_ListCredentials_StoreError(t *testing.T) {
 	ms := &mockStore{
-		listCredentialsFunc: func(_ context.Context, _ string) ([]model.SanitizedCredentialMeta, error) {
+		listCredentialsFunc: func(_ context.Context, _ string, _ string) ([]model.SanitizedCredentialMeta, error) {
 			return nil, errStore
 		},
 	}
@@ -400,7 +400,7 @@ func TestIdentityHandler_ListCredentials_StoreError(t *testing.T) {
 func TestIngestHandler_PostEvent_Success(t *testing.T) {
 	var insertedEventID string
 	ms := &mockStore{
-		insertEventFunc: func(_ context.Context, e *model.RedactedEvent) error {
+		insertEventFunc: func(_ context.Context, _ string, e *model.RedactedEvent) error {
 			insertedEventID = e.EventID
 			return nil
 		},
@@ -460,7 +460,7 @@ func TestIngestHandler_PostEvent_FailsValidation(t *testing.T) {
 
 func TestIngestHandler_PostEvent_UpsertAgentError(t *testing.T) {
 	ms := &mockStore{
-		upsertAgentFunc: func(_ context.Context, _ string) error { return errStore },
+		upsertAgentFunc: func(_ context.Context, _ string, _ string) error { return errStore },
 	}
 	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
@@ -475,7 +475,7 @@ func TestIngestHandler_PostEvent_UpsertAgentError(t *testing.T) {
 
 func TestIngestHandler_PostEvent_InsertEventError(t *testing.T) {
 	ms := &mockStore{
-		insertEventFunc: func(_ context.Context, _ *model.RedactedEvent) error { return errStore },
+		insertEventFunc: func(_ context.Context, _ string, _ *model.RedactedEvent) error { return errStore },
 	}
 	h := NewIngestHandler(ms, sse.NewBroker(), nil)
 
@@ -543,7 +543,7 @@ func TestIngestHandler_PostAlert_FailsValidation(t *testing.T) {
 func TestIngestHandler_PostCredential_Success(t *testing.T) {
 	var capturedCredID string
 	ms := &mockStore{
-		upsertCredentialFunc: func(_ context.Context, c *model.SanitizedCredentialMeta) error {
+		upsertCredentialFunc: func(_ context.Context, _ string, c *model.SanitizedCredentialMeta) error {
 			capturedCredID = c.CredentialID
 			return nil
 		},
@@ -592,7 +592,7 @@ func TestIngestHandler_PostCredential_MissingRequiredFields(t *testing.T) {
 
 func TestAlertHandler_ListRecent_Success(t *testing.T) {
 	ms := &mockStore{
-		listRecentAlertsFunc: func(_ context.Context, limit int) ([]model.RedactedAlert, error) {
+		listRecentAlertsFunc: func(_ context.Context, _ string, limit int) ([]model.RedactedAlert, error) {
 			return []model.RedactedAlert{
 				{AlertID: "alert-1", Severity: "critical"},
 			}, nil
@@ -619,7 +619,7 @@ func TestAlertHandler_ListRecent_Success(t *testing.T) {
 
 func TestAlertHandler_ListRecent_StoreError(t *testing.T) {
 	ms := &mockStore{
-		listRecentAlertsFunc: func(_ context.Context, _ int) ([]model.RedactedAlert, error) {
+		listRecentAlertsFunc: func(_ context.Context, _ string, _ int) ([]model.RedactedAlert, error) {
 			return nil, errStore
 		},
 	}
@@ -670,7 +670,7 @@ func TestQueryInt(t *testing.T) {
 
 func TestThreatHandler_GetSummary_Success(t *testing.T) {
 	ms := &mockStore{
-		getThreatSummaryFunc: func(_ context.Context, hours int) (*store.ThreatSummary, error) {
+		getThreatSummaryFunc: func(_ context.Context, _ string, hours int) (*store.ThreatSummary, error) {
 			return &store.ThreatSummary{
 				DlpTotal:       10,
 				InjectionTotal: 5,
@@ -702,7 +702,7 @@ func TestThreatHandler_GetSummary_Success(t *testing.T) {
 
 func TestThreatHandler_GetSummary_StoreError(t *testing.T) {
 	ms := &mockStore{
-		getThreatSummaryFunc: func(_ context.Context, _ int) (*store.ThreatSummary, error) {
+		getThreatSummaryFunc: func(_ context.Context, _ string, _ int) (*store.ThreatSummary, error) {
 			return nil, errStore
 		},
 	}
@@ -720,7 +720,7 @@ func TestThreatHandler_GetSummary_StoreError(t *testing.T) {
 func TestThreatHandler_GetSummary_ClampHours(t *testing.T) {
 	var capturedHours int
 	ms := &mockStore{
-		getThreatSummaryFunc: func(_ context.Context, hours int) (*store.ThreatSummary, error) {
+		getThreatSummaryFunc: func(_ context.Context, _ string, hours int) (*store.ThreatSummary, error) {
 			capturedHours = hours
 			return &store.ThreatSummary{}, nil
 		},
@@ -741,7 +741,7 @@ func TestThreatHandler_GetSummary_ClampHours(t *testing.T) {
 
 func TestThreatHandler_GetTimeline_Success(t *testing.T) {
 	ms := &mockStore{
-		getThreatTimelineFunc: func(_ context.Context, _ int) ([]store.ThreatTimelinePoint, error) {
+		getThreatTimelineFunc: func(_ context.Context, _ string, _ int) ([]store.ThreatTimelinePoint, error) {
 			return []store.ThreatTimelinePoint{
 				{Hour: "2024-01-01 00:00", Dlp: 3, Injection: 1, Semantic: 0},
 			}, nil
@@ -783,7 +783,7 @@ func TestThreatHandler_GetTimeline_NilSlice(t *testing.T) {
 
 func TestThreatHandler_GetTopPatterns_Success(t *testing.T) {
 	ms := &mockStore{
-		getTopThreatPatternsFunc: func(_ context.Context, _ int, limit int) ([]store.ThreatPattern, error) {
+		getTopThreatPatternsFunc: func(_ context.Context, _ string, _ int, limit int) ([]store.ThreatPattern, error) {
 			return []store.ThreatPattern{
 				{Type: "dlp", PatternName: "ssn_pattern", Category: "pii", TotalCount: 15, EventCount: 10},
 				{Type: "injection", PatternName: "sql_inject", TotalCount: 5, EventCount: 3},
@@ -814,7 +814,7 @@ func TestThreatHandler_GetTopPatterns_Success(t *testing.T) {
 
 func TestThreatHandler_GetTopPatterns_StoreError(t *testing.T) {
 	ms := &mockStore{
-		getTopThreatPatternsFunc: func(_ context.Context, _ int, _ int) ([]store.ThreatPattern, error) {
+		getTopThreatPatternsFunc: func(_ context.Context, _ string, _ int, _ int) ([]store.ThreatPattern, error) {
 			return nil, errStore
 		},
 	}

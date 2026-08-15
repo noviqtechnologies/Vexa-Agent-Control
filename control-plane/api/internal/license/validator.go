@@ -20,10 +20,12 @@ var defaultPublicKeyBytes = []byte{
 
 // Claims represents the decoded AgentWall license JWT payload.
 type Claims struct {
-	OrgID    string   `json:"sub"`
-	Tier     string   `json:"tier"`
-	MaxSeats int      `json:"max_seats"`
-	Features []string `json:"features"`
+	OrgID     string   `json:"sub"`
+	Tier      string   `json:"tier"`
+	MaxSeats  int      `json:"max_seats"`
+	Features  []string `json:"features"`
+	IsTrial   bool     `json:"is_trial,omitempty"`
+	TrialDays int      `json:"trial_days,omitempty"`
 	jwt.RegisteredClaims
 }
 

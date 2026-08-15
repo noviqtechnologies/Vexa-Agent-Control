@@ -11,6 +11,7 @@ import (
 
 type GroupPolicyVersion struct {
 	ID        string          `json:"id"`
+	TenantID  string          `json:"tenant_id"`
 	GroupID   string          `json:"group_id"`
 	Version   int             `json:"version"`
 	Claims    json.RawMessage `json:"claims"`
@@ -20,17 +21,20 @@ type GroupPolicyVersion struct {
 	Active    bool            `json:"active"`
 }
 
-// GetActiveGroupPolicy gets the active policy for a group.
-func (s *Store) GetActiveGroupPolicy(ctx context.Context, groupID string) (*GroupPolicyVersion, error) {
+// GetActiveGroupPolicy gets the active policy for a group within a tenant.
+func (s *Store) GetActiveGroupPolicy(ctx context.Context, tenantID, groupID string) (*GroupPolicyVersion, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	var p GroupPolicyVersion
 	var claims, tools []byte
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, group_id, version, claims, tools, created_at, created_by, active
+		SELECT id, tenant_id, group_id, version, claims, tools, created_at, created_by, active
 		FROM group_policy_versions
-		WHERE group_id = $1 AND active = true
-	`, groupID).Scan(
-		&p.ID, &p.GroupID, &p.Version, &claims, &tools, &p.CreatedAt, &p.CreatedBy, &p.Active,
+		WHERE tenant_id = $1 AND group_id = $2 AND active = true
+	`, tenantID, groupID).Scan(
+		&p.ID, &p.TenantID, &p.GroupID, &p.Version, &claims, &tools, &p.CreatedAt, &p.CreatedBy, &p.Active,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil // Not found
@@ -43,25 +47,28 @@ func (s *Store) GetActiveGroupPolicy(ctx context.Context, groupID string) (*Grou
 	return &p, nil
 }
 
-// PublishGroupPolicy creates a new version of the group policy and sets it to active, deactivating the old one.
-func (s *Store) PublishGroupPolicy(ctx context.Context, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*GroupPolicyVersion, error) {
+// PublishGroupPolicy creates a new version of the group policy and sets it to active, deactivating the old one within tenant.
+func (s *Store) PublishGroupPolicy(ctx context.Context, tenantID, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*GroupPolicyVersion, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	// Get max version
+	// Get max version for this group within tenant
 	var currentVersion int
-	err = tx.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) FROM group_policy_versions WHERE group_id = $1`, groupID).Scan(&currentVersion)
+	err = tx.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) FROM group_policy_versions WHERE tenant_id = $1 AND group_id = $2`, tenantID, groupID).Scan(&currentVersion)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, fmt.Errorf("get max version: %w", err)
 	}
 
 	nextVersion := currentVersion + 1
 
-	// Deactivate existing active version
-	_, err = tx.Exec(ctx, `UPDATE group_policy_versions SET active = false WHERE group_id = $1 AND active = true`, groupID)
+	// Deactivate existing active version for this group within tenant
+	_, err = tx.Exec(ctx, `UPDATE group_policy_versions SET active = false WHERE tenant_id = $1 AND group_id = $2 AND active = true`, tenantID, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("deactivate current version: %w", err)
 	}
@@ -70,11 +77,11 @@ func (s *Store) PublishGroupPolicy(ctx context.Context, groupID string, claims j
 	var outClaims, outTools []byte
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO group_policy_versions (group_id, version, claims, tools, created_by, active)
-		VALUES ($1, $2, $3, $4, $5, true)
-		RETURNING id, group_id, version, claims, tools, created_at, created_by, active
-	`, groupID, nextVersion, claims, tools, createdBy).Scan(
-		&p.ID, &p.GroupID, &p.Version, &outClaims, &outTools, &p.CreatedAt, &p.CreatedBy, &p.Active,
+		INSERT INTO group_policy_versions (tenant_id, group_id, version, claims, tools, created_by, active)
+		VALUES ($1, $2, $3, $4, $5, $6, true)
+		RETURNING id, tenant_id, group_id, version, claims, tools, created_at, created_by, active
+	`, tenantID, groupID, nextVersion, claims, tools, createdBy).Scan(
+		&p.ID, &p.TenantID, &p.GroupID, &p.Version, &outClaims, &outTools, &p.CreatedAt, &p.CreatedBy, &p.Active,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert group policy: %w", err)
@@ -89,14 +96,17 @@ func (s *Store) PublishGroupPolicy(ctx context.Context, groupID string, claims j
 	return &p, nil
 }
 
-// ListGroupPolicies returns a list of all active group policies.
-func (s *Store) ListGroupPolicies(ctx context.Context) ([]*GroupPolicyVersion, error) {
+// ListGroupPolicies returns a list of all active group policies for a tenant.
+func (s *Store) ListGroupPolicies(ctx context.Context, tenantID string) ([]*GroupPolicyVersion, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, group_id, version, claims, tools, created_at, created_by, active
+		SELECT id, tenant_id, group_id, version, claims, tools, created_at, created_by, active
 		FROM group_policy_versions
-		WHERE active = true
+		WHERE tenant_id = $1 AND active = true
 		ORDER BY group_id ASC
-	`)
+	`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("query list group policies: %w", err)
 	}
@@ -106,7 +116,7 @@ func (s *Store) ListGroupPolicies(ctx context.Context) ([]*GroupPolicyVersion, e
 	for rows.Next() {
 		var p GroupPolicyVersion
 		var claims, tools []byte
-		if err := rows.Scan(&p.ID, &p.GroupID, &p.Version, &claims, &tools, &p.CreatedAt, &p.CreatedBy, &p.Active); err != nil {
+		if err := rows.Scan(&p.ID, &p.TenantID, &p.GroupID, &p.Version, &claims, &tools, &p.CreatedAt, &p.CreatedBy, &p.Active); err != nil {
 			return nil, fmt.Errorf("scan list group policies: %w", err)
 		}
 		p.Claims = json.RawMessage(claims)

@@ -56,22 +56,22 @@ Clone the AgentWall repository to obtain the Helm chart directory (`./chart`) an
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 kubectl create namespace agentwall-system
 ```
 
 #### Windows (PowerShell):
 ```powershell
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 kubectl create namespace agentwall-system
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-git clone https://github.com/noviqtechnologies/agentwall.git
-cd agentwall
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
 kubectl create namespace agentwall-system
 ```
 

@@ -10,13 +10,17 @@ import (
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 )
 
-func (s *Store) ListPolicies(ctx context.Context) ([]*model.Policy, error) {
+func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Policy, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, version, content, is_active, created_at, updated_at
 		FROM policies
+		WHERE tenant_id = $1
 		ORDER BY created_at DESC
 		LIMIT 50
-	`)
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +37,16 @@ func (s *Store) ListPolicies(ctx context.Context) ([]*model.Policy, error) {
 	return policies, nil
 }
 
-func (s *Store) GetRawActivePolicy(ctx context.Context) (*model.Policy, error) {
+func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	var p model.Policy
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, version, content, is_active, created_at, updated_at
 		FROM policies
-		WHERE is_active = true
-	`).Scan(
+		WHERE is_active = true AND tenant_id = $1
+	`, tenantID).Scan(
 		&p.ID, &p.Version, &p.Content, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -51,8 +58,11 @@ func (s *Store) GetRawActivePolicy(ctx context.Context) (*model.Policy, error) {
 	return &p, nil
 }
 
-func (s *Store) GetActivePolicy(ctx context.Context) (*model.Policy, error) {
-	p, err := s.GetRawActivePolicy(ctx)
+func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	p, err := s.GetRawActivePolicy(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +71,7 @@ func (s *Store) GetActivePolicy(ctx context.Context) (*model.Policy, error) {
 	}
 
 	// Dynamic Assembly: Merge active group_policy_versions into the served policy YAML (FR-112)
-	groupPolicies, err := s.ListGroupPolicies(ctx)
+	groupPolicies, err := s.ListGroupPolicies(ctx, tenantID)
 	if err == nil && len(groupPolicies) > 0 {
 		var groupsYaml strings.Builder
 		groupsYaml.WriteString("\n\ngroups:\n")
@@ -115,11 +125,32 @@ func (s *Store) GetActivePolicy(ctx context.Context) (*model.Policy, error) {
 	return p, nil
 }
 
-func (s *Store) SavePolicy(ctx context.Context, p *model.Policy) error {
-	// If this one is active, deactivate all others first in a transaction
+// EnsurePoliciesSchema ensures policies table has tenant_id and tenant-scoped unique active index.
+func (s *Store) EnsurePoliciesSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		ALTER TABLE policies ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE;
+		DROP INDEX IF EXISTS idx_policies_active_unique;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true;
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
+func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	// If this one is active, deactivate all others within tenant first in a transaction
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		if p.IsActive {
-			_, err := tx.Exec(ctx, "UPDATE policies SET is_active = false WHERE is_active = true")
+			// Ensure obsolete global index is dropped and per-tenant index exists
+			_, _ = tx.Exec(ctx, "DROP INDEX IF EXISTS idx_policies_active_unique")
+			_, _ = tx.Exec(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true")
+
+			_, err := tx.Exec(ctx, "UPDATE policies SET is_active = false WHERE is_active = true AND (tenant_id = $1 OR tenant_id IS NULL)", tenantID)
 			if err != nil {
 				return err
 			}
@@ -127,14 +158,15 @@ func (s *Store) SavePolicy(ctx context.Context, p *model.Policy) error {
 
 		var id string
 		err := tx.QueryRow(ctx, `
-			INSERT INTO policies (version, content, is_active, created_at, updated_at)
-			VALUES ($1, $2, $3, now(), now())
+			INSERT INTO policies (tenant_id, version, content, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, now(), now())
 			ON CONFLICT (version) DO UPDATE SET
+				tenant_id = EXCLUDED.tenant_id,
 				content = EXCLUDED.content,
 				is_active = EXCLUDED.is_active,
 				updated_at = now()
 			RETURNING id
-		`, p.Version, p.Content, p.IsActive).Scan(&id)
+		`, tenantID, p.Version, p.Content, p.IsActive).Scan(&id)
 		
 		if err == nil {
 			p.ID = id

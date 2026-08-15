@@ -19,13 +19,13 @@ version: "3.9"
 # AC-203-2: Enforcement is identical to production (same binary, same policy).
 # AC-203-4: This file is provided in the repository root per the spec.
 
-name: vexa-agentwall-dev
+name: vexa-agentcontrol-dev
 
 services:
 
   # ── Mock OIDC Provider ──────────────────────────────────────────────────────
   mock-oidc:
-    container_name: vexa-agentwall-mock-oidc
+    container_name: vexa-agentcontrol-mock-oidc
     image: python:3.12-slim
     working_dir: /app
     volumes:
@@ -41,11 +41,11 @@ services:
       retries: 10
       start_period: 15s
     networks:
-      - agentwall-net
+      - agentcontrol-net
 
   # ── Mock Splunk HEC ─────────────────────────────────────────────────────────
   mock-splunk:
-    container_name: vexa-agentwall-mock-splunk
+    container_name: vexa-agentcontrol-mock-splunk
     image: python:3.12-slim
     working_dir: /app
     volumes:
@@ -60,11 +60,11 @@ services:
       retries: 5
       start_period: 5s
     networks:
-      - agentwall-net
+      - agentcontrol-net
 
   # ── HashiCorp Vault (FR-22) ─────────────────────────────────────────────────
   vault:
-    container_name: vexa-agentwall-vault
+    container_name: vexa-agentcontrol-vault
     image: hashicorp/vault:1.16
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: "root"
@@ -77,11 +77,11 @@ services:
       retries: 5
       start_period: 5s
     networks:
-      - agentwall-net
+      - agentcontrol-net
 
   # ── Mock MCP Tool Server ────────────────────────────────────────────────────
   mock-mcp:
-    container_name: vexa-agentwall-mock-mcp
+    container_name: vexa-agentcontrol-mock-mcp
     build:
       context: ./test-tools/mock-mcp-server
       dockerfile: Dockerfile
@@ -94,11 +94,12 @@ services:
       retries: 3
       start_period: 5s
     networks:
-      - agentwall-net
+      - agentcontrol-net
 
-  # ── AgentWall Gateway ───────────────────────────────────────────────────────
-  agentwall:
-    container_name: vexa-agentwall-gateway-dev
+  # ── AgentControl Gateway ────────────────────────────────────────────────────
+  agentcontrol:
+    container_name: vexa-agentcontrol-gateway-dev
+    image: vexa-agentcontrol-gateway:dev
     build:
       context: .
       dockerfile: Dockerfile
@@ -106,7 +107,7 @@ services:
       - "8080:8080"
     volumes:
       - ./test-tools/test-policy.yaml:/app/policy.yaml:ro
-      - agentwall-logs:/var/log/agentwall
+      - agentcontrol-logs:/var/log/agentwall
     environment:
       # Core gateway config
       AGENTWALL_LISTEN: "0.0.0.0:8080"
@@ -144,11 +145,11 @@ services:
       retries: 5
       start_period: 15s
     networks:
-      - agentwall-net
+      - agentcontrol-net
 
 volumes:
-  agentwall-logs:
+  agentcontrol-logs:
 
 networks:
-  agentwall-net:
+  agentcontrol-net:
     driver: bridge

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 )
 
 type LicenseHandler struct {
@@ -24,9 +25,10 @@ func NewLicenseHandler(s DataStore, c *license.Claims) *LicenseHandler {
 
 // GET /api/v1/license/status
 func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	seatsUsed := 0
 	if h.store != nil {
-		if count, err := h.store.CountDistinctAgents(r.Context()); err == nil {
+		if count, err := h.store.CountDistinctAgents(r.Context(), tenantID); err == nil {
 			seatsUsed = count
 		}
 	}
@@ -43,6 +45,8 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		"seats_used":      seatsUsed,
 		"seats_remaining": seatsRemaining,
 		"features":        h.claims.Features,
+		"is_trial":        h.claims.IsTrial,
+		"trial_days":      h.claims.TrialDays,
 	}
 	if h.claims.ExpiresAt != nil {
 		resp["expires_at"] = h.claims.ExpiresAt.Time

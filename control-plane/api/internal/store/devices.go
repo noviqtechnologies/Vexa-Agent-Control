@@ -199,7 +199,23 @@ func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
 	if err != nil {
 		return err
 	}
-	if res.RowsAffected() == 0 {
+
+	enrollRes, err := s.pool.Exec(ctx, `
+		UPDATE device_enrollments
+		SET enrollment_status = 'REVOKED', updated_at = NOW()
+		WHERE device_id::text = $1 OR hostname = $1
+	`, deviceID)
+	if err != nil {
+		return err
+	}
+
+	_, _ = s.pool.Exec(ctx, `
+		UPDATE device_compliance_reports
+		SET overall_compliance = 'NON_COMPLIANT', reported_at = NOW()
+		WHERE device_id::text = $1
+	`, deviceID)
+
+	if res.RowsAffected() == 0 && enrollRes.RowsAffected() == 0 {
 		return ErrDeviceNotFound
 	}
 	return nil

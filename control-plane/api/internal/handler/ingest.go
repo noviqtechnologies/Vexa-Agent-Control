@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 )
@@ -24,7 +25,6 @@ func NewIngestHandler(s DataStore, b *sse.Broker, c *license.Claims) *IngestHand
 }
 
 // PostEvent handles POST /api/v1/ingest/events from the gateway.
-// Accepts only the RedactedEvent JSON shape — any unknown fields are rejected.
 func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -40,12 +40,13 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	tenantID := middleware.TenantIDFromContext(ctx)
 
 	// Seat enforcement check: reject new agent registrations if seat cap reached
 	if h.claims != nil && h.claims.MaxSeats > 0 {
-		exists, err := h.store.AgentExists(ctx, event.AgentID)
+		exists, err := h.store.AgentExists(ctx, tenantID, event.AgentID)
 		if err == nil && !exists {
-			count, err := h.store.CountDistinctAgents(ctx)
+			count, err := h.store.CountDistinctAgents(ctx, tenantID)
 			if err == nil && count >= h.claims.MaxSeats {
 				log.Printf("seat limit reached (%d/%d), rejecting new agent %s", count, h.claims.MaxSeats, event.AgentID)
 				w.Header().Set("Content-Type", "application/json")
@@ -60,12 +61,12 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.store.UpsertAgent(ctx, event.AgentID); err != nil {
+	if err := h.store.UpsertAgent(ctx, tenantID, event.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	if err := h.store.InsertEvent(ctx, &event); err != nil {
+	if err := h.store.InsertEvent(ctx, tenantID, &event); err != nil {
 		log.Printf("insert event: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -75,7 +76,6 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 // PostAlert handles POST /api/v1/ingest/alerts from the gateway.
-// Persists the alert and fans out to SSE subscribers (AC-23.2).
 func (h *IngestHandler) PostAlert(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -91,18 +91,19 @@ func (h *IngestHandler) PostAlert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	tenantID := middleware.TenantIDFromContext(ctx)
 
-	if err := h.store.UpsertAgent(ctx, alert.Event.AgentID); err != nil {
+	if err := h.store.UpsertAgent(ctx, tenantID, alert.Event.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	if err := h.store.InsertEvent(ctx, &alert.Event); err != nil {
+	if err := h.store.InsertEvent(ctx, tenantID, &alert.Event); err != nil {
 		log.Printf("insert event for alert: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	if err := h.store.InsertAlert(ctx, &alert); err != nil {
+	if err := h.store.InsertAlert(ctx, tenantID, &alert); err != nil {
 		log.Printf("insert alert: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -130,12 +131,14 @@ func (h *IngestHandler) PostCredential(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if err := h.store.UpsertAgent(ctx, cred.AgentID); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+
+	if err := h.store.UpsertAgent(ctx, tenantID, cred.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	if err := h.store.UpsertCredential(ctx, &cred); err != nil {
+	if err := h.store.UpsertCredential(ctx, tenantID, &cred); err != nil {
 		log.Printf("upsert credential: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -161,7 +164,9 @@ func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if err := h.store.UpsertAgent(ctx, snap.AgentID); err != nil {
+	tenantID := middleware.TenantIDFromContext(ctx)
+
+	if err := h.store.UpsertAgent(ctx, tenantID, snap.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -169,7 +174,7 @@ func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
 
 	for _, s := range snap.Servers {
 		srv := s
-		if err := h.store.UpsertMcpServer(ctx, snap.AgentID, &srv); err != nil {
+		if err := h.store.UpsertMcpServer(ctx, tenantID, snap.AgentID, &srv); err != nil {
 			log.Printf("upsert mcp server: %v", err)
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return

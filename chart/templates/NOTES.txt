@@ -60,7 +60,7 @@ Release:   {{ .Release.Name }}
 • Enable NetworkPolicy enforcement: set networkPolicy.enforced=true on your CR
 • Trigger policy hot-reload: kubectl exec -it <gateway-pod> -- kill -HUP 1
 
-For full docs: https://github.com/noviqtechnologies/agentwall
+For full docs: https://github.com/noviqtechnologies/Vexa-Agent-Control
 
 {{- if and .Values.gateway.tls.enabled .Values.gateway.tls.createSelfSigned }}
 

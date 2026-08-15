@@ -4,6 +4,7 @@ design/
 agentinfo/
 scratch/
 graphify-out/
+infra/gcp-teams-saas-hub/
 
 # Terraform
 .terraform/
@@ -93,5 +94,5 @@ tests/PHASE1_VERIFICATION_TEST_PLAN.docx
 tests/PHASE1_VERIFICATION_TEST_PLAN.md
 tests/fixtures/README.md
 test-cert.pem 
-test-key.pem 
 .claude/
+*cookies*.txt

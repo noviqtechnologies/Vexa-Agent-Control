@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
 type PublishGroupPolicyRequest struct {
@@ -17,18 +19,24 @@ type GroupPolicyHandler struct {
 	store DataStore
 }
 
-func NewHandler(s DataStore) *GroupPolicyHandler {
+func NewGroupPolicyHandler(s DataStore) *GroupPolicyHandler {
 	return &GroupPolicyHandler{store: s}
 }
 
+// Backward compatibility alias
+func NewHandler(s DataStore) *GroupPolicyHandler {
+	return NewGroupPolicyHandler(s)
+}
+
 func (h *GroupPolicyHandler) GetGroupPolicy(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	groupID := chi.URLParam(r, "groupID")
 	if groupID == "" {
 		http.Error(w, "missing groupID", http.StatusBadRequest)
 		return
 	}
 
-	policy, err := h.store.GetActiveGroupPolicy(r.Context(), groupID)
+	policy, err := h.store.GetActiveGroupPolicy(r.Context(), tenantID, groupID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -44,6 +52,7 @@ func (h *GroupPolicyHandler) GetGroupPolicy(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *GroupPolicyHandler) PublishGroupPolicy(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	var req PublishGroupPolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -55,9 +64,12 @@ func (h *GroupPolicyHandler) PublishGroupPolicy(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	createdBy := "system" // Extract from context/auth later
+	createdBy := "system"
+	if claims := middleware.UserClaimsFromContext(r.Context()); claims != nil && claims.UserID != "" {
+		createdBy = claims.UserID
+	}
 
-	policy, err := h.store.PublishGroupPolicy(r.Context(), req.GroupID, req.Claims, req.Tools, createdBy)
+	policy, err := h.store.PublishGroupPolicy(r.Context(), tenantID, req.GroupID, req.Claims, req.Tools, createdBy)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -69,10 +81,15 @@ func (h *GroupPolicyHandler) PublishGroupPolicy(w http.ResponseWriter, r *http.R
 }
 
 func (h *GroupPolicyHandler) ListGroupPolicies(w http.ResponseWriter, r *http.Request) {
-	policies, err := h.store.ListGroupPolicies(r.Context())
+	tenantID := middleware.TenantIDFromContext(r.Context())
+	policies, err := h.store.ListGroupPolicies(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	if policies == nil {
+		policies = []*store.GroupPolicyVersion{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

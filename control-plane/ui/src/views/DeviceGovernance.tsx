@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   listDevices, revokeDeviceV2, createEnrollmentTokenV2,
   type Device, type EnrollmentTokenV2
 } from '../api/client'
+
+const REVOCATION_PRESETS = [
+  'Decommissioned / Offboarded',
+  'Security Incident / Suspected Compromise',
+  'Lost or Stolen Workstation',
+  'Policy Violation / Unapproved Modifications',
+  'Role Transition / Transferred Device',
+  'Custom Reason',
+]
 
 function timeAgo(iso: string): string {
   if (!iso) return 'never'
@@ -22,11 +31,25 @@ export default function DeviceGovernance() {
   const [loading, setLoading] = useState(true)
   const [osFilter, setOsFilter] = useState(searchParams.get('os') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
+
+  // Revocation Modal State
+  const [revokeTarget, setRevokeTarget] = useState<{ deviceId: string; hostname: string } | null>(null)
+  const [revokeReason, setRevokeReason] = useState('Decommissioned / Offboarded')
+  const [revokeCustomReason, setRevokeCustomReason] = useState('')
+  const [revokeIncidentRef, setRevokeIncidentRef] = useState('')
+  const [revoking, setRevoking] = useState(false)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
+
+  // In-Page Notification State
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Enrollment Token Modal State
   const [showTokenModal, setShowTokenModal] = useState(false)
   const [generatedToken, setGeneratedToken] = useState<EnrollmentTokenV2 | null>(null)
   const [tokenReason, setTokenReason] = useState('Workstation Onboarding')
   const [deviceLabel, setDeviceLabel] = useState('')
   const [ttlHours, setTtlHours] = useState(24)
+  const [tokenError, setTokenError] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<'unix' | 'win' | null>(null)
 
   const [allDevices, setAllDevices] = useState<Device[]>([])
@@ -38,14 +61,12 @@ export default function DeviceGovernance() {
 
   const fetchDevices = () => {
     setLoading(true)
-    // Fetch overall device fleet for accurate stat tiles
     listDevices('', '')
       .then((res) => {
         setAllDevices(res.devices || [])
       })
       .catch(() => {})
 
-    // Fetch filtered devices for table display
     listDevices(osFilter, statusFilter)
       .then((res) => {
         setDevices(res.devices || [])
@@ -58,25 +79,58 @@ export default function DeviceGovernance() {
     fetchDevices()
   }, [osFilter, statusFilter])
 
-  const handleRevoke = async (deviceId: string) => {
-    const reason = prompt(`Please enter a mandatory revocation reason for device ${deviceId}:`, 'Decommissioned / Offboarded')
-    if (reason && reason.trim()) {
-      try {
-        await revokeDeviceV2(deviceId, reason.trim())
-        fetchDevices()
-      } catch (e: any) {
-        alert(`Failed to revoke device: ${e.message}`)
-      }
+  const openRevokeModal = (deviceId: string, hostname: string) => {
+    setRevokeTarget({ deviceId, hostname })
+    setRevokeReason('Decommissioned / Offboarded')
+    setRevokeCustomReason('')
+    setRevokeIncidentRef('')
+    setRevokeError(null)
+  }
+
+  const closeRevokeModal = () => {
+    if (revoking) return
+    setRevokeTarget(null)
+    setRevokeError(null)
+  }
+
+  const handleConfirmRevoke = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!revokeTarget) return
+
+    const finalReason = revokeReason === 'Custom Reason' ? revokeCustomReason.trim() : revokeReason
+    if (!finalReason) {
+      setRevokeError('Please provide a valid revocation reason.')
+      return
+    }
+
+    setRevoking(true)
+    setRevokeError(null)
+
+    try {
+      await revokeDeviceV2(revokeTarget.deviceId, finalReason)
+      const targetHost = revokeTarget.hostname || revokeTarget.deviceId
+      setRevokeTarget(null)
+      setNotification({
+        type: 'success',
+        message: `Workstation "${targetHost}" has been revoked successfully. Active credentials invalidated.`,
+      })
+      setTimeout(() => setNotification(null), 6000)
+      fetchDevices()
+    } catch (e: any) {
+      setRevokeError(e.message || 'Failed to revoke device')
+    } finally {
+      setRevoking(false)
     }
   }
 
   const handleGenerateToken = async (e: React.FormEvent) => {
     e.preventDefault()
+    setTokenError(null)
     try {
       const tok = await createEnrollmentTokenV2(tokenReason || 'Workstation Onboarding', deviceLabel, '', ttlHours)
       setGeneratedToken(tok)
     } catch (err: any) {
-      alert(`Failed to create enrollment token: ${err.message}`)
+      setTokenError(err.message || 'Failed to create enrollment token')
     }
   }
 
@@ -87,6 +141,36 @@ export default function DeviceGovernance() {
 
   return (
     <div style={{ padding: '24px' }}>
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-sm, 6px)',
+            backgroundColor: notification.type === 'success' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+            border: `1px solid ${notification.type === 'success' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+            color: notification.type === 'success' ? '#4ade80' : '#f87171',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 500 }}>
+            <span>{notification.type === 'success' ? '✔' : '⚠'}</span>
+            <span>{notification.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotification(null)}
+            style={{ background: 'none', border: 'none', color: 'currentColor', opacity: 0.8, cursor: 'pointer', fontSize: 16 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1>Central Device Governance</h1>
@@ -96,6 +180,7 @@ export default function DeviceGovernance() {
           className="btn btn-primary"
           onClick={() => {
             setGeneratedToken(null)
+            setTokenError(null)
             setShowTokenModal(true)
           }}
         >
@@ -272,7 +357,8 @@ export default function DeviceGovernance() {
                       <button
                         className="btn btn-sm btn-danger"
                         style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        onClick={() => handleRevoke(d.device_id)}
+                        onClick={() => openRevokeModal(d.device_id, d.hostname)}
+                        title="Revoke device PKI and gateway access"
                       >
                         Revoke
                       </button>
@@ -285,14 +371,229 @@ export default function DeviceGovernance() {
         )}
       </div>
 
+      {/* Professional Device Revocation Modal */}
+      {revokeTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeRevokeModal()
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: '100%',
+              maxWidth: '540px',
+              padding: '24px',
+              backgroundColor: 'var(--bg-surface-1, #18181b)',
+              border: '1px solid var(--border-default, #27272a)',
+              borderRadius: 'var(--radius, 8px)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ef4444',
+                    fontSize: '18px',
+                  }}
+                >
+                  ⚠️
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: '#f4f4f5' }}>
+                    Revoke Workstation Credentials
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#71717a' }}>
+                    Immediate cryptographic quarantine
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeRevokeModal}
+                disabled={revoking}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#71717a',
+                  cursor: revoking ? 'not-allowed' : 'pointer',
+                  fontSize: 18,
+                  padding: 4,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#121214',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '12px 14px',
+                marginBottom: 18,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: '#a1a1aa', fontWeight: 600 }}>TARGET WORKSTATION</span>
+                <span style={{ fontSize: 12, color: '#f4f4f5', fontWeight: 600 }}>{revokeTarget.hostname}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#71717a' }}>Device UUID</span>
+                <code style={{ fontSize: 11, fontFamily: 'monospace', color: '#d4d4d8' }}>
+                  {revokeTarget.deviceId}
+                </code>
+              </div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 11, color: '#f87171' }}>
+                ⚠ Revoking will immediately terminate mTLS access, invalidate security daemon tokens, and block proxy AI requests.
+              </div>
+            </div>
+
+            {revokeError && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: 16,
+                  color: '#f87171',
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span>✕</span>
+                <div style={{ flex: 1 }}>{revokeError}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmRevoke}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#f4f4f5' }}>
+                  Revocation Reason *
+                </label>
+                <select
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  disabled={revoking}
+                  className="input"
+                  style={{ width: '100%', padding: '8px 12px', marginBottom: revokeReason === 'Custom Reason' ? 8 : 0 }}
+                >
+                  {REVOCATION_PRESETS.map((preset) => (
+                    <option key={preset} value={preset}>
+                      {preset}
+                    </option>
+                  ))}
+                </select>
+                {revokeReason === 'Custom Reason' && (
+                  <textarea
+                    rows={3}
+                    placeholder="Enter detailed audit reason for revocation..."
+                    value={revokeCustomReason}
+                    onChange={(e) => setRevokeCustomReason(e.target.value)}
+                    required
+                    disabled={revoking}
+                    className="input"
+                    style={{ width: '100%', padding: '8px 12px', resize: 'vertical' }}
+                  />
+                )}
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#f4f4f5' }}>
+                  Incident Reference / Ticket ID (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. SEC-2026-89 or JIRA-1044"
+                  value={revokeIncidentRef}
+                  onChange={(e) => setRevokeIncidentRef(e.target.value)}
+                  disabled={revoking}
+                  className="input"
+                  style={{ width: '100%', padding: '8px 12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeRevokeModal}
+                  disabled={revoking}
+                  style={{ padding: '8px 16px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={revoking || (revokeReason === 'Custom Reason' && !revokeCustomReason.trim())}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    cursor: revoking ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {revoking ? 'Revoking...' : 'Confirm Revocation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Token Modal */}
       {showTokenModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '540px', padding: '24px' }}>
             <h3>Generate One-Time Enrollment Token (OTET)</h3>
             <p style={{ color: '#aaa', fontSize: '13px', marginBottom: '16px' }}>
               Issue a single-use token (OTET) to enroll a team workstation into cryptographic PKI governance.
             </p>
+
+            {tokenError && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: 16,
+                  color: '#f87171',
+                  fontSize: 13,
+                }}
+              >
+                {tokenError}
+              </div>
+            )}
 
             {!generatedToken ? (
               <form onSubmit={handleGenerateToken}>

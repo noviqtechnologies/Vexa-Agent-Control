@@ -305,8 +305,8 @@ export default function FleetOverview() {
                     className="soc-terminal-copy-btn"
                     onClick={() => copyToClipboard(
                       selectedPlatform === 'unix'
-                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash'
-                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex',
+                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash'
+                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex',
                       selectedPlatform
                     )}
                   >
@@ -334,8 +334,8 @@ export default function FleetOverview() {
                     <span className="soc-prompt">{selectedPlatform === 'unix' ? '$' : 'PS >'}</span>
                     <span className="soc-command">
                       {selectedPlatform === 'unix'
-                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash'
-                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex'}
+                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash'
+                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex'}
                     </span>
                   </div>
                 </div>

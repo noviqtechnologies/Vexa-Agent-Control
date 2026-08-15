@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
@@ -22,10 +23,14 @@ func NewProviderKeysHandler(s DataStore, masterKey []byte) *ProviderKeysHandler 
 // List GET /api/v1/providers/keys
 func (h *ProviderKeysHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	keys, err := h.store.ListProviderKeys(ctx)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	keys, err := h.store.ListProviderKeys(ctx, tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
+	}
+	if keys == nil {
+		keys = []store.ProviderKey{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -66,13 +71,17 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	tenantID := middleware.TenantIDFromContext(ctx)
+
 	k := &store.ProviderKey{
+		TenantID:        tenantID,
 		Provider:        strings.ToLower(req.Provider),
 		APIKeyMasked:    masked,
 		APIKeyEncrypted: encryptedKey,
 	}
 
-	if err := h.store.InsertProviderKey(r.Context(), k); err != nil {
+	if err := h.store.InsertProviderKey(ctx, tenantID, k); err != nil {
 		http.Error(w, `{"error":"failed to save key"}`, http.StatusInternalServerError)
 		return
 	}
@@ -93,7 +102,9 @@ func (h *ProviderKeysHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteProviderKey(r.Context(), id); err != nil {
+	ctx := r.Context()
+	tenantID := middleware.TenantIDFromContext(ctx)
+	if err := h.store.DeleteProviderKey(ctx, tenantID, id); err != nil {
 		http.Error(w, `{"error":"failed to delete key"}`, http.StatusInternalServerError)
 		return
 	}

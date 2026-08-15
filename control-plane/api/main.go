@@ -43,6 +43,16 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := db.EnsureOrganizationsSchema(ctx); err != nil {
+		log.Printf("[organizations] schema verification warning: %v", err)
+	}
+	if err := db.EnsureUsersSchema(ctx); err != nil {
+		log.Printf("[users] schema verification warning: %v", err)
+	}
+	if err := db.EnsurePoliciesSchema(ctx); err != nil {
+		log.Printf("[policies] schema verification warning: %v", err)
+	}
+
 	// Initialize Spend v2 Store and Sweeper
 	spendStore := spend.NewStore(db.Pool())
 	if err := spendStore.EnsureSchema(ctx); err != nil {
@@ -61,6 +71,14 @@ func main() {
 	deviceH := handler.NewDeviceHandler(deviceStore)
 
 	sseBroker := sse.NewBroker()
+
+	// Initialize Automated License Issuer (GCP Secret Manager / Env)
+	licenseIssuer, err := license.NewIssuerFromEnv()
+	if err != nil {
+		log.Printf("[license] issuer initialization warning: %v", err)
+	} else if licenseIssuer != nil {
+		log.Printf("[license] automated license issuer initialized with Ed25519 signing key")
+	}
 
 	var activeClaims *license.Claims
 	if cfg.LicenseKey != "" {
@@ -99,10 +117,11 @@ func main() {
 	templateH := handler.NewTemplateHandler(db)
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
+	saasOpH := handler.NewSaaSOperatorHandler(db, licenseIssuer)
 
 	authH.CheckBootstrap()
 
-	groupPolicyH := handler.NewHandler(db)
+	groupPolicyH := handler.NewGroupPolicyHandler(db)
 	gatewayH := handler.NewGatewayHandler()
 	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret)
 	hubSpecH := handler.NewHubSpecHandler(db, sseBroker, cfg.ProviderKeyEncryptionSecret)
@@ -206,18 +225,33 @@ func main() {
 		r.Post("/tamper-log", deviceAdminH.PostTamperLog)
 	})
 
-	// Unauthenticated Auth Routes
+	// Auth Routes
 	r.Route("/api/v1/auth", func(r chi.Router) {
 		r.Post("/login", authH.Login)
 		r.Post("/logout", authH.Logout)
 		r.Get("/providers", authH.ListPublicProviders)
 		r.Get("/oauth/{provider_id}/login", authH.OAuthLogin)
 		r.Get("/oauth/{provider_id}/callback", authH.OAuthCallback)
+		r.With(middleware.DashboardAuth()).Get("/me", authH.Me)
+		r.With(middleware.DashboardAuth()).Post("/setup-initial-password", authH.SetupInitialPassword)
 	})
 
-	// Dashboard API — session cookie auth for human operators.
+	// Dashboard API — session cookie auth for human operators & admins.
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
+
+		// SaaS Operator Admin Routes (Platform Super-Admin only)
+		r.Route("/operator", func(r chi.Router) {
+			r.Use(middleware.RequireSaaSOperator())
+			r.Post("/organizations", saasOpH.CreateOrganization)
+			r.Get("/organizations", saasOpH.ListOrganizations)
+			r.Get("/organizations/{id}", saasOpH.GetOrganization)
+			r.Put("/organizations/{id}", saasOpH.UpdateOrganization)
+			r.Post("/organizations/{id}/status", saasOpH.UpdateStatus)
+			r.Post("/organizations/{id}/renew-license", saasOpH.RenewLicense)
+			r.Post("/organizations/{id}/regenerate-bootstrap", saasOpH.RegenerateBootstrapToken)
+			r.Get("/stats", saasOpH.GetStats)
+		})
 
 		r.Get("/license/status", licenseH.GetStatus)
 		r.Get("/gateways", hubSpecH.ListGateways)
@@ -256,6 +290,8 @@ func main() {
 		// Users
 		r.Get("/users", userH.List)
 		r.Post("/users", userH.Create)
+		r.Post("/users/{id}/password", userH.UpdatePassword)
+		r.Put("/users/{id}/password", userH.UpdatePassword)
 		r.Delete("/users/{id}", userH.Delete)
 		
 		// Policy Management (Operator Auth)

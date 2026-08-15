@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
 
@@ -19,7 +20,8 @@ func NewFleetHandler(s DataStore) *FleetHandler {
 
 // GetOverview returns fleet-wide stats for the dashboard header.
 func (h *FleetHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.store.GetFleetStats(r.Context())
+	tenantID := middleware.TenantIDFromContext(r.Context())
+	stats, err := h.store.GetFleetStats(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -29,10 +31,11 @@ func (h *FleetHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
 
 // ListAgents returns paginated agent summaries.
 func (h *FleetHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	limit := queryInt(r, "limit", 50)
 	offset := queryInt(r, "offset", 0)
 
-	agents, err := h.store.ListAgents(r.Context(), limit, offset)
+	agents, err := h.store.ListAgents(r.Context(), tenantID, limit, offset)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -45,12 +48,13 @@ func (h *FleetHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 
 // GetHeatmap returns hourly decision breakdown for the Fleet Overview heatmap.
 func (h *FleetHandler) GetHeatmap(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	hours := queryInt(r, "hours", 24)
 	if hours > 168 {
 		hours = 168
 	}
 
-	data, err := h.store.GetDecisionHeatmap(r.Context(), hours)
+	data, err := h.store.GetDecisionHeatmap(r.Context(), tenantID, hours)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -63,10 +67,11 @@ func (h *FleetHandler) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 
 // ListEvents returns recent events, optionally filtered by agent.
 func (h *FleetHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	agentID := chi.URLParam(r, "agentID")
 	limit := queryInt(r, "limit", 100)
 
-	events, err := h.store.ListRecentEvents(r.Context(), agentID, limit)
+	events, err := h.store.ListRecentEvents(r.Context(), tenantID, agentID, limit)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

@@ -7,20 +7,20 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
   # Install latest release (mandatory SHA-256 verified, strict error handling)
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 
   agentcontrol --version
   ```
 * **Windows (PowerShell):**
   ```powershell
   # Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
-  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
+  irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
 
   agentcontrol.exe --version
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   agentcontrol.exe --version
   ```
 

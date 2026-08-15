@@ -111,11 +111,17 @@ func (h *AdminV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := "00000000-0000-0000-0000-000000000001"
+	tenantID := r.Header.Get("X-Tenant-ID")
+	if tenantID == "" {
+		tenantID = r.Header.Get("X-Organization-ID")
+	}
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	err := h.Store.RevokeDeviceV2(r.Context(), tenantID, deviceID, req.Reason, "admin_operator")
 	if err != nil {
 		log.Printf("RevokeDevice error for device %s: %v", deviceID, err)
-		http.Error(w, `{"error":{"code":"device_not_found"}}`, http.StatusNotFound)
+		http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found or already revoked"}}`, http.StatusNotFound)
 		return
 	}
 

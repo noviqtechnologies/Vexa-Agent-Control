@@ -40,10 +40,10 @@ func TestLicenseHandler_GetStatus_Community(t *testing.T) {
 
 func TestIngestHandler_SeatEnforcement_RejectedWhenFull(t *testing.T) {
 	ms := &mockStore{
-		agentExistsFunc: func(_ context.Context, agentID string) (bool, error) {
+		agentExistsFunc: func(_ context.Context, _ string, _ string) (bool, error) {
 			return false, nil // New agent
 		},
-		countDistinctAgentsFunc: func(_ context.Context) (int, error) {
+		countDistinctAgentsFunc: func(_ context.Context, _ string) (int, error) {
 			return 10, nil // Already at max 10 seats
 		},
 	}
@@ -75,10 +75,10 @@ func TestIngestHandler_SeatEnforcement_RejectedWhenFull(t *testing.T) {
 
 func TestIngestHandler_SeatEnforcement_AllowedExistingAgent(t *testing.T) {
 	ms := &mockStore{
-		agentExistsFunc: func(_ context.Context, agentID string) (bool, error) {
+		agentExistsFunc: func(_ context.Context, _ string, _ string) (bool, error) {
 			return true, nil // Existing agent
 		},
-		countDistinctAgentsFunc: func(_ context.Context) (int, error) {
+		countDistinctAgentsFunc: func(_ context.Context, _ string) (int, error) {
 			return 10, nil // At 10 seats, but existing agent should still be allowed
 		},
 	}

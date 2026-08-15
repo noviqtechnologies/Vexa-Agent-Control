@@ -14,9 +14,9 @@ type: application
 version: 0.1.0
 appVersion: "1.0.16"
 kubeVersion: ">=1.24.0-0"
-home: https://github.com/noviqtechnologies/agentwall
+home: https://github.com/noviqtechnologies/Vexa-Agent-Control
 sources:
-  - https://github.com/noviqtechnologies/agentwall
+  - https://github.com/noviqtechnologies/Vexa-Agent-Control
 keywords:
   - security
   - mcp
@@ -27,6 +27,6 @@ keywords:
 maintainers:
   - name: Noviq Technologies
     url: https://github.com/noviqtechnologies
-icon: https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/docs/logo.png
+icon: https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/docs/logo.png
 annotations:
   category: Security

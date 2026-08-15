@@ -39,9 +39,9 @@ dev = [
 
 [project.urls]
 Homepage = "https://vexasec.io"
-Documentation = "https://github.com/noviqtechnologies/agentwall/tree/main/docs"
-Repository = "https://github.com/noviqtechnologies/agentwall"
-Issues = "https://github.com/noviqtechnologies/agentwall/issues"
+Documentation = "https://github.com/noviqtechnologies/Vexa-Agent-Control/tree/main/docs"
+Repository = "https://github.com/noviqtechnologies/Vexa-Agent-Control"
+Issues = "https://github.com/noviqtechnologies/Vexa-Agent-Control/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentwall"]

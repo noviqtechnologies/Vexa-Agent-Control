@@ -131,17 +131,17 @@ The fastest path to complete local AI security is **One-Command Protection** via
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
   ```
 
 * **Windows (PowerShell):**
   ```powershell
-  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
+  irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
   ```
 
 * **Windows (Command Prompt):**
   ```cmd
-  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   ```
 
 ### Step 2: Run One-Command Protection

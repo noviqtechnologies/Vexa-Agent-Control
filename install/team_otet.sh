@@ -54,7 +54,8 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-REPO="noviqtechnologies/agentwall"
+INSTALL_DIR="${HOME}/.local/bin"
+REPO="noviqtechnologies/Vexa-Agent-Control"
 echo "[*] Fetching latest release version..."
 VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" \
   | grep '"tag_name"' \

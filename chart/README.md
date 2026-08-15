@@ -1,7 +1,6 @@
-# AgentWall Helm Chart
+# Vexa-Agent-Control Helm Chart
 
-Deploys the [VEXA AgentWall](https://github.com/noviqtechnologies/agentwall)
-security gateway and its Kubernetes operator into a cluster.
+Deploys the [Vexa Agent Control](https://github.com/noviqtechnologies/Vexa-Agent-Control) gateway and optional Kubernetes operator on a cluster.
 
 ## What this chart installs
 

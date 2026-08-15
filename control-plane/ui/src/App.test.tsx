@@ -16,11 +16,19 @@ vi.mock('./views/PolicyInsights', () => ({
 vi.mock('./views/ThreatIntelligence', () => ({
   default: () => <div data-testid="threat-intelligence">ThreatIntelligence</div>,
 }))
+vi.mock('./views/SaaSOperator', () => ({
+  default: () => <div data-testid="saas-operator">SaaSOperator</div>,
+}))
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({}),
+    json: async () => ({
+      user_id: 'admin',
+      tenant_id: '00000000-0000-0000-0000-000000000001',
+      is_admin: true,
+      is_saas_operator: true,
+    }),
   }))
 })
 
@@ -37,7 +45,7 @@ function renderAt(path: string) {
 describe('App routing', () => {
   it('renders accordion navigation items', async () => {
     renderAt('/')
-    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
+    expect(await screen.findByText('Fleet Overview')).toBeInTheDocument()
     expect(screen.getByText('Team & Fleet')).toBeInTheDocument()
     expect(screen.getByText('Policies & Security')).toBeInTheDocument()
     expect(screen.getByText('Spend & Budgets')).toBeInTheDocument()
@@ -59,18 +67,8 @@ describe('App routing', () => {
     expect(await screen.findByTestId('identity-governance')).toBeInTheDocument()
   })
 
-  it('renders PolicyInsights at /policy', async () => {
-    renderAt('/policy')
-    expect(await screen.findByTestId('policy-insights')).toBeInTheDocument()
-  })
-
-  it('renders ThreatIntelligence at /threats', async () => {
-    renderAt('/threats')
-    expect(await screen.findByTestId('threat-intelligence')).toBeInTheDocument()
-  })
-
-  it('shows Agent Control logo', async () => {
-    renderAt('/')
-    expect(await screen.findByText(/Agent Control/i)).toBeInTheDocument()
+  it('renders SaaSOperator at /operator/tenants', async () => {
+    renderAt('/operator/tenants')
+    expect(await screen.findByTestId('saas-operator')).toBeInTheDocument()
   })
 })

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
 )
@@ -19,7 +20,8 @@ func NewAuthProviderHandler(s *store.Store) *AuthProviderHandler {
 }
 
 func (h *AuthProviderHandler) List(w http.ResponseWriter, r *http.Request) {
-	providers, err := h.store.ListAuthProviders(r.Context())
+	tenantID := middleware.TenantIDFromContext(r.Context())
+	providers, err := h.store.ListAuthProviders(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -35,8 +37,9 @@ func (h *AuthProviderHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthProviderHandler) Get(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	id := chi.URLParam(r, "id")
-	provider, err := h.store.GetAuthProvider(r.Context(), id)
+	provider, err := h.store.GetAuthProvider(r.Context(), tenantID, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -52,6 +55,7 @@ func (h *AuthProviderHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthProviderHandler) Upsert(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantIDFromContext(r.Context())
 	var p model.AuthProvider
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -68,7 +72,7 @@ func (h *AuthProviderHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 	}
 	p.UpdatedAt = time.Now()
 	
-	if err := h.store.UpsertAuthProvider(r.Context(), &p); err != nil {
+	if err := h.store.UpsertAuthProvider(r.Context(), tenantID, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

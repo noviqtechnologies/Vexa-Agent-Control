@@ -22,7 +22,7 @@ fi
 
 echo "[*] Target OS: $OS | Arch: $ARCH"
 
-REPO="noviqtechnologies/agentwall"
+REPO="noviqtechnologies/Vexa-Agent-Control"
 
 echo "[*] Fetching latest release version..."
 VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" \

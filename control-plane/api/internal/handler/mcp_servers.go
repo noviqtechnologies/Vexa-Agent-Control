@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
 )
 
 type McpServersHandler struct {
@@ -18,7 +19,8 @@ func NewMcpServersHandler(s DataStore) *McpServersHandler {
 // ListFleetWide GET /api/v1/fleet/mcp-servers
 func (h *McpServersHandler) ListFleetWide(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	servers, err := h.store.ListMcpServersFleetWide(ctx)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	servers, err := h.store.ListMcpServersFleetWide(ctx, tenantID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -39,7 +41,8 @@ func (h *McpServersHandler) ListByAgent(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	servers, err := h.store.ListMcpServersByAgent(ctx, agentID)
+	tenantID := middleware.TenantIDFromContext(ctx)
+	servers, err := h.store.ListMcpServersByAgent(ctx, tenantID, agentID)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

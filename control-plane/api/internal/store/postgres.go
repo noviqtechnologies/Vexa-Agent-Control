@@ -53,74 +53,98 @@ func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
-// UpsertAgent ensures the agent exists, updating last_seen_at on conflict.
-func (s *Store) UpsertAgent(ctx context.Context, agentID string) error {
+// UpsertAgent ensures the agent exists within a tenant, updating last_seen_at on conflict.
+func (s *Store) UpsertAgent(ctx context.Context, tenantID, agentID string) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO agents (agent_id, first_seen_at, last_seen_at)
-		VALUES ($1, now(), now())
+		INSERT INTO agents (tenant_id, agent_id, first_seen_at, last_seen_at)
+		VALUES ($1, $2, now(), now())
 		ON CONFLICT (agent_id) DO UPDATE SET
+			tenant_id    = EXCLUDED.tenant_id,
 			last_seen_at = now(),
 			updated_at   = now()
-	`, agentID)
+	`, tenantID, agentID)
 	return err
 }
 
-// CountDistinctAgents returns the total count of registered devices consuming license seats.
-func (s *Store) CountDistinctAgents(ctx context.Context) (int, error) {
+// CountDistinctAgents returns the total count of registered devices consuming license seats for a tenant.
+func (s *Store) CountDistinctAgents(ctx context.Context, tenantID string) (int, error) {
 	var count int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices`).Scan(&count)
+	var err error
+	if tenantID != "" {
+		err = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices WHERE tenant_id = $1`, tenantID).Scan(&count)
+	} else {
+		err = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices`).Scan(&count)
+	}
 	return count, err
 }
 
-// AgentExists returns true if the specified agentID already exists in the agents table.
-func (s *Store) AgentExists(ctx context.Context, agentID string) (bool, error) {
+// AgentExists returns true if the specified agentID exists within a tenant.
+func (s *Store) AgentExists(ctx context.Context, tenantID, agentID string) (bool, error) {
 	var exists bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = $1)`, agentID).Scan(&exists)
+	var err error
+	if tenantID != "" {
+		err = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = $1 AND tenant_id = $2)`, agentID, tenantID).Scan(&exists)
+	} else {
+		err = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = $1)`, agentID).Scan(&exists)
+	}
 	return exists, err
 }
 
-// InsertEvent persists a redacted event. Caller must UpsertAgent first.
-func (s *Store) InsertEvent(ctx context.Context, e *model.RedactedEvent) error {
+// InsertEvent persists a redacted event scoped to a tenant. Caller must UpsertAgent first.
+func (s *Store) InsertEvent(ctx context.Context, tenantID string, e *model.RedactedEvent) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	dlp, _ := json.Marshal(e.DlpFindings)
 	inj, _ := json.Marshal(e.InjectionFindings)
 	sem, _ := json.Marshal(e.SemanticFindings)
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO telemetry_events
-			(event_id, timestamp_ms, session_id, agent_id, tool_name,
+			(tenant_id, event_id, timestamp_ms, session_id, agent_id, tool_name,
 			 decision, dlp_findings, injection_findings, semantic_findings)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, e.EventID, e.TimestampMs, e.SessionID, e.AgentID, e.ToolName,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, tenantID, e.EventID, e.TimestampMs, e.SessionID, e.AgentID, e.ToolName,
 		e.Decision, dlp, inj, sem)
 	return err
 }
 
-// InsertAlert persists an alert.
-func (s *Store) InsertAlert(ctx context.Context, a *model.RedactedAlert) error {
+// InsertAlert persists an alert scoped to a tenant.
+func (s *Store) InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO alerts (alert_id, severity, event_id)
-		VALUES ($1, $2, $3)
-	`, a.AlertID, a.Severity, a.Event.EventID)
+		INSERT INTO alerts (tenant_id, alert_id, severity, event_id)
+		VALUES ($1, $2, $3, $4)
+	`, tenantID, a.AlertID, a.Severity, a.Event.EventID)
 	return err
 }
 
-// UpsertCredential persists or updates credential metadata.
-func (s *Store) UpsertCredential(ctx context.Context, c *model.SanitizedCredentialMeta) error {
+// UpsertCredential persists or updates credential metadata scoped to a tenant.
+func (s *Store) UpsertCredential(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	history, _ := json.Marshal(c.RotationHistory)
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO identity_credentials
-			(credential_id, agent_id, scope, ttl_seconds,
+			(tenant_id, credential_id, agent_id, scope, ttl_seconds,
 			 created_at_ms, expires_at_ms, last_rotated_at_ms, rotation_history)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (credential_id) DO UPDATE SET
+			tenant_id          = EXCLUDED.tenant_id,
 			scope              = EXCLUDED.scope,
 			ttl_seconds        = EXCLUDED.ttl_seconds,
 			expires_at_ms      = EXCLUDED.expires_at_ms,
 			last_rotated_at_ms = EXCLUDED.last_rotated_at_ms,
 			rotation_history   = EXCLUDED.rotation_history,
 			updated_at         = now()
-	`, c.CredentialID, c.AgentID, c.Scope, c.TTLSeconds,
+	`, tenantID, c.CredentialID, c.AgentID, c.Scope, c.TTLSeconds,
 		c.CreatedAtMs, c.ExpiresAtMs, c.LastRotatedAtMs, history)
 	return err
 }
@@ -137,7 +161,10 @@ type AgentSummary struct {
 	AlertCount    int64     `json:"alert_count"`
 }
 
-func (s *Store) ListAgents(ctx context.Context, limit, offset int) ([]AgentSummary, error) {
+func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset int) ([]AgentSummary, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			a.agent_id,
@@ -151,17 +178,20 @@ func (s *Store) ListAgents(ctx context.Context, limit, offset int) ([]AgentSumma
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
+			WHERE tenant_id = $1
 			GROUP BY agent_id
 		) e ON e.agent_id = a.agent_id
 		LEFT JOIN (
 			SELECT te.agent_id, COUNT(*) AS cnt
 			FROM alerts al
 			JOIN telemetry_events te ON te.event_id = al.event_id
+			WHERE al.tenant_id = $1
 			GROUP BY te.agent_id
 		) al ON al.agent_id = a.agent_id
+		WHERE a.tenant_id = $1
 		ORDER BY a.last_seen_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		LIMIT $2 OFFSET $3
+	`, tenantID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -188,22 +218,28 @@ type FleetStats struct {
 	CriticalAlerts int64 `json:"critical_alerts"`
 }
 
-func (s *Store) GetFleetStats(ctx context.Context) (*FleetStats, error) {
+func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM devices),
-			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'),
-			(SELECT COUNT(*) FROM telemetry_events),
-			(SELECT COUNT(*) FROM telemetry_events WHERE decision = 'denied'),
-			(SELECT COUNT(*) FROM alerts),
-			(SELECT COUNT(*) FROM alerts WHERE severity = 'critical')
-	`).Scan(&stats.TotalAgents, &stats.ActiveAgents, &stats.TotalEvents,
+			(SELECT COUNT(*) FROM devices WHERE tenant_id = $1),
+			(SELECT COUNT(*) FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'),
+			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1),
+			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied'),
+			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1),
+			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1 AND severity = 'critical')
+	`, tenantID).Scan(&stats.TotalAgents, &stats.ActiveAgents, &stats.TotalEvents,
 		&stats.DeniedEvents, &stats.TotalAlerts, &stats.CriticalAlerts)
 	return &stats, err
 }
 
-func (s *Store) ListRecentAlerts(ctx context.Context, limit int) ([]model.RedactedAlert, error) {
+func (s *Store) ListRecentAlerts(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			a.alert_id, a.severity,
@@ -212,9 +248,10 @@ func (s *Store) ListRecentAlerts(ctx context.Context, limit int) ([]model.Redact
 			e.dlp_findings, e.injection_findings, e.semantic_findings
 		FROM alerts a
 		JOIN telemetry_events e ON e.event_id = a.event_id
+		WHERE a.tenant_id = $1
 		ORDER BY a.created_at DESC
-		LIMIT $1
-	`, limit)
+		LIMIT $2
+	`, tenantID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -245,19 +282,23 @@ type RecentEvent struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (s *Store) ListRecentEvents(ctx context.Context, agentID string, limit int) ([]RecentEvent, error) {
+func (s *Store) ListRecentEvents(ctx context.Context, tenantID, agentID string, limit int) ([]RecentEvent, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	query := `
 		SELECT event_id, timestamp_ms, session_id, agent_id, tool_name,
 		       decision, dlp_findings, injection_findings, semantic_findings, created_at
 		FROM telemetry_events
+		WHERE tenant_id = $1
 	`
 	var args []any
 	if agentID != "" {
-		query += ` WHERE agent_id = $1 ORDER BY timestamp_ms DESC LIMIT $2`
-		args = []any{agentID, limit}
+		query += ` AND agent_id = $2 ORDER BY timestamp_ms DESC LIMIT $3`
+		args = []any{tenantID, agentID, limit}
 	} else {
-		query += ` ORDER BY timestamp_ms DESC LIMIT $1`
-		args = []any{limit}
+		query += ` ORDER BY timestamp_ms DESC LIMIT $2`
+		args = []any{tenantID, limit}
 	}
 
 	rows, err := s.pool.Query(ctx, query, args...)
@@ -285,18 +326,23 @@ func (s *Store) ListRecentEvents(ctx context.Context, agentID string, limit int)
 	return events, rows.Err()
 }
 
-func (s *Store) ListCredentials(ctx context.Context, agentID string) ([]model.SanitizedCredentialMeta, error) {
+func (s *Store) ListCredentials(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	query := `
 		SELECT credential_id, agent_id, scope, ttl_seconds,
 		       created_at_ms, expires_at_ms, last_rotated_at_ms, rotation_history
 		FROM identity_credentials
+		WHERE tenant_id = $1
 	`
 	var args []any
 	if agentID != "" {
-		query += ` WHERE agent_id = $1 ORDER BY expires_at_ms ASC`
-		args = []any{agentID}
+		query += ` AND agent_id = $2 ORDER BY expires_at_ms ASC`
+		args = []any{tenantID, agentID}
 	} else {
 		query += ` ORDER BY expires_at_ms ASC`
+		args = []any{tenantID}
 	}
 
 	rows, err := s.pool.Query(ctx, query, args...)
@@ -329,7 +375,10 @@ type DecisionBreakdown struct {
 	Warned   int64  `json:"warned"`
 }
 
-func (s *Store) GetDecisionHeatmap(ctx context.Context, hours int) ([]DecisionBreakdown, error) {
+func (s *Store) GetDecisionHeatmap(ctx context.Context, tenantID string, hours int) ([]DecisionBreakdown, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			to_char(to_timestamp(timestamp_ms / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:00') AS hour,
@@ -337,10 +386,10 @@ func (s *Store) GetDecisionHeatmap(ctx context.Context, hours int) ([]DecisionBr
 			COUNT(*) FILTER (WHERE decision = 'denied')  AS denied,
 			COUNT(*) FILTER (WHERE decision = 'warned')  AS warned
 		FROM telemetry_events
-		WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
 		GROUP BY hour
 		ORDER BY hour
-	`, hours)
+	`, tenantID, hours)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +417,10 @@ type ThreatSummary struct {
 	EventsWithSem  int64 `json:"events_with_semantic"`
 }
 
-func (s *Store) GetThreatSummary(ctx context.Context, hours int) (*ThreatSummary, error) {
+func (s *Store) GetThreatSummary(ctx context.Context, tenantID string, hours int) (*ThreatSummary, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	var ts ThreatSummary
 	err := s.pool.QueryRow(ctx, `
 		SELECT
@@ -379,8 +431,8 @@ func (s *Store) GetThreatSummary(ctx context.Context, hours int) (*ThreatSummary
 			COUNT(*) FILTER (WHERE jsonb_array_length(injection_findings) > 0),
 			COUNT(*) FILTER (WHERE jsonb_array_length(semantic_findings) > 0)
 		FROM telemetry_events
-		WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
-	`, hours).Scan(
+		WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
+	`, tenantID, hours).Scan(
 		&ts.DlpTotal, &ts.InjectionTotal, &ts.SemanticTotal,
 		&ts.EventsWithDlp, &ts.EventsWithInj, &ts.EventsWithSem,
 	)
@@ -394,7 +446,10 @@ type ThreatTimelinePoint struct {
 	Semantic  int64  `json:"semantic"`
 }
 
-func (s *Store) GetThreatTimeline(ctx context.Context, hours int) ([]ThreatTimelinePoint, error) {
+func (s *Store) GetThreatTimeline(ctx context.Context, tenantID string, hours int) ([]ThreatTimelinePoint, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			to_char(to_timestamp(timestamp_ms / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:00') AS hour,
@@ -402,10 +457,10 @@ func (s *Store) GetThreatTimeline(ctx context.Context, hours int) ([]ThreatTimel
 			COALESCE(SUM(jsonb_array_length(injection_findings)), 0),
 			COALESCE(SUM(jsonb_array_length(semantic_findings)), 0)
 		FROM telemetry_events
-		WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+		WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
 		GROUP BY hour
 		ORDER BY hour
-	`, hours)
+	`, tenantID, hours)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +485,10 @@ type ThreatPattern struct {
 	EventCount  int64  `json:"event_count"`
 }
 
-func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) ([]ThreatPattern, error) {
+func (s *Store) GetTopThreatPatterns(ctx context.Context, tenantID string, hours int, limit int) ([]ThreatPattern, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		WITH dlp AS (
 			SELECT
@@ -440,7 +498,7 @@ func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) 
 				(f->>'count')::BIGINT AS cnt
 			FROM telemetry_events,
 				jsonb_array_elements(dlp_findings) AS f
-			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+			WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
 		),
 		injection AS (
 			SELECT
@@ -450,7 +508,7 @@ func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) 
 				(f->>'count')::BIGINT AS cnt
 			FROM telemetry_events,
 				jsonb_array_elements(injection_findings) AS f
-			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+			WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
 		),
 		semantic AS (
 			SELECT
@@ -460,7 +518,7 @@ func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) 
 				1::BIGINT AS cnt
 			FROM telemetry_events,
 				jsonb_array_elements(semantic_findings) AS f
-			WHERE timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $1 * 3600000)::BIGINT
+			WHERE tenant_id = $1 AND timestamp_ms > (EXTRACT(EPOCH FROM now()) * 1000 - $2 * 3600000)::BIGINT
 		),
 		combined AS (
 			SELECT * FROM dlp
@@ -473,8 +531,8 @@ func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) 
 		FROM combined
 		GROUP BY type, pattern_name, category
 		ORDER BY total_count DESC
-		LIMIT $2
-	`, hours, limit)
+		LIMIT $3
+	`, tenantID, hours, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -491,8 +549,7 @@ func (s *Store) GetTopThreatPatterns(ctx context.Context, hours int, limit int) 
 	return patterns, rows.Err()
 }
 
-// RunMigrations applies the SQL migration files. For Phase 1, this is a
-// simple single-file apply. Phase 2 will switch to golang-migrate.
+// RunMigrations applies the SQL migration files.
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationSQL string) error {
 	_, err := pool.Exec(ctx, migrationSQL)
 	return err
@@ -507,26 +564,33 @@ type McpServerInventoryRow struct {
 	LastSeenAt   string `json:"last_seen_at"`
 }
 
-func (s *Store) UpsertMcpServer(ctx context.Context, agentID string, m *model.SanitizedMcpServerMeta) error {
+func (s *Store) UpsertMcpServer(ctx context.Context, tenantID, agentID string, m *model.SanitizedMcpServerMeta) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO mcp_servers
-			(agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at)
-		VALUES ($1, $2, $3, $4, $5, now())
+			(tenant_id, agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
 		ON CONFLICT (agent_id, ide_target, server_name) DO UPDATE SET
+			tenant_id     = EXCLUDED.tenant_id,
 			wrapped       = EXCLUDED.wrapped,
 			path_verified = EXCLUDED.path_verified,
 			last_seen_at  = now()
-	`, agentID, m.IDETarget, m.ServerName, m.Wrapped, m.PathVerified)
+	`, tenantID, agentID, m.IDETarget, m.ServerName, m.Wrapped, m.PathVerified)
 	return err
 }
 
-func (s *Store) ListMcpServersByAgent(ctx context.Context, agentID string) ([]McpServerInventoryRow, error) {
+func (s *Store) ListMcpServersByAgent(ctx context.Context, tenantID, agentID string) ([]McpServerInventoryRow, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at
 		FROM mcp_servers
-		WHERE agent_id = $1
+		WHERE tenant_id = $1 AND agent_id = $2
 		ORDER BY last_seen_at DESC
-	`, agentID)
+	`, tenantID, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +609,10 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, agentID string) ([]Mc
 	return servers, rows.Err()
 }
 
-func (s *Store) ListMcpServersFleetWide(ctx context.Context) ([]McpServerInventoryRow, error) {
+func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([]McpServerInventoryRow, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT a.agent_id, 
 		       COALESCE(m.ide_target, ''), 
@@ -553,10 +620,11 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context) ([]McpServerInvento
 		       COALESCE(m.wrapped, false), 
 		       COALESCE(m.path_verified, false), 
 		       COALESCE(m.last_seen_at, a.last_seen_at)
-		FROM mcp_servers m
-		RIGHT JOIN agents a ON a.agent_id = m.agent_id
+		FROM agents a
+		LEFT JOIN mcp_servers m ON a.agent_id = m.agent_id AND m.tenant_id = $1
+		WHERE a.tenant_id = $1
 		ORDER BY a.agent_id ASC, m.last_seen_at DESC
-	`)
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}

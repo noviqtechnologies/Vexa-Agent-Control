@@ -62,7 +62,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 
 ```bash
 # Install latest release (mandatory SHA-256 verified, strict error handling)
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 
 agentwall --version
 ```
@@ -114,7 +114,7 @@ agentwall service status
 
 ```powershell
 # Install latest release (mandatory SHA-256 verified, auto-adds to user PATH)
-irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
 
 agentwall.exe --version
 ```

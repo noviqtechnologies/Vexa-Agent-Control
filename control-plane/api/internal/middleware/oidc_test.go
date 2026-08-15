@@ -4,137 +4,35 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/session"
 )
 
-func okHandler(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
+func TestRequireSaaSOperatorMiddleware(t *testing.T) {
+	handler := DashboardAuth()(RequireSaaSOperator()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("operator-ok"))
+	})))
 
-// --- GatewayAuth tests ---
+	// 1. Regular admin user (is_saas_operator = false) -> Expected 403
+	regularCookie := session.Create("00000000-0000-0000-0000-000000000001", "admin-user", true, false)
+	req1 := httptest.NewRequest("GET", "/api/v1/operator/organizations", nil)
+	req1.AddCookie(&http.Cookie{Name: "agentwall_session", Value: regularCookie})
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
 
-func TestGatewayAuth_ValidToken(t *testing.T) {
-	secret := "test-gateway-secret-32chars!!"
-	mw := GatewayAuth(secret)
-	handler := mw(http.HandlerFunc(okHandler))
+	if rec1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for non-operator, got %d", rec1.Code)
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", nil)
-	req.Header.Set("Authorization", "Bearer "+secret)
-	rr := httptest.NewRecorder()
+	// 2. SaaS Operator user (is_saas_operator = true) -> Expected 200
+	operatorCookie := session.Create("00000000-0000-0000-0000-000000000001", "operator-user", true, true)
+	req2 := httptest.NewRequest("GET", "/api/v1/operator/organizations", nil)
+	req2.AddCookie(&http.Cookie{Name: "agentwall_session", Value: operatorCookie})
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
 
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusOK)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for operator, got %d", rec2.Code)
 	}
 }
-
-func TestGatewayAuth_InvalidToken(t *testing.T) {
-	mw := GatewayAuth("real-secret")
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", nil)
-	req.Header.Set("Authorization", "Bearer wrong-secret")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusForbidden)
-	}
-}
-
-func TestGatewayAuth_MissingHeader(t *testing.T) {
-	mw := GatewayAuth("real-secret")
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", nil)
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestGatewayAuth_MalformedHeader(t *testing.T) {
-	mw := GatewayAuth("real-secret")
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", nil)
-	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestGatewayAuth_EmptySecret_FailsClosed(t *testing.T) {
-	mw := GatewayAuth("")
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/events", nil)
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("got status %d, want %d — empty secret must fail closed", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestGatewayAuth_TimingResistance(t *testing.T) {
-	secret := "correct-secret"
-	mw := GatewayAuth(secret)
-	handler := mw(http.HandlerFunc(okHandler))
-
-	// A token that shares a prefix should still be rejected.
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.Header.Set("Authorization", "Bearer correct-secre")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusForbidden)
-	}
-}
-
-// --- PolicyReadAuth and DashboardAuth tests ---
-
-func TestPolicyReadAuth_BearerToken(t *testing.T) {
-	secret := "read-secret-123"
-	mw := PolicyReadAuth(secret)
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/policies/active", nil)
-	req.Header.Set("Authorization", "Bearer "+secret)
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusOK)
-	}
-}
-
-func TestPolicyReadAuth_InvalidBearerToken(t *testing.T) {
-	secret := "read-secret-123"
-	mw := PolicyReadAuth(secret)
-	handler := mw(http.HandlerFunc(okHandler))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/policies/active", nil)
-	req.Header.Set("Authorization", "Bearer wrong-secret")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("got status %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-

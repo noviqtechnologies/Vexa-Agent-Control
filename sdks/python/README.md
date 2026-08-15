@@ -1,6 +1,6 @@
-# Vexa Agent Control Python Client SDK
+# Vexa Agent Control — Python SDK
 
-Python client for the [Vexa Agent Control](https://github.com/noviqtechnologies/agentwall) AI Security Gateway & Firewall.
+Python client for the [Vexa Agent Control](https://github.com/noviqtechnologies/Vexa-Agent-Control) AI Security Gateway & Firewall.
 
 Routes AI agent tool calls and LLM egress through the out-of-process Agent Control proxy, enforcing default-deny policies, DLP secret redaction, prompt injection scanning, spend caps, and Human-in-the-Loop approvals without running governance logic in-process.
 

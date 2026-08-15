@@ -56,11 +56,14 @@ export default function IdentityGovernance() {
   }
 
   const [showModal, setShowModal] = useState(false)
+  const [copiedCurl, setCopiedCurl] = useState(false)
 
   if (loading) return <div className="loading">Loading identity data</div>
 
-  const sampleCurl = `curl -X POST http://localhost:8080/api/v1/ingest/credentials \\
+  const hubOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'
+  const sampleCurl = `curl -X POST ${hubOrigin}/api/v1/ingest/credentials \\
   -H "Content-Type: application/json" \\
+  -H "X-Gateway-Secret: local-dev-shared-secret-change-me" \\
   -d '{
     "credential_id": "cred-agent-01",
     "agent_id": "agent-sentry-01",
@@ -145,10 +148,11 @@ export default function IdentityGovernance() {
                 className="btn btn-secondary"
                 onClick={() => {
                   navigator.clipboard.writeText(sampleCurl)
-                  alert('cURL snippet copied to clipboard!')
+                  setCopiedCurl(true)
+                  setTimeout(() => setCopiedCurl(false), 2000)
                 }}
               >
-                Copy cURL Snippet
+                {copiedCurl ? '✔ Copied to Clipboard!' : 'Copy cURL Snippet'}
               </button>
               <button
                 type="button"
