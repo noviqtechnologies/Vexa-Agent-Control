@@ -43,6 +43,7 @@ export default function FleetOverview() {
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null)
+  const [selectedPlatform, setSelectedPlatform] = useState<'unix' | 'windows'>('unix')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -112,7 +113,7 @@ export default function FleetOverview() {
           <button
             type="button"
             className="soc-btn-primary"
-            onClick={() => navigate('/admin/devices')}
+            onClick={() => navigate('/devices')}
           >
             + Enroll Device
           </button>
@@ -122,7 +123,7 @@ export default function FleetOverview() {
       {/* Stat tiles */}
       {stats && (
         <div className="stats-grid soc-stats-grid">
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to view Central Device Governance">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Device Governance">
             <div className="stat-header-row">
               <div className="stat-label">Total Devices</div>
               <span className="soc-delta-badge delta-neutral">Fleet</span>
@@ -131,7 +132,7 @@ export default function FleetOverview() {
             <div className="stat-subtext">Enrolled Machines</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices?status=COMPLIANT')} title="Click to view Compliant Active Devices">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Compliant Active Devices">
             <div className="stat-header-row">
               <div className="stat-label">Active Devices</div>
               <span className="soc-delta-badge delta-success">Compliant</span>
@@ -177,7 +178,7 @@ export default function FleetOverview() {
           </div>
 
           {licenseStatus && (
-            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/admin/devices')} title="Click to manage Device Seat Allocations">
+            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to manage Device Seat Allocations">
               <div className="stat-header-row">
                 <div className="stat-label">Seats Used ({licenseStatus.tier.toUpperCase()})</div>
                 <span className="soc-delta-badge delta-neutral">{licenseStatus.seats_remaining} left</span>
@@ -246,39 +247,105 @@ export default function FleetOverview() {
         ) : (
           <div className="soc-empty-heatmap">
             <div className="empty-state">No events in the last 24 hours</div>
-            <div className="soc-quickstart-box">
-              <div className="soc-quickstart-header">
-                <span className="soc-qs-icon">⚡</span>
-                <strong>Quickstart: Connect Your First Agent Node</strong>
-              </div>
-              <p>Install the Agentwall sidecar daemon to automatically intercept MCP, HTTP, and LLM egress requests:</p>
-              
-              <div className="soc-code-snippet-row">
-                <div className="soc-snippet-label">Linux / macOS:</div>
-                <div className="soc-code-box">
-                  <code>curl -fsSL https://get.agentwall.io/install.sh | bash</code>
+            
+            <div className="soc-quickstart-card">
+              <div className="soc-quickstart-top">
+                <div className="soc-qs-header-info">
+                  <div className="soc-qs-title">
+                    <span className="soc-qs-icon">⚡</span>
+                    <strong>Quickstart: Protect Your First Workstation</strong>
+                  </div>
+                  <p className="soc-qs-desc">
+                    Install Agent Control and run <code className="soc-inline-code">agentcontrol protect</code> to automatically discover and govern AI IDEs (Cursor, VS Code, JetBrains, Claude Desktop):
+                  </p>
+                </div>
+
+                {/* OS Switcher Tabs */}
+                <div className="soc-os-tabs" role="tablist">
                   <button
                     type="button"
-                    className="soc-btn-copy"
-                    onClick={() => copyToClipboard('curl -fsSL https://get.agentwall.io/install.sh | bash', 'linux')}
+                    role="tab"
+                    aria-selected={selectedPlatform === 'unix'}
+                    className={`soc-os-tab ${selectedPlatform === 'unix' ? 'active' : ''}`}
+                    onClick={() => setSelectedPlatform('unix')}
                   >
-                    {copiedSnippet === 'linux' ? '✓ Copied' : 'Copy'}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
+                    </svg>
+                    macOS / Linux / WSL
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedPlatform === 'windows'}
+                    className={`soc-os-tab ${selectedPlatform === 'windows' ? 'active' : ''}`}
+                    onClick={() => setSelectedPlatform('windows')}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                    </svg>
+                    Windows (PowerShell)
                   </button>
                 </div>
               </div>
 
-              <div className="soc-code-snippet-row" style={{ marginTop: 8 }}>
-                <div className="soc-snippet-label">Windows (PowerShell):</div>
-                <div className="soc-code-box">
-                  <code>irm https://get.agentwall.io/install.ps1 | iex</code>
+              {/* Terminal Snippet Box */}
+              <div className="soc-terminal-frame">
+                <div className="soc-terminal-topbar">
+                  <div className="soc-terminal-controls">
+                    <span className="ctrl-dot red" />
+                    <span className="ctrl-dot yellow" />
+                    <span className="ctrl-dot green" />
+                  </div>
+                  <span className="soc-terminal-label">
+                    {selectedPlatform === 'unix' ? 'Terminal — Bash' : 'PowerShell — Terminal'}
+                  </span>
                   <button
                     type="button"
-                    className="soc-btn-copy"
-                    onClick={() => copyToClipboard('irm https://get.agentwall.io/install.ps1 | iex', 'windows')}
+                    className="soc-terminal-copy-btn"
+                    onClick={() => copyToClipboard(
+                      selectedPlatform === 'unix'
+                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash'
+                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex',
+                      selectedPlatform
+                    )}
                   >
-                    {copiedSnippet === 'windows' ? '✓ Copied' : 'Copy'}
+                    {copiedSnippet === selectedPlatform ? (
+                      <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span style={{ color: '#10b981', fontWeight: 600 }}>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        <span>Copy</span>
+                      </>
+                    )}
                   </button>
                 </div>
+
+                <div className="soc-terminal-content">
+                  <div className="soc-code-line">
+                    <span className="soc-prompt">{selectedPlatform === 'unix' ? '$' : 'PS >'}</span>
+                    <span className="soc-command">
+                      {selectedPlatform === 'unix'
+                        ? 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash'
+                        : 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Assurance Footnote Badges */}
+              <div className="soc-qs-footer-badges">
+                <span className="soc-pill-badge">🛡️ 9 IDEs Auto-Detected</span>
+                <span className="soc-pill-badge">🔐 Hardware Ed25519 PKI</span>
+                <span className="soc-pill-badge">⚡ Zero-Config Local Setup</span>
               </div>
             </div>
           </div>

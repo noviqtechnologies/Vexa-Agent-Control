@@ -75,9 +75,9 @@ fn test_ac4_2_all_tools_present() {
         make_event("tool_c", "{}", "2026-06-11T10:02:00Z"),
     ];
     let yaml = generate_from_events(&events, 30);
-    assert!(yaml.contains("- name: tool_a"));
-    assert!(yaml.contains("- name: tool_b"));
-    assert!(yaml.contains("- name: tool_c"));
+    assert!(yaml.contains("- name: \"tool_a\"") || yaml.contains("- name: tool_a"));
+    assert!(yaml.contains("- name: \"tool_b\"") || yaml.contains("- name: tool_b"));
+    assert!(yaml.contains("- name: \"tool_c\"") || yaml.contains("- name: tool_c"));
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn test_ac4_6_nested_json_5levels() {
     )];
     let yaml = generate_from_events(&events, 30);
     // Should be flattened to l1.l2.l3.l4.l5
-    assert!(yaml.contains("name: l1.l2.l3.l4.l5"));
+    assert!(yaml.contains("name: \"l1.l2.l3.l4.l5\"") || yaml.contains("name: l1.l2.l3.l4.l5"));
 }
 
 #[test]
@@ -241,3 +241,93 @@ fn test_large_event_set() {
         duration
     );
 }
+
+#[test]
+fn test_generate_default_baseline_policy() {
+    let yaml = agentwall::generate_policy::generate_default_baseline_policy();
+    assert!(yaml.contains("version: \"2.1\""));
+    assert!(yaml.contains("auto_block_sensitive_exfiltration"));
+    assert!(yaml.contains("read_file"));
+    assert!(yaml.contains("exec_shell"));
+    assert!(yaml.contains("firewall:"));
+
+    let file = write_temp_policy(&yaml);
+    let exit_code = agentwall::lint::execute(file.path().to_str().unwrap()).unwrap();
+    assert!(
+        exit_code == 0 || exit_code == 2,
+        "Baseline policy should be lint-passing, got: {}",
+        exit_code
+    );
+}
+
+#[test]
+fn test_multiline_string_value_escaping() {
+    let multiline_val = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
+    let payload = serde_json::json!({
+        "content": multiline_val,
+        "path": "credentials.key"
+    });
+    let events = vec![make_event("write_file", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let yaml = generate_from_events(&events, 30);
+
+    // Verify CompiledPolicy can parse generated YAML without error
+    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    assert!(
+        compiled.is_ok(),
+        "Generated YAML failed to parse: {:?}",
+        compiled.err()
+    );
+
+    let file = write_temp_policy(&yaml);
+    let exit_code = agentwall::lint::execute(file.path().to_str().unwrap()).unwrap();
+    assert!(
+        exit_code == 0 || exit_code == 2,
+        "Generated policy with multiline string should pass linting, got: {}",
+        exit_code
+    );
+}
+
+#[test]
+fn test_tool_and_param_name_with_colons_escaped() {
+    let payload = serde_json::json!({
+        "header:authorization": "Bearer token123",
+        "user:id": "usr_456"
+    });
+    let events = vec![make_event("api:call", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let yaml = generate_from_events(&events, 30);
+
+    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    assert!(
+        compiled.is_ok(),
+        "Generated YAML with colons in tool/param names failed to parse: {:?}",
+        compiled.err()
+    );
+}
+
+#[test]
+fn test_multiline_rsa_key_not_in_enum() {
+    let rsa_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
+    let payload = serde_json::json!({
+        "content": rsa_key,
+        "path": "/home/user/.ssh/id_rsa"
+    });
+    let events = vec![make_event("write_file", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let yaml = generate_from_events(&events, 30);
+
+    // Multiline RSA key must NOT be emitted under # enum:
+    assert!(
+        !yaml.contains("BEGIN RSA PRIVATE KEY"),
+        "Multiline RSA key should be excluded from # enum:"
+    );
+
+    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    assert!(
+        compiled.is_ok(),
+        "Generated YAML with multiline RSA key write_file failed to parse: {:?}",
+        compiled.err()
+    );
+}
+
+
+
+

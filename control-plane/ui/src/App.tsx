@@ -6,12 +6,12 @@ import FleetOverview from './views/FleetOverview'
 import IdentityGovernance from './views/IdentityGovernance'
 import PolicyInsights from './views/PolicyInsights'
 import PolicyEditor from './views/PolicyEditor'
+import PolicyMarketplace from './views/PolicyMarketplace'
 import ThreatIntelligence from './views/ThreatIntelligence'
 import AuthProviders from './views/AuthProviders'
 import Users from './views/Users'
 import SafeMode from './views/SafeMode'
 import AuditLogs from './views/AuditLogs'
-import IdeConnections from './views/IdeConnections'
 import Login from './views/Login'
 import RequireAdmin from './auth/RequireAdmin'
 import McpServers from './views/McpServers'
@@ -21,7 +21,8 @@ import SpendLimits from './views/SpendLimits'
 import IncreaseRequests from './views/IncreaseRequests'
 import SpendStatus from './views/SpendStatus'
 import SpendVisualization from './views/SpendVisualization'
-import DeviceGovernance from './views/DeviceGovernance'
+import Devices from './views/Devices'
+import TamperLog from './views/TamperLog'
 import CommandPalette from './components/CommandPalette'
 import NotificationCenter from './components/NotificationCenter'
 
@@ -34,37 +35,8 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    id: 'policy',
-    label: 'Policy Management',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Active Policies', to: '/policy' },
-      { label: 'Policy Editor', to: '/policy/edit' },
-      { label: 'Group Policies', to: '/policy/group' },
-      { label: 'Safe Mode', to: '/policy/safe-mode' },
-    ],
-  },
-  {
-    id: 'observation',
-    label: 'Observation & Routing',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-        <circle cx="12" cy="12" r="3"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Threat Intelligence', to: '/threats' },
-      { label: 'Audit Logs', to: '/audit' },
-    ],
-  },
-  {
-    id: 'users',
-    label: 'User Management',
+    id: 'team',
+    label: 'Team & Fleet',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -74,14 +46,29 @@ const NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Device Governance', to: '/admin/devices' },
-      { label: 'Users', to: '/admin/users' },
-      { label: 'Auth Providers', to: '/admin/auth-providers' },
+      { label: 'Device Governance', to: '/devices' },
+      { label: 'IDE Tamper Log', to: '/devices/tamper-log' },
+      { label: 'Users & Roles', to: '/admin/users' },
+      { label: 'Auth Providers & SSO', to: '/admin/auth-providers' },
+    ],
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations & Keys',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <path d="M8 21h8m-4-4v4"/>
+      </svg>
+    ),
+    children: [
+      { label: 'LLM Providers', to: '/integrations/llm-providers' },
+      { label: 'MCP Servers', to: '/integrations/mcp-servers' },
     ],
   },
   {
     id: 'spend',
-    label: 'Spend Management',
+    label: 'Spend & Budgets',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
@@ -91,22 +78,26 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Spend Limits', to: '/spend/limits' },
       { label: 'Increase Requests', to: '/spend/requests' },
       { label: 'Spend Status', to: '/spend/status' },
-      { label: 'Visualization', to: '/spend/visualization' },
+      { label: 'Usage Analytics', to: '/spend/visualization' },
     ],
   },
   {
-    id: 'integrations',
-    label: 'Ecosystem Integrations',
+    id: 'policies',
+    label: 'Policies & Security',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="2" y="3" width="20" height="14" rx="2"/>
-        <path d="M8 21h8m-4-4v4"/>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
     ),
     children: [
-      { label: 'IDE Connections', to: '/integrations/ide' },
-      { label: 'MCP Servers', to: '/integrations/mcp-servers' },
-      { label: 'LLM Providers', to: '/integrations/llm-providers' },
+      { label: 'Active Policies', to: '/policy' },
+      { label: 'Policy Marketplace', to: '/policy/marketplace' },
+      { label: 'Policy Editor', to: '/policy/edit' },
+      { label: 'Group Policies', to: '/policy/group' },
+      { label: 'Threat Intelligence', to: '/threats' },
+      { label: 'Audit Logs', to: '/audit' },
+      { label: 'Safe Mode', to: '/policy/safe-mode' },
+      { label: 'Agent Identity', to: '/identity' },
     ],
   },
 ]
@@ -158,11 +149,11 @@ function Sidebar({ onLogout, onOpenCommandPalette }: { onLogout: () => void; onO
     <nav className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" style={{ flexShrink: 0 }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" style={{ flexShrink: 0 }}>
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           <path d="M9 12l2 2 4-4"/>
         </svg>
-        Vexa <span>Agentwall</span>
+        <span className="sidebar-brand-text">Vexa <span>Agent Control</span></span>
       </div>
 
       {/* Quick search command button in sidebar */}
@@ -190,18 +181,6 @@ function Sidebar({ onLogout, onOpenCommandPalette }: { onLogout: () => void; onO
           <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
         </svg>
         Dashboard
-      </NavLink>
-
-      {/* Agent Identity — single link */}
-      <NavLink
-        to="/identity"
-        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="5" width="20" height="14" rx="2"/>
-          <path d="M16 10a4 4 0 0 1-8 0"/>
-        </svg>
-        Agent Identity
       </NavLink>
 
       {/* Divider */}
@@ -277,7 +256,7 @@ function GlobalAuthBanner() {
       </div>
       <div className="ap-global-warning-content">
         <strong>No Auth Providers Configured!</strong>
-        <p>To finish setting up AgentWall, you'll need to configure an Auth Provider. Select one below to get started!</p>
+        <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
       </div>
     </div>
   );
@@ -345,6 +324,8 @@ export default function App() {
                     <Route path="/fleet" element={<FleetOverview />} />
                     <Route path="/identity" element={<IdentityGovernance />} />
                     <Route path="/policy" element={<PolicyInsights />} />
+                    <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
+                    <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
                     <Route path="/policy/edit" element={<PolicyEditor />} />
                     <Route path="/policy/group" element={<GroupPolicyEditor />} />
                     <Route path="/spend/limits" element={<SpendLimits />} />
@@ -356,8 +337,10 @@ export default function App() {
                     <Route path="/audit" element={<AuditLogs />} />
                     <Route path="/admin/auth-providers" element={<AuthProviders />} />
                     <Route path="/admin/users" element={<Users />} />
-                    <Route path="/admin/devices" element={<DeviceGovernance />} />
-                    <Route path="/integrations/ide" element={<IdeConnections />} />
+                    <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
+                    <Route path="/devices" element={<Devices />} />
+                    <Route path="/devices/tamper-log" element={<TamperLog />} />
+                    <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
                     <Route path="/integrations/mcp-servers" element={
                       <RequireAdmin>
                         <McpServers />

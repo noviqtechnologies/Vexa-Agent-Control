@@ -29,6 +29,37 @@ use policy::safe_mode::SafeModeScanner;
 use proxy::handler::ProxyState;
 
 fn main() {
+    // ── Windows SCM fast-path ──────────────────────────────────────────────
+    // service_dispatcher::start() MUST be called from the main thread before
+    // any heavy setup.  SCM will kill the process with Error 1053 (timeout)
+    // if we don't connect within ~30 s.  We detect the SCM environment by
+    // attempting to start the dispatcher; if it returns an error it means we
+    // are running interactively, so fall through to normal startup.
+    #[cfg(target_os = "windows")]
+    {
+        use agentwall::service::windows::service_dispatcher_handler;
+        let registered = service_dispatcher_handler::try_register_scm_runner(|| {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_stack_size(8 * 1024 * 1024)
+                .build()
+                .expect("Failed to build service Tokio runtime");
+            rt.block_on(async {
+                dispatch_command(Box::new(agentwall::cli::Commands::Start(Box::new(
+                    agentwall::cli::StartArgs::centralized_default(),
+                ))))
+                .await
+            })
+        });
+        if registered {
+            // Only exit if service_dispatcher::start actually succeeded in connecting to SCM.
+            // If it returns Err (e.g. error code 1063 when run interactively), fall through!
+            if let Ok(code) = service_dispatcher_handler::try_start_and_wait() {
+                std::process::exit(code);
+            }
+        }
+    }
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)
@@ -90,6 +121,20 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         Commands::Enroll { token, hub_url } => {
             agentwall::identity::device::run_enroll(&token, &hub_url).await
         }
+        #[cfg(feature = "team")]
+        Commands::Join { token, hub_url } => {
+            println!("Joining team workspace at {}...", hub_url);
+            match agentwall::identity::team::TeamIdentity::join(&hub_url, &token) {
+                Ok(_) => {
+                    println!("Successfully joined organization workspace!");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("Failed to join workspace: {}", e);
+                    1
+                }
+            }
+        }
         Commands::Service { action } => {
             let act = match action {
                 agentwall::cli::ServiceCliAction::Install {
@@ -113,19 +158,8 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentwall::service::run_service(act)
         }
         Commands::Start(args) => {
-            #[cfg(target_os = "windows")]
-            {
-                let args_clone = args.clone();
-                let handle = tokio::runtime::Handle::current();
-                let maybe_code = tokio::task::block_in_place(|| {
-                    agentwall::service::windows::run_as_windows_service_if_present(move || {
-                        handle.block_on(dispatch_start(*args_clone))
-                    })
-                });
-                if let Some(code) = maybe_code {
-                    return code;
-                }
-            }
+            // When running interactively (not under Windows SCM), just run the
+            // centralized daemon directly.
             dispatch_start(*args).await
         }
         Commands::Test {
@@ -354,6 +388,42 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             },
         },
         Commands::Unwrap { target } => agentwall::wrap::run_unwrap_target(&target),
+        Commands::Protect {
+            dry_run,
+            no_browser,
+            listen,
+            mcp_url,
+            enforce,
+            shadow,
+            policy,
+        } => {
+            let active_enforce = enforce && !shadow;
+            let code = agentwall::wrap::run_protect_orchestration(
+                dry_run,
+                no_browser,
+                &listen,
+                &mcp_url,
+                active_enforce,
+                &policy,
+            );
+            if code != 0 || dry_run {
+                return code;
+            }
+            run_dev(
+                listen,
+                mcp_url,
+                false,
+                true,
+                active_enforce,
+                false,
+                false,
+                "http://localhost:11434".to_string(),
+                vec![],
+                Some(policy),
+            )
+            .await
+        }
+        Commands::Unprotect { dry_run, force } => agentwall::wrap::run_unprotect_all(dry_run, force),
         Commands::Status => agentwall::wrap::run_status(),
         Commands::Watch { all, target } => agentwall::wrap::run_watch(all, target),
         Commands::StdioProxy {
@@ -383,6 +453,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 dual_agent,
                 local_llm_url,
                 args,
+                None,
             )
             .await
         }
@@ -423,7 +494,7 @@ fn print_banner() {
     println!("┌────────────────────────────────────────────────────────────┐");
     println!(
         "│  {}  {}  │",
-        "AgentWall Enterprise MCP Gateway".bold().cyan(),
+        "🛡 VEXA AGENT CONTROL — Local AI Firewall & Security Gateway".bold().cyan(),
         format!("v{}", version).dimmed()
     );
     println!("└────────────────────────────────────────────────────────────┘");
@@ -520,7 +591,7 @@ async fn run_stdio_proxy(
         agent_pid: None,
         upstream_url: "".to_string(),
         dry_run: false,
-        shadow_mode: false,
+        shadow_mode: std::sync::atomic::AtomicBool::new(false),
         policy_loaded: std::sync::atomic::AtomicBool::new(false),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
@@ -906,19 +977,34 @@ async fn run_start(
     };
     // ---------------------------------------------
 
-    // 2. Check log path writable
-    let mut log_dir = Path::new(&log_path).parent().unwrap_or(Path::new("."));
+    // 2. Resolve and ensure log path directory exists
+    let resolved_log_path = if log_path.starts_with("~/") || log_path.starts_with("~\\") {
+        if let Some(home) = dirs::home_dir() {
+            home.join(&log_path[2..]).to_string_lossy().to_string()
+        } else {
+            log_path.clone()
+        }
+    } else {
+        log_path.clone()
+    };
+
+    let log_path_obj = Path::new(&resolved_log_path);
+    let mut log_dir = log_path_obj.parent().unwrap_or(Path::new("."));
     if log_dir.as_os_str().is_empty() {
         log_dir = Path::new(".");
     }
     if !log_dir.exists() {
-        eprintln!(
-            "{} Log directory does not exist: {}",
-            "✖".red(),
-            log_dir.display()
-        );
-        return 1;
+        if let Err(e) = std::fs::create_dir_all(log_dir) {
+            eprintln!(
+                "{} Could not create log directory {}: {}",
+                "✖".red(),
+                log_dir.display(),
+                e
+            );
+            return 1;
+        }
     }
+    let log_path = resolved_log_path;
 
     // Override listen address for centralized mode if it's the default
     // Override listen address for centralized mode if it's the default
@@ -1067,7 +1153,7 @@ async fn run_start(
         agent_pid: resolved_pid,
         upstream_url: mcp_url,
         dry_run,
-        shadow_mode,
+        shadow_mode: std::sync::atomic::AtomicBool::new(shadow_mode),
         policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(rate_limit_val),
         http_client: reqwest::Client::new(),
@@ -1775,7 +1861,7 @@ async fn run_wrap(
         agent_pid: None,
         upstream_url: "".to_string(), // Not used in stdio proxy
         dry_run,
-        shadow_mode: false,
+        shadow_mode: std::sync::atomic::AtomicBool::new(false),
         policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
@@ -1883,6 +1969,7 @@ async fn run_dev(
     dual_agent: bool,
     local_llm_url: String,
     args: Vec<String>,
+    policy_path_opt: Option<String>,
 ) -> i32 {
     if learn {
         println!(
@@ -1908,6 +1995,32 @@ async fn run_dev(
         );
         detector.start();
     }
+
+    // Attempt to load policy YAML if path is specified or default exists
+    let (compiled_policy, policy_loaded, policy_path_str) = match policy_path_opt.as_deref() {
+        Some(path_str) => {
+            let p = std::path::Path::new(path_str);
+            if p.exists() {
+                match load_policy(p, None) {
+                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some(path_str.to_string())),
+                    _ => (None, false, None),
+                }
+            } else {
+                (None, false, None)
+            }
+        }
+        None => {
+            let default_p = std::path::Path::new("agentwall-policy.yaml");
+            if default_p.exists() {
+                match load_policy(default_p, None) {
+                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some("agentwall-policy.yaml".to_string())),
+                    _ => (None, false, None),
+                }
+            } else {
+                (None, false, None)
+            }
+        }
+    };
 
     // Generate session secret and ID
     let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
@@ -1982,17 +2095,16 @@ async fn run_dev(
     let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
 
     let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(None),
+        policy: std::sync::RwLock::new(compiled_policy),
         audit_logger,
         session_id,
         kill_mode: KillMode::Process,
         agent_pid: None,
         upstream_url: mcp_url,
         dry_run: false,
-        // When --enforce is passed, shadow_mode is false → injection/DLP scanners block.
-        // Default (no --enforce) keeps the original observation-only behaviour.
-        shadow_mode: !enforce,
-        policy_loaded: std::sync::atomic::AtomicBool::new(false),
+        // When enforce is true, shadow_mode is false → injection/DLP scanners block.
+        shadow_mode: std::sync::atomic::AtomicBool::new(!enforce),
+        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(0),
         http_client: reqwest::Client::new(),
         safe_mode_scanner,
@@ -2022,11 +2134,11 @@ async fn run_dev(
         metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
+        event_tx: tokio::sync::broadcast::channel(1024).0,
         credential_scope_validator: Arc::new(
             policy::credential_scope::CredentialScopeValidator::new(false),
         ),
-        policy_path: None,
+        policy_path: policy_path_str,
         gateway_start_time: std::time::Instant::now(),
         spend_ledger: None,
         pricing_table: None,
@@ -2077,17 +2189,31 @@ async fn run_dev(
         }
     };
 
-    println!(
-        "{} {} {}",
-        "👁".blue(),
-        "Mode:".bold(),
-        "SHADOW (Observation Only — no enforcement)".cyan().bold()
-    );
-    println!(
-        "{} {}",
-        "ℹ".blue(),
-        "All tool calls forwarded and logged. Enforcement is OFF.".blue()
-    );
+    if !enforce {
+        println!(
+            "{} {} {}",
+            "👁".blue(),
+            "Mode:".bold(),
+            "SHADOW (Observation Only — no enforcement)".cyan().bold()
+        );
+        println!(
+            "{} {}",
+            "ℹ".blue(),
+            "All tool calls forwarded and logged. Enforcement is OFF.".blue()
+        );
+    } else {
+        println!(
+            "{} {} {}",
+            "🛡".green(),
+            "Mode:".bold(),
+            "ACTIVE ENFORCEMENT (DLP & Secret Shield ON)".green().bold()
+        );
+        println!(
+            "{} {}",
+            "ℹ".blue(),
+            "High-risk tool calls and secret leaks will be intercepted per policy.".blue()
+        );
+    }
     println!(
         "{} {} {}",
         "📡".blue(),
@@ -2212,7 +2338,7 @@ async fn run_bench(
     println!("{}", "=".repeat(60).cyan());
     println!(
         "{} {}",
-        " VEXA AgentWall ".bold().white().on_cyan(),
+        " VEXA Agent Control ".bold().white().on_cyan(),
         "ADR Security Benchmarking Subsystem".cyan()
     );
     println!("{}", "=".repeat(60).cyan());

@@ -231,19 +231,17 @@ curl.exe -i http://localhost:8400/healthz
 Open `http://localhost:8081` in your browser.
 
 **Local Development Credentials (`DEV_MODE`):**
-- **Username:** `admin`
+- **Email:** `admin`
 - **Password:** `admin` (or any string in local dev mode)
 
 > [!NOTE]
-> When calling the login endpoint directly rather than using the browser form, the JSON field is **`email`**, not `username`:
+> The login API expects an `email` field (not `username`). Using any other field name returns 401 even with the correct value — specifically `401 local auth not enabled`, which is misleading: `DEV_MODE` is active, the field name is simply wrong.
 >
 > ```bash
 > curl -X POST http://localhost:8400/api/v1/auth/login \
 >      -H "Content-Type: application/json" \
 >      -d '{"email":"admin","password":"admin"}' -c cookie.txt
 > ```
->
-> Posting `{"username":"admin",...}` leaves `email` empty and fails with `401 local auth not enabled`, which is misleading — `DEV_MODE` is active, the field name is simply wrong.
 >
 > `DEV_MODE` is what accepts `admin` with any password. With `DEV_MODE=false` and no auth provider configured, the API instead prints a one-time bootstrap credential to its own logs (`docker compose logs dashboard-api`) — use `admin` plus that token as the password:
 >
@@ -280,15 +278,11 @@ curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-sess
 ```
 
 > [!NOTE]
-> **Expected Behavior:** If no upstream MCP server is running, the gateway still evaluates policy, writes the audit log entry, and then reports that it could not reach the upstream:
+> **Expected Behavior:** If no upstream MCP server is running, the gateway still evaluates policy, writes the audit log entry, and then returns an upstream network error. The URL in the message is whichever upstream that gateway was configured with, so it differs by deployment mode:
+> - **Native gateway** (running on the host): `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`
+> - **Containerised gateway** (Docker Compose `gateway` service): resolves the upstream over the Compose network, e.g. `Upstream error: Network error: error sending request for url (http://mock-mcp:3000/)`
 >
-> ```json
-> {"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)"}}
-> ```
->
-> This upstream network error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
->
-> The URL in the message is whichever upstream the gateway was configured with. A native binary started as above reports `http://127.0.0.1:3000/`; the containerized gateway from Docker Compose reports `http://mock-mcp:3000/`.
+> Either way, the upstream error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
 >
 > A response of `{"error":{"code":-32001,...,"message":"Policy violation: reason=not_in_policy"}}` instead means the tool is not in the active policy's allowlist — that is enforcement working, not a failure.
 
@@ -319,14 +313,13 @@ agentwall.exe verify-log .\team-audit.log
 ```
 
 **Expected Output:**
-
-```
+```text
 ℹ Verifying HMAC chain and payload integrity for ./team-audit.log (key: ~/.AgentWall/audit.key)... VALID
-  ✓ 1 entries verified with HMAC key, cryptographic chain and payloads intact.
+  ✓ N entries verified with HMAC key, cryptographic chain and payloads intact.
 ```
+*(Where `N` is the number of MCP tool-call audit entries recorded during the session.)*
 
-The entry count reflects how many requests the gateway has processed. Any
-tampering breaks the HMAC chain and reports `INVALID` with the offending entry index.
+Tampering with any entry breaks the HMAC chain and reports `INVALID` with the offending entry index.
 
 ---
 

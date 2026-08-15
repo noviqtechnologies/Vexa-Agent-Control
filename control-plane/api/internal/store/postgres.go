@@ -49,6 +49,10 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // UpsertAgent ensures the agent exists, updating last_seen_at on conflict.
 func (s *Store) UpsertAgent(ctx context.Context, agentID string) error {
 	_, err := s.pool.Exec(ctx, `
@@ -189,7 +193,7 @@ func (s *Store) GetFleetStats(ctx context.Context) (*FleetStats, error) {
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM devices),
-			(SELECT COUNT(*) FROM devices WHERE NOT is_revoked AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes' AND mcp_servers_wrapped >= mcp_servers_total),
+			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'),
 			(SELECT COUNT(*) FROM telemetry_events),
 			(SELECT COUNT(*) FROM telemetry_events WHERE decision = 'denied'),
 			(SELECT COUNT(*) FROM alerts),

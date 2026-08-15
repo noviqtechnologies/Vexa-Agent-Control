@@ -175,12 +175,16 @@ func getOAuthConfig(p *model.AuthProvider, host string) *oauth2.Config {
 			TokenURL: "https://oauth2.googleapis.com/token",
 		}
 		scopes = []string{"https://www.googleapis.com/auth/userinfo.email"}
-	} else if p.Type == "github" {
-		endpoint = oauth2.Endpoint{
-			AuthURL:  "https://github.com/login/oauth/authorize",
-			TokenURL: "https://github.com/login/oauth/access_token",
+	} else if p.Type == "entra" {
+		tenant := "common"
+		if p.IssuerURL != "" {
+			tenant = strings.TrimSpace(p.IssuerURL)
 		}
-		scopes = []string{"user:email"}
+		endpoint = oauth2.Endpoint{
+			AuthURL:  fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/authorize", tenant),
+			TokenURL: fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenant),
+		}
+		scopes = []string{"openid", "email", "profile", "User.Read"}
 	}
 	
 	return &oauth2.Config{
@@ -251,17 +255,19 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 			json.NewDecoder(resp.Body).Decode(&user)
 			email = user.Email
 		}
-	} else if provider.Type == "github" {
-		resp, err := client.Get("https://api.github.com/user/emails")
+	} else if provider.Type == "entra" {
+		resp, err := client.Get("https://graph.microsoft.com/v1.0/me")
 		if err == nil {
 			defer resp.Body.Close()
-			var emails []struct{ Email string `json:"email"`; Primary bool `json:"primary"`; Verified bool `json:"verified"` }
-			json.NewDecoder(resp.Body).Decode(&emails)
-			for _, e := range emails {
-				if e.Primary && e.Verified {
-					email = e.Email
-					break
-				}
+			var user struct {
+				Mail              string `json:"mail"`
+				UserPrincipalName string `json:"userPrincipalName"`
+			}
+			json.NewDecoder(resp.Body).Decode(&user)
+			if user.Mail != "" {
+				email = user.Mail
+			} else {
+				email = user.UserPrincipalName
 			}
 		}
 	}

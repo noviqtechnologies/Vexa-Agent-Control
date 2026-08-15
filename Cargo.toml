@@ -3,10 +3,14 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentwall"
-version = "1.0.28"
+version = "1.0.33"
 edition = "2021"
-description = "VEXA AgentWall — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
+description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
+
+[[bin]]
+name = "agentcontrol"
+path = "src/main.rs"
 
 [[bin]]
 name = "agentwall"
@@ -15,6 +19,24 @@ path = "src/main.rs"
 [lib]
 name = "agentwall"
 path = "src/lib.rs"
+
+[features]
+# The minimal set for individual developers (Local Safe Mode + Proxy)
+default = ["local-core"]
+
+# SMB / Team Edition (Adds Passport Model + SaaS Sync)
+team = ["local-core", "passport-injection", "saas-sync"]
+
+# Enterprise Edition (Adds OIDC, mTLS, and SIEM Export)
+enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]
+
+# Internal Functional Flags
+local-core = []
+passport-injection = []
+saas-sync = []
+oidc-auth = []
+mtls-identity = []
+siem-export = []
 
 [dependencies]
 # FR-23: Dashboard wire-boundary types

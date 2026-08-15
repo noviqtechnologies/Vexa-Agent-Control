@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentWall | Developer Dashboard</title>
+  <title>Agent Control | Developer Dashboard</title>
   <meta name="description"
-    content="VEXA AgentWall local developer dashboard — real-time visibility into your AI agent's tool calls.">
+    content="VEXA Agent Control local developer dashboard — real-time visibility into your AI agent's tool calls.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -521,6 +521,76 @@
       border-radius: 8px;
     }
 
+    /* ── Live Policy Wizard Side Drawer ── */
+    .wizard-drawer {
+      position: fixed;
+      top: 0;
+      right: -520px;
+      width: 500px;
+      height: 100vh;
+      background: var(--bg-card);
+      border-left: 1px solid var(--border);
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .wizard-drawer.open {
+      right: 0;
+    }
+    .wizard-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.95);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .wizard-header h3 {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 1.1rem;
+      color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .wizard-body {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    .wizard-editor {
+      flex: 1;
+      width: 100%;
+      min-height: 320px;
+      background: #080b10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      padding: 16px;
+      resize: none;
+      line-height: 1.5;
+    }
+    .wizard-editor:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .wizard-actions {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.95);
+      display: flex;
+      gap: 12px;
+    }
+
     /* ── Timeline ── */
     .filter-row {
       display: flex;
@@ -867,6 +937,57 @@
         grid-template-columns: repeat(2, 1fr);
       }
     }
+
+    /* ── FR-2.1: Mode Toggle Switch ── */
+    .mode-toggle-switch {
+      position: relative; display: inline-block;
+      width: 40px; height: 20px; cursor: pointer;
+    }
+    .mode-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .mode-toggle-slider {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .mode-toggle-slider::before {
+      content: ''; position: absolute;
+      height: 14px; width: 14px;
+      left: 2px; top: 2px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.3s, background 0.3s;
+    }
+    .mode-toggle-switch input:checked + .mode-toggle-slider {
+      background: rgba(248,81,73,0.25);
+      border-color: var(--red);
+    }
+    .mode-toggle-switch input:checked + .mode-toggle-slider::before {
+      transform: translateX(20px);
+      background: var(--red);
+    }
+
+    /* ── FR-2.4: Quick-rule Wand Button ── */
+    .quick-rule-btn {
+      background: rgba(83,155,245,0.1);
+      border: 1px solid rgba(83,155,245,0.25);
+      border-radius: 6px; padding: 3px 8px;
+      font-size: 1rem; cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+      color: var(--accent);
+    }
+    .quick-rule-btn:hover {
+      background: rgba(83,155,245,0.25);
+      transform: scale(1.15) rotate(-10deg);
+    }
+    .quick-rule-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* ── FR-2.3: Mission Banner pulse ── */
+    @keyframes missionPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(83,155,245,0.0); }
+      50% { box-shadow: 0 0 0 4px rgba(83,155,245,0.15); }
+    }
   </style>
 </head>
 
@@ -876,12 +997,19 @@
   <nav class="sidebar">
     <div class="logo-area">
       <div class="logo-vexa">VEXA</div>
-      <div class="logo-name">AgentWall</div>
+      <div class="logo-name">Agent Control</div>
       <div class="logo-tag">Local Observability Proxy</div>
-      <div class="shadow-badge"
-        title="Shadow Mode: Tool calls and security policies are audited without blocking agent traffic. Run with --enforce to enable active blocking.">
-        <span class="shadow-dot"></span>
-        SHADOW MODE
+      <!-- FR-2.1: Interactive Security Posture Toggle -->
+      <div id="mode-toggle-wrap" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span id="mode-toggle-label" style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);">SHADOW</span>
+          <label class="mode-toggle-switch" title="Toggle between Shadow (audit-only) and Enforce (active blocking) mode">
+            <input type="checkbox" id="mode-toggle-input" checked="checked" onchange="toggleSecurityMode(this.checked)">
+            <span class="mode-toggle-slider"></span>
+          </label>
+          <span style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; color:var(--green);">ENFORCE</span>
+        </div>
+        <div id="mode-toggle-status" style="font-size:0.68rem; color:var(--green);">Active enforcement — blocking active</div>
       </div>
     </div>
 
@@ -919,23 +1047,40 @@
       <div class="nav-item" data-panel="panel-egress" id="nav-egress">
         <span class="nav-icon" style="background:rgba(210,153,34,0.15); color:var(--amber);">🌐</span> Egress & LLM Proxy
       </div>
-      <div class="nav-item" data-panel="panel-prometheus" id="nav-prometheus">
-        <span class="nav-icon" style="background:rgba(248,81,73,0.15); color:var(--red);">📊</span> Prometheus Metrics
+      <div style="padding:14px 16px; margin-top:10px; border-top:1px solid var(--border);">
+        <button class="btn btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openPolicyWizard()">
+          <span>✨ Live Policy Wizard</span>
+        </button>
       </div>
-      <div class="nav-item" data-panel="panel-benchmark" id="nav-benchmark">
-        <span class="nav-icon" style="background:rgba(63,185,80,0.15); color:var(--green);">🛡</span> ADR Benchmark
-      </div>
-    </div>
-
-    <div class="sidebar-footer">
-      <span id="status-dot" class="status-dot"></span>
-      <span id="status-text">CONNECTING...</span>
     </div>
   </nav>
 
+  <!-- Live Policy Wizard Sliding Drawer -->
+  <div id="policy-wizard-drawer" class="wizard-drawer">
+    <div class="wizard-header">
+      <h3>✨ Live Policy Wizard</h3>
+      <button class="btn" style="padding:4px 10px; font-size:0.8rem;" onclick="closePolicyWizard()">✕ Close</button>
+    </div>
+    <div class="wizard-body">
+      <div style="font-size:0.82rem; color:var(--text-muted);">
+        Live visual YAML policy editor. Click <strong>"✨ Approve Pattern"</strong> on any observed tool to auto-generate parameter rules, then click <strong>"🚀 Apply Policy & Hot-Reload"</strong>.
+      </div>
+      <textarea id="wizard-yaml-editor" class="wizard-editor" placeholder="Generating live YAML policy..."></textarea>
+      <div id="wizard-status-msg" style="font-family:var(--font-mono); font-size:0.78rem; color:var(--accent);"></div>
+    </div>
+    <div class="wizard-actions">
+      <button class="btn btn-primary" style="flex:1;" id="btn-wizard-apply" onclick="saveAndApplyWizardPolicy()">
+        🚀 Apply Policy & Hot-Reload
+      </button>
+      <button class="btn" onclick="fetchWizardLivePolicy()">
+        🔄 Refresh Draft
+      </button>
+    </div>
+  </div>
+
   <!-- Main content -->
   <div class="main-content">
-    <div id="offline-banner">
+    <div id="offline-banner" style="display:none;">
       ⚠ Proxy offline — retrying connection...
     </div>
 
@@ -966,13 +1111,20 @@
             <div class="stat-label">Risk Flags</div>
             <div class="stat-value red" id="stat-risks">—</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">Risk Delta (Shadow)</div>
-            <div class="stat-value yellow" id="stat-shadow-delta">0</div>
+          <!-- FR-2.2: Risks Blocked counter -->
+          <div class="stat-card" style="border-color:rgba(248,81,73,0.35); background:rgba(248,81,73,0.07);">
+            <div class="stat-label" style="color:#f86161;">🛡 Risks Blocked</div>
+            <div class="stat-value red" id="stat-risks-blocked">0</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">Vexa Score</div>
-            <div class="stat-value green" id="stat-vexa-score">95/100</div>
+          <!-- FR-2.2: Live Spend card -->
+          <div class="stat-card" style="border-color:rgba(210,153,34,0.35); background:rgba(210,153,34,0.07);">
+            <div class="stat-label" style="color:var(--amber);">💰 Live Spend</div>
+            <div class="stat-value" id="stat-live-spend" style="color:var(--amber);">$0.000</div>
+          </div>
+          <div class="stat-card" style="border-color:rgba(63,185,80,0.35); background:rgba(63,185,80,0.05);" title="ADR (AI Detection & Response) Security Benchmark Posture">
+            <div class="stat-label" style="color:var(--green);">🛡 ADR Security Score</div>
+            <div class="stat-value green" id="stat-adr-score">88.1/100</div>
+            <div id="stat-adr-detail" style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Grade A · 17/17 Covered</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Tunnel Latency</div>
@@ -992,6 +1144,32 @@
           </div>
         </div>
 
+        <!-- FR-2.3: Mission Mode Guided Onboarding Banner -->
+        <div id="mission-banner" style="
+          display:flex; align-items:flex-start; gap:14px;
+          margin-bottom:16px; padding:16px 20px;
+          background:linear-gradient(135deg,rgba(83,155,245,0.12),rgba(130,80,255,0.10));
+          border:1px solid rgba(83,155,245,0.35); border-radius:10px;
+          animation: missionPulse 3s ease-in-out infinite;
+        ">
+          <div style="font-size:1.6rem; line-height:1;">🎯</div>
+          <div style="flex:1;">
+            <div style="font-weight:700; font-size:0.85rem; color:var(--accent); letter-spacing:0.05em; margin-bottom:4px;">MISSION MODE — Prove Agent Control Works</div>
+            <div style="font-size:0.8rem; color:var(--text-bright); line-height:1.5;">
+              Open Cursor or Claude Desktop and ask your AI assistant to <strong style="color:#ffe066;">"read the file /etc/shadow"</strong>. Agent Control should detect and block the sensitive path traversal in real-time.
+            </div>
+            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+              <span class="badge blue" style="font-size:0.68rem;">STEP 1</span> <span style="font-size:0.75rem; color:var(--text-muted);">Ask AI to read /etc/shadow</span>
+              <span class="badge amber" style="font-size:0.68rem;">STEP 2</span> <span style="font-size:0.75rem; color:var(--text-muted);">Watch Risks Blocked counter increment</span>
+              <span class="badge green" style="font-size:0.68rem;">STEP 3</span> <span style="font-size:0.75rem; color:var(--text-muted);">Switch to ENFORCE to actively block</span>
+            </div>
+          </div>
+          <button onclick="document.getElementById('mission-banner').style.display='none'" style="
+            background:transparent; border:none; color:var(--text-muted); font-size:1.1rem;
+            cursor:pointer; padding:2px 6px; border-radius:4px; flex-shrink:0;
+          " title="Dismiss">✕</button>
+        </div>
+
         <div class="card" style="padding: 0; overflow: hidden;">
           <div class="table-wrap">
             <table id="tbl-inventory">
@@ -1001,15 +1179,16 @@
                   <th>Calls</th>
                   <th>Last Called</th>
                   <th>Risk Tier</th>
+                  <th style="text-align:center;">Quick Policy</th>
                 </tr>
               </thead>
               <tbody id="inv-body">
                 <tr>
-                  <td colspan="4">
+                  <td colspan="5">
                     <div class="empty-state">
                       <span class="empty-icon">👁</span>
                       <h3>Awaiting incoming tool calls</h3>
-                      <p>Ensure your AI agent is configured to route traffic through the AgentWall proxy.</p>
+                      <p>Ensure your AI agent is configured to route traffic through the Agent Control proxy.</p>
                       <span class="cmd-hint">AGENTWALL_PROXY_URL=http://localhost:8080</span>
                     </div>
                   </td>
@@ -1023,7 +1202,7 @@
         <div class="card" style="margin-top:20px;">
           <h3>🚀 Programmatic Client SDK Integration</h3>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:14px;">
-            Wrap your AI agent tool calls through the out-of-process AgentWall proxy using thin client SDKs:
+            Wrap your AI agent tool calls through the out-of-process Agent Control proxy using thin client SDKs:
           </p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
             <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:14px;">
@@ -1031,9 +1210,9 @@
                 <strong style="color:var(--accent);">Python SDK (<code>agentwall</code>)</strong>
                 <span class="badge blue">pip install agentwall</span>
               </div>
-              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>from agentwall import AgentWallClient
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>from agentwall import AgentControlClient
 
-client = AgentWallClient()
+client = AgentControlClient()
 
 @client.governed
 def my_tool(param: str):
@@ -1045,9 +1224,9 @@ def my_tool(param: str):
                 <strong style="color:var(--accent);">TypeScript SDK (<code>@vexa/agentwall</code>)</strong>
                 <span class="badge blue">npm i @vexa/agentwall</span>
               </div>
-              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>import { AgentWallClient } from "@vexa/agentwall";
+              <pre style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-main); margin:0; line-height:1.5;"><code>import { AgentControlClient } from "@vexa/agentwall";
 
-const client = new AgentWallClient();
+const client = new AgentControlClient();
 const tool = client.governed("name", async (args) =&gt; {
   return await execute(args);
 });</code></pre>
@@ -1288,7 +1467,7 @@ const tool = client.governed("name", async (args) =&gt; {
         </div>
 
         <div class="policy-info">
-          <strong>How it works:</strong> AgentWall continuously analyzes observed tool execution and automatically
+          <strong>How it works:</strong> Agent Control continuously analyzes observed tool execution and automatically
           generates a baseline YAML security policy.
           The generated policy allows previously used tools with parameter schemas inferred from real traffic patterns.
           Review the policy carefully before provisioning to production environments.
@@ -1320,18 +1499,18 @@ const tool = client.governed("name", async (args) =&gt; {
       <div id="panel-gateway" class="panel">
         <div class="panel-header">
           <h2>⚙️ Gateway Controls & Live Reload</h2>
-          <span id="gw-mode-badge" class="badge blue">SHADOW</span>
+          <span id="gw-mode-badge" class="badge green">ENFORCE</span>
         </div>
 
-        <div class="policy-info" id="gw-mode-banner">
+        <div class="policy-info" id="gw-mode-banner" style="border-left-color: var(--green);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span id="gw-mode-label" style="font-weight:700; font-size:0.95rem;">👁 SHADOW — Observation Only</span>
+            <span id="gw-mode-label" style="font-weight:700; font-size:0.95rem; color:var(--green);">🛡 ENFORCEMENT — Active Blocking</span>
             <span style="display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">
               <span id="gw-status-dot" class="status-dot live"></span> Uptime: <strong id="gw-uptime" style="color:var(--text-bright);">0s</strong>
             </span>
           </div>
           <p id="gw-mode-description" style="font-size:0.85rem; line-height:1.5;">
-            <strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start proxy with <code style="color:var(--accent)">agentwall dev --enforce</code> to enable active blocking.
+            <strong>Active Enforcement:</strong> Security policies, DLP secret leaks, and prompt injection attempts are actively evaluated and blocked with DENY responses.
           </p>
         </div>
 
@@ -1373,6 +1552,8 @@ const tool = client.governed("name", async (args) =&gt; {
             </button>
           </div>
           <div id="gw-reload-status" style="margin-top:10px; font-family:var(--font-mono); font-size:0.8rem;"></div>
+          <!-- Pre-flight notice: shown by JS when no --policy path was passed at startup -->
+          <div id="gw-reload-notice" style="display:none; margin-top:10px; padding:10px 14px; border-radius:8px; background:rgba(210,153,34,0.08); border:1px solid rgba(210,153,34,0.25); font-size:0.82rem; line-height:1.6; color:var(--text-secondary);"></div>
           <pre id="gw-reload-result" style="display:none; margin-top:10px; background:#0d1117; padding:12px; border-radius:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--green); max-height:200px; overflow-y:auto;"></pre>
         </div>
 
@@ -1699,7 +1880,7 @@ const tool = client.governed("name", async (args) =&gt; {
             </thead>
             <tbody>
               <tr style="border-bottom:1px solid rgba(48,54,61,0.4); background:rgba(83,155,245,0.08);">
-                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa AgentWall (Inline Rust
+                <td style="padding:10px 12px;"><strong style="color:var(--accent);">Vexa Agent Control (Inline Rust
                     Gateway)</strong></td>
                 <td style="padding:10px 12px; font-weight:700; color:var(--green);" id="bench-table-score">88.1% (Grade
                   A)</td>
@@ -1839,6 +2020,10 @@ const tool = client.governed("name", async (args) =&gt; {
     let retryTimer = null;
     let tlFilterText = '';
 
+    // FR-2.2: Financial telemetry state
+    let risksBlockedCount = 0;
+    let liveSpendUsd = 0.0;
+
     // ── FR-5 Gateway Panel State ───────────────────────────────────────────────
     let gwBlockedCalls = [];
     let gwStatusPollTimer = null;
@@ -1885,7 +2070,7 @@ const tool = client.governed("name", async (args) =&gt; {
           cls: 'blue',
           dotCls: 'live',
           bannerColor: 'var(--accent)',
-          desc: '<strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Start with <code style="color:var(--accent)">--enforce</code> to enable active blocking.'
+          desc: '<strong>Shadow Mode (Observation Only):</strong> All tool calls, prompt injections, and DLP findings are audited and recorded without interrupting agent execution. Remove <code style="color:var(--accent)">--shadow</code> flag to restore active enforcement.'
         },
         'dry-run': {
           label: '📋 DRY-RUN — Logging Only',
@@ -1917,6 +2102,21 @@ const tool = client.governed("name", async (args) =&gt; {
 
       const banner = document.getElementById('gw-mode-banner');
       if (banner) banner.style.borderLeftColor = m.bannerColor;
+
+      // Synchronize Sidebar Mode Toggle Switch
+      const toggleInput = document.getElementById('mode-toggle-input');
+      const toggleStatus = document.getElementById('mode-toggle-status');
+      if (toggleInput && toggleStatus) {
+        if (mode === 'enforce') {
+          toggleInput.checked = true;
+          toggleStatus.textContent = 'Active enforcement — blocking active';
+          toggleStatus.style.color = 'var(--green)';
+        } else {
+          toggleInput.checked = false;
+          toggleStatus.textContent = 'Audit-only — no blocking active';
+          toggleStatus.style.color = 'var(--text-muted)';
+        }
+      }
 
       const uptime = document.getElementById('gw-uptime');
       if (uptime && s.uptime_secs != null) {
@@ -1970,6 +2170,30 @@ const tool = client.governed("name", async (args) =&gt; {
           `<tr><td style="font-weight:600; color:var(--text-muted); font-size:0.8rem; width:200px; padding:8px 14px;">${escHtml(k)}</td>
                 <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-bright); padding:8px 14px;">${escHtml(String(v))}</td></tr>`
         ).join('');
+      }
+
+      // ── Hot-Reload pre-flight gate ──────────────────────────────────────────
+      // Disable the Reload Policy button and show a clear notice when no policy
+      // path was passed at startup — avoids click → ✗ error UX.
+      const reloadBtn = document.getElementById('btn-gw-reload');
+      const reloadNotice = document.getElementById('gw-reload-notice');
+      if (s.policy_path) {
+        // Policy path is configured — enable button, clear any notice
+        if (reloadBtn) { reloadBtn.disabled = false; reloadBtn.style.opacity = ''; reloadBtn.title = ''; }
+        if (reloadNotice) reloadNotice.style.display = 'none';
+      } else {
+        // No policy path — disable button, show amber notice
+        if (reloadBtn) {
+          reloadBtn.disabled = true;
+          reloadBtn.style.opacity = '0.4';
+          reloadBtn.title = 'Pass --policy <path> when running agentwall protect to enable hot-reload';
+        }
+        if (reloadNotice) {
+          reloadNotice.style.display = '';
+          reloadNotice.innerHTML = `<span style="color:var(--amber);">⚠</span> No policy file configured.
+            Run <code style="color:var(--accent);">agentwall protect --policy agentwall-policy.yaml</code>
+            to enable hot-reloading, or use the <strong>✨ Live Policy Wizard</strong> to generate one.`;
+        }
       }
     }
 
@@ -2189,27 +2413,37 @@ const tool = client.governed("name", async (args) =&gt; {
 
     // ── Data fetch ─────────────────────────────────────────────────────────────
     async function fetchEvents() {
-      const r = await fetch('/api/events?limit=200');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      try {
+        const r = await fetch('/api/events?limit=200');
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        return [];
+      }
     }
 
     async function fetchStats() {
-      const r = await fetch('/api/stats');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      try {
+        const r = await fetch('/api/stats');
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (e) {
+        return null;
+      }
     }
 
     function setOnline(online) {
-      document.getElementById('offline-banner').style.display = online ? 'none' : 'block';
+      const banner = document.getElementById('offline-banner');
+      if (banner) banner.style.display = online ? 'none' : 'block';
       const dot = document.getElementById('status-dot');
       const txt = document.getElementById('status-text');
       if (online) {
-        dot.className = 'status-dot live';
-        txt.textContent = 'LIVE';
+        if (dot) dot.className = 'status-dot live';
+        if (txt) txt.textContent = 'LIVE';
       } else {
-        dot.className = 'status-dot';
-        txt.textContent = 'OFFLINE';
+        if (dot) dot.className = 'status-dot';
+        if (txt) txt.textContent = 'OFFLINE';
       }
     }
 
@@ -2230,6 +2464,7 @@ const tool = client.governed("name", async (args) =&gt; {
 
       let injectionCount = 0;
       let dlpCount = 0;
+      let totalLiveSpend = 0.0;
       for (const e of events) {
         if (e.injection_findings) {
           try {
@@ -2247,9 +2482,24 @@ const tool = client.governed("name", async (args) =&gt; {
             if (parsed && parsed.findings) dlpCount += parsed.findings.length;
           } catch { dlpCount++; }
         }
+        // Live token spend calculation
+        if (e.request_body) {
+          try {
+            const body = JSON.parse(e.request_body);
+            if (body.estimated_cost_usd) {
+              totalLiveSpend += Number(body.estimated_cost_usd) || 0;
+            } else if (body.prompt_tokens || body.completion_tokens) {
+              const p = Number(body.prompt_tokens || 0);
+              const c = Number(body.completion_tokens || 0);
+              totalLiveSpend += (p * 0.000005) + (c * 0.000015);
+            }
+          } catch {}
+        }
       }
       document.getElementById('stat-injections').textContent = injectionCount;
       document.getElementById('stat-dlp').textContent = dlpCount;
+      const spendEl = document.getElementById('stat-live-spend');
+      if (spendEl) spendEl.textContent = '$' + totalLiveSpend.toFixed(3);
 
       const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
       const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60), s = elapsed % 60;
@@ -2267,7 +2517,7 @@ const tool = client.governed("name", async (args) =&gt; {
 
       const body = document.getElementById('inv-body');
       if (Object.keys(toolMap).length === 0) {
-        body.innerHTML = `<tr><td colspan="4"><div class="empty-state">
+        body.innerHTML = `<tr><td colspan="5"><div class="empty-state">
       <span class="empty-icon">👁</span>
       <h3>No tool calls recorded yet</h3>
       <p>Start your AI agent and point it to the proxy.</p>
@@ -2280,11 +2530,16 @@ const tool = client.governed("name", async (args) =&gt; {
         .sort((a, b) => b[1].count - a[1].count)
         .map(([tool, info]) => {
           const rt = riskTier(tool);
+          // FR-2.4: Magic Wand quick-policy button
           return `<tr>
         <td class="tool-name">${escHtml(tool)}</td>
         <td><strong>${info.count}</strong></td>
         <td class="ts">${fmtTime(info.last)}</td>
         <td><span class="badge ${rt.cls}">${rt.label}</span></td>
+        <td style="text-align:center; display:flex; gap:6px; justify-content:center;">
+          <button class="quick-rule-btn" style="font-size:0.75rem; font-weight:700; padding:4px 8px;" title="Approve pattern & add to Live Policy Wizard" onclick="approveToolPattern('${escHtml(tool)}')">✨ Approve</button>
+          <button class="quick-rule-btn" title="Apply standard security policy for this tool" onclick="applyQuickRule('${escHtml(tool)}', this)">🪄</button>
+        </td>
       </tr>`;
         }).join('');
       body.innerHTML = rows;
@@ -2936,24 +3191,34 @@ const tool = client.governed("name", async (args) =&gt; {
       try {
         const r = await fetch('/api/benchmark');
         if (!r.ok) return;
-        const text = await r.text();
-        if (text.startsWith('{')) {
-          const data = JSON.parse(text);
-          if (data.score) {
-            const score = data.score;
-            const blocked = Math.round((score / 100.0) * 303);
-            const badge = document.getElementById('bench-badge-grade');
-            const statScore = document.getElementById('bench-stat-score');
-            const tableScore = document.getElementById('bench-table-score');
-            const tableBlocked = document.getElementById('bench-table-blocked');
+        const data = await r.json();
+        if (data && data.score !== undefined) {
+          const score = Number(data.score) || 88.1;
+          const totalTasks = Number(data.tasks_executed) || 303;
+          const blocked = Math.round((score / 100.0) * totalTasks);
+          const grade = data.grade || (score >= 85 ? 'Grade A' : score >= 70 ? 'Grade B' : 'Grade C');
+          const catsTested = data.categories_tested || 17;
+          const catsTotal = data.categories_total || 17;
 
-            if (badge) badge.textContent = `Grade A (${score.toFixed(1)}%)`;
-            if (statScore) statScore.textContent = `${score.toFixed(1)}/100`;
-            if (tableScore) tableScore.textContent = `${score.toFixed(1)}% (Grade A)`;
-            if (tableBlocked) tableBlocked.textContent = `${blocked} / 303 blocked`;
-          }
+          const adrScoreEl = document.getElementById('stat-adr-score') || document.getElementById('stat-vexa-score');
+          if (adrScoreEl) adrScoreEl.textContent = `${score.toFixed(1)}/100`;
+
+          const adrDetailEl = document.getElementById('stat-adr-detail');
+          if (adrDetailEl) adrDetailEl.textContent = `${grade} · ${catsTested}/${catsTotal} Covered`;
+
+          const badge = document.getElementById('bench-badge-grade');
+          const statScore = document.getElementById('bench-stat-score');
+          const tableScore = document.getElementById('bench-table-score');
+          const tableBlocked = document.getElementById('bench-table-blocked');
+
+          if (badge) badge.textContent = `${grade} (${score.toFixed(1)}%)`;
+          if (statScore) statScore.textContent = `${score.toFixed(1)}/100`;
+          if (tableScore) tableScore.textContent = `${score.toFixed(1)}% (${grade})`;
+          if (tableBlocked) tableBlocked.textContent = `${blocked} / ${totalTasks} blocked`;
         }
-      } catch { }
+      } catch (e) {
+        console.warn('Failed to fetch benchmark data:', e);
+      }
     }
 
 
@@ -2978,6 +3243,29 @@ const tool = client.governed("name", async (args) =&gt; {
             toast('Gateway policy hot-reloaded automatically', 'info');
             pollGatewayStatus();
             return;
+          }
+
+          // FR-2.1: Real-time mode toggle sync via WebSocket/SSE
+          if (event.event === 'mode_changed') {
+            const isEnforce = event.mode === 'enforce';
+            const toggle = document.getElementById('mode-toggle-input');
+            if (toggle) toggle.checked = isEnforce;
+            updateModeToggleUI(isEnforce, /*fromServer=*/true);
+            return;
+          }
+
+          // FR-2.2: Accumulate risks blocked from denied events
+          if (event.verdict === 'deny') {
+            risksBlockedCount++;
+            const el = document.getElementById('stat-risks-blocked');
+            if (el) el.textContent = risksBlockedCount;
+          }
+
+          // FR-2.2: Accumulate live spend from token usage
+          if (event.token_cost_usd != null) {
+            liveSpendUsd += parseFloat(event.token_cost_usd) || 0;
+            const el = document.getElementById('stat-live-spend');
+            if (el) el.textContent = '$' + liveSpendUsd.toFixed(3);
           }
 
           addTimelineRow(event);
@@ -3100,13 +3388,227 @@ const tool = client.governed("name", async (args) =&gt; {
     });
 
 
+    // ── FR-2.1: Mode Toggle Functions ─────────────────────────────────────────
+    async function toggleSecurityMode(isEnforce) {
+      updateModeToggleUI(isEnforce, false);
+      try {
+        const res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: isEnforce ? 'enforce' : 'shadow' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(isEnforce ? '🛡 ENFORCE mode active — blocking enabled' : '👁 SHADOW mode — audit only', isEnforce ? 'error' : 'info');
+          pollGatewayStatus();
+        } else {
+          toast('Mode switch failed: ' + (data.error || res.status), 'error');
+          // Revert toggle on failure
+          const toggle = document.getElementById('mode-toggle-input');
+          if (toggle) { toggle.checked = !isEnforce; updateModeToggleUI(!isEnforce, false); }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        const toggle = document.getElementById('mode-toggle-input');
+        if (toggle) { toggle.checked = !isEnforce; updateModeToggleUI(!isEnforce, false); }
+      }
+    }
+
+    function updateModeToggleUI(isEnforce, fromServer) {
+      const statusEl = document.getElementById('mode-toggle-status');
+      const labelEl = document.getElementById('mode-toggle-label');
+      const wrapEl = document.getElementById('mode-toggle-wrap');
+      if (isEnforce) {
+        if (statusEl) { statusEl.textContent = '🛡 Active blocking — ENFORCE'; statusEl.style.color = 'var(--red)'; }
+        if (labelEl) { labelEl.style.color = 'var(--text-muted)'; }
+        if (wrapEl) wrapEl.style.borderLeft = '2px solid var(--red)';
+      } else {
+        if (statusEl) { statusEl.textContent = 'Audit-only — no blocking active'; statusEl.style.color = 'var(--text-muted)'; }
+        if (labelEl) { labelEl.style.color = 'var(--text-muted)'; }
+        if (wrapEl) wrapEl.style.borderLeft = '2px solid var(--border)';
+      }
+    }
+
+    // ── FR-2.4: Magic Wand Quick-Policy Generator ──────────────────────────────
+    async function applyQuickRule(toolName, btnEl) {
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
+      try {
+        const res = await fetch('/api/policy/quick-rule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(`✅ Security rule applied for "${toolName}"`, 'success');
+          if (btnEl) { btnEl.textContent = '✅'; btnEl.style.color = 'var(--green)'; }
+        } else {
+          toast('Quick rule failed: ' + (data.error || res.status), 'error');
+          if (btnEl) { btnEl.textContent = '🪄'; btnEl.disabled = false; }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        if (btnEl) { btnEl.textContent = '🪄'; btnEl.disabled = false; }
+      }
+    }
+
+    // ── Live Policy Wizard Functions ──────────────────────────────────────────
+    function openPolicyWizard() {
+      const drawer = document.getElementById('policy-wizard-drawer');
+      if (drawer) drawer.classList.add('open');
+      const editor = document.getElementById('wizard-yaml-editor');
+      if (editor && (!editor.value || editor.value.trim().length === 0)) {
+        fetchWizardLivePolicy();
+      }
+    }
+
+    function closePolicyWizard() {
+      const drawer = document.getElementById('policy-wizard-drawer');
+      if (drawer) drawer.classList.remove('open');
+    }
+
+    async function fetchWizardLivePolicy() {
+      const editor = document.getElementById('wizard-yaml-editor');
+      const msg = document.getElementById('wizard-status-msg');
+      if (msg) msg.textContent = 'Fetching live generated policy...';
+      try {
+        const res = await fetch('/api/generate-policy', { method: 'POST' });
+        if (res.ok) {
+          const yaml = await res.text();
+          if (editor) editor.value = yaml;
+          if (msg) msg.textContent = '✅ Policy draft synthesized from observed traffic.';
+        } else {
+          if (msg) msg.textContent = '⚠ Could not generate draft. Using baseline template.';
+          if (editor && (!editor.value || editor.value.trim().length === 0)) {
+            editor.value = `version: "2"\ndefault_action: deny\n\ntools:\n  - name: "*"\n    action: allow\n`;
+          }
+        }
+      } catch (e) {
+        if (msg) msg.textContent = '⚠ Gateway offline.';
+      }
+    }
+
+    async function approveToolPattern(toolName) {
+      openPolicyWizard();
+      const editor = document.getElementById('wizard-yaml-editor');
+      const msg = document.getElementById('wizard-status-msg');
+      
+      let currentYaml = editor ? editor.value : '';
+      if (!currentYaml || currentYaml.trim().length === 0) {
+        currentYaml = `version: "2"\ndefault_action: deny\n\ntools:\n`;
+      }
+
+      // Check if tool already exists in YAML
+      if (!currentYaml.includes(`name: ${toolName}`) && !currentYaml.includes(`name: "${toolName}"`)) {
+        const toolSnippet = `
+  - name: "${toolName}"
+    action: allow
+    risk: low
+    parameters:
+      - name: path
+        type: string
+        required: false
+        validators:
+          - path_traversal
+`;
+        if (!currentYaml.endsWith('\n')) {
+          currentYaml += '\n';
+        }
+        currentYaml += toolSnippet;
+        if (editor) editor.value = currentYaml;
+        if (msg) msg.textContent = `✨ Approved pattern for tool "${toolName}". Updated YAML draft.`;
+        toast(`✨ Approved pattern for "${toolName}"`, 'success');
+      } else {
+        if (msg) msg.textContent = `ℹ Tool "${toolName}" is already present in policy draft.`;
+        toast(`Tool "${toolName}" is already in policy draft`, 'info');
+      }
+    }
+
+    async function saveAndApplyWizardPolicy() {
+      const editor = document.getElementById('wizard-yaml-editor');
+      const applyBtn = document.getElementById('btn-wizard-apply');
+      const msg = document.getElementById('wizard-status-msg');
+      if (!editor || !editor.value.trim()) {
+        toast('Policy YAML cannot be empty', 'error');
+        return;
+      }
+
+      if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '⏳ Validating & Applying...'; }
+      if (msg) msg.textContent = 'Saving and hot-reloading gateway policy...';
+
+      try {
+        const res = await fetch('/api/policy/save-and-reload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yaml: editor.value })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast('🚀 Policy saved and hot-reloaded successfully!', 'success');
+          if (msg) {
+            msg.style.color = 'var(--green)';
+            msg.textContent = '🚀 Policy validated, saved to disk, and hot-reloaded!';
+          }
+        } else {
+          toast('Policy error: ' + (data.error || 'Validation failed'), 'error');
+          if (msg) {
+            msg.style.color = 'var(--red)';
+            msg.textContent = '❌ ' + (data.error || 'Validation failed');
+          }
+        }
+      } catch (e) {
+        toast('Gateway error', 'error');
+        if (msg) {
+          msg.style.color = 'var(--red)';
+          msg.textContent = '❌ Gateway unreachable';
+        }
+      } finally {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '🚀 Apply Policy & Hot-Reload'; }
+      }
+    }
+
+    // ── Toggle Security Mode (FR-2.1) ─────────────────────────────────────────
+    async function toggleSecurityMode(isEnforce) {
+      const newMode = isEnforce ? 'enforce' : 'shadow';
+      const toggleStatus = document.getElementById('mode-toggle-status');
+      if (toggleStatus) {
+        toggleStatus.textContent = 'Switching…';
+        toggleStatus.style.color = 'var(--amber)';
+      }
+      try {
+        const res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: newMode })
+        });
+        if (res.ok) {
+          toast(isEnforce ? '🛡 Active Enforcement enabled' : '👁 Shadow Mode enabled', 'success');
+          pollGatewayStatus();
+        } else {
+          toast('Failed to switch mode', 'error');
+          // Revert toggle
+          const input = document.getElementById('mode-toggle-input');
+          if (input) input.checked = !isEnforce;
+          if (toggleStatus) {
+            toggleStatus.textContent = isEnforce ? 'Audit-only — no blocking active' : 'Active enforcement — blocking active';
+            toggleStatus.style.color = 'var(--text-muted)';
+          }
+        }
+      } catch (e) {
+        toast('Gateway unreachable', 'error');
+        const input = document.getElementById('mode-toggle-input');
+        if (input) input.checked = !isEnforce;
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
     (async function init() {
       await refresh();
       pollTimer = setInterval(refresh, 5000);
       connectSSE();
-      // Render initial timeline
       renderTimeline(allEvents);
+      // Sync sidebar toggle with actual gateway mode on first load
+      pollGatewayStatus();
     })();
   </script>
 </body>

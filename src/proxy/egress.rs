@@ -265,7 +265,7 @@ pub async fn handle_egress(
         });
         dlp_findings_json = Some(findings_json.to_string());
 
-        if state.shadow_mode {
+        if state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
             crate::logging::log_event(
                 crate::logging::Level::Warn,
                 "egress_dlp_finding",
@@ -406,7 +406,7 @@ pub async fn handle_egress(
             if let Ok(bytes) = upstream_res.bytes().await {
                 let body_str = String::from_utf8_lossy(&bytes);
                 // Scan for Prompt Injection
-                let enforce_mode = !state.shadow_mode;
+                let enforce_mode = !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed);
                 let scan_val = serde_json::json!({ "content": body_str.to_string() });
                 let inj_scan_result =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

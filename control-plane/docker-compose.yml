@@ -109,14 +109,14 @@ services:
     depends_on:
       dashboard-api:
         condition: service_healthy
-    environment:
-      # Each Compose service has its own network namespace, so the UI cannot
-      # reach the API on 127.0.0.1 (the image default, which is correct only on
-      # ECS Fargate). Address it by Docker DNS service name instead — without
-      # this every /api/ call from the console returns 502 Bad Gateway.
-      AGENTWALL_API_UPSTREAM: "http://dashboard-api:8400"
     ports:
       - "8081:80"
+    environment:
+      # Override the nginx proxy_pass upstream for Docker Compose networking.
+      # Each service gets its own network namespace, so the Fargate default
+      # (127.0.0.1:8400) is unreachable. Docker DNS resolves 'dashboard-api'
+      # to the API container's internal IP inside the Compose bridge network.
+      AGENTWALL_API_UPSTREAM: "dashboard-api:8400"
 
 volumes:
   agentwall_pg_data:

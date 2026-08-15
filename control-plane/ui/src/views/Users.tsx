@@ -140,7 +140,7 @@ export default function Users() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1>Users</h1>
-          <p>Manage local and identity-provider users for AgentWall access.</p>
+          <p>Manage local and identity-provider users for Agent Control access.</p>
         </div>
         <button className="btn-primary" onClick={openModal}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

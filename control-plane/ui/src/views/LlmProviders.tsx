@@ -77,7 +77,7 @@ export default function LlmProviders() {
       <div className="view-header">
         <div>
           <h1 className="view-title">LLM Providers</h1>
-          <p className="view-subtitle">Manage centralized API keys pushed to AgentWall Gateways</p>
+          <p className="view-subtitle">Manage centralized API keys pushed to Agent Control Gateways</p>
         </div>
       </div>
 

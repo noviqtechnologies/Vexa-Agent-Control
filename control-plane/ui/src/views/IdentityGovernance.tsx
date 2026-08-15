@@ -123,7 +123,7 @@ export default function IdentityGovernance() {
           🔐 Understanding Agent Identity & Scoped Credentials
         </h4>
         <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: '1.5' }}>
-          AgentWall enforces least-privilege Zero-Trust identity binding for AI daemons.
+          Agent Control enforces least-privilege Zero-Trust identity binding for AI daemons.
           Credentials define tool scopes (e.g. <code>mcp:tools:execute</code>) and strict TTLs. Gateway proxies auto-rotate tokens based on security policies.
         </div>
       </div>

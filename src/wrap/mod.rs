@@ -8,6 +8,7 @@ pub mod claude;
 pub mod config_path;
 pub mod file_lock;
 pub mod generic_ide;
+pub mod ide_config;
 pub mod status;
 pub mod transformer;
 pub mod watch;
@@ -259,3 +260,164 @@ pub fn run_status() -> i32 {
 pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     watch::run_watch(all, target)
 }
+
+/// Executes `agentwall unprotect` — restores configurations across all supported IDE targets from backups (FR-1.4).
+pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
+    println!(
+        "{} Unprotecting all IDE configurations...",
+        "●".cyan().bold()
+    );
+    if dry_run {
+        println!("  ℹ [DRY RUN] Previewing unprotect across all IDE targets (no disk modifications).");
+    }
+
+    let targets = vec![
+        ("Claude Desktop", UnwrapTarget::Claude { force }),
+        ("Cursor", UnwrapTarget::Cursor { force }),
+        ("Codex", UnwrapTarget::Codex { force }),
+        ("VS Code", UnwrapTarget::Vscode { force }),
+        ("JetBrains", UnwrapTarget::Jetbrains { force }),
+        ("Zed", UnwrapTarget::Zed { force }),
+        ("Cline", UnwrapTarget::Cline { force }),
+        ("OpenCode", UnwrapTarget::Opencode { force }),
+        ("Antigravity", UnwrapTarget::Antigravity { force }),
+    ];
+
+    let mut restored_count = 0;
+    let mut no_backup_count = 0;
+    let mut err_count = 0;
+
+    for (name, target) in targets {
+        if dry_run {
+            println!("  ℹ {}: Would attempt unwrap and restore backup", name.bold());
+            restored_count += 1;
+            continue;
+        }
+
+        let res = match &target {
+            UnwrapTarget::Claude { force } => claude::unwrap_claude(*force),
+            UnwrapTarget::Cursor { force } => config_path::cursor_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("Cursor", p, *force)),
+            UnwrapTarget::Codex { force } => config_path::codex_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("Codex", p, *force)),
+            UnwrapTarget::Vscode { force } => config_path::vscode_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("VS Code", p, *force)),
+            UnwrapTarget::Jetbrains { force } => config_path::jetbrains_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("JetBrains", p, *force)),
+            UnwrapTarget::Zed { force } => config_path::zed_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("Zed", p, *force)),
+            UnwrapTarget::Cline { force } => config_path::cline_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("Cline", p, *force)),
+            UnwrapTarget::Opencode { force } => config_path::opencode_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("OpenCode", p, *force)),
+            UnwrapTarget::Antigravity { force } => config_path::antigravity_config_path()
+                .and_then(|p| generic_ide::unwrap_generic("Antigravity", p, *force)),
+        };
+
+        match res {
+            Ok(r) => {
+                restored_count += 1;
+                println!(
+                    "  ✔ {}: Restored config from {}",
+                    name.bold(),
+                    r.backup_path.display().to_string().cyan()
+                );
+            }
+            Err(WrapError::NoBackupFound) => {
+                no_backup_count += 1;
+                println!("  ℹ {}: No backup found to restore", name.dimmed());
+            }
+            Err(WrapError::ConfigNotFound(_)) => {
+                no_backup_count += 1;
+            }
+            Err(e) => {
+                err_count += 1;
+                eprintln!("  ✖ {}: Restoring backup failed: {}", name.red(), e);
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "✔ Reversion Sweep Complete — Restored: {}, Skipped/No Backup: {}, Errors: {}",
+        restored_count.to_string().bold(),
+        no_backup_count.to_string().dimmed(),
+        err_count.to_string().yellow()
+    );
+
+    if err_count > 0 { 2 } else { 0 }
+}
+
+/// Helper to open a URL in the user's default web browser across OS platforms.
+fn open_browser(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn()?;
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(url).spawn()?;
+    }
+    Ok(())
+}
+
+/// Executes `agentwall protect` — Automated discovery, atomic wrapping, gateway startup, and dashboard launch (FR-1.1, FR-1.2, FR-1.3).
+pub fn run_protect_orchestration(
+    dry_run: bool,
+    no_browser: bool,
+    listen: &str,
+    _mcp_url: &str,
+    _enforce: bool,
+    policy: &str,
+) -> i32 {
+    println!(
+        "{} Initializing AgentWall One-Command Protection...",
+        "🛡".cyan().bold()
+    );
+
+    // Step 0: Ensure baseline policy exists
+    let policy_path = std::path::Path::new(policy);
+    if !policy_path.exists() {
+        if dry_run {
+            println!("  ℹ [DRY RUN] Would generate default baseline policy at {}", policy.cyan());
+        } else {
+            let default_policy = crate::generate_policy::generate_default_baseline_policy();
+            if let Err(e) = std::fs::write(policy_path, default_policy) {
+                eprintln!("  ⚠ Failed to auto-generate baseline policy file {}: {}", policy, e);
+            } else {
+                println!("  ✔ Auto-generated baseline security policy at {}", policy.cyan());
+            }
+        }
+    } else {
+        println!("  ✔ Loaded security policy from {}", policy.cyan());
+    }
+
+    if dry_run {
+        println!("  ℹ [DRY RUN] Scanning and previewing IDE configuration wraps without modifying disk or starting gateway.");
+        run_wrap_all(true, false);
+        return 0;
+    }
+
+    // Step 1: Scan & Wrap all IDE targets atomically
+    println!("\n{} Step 1/2: Automated IDE Discovery & Atomic Wrapping", "●".cyan());
+    run_wrap_all(false, false);
+
+    // Step 2: Auto-launch browser dashboard if enabled
+    if !no_browser {
+        let dash_url = format!("http://{}", listen);
+        println!("\n{} Launching Local Developer Dashboard at {}", "🚀".green().bold(), dash_url.cyan());
+        if let Err(e) = open_browser(&dash_url) {
+            eprintln!("  ⚠ Could not open browser automatically: {}", e);
+        }
+    }
+
+    0
+}
+
+

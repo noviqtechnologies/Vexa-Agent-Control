@@ -52,16 +52,27 @@
 //!      │ 10. Validate JWT + credential scope before policy eval
 //! ```
 
+pub mod standalone;
+
+#[cfg(feature = "team")]
+pub mod team;
+
 pub mod audit;
 pub mod audit_log;
 pub mod create;
 pub mod credential;
 pub mod device;
 pub mod inspect;
+pub mod ipc;
+pub mod keys;
 pub mod rotate;
 pub mod scope;
 pub mod scope_validator;
+pub mod transcript;
 pub mod vault;
+
+#[cfg(test)]
+mod transcript_test;
 
 pub use credential::AgentCredential;
 pub use scope_validator::{CredentialScopeCheckResult, IdentityScopeValidator};

@@ -1,6 +1,13 @@
 # Configuration & Policies
 
-AgentWall's core enforcement logic is driven by Schema v2 YAML policy files. 
+AgentWall's core enforcement logic is driven by Schema v2 YAML policy files.
+
+## Zero-Configuration Default Policy & Audit Logging
+
+When running `agentwall protect` in a directory without an existing policy, AgentWall automatically generates a baseline `agentwall-policy.yaml` with out-of-the-box secret DLP rules:
+- **Sensitive File Protection:** Automatic sequence blocking when tool calls read `.env`, `.ssh/id_rsa`, or `~/.aws/credentials` followed by outbound execution.
+- **Path Traversal Shield:** Enforces canonical path verification on `read_file` and filesystem parameters.
+- **Default Audit Log Location:** Audit logs are saved to `~/.agentwall/audit.jsonl` by default (overridable via `--log-path` or `AGENTWALL_LOG_PATH`).
 
 ## Policy Structure
 
@@ -158,6 +165,64 @@ schema_drift:
 | `enabled` | boolean | `false` | Enables cross-session schema drift evaluation on `tools/list` responses. |
 | `action` | string | `"warn"` | Action to take upon drift: `warn` (audit log only), `block` (reject session with error `-32002`), or `downgrade_score` (reduce Vexa Security Score by 25 points). |
 | `baseline_path` | string | `null` | Optional filesystem path to persist tool catalog baseline hashes across gateway restarts. |
+
+## Authoritative LLM Spend Governance & Policy Limits
+
+In Team and Enterprise deployments, spend management is authoritatively governed by PostgreSQL with preflight bounded reservations and integer microcents math.
+
+### Policy Configuration Schema
+
+Spend policies can be published via the Management Console (`/spend/limits`) or via the Control Hub API (`POST /api/v2/spend/policies`):
+
+```json
+{
+  "scope_type": "organization",
+  "scope_id": "00000000-0000-0000-0000-000000000001",
+  "period_type": "monthly",
+  "limit_usd": 500.00,
+  "action": "hard_deny"
+}
+```
+
+| Parameter | Type | Valid Values | Description |
+|---|---|---|---|
+| `scope_type` | string | `organization`, `project` | Hierarchical governance scope |
+| `scope_id` | string | UUID or project slug | Tenant ID or Project identifier |
+| `period_type` | string | `daily`, `monthly` | Budget reset interval (UTC calendar boundary) |
+| `limit_usd` / `limit_microcents` | number / integer | `> 0` | Cap amount ($1 = 100,000,000 microcents) |
+| `action` | string | `hard_deny`, `warn` | `hard_deny` returns HTTP 429 before upstream dispatch; `warn` allows with audit log |
+
+### Preflight Reservation & Settlement Invariants
+1. **Pre-dispatch Lock**: Before sending requests to providers (OpenAI, Anthropic, etc.), AgentWall locks the active `budget_windows` row `FOR UPDATE` and reserves the bounded maximum cost.
+2. **Hard Limit Verification**: Invariant enforced: `reserved_microcents + settled_microcents + reserve_microcents <= limit_microcents`.
+3. **Settlement**: Upon receiving provider token counts (`prompt_tokens`, `completion_tokens`, `cached_tokens`), the reservation is converted to settled spend, and unused reserve balances are released immediately.
+4. **Auto-Sweeper**: A background sweeper automatically releases un-settled reservations older than 5 minutes.
+
+---
+
+## 8. Sentry Daemon & IDE Auto-Enforcement Configuration
+
+The Sentry Daemon (`agentwall watch` / OS background service) runs locally on developer workstations to continuously watch and lock IDE proxy settings.
+
+### Target Path Resolution Reference
+| IDE Target | Windows Resolution | macOS Resolution | Linux Resolution | Injected Config Key |
+|---|---|---|---|---|
+| **Cursor** | `%APPDATA%\Cursor\User\settings.json` | `~/Library/Application Support/Cursor/User/settings.json` | `~/.config/Cursor/User/settings.json` | `cursor.models.openaiBaseUrl: "http://127.0.0.1:8080/v1"` |
+| **VS Code** | `%APPDATA%\Code\User\settings.json` | `~/Library/Application Support/Code/User/settings.json` | `~/.config/Code/User/settings.json` | `cline.baseUrl: "http://127.0.0.1:8080/v1"` |
+| **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | MCP stdio tool proxies |
+| **Zed Editor** | `%LOCALAPPDATA%\Zed\settings.json` | `~/.config/zed/settings.json` | `~/.config/zed/settings.json` | `language_models.openai.api_url: "http://127.0.0.1:8080/v1"` |
+| **Windsurf** | `%APPDATA%\Windsurf\User\settings.json` | `~/Library/Application Support/Windsurf/User/settings.json` | `~/.config/Windsurf/User/settings.json` | `openai.baseUrl: "http://127.0.0.1:8080/v1"` |
+
+### Sentry Daemon CLI Options
+```bash
+# Watch all supported IDE configurations with event-driven self-healing
+agentwall watch --all
+
+# Inspect current IDE config paths, existence, and proxy lock states
+agentwall status
+```
+
+
 
 <!--
 ## Client SDK Environment Variables

@@ -22,10 +22,10 @@ AgentWall operates under a Zero-Trust posture, binding every agent tool executio
 
 ---
 
-### 💾 2. Data Persistence Strategy
-AgentWall stores activity metrics, token usage, and audit records differently based on the deployment scale:
-* **Local / Developer Workstation (`agentwall dev`):** Persistent state is stored locally inside a lightweight, standalone **SQLite database**. This database tracks tool call history to generate policy drafts and powers the local SQLite-backed token spend ledger (`ledger.rs`) to enforce budget and rate limit caps.
-* **Enterprise Control Plane (`control-plane`):** Production deployments persist fleet-wide configurations, audit snapshots, and policy catalogs to a distributed **PostgreSQL database**.
+### 💾 2. Data Persistence & Authoritative Spend Governance Strategy
+AgentWall stores activity metrics, token usage, and audit records with strict tiered authority:
+* **Local Workstation Telemetry:** Local tool call history and observational metrics are recorded to a lightweight SQLite database for developer dashboards and debugging.
+* **Authoritative PostgreSQL Spend Ledger (`control-plane/spend`):** In Team and Enterprise deployments, PostgreSQL is the **sole authority for hard financial budgets**. All preflight bounded reservations (`POST /api/v2/spend/authorize`), settlements, releases, and immutable transaction logs (`spend_events`) are processed in serializable transactions with integer microcents arithmetic ($1 = 100,000,000 µ¢).
 * **SIEM Telemetry Streaming:** For corporate compliance, the gateway streams audit events directly to enterprise SIEM platforms (Splunk, Datadog, OpenSearch) in real time over HTTP/HTTPS, eliminating long-term log storage overhead on the gateway nodes themselves.
 
 ---

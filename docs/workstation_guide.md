@@ -27,7 +27,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 1. [Prerequisites](#1-prerequisites)
 2. [Installation](#2-installation)
 3. [Step-by-Step: Getting Started](#3-step-by-step-getting-started)
-   - [Step 1 — Launch Observation Proxy & Dashboard](#step-1--launch-observation-proxy--dashboard)
+   - [Step 1 — Protect & Launch (Recommended)](#step-1--protect--launch-recommended) | [Manual: `agentwall dev`](#step-1b--manual-launch-agentwall-dev)
    - [Step 2 — Route Agent HTTP Traffic Through Proxy](#step-2--route-agent-http-traffic-through-proxy)
    - [Step 3 — Wrap Stdio Tools & Desktop IDEs](#step-3--wrap-stdio-tools--desktop-ides)
    - [Step 4 — Auto-Generate Security Policy](#step-4--auto-generate-security-policy)
@@ -61,9 +61,14 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 ### macOS / Linux / WSL
 
 ```bash
-curl -fsSL https://vexasec.io/install.sh | bash
+# Install latest release (mandatory SHA-256 verified, strict error handling)
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash
+
 agentwall --version
 ```
+
+> [!TIP]
+> **Enterprise / Team enrollment?** Use the separate `team_otet.sh` script which handles OTET token enrollment and Sentry daemon installation. See the [Team Control Hub Guide](team_hub_guide.md).
 
 ### Persistent OS Sentry Daemon & File Locking
 
@@ -108,16 +113,17 @@ agentwall service status
 ### Windows (PowerShell)
 
 ```powershell
-# Standard local developer mode
-irm https://vexasec.io/install.ps1 | iex
-
-# Or automated enterprise enrollment with remote Control Hub:
-$env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN"
-$env:DASHBOARD_API_URL = "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8080"
-irm https://vexasec.io/install.ps1 | iex
+# Install latest release (mandatory SHA-256 verified, auto-adds to user PATH)
+irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex
 
 agentwall.exe --version
 ```
+
+> [!NOTE]
+> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place the binary + `quickstart_agent.py` into `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install dir to your user `PATH`.
+
+> [!TIP]
+> **Enterprise / Team enrollment?** Use the separate `team_otet.ps1` script instead. See the [Team Control Hub Guide](team_hub_guide.md).
 
 > **Important — Installer Elevation & Administrator Permissions:**
 > - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentwall service install` runs automatically and sets all secrets at System scope.**
@@ -125,10 +131,10 @@ agentwall.exe --version
 >   ```powershell
 >   # Run in an elevated (Administrator) PowerShell session:
 >   agentwall.exe service install `
->     --hub-url            "http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com:8081" `
+>     --hub-url            "http://localhost:8400" `
 >     --gateway-secret     "<GATEWAY_SECRET>" `
 >     --policy-read-secret "<POLICY_READ_SECRET>" `
->     --agent-id           "wasim-win11"   # optional
+>     --agent-id           "dev-workstation-01"   # optional
 >   ```
 >   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the service, so Sentry reads the correct secrets on first boot.
 > - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentwall watch --all`** in a standard user terminal.
@@ -157,24 +163,50 @@ agentwall.exe --version
 
 ## 3. Step-by-Step: Getting Started
 
-### Step 1 — Launch Observation Proxy & Dashboard
+### Step 1 — Protect & Launch (Recommended)
 
-Start the observation-mode shadow proxy listening on `127.0.0.1:8080`. AgentWall runs a **single process** that serves both the proxy (intercepting agent traffic on port `8080`) and the web dashboard UI (accessible in your browser at `http://127.0.0.1:8080`).
+The fastest path from zero to full protection. Run **one command** and AgentWall handles everything:
+1. Auto-generates a baseline `agentwall-policy.yaml` with DLP secret rules if no policy exists
+2. Discovers all installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex) and atomically wraps their MCP configs
+3. Starts the local gateway proxy listening on `127.0.0.1:8080` (audit log → `~/.agentwall/audit.jsonl`)
+4. Opens the local developer dashboard in your default browser
 
 ```bash
-agentwall dev
+agentwall protect                # macOS / Linux
+agentwall protect --enforce      # Start immediately in active-blocking mode
+agentwall protect --dry-run      # Preview all changes without writing to disk
 ```
 
-*(Windows PowerShell: `.\agentwall.exe dev`)*
+**Windows (PowerShell):**
+```powershell
+agentwall.exe protect
+```
 
 **What You Will See:**
-A terminal banner confirming proxy launch. Your default browser opens automatically at `http://127.0.0.1:8080` showing the live traffic dashboard.
+A terminal summary listing every IDE discovered, configs patched, and the baseline policy generated. Your default browser opens automatically at `http://127.0.0.1:8080`.
 
 **What You Achieve:**
-Real-time agent event monitoring is active. All traffic passing through the proxy appears instantly in the dashboard — no configuration needed.
+Full IDE protection + real-time agent event monitoring with zero manual configuration. Reverse everything cleanly with `agentwall unprotect`.
 
 > [!NOTE]
-> **Shadow / Observation Mode:** In this mode, AgentWall **observes and logs** all traffic but does **not block** any tool calls. This lets you assess your agents' behavior before enabling enforcement.
+> **`agentwall init` is deprecated.** All zero-config setup is now handled by `agentwall protect` in a single step.
+
+---
+
+### Step 1b — Observation-Only Mode (`agentwall protect --shadow`)
+
+If you want to observe agent traffic *without* active policy enforcement (for risk auditing or policy learning), pass the `--shadow` flag:
+
+```bash
+agentwall protect --shadow          # macOS / Linux
+agentwall.exe protect --shadow      # Windows
+```
+
+> [!NOTE]
+> `agentwall dev` is deprecated in favor of `agentwall protect` and `agentwall protect --shadow`.
+
+**What You Achieve:**
+Real-time agent event monitoring is active. All traffic passing through the proxy appears instantly in the dashboard without active blocking, allowing you to assess agent behavior before enforcing policy rules.
 
 > [!TIP]
 > **Populating Test Telemetry:** `quickstart_agent.py` is automatically installed alongside the `agentwall` binary into your PATH. If your browser dashboard shows *"No tool calls recorded yet"*, run the test script in a separate terminal to populate all dashboard panels:
@@ -256,16 +288,26 @@ agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "%US
 
 AgentWall automatically patches the MCP configuration file of the target IDE — no manual JSON editing required. Supported targets:
 
-| IDE / Client | Wrap Command |
-|---|---|
-| Claude Desktop | `agentwall wrap claude` |
-| Cursor | `agentwall wrap cursor` |
-| VS Code | `agentwall wrap vscode` |
-| JetBrains IDEs | `agentwall wrap jetbrains` |
-| Zed | `agentwall wrap zed` |
-| Cline | `agentwall wrap cline` |
-| OpenCode | `agentwall wrap opencode` |
-| Antigravity IDE | `agentwall wrap antigravity` |
+> [!TIP]
+> **One-command protection:** Instead of wrapping IDEs one by one, use `agentwall protect` to discover and wrap **all** supported IDEs simultaneously, start the gateway, and open the dashboard:
+> ```bash
+> agentwall protect             # macOS / Linux — wraps all IDEs in one pass
+> agentwall.exe protect         # Windows
+> agentwall protect --dry-run   # Preview changes without writing to disk
+> agentwall protect --enforce   # Start immediately in active-blocking mode
+> ```
+> To restore every IDE to its original config: `agentwall unprotect` (verifies backup integrity before restoring).
+
+| IDE / Client | Wrap Command | Unprotect |
+|---|---|---|
+| Claude Desktop | `agentwall wrap claude` | `agentwall unwrap claude` |
+| Cursor | `agentwall wrap cursor` | `agentwall unwrap cursor` |
+| VS Code | `agentwall wrap vscode` | `agentwall unwrap vscode` |
+| JetBrains IDEs | `agentwall wrap jetbrains` | `agentwall unwrap jetbrains` |
+| Zed | `agentwall wrap zed` | `agentwall unwrap zed` |
+| Cline | `agentwall wrap cline` | `agentwall unwrap cline` |
+| OpenCode | `agentwall wrap opencode` | `agentwall unwrap opencode` |
+| Antigravity IDE | `agentwall wrap antigravity` | `agentwall unwrap antigravity` |
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
@@ -288,6 +330,9 @@ MCP tool calls (file manipulation, shell execution, etc.) are proxied and govern
 ---
 
 ### Step 4 — Auto-Generate Security Policy
+
+> [!TIP]
+> **Using `agentwall protect`?** A baseline `agentwall-policy.yaml` is automatically created for you with P0 DLP secret rules when no policy file exists. You can skip this step and refine the generated policy manually.
 
 After running your agents or IDE tools, generate a YAML security policy derived from the observed traffic. This is a **one-time learning step** — run it after observation, not during.
 

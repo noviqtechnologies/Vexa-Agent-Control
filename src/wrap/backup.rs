@@ -51,6 +51,23 @@ pub fn find_latest_backup(config_dir: &Path) -> Option<PathBuf> {
     backups.into_iter().last()
 }
 
+/// Verify the structural integrity of a backup configuration file (FR-1.4).
+pub fn verify_backup_integrity(backup_path: &Path) -> Result<(), WrapError> {
+    if !backup_path.exists() {
+        return Err(WrapError::NoBackupFound);
+    }
+    let content = std::fs::read_to_string(backup_path)?;
+    if content.trim().is_empty() {
+        return Err(WrapError::InvalidJson(
+            "Backup file is empty (0 bytes)".to_string(),
+        ));
+    }
+    let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        WrapError::InvalidJson(format!("Backup JSON corruption detected: {}", e))
+    })?;
+    Ok(())
+}
+
 /// List all agentwall backup files in a directory.
 fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
     let entries = std::fs::read_dir(config_dir)?;
@@ -66,6 +83,7 @@ fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
         .collect();
     Ok(backups)
 }
+
 
 #[cfg(test)]
 mod tests {

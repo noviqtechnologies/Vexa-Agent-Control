@@ -26,6 +26,17 @@ pub mod wrap;
 pub mod compliance;
 pub mod license;
 pub mod spend;
+pub mod sentry;
 
 pub mod bench;
 pub mod detector;
+
+#[cfg(feature = "passport-injection")]
+pub mod passport;
+
+#[cfg(feature = "saas-sync")]
+pub mod sync;
+
+#[cfg(feature = "enterprise")]
+pub mod enterprise;
+

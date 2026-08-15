@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
@@ -202,7 +201,10 @@ func (h *HubSpecHandler) GetPolicyByID(w http.ResponseWriter, r *http.Request) {
 type CreatePolicyRequest struct {
 	Name          string `json:"name"`
 	YamlContent   string `json:"yaml_content"`
+	Content       string `json:"content"`
+	Version       string `json:"version"`
 	SchemaVersion string `json:"schema_version"`
+	IsActive      bool   `json:"is_active"`
 }
 
 // POST /api/v1/policies
@@ -213,6 +215,10 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"error":{"code":"POLICY_INVALID","message":"Invalid request body"}}`))
 		return
+	}
+
+	if req.YamlContent == "" && req.Content != "" {
+		req.YamlContent = req.Content
 	}
 
 	if req.YamlContent == "" {
@@ -230,7 +236,11 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	versionStr := fmt.Sprintf("%d", time.Now().Unix())
+	versionStr := req.Version
+	if versionStr == "" {
+		versionStr = fmt.Sprintf("%d", time.Now().Unix())
+	}
+
 	p := model.Policy{
 		Version:  versionStr,
 		Content:  req.YamlContent,
@@ -247,12 +257,21 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vNum, _ := strconv.Atoi(p.Version)
+	if vNum == 0 {
+		vNum = 1
+	}
 
 	resp := map[string]interface{}{
-		"id":        p.ID,
-		"name":      req.Name,
-		"version":   vNum,
-		"is_active": true,
+		"id":             p.ID,
+		"name":           req.Name,
+		"version":        p.Version,
+		"version_num":    vNum,
+		"schema_version": "v2",
+		"content":        p.Content,
+		"yaml_content":   p.Content,
+		"is_active":      p.IsActive,
+		"created_at":     p.CreatedAt.Format(time.RFC3339),
+		"updated_at":     p.UpdatedAt.Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -275,39 +294,31 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/v1/credentials/{provider}
+// Legacy credential metadata endpoint. Upholds provider key custody by never returning raw provider master keys.
 func (h *HubSpecHandler) GetProviderCredential(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	if provider == "" {
 		provider = "openai"
 	}
 
-	var rawKey string
+	var maskedKey string
 	if h.store != nil {
 		k, err := h.store.GetProviderKeyByProvider(r.Context(), provider)
-		if err == nil && k != nil && k.APIKeyEncrypted != "" {
-			if crypto.IsEncrypted(k.APIKeyEncrypted) && len(h.masterKey) == 32 {
-				decrypted, err := crypto.Decrypt(h.masterKey, k.APIKeyEncrypted)
-				if err == nil {
-					rawKey = decrypted
-				} else {
-					rawKey = k.APIKeyEncrypted
-				}
-			} else {
-				rawKey = k.APIKeyEncrypted
-			}
+		if err == nil && k != nil {
+			maskedKey = k.APIKeyMasked
 		}
 	}
 
-	if rawKey == "" {
-		rawKey = "test_ciphertext_dummy"
+	if maskedKey == "" {
+		maskedKey = "sk-...[managed-by-hub]"
 	}
 
 	resp := map[string]interface{}{
 		"provider":         provider,
 		"credential_id":    fmt.Sprintf("cred-%s-1", provider),
-		"api_key":          rawKey,
-		"key_ciphertext":   rawKey,
+		"api_key_masked":   maskedKey,
 		"rotation_version": 1,
+		"custody":          "hub_managed",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

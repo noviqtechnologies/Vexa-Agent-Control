@@ -140,8 +140,8 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       id: 'nav-devices',
       title: 'Device Governance & Token Enrollment',
       category: 'Governance',
-      description: 'Hardware keypair bindings and workstation attestation',
-      action: () => navigate('/admin/devices'),
+      description: 'Workstation fleet governance, IDE Sentry locking, and PKI enrollment',
+      action: () => navigate('/devices'),
       shortcut: 'G D',
     },
     {
@@ -187,13 +187,6 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       action: () => navigate('/spend/visualization'),
     },
     {
-      id: 'nav-ide',
-      title: 'IDE Connections (VS Code / JetBrains / Cursor)',
-      category: 'Integrations',
-      description: 'Local sidecar proxy bridge for developer IDEs',
-      action: () => navigate('/integrations/ide'),
-    },
-    {
       id: 'nav-mcp',
       title: 'MCP Server Registry',
       category: 'Integrations',
@@ -211,15 +204,15 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       id: 'act-copy-linux',
       title: 'Copy Linux / macOS Quickstart Script',
       category: 'Actions',
-      description: 'curl -fsSL https://get.agentwall.io/install.sh | bash',
-      action: () => copyToClipboard('curl -fsSL https://get.agentwall.io/install.sh | bash', 'Linux/macOS install script copied!'),
+      description: 'curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash',
+      action: () => copyToClipboard('curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.sh | bash', 'Linux/macOS install script copied!'),
     },
     {
       id: 'act-copy-win',
       title: 'Copy Windows Quickstart Script',
       category: 'Actions',
-      description: 'irm https://get.agentwall.io/install.ps1 | iex',
-      action: () => copyToClipboard('irm https://get.agentwall.io/install.ps1 | iex', 'Windows install script copied!'),
+      description: 'irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex',
+      action: () => copyToClipboard('irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/install/install.ps1 | iex', 'Windows install script copied!'),
     },
   ]
 
@@ -326,7 +319,7 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
             <span><kbd>↵</kbd> to select</span>
             <span><kbd>ESC</kbd> to dismiss</span>
           </div>
-          <span className="footer-brand">Vexa Agentwall SOC</span>
+          <span className="footer-brand">Vexa Agent Control SOC</span>
         </div>
       </div>
     </div>

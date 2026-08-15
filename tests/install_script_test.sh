@@ -18,6 +18,15 @@ echo "[*] Checking syntax of install.sh..."
 bash -n "$SCRIPT_PATH"
 echo "[✓] Syntax check passed."
 
+# 3. Check for set -euo pipefail
+if grep -q "set -euo pipefail" "$SCRIPT_PATH"; then
+    echo "[✓] Strict error handling (set -euo pipefail) verified."
+else
+    echo "[!] Error: install.sh missing strict error handling set -euo pipefail"
+    exit 1
+fi
+
+
 # We will skip executing the actual installation to avoid polluting the host
 # or hitting GitHub API limits during CI.
 # If we wanted to test full execution we could mock curl and unzip by prepending

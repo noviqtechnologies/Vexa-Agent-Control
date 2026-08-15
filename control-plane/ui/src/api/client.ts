@@ -132,7 +132,117 @@ export interface LicenseStatus {
   expires_at?: string
 }
 
+export interface BudgetWindowV2 {
+  window_id: string
+  organization_id: string
+  policy_version_id: string
+  scope_type: string
+  scope_id: string
+  window_start: string
+  window_end: string
+  limit_microcents: number
+  reserved_microcents: number
+  settled_microcents: number
+  available_microcents: number
+  version: number
+}
+
+export interface SpendPolicyV2 {
+  policy_id: string
+  organization_id: string
+  scope_type: string
+  scope_id: string
+  currency: string
+  period_type: string
+  limit_microcents: number
+  action: string
+  effective_from: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SpendEventV2 {
+  event_id: string
+  organization_id: string
+  reservation_id: string
+  request_id: string
+  event_type: string
+  amount_microcents: number
+  currency: string
+  usage_json: string
+  provider_request_id?: string
+  actor: string
+  reason_code: string
+  occurred_at: string
+}
+
+export interface IncreaseRequestV2 {
+  request_id: string
+  organization_id: string
+  project_id: string
+  requested_limit_microcents: number
+  current_limit_microcents: number
+  reason: string
+  status: string
+  created_by: string
+  decided_by?: string
+  decision_reason?: string
+  resulting_policy_version_id?: string
+  created_at: string
+  decided_at?: string
+}
+
 export const api = {
+  // Spend V2 (Authoritative PostgreSQL Ledger)
+  getEffectiveSpendV2: async () => {
+    const res = await fetch('/api/v2/spend/effective', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; windows: BudgetWindowV2[] }>
+  },
+  listSpendEventsV2: async (limit = 100) => {
+    const res = await fetch(`/api/v2/spend/events?limit=${limit}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; events: SpendEventV2[] }>
+  },
+  listSpendPoliciesV2: async () => {
+    const res = await fetch('/api/v2/spend/policies', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ policies: SpendPolicyV2[] }>
+  },
+  createSpendPolicyV2: async (data: { scope_type: string; scope_id: string; period_type: string; limit_usd: number; action?: string }) => {
+    const res = await fetch('/api/v2/spend/policies', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json()
+  },
+  listIncreaseRequestsV2: async () => {
+    const res = await fetch('/api/v2/spend/increase-requests', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ requests: IncreaseRequestV2[] }>
+  },
+  createIncreaseRequestV2: async (data: { project_id: string; requested_limit_usd: number; current_limit_microcents: number; reason: string }) => {
+    const res = await fetch('/api/v2/spend/increase-requests', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json()
+  },
+  decideIncreaseRequestV2: async (id: string, decision: 'APPROVED' | 'REJECTED', reason: string) => {
+    const res = await fetch(`/api/v2/spend/increase-requests/${id}/decide`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, reason })
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json()
+  },
+
   // License
   getLicenseStatus: () => get<LicenseStatus>('/license/status'),
 
@@ -182,6 +292,20 @@ export const api = {
   listPolicies: () => get<Policy[]>('/policies'),
   getActivePolicy: () => get<Policy>('/policies/active?raw=true'),
   savePolicy: (policy: Partial<Policy>) => postJSON<Policy>('/policies', policy),
+  
+  // Policy Marketplace Templates
+  listTemplates: () => get<PolicyTemplate[]>('/policies/templates'),
+  getTemplate: (id: string) => get<PolicyTemplate>(`/policies/templates/${id}`),
+  createCustomTemplate: (tpl: Partial<PolicyTemplate>) => postJSON<PolicyTemplate>('/policies/templates', tpl),
+  deleteCustomTemplate: (id: string) => fetch(`${BASE}/policies/templates/${id}`, { method: 'DELETE', headers: authHeaders() }),
+
+  // Sentry Device Governance & Tamper Log
+  listSentryDevices: (complianceStatus = '', limit = 50) => {
+    const query = complianceStatus ? `?compliance_status=${complianceStatus}&limit=${limit}` : `?limit=${limit}`
+    return get<ListSentryDevicesResponse>(`/devices${query}`)
+  },
+  listSentryTamperEvents: (limit = 50) =>
+    get<ListSentryTamperEventsResponse>(`/devices/tamper-log?limit=${limit}`),
 }
 
 async function post<T>(path: string): Promise<T> {
@@ -236,6 +360,19 @@ export interface Policy {
   version: string
   content: string
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PolicyTemplate {
+  id: string
+  name: string
+  category: string
+  description: string
+  tags: string[]
+  icon: string
+  content: string
+  is_custom: boolean
   created_at: string
   updated_at: string
 }
@@ -302,12 +439,51 @@ export interface EnrollmentToken {
   created_at: string
 }
 
+export interface EnrollmentTokenV2 {
+  id: string
+  token: string
+  token_hint: string
+  expires_at: string
+  max_uses: number
+  status: string
+}
+
+export async function createEnrollmentTokenV2(reason: string, deviceLabel = '', targetOwner = '', ttlHours = 24): Promise<EnrollmentTokenV2> {
+  const res = await fetch('/api/v2/admin/enrollment-tokens', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schema_version: '2.0',
+      expires_in_minutes: ttlHours * 60,
+      device_label: deviceLabel,
+      target_owner_subject: targetOwner,
+      reason: reason,
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`)
+  }
+  return res.json()
+}
+
+export async function revokeDeviceV2(deviceId: string, reason = 'Operator manual revocation'): Promise<{ device_id: string; status: string }> {
+  const res = await fetch(`/api/v2/admin/devices/${deviceId}/revoke`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  })
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await res.text()}`)
+  }
+  return res.json()
+}
+
 export async function listDevices(osFamily = '', status = ''): Promise<{ devices: Device[]; total: number }> {
   return get<{ devices: Device[]; total: number }>(`/admin/devices?os_family=${osFamily}&status=${status}`)
 }
 
 export async function revokeDevice(deviceId: string): Promise<{ device_id: string; status: string }> {
-  return postJSON<{ device_id: string; status: string }>(`/admin/devices/${deviceId}/revoke`, {})
+  return revokeDeviceV2(deviceId)
 }
 
 export async function createEnrollmentToken(rawToken: string, maxUses = 10, ttlHours = 24): Promise<EnrollmentToken> {
@@ -316,6 +492,55 @@ export async function createEnrollmentToken(rawToken: string, maxUses = 10, ttlH
     max_uses: maxUses,
     ttl_hours: ttlHours,
   })
+}
+
+// ── Device Governance & Sentry Compliance Types & API ────────────────────────
+
+export interface SentryDeviceSummary {
+  device_id: string
+  hostname: string
+  user_identifier: string
+  os: string
+  os_version: string
+  overall_compliance: 'COMPLIANT' | 'NON_COMPLIANT' | 'OFFLINE'
+  active_ides: string[]
+  tamper_count_24h: number
+  last_heartbeat_at?: string
+  enrollment_status: string
+}
+
+export interface ListSentryDevicesResponse {
+  devices: SentryDeviceSummary[]
+  total_count: number
+  compliant_count: number
+  non_compliant_count: number
+  offline_count: number
+}
+
+export interface SentryTamperEvent {
+  event_id: string
+  device_id: string
+  hostname: string
+  user_identifier: string
+  ide_name: string
+  event_type: string
+  tamper_details: string
+  healed_successfully: boolean
+  occurred_at: string
+}
+
+export interface ListSentryTamperEventsResponse {
+  events: SentryTamperEvent[]
+  total_count: number
+}
+
+export async function listSentryDevices(complianceStatus = '', limit = 50): Promise<ListSentryDevicesResponse> {
+  const query = complianceStatus ? `?compliance_status=${complianceStatus}&limit=${limit}` : `?limit=${limit}`
+  return get<ListSentryDevicesResponse>(`/devices${query}`)
+}
+
+export async function listSentryTamperEvents(limit = 50): Promise<ListSentryTamperEventsResponse> {
+  return get<ListSentryTamperEventsResponse>(`/devices/tamper-log?limit=${limit}`)
 }
 
 // SSE stream for real-time alerts (AC-23.2).

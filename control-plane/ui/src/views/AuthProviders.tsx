@@ -20,44 +20,20 @@ type ModalStep = 'setup' | 'configure'
 
 const PROVIDER_META: Record<string, { label: string; description: string; isOAuth: boolean; isEnterprise?: boolean }> = {
   local: {
-    label: 'Local',
-    description: 'Email/password stored in AgentWall. Best for development.',
+    label: 'Local Authentication',
+    description: 'Email and password managed directly in Agent Control. Ideal for development & initial setup.',
     isOAuth: false,
   },
-  github: {
-    label: 'GitHub',
-    description: 'Authenticate users via GitHub OAuth application.',
-    isOAuth: true,
-  },
   google: {
-    label: 'Google',
-    description: 'Authenticate users via Google OAuth 2.0.',
+    label: 'Google Workspace',
+    description: 'Authenticate team members via Google Cloud OAuth 2.0 & Google Workspace SSO.',
     isOAuth: true,
-  },
-  okta: {
-    label: 'Okta',
-    description: 'Authenticate users via Okta SSO.',
-    isOAuth: true,
-    isEnterprise: true,
-  },
-  auth0: {
-    label: 'Auth0',
-    description: 'Authenticate users via Auth0.',
-    isOAuth: true,
-    isEnterprise: true,
-  },
-  jumpcloud: {
-    label: 'JumpCloud',
-    description: 'Authenticate users via JumpCloud.',
-    isOAuth: true,
-    isEnterprise: true,
   },
   entra: {
-    label: 'Microsoft Entra',
-    description: 'Authenticate users via Microsoft Entra ID.',
+    label: 'Microsoft Entra ID',
+    description: 'Authenticate enterprise team members via Microsoft Entra ID (Azure Active Directory).',
     isOAuth: true,
-    isEnterprise: true,
-  }
+  },
 }
 
 function LocalIcon() {
@@ -69,63 +45,30 @@ function LocalIcon() {
   )
 }
 
-function GitHubIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-    </svg>
-  )
-}
-
 function GoogleIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
-      <path d="M17 12h-5v5m0-5V7" />
-    </svg>
-  )
-}
-
-function OktaIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="4" fill="currentColor" />
-    </svg>
-  )
-}
-
-function Auth0Icon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M12 2l4.5 9h-9z" />
-      <path d="M12 22l-4.5-9h9z" />
-    </svg>
-  )
-}
-
-function JumpCloudIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M17.5 19c2.5 0 4.5-2 4.5-4.5S20 10 17.5 10c-.3 0-.6 0-.8.1C15.8 7.1 13.1 5 10 5 6.1 5 3 8.1 3 12s3.1 7 7 7h7.5z" />
+    <svg width="28" height="28" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
     </svg>
   )
 }
 
 function EntraIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M4 12l8-8 8 8-8 8z" fill="currentColor"/>
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <path fill="#F25022" d="M1 1h10v10H1z"/>
+      <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+      <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+      <path fill="#FFB900" d="M13 13h10v10H13z"/>
     </svg>
   )
 }
 
 function ProviderIcon({ type }: { type: string }) {
-  if (type === 'github') return <GitHubIcon />
   if (type === 'google') return <GoogleIcon />
-  if (type === 'okta') return <OktaIcon />
-  if (type === 'auth0') return <Auth0Icon />
-  if (type === 'jumpcloud') return <JumpCloudIcon />
   if (type === 'entra') return <EntraIcon />
   return <LocalIcon />
 }
@@ -279,7 +222,7 @@ export default function AuthProviders() {
       <div className="page-header">
         <h1>Auth Providers</h1>
         <p>
-          Authentication providers allow users to sign in to AgentWall. Configure at least one
+          Authentication providers allow users to sign in to Agent Control. Configure at least one
           provider before inviting users.
         </p>
       </div>
@@ -294,7 +237,7 @@ export default function AuthProviders() {
           </div>
           <div className="ap-global-warning-content">
             <strong>No Auth Providers Configured!</strong>
-            <p>To finish setting up AgentWall, you'll need to configure an Auth Provider. Select one below to get started!</p>
+            <p>To finish setting up Agent Control, you'll need to configure an Auth Provider. Select one below to get started!</p>
           </div>
         </div>
       )}
@@ -365,7 +308,7 @@ export default function AuthProviders() {
                   <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
                 <p>
-                  Local authentication stores passwords in AgentWall and is intended for{' '}
+                  Local authentication stores passwords in Agent Control and is intended for{' '}
                   <strong>development or testing</strong>. For production, use an SSO provider
                   such as Google or GitHub.
                 </p>
@@ -421,22 +364,20 @@ export default function AuthProviders() {
                   {/* Docs Box */}
                   <div className="ap-docs-box" style={{ border: '1px solid #374151', borderRadius: '6px', padding: '12px', fontSize: '13px', color: '#E8E8ED' }}>
                     For more details, please review <a href={
-                      editingProvider.type === 'github' ? 'https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app' :
                       editingProvider.type === 'google' ? 'https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred' :
-                      `https://docs.obot.ai/configuration/auth-providers/#${editingProvider.type}`
+                      editingProvider.type === 'entra' ? 'https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app' :
+                      '#'
                     } target="_blank" rel="noreferrer" style={{ color: '#60A5FA', textDecoration: 'none' }}>the documentation</a> for configuring this auth provider.
                   </div>
 
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#F9FAFB', margin: '8px 0 0 0' }}>Required Configuration</h3>
 
                   <div className="form-group">
-                    <label className="form-label">Client ID</label>
+                    <label className="form-label">Client ID (Application ID)</label>
                     <p className="form-hint">
                       {editingProvider.type === 'google' 
-                        ? "Unique identifier for the application when using Google's OAuth. Can typically be found in Google Cloud Console > Credentials"
-                        : editingProvider.type === 'github'
-                        ? "Client ID for your GitHub OAuth app. Can be found in GitHub Developer Settings > OAuth Apps"
-                        : `Client ID for your ${editingProvider.name} OAuth app.`}
+                        ? "OAuth 2.0 Client ID from Google Cloud Console > APIs & Services > Credentials"
+                        : "Application (client) ID from Microsoft Entra admin center > App registrations"}
                     </p>
                     <input
                       className="form-input"
@@ -451,10 +392,8 @@ export default function AuthProviders() {
                     <label className="form-label">Client Secret</label>
                     <p className="form-hint">
                       {editingProvider.type === 'google' 
-                        ? "Password or key that app uses to authenticate with Google's OAuth. Can typically be found in Google Cloud Console > Credentials"
-                        : editingProvider.type === 'github'
-                        ? "Client secret for your GitHub OAuth app. Can be found in GitHub Developer Settings > OAuth Apps"
-                        : `Client secret for your ${editingProvider.name} OAuth app.`}
+                        ? "OAuth Client Secret from Google Cloud Console"
+                        : "Client secret value from Microsoft Entra admin center > Certificates & secrets"}
                     </p>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -470,10 +409,28 @@ export default function AuthProviders() {
                       </svg>
                     </div>
                   </div>
+
+                  {editingProvider.type === 'entra' && (
+                    <div className="form-group">
+                      <label className="form-label">Directory (Tenant) ID or Issuer URL</label>
+                      <p className="form-hint">
+                        Your Microsoft Entra Tenant ID (GUID) or <code>common</code> for multi-tenant organizations.
+                      </p>
+                      <input
+                        className="form-input"
+                        placeholder="common or 00000000-0000-0000-0000-000000000000"
+                        value={editingProvider.issuer_url || ''}
+                        onChange={e =>
+                          setEditingProvider({ ...editingProvider, issuer_url: e.target.value })
+                        }
+                      />
+                    </div>
+                  )}
+
                   <div className="form-group">
                     <label className="form-label">Allowed E-Mail Domains</label>
                     <p className="form-hint">
-                      A list of email domains that are allowed to authenticate with this provider. <code>*</code> is a special value that allows all domains.
+                      A list of email domains allowed to authenticate (e.g. <code>company.com</code>). Use <code>*</code> to allow any domain.
                     </p>
                     <TagInput
                       tags={editingProvider.email_domains}
@@ -496,33 +453,6 @@ export default function AuthProviders() {
                       }
                     />
                   </div>
-
-                  {editingProvider.type === 'github' && (
-                    <>
-                      <div className="form-group">
-                        <label className="form-label">Allowed {editingProvider.name} Organization</label>
-                        <p className="form-hint">Restrict logins to members of this {editingProvider.name} organization.</p>
-                        <input
-                          className="form-input"
-                          value={editingProvider.allowed_org || ''}
-                          onChange={e =>
-                            setEditingProvider({ ...editingProvider, allowed_org: e.target.value })
-                          }
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Allowed {editingProvider.name} Users</label>
-                        <p className="form-hint">A list of {editingProvider.name} users allowed to log in, even if they do not belong to the specified org.</p>
-                        <TagInput
-                          tags={editingProvider.allowed_users || []}
-                          onChange={users =>
-                            setEditingProvider({ ...editingProvider, allowed_users: users })
-                          }
-                        />
-                      </div>
-                    </>
-                  )}
 
                   <div className="form-group ap-toggle-row" style={{ marginTop: '4px' }}>
                     <div style={{ flex: 1 }}>

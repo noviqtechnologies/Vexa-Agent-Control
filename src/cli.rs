@@ -10,9 +10,10 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "agentwall",
+    name = "agentcontrol",
+    bin_name = "agentcontrol",
     version,
-    about = "VEXA AgentWall — centralized enterprise security gateway for AI agent tool calls over MCP"
+    about = "VEXA Agent Control — centralized enterprise security gateway for AI agent tool calls over MCP"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -34,6 +35,18 @@ pub enum Commands {
             env = "DASHBOARD_API_URL",
             default_value = "http://localhost:8400"
         )]
+        hub_url: String,
+    },
+
+    /// Join organization / team workspace (SMB Feature)
+    #[cfg(feature = "team")]
+    Join {
+        /// Organization or workspace join token
+        #[arg(long)]
+        token: String,
+
+        /// Control Hub / SaaS URL
+        #[arg(long, default_value = "https://app.vexasec.io")]
         hub_url: String,
     },
 
@@ -248,6 +261,49 @@ pub enum Commands {
         #[command(subcommand)]
         target: UnwrapTarget,
     },
+
+    /// Automatically discover IDEs, atomically wrap MCP configs, start gateway, and open dashboard
+    Protect {
+        /// Preview changes without writing to disk or starting gateway
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Disable automatic opening of local dashboard in browser
+        #[arg(long, default_value_t = false)]
+        no_browser: bool,
+
+        /// Listen address for gateway proxy (default: 127.0.0.1:8080)
+        #[arg(long, default_value = "127.0.0.1:8080")]
+        listen: String,
+
+        /// Upstream HTTP MCP server URL (default: http://127.0.0.1:3000)
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        mcp_url: String,
+
+        /// Enable active enforcement mode (default: true for protect)
+        #[arg(long, default_value_t = true)]
+        enforce: bool,
+
+        /// Enable observation-only shadow mode without active blocking
+        #[arg(long, default_value_t = false)]
+        shadow: bool,
+
+        /// YAML policy file path
+        #[arg(long, default_value = "agentwall-policy.yaml")]
+        policy: String,
+    },
+
+    /// One-command reversion — restore all IDE configurations from backups and verify integrity
+    Unprotect {
+        /// Preview unprotect operations without modifying disk
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Force restoration even if backup integrity warning is issued
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
 
     /// Internal command used by Claude Desktop to proxy tool calls
     #[command(name = "stdio-proxy", hide = true)]
@@ -654,7 +710,7 @@ pub struct StartArgs {
     pub listen: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
     pub log_path: String,
 
     /// Upstream MCP server URL
@@ -762,6 +818,40 @@ pub struct StartArgs {
     pub centralized: bool,
 }
 
+impl StartArgs {
+    pub fn centralized_default() -> Self {
+        Self {
+            policy: None,
+            listen: "127.0.0.1:8080".to_string(),
+            log_path: "~/.agentwall/audit.jsonl".to_string(),
+            mcp_url: "http://127.0.0.1:3000".to_string(),
+            agent_pid: None,
+            agent_pid_file: None,
+            kill_mode: "connection".to_string(),
+            log_max_bytes: 104857600,
+            dry_run: false,
+            rate_limit: None,
+            oidc_issuer: None,
+            report_path: None,
+            balanced: false,
+            strict: false,
+            scan_responses: false,
+            block_on_secrets: false,
+            max_scan_bytes: 1048576,
+            siem_backend: "local".to_string(),
+            siem_endpoint: String::new(),
+            siem_token: String::new(),
+            siem_timeout_secs: 2,
+            include_params: false,
+            shadow_mode: false,
+            strict_credential_scope: false,
+            tls_cert: None,
+            tls_key: None,
+            centralized: true,
+        }
+    }
+}
+
 #[derive(clap::Args, Debug, Clone)]
 pub struct WrapArgs {
     /// The command to wrap (e.g. "npx @modelcontextprotocol/server-memory")
@@ -789,7 +879,7 @@ pub struct WrapArgs {
     pub kill_mode: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "audit.log")]
+    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
     pub log_path: String,
 
     /// Enable balanced security profile

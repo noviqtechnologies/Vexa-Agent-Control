@@ -37,7 +37,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
             agent_id,
         } => {
             println!(
-                "{} Installing AgentWall Persistent Sentry Daemon",
+                "{} Installing Agent Control Persistent Sentry Daemon",
                 "●".green().bold()
             );
             println!("  Binary path: {}", current_exe.cyan());
@@ -79,7 +79,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
         }
         ServiceAction::Uninstall => {
             println!(
-                "{} Uninstalling AgentWall Persistent Sentry Daemon...",
+                "{} Uninstalling Agent Control Persistent Sentry Daemon...",
                 "●".yellow().bold()
             );
 
@@ -100,18 +100,18 @@ pub fn run_service(action: ServiceAction) -> i32 {
             }
         }
         ServiceAction::Status => {
-            println!("{} AgentWall Service Daemon Status", "●".green().bold());
+            println!("{} Agent Control Service Daemon Status", "●".green().bold());
             println!("  OS Target: {}", std::env::consts::OS.cyan());
             println!("  Arch: {}", std::env::consts::ARCH.cyan());
             println!("  Binary: {}", current_exe.dimmed());
 
             if cfg!(target_os = "windows") {
-                println!("  Service Name: AgentWallSentry (Windows SCM)");
+                println!("  Service Name: AgentControlSentry (Windows SCM)");
                 println!("  Profile Scan Engine: Windows Session 0 Multi-User Hives Enabled");
             } else if cfg!(target_os = "macos") {
-                println!("  Service Target: LaunchDaemon / LaunchAgent (io.vexasec.agentwall)");
+                println!("  Service Target: LaunchDaemon / LaunchAgent (io.vexasec.agentcontrol)");
             } else {
-                println!("  Service Target: systemd (agentwall.service)");
+                println!("  Service Target: systemd (agent-control.service)");
             }
 
             0

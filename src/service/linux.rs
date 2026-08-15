@@ -7,8 +7,8 @@ use std::process::Command;
 pub fn install_linux_service(
     bin_path: &str,
     hub_url: &str,
-    gateway_secret: &str,
-    policy_read_secret: &str,
+    _gateway_secret: &str,
+    _policy_read_secret: &str,
     agent_id: Option<&str>,
 ) -> Result<(), String> {
     // Build optional AGENT_ID environment line
@@ -18,25 +18,23 @@ pub fn install_linux_service(
 
     let service_content = format!(
         r#"[Unit]
-Description=AgentWall Sentry Endpoint Security Service
+Description=Agent Control Sentry Endpoint Security Service
 After=network.target
 
 [Service]
 Type=simple
-ExecStart={} start --centralized
+ExecStart={} start --centralized --listen 127.0.0.1:8080
 Restart=always
 RestartSec=5s
 Environment=DASHBOARD_API_URL="{}"
-Environment=GATEWAY_SECRET="{}"
-Environment=POLICY_READ_SECRET="{}"
 {}
 [Install]
 WantedBy=multi-user.target
 "#,
-        bin_path, hub_url, gateway_secret, policy_read_secret, agent_id_line
+        bin_path, hub_url, agent_id_line
     );
 
-    let unit_path = "/etc/systemd/system/agentwall.service";
+    let unit_path = "/etc/systemd/system/agent-control.service";
     println!("  Writing systemd unit to {}", unit_path.cyan());
 
     fs::write(unit_path, service_content).map_err(|e| {
@@ -52,17 +50,17 @@ WantedBy=multi-user.target
     }
 
     let enable = Command::new("systemctl")
-        .args(["enable", "--now", "agentwall"])
+        .args(["enable", "--now", "agent-control"])
         .output();
     if let Err(e) = enable {
         return Err(format!(
-            "failed to execute systemctl enable --now agentwall: {}",
+            "failed to execute systemctl enable --now agent-control: {}",
             e
         ));
     }
 
     println!(
-        "{} AgentWall Linux systemd service installed and started!",
+        "{} Agent Control Linux systemd service installed and started!",
         "✔".green().bold()
     );
     Ok(())
@@ -70,20 +68,33 @@ WantedBy=multi-user.target
 
 pub fn uninstall_linux_service() -> Result<(), String> {
     let _ = Command::new("systemctl")
+        .args(["stop", "agent-control"])
+        .output();
+    let _ = Command::new("systemctl")
+        .args(["disable", "agent-control"])
+        .output();
+
+    let unit_path = "/etc/systemd/system/agent-control.service";
+    if std::path::Path::new(unit_path).exists() {
+        let _ = fs::remove_file(unit_path);
+    }
+
+    // Also clean up legacy agentwall service if present
+    let _ = Command::new("systemctl")
         .args(["stop", "agentwall"])
         .output();
     let _ = Command::new("systemctl")
         .args(["disable", "agentwall"])
         .output();
-
-    let unit_path = "/etc/systemd/system/agentwall.service";
-    if std::path::Path::new(unit_path).exists() {
-        let _ = fs::remove_file(unit_path);
+    let legacy_unit_path = "/etc/systemd/system/agentwall.service";
+    if std::path::Path::new(legacy_unit_path).exists() {
+        let _ = fs::remove_file(legacy_unit_path);
     }
+
     let _ = Command::new("systemctl").arg("daemon-reload").output();
 
     println!(
-        "{} AgentWall Linux systemd service uninstalled.",
+        "{} Agent Control Linux systemd service uninstalled.",
         "✔".green().bold()
     );
     Ok(())

@@ -17,7 +17,7 @@ impl BaselineComparator {
         let count = if total_tasks == 0 { 303 } else { total_tasks };
         vec![
             BaselineScore {
-                system_name: "Vexa AgentWall",
+                system_name: "Vexa Agent Control",
                 score: 92.4,
                 tasks_blocked: (count as f64 * 0.924) as usize,
                 total_tasks: count,

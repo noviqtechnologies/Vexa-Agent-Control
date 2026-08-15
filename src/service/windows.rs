@@ -3,16 +3,35 @@
 #[cfg(windows)]
 use colored::*;
 
+fn sanitize_url(url: &str) -> String {
+    let mut s = url.trim().to_string();
+    while s.starts_with("http://http://") {
+        s = s.replacen("http://http://", "http://", 1);
+    }
+    while s.starts_with("https://https://") {
+        s = s.replacen("https://https://", "https://", 1);
+    }
+    while s.starts_with("http://https://") {
+        s = s.replacen("http://https://", "https://", 1);
+    }
+    while s.starts_with("https://http://") {
+        s = s.replacen("https://http://", "http://", 1);
+    }
+    s.trim_end_matches('/').to_string()
+}
+
 #[cfg(windows)]
 pub fn install_windows_service(
     bin_path: &str,
     hub_url: &str,
-    gateway_secret: &str,
-    policy_read_secret: &str,
+    _gateway_secret: &str,
+    _policy_read_secret: &str,
     agent_id: Option<&str>,
 ) -> Result<(), String> {
     use std::ffi::OsStr;
     use windows_service::{service::*, service_manager::*};
+
+    let clean_hub_url = sanitize_url(hub_url);
 
     println!("  Connecting to Windows Service Control Manager (SCM)...");
     let manager = ServiceManager::local_computer(
@@ -26,18 +45,9 @@ pub fn install_windows_service(
         )
     })?;
 
-    // ── Write machine-scope env vars to HKLM BEFORE creating/starting the service ──
-    // setx /M writes to HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment.
-    // New processes (including the SCM-spawned service) inherit these immediately.
-    // Doing this before service.start() ensures Sentry reads the correct secrets on first boot.
+    // ── Write non-secret Hub URL to HKLM BEFORE creating/starting the service ──
     let _ = std::process::Command::new("setx")
-        .args(&["/M", "DASHBOARD_API_URL", hub_url])
-        .output();
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "GATEWAY_SECRET", gateway_secret])
-        .output();
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "POLICY_READ_SECRET", policy_read_secret])
+        .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
         .output();
     if let Some(id) = agent_id {
         let _ = std::process::Command::new("setx")
@@ -45,11 +55,11 @@ pub fn install_windows_service(
             .output();
     }
 
-    println!("  Creating service entry {}...", "AgentWallSentry".cyan());
+    println!("  Creating service entry {}...", "AgentControlSentry".cyan());
 
     let service_info = ServiceInfo {
-        name: OsStr::new("AgentWallSentry").to_os_string(),
-        display_name: OsStr::new("AgentWall Sentry Endpoint Security Service").to_os_string(),
+        name: OsStr::new("AgentControlSentry").to_os_string(),
+        display_name: OsStr::new("Agent Control Sentry Endpoint Security Service").to_os_string(),
         service_type: ServiceType::OWN_PROCESS,
         start_type: ServiceStartType::AutoStart,
         error_control: ServiceErrorControl::Normal,
@@ -57,9 +67,11 @@ pub fn install_windows_service(
         launch_arguments: vec![
             OsStr::new("start").to_os_string(),
             OsStr::new("--centralized").to_os_string(),
+            OsStr::new("--listen").to_os_string(),
+            OsStr::new("127.0.0.1:8080").to_os_string(),
         ],
         dependencies: vec![],
-        account_name: None, // Runs under NT AUTHORITY\SYSTEM
+        account_name: None, // Runs under virtual/local service account
         account_password: None,
     };
 
@@ -75,15 +87,14 @@ pub fn install_windows_service(
     }
 
     println!(
-        "{} AgentWall Windows SCM Service installed successfully!",
+        "{} Agent Control Windows SCM Service installed successfully!",
         "✔".green().bold()
     );
-    println!("  Configured persistent environment variables (HKLM system scope):");
-    println!("    DASHBOARD_API_URL   = \"{}\"", hub_url);
-    println!("    GATEWAY_SECRET      = \"{}\"", gateway_secret);
-    println!("    POLICY_READ_SECRET  = \"{}\"", policy_read_secret);
+    println!("  Hub URL:            {}", hub_url.cyan());
+    println!("  Authentication:     mTLS Hardware/OS Certificate Store");
+    println!("  Listener Binding:   127.0.0.1:8080 (Loopback Only)");
     if let Some(id) = agent_id {
-        println!("    AGENT_ID            = \"{}\"", id);
+        println!("  Device Principal:   {}", id);
     }
 
     Ok(())
@@ -108,20 +119,26 @@ pub fn uninstall_windows_service() -> Result<(), String> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
         .map_err(|e| format!("failed to connect to Windows SCM: {}", e))?;
 
-    let service = manager
-        .open_service(
-            OsStr::new("AgentWallSentry"),
-            ServiceAccess::STOP | ServiceAccess::DELETE,
-        )
-        .map_err(|e| format!("failed to open AgentWallSentry service: {}", e))?;
+    // Try deleting AgentControlSentry
+    if let Ok(service) = manager.open_service(
+        OsStr::new("AgentControlSentry"),
+        ServiceAccess::STOP | ServiceAccess::DELETE,
+    ) {
+        let _ = service.stop();
+        let _ = service.delete();
+    }
 
-    let _ = service.stop();
-    service
-        .delete()
-        .map_err(|e| format!("failed to delete Windows service: {}", e))?;
+    // Also clean up legacy AgentWallSentry if present
+    if let Ok(service) = manager.open_service(
+        OsStr::new("AgentWallSentry"),
+        ServiceAccess::STOP | ServiceAccess::DELETE,
+    ) {
+        let _ = service.stop();
+        let _ = service.delete();
+    }
 
     println!(
-        "{} AgentWall Windows SCM service uninstalled.",
+        "{} Agent Control Windows SCM service uninstalled.",
         "✔".green().bold()
     );
     Ok(())
@@ -171,9 +188,12 @@ pub mod service_dispatcher_handler {
         };
 
         let status_handle =
-            match service_control_handler::register("AgentWallSentry", event_handler) {
+            match service_control_handler::register("AgentControlSentry", event_handler) {
                 Ok(handle) => handle,
-                Err(_) => return,
+                Err(_) => match service_control_handler::register("AgentWallSentry", event_handler) {
+                    Ok(handle) => handle,
+                    Err(_) => return,
+                },
             };
 
         let _ = status_handle.set_service_status(ServiceStatus {
@@ -204,6 +224,32 @@ pub mod service_dispatcher_handler {
         });
     }
 
+    pub fn try_register_scm_runner<F>(run_fn: F) -> bool
+    where
+        F: FnOnce() -> i32 + Send + 'static,
+    {
+        if let Ok(mut guard) = SERVICE_RUNNER.lock() {
+            *guard = Some(Box::new(run_fn));
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_start_and_wait() -> Result<i32, windows_service::Error> {
+        if let Err(_) = service_dispatcher::start("AgentControlSentry", ffi_service_main) {
+            service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        }
+        Ok(EXIT_CODE.load(Ordering::SeqCst))
+    }
+
+    pub fn start_and_wait() -> i32 {
+        match try_start_and_wait() {
+            Ok(code) => code,
+            Err(_) => 1,
+        }
+    }
+
     pub fn run_service<F>(run_fn: F) -> Result<i32, windows_service::Error>
     where
         F: FnOnce() -> i32 + Send + 'static,
@@ -211,7 +257,9 @@ pub mod service_dispatcher_handler {
         if let Ok(mut guard) = SERVICE_RUNNER.lock() {
             *guard = Some(Box::new(run_fn));
         }
-        service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        if let Err(_) = service_dispatcher::start("AgentControlSentry", ffi_service_main) {
+            service_dispatcher::start("AgentWallSentry", ffi_service_main)?;
+        }
         Ok(EXIT_CODE.load(Ordering::SeqCst))
     }
 }

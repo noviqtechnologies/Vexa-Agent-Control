@@ -1,5 +1,5 @@
 ╔═══════════════════════════════════════════════════════════════════════╗
-║          VEXA AgentWall {{ .Chart.AppVersion }} installed                        ║
+║          VEXA Agent Control {{ .Chart.AppVersion }} installed                    ║
 ╚═══════════════════════════════════════════════════════════════════════╝
 
 Namespace: {{ .Values.namespace.name }}

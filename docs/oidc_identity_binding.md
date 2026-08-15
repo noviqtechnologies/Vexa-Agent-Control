@@ -1,6 +1,6 @@
 # OIDC Identity Binding & Auth Provider Configuration Guide
 
-This guide provides detailed instructions for configuring **OIDC Identity Binding** and **Authentication Providers** in Vexa AgentWall. 
+This guide provides detailed instructions for configuring **OIDC Identity Binding** and **Authentication Providers** in Vexa Agent Control. 
 
 AgentWall enforces Zero-Trust identity governance by binding agent sessions and tool calls to cryptographically verified OpenID Connect (OIDC) identities, extracting group memberships, and applying group-based policy rules.
 

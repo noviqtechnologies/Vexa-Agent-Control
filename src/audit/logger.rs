@@ -163,6 +163,17 @@ impl std::fmt::Display for AuditError {
     }
 }
 
+pub fn resolve_log_path(path: &std::path::Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if s.starts_with('~') {
+        if let Some(home) = dirs::home_dir() {
+            let stripped = s.trim_start_matches('~').trim_start_matches('/').trim_start_matches('\\');
+            return home.join(stripped);
+        }
+    }
+    path.to_path_buf()
+}
+
 impl AuditLogger {
     /// Construct a new logger and spawn its background writer thread.
     ///
@@ -176,18 +187,24 @@ impl AuditLogger {
         let entry_count = Arc::new(AtomicU64::new(0));
         let entry_count_w = entry_count.clone();
 
+        let resolved_path = resolve_log_path(&cfg.log_path);
+        if let Some(parent) = resolved_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&cfg.log_path)
+            .open(&resolved_path)
             .map_err(AuditError::IoError)?;
 
         // Move config values into the writer thread.
-        let log_path = cfg.log_path.clone();
+        let log_path = resolved_path;
         let session_secret = cfg.session_secret.clone();
         let max_bytes = cfg.max_bytes;
         let siem_exporter = cfg.siem_exporter.clone();
         let include_params = cfg.include_params;
+
 
         // Tokio's `spawn_blocking` keeps the blocking writes off the async executor.
         // We use a dedicated OS thread via `std::thread::spawn` to avoid holding

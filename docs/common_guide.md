@@ -1,6 +1,6 @@
-# Vexa AgentWall — Common Reference Guide
+# Vexa Agent Control — Common Reference Guide
 
-> This guide contains technical reference sections that apply equally across all three AgentWall deployment profiles:
+> This guide contains technical reference sections that apply equally across all three Agent Control deployment profiles:
 > [Workstation Sidecar](workstation_guide.md) · [Team Control Hub](team_hub_guide.md) · [Enterprise Fleet](enterprise_guide.md)
 
 ---
@@ -53,6 +53,17 @@
 ## 1. Writing YAML Policies (v2 Schema)
 
 AgentWall policies use strict, explicit YAML configuration files conforming to the **v2 schema**. AgentWall operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
+
+### Policy Marketplace ("No More Blank YAML")
+
+Writing security policies from scratch can be challenging. AgentWall includes a **Policy Marketplace** in the Web Console (`/policy/marketplace`) with **One-Click Templates**:
+
+- **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration sequences.
+- **Production Data Egress Control**: Locks outbound network requests to internal company domain wildcards, enables loop prevention firewalls, and enforces MCP schema-drift blocking.
+- **HIPAA & Healthcare Compliance**: Auto-redacts PHI, SSNs, Medical Record Numbers (MRN), and PII across LLM requests and agent responses.
+- **Full Defense in Depth**: Combines developer safety, egress boundaries, and LLM DLP redaction into a comprehensive posture.
+
+Users can preview YAML configurations, apply postures in a single click, or save custom organization templates to PostgreSQL.
 
 ### v2 Policy Architecture
 
@@ -400,7 +411,8 @@ Gateway                                               Control Hub API
 
 | Event | Handler Behavior |
 |---|---|
-| `policy_update` | Atomic in-memory hot-swap (`ArcSwap`) without dropping active agent TCP connections |
+| `policy_update` | Atomic in-memory policy swap (via `RwLock<Option<CompiledPolicy>>`); **new sessions** immediately evaluate against the updated ruleset; in-flight sessions complete under the prior policy |
+
 | `credential_rotation` | Signals key rotation — gateway fetches updated ciphertext from `GET /api/v1/credentials/:provider` |
 | `: ping` | Sent every 15 seconds. No ping within 30 seconds triggers warning and exponential backoff reconnect |
 
@@ -921,17 +933,19 @@ Persist the installation directory in your shell configuration:
 
 ### Spend Limit & Loop Detection Triggers
 
-#### Error 429 `SPEND_LIMIT_EXCEEDED`
+#### Error 429 `spend_budget_exhausted` (Authoritative PostgreSQL Ledger)
 ```json
 {
   "error": {
-    "code": "SPEND_LIMIT_EXCEEDED",
-    "message": "Token budget of 100,000 exceeded for current session"
+    "code": "spend_budget_exhausted",
+    "message": "LLM spend budget exceeded or preflight authorization denied",
+    "scope": "organization",
+    "reset_at": "2026-09-01T00:00:00Z"
   }
 }
 ```
-- **Cause:** The session token consumption exceeded `spend.max_tokens_per_session`.
-- **Solution:** Reset session spend metrics or adjust spend limits in `agentwall-policy.yaml`.
+- **Cause:** Pre-dispatch authorization checked active budget windows in PostgreSQL (`reserved + settled + reserve > limit`) and rejected the request to prevent financial overruns. Zero provider tokens were consumed.
+- **Solution:** Submit an increase request via the Web Console (`/spend/status`) or ask an administrator to publish an updated budget limit (`/spend/limits`).
 
 #### Error 429 `LOOP_DETECTED`
 ```json

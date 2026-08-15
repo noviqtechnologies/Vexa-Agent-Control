@@ -153,230 +153,115 @@ For full details, see → [Team Control Hub Guide — Docker Deployment](team_hu
 
 ---
 
-## ☁️ Multi-Cloud Serverless Deployment (Terraform)
+## 🛠️ Building from Source
 
-Deploy production-ready, cost-effective (~$0–$25/month) serverless AgentWall infrastructure on **AWS**, **Azure**, or **GCP** using our official Terraform modules.
+If you prefer building AgentWall directly from source, you will need the Rust toolchain (Rust 1.89+):
 
 ### Prerequisites
+- **Rust Toolchain:** Install via [rustup.rs](https://rustup.rs) (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
+- **C Compiler:** `build-essential` (Linux), Xcode CLI tools (macOS), or MSVC C++ Build Tools (Windows)
 
-1. **Install Terraform (`>= 1.6.0`):**
-   - **Windows:** `winget install HashiCorp.Terraform`
-   - **macOS:** `brew tap hashicorp/tap && brew install hashicorp/tap/terraform`
-   - **Linux:** `sudo apt-get install terraform`
-2. **Cloud CLI & Authentication:**
-   - **AWS:** `aws configure` (AWS CLI v2)
-   - **Azure:** `az login && az account set --subscription <id>` (Azure CLI)
-   - **GCP:** `gcloud auth login && gcloud auth application-default login` (Google Cloud SDK)
-
----
-
-### 🅰️ Amazon Web Services — AWS ECS Fargate
-
-Provisions a VPC, Application Load Balancer (ALB), ECS Fargate task (Gateway, Control Plane UI, Go API, PostgreSQL), and CloudWatch Log Group.
-
-* **Target Directory:** `infra/aws/ecs/`
-* **Monthly Cost:** ~$15–$25 / month
+### Build Steps
 
 ```bash
-cd infra/aws/ecs
+# 1. Clone repository
+git clone https://github.com/noviqtechnologies/agentwall.git
+cd agentwall
 
-# Initialize Terraform providers
-terraform init
+# 2. Compile release binary
+cargo build --release
 
-# Review execution plan
-terraform plan
-
-# Apply and deploy infrastructure
-terraform apply
+# 3. Locate compiled binary
+# Target output: ./target/release/agentwall (or ./target/release/agentwall.exe on Windows)
+./target/release/agentwall --version
 ```
-
-**Post-Deployment Validation:**
-
-* **Windows (PowerShell):**
-  ```powershell
-  # 1. Health Check
-  Invoke-RestMethod -Uri "http://<ALB-DNS-NAME>:8080/healthz"
-
-  # 2. Test Policy Guardrail Interception
-  $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-  Invoke-RestMethod -Uri "http://<ALB-DNS-NAME>:8080" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $body
-
-  # 3. Stream CloudWatch Logs
-  aws logs tail /ecs/agentwall --follow --format short
-  ```
-
-* **Linux / macOS (Bash / Zsh):**
-  ```bash
-  # 1. Health Check
-  curl -i http://<ALB-DNS-NAME>:8080/healthz
-
-  # 2. Test Policy Guardrail Interception
-  curl -X POST http://<ALB-DNS-NAME>:8080 \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-
-  # 3. Stream CloudWatch Logs
-  aws logs tail /ecs/agentwall --follow --format short
-  ```
-
-* **Control Plane UI:** Navigate to `http://<ALB-DNS-NAME>:8081` in your browser.
-
-→ **[Full AWS Guide](../infra/aws/README.md)**
-
----
-
-### 🅱️ Microsoft Azure — Azure Container Apps (ACA)
-
-Provisions Azure Container Apps with built-in Envoy ingress (automatic free HTTPS/TLS certificates), Log Analytics workspace, and dev scale-to-zero compute.
-
-* **Target Directory:** `infra/azure/`
-* **Monthly Cost:** ~$0–$20 / month (Free Auto-TLS & Scale-to-Zero)
-
-**On Windows (PowerShell):**
-```powershell
-cd infra/azure
-Copy-Item terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-**On Linux / macOS:**
-```bash
-cd infra/azure
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-**Post-Deployment Validation:**
-
-* **Windows (PowerShell):**
-  ```powershell
-  # 1. Health Check
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>/healthz"
-
-  # 2. Test Policy Guardrail Interception
-  $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $body
-
-  # 3. Stream Azure Logs
-  az containerapp logs show --name agentwall-gateway --resource-group rg-agentwall-dev-westeurope --follow
-  ```
-
-* **Linux / macOS (Bash / Zsh):**
-  ```bash
-  # 1. Health Check
-  curl -i https://<gateway-fqdn>/healthz
-
-  # 2. Test Policy Guardrail Interception
-  curl -X POST https://<gateway-fqdn> \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-
-  # 3. Stream Azure Logs
-  az containerapp logs show --name agentwall-gateway --resource-group rg-agentwall-dev-westeurope --follow
-  ```
-
-* **Control Plane UI:** Navigate to `https://<ui-fqdn>` in your browser.
-
-→ **[Full Azure Guide](../infra/azure/README.md)**
-
----
-
-### 🅲 Google Cloud Platform — Cloud Run (v2)
-
-Provisions Cloud Run services with multi-container revisions (API + Postgres sidecar), auto-managed HTTPS certificates, and scale-to-zero.
-
-* **Target Directory:** `infra/gcp/`
-* **Monthly Cost:** ~$0–$15 / month (Free Auto-TLS & Scale-to-Zero)
-
-**On Windows (PowerShell):**
-```powershell
-cd infra/gcp
-Copy-Item terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-**On Linux / macOS:**
-```bash
-cd infra/gcp
-cp terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-**Post-Deployment Validation:**
-
-* **Windows (PowerShell):**
-  ```powershell
-  # 1. Health Check
-  Invoke-RestMethod -Uri "https://<gateway-url>/healthz"
-
-  # 2. Test Policy Guardrail Interception
-  $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-  Invoke-RestMethod -Uri "https://<gateway-url>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $body
-
-  # 3. Stream Google Cloud Logs
-  gcloud run services logs tail agentwall-dev-gateway --region us-central1
-  ```
-
-* **Linux / macOS (Bash / Zsh):**
-  ```bash
-  # 1. Health Check
-  curl -i https://<gateway-url>/healthz
-
-  # 2. Test Policy Guardrail Interception
-  curl -X POST https://<gateway-url> \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-
-  # 3. Stream Google Cloud Logs
-  gcloud run services logs tail agentwall-dev-gateway --region us-central1
-  ```
-
-* **Control Plane UI:** Navigate to `https://<ui-url>` in your browser.
-
-→ **[Full GCP Guide](../infra/gcp/README.md)**
 
 ---
 
 ## ☸️ Kubernetes Deployment (For Production)
 
-For high-availability production deployments, AgentWall includes a complete Helm chart (`./chart`) with a Kubernetes operator, CRDs, multi-replica gateway deployment, Control Hub API, PostgreSQL database, and optional NetworkPolicy enforcement.
+For high-availability production environments, AgentWall includes a complete Helm chart (`./chart`) supporting multi-replica gateways, Control Hub API, PostgreSQL database, and automated TLS certificate management.
+
+### Step 1: Create Namespace & TLS Secrets
+
+```bash
+kubectl create namespace agentwall-system
+
+kubectl create secret tls agentwall-tls \
+  --cert=/etc/certs/tls.crt \
+  --key=/etc/certs/tls.key \
+  -n agentwall-system
+```
+
+### Step 2: Deploy via Helm
 
 ```bash
 helm install agentwall ./chart \
   --namespace agentwall-system \
-  --create-namespace \
   --set gateway.tls.enabled=true \
-  --set gateway.tls.secretName=my-gateway-tls \
+  --set gateway.tls.secretName=agentwall-tls \
   --set dashboardApi.enabled=true \
   --set dashboardDb.enabled=true \
-  --set dashboardFrontend.enabled=true \
-  --set dashboardApi.oidc.issuer=https://your-idp.example.com \
-  --set dashboardApi.oidc.clientId=agentwall-dashboard
+  --set dashboardFrontend.enabled=true
 ```
 
-For full details, see → [Team Control Hub Guide — Kubernetes Deployment](team_hub_guide.md#22-kubernetes-deployment-production) and `chart/values.yaml` for the full reference of configurable values.
+For custom configuration parameters and full values reference, see `chart/values.yaml`.
 
 ---
 
-## 🧹 Cloud Infrastructure Teardown
+## 🛡️ Hardened Agent Container Runtime (HAR)
 
-To destroy any provisioned cloud resources and stop billing:
+AgentWall provides a pre-built, light-footprint (<100MB) Distroless OCI sidecar image designed for Kubernetes pods and production containerized agent runtimes.
 
 ```bash
-# Run from within the respective infra directory (infra/aws/ecs, infra/azure, or infra/gcp)
-terraform destroy
+# Build the HAR sidecar container
+docker build -f Dockerfile.har -t agentwall-har:2.0 .
+
+# Run container with mounted policy
+docker run -d \
+  --name agentwall-har \
+  -p 8080:8080 \
+  -v ./agentwall-policy.yaml:/etc/agentwall/policy.yaml:ro \
+  -e AGENTWALL_POLICY_PATH=/etc/agentwall/policy.yaml \
+  agentwall-har:2.0
+```
+
+---
+
+## 🧹 Uninstallation & Clean Removal
+
+### Standalone Workstation Uninstallation
+
+To restore all IDE configurations and remove AgentWall binaries:
+
+* **macOS / Linux:**
+  ```bash
+  # 1. Revert all IDE configuration wraps
+  agentwall unprotect
+
+  # 2. Stop and uninstall Sentry service if installed
+  agentwall service uninstall
+
+  # 3. Run uninstaller script to remove binary and local files
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/uninstall.sh | bash
+  ```
+
+* **Windows (PowerShell):**
+  ```powershell
+  # 1. Revert all IDE configuration wraps
+  agentwall.exe unprotect
+
+  # 2. Stop and remove Windows SCM service if installed
+  agentwall.exe service uninstall
+
+  # 3. Run uninstaller script
+  irm https://raw.githubusercontent.com/noviqtechnologies/agentwall/main/uninstall.ps1 | iex
+  ```
+
+### Kubernetes Helm Uninstallation
+
+```bash
+helm uninstall agentwall -n agentwall-system
+kubectl delete namespace agentwall-system
 ```
 

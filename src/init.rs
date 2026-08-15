@@ -20,14 +20,22 @@ use crate::wrap::config_path::*;
 /// # Returns
 /// Exit code: `0` on successful execution or discovery.
 pub fn run_init(target: &Option<InitTarget>) -> i32 {
+    println!(
+        "{} {}",
+        "ℹ".yellow().bold(),
+        "Notice: 'agentwall init' is deprecated in v6.1. Use 'agentwall protect' for one-command zero-config security.".yellow()
+    );
     if let Some(t) = target {
         match t {
             InitTarget::Sidecar { mcp_upstream } => return run_init_sidecar(mcp_upstream),
         }
     }
 
-    println!("{}", "VEXA AgentWall — IDE Discovery (FR-20)".bold().cyan());
-    println!("Scanning for known agent and IDE configurations...\n");
+    println!("{}", "VEXA Agent Control — One-Command Protection Notice".bold().cyan());
+    println!("To discover IDEs, auto-generate local policies, and start protection, run:\n");
+    println!("  {}", "agentwall protect".bold().green());
+    println!();
+
 
     let mut found_any = false;
 

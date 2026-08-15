@@ -38,11 +38,10 @@ describe('App routing', () => {
   it('renders accordion navigation items', async () => {
     renderAt('/')
     expect(await screen.findByText('Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('Agent Identity')).toBeInTheDocument()
-    expect(screen.getByText('Policy Management')).toBeInTheDocument()
-    expect(screen.getByText('Observation & Routing')).toBeInTheDocument()
-    expect(screen.getByText('User Management')).toBeInTheDocument()
-    expect(screen.getByText('Ecosystem Integrations')).toBeInTheDocument()
+    expect(screen.getByText('Team & Fleet')).toBeInTheDocument()
+    expect(screen.getByText('Policies & Security')).toBeInTheDocument()
+    expect(screen.getByText('Spend & Budgets')).toBeInTheDocument()
+    expect(screen.getByText('Integrations & Keys')).toBeInTheDocument()
   })
 
   it('redirects / to /fleet', async () => {
@@ -70,8 +69,8 @@ describe('App routing', () => {
     expect(await screen.findByTestId('threat-intelligence')).toBeInTheDocument()
   })
 
-  it('shows AgentWall logo', async () => {
+  it('shows Agent Control logo', async () => {
     renderAt('/')
-    expect(await screen.findByText(/Agentwall/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Agent Control/i)).toBeInTheDocument()
   })
 })

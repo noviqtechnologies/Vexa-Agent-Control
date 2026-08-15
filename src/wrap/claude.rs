@@ -122,6 +122,9 @@ pub fn unwrap_claude(force: bool) -> Result<UnwrapResult, WrapError> {
 
     match backup::find_latest_backup(config_dir) {
         Some(backup_path) => {
+            if !force {
+                backup::verify_backup_integrity(&backup_path)?;
+            }
             fs::copy(&backup_path, &config_path)?;
             fs::remove_file(&backup_path)?;
             Ok(UnwrapResult {
