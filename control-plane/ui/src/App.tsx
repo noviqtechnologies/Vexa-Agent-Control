@@ -49,7 +49,7 @@ const NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Tenant Onboarding', to: '/operator/tenants' },
+      { label: 'Tenant Management', to: '/operator' },
     ],
   },
   {
@@ -476,6 +476,11 @@ export default function App() {
                       <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
                       <Route path="/devices" element={<Devices />} />
                       <Route path="/devices/tamper-log" element={<TamperLog />} />
+                      <Route path="/operator" element={
+                        <RequireOperator>
+                          <SaaSOperator />
+                        </RequireOperator>
+                      } />
                       <Route path="/operator/tenants" element={
                         <RequireOperator>
                           <SaaSOperator />
