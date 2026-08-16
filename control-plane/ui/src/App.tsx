@@ -28,6 +28,7 @@ import SaaSOperator from './views/SaaSOperator'
 import CommandPalette from './components/CommandPalette'
 import NotificationCenter from './components/NotificationCenter'
 import SetInitialPasswordModal from './components/SetInitialPasswordModal'
+import SessionTimeoutModal from './components/SessionTimeoutModal'
 
 interface NavSection {
   id: string
@@ -426,6 +427,7 @@ export default function App() {
 
   return (
     <>
+      <SessionTimeoutModal />
       {authenticated && needsPasswordSetup && !user?.is_saas_operator && (
         <SetInitialPasswordModal />
       )}

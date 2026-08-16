@@ -66,7 +66,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			IsAdmin:  true,
 		})
 
-		h.setSessionCookie(w, org.ID, userID, true, isSaaSOperator)
+		h.setSessionCookie(w, r, org.ID, userID, true, isSaaSOperator)
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
 			"user_id":              userID,
@@ -86,7 +86,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if (isGlobalBootstrap || isDevMode) && isPlatformEmail {
 		isOp := req.Email == "operator" || isSaaSOperator || (isDevMode && (req.Email == "admin" || req.Email == "admin@example.com"))
-		h.setSessionCookie(w, middleware.DefaultTenantID, req.Email, true, isOp)
+		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, isOp)
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
 			"user_id":              req.Email,
@@ -112,7 +112,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				isSaaSOperator = true
 			}
 
-			h.setSessionCookie(w, tenantID, u.Email, u.IsAdmin, isSaaSOperator)
+			h.setSessionCookie(w, r, tenantID, u.Email, u.IsAdmin, isSaaSOperator)
 			json.NewEncoder(w).Encode(map[string]any{
 				"status":               "ok",
 				"user_id":              u.Email,
@@ -128,7 +128,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "invalid credentials", http.StatusUnauthorized)
 }
 
+func isRequestSecure(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return true
+	}
+	if strings.HasPrefix(r.Header.Get("Origin"), "https://") || strings.HasPrefix(r.Header.Get("Referer"), "https://") {
+		return true
+	}
+	return false
+}
+
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	isSecure := isRequestSecure(r)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "agentwall_session",
 		Value:    "",
@@ -136,6 +153,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
+		Secure:   isSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	w.WriteHeader(http.StatusOK)
@@ -258,14 +276,16 @@ func (h *AuthHandler) SetupInitialPassword(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, tenantID, userID string, isAdmin, isSaaSOperator bool) {
+func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, r *http.Request, tenantID, userID string, isAdmin, isSaaSOperator bool) {
 	cookieValue := session.Create(tenantID, userID, isAdmin, isSaaSOperator)
-	
+	isSecure := isRequestSecure(r)
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "agentwall_session",
 		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(session.SessionDuration.Seconds()),
 	})
@@ -471,7 +491,7 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
 	isSaaSOperator := user.IsSaaSOperator || (saasOpEmail != "" && strings.EqualFold(email, saasOpEmail))
 
-	h.setSessionCookie(w, tenantID, user.ID, user.IsAdmin, isSaaSOperator)
+	h.setSessionCookie(w, r, tenantID, user.ID, user.IsAdmin, isSaaSOperator)
 	
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",

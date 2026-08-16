@@ -6,17 +6,29 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-const SessionDuration = 8 * time.Hour
+var SessionDuration = 8 * time.Hour
 
 var Secret []byte
 
 func init() {
-	Secret = make([]byte, 32)
-	rand.Read(Secret)
+	if durStr := os.Getenv("SESSION_DURATION_HOURS"); durStr != "" {
+		if hours, err := strconv.Atoi(durStr); err == nil && hours > 0 {
+			SessionDuration = time.Duration(hours) * time.Hour
+		}
+	}
+
+	if envSecret := os.Getenv("AGENTWALL_SESSION_SECRET"); envSecret != "" {
+		Secret = []byte(envSecret)
+	} else {
+		Secret = make([]byte, 32)
+		rand.Read(Secret)
+	}
 }
 
 type SessionInfo struct {

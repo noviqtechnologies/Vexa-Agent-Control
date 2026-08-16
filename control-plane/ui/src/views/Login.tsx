@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import './Login.css'
 
@@ -10,6 +11,10 @@ interface PublicProvider {
 
 export default function Login() {
   const { login, error: authError } = useAuth()
+  const location = useLocation()
+  const queryParams = new URLSearchParams(location.search)
+  const isIdleTimeout = queryParams.get('reason') === 'idle_timeout'
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -87,6 +92,28 @@ export default function Login() {
             <h2>Agent Control Console</h2>
             <p>Authenticate with operator credentials or enterprise SSO</p>
           </div>
+
+          {isIdleTimeout && !authError && (
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: '8px',
+              padding: '12px 14px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              color: '#fbbf24',
+              fontSize: '0.88rem',
+              lineHeight: 1.4,
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>Your session expired due to 15 minutes of inactivity. Please sign in again.</span>
+            </div>
+          )}
 
           {authError && (
             <div className="soc-login-error">
