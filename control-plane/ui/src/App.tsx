@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
-import RequireOperator from './auth/RequireOperator'
 import FleetOverview from './views/FleetOverview'
 import IdentityGovernance from './views/IdentityGovernance'
 import PolicyInsights from './views/PolicyInsights'
@@ -37,7 +36,7 @@ interface NavSection {
   children: { label: string; to: string }[]
 }
 
-const NAV_SECTIONS: NavSection[] = [
+const OPERATOR_NAV_SECTIONS: NavSection[] = [
   {
     id: 'operator',
     label: 'Platform Operations',
@@ -52,6 +51,25 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Tenant Management', to: '/operator' },
     ],
   },
+  {
+    id: 'audit-section',
+    label: 'Audit & Compliance',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
+    children: [
+      { label: 'Platform Audit Ledger', to: '/audit' },
+    ],
+  },
+]
+
+const CUSTOMER_NAV_SECTIONS: NavSection[] = [
   {
     id: 'team',
     label: 'Team & Fleet',
@@ -143,11 +161,14 @@ function ChevronIcon({ open }: { open: boolean }) {
 function Sidebar({ onLogout }: { onLogout: () => void }) {
   const location = useLocation()
   const { user, needsAuthProviderConfig } = useAuth()
-  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
+  const isOperator = !!user?.is_saas_operator
+  const isEnforced = needsAuthProviderConfig && !isOperator
+
+  const visibleSections = isOperator ? OPERATOR_NAV_SECTIONS : CUSTOMER_NAV_SECTIONS
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {}
-    NAV_SECTIONS.forEach((s) => {
+    visibleSections.forEach((s) => {
       if (isEnforced && s.id === 'team') {
         state[s.id] = false
       } else {
@@ -162,19 +183,11 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
     setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
-  // Filter out platform operator section if user is not authorized
-  const visibleSections = NAV_SECTIONS.filter((s) => {
-    if (s.id === 'operator') {
-      return !!user?.is_saas_operator
-    }
-    return true
-  })
-
   return (
     <aside className="app-sidebar">
       {/* Brand / Logo header */}
       <div className="sidebar-brand">
-        <NavLink to="/fleet" className="brand-link">
+        <NavLink to={isOperator ? "/operator" : "/fleet"} className="brand-link">
           <div className="brand-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -182,14 +195,28 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
           <div className="brand-text">
             <span className="brand-name">Vexa Agent Control</span>
-            <span className="brand-tag">SOC Console</span>
+            <span className="brand-tag">{isOperator ? "Platform Management" : "SOC Console"}</span>
           </div>
         </NavLink>
       </div>
 
       {/* Top-level standalone Overview link */}
       <div className="sidebar-top-nav">
-        {isEnforced ? (
+        {isOperator ? (
+          <NavLink
+            to="/operator"
+            className={({ isActive }) => `sidebar-nav-item single-item ${isActive ? 'active' : ''}`}
+          >
+            <span className="item-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </span>
+            <span className="item-label">Platform Overview</span>
+          </NavLink>
+        ) : isEnforced ? (
           <div className="sidebar-nav-item single-item disabled" title="Complete Authentication Setup to unlock Fleet Overview">
             <span className="item-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -307,10 +334,10 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
 }
 
 function GlobalAuthBanner() {
-  const { needsAuthProviderConfig } = useAuth()
+  const { user, needsAuthProviderConfig } = useAuth()
   const location = useLocation()
 
-  if (!needsAuthProviderConfig || location.pathname.startsWith('/admin/auth-providers')) return null
+  if (!needsAuthProviderConfig || user?.is_saas_operator || location.pathname.startsWith('/admin/auth-providers')) return null
 
   return (
     <div style={{
@@ -436,7 +463,7 @@ export default function App() {
         onClose={() => setIsCommandPaletteOpen(false)}
       />
       <Routes>
-        <Route path="/login" element={authenticated ? <Navigate to="/fleet" /> : <Login />} />
+        <Route path="/login" element={authenticated ? (user?.is_saas_operator ? <Navigate to="/operator" replace /> : <Navigate to="/fleet" replace />) : <Login />} />
 
         <Route path="*" element={
           <RequireAuth>
@@ -449,7 +476,15 @@ export default function App() {
                 <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
                 <main className="main-content">
                   <GlobalAuthBanner />
-                  {isEnforced ? (
+                  {user?.is_saas_operator ? (
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/operator" replace />} />
+                      <Route path="/operator" element={<SaaSOperator />} />
+                      <Route path="/operator/tenants" element={<SaaSOperator />} />
+                      <Route path="/audit" element={<AuditLogs />} />
+                      <Route path="*" element={<Navigate to="/operator" replace />} />
+                    </Routes>
+                  ) : isEnforced ? (
                     <Routes>
                       <Route path="/admin/auth-providers" element={<AuthProviders />} />
                       <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
@@ -476,16 +511,6 @@ export default function App() {
                       <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
                       <Route path="/devices" element={<Devices />} />
                       <Route path="/devices/tamper-log" element={<TamperLog />} />
-                      <Route path="/operator" element={
-                        <RequireOperator>
-                          <SaaSOperator />
-                        </RequireOperator>
-                      } />
-                      <Route path="/operator/tenants" element={
-                        <RequireOperator>
-                          <SaaSOperator />
-                        </RequireOperator>
-                      } />
                       <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
                       <Route path="/integrations/mcp-servers" element={
                         <RequireAdmin>
@@ -499,6 +524,7 @@ export default function App() {
                       } />
                       {/* Legacy redirect */}
                       <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
+                      <Route path="*" element={<Navigate to="/fleet" replace />} />
                     </Routes>
                   )}
                 </main>

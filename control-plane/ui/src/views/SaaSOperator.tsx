@@ -51,6 +51,8 @@ export default function SaaSOperator() {
   const [isRenewTrial, setIsRenewTrial] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [regeneratedToken, setRegeneratedToken] = useState<{ orgName: string; token: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'SUSPENDED' | 'TRIAL'>('ALL')
 
   // Create Form State
   const [formName, setFormName] = useState('')
@@ -195,6 +197,20 @@ export default function SaaSOperator() {
     setTimeout(() => setCopiedKey(null), 2000)
   }
 
+  const filteredOrgs = orgs.filter(org => {
+    const query = searchQuery.trim().toLowerCase()
+    const matchesQuery = !query ||
+      org.name.toLowerCase().includes(query) ||
+      org.slug.toLowerCase().includes(query) ||
+      (org.contact_email && org.contact_email.toLowerCase().includes(query))
+
+    if (!matchesQuery) return false
+    if (filterStatus === 'ACTIVE') return org.status === 'ACTIVE'
+    if (filterStatus === 'SUSPENDED') return org.status === 'SUSPENDED'
+    if (filterStatus === 'TRIAL') return org.is_trial
+    return true
+  })
+
   return (
     <div className="saas-operator-container">
       {/* Header */}
@@ -290,16 +306,74 @@ export default function SaaSOperator() {
 
       {/* Organizations Directory */}
       <div className="saas-table-card">
-        <div className="saas-table-header">
-          <h2>Tenant Organizations Directory</h2>
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{orgs.length} total registered</span>
+        <div className="saas-table-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2>Tenant Organizations Directory</h2>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {filteredOrgs.length} of {orgs.length} organizations
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'var(--bg-surface-0)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '4px 10px',
+              gap: 6
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search organizations..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  width: 180
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', background: 'var(--bg-surface-0)', padding: 3, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', gap: 2 }}>
+              {(['ALL', 'ACTIVE', 'TRIAL', 'SUSPENDED'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setFilterStatus(tab)}
+                  style={{
+                    padding: '3px 10px',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    borderRadius: 4,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: filterStatus === tab ? 'var(--accent)' : 'transparent',
+                    color: filterStatus === tab ? '#ffffff' : 'var(--text-secondary)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {loading ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>Loading tenant registry...</div>
-        ) : orgs.length === 0 ? (
+        ) : filteredOrgs.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-            No organizations registered. Click "Onboard Organization" to create the first tenant.
+            {orgs.length === 0 ? 'No organizations registered. Click "Onboard Organization" to create the first tenant.' : 'No organizations matching the current search/filter.'}
           </div>
         ) : (
           <table className="saas-table">
@@ -314,11 +388,11 @@ export default function SaaSOperator() {
               </tr>
             </thead>
             <tbody>
-              {orgs.map(org => (
+              {filteredOrgs.map(org => (
                 <tr key={org.id}>
                   <td>
                     <span className="saas-org-name">{org.name}</span>
-                    <span className="saas-org-slug">{org.slug}.vexasec.io</span>
+                    <span className="saas-org-slug">slug: {org.slug}</span>
                   </td>
                   <td>
                     <span className={`saas-badge ${org.is_trial ? 'trial' : org.license_tier === 'community' ? 'community' : 'paid'}`}>
@@ -396,7 +470,7 @@ export default function SaaSOperator() {
               </div>
 
               <div className="saas-form-group">
-                <label>Tenant Subdomain Slug</label>
+                <label>Tenant Identifier (Slug)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
                     type="text"
@@ -406,7 +480,7 @@ export default function SaaSOperator() {
                     onChange={e => setFormSlug(e.target.value)}
                     required
                   />
-                  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>.vexasec.io</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>(slug)</span>
                 </div>
               </div>
 

@@ -133,7 +133,7 @@ function TagInput({
 }
 
 export default function AuthProviders() {
-  const { checkSession } = useAuth()
+  const { user, checkSession } = useAuth()
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [editingProvider, setEditingProvider] = useState<AuthProvider | null>(null)
   const [modalStep, setModalStep] = useState<ModalStep>('setup')
@@ -232,7 +232,7 @@ export default function AuthProviders() {
         </p>
       </div>
 
-      {noProvidersConfigured && (
+      {noProvidersConfigured && !user?.is_saas_operator && (
         <div className="ap-enforcement-banner">
           <div className="ap-enforcement-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.2">
@@ -254,6 +254,31 @@ export default function AuthProviders() {
               <span className="ap-step-pill">2. Click "Setup" and Save Configuration</span>
               <span className="ap-step-pill">3. Console Unlocks Immediately</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {user?.is_saas_operator && (
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.12)',
+          border: '1px solid rgba(99, 102, 241, 0.3)',
+          borderRadius: '8px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          color: '#c7d2fe',
+          fontSize: '13px',
+          lineHeight: 1.5
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div>
+            <strong style={{ color: '#ffffff' }}>Platform Operator Notice:</strong> SSO providers configured here apply to platform administrators. Single-tenant customer organizations manage their own isolated SSO providers independently.
           </div>
         </div>
       )}

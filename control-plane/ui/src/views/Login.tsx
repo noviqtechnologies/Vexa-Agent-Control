@@ -15,6 +15,10 @@ export default function Login() {
   const queryParams = new URLSearchParams(location.search)
   const isIdleTimeout = queryParams.get('reason') === 'idle_timeout'
 
+  // Default to operator portal if arriving at /operator or ?portal=operator
+  const isInitialOperator = location.pathname.startsWith('/operator') || queryParams.get('portal') === 'operator'
+  const [portalMode, setPortalMode] = useState<'tenant' | 'operator'>(isInitialOperator ? 'operator' : 'tenant')
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -88,9 +92,49 @@ export default function Login() {
 
         {/* Glassmorphic Login Card */}
         <div className="soc-login-card">
+          {/* Portal Selector Toggle Tabs */}
+          <div className="soc-portal-toggle">
+            <button
+              type="button"
+              className={`portal-tab ${portalMode === 'tenant' ? 'active' : ''}`}
+              onClick={() => setPortalMode('tenant')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 21h18M3 7v14M21 7v14M6 11h4M6 15h4M14 11h4M14 15h4M9 3l3-2 3 2v4H9V3z" />
+              </svg>
+              <span>Customer Portal</span>
+            </button>
+            <button
+              type="button"
+              className={`portal-tab ${portalMode === 'operator' ? 'active' : ''}`}
+              onClick={() => setPortalMode('operator')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20" />
+              </svg>
+              <span>SaaS Operator</span>
+            </button>
+          </div>
+
           <div className="soc-login-header">
-            <h2>Agent Control Console</h2>
-            <p>Authenticate with operator credentials or enterprise SSO</p>
+            {portalMode === 'operator' ? (
+              <>
+                <div className="soc-portal-mode-badge operator">
+                  <span>🌐 Platform Super-Admin Mode</span>
+                </div>
+                <h2>SaaS Platform Operator Portal</h2>
+                <p>Multi-tenant infrastructure control, organization provisioning, license minting, and global fleet operations.</p>
+              </>
+            ) : (
+              <>
+                <div className="soc-portal-mode-badge tenant">
+                  <span>🏢 Customer Workspace Mode</span>
+                </div>
+                <h2>Customer Organization Console</h2>
+                <p>Sign in to govern your AI developers, IDE workstations, policies, and spend limits.</p>
+              </>
+            )}
           </div>
 
           {isIdleTimeout && !authError && (
@@ -132,7 +176,9 @@ export default function Login() {
               {(hasLocal || noProviders) && (
                 <form onSubmit={handleSubmit} className="local-login-form">
                   <div className="form-group">
-                    <label htmlFor="login-email">Email or Operator Username</label>
+                    <label htmlFor="login-email">
+                      {portalMode === 'operator' ? 'Platform Super-Admin Username / Email' : 'Organization Email or Username'}
+                    </label>
                     <div className="soc-input-wrapper">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -143,7 +189,7 @@ export default function Login() {
                         type="text"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        placeholder="admin or secops@enterprise.internal"
+                        placeholder={portalMode === 'operator' ? 'admin or operator@vexasec.io' : 'secops@yourcompany.com or admin'}
                         required
                         autoFocus
                       />
@@ -153,7 +199,7 @@ export default function Login() {
                   <div className="form-group">
                     <div className="label-row">
                       <label htmlFor="login-password">
-                        Password or Bootstrap Token
+                        {portalMode === 'operator' ? 'Master Password or Bootstrap Secret' : 'Password or SSO Token'}
                       </label>
                       <button
                         type="button"
@@ -185,7 +231,7 @@ export default function Login() {
                     className="soc-login-submit-btn"
                     disabled={submitting}
                   >
-                    {submitting ? 'Authenticating...' : 'Sign In to Agent Control →'}
+                    {submitting ? 'Authenticating...' : portalMode === 'operator' ? 'Sign In as SaaS Super-Admin →' : 'Sign In to Customer Workspace →'}
                   </button>
                 </form>
               )}

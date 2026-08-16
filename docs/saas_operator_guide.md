@@ -11,20 +11,20 @@ This guide details operational workflows for **Platform Operators / Super-Admins
 
 ```
                               Edge Load Balancer (ALB)
-                             *.vexasec.io / console.vexasec.io
-                                            │
-               ┌────────────────────────────┼────────────────────────────┐
-               ▼                            ▼                            ▼
-        [ SaaS Operator ]          [ Tenant Org: Acme ]        [ Tenant Org: Globex ]
-         /operator/tenants          acme.vexasec.io             globex.vexasec.io
-               │                            │                            │
-               └────────────────────────────┼────────────────────────────┘
-                                            ▼
-                               [ Pooled Cloud Run Services ]
-                                            │
-                                            ▼
-                           [ Multi-Tenant Cloud SQL Database ]
-                           (Every row scoped by tenant_id UUID)
+                                 console.vexasec.io
+                                        │
+           ┌────────────────────────────┼────────────────────────────┐
+           ▼                            ▼                            ▼
+    [ SaaS Operator ]          [ Tenant Org: Acme ]        [ Tenant Org: Globex ]
+     /operator/tenants          Unified Auth Token          Unified Auth Token
+           │                            │                            │
+           └────────────────────────────┼────────────────────────────┘
+                                        ▼
+                           [ Pooled Cloud Run Services ]
+                                        │
+                                        ▼
+                       [ Multi-Tenant Cloud SQL Database ]
+                       (Every row scoped by tenant_id UUID)
 ```
 
 ### Key Principles:
@@ -44,7 +44,7 @@ This guide details operational workflows for **Platform Operators / Super-Admins
 ### Step 2: Provision Organization
 Click **Onboard Organization** and configure:
 1. **Organization Name:** e.g., `Acme Healthcare`.
-2. **Tenant Subdomain Slug:** e.g., `acme-health` (routes to `https://acme-health.vexasec.io`).
+2. **Tenant Slug:** e.g., `acme-health` (unique tenant identifier).
 3. **Admin Email:** Primary IT / Security contact (e.g., `sec-admin@acmehealth.com`).
 4. **License Plan:**
    - **15-Day Free Trial:** Zero setup trial with full enterprise governance.
@@ -57,7 +57,7 @@ Click **Provision Organization**.
 
 ### Step 3: Secure Handoff Credentials
 Upon creation, the system auto-mints an Ed25519-signed license JWT and displays:
-- **Tenant Console URL:** `https://acme-health.vexasec.io`
+- **Customer Console URL:** `https://console.vexasec.io`
 - **Single-Use Bootstrap Token:** One-time password for the customer administrator.
 - **Gateway Secret:** For centralized proxy telemetry.
 - **Policy Read Secret:** For gateway dynamic rule subscriptions.

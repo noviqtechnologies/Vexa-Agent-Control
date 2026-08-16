@@ -55,30 +55,35 @@ export function AuthProvider({ children }: Props) {
       const res = await fetch('/api/v1/auth/me')
       if (res.ok) {
         const userData = await res.json()
+        const isOperator = !!userData.is_saas_operator
         setAuthenticated(true)
         setUser({
           id: userData.user_id || 'user',
           tenant_id: userData.tenant_id || '00000000-0000-0000-0000-000000000001',
           organization_name: userData.organization_name,
           is_admin: !!userData.is_admin,
-          is_saas_operator: !!userData.is_saas_operator,
-          needs_password_setup: !!userData.needs_password_setup,
+          is_saas_operator: isOperator,
+          needs_password_setup: !isOperator && !!userData.needs_password_setup,
         })
-        setNeedsPasswordSetup(!!userData.needs_password_setup)
+        setNeedsPasswordSetup(!isOperator && !!userData.needs_password_setup)
         
-        // Also check if any auth providers are configured
-        try {
-          const authRes = await fetch('/api/v1/auth_providers')
-          if (authRes.ok) {
-            const data = await authRes.json()
-            if (Array.isArray(data) && data.filter((p: any) => p.enabled).length === 0) {
-              setNeedsAuthProviderConfig(true)
-            } else {
-              setNeedsAuthProviderConfig(false)
+        // SaaS Operators are never forced to configure tenant auth providers
+        if (!isOperator) {
+          try {
+            const authRes = await fetch('/api/v1/auth_providers')
+            if (authRes.ok) {
+              const data = await authRes.json()
+              if (Array.isArray(data) && data.filter((p: any) => p.enabled).length === 0) {
+                setNeedsAuthProviderConfig(true)
+              } else {
+                setNeedsAuthProviderConfig(false)
+              }
             }
+          } catch {
+            // Ignore fetch error for providers
           }
-        } catch {
-          // Ignore fetch error for providers
+        } else {
+          setNeedsAuthProviderConfig(false)
         }
       } else {
         // Fallback check to fleet overview if /auth/me is not ready
@@ -120,14 +125,20 @@ export function AuthProvider({ children }: Props) {
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}))
+        const isOperator = !!data.is_saas_operator
         setAuthenticated(true)
         setUser({
           id: data.user_id || 'user',
           tenant_id: data.tenant_id || '00000000-0000-0000-0000-000000000001',
           organization_name: data.organization_name,
           is_admin: !!data.is_admin,
-          is_saas_operator: !!data.is_saas_operator,
+          is_saas_operator: isOperator,
+          needs_password_setup: !isOperator && !!data.needs_password_setup,
         })
+        setNeedsPasswordSetup(!isOperator && !!data.needs_password_setup)
+        if (isOperator) {
+          setNeedsAuthProviderConfig(false)
+        }
         // Refresh session context
         await checkSession()
       } else {

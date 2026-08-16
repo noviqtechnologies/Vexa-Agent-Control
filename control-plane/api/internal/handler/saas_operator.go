@@ -118,9 +118,15 @@ func (h *SaaSOperatorHandler) CreateOrganization(w http.ResponseWriter, r *http.
 		return
 	}
 
-	consoleURL := fmt.Sprintf("https://%s.vexasec.io", req.Slug)
-	if r.Host != "" && (strings.HasPrefix(r.Host, "localhost") || strings.HasPrefix(r.Host, "127.0.0.1")) {
-		consoleURL = fmt.Sprintf("http://localhost:8081?tenant=%s", req.Slug)
+	consoleURL := "https://console.vexasec.io"
+	if r.Host != "" {
+		if strings.HasPrefix(r.Host, "localhost") || strings.HasPrefix(r.Host, "127.0.0.1") {
+			consoleURL = fmt.Sprintf("http://localhost:8081?tenant=%s", req.Slug)
+		} else if strings.Contains(r.Host, "console.vexasec.io") {
+			consoleURL = "https://console.vexasec.io"
+		} else {
+			consoleURL = fmt.Sprintf("https://%s", r.Host)
+		}
 	}
 
 	resp := CreateOrgResponse{

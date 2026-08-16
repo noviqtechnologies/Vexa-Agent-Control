@@ -49,7 +49,7 @@ describe('SaaSOperator View', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Acme Health')).toBeDefined()
-      expect(screen.getByText('acme-health.vexasec.io')).toBeDefined()
+      expect(screen.getByText('slug: acme-health')).toBeDefined()
       expect(screen.getByText('15d Free Trial')).toBeDefined()
       expect(screen.getByText('14 days left')).toBeDefined()
     })

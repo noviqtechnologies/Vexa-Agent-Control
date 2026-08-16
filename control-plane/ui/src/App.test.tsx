@@ -27,7 +27,7 @@ beforeEach(() => {
       user_id: 'admin',
       tenant_id: '00000000-0000-0000-0000-000000000001',
       is_admin: true,
-      is_saas_operator: true,
+      is_saas_operator: false,
     }),
   }))
 })
@@ -67,7 +67,16 @@ describe('App routing', () => {
     expect(await screen.findByTestId('identity-governance')).toBeInTheDocument()
   })
 
-  it('renders SaaSOperator at /operator/tenants', async () => {
+  it('renders SaaSOperator at /operator/tenants for operator', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        user_id: 'superadmin',
+        tenant_id: '00000000-0000-0000-0000-000000000000',
+        is_admin: true,
+        is_saas_operator: true,
+      }),
+    }))
     renderAt('/operator/tenants')
     expect(await screen.findByTestId('saas-operator')).toBeInTheDocument()
   })

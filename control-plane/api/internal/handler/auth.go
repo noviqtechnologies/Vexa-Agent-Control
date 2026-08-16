@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -79,21 +78,26 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Check Global Bootstrap Token or Dev Mode (Dev Mode bypass strictly for platform admin/operator)
+	// 2. Check Global Bootstrap Token, Secret Manager Session Secret, or SAAS_OPERATOR_PASSWORD
+	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
+	sessionSecret := os.Getenv("AGENTWALL_SESSION_SECRET")
 	isDevMode := os.Getenv("DEV_MODE") == "true"
-	isGlobalBootstrap := BootstrapToken != "" && req.Password == BootstrapToken
+	
+	isSecretMatch := (BootstrapToken != "" && req.Password == BootstrapToken) ||
+		(saasOpPassword != "" && req.Password == saasOpPassword) ||
+		(sessionSecret != "" && req.Password == sessionSecret)
+
 	isPlatformEmail := req.Email == "admin" || req.Email == "operator" || req.Email == "admin@example.com" || (saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail))
 
-	if (isGlobalBootstrap || isDevMode) && isPlatformEmail {
-		isOp := req.Email == "operator" || isSaaSOperator || (isDevMode && (req.Email == "admin" || req.Email == "admin@example.com"))
-		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, isOp)
+	if (isSecretMatch || isDevMode) && isPlatformEmail {
+		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, true)
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
 			"user_id":              req.Email,
 			"tenant_id":            middleware.DefaultTenantID,
 			"organization_name":    "Platform Management",
 			"is_admin":             true,
-			"is_saas_operator":     isOp,
+			"is_saas_operator":     true,
 			"needs_password_setup": false,
 		})
 		return
@@ -298,20 +302,25 @@ func GenerateBootstrapToken() string {
 }
 
 func (h *AuthHandler) CheckBootstrap() {
-	count, err := h.store.CountAuthProviders(context.Background(), "")
-	if err != nil {
-		log.Printf("ERROR checking auth providers for bootstrap: %v", err)
+	if opPass := os.Getenv("SAAS_OPERATOR_PASSWORD"); opPass != "" {
+		BootstrapToken = opPass
+		log.Printf("INFO: SaaS Platform Operator password loaded from SAAS_OPERATOR_PASSWORD.")
 		return
 	}
-	if count == 0 {
+
+	if sessSec := os.Getenv("AGENTWALL_SESSION_SECRET"); sessSec != "" {
+		BootstrapToken = sessSec
+		log.Printf("INFO: SaaS Platform Super-Admin Master Secret loaded from Secret Manager.")
+		return
+	}
+
+	// Always ensure a BootstrapToken exists for platform super-admin access
+	if BootstrapToken == "" {
 		BootstrapToken = GenerateBootstrapToken()
 		log.Printf("=========================================================")
-		log.Printf("INFO: NO AUTH PROVIDERS CONFIGURED.")
-		log.Printf("INFO: Bootstrap Token: %s", BootstrapToken)
-		log.Printf("INFO: Use Email 'admin' and this token to log in.")
+		log.Printf("INFO: SaaS Platform Super-Admin Bootstrap Secret: %s", BootstrapToken)
+		log.Printf("INFO: Use Email/Username 'admin' and this secret to log in.")
 		log.Printf("=========================================================")
-	} else {
-		log.Printf("INFO: Found %d auth providers, skipping bootstrap.", count)
 	}
 }
 
