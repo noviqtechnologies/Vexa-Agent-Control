@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 )
 
 type DeviceHandler struct {
@@ -21,8 +22,6 @@ func (h *DeviceHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/v1/devices", func(r chi.Router) {
 		r.Post("/enroll", h.EnrollDevice)
 		r.Post("/{id}/telemetry", h.RecordTelemetry)
-		r.Get("/", h.ListDevices)
-		r.Get("/tamper-log", h.ListTamperEvents)
 	})
 }
 
@@ -34,10 +33,7 @@ func (h *DeviceHandler) EnrollDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID := r.Header.Get("X-Organization-ID")
-	if orgID == "" {
-		orgID = "00000000-0000-0000-0000-000000000001"
-	}
+	orgID := middleware.ResolveTenantScope(r)
 
 	resp, err := h.store.EnrollDevice(r.Context(), orgID, &req)
 	if err != nil {
@@ -65,10 +61,7 @@ func (h *DeviceHandler) RecordTelemetry(w http.ResponseWriter, r *http.Request) 
 	}
 	req.DeviceID = deviceID
 
-	orgID := r.Header.Get("X-Organization-ID")
-	if orgID == "" {
-		orgID = "00000000-0000-0000-0000-000000000001"
-	}
+	orgID := middleware.ResolveTenantScope(r)
 
 	resp, err := h.store.RecordTelemetry(r.Context(), orgID, &req)
 	if err != nil {
@@ -83,10 +76,7 @@ func (h *DeviceHandler) RecordTelemetry(w http.ResponseWriter, r *http.Request) 
 
 // ListDevices handles GET /api/v1/devices
 func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
-	orgID := r.Header.Get("X-Organization-ID")
-	if orgID == "" {
-		orgID = "00000000-0000-0000-0000-000000000001"
-	}
+	orgID := middleware.ResolveTenantScope(r)
 
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
@@ -117,10 +107,7 @@ func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 
 // ListTamperEvents handles GET /api/v1/devices/tamper-log
 func (h *DeviceHandler) ListTamperEvents(w http.ResponseWriter, r *http.Request) {
-	orgID := r.Header.Get("X-Organization-ID")
-	if orgID == "" {
-		orgID = "00000000-0000-0000-0000-000000000001"
-	}
+	orgID := middleware.ResolveTenantScope(r)
 
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {

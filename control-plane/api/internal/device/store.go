@@ -284,7 +284,7 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 			END AS overall_compliance,
 			0 AS tamper_count_24h
 		FROM devices d
-		WHERE ($1 = '' OR d.tenant_id::text = $1 OR d.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		WHERE ($1 = '' OR d.tenant_id::text = $1)
 		UNION ALL
 		SELECT 
 			d.device_id::text AS device_id, d.hostname, d.user_identifier, d.os, d.os_version,

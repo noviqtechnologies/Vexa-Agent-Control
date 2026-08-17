@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
@@ -22,12 +23,13 @@ func NewDeviceAdminHandler(s *store.Store) *DeviceAdminHandler {
 
 // GET /api/v1/admin/devices
 func (h *DeviceAdminHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
 	osFamily := r.URL.Query().Get("os_family")
 	statusFilter := r.URL.Query().Get("status")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	devices, err := h.store.ListDevices(r.Context(), osFamily, statusFilter, limit, offset)
+	devices, err := h.store.ListDevices(r.Context(), tenantID, osFamily, statusFilter, limit, offset)
 	if err != nil {
 		log.Printf("list devices failed: %v", err)
 		http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"failed to list devices"}}`, http.StatusInternalServerError)
@@ -45,13 +47,14 @@ func (h *DeviceAdminHandler) ListDevices(w http.ResponseWriter, r *http.Request)
 
 // POST /api/v1/admin/devices/{id}/revoke
 func (h *DeviceAdminHandler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
 	deviceID := chi.URLParam(r, "id")
 	if deviceID == "" {
 		http.Error(w, `{"error":{"code":"INVALID_REQUEST","message":"device id is required"}}`, http.StatusBadRequest)
 		return
 	}
 
-	err := h.store.RevokeDevice(r.Context(), deviceID)
+	err := h.store.RevokeDevice(r.Context(), tenantID, deviceID)
 	if err != nil {
 		if errors.Is(err, store.ErrDeviceNotFound) {
 			http.Error(w, `{"error":{"code":"NOT_FOUND","message":"device not found"}}`, http.StatusNotFound)
@@ -98,7 +101,8 @@ func (h *DeviceAdminHandler) PostTamperLog(w http.ResponseWriter, r *http.Reques
 		ActionTaken:  req.ActionTaken,
 	}
 
-	if err := h.store.InsertTamperLog(r.Context(), &logEntry); err != nil {
+	tenantID := middleware.ResolveTenantScope(r)
+	if err := h.store.InsertTamperLog(r.Context(), tenantID, &logEntry); err != nil {
 		log.Printf("insert tamper log failed: %v", err)
 		http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"failed to insert tamper log"}}`, http.StatusInternalServerError)
 		return

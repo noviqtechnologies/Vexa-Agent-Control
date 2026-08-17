@@ -21,6 +21,7 @@ type DataStore interface {
 	UpsertAgent(ctx context.Context, tenantID, agentID string) error
 	CountDistinctAgents(ctx context.Context, tenantID string) (int, error)
 	AgentExists(ctx context.Context, tenantID, agentID string) (bool, error)
+	ResolveTenantIDForAgent(ctx context.Context, agentID string) string
 	InsertEvent(ctx context.Context, tenantID string, e *model.RedactedEvent) error
 	InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error
 	UpsertCredential(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error

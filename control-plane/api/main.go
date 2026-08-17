@@ -144,7 +144,6 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
-	r.Use(chimw.Timeout(30 * time.Second))
 	r.Use(middleware.LegacyQuarantineGate())
 
 	// Health check — no auth.
@@ -162,6 +161,8 @@ func main() {
 
 	// 2. Admin Console v2 Handlers
 	r.Route("/api/v2/admin", func(r chi.Router) {
+		r.Use(middleware.DashboardAuth())
+		r.Use(middleware.RequireAdmin())
 		r.Post("/enrollment-tokens", adminV2H.CreateEnrollmentToken)
 		r.Post("/devices/{device_id}/revoke", adminV2H.RevokeDevice)
 		r.Post("/devices/{id}/revoke", adminV2H.RevokeDevice)
@@ -196,8 +197,9 @@ func main() {
 		r.Post("/increase-requests/{id}/decide", spendV2H.DecideIncreaseRequest)
 	})
 
-	// 6. Device Governance & Sentry Compliance API
-	deviceH.RegisterRoutes(r)
+	// 6. Device Governance & Sentry Compliance API (Public Ingest/Enrollment)
+	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
+	r.Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
 
 	// Public PKI Enrollment route (Unauthenticated)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
@@ -261,6 +263,10 @@ func main() {
 		r.Get("/fleet/events", fleetH.ListEvents)
 		r.Get("/fleet/agents/{agentID}/events", fleetH.ListEvents)
 
+		// Sentry Device Governance & Tamper Log
+		r.Get("/devices", deviceH.ListDevices)
+		r.Get("/devices/tamper-log", deviceH.ListTamperEvents)
+
 		// Admin-only fleet routes
 		r.Route("/fleet/mcp-servers", func(r chi.Router) {
 			r.Use(middleware.RequireAdmin())
@@ -285,25 +291,25 @@ func main() {
 		// Auth Providers
 		r.Get("/auth_providers", authProviderH.List)
 		r.Get("/auth_providers/{id}", authProviderH.Get)
-		r.Put("/auth_providers", authProviderH.Upsert)
+		r.With(middleware.RequireAdmin()).Put("/auth_providers", authProviderH.Upsert)
 		
 		// Users
 		r.Get("/users", userH.List)
-		r.Post("/users", userH.Create)
+		r.With(middleware.RequireAdmin()).Post("/users", userH.Create)
 		r.Post("/users/{id}/password", userH.UpdatePassword)
 		r.Put("/users/{id}/password", userH.UpdatePassword)
-		r.Delete("/users/{id}", userH.Delete)
+		r.With(middleware.RequireAdmin()).Delete("/users/{id}", userH.Delete)
 		
 		// Policy Management (Operator Auth)
 		r.Get("/policies", policyMgmtH.List)
 		r.Get("/policies/active", policyMgmtH.GetActive)
 		r.Get("/policy/active", policyMgmtH.GetActive)
 		r.Get("/policies/{id}", hubSpecH.GetPolicyByID)
-		r.Post("/policies", hubSpecH.CreatePolicy)
+		r.With(middleware.RequireAdmin()).Post("/policies", hubSpecH.CreatePolicy)
 		r.Get("/policies/templates", templateH.ListTemplates)
 		r.Get("/policies/templates/{id}", templateH.GetTemplate)
-		r.Post("/policies/templates", templateH.CreateCustomTemplate)
-		r.Delete("/policies/templates/{id}", templateH.DeleteCustomTemplate)
+		r.With(middleware.RequireAdmin()).Post("/policies/templates", templateH.CreateCustomTemplate)
+		r.With(middleware.RequireAdmin()).Delete("/policies/templates/{id}", templateH.DeleteCustomTemplate)
 
 		// Gateway Management (Phase 1 Mock)
 		r.Post("/gateways/register", gatewayH.Register)
@@ -320,7 +326,7 @@ func main() {
 		r.Route("/group-policies", func(r chi.Router) {
 			r.Get("/", groupPolicyH.ListGroupPolicies)
 			r.Get("/{groupID}", groupPolicyH.GetGroupPolicy)
-			r.Post("/", groupPolicyH.PublishGroupPolicy)
+			r.With(middleware.RequireAdmin()).Post("/", groupPolicyH.PublishGroupPolicy)
 		})
 
 		// Safe Mode status (always active — static endpoint)
@@ -329,19 +335,20 @@ func main() {
 		// Spend Caps (Admin + Gateway API)
 		r.Route("/spend", func(r chi.Router) {
 			r.Get("/budgets", spendH.ListBudgets)
-			r.Post("/budgets", spendH.CreateBudget)
+			r.With(middleware.RequireAdmin()).Post("/budgets", spendH.CreateBudget)
 			r.Get("/snapshots", spendH.ListSnapshots)
 			r.Get("/requests", spendH.ListIncreaseRequests)
 			r.Post("/requests", spendH.SubmitIncreaseRequest)
-			r.Post("/requests/{id}/resolve", spendH.ResolveIncreaseRequest)
+			r.With(middleware.RequireAdmin()).Post("/requests/{id}/resolve", spendH.ResolveIncreaseRequest)
 		})
 
 		// Central Device Governance (Admin)
 		r.Route("/admin/devices", func(r chi.Router) {
+			r.Use(middleware.RequireAdmin())
 			r.Get("/", deviceAdminH.ListDevices)
 			r.Post("/{id}/revoke", deviceAdminH.RevokeDevice)
 		})
-		r.Post("/admin/enrollment-tokens", enrollmentH.PostCreateToken)
+		r.With(middleware.RequireAdmin()).Post("/admin/enrollment-tokens", enrollmentH.PostCreateToken)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

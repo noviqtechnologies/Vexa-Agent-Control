@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
@@ -49,7 +50,8 @@ func (h *HeartbeatHandler) PostHeartbeat(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	err := h.store.UpdateDeviceHeartbeat(ctx, req.DeviceID, req.MCPServersTotal, req.MCPServersWrapped, req.IDEChecksums)
+	tenantID := middleware.ResolveTenantScope(r)
+	err := h.store.UpdateDeviceHeartbeat(ctx, tenantID, req.DeviceID, req.MCPServersTotal, req.MCPServersWrapped, req.IDEChecksums)
 	if err != nil {
 		if errors.Is(err, store.ErrDeviceRevoked) {
 			log.Printf("heartbeat rejected for revoked device %s", req.DeviceID)

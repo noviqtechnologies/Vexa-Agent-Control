@@ -132,7 +132,9 @@ func (s *Store) EnsurePoliciesSchema(ctx context.Context) error {
 	}
 	q := `
 		ALTER TABLE policies ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE;
+		ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key;
 		DROP INDEX IF EXISTS idx_policies_active_unique;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_version ON policies (tenant_id, version);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true;
 	`
 	_, err := s.pool.Exec(ctx, q)
@@ -147,7 +149,9 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		if p.IsActive {
 			// Ensure obsolete global index is dropped and per-tenant index exists
+			_, _ = tx.Exec(ctx, "ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key")
 			_, _ = tx.Exec(ctx, "DROP INDEX IF EXISTS idx_policies_active_unique")
+			_, _ = tx.Exec(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_version ON policies (tenant_id, version)")
 			_, _ = tx.Exec(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true")
 
 			_, err := tx.Exec(ctx, "UPDATE policies SET is_active = false WHERE is_active = true AND (tenant_id = $1 OR tenant_id IS NULL)", tenantID)
@@ -160,8 +164,7 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 		err := tx.QueryRow(ctx, `
 			INSERT INTO policies (tenant_id, version, content, is_active, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, now(), now())
-			ON CONFLICT (version) DO UPDATE SET
-				tenant_id = EXCLUDED.tenant_id,
+			ON CONFLICT (tenant_id, version) DO UPDATE SET
 				content = EXCLUDED.content,
 				is_active = EXCLUDED.is_active,
 				updated_at = now()

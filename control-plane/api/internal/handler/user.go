@@ -85,7 +85,15 @@ type UpdatePasswordReq struct {
 
 func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
+	claims := middleware.UserClaimsFromContext(r.Context())
 	id := chi.URLParam(r, "id")
+
+	// Authorization check: users can only update their own password unless they hold admin or operator role
+	if claims != nil && claims.UserID != id && !claims.IsAdmin && !claims.IsSaaSOperator {
+		http.Error(w, `{"error":"forbidden: admin privileges required to update other users' passwords"}`, http.StatusForbidden)
+		return
+	}
+
 	var req UpdatePasswordReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
 		http.Error(w, "invalid password request", http.StatusBadRequest)

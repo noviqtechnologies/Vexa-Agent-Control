@@ -192,7 +192,7 @@ func (s *Store) DeleteUser(ctx context.Context, tenantID, id string) error {
 	if err != nil {
 		return err
 	}
-	if u == nil {
+	if u == nil || (tenantID != "" && u.TenantID != tenantID) {
 		return errors.New("user not found")
 	}
 	if u.IsAdmin || u.IsSaaSOperator {

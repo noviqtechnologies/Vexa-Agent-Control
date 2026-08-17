@@ -21,25 +21,18 @@ func NewSpendV2Handler(s *spend.Store) *SpendV2Handler {
 
 // resolveContextOrgAndActor safely resolves organization/tenant and actor from authenticated context
 func resolveContextOrgAndActor(r *http.Request) (string, string) {
+	orgID := middleware.ResolveTenantScope(r)
+
 	// 1. Check Device Principal (mTLS authenticated gateway)
 	if dev, ok := r.Context().Value(middleware.DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil {
-		return dev.TenantID, dev.DeviceID
+		return orgID, dev.DeviceID
 	}
 
 	// 2. Check User Claims (Dashboard operator)
 	if user, ok := r.Context().Value(middleware.UserClaimsKey).(*middleware.UserClaims); ok && user != nil {
-		orgID := r.Header.Get("X-Organization-ID")
-		if orgID == "" {
-			orgID = "00000000-0000-0000-0000-000000000001"
-		}
 		return orgID, user.UserID
 	}
 
-	// 3. Fallback Header or Default Seed Tenant
-	orgID := r.Header.Get("X-Organization-ID")
-	if orgID == "" {
-		orgID = "00000000-0000-0000-0000-000000000001"
-	}
 	return orgID, "gateway-workload"
 }
 

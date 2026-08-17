@@ -1,18 +1,32 @@
 version: "2"
 default_action: deny
 
+session:
+  max_calls_per_second: 10
+
 llm:
   providers:
+    - name: "anthropic"
+      action: "allow"
+      models:
+        - "claude*"
     - name: "openai"
       action: "allow"
-      models: ["gpt-4o", "gpt-3.5-turbo"]
-      dlp_tier: "strict"
-    - name: "mock-provider"
-      action: "deny"
-      models: ["bad-model"]
+      models:
+        - "gpt*"
+        - "o1*"
+        - "o3*"
   dlp:
     actions:
       - entity: "CREDIT_CARD"
         action: "deny"
       - entity: "SSN"
         action: "deny"
+
+tools:
+  - name: "read_file"
+    action: allow
+    parameters:
+      - name: "path"
+        type: string
+        required: true

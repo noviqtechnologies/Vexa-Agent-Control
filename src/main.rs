@@ -1217,7 +1217,16 @@ async fn run_start(
             .ok()
             .filter(|s| !s.is_empty()),
         centralized_mode: centralized,
-        provider_keys: dashmap::DashMap::new(),
+        provider_keys: {
+            let map = dashmap::DashMap::new();
+            if let Ok(k) = std::env::var("OPENAI_API_KEY") {
+                if !k.is_empty() { map.insert("openai".to_string(), k); }
+            }
+            if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
+                if !k.is_empty() { map.insert("anthropic".to_string(), k); }
+            }
+            map
+        },
     });
 
     if state.dashboard_client.is_some() {

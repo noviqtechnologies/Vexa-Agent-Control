@@ -24,8 +24,11 @@ func HashEnrollmentToken(rawToken string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// CreateEnrollmentToken inserts a new enrollment token.
-func (s *Store) CreateEnrollmentToken(ctx context.Context, tokenID, rawToken, createdBy string, maxUses int, ttlHours int) (*model.EnrollmentToken, error) {
+// CreateEnrollmentToken inserts a new enrollment token for a tenant.
+func (s *Store) CreateEnrollmentToken(ctx context.Context, tenantID, tokenID, rawToken, createdBy string, maxUses int, ttlHours int) (*model.EnrollmentToken, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	if ttlHours <= 0 {
 		ttlHours = 24
 	}
@@ -38,14 +41,24 @@ func (s *Store) CreateEnrollmentToken(ctx context.Context, tokenID, rawToken, cr
 
 	var t model.EnrollmentToken
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO enrollment_tokens (token_id, token_hash, created_by, max_uses, current_uses, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, 0, $5, NOW())
-		RETURNING token_id, token_hash, created_by, max_uses, current_uses, expires_at, created_at
-	`, tokenID, tokenHash, createdBy, maxUses, expiresAt).Scan(
+		INSERT INTO enrollment_tokens (tenant_id, token_hash, token_hint, status, max_uses, current_uses, reason, expires_at, created_by_subject, created_at)
+		VALUES ($1, $2, $3, 'ACTIVE', $4, 0, 'Standard enrollment', $5, $6, NOW())
+		RETURNING id::text, token_hash, created_by_subject, max_uses, current_uses, expires_at, created_at
+	`, tenantID, []byte(tokenHash), tokenID, maxUses, expiresAt, createdBy).Scan(
 		&t.TokenID, &t.TokenHash, &t.CreatedBy, &t.MaxUses, &t.CurrentUses, &t.ExpiresAt, &t.CreatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create enrollment token: %w", err)
+		// Fallback for v1 compatibility table
+		err = s.pool.QueryRow(ctx, `
+			INSERT INTO enrollment_tokens (tenant_id, token_id, token_hash, created_by, max_uses, current_uses, expires_at, created_at)
+			VALUES ($1, $2, $3, $4, $5, 0, $6, NOW())
+			RETURNING token_id, token_hash, created_by, max_uses, current_uses, expires_at, created_at
+		`, tenantID, tokenID, tokenHash, createdBy, maxUses, expiresAt).Scan(
+			&t.TokenID, &t.TokenHash, &t.CreatedBy, &t.MaxUses, &t.CurrentUses, &t.ExpiresAt, &t.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create enrollment token: %w", err)
+		}
 	}
 	return &t, nil
 }
@@ -59,11 +72,11 @@ func (s *Store) ConsumeEnrollmentToken(ctx context.Context, rawToken string) err
 	var expiresAt time.Time
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT token_id, max_uses, current_uses, expires_at
+		SELECT COALESCE(id::text, token_id), max_uses, current_uses, expires_at
 		FROM enrollment_tokens
-		WHERE token_hash = $1
+		WHERE token_hash = $1 OR token_hash = $2
 		FOR UPDATE
-	`, tokenHash).Scan(&tokenID, &maxUses, &currentUses, &expiresAt)
+	`, tokenHash, []byte(tokenHash)).Scan(&tokenID, &maxUses, &currentUses, &expiresAt)
 
 	if err == pgx.ErrNoRows {
 		return ErrTokenInvalid
@@ -80,15 +93,18 @@ func (s *Store) ConsumeEnrollmentToken(ctx context.Context, rawToken string) err
 
 	_, err = s.pool.Exec(ctx, `
 		UPDATE enrollment_tokens
-		SET current_uses = current_uses + 1
-		WHERE token_id = $1
+		SET current_uses = current_uses + 1,
+		    status = CASE WHEN current_uses + 1 >= max_uses THEN 'CONSUMED'::token_status ELSE status END
+		WHERE id::text = $1 OR token_id = $1
 	`, tokenID)
 	return err
 }
 
 // RegisterDevice registers a new device or updates public key/metadata on enrollment.
-func (s *Store) RegisterDevice(ctx context.Context, d *model.Device) error {
-	tenantID := "00000000-0000-0000-0000-000000000001"
+func (s *Store) RegisterDevice(ctx context.Context, tenantID string, d *model.Device) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO devices (
 			tenant_id, stable_device_id, display_name, os_family,
@@ -109,8 +125,11 @@ func (s *Store) RegisterDevice(ctx context.Context, d *model.Device) error {
 	return err
 }
 
-// GetDeviceByID fetches a device by ID or stable_device_id.
-func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (*model.Device, error) {
+// GetDeviceByID fetches a device by ID or stable_device_id scoped to a tenant.
+func (s *Store) GetDeviceByID(ctx context.Context, tenantID, deviceID string) (*model.Device, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	var d model.Device
 	var state string
 	var revokedAt *time.Time
@@ -130,10 +149,10 @@ func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (*model.Devi
 			d.revoked_at,
 			d.updated_at
 		FROM devices d
-		LEFT JOIN device_enrollment_keys k ON d.id = k.device_id AND k.status = 'ACTIVE'
-		WHERE d.id::text = $1 OR d.stable_device_id = $1
+		LEFT JOIN device_enrollment_keys k ON d.id = k.device_id AND k.status = 'ACTIVE' AND k.tenant_id = d.tenant_id
+		WHERE (d.id::text = $1 OR d.stable_device_id = $1) AND d.tenant_id = $2
 		LIMIT 1
-	`, deviceID).Scan(
+	`, deviceID, tenantID).Scan(
 		&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentControlVersion,
 		&state, &d.FirstEnrolledAt, &lastHb, &revokedAt, &d.UpdatedAt,
 	)
@@ -160,7 +179,10 @@ func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (*model.Devi
 }
 
 // UpdateDeviceHeartbeat updates last_heartbeat_at and re-evaluates compliance status.
-func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, deviceID string, mcpTotal, mcpWrapped int, checksums map[string]interface{}) error {
+func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, tenantID, deviceID string, mcpTotal, mcpWrapped int, checksums map[string]interface{}) error {
+	if tenantID == "" {
+		tenantID = s.ResolveTenantIDForAgent(ctx, deviceID)
+	}
 	status := "COMPLIANT"
 	if mcpWrapped < mcpTotal && mcpTotal > 0 {
 		status = "NON_COMPLIANT"
@@ -171,31 +193,50 @@ func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, deviceID string, mcpT
 		SET last_heartbeat_at = NOW(),
 		    state = CASE WHEN state = 'REVOKED' THEN 'REVOKED'::device_state ELSE $2::device_state END,
 		    updated_at = NOW()
-		WHERE (id::text = $1 OR stable_device_id = $1) AND state != 'REVOKED'
-	`, deviceID, status)
+		WHERE (id::text = $1 OR stable_device_id = $1) AND tenant_id = $3 AND state != 'REVOKED'
+	`, deviceID, status, tenantID)
 
 	if err != nil {
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		d, getErr := s.GetDeviceByID(ctx, deviceID)
-		if getErr == nil && d.IsRevoked {
+		d, getErr := s.GetDeviceByID(ctx, tenantID, deviceID)
+		if getErr == nil && d != nil && d.IsRevoked {
 			return ErrDeviceRevoked
 		}
-		return ErrDeviceNotFound
+		// Auto-register device on heartbeat ingest if not yet in database
+		_, insertErr := s.pool.Exec(ctx, `
+			INSERT INTO devices (
+				tenant_id, stable_device_id, display_name, os_family,
+				architecture, state, first_enrolled_at, last_heartbeat_at,
+				created_at, updated_at
+			) VALUES (
+				$1, $2, $2, 'linux',
+				'x86_64', 'COMPLIANT', NOW(), NOW(),
+				NOW(), NOW()
+			)
+			ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET
+				state = 'COMPLIANT',
+				last_heartbeat_at = NOW(),
+				updated_at = NOW()
+		`, tenantID, deviceID)
+		return insertErr
 	}
 	return nil
 }
 
-// RevokeDevice sets state to REVOKED for a given device.
-func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
+// RevokeDevice sets state to REVOKED for a given device within a tenant.
+func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	res, err := s.pool.Exec(ctx, `
 		UPDATE devices
 		SET state = 'REVOKED',
 		    revoked_at = NOW(),
 		    updated_at = NOW()
-		WHERE id::text = $1 OR stable_device_id = $1
-	`, deviceID)
+		WHERE (id::text = $1 OR stable_device_id = $1) AND tenant_id = $2
+	`, deviceID, tenantID)
 	if err != nil {
 		return err
 	}
@@ -203,8 +244,8 @@ func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
 	enrollRes, err := s.pool.Exec(ctx, `
 		UPDATE device_enrollments
 		SET enrollment_status = 'REVOKED', updated_at = NOW()
-		WHERE device_id::text = $1 OR hostname = $1
-	`, deviceID)
+		WHERE (device_id::text = $1 OR hostname = $1) AND organization_id = $2
+	`, deviceID, tenantID)
 	if err != nil {
 		return err
 	}
@@ -212,8 +253,8 @@ func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
 	_, _ = s.pool.Exec(ctx, `
 		UPDATE device_compliance_reports
 		SET overall_compliance = 'NON_COMPLIANT', reported_at = NOW()
-		WHERE device_id::text = $1
-	`, deviceID)
+		WHERE device_id::text = $1 AND organization_id = $2
+	`, deviceID, tenantID)
 
 	if res.RowsAffected() == 0 && enrollRes.RowsAffected() == 0 {
 		return ErrDeviceNotFound
@@ -221,8 +262,11 @@ func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
 	return nil
 }
 
-// ListDevices lists devices filtered by os_family or compliance_status with auto-calculated compliance.
-func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, limit, offset int) ([]model.Device, error) {
+// ListDevices lists devices filtered by os_family or compliance_status strictly scoped to tenant.
+func (s *Store) ListDevices(ctx context.Context, tenantID, osFamily, statusFilter string, limit, offset int) ([]model.Device, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -249,9 +293,10 @@ func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, 
 			d.revoked_at,
 			d.updated_at
 		FROM devices d
-		LEFT JOIN device_enrollment_keys k ON d.id = k.device_id AND k.status = 'ACTIVE'
-		WHERE ($1 = '' OR d.os_family = $1)
-		  AND ($2 = '' OR (
+		LEFT JOIN device_enrollment_keys k ON d.id = k.device_id AND k.status = 'ACTIVE' AND k.tenant_id = d.tenant_id
+		WHERE d.tenant_id = $1
+		  AND ($2 = '' OR d.os_family = $2)
+		  AND ($3 = '' OR (
 		      CASE
 		          WHEN d.state = 'REVOKED' THEN 'REVOKED'
 		          WHEN d.state = 'PENDING' THEN 'PENDING'
@@ -259,11 +304,11 @@ func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, 
 		          WHEN d.last_heartbeat_at < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
 		          WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
 		          ELSE d.state::text
-		      END = $2
+		      END = $3
 		  ))
 		ORDER BY d.created_at DESC
-		LIMIT $3 OFFSET $4
-	`, osFamily, statusFilter, limit, offset)
+		LIMIT $4 OFFSET $5
+	`, tenantID, osFamily, statusFilter, limit, offset)
 
 	if err != nil {
 		return nil, err
@@ -289,11 +334,14 @@ func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, 
 	return devices, rows.Err()
 }
 
-// InsertTamperLog records a tamper detection event.
-func (s *Store) InsertTamperLog(ctx context.Context, log *model.DeviceTamperLog) error {
+// InsertTamperLog records a tamper detection event scoped to tenant.
+func (s *Store) InsertTamperLog(ctx context.Context, tenantID string, log *model.DeviceTamperLog) error {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO device_tamper_logs (device_id, target_ide, detected_diff, action_taken, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
-	`, log.DeviceID, log.TargetIDE, log.DetectedDiff, log.ActionTaken)
+		INSERT INTO device_tamper_logs (tenant_id, device_id, target_ide, detected_diff, action_taken, created_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
+	`, tenantID, log.DeviceID, log.TargetIDE, log.DetectedDiff, log.ActionTaken)
 	return err
 }

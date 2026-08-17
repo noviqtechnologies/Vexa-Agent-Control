@@ -117,7 +117,9 @@ pub async fn handle_request(
                     let mut matched = None;
                     for provider in providers {
                         if let Some(models) = &provider.models {
-                            if models.iter().any(|m| m == "*" || m == &model) {
+                            if models.iter().any(|m| {
+                                m == "*" || m == &model || (m.ends_with('*') && model.starts_with(m.trim_end_matches('*')))
+                            }) {
                                 matched = Some((provider.clone(), provider.name.clone()));
                                 break;
                             }
@@ -196,13 +198,34 @@ pub async fn handle_request(
     }
 
     // Centrally-managed provider key injection (FR-005 / US-007)
-    let api_key = match state.provider_keys.get(&provider_name) {
-        Some(k) => k.clone(),
+    let api_key = match state
+        .provider_keys
+        .get(&provider_name)
+        .map(|k| k.clone())
+        .or_else(|| match provider_name.as_str() {
+            "openai" => std::env::var("OPENAI_API_KEY").ok(),
+            "anthropic" => std::env::var("ANTHROPIC_API_KEY").ok(),
+            "groq" => std::env::var("GROQ_API_KEY").ok(),
+            "together" => std::env::var("TOGETHER_API_KEY").ok(),
+            "mistral" => std::env::var("MISTRAL_API_KEY").ok(),
+            _ => None,
+        })
+        .or_else(|| {
+            auth_header.as_deref().and_then(|h| {
+                let token = h.strip_prefix("Bearer ").unwrap_or(h).trim();
+                if token.starts_with("sk-") {
+                    Some(token.to_string())
+                } else {
+                    None
+                }
+            })
+        }) {
+        Some(k) => k,
         None => {
             return Ok(crate::proxy::server::json_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                &serde_json::json!({"error": format!("API key for provider '{}' is not configured on the gateway", provider_name)}),
-            ))
+                &serde_json::json!({"error": format!("API key for provider '{}' is not configured on the gateway (set OPENAI_API_KEY or configure in Dashboard)", provider_name)}),
+            ));
         }
     };
 
@@ -347,8 +370,16 @@ pub async fn handle_request(
 
             if let Ok(resp_json) = serde_json::from_slice::<Value>(&resp_bytes) {
                 if let Some(usage) = resp_json.get("usage") {
-                    prompt_tokens_val = usage.get("prompt_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-                    completion_tokens_val = usage.get("completion_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                    prompt_tokens_val = usage
+                        .get("prompt_tokens")
+                        .or_else(|| usage.get("input_tokens"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                    completion_tokens_val = usage
+                        .get("completion_tokens")
+                        .or_else(|| usage.get("output_tokens"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
                     if let Some(prompt_details) = usage.get("prompt_tokens_details") {
                         cached_tokens_val = prompt_details.get("cached_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
                     }

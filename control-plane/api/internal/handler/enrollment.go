@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
@@ -30,12 +31,12 @@ func NewEnrollmentHandler(s *store.Store, jwtSecret string) *EnrollmentHandler {
 }
 
 type EnrollRequest struct {
-	EnrollmentToken  string `json:"enrollment_token"`
-	DeviceID         string `json:"device_id"`
-	Hostname         string `json:"hostname"`
-	OSArch           string `json:"os_arch"`
-	OSFamily         string `json:"os_family"`
-	PublicKey        string `json:"public_key"`
+	EnrollmentToken     string `json:"enrollment_token"`
+	DeviceID            string `json:"device_id"`
+	Hostname            string `json:"hostname"`
+	OSArch              string `json:"os_arch"`
+	OSFamily            string `json:"os_family"`
+	PublicKey           string `json:"public_key"`
 	AgentControlVersion string `json:"agentcontrol_version"`
 }
 
@@ -76,17 +77,18 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dev := model.Device{
-		DeviceID:          req.DeviceID,
-		Hostname:          req.Hostname,
-		OSArch:            req.OSArch,
-		OSFamily:          req.OSFamily,
-		PublicKey:         req.PublicKey,
-		AgentControlVersion:  req.AgentControlVersion,
-		MCPServersTotal:   0,
-		MCPServersWrapped: 0,
+		DeviceID:            req.DeviceID,
+		Hostname:            req.Hostname,
+		OSArch:              req.OSArch,
+		OSFamily:            req.OSFamily,
+		PublicKey:           req.PublicKey,
+		AgentControlVersion: req.AgentControlVersion,
+		MCPServersTotal:     0,
+		MCPServersWrapped:   0,
 	}
 
-	if err := h.store.RegisterDevice(ctx, &dev); err != nil {
+	tenantID := middleware.ResolveTenantScope(r)
+	if err := h.store.RegisterDevice(ctx, tenantID, &dev); err != nil {
 		log.Printf("register device failed: %v", err)
 		http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"failed to register device"}}`, http.StatusInternalServerError)
 		return
@@ -97,6 +99,7 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 	claims := jwt.MapClaims{
 		"sub":       req.DeviceID,
 		"device_id": req.DeviceID,
+		"tenant_id": tenantID,
 		"os_family": req.OSFamily,
 		"exp":       expiresAt.Unix(),
 		"iat":       time.Now().Unix(),
@@ -123,11 +126,11 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateTokenRequest struct {
-	TokenID    string `json:"token_id"`
-	RawToken   string `json:"raw_token"`
-	CreatedBy  string `json:"created_by"`
-	MaxUses    int    `json:"max_uses"`
-	TTLHours   int    `json:"ttl_hours"`
+	TokenID   string `json:"token_id"`
+	RawToken  string `json:"raw_token"`
+	CreatedBy string `json:"created_by"`
+	MaxUses   int    `json:"max_uses"`
+	TTLHours  int    `json:"ttl_hours"`
 }
 
 // POST /api/v1/admin/enrollment-tokens
@@ -153,7 +156,8 @@ func (h *EnrollmentHandler) PostCreateToken(w http.ResponseWriter, r *http.Reque
 		req.CreatedBy = "admin@corp.com"
 	}
 
-	tok, err := h.store.CreateEnrollmentToken(r.Context(), req.TokenID, req.RawToken, req.CreatedBy, req.MaxUses, req.TTLHours)
+	tenantID := middleware.ResolveTenantScope(r)
+	tok, err := h.store.CreateEnrollmentToken(r.Context(), tenantID, req.TokenID, req.RawToken, req.CreatedBy, req.MaxUses, req.TTLHours)
 	if err != nil {
 		log.Printf("create token failed: %v", err)
 		http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"failed to create enrollment token"}}`, http.StatusInternalServerError)

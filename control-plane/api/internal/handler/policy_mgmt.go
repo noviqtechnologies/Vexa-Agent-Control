@@ -82,9 +82,9 @@ func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)
 
-	// Broadcast the new policy over SSE to connected gateways
+	// Broadcast the new policy over SSE to connected gateways for this tenant
 	if h.broker != nil {
-		h.broker.Publish(formatSSE("policy_update", p.Content))
+		h.broker.PublishTenant(tenantID, formatSSE("policy_update", p.Content))
 	}
 }
 
@@ -114,10 +114,9 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	clientChan, cleanup := h.broker.Subscribe()
+	tenantID := middleware.ResolveTenantScope(r)
+	clientChan, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
-
-	tenantID := middleware.TenantIDFromContext(r.Context())
 	// Send initial active policy if available
 	policy, err := h.store.GetActivePolicy(r.Context(), tenantID)
 	if err == nil && policy != nil {

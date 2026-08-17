@@ -74,9 +74,21 @@ func (s *Store) CountDistinctAgents(ctx context.Context, tenantID string) (int, 
 	var count int
 	var err error
 	if tenantID != "" {
-		err = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices WHERE tenant_id = $1`, tenantID).Scan(&count)
+		err = s.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM (
+				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
+				UNION
+				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
+			) d
+		`, tenantID).Scan(&count)
 	} else {
-		err = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM devices`).Scan(&count)
+		err = s.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM (
+				SELECT id::text FROM devices WHERE state != 'REVOKED'
+				UNION
+				SELECT device_id::text FROM device_enrollments WHERE enrollment_status != 'REVOKED'
+			) d
+		`).Scan(&count)
 	}
 	return count, err
 }
@@ -91,6 +103,47 @@ func (s *Store) AgentExists(ctx context.Context, tenantID, agentID string) (bool
 		err = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = $1)`, agentID).Scan(&exists)
 	}
 	return exists, err
+}
+
+// ResolveTenantIDForAgent checks if an agent or device belongs to a non-default tenant.
+func (s *Store) ResolveTenantIDForAgent(ctx context.Context, agentID string) string {
+	if agentID == "" {
+		return "00000000-0000-0000-0000-000000000001"
+	}
+	var tenantID string
+	// 1. Check devices table
+	err := s.pool.QueryRow(ctx, `
+		SELECT tenant_id::text FROM devices 
+		WHERE stable_device_id = $1 
+		   OR id::text = $1 
+		   OR LOWER(display_name) = LOWER($1)
+		   OR $1 ILIKE '%' || LOWER(display_name) || '%'
+		LIMIT 1
+	`, agentID).Scan(&tenantID)
+	if err == nil && tenantID != "" {
+		return tenantID
+	}
+	// 2. Check agents table
+	err = s.pool.QueryRow(ctx, `
+		SELECT tenant_id::text FROM agents 
+		WHERE agent_id = $1 
+		LIMIT 1
+	`, agentID).Scan(&tenantID)
+	if err == nil && tenantID != "" {
+		return tenantID
+	}
+	// 3. Check device_enrollments table
+	err = s.pool.QueryRow(ctx, `
+		SELECT organization_id::text FROM device_enrollments 
+		WHERE hostname = $1 
+		   OR device_id::text = $1 
+		   OR $1 ILIKE '%' || LOWER(hostname) || '%'
+		LIMIT 1
+	`, agentID).Scan(&tenantID)
+	if err == nil && tenantID != "" {
+		return tenantID
+	}
+	return "00000000-0000-0000-0000-000000000001"
 }
 
 // InsertEvent persists a redacted event scoped to a tenant. Caller must UpsertAgent first.
@@ -174,7 +227,17 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 			a.last_seen_at,
 			COALESCE(e.cnt, 0) AS event_count,
 			COALESCE(al.cnt, 0) AS alert_count
-		FROM agents a
+		FROM (
+			SELECT agent_id, display_name, status::text AS status, policy_version, last_seen_at, tenant_id FROM agents WHERE tenant_id = $1
+			UNION ALL
+			SELECT COALESCE(stable_device_id, id::text) AS agent_id, COALESCE(display_name, stable_device_id, id::text) AS display_name, state::text AS status, 'v1.0' AS policy_version, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, tenant_id
+			FROM devices
+			WHERE tenant_id = $1 AND COALESCE(stable_device_id, id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+			UNION ALL
+			SELECT hostname AS agent_id, user_identifier AS display_name, enrollment_status::text AS status, 'v1.0' AS policy_version, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, organization_id AS tenant_id
+			FROM device_enrollments
+			WHERE organization_id = $1 AND hostname NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+		) a
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
@@ -188,7 +251,6 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 			WHERE al.tenant_id = $1
 			GROUP BY te.agent_id
 		) al ON al.agent_id = a.agent_id
-		WHERE a.tenant_id = $1
 		ORDER BY a.last_seen_at DESC
 		LIMIT $2 OFFSET $3
 	`, tenantID, limit, offset)
@@ -225,8 +287,16 @@ func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM devices WHERE tenant_id = $1),
-			(SELECT COUNT(*) FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'),
+			(SELECT COUNT(*) FROM (
+				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
+				UNION
+				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
+			) d),
+			(SELECT COUNT(*) FROM (
+				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
+				UNION
+				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status = 'ACTIVE' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
+			) d),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied'),
 			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1),
@@ -620,9 +690,18 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([
 		       COALESCE(m.wrapped, false), 
 		       COALESCE(m.path_verified, false), 
 		       COALESCE(m.last_seen_at, a.last_seen_at)
-		FROM agents a
+		FROM (
+			SELECT agent_id, last_seen_at, tenant_id FROM agents WHERE tenant_id = $1
+			UNION ALL
+			SELECT COALESCE(stable_device_id, id::text) AS agent_id, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, tenant_id
+			FROM devices
+			WHERE tenant_id = $1 AND COALESCE(stable_device_id, id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+			UNION ALL
+			SELECT hostname AS agent_id, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, organization_id AS tenant_id
+			FROM device_enrollments
+			WHERE organization_id = $1 AND hostname NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+		) a
 		LEFT JOIN mcp_servers m ON a.agent_id = m.agent_id AND m.tenant_id = $1
-		WHERE a.tenant_id = $1
 		ORDER BY a.agent_id ASC, m.last_seen_at DESC
 	`, tenantID)
 	if err != nil {

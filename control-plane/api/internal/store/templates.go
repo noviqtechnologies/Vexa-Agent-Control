@@ -300,6 +300,7 @@ func (s *Store) EnsureTemplatesTable(ctx context.Context) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS policy_templates (
 		id          TEXT PRIMARY KEY,
+		tenant_id   UUID REFERENCES tenants(id) ON DELETE CASCADE,
 		name        TEXT NOT NULL,
 		category    TEXT NOT NULL,
 		description TEXT NOT NULL,
@@ -309,23 +310,31 @@ func (s *Store) EnsureTemplatesTable(ctx context.Context) error {
 		is_custom   BOOLEAN NOT NULL DEFAULT true,
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
 		updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-	);`
+	);
+	ALTER TABLE policy_templates ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+	CREATE INDEX IF NOT EXISTS idx_policy_templates_tenant ON policy_templates(tenant_id);
+	`
 	_, err := s.pool.Exec(ctx, query)
 	return err
 }
 
-func (s *Store) ListTemplates(ctx context.Context) ([]*model.PolicyTemplate, error) {
+func (s *Store) ListTemplates(ctx context.Context, tenantID string) ([]*model.PolicyTemplate, error) {
 	if err := s.EnsureTemplatesTable(ctx); err != nil {
 		// Log warning, return builtins fallback
 	}
 
 	result := append([]*model.PolicyTemplate{}, builtinTemplates...)
 
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, category, description, tags, icon, content, is_custom, created_at, updated_at
 		FROM policy_templates
+		WHERE tenant_id = $1
 		ORDER BY created_at DESC
-	`)
+	`, tenantID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return result, nil
@@ -344,7 +353,7 @@ func (s *Store) ListTemplates(ctx context.Context) ([]*model.PolicyTemplate, err
 	return result, nil
 }
 
-func (s *Store) GetTemplateByID(ctx context.Context, id string) (*model.PolicyTemplate, error) {
+func (s *Store) GetTemplateByID(ctx context.Context, tenantID, id string) (*model.PolicyTemplate, error) {
 	for _, b := range builtinTemplates {
 		if b.ID == id {
 			return b, nil
@@ -355,12 +364,16 @@ func (s *Store) GetTemplateByID(ctx context.Context, id string) (*model.PolicyTe
 		return nil, err
 	}
 
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
 	var t model.PolicyTemplate
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, category, description, tags, icon, content, is_custom, created_at, updated_at
 		FROM policy_templates
-		WHERE id = $1
-	`, id).Scan(&t.ID, &t.Name, &t.Category, &t.Description, &t.Tags, &t.Icon, &t.Content, &t.IsCustom, &t.CreatedAt, &t.UpdatedAt)
+		WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+	`, id, tenantID).Scan(&t.ID, &t.Name, &t.Category, &t.Description, &t.Tags, &t.Icon, &t.Content, &t.IsCustom, &t.CreatedAt, &t.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -368,9 +381,13 @@ func (s *Store) GetTemplateByID(ctx context.Context, id string) (*model.PolicyTe
 	return &t, nil
 }
 
-func (s *Store) SaveCustomTemplate(ctx context.Context, t *model.PolicyTemplate) error {
+func (s *Store) SaveCustomTemplate(ctx context.Context, tenantID string, t *model.PolicyTemplate) error {
 	if err := s.EnsureTemplatesTable(ctx); err != nil {
 		return err
+	}
+
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	if t.Tags == nil {
@@ -385,25 +402,29 @@ func (s *Store) SaveCustomTemplate(ctx context.Context, t *model.PolicyTemplate)
 	t.UpdatedAt = now
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO policy_templates (id, name, category, description, tags, icon, content, is_custom, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO policy_templates (id, tenant_id, name, category, description, tags, icon, content, is_custom, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
+			tenant_id = EXCLUDED.tenant_id,
 			category = EXCLUDED.category,
 			description = EXCLUDED.description,
 			tags = EXCLUDED.tags,
 			icon = EXCLUDED.icon,
 			content = EXCLUDED.content,
 			updated_at = EXCLUDED.updated_at
-	`, t.ID, t.Name, t.Category, t.Description, t.Tags, t.Icon, t.Content, true, now, now)
+	`, t.ID, tenantID, t.Name, t.Category, t.Description, t.Tags, t.Icon, t.Content, true, now, now)
 
 	return err
 }
 
-func (s *Store) DeleteCustomTemplate(ctx context.Context, id string) error {
+func (s *Store) DeleteCustomTemplate(ctx context.Context, tenantID, id string) error {
 	if err := s.EnsureTemplatesTable(ctx); err != nil {
 		return err
 	}
-	_, err := s.pool.Exec(ctx, `DELETE FROM policy_templates WHERE id = $1 AND is_custom = true`, id)
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	_, err := s.pool.Exec(ctx, `DELETE FROM policy_templates WHERE id = $1 AND tenant_id = $2 AND is_custom = true`, id, tenantID)
 	return err
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
@@ -19,7 +20,8 @@ func NewTemplateHandler(s *store.Store) *TemplateHandler {
 }
 
 func (h *TemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
-	templates, err := h.store.ListTemplates(r.Context())
+	tenantID := middleware.ResolveTenantScope(r)
+	templates, err := h.store.ListTemplates(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -33,13 +35,14 @@ func (h *TemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TemplateHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "template id required", http.StatusBadRequest)
 		return
 	}
 
-	tpl, err := h.store.GetTemplateByID(r.Context(), id)
+	tpl, err := h.store.GetTemplateByID(r.Context(), tenantID, id)
 	if err != nil || tpl == nil {
 		http.Error(w, "template not found", http.StatusNotFound)
 		return
@@ -50,6 +53,7 @@ func (h *TemplateHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TemplateHandler) CreateCustomTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
 	var tpl model.PolicyTemplate
 	if err := json.NewDecoder(r.Body).Decode(&tpl); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
@@ -61,7 +65,7 @@ func (h *TemplateHandler) CreateCustomTemplate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := h.store.SaveCustomTemplate(r.Context(), &tpl); err != nil {
+	if err := h.store.SaveCustomTemplate(r.Context(), tenantID, &tpl); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -72,13 +76,14 @@ func (h *TemplateHandler) CreateCustomTemplate(w http.ResponseWriter, r *http.Re
 }
 
 func (h *TemplateHandler) DeleteCustomTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "template id required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.store.DeleteCustomTemplate(r.Context(), id); err != nil {
+	if err := h.store.DeleteCustomTemplate(r.Context(), tenantID, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

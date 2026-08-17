@@ -86,6 +86,9 @@ func (m *mockStore) AgentExists(ctx context.Context, tenantID, agentID string) (
 	}
 	return false, nil
 }
+func (m *mockStore) ResolveTenantIDForAgent(ctx context.Context, agentID string) string {
+	return "00000000-0000-0000-0000-000000000001"
+}
 func (m *mockStore) InsertEvent(ctx context.Context, tenantID string, e *model.RedactedEvent) error {
 	if m.insertEventFunc != nil {
 		return m.insertEventFunc(ctx, tenantID, e)

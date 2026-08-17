@@ -30,7 +30,8 @@ func (h *AlertHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	ch, cleanup := h.broker.Subscribe()
+	tenantID := middleware.ResolveTenantScope(r)
+	ch, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
 
 	ctx := r.Context()

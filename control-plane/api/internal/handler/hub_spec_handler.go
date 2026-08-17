@@ -128,7 +128,8 @@ func (h *HubSpecHandler) GetEventsStream(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	clientChan, cleanup := h.broker.Subscribe()
+	tenantID := middleware.ResolveTenantScope(r)
+	clientChan, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
 
 	// Initial heartbeat line

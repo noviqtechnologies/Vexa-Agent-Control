@@ -41,6 +41,9 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
+	if tenantID == middleware.DefaultTenantID {
+		tenantID = h.store.ResolveTenantIDForAgent(ctx, event.AgentID)
+	}
 
 	// Seat enforcement check: reject new agent registrations if seat cap reached
 	if h.claims != nil && h.claims.MaxSeats > 0 {
@@ -92,6 +95,9 @@ func (h *IngestHandler) PostAlert(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
+	if tenantID == middleware.DefaultTenantID {
+		tenantID = h.store.ResolveTenantIDForAgent(ctx, alert.Event.AgentID)
+	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, alert.Event.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
@@ -110,7 +116,7 @@ func (h *IngestHandler) PostAlert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fan out to SSE — non-blocking, never fails the ingest.
-	h.broker.Publish(alert)
+	h.broker.PublishTenant(tenantID, alert)
 
 	w.WriteHeader(http.StatusCreated)
 }
@@ -132,6 +138,9 @@ func (h *IngestHandler) PostCredential(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
+	if tenantID == middleware.DefaultTenantID {
+		tenantID = h.store.ResolveTenantIDForAgent(ctx, cred.AgentID)
+	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, cred.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
@@ -165,6 +174,9 @@ func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
+	if tenantID == middleware.DefaultTenantID {
+		tenantID = h.store.ResolveTenantIDForAgent(ctx, snap.AgentID)
+	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, snap.AgentID); err != nil {
 		log.Printf("upsert agent: %v", err)
@@ -180,7 +192,7 @@ func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	log.Printf("ingest mcp servers: received %d servers for agent %s", len(snap.Servers), snap.AgentID)
+	log.Printf("ingest mcp servers: received %d servers for agent %s in tenant %s", len(snap.Servers), snap.AgentID, tenantID)
 
 	w.WriteHeader(http.StatusCreated)
 }

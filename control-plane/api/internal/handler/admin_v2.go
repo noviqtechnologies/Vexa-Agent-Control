@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
@@ -55,7 +56,12 @@ func (h *AdminV2Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Re
 	rawToken := fmt.Sprintf("OTET-%s", hex.EncodeToString(rawBytes))
 	tokenHint := fmt.Sprintf("OTET-...%s", rawToken[len(rawToken)-4:])
 
-	tenantID := "00000000-0000-0000-0000-000000000001"
+	tenantID := middleware.ResolveTenantScope(r)
+
+	actor := "admin_operator"
+	if claims := middleware.UserClaimsFromContext(r.Context()); claims != nil && claims.UserID != "" {
+		actor = claims.UserID
+	}
 
 	rec, err := h.Store.CreateEnrollmentTokenV2(
 		r.Context(),
@@ -65,7 +71,7 @@ func (h *AdminV2Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Re
 		req.DeviceLabel,
 		req.TargetOwnerSub,
 		req.Reason,
-		"admin_operator",
+		actor,
 		req.ExpiresInMinutes,
 	)
 
@@ -111,14 +117,14 @@ func (h *AdminV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := r.Header.Get("X-Tenant-ID")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Organization-ID")
+	tenantID := middleware.ResolveTenantScope(r)
+
+	actor := "admin_operator"
+	if claims := middleware.UserClaimsFromContext(r.Context()); claims != nil && claims.UserID != "" {
+		actor = claims.UserID
 	}
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
-	err := h.Store.RevokeDeviceV2(r.Context(), tenantID, deviceID, req.Reason, "admin_operator")
+
+	err := h.Store.RevokeDeviceV2(r.Context(), tenantID, deviceID, req.Reason, actor)
 	if err != nil {
 		log.Printf("RevokeDevice error for device %s: %v", deviceID, err)
 		http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found or already revoked"}}`, http.StatusNotFound)
