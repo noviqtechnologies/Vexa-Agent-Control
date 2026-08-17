@@ -73,9 +73,9 @@ jobs:
         run: |
           mkdir -p release/bin
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/agentwall.exe release/bin/
+            cp target/${{ matrix.target }}/release/agentcontrol.exe release/bin/
           else
-            cp target/${{ matrix.target }}/release/agentwall release/bin/
+            cp target/${{ matrix.target }}/release/agentcontrol release/bin/
           fi
           cp quickstart_agent.py release/bin/
 
@@ -83,19 +83,19 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           cd release
-          zip -r ../agentwall-${{ env.VERSION }}-${{ matrix.arch_name }}.zip .
+          zip -r ../agentcontrol-${{ env.VERSION }}-${{ matrix.arch_name }}.zip .
 
       - name: Create Zip (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path release\* -DestinationPath agentwall-${{ env.VERSION }}-${{ matrix.arch_name }}.zip
+          Compress-Archive -Path release\* -DestinationPath agentcontrol-${{ env.VERSION }}-${{ matrix.arch_name }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agentwall-${{ matrix.arch_name }}
-          path: agentwall-${{ env.VERSION }}-${{ matrix.arch_name }}.zip
+          name: agentcontrol-${{ matrix.arch_name }}
+          path: agentcontrol-${{ env.VERSION }}-${{ matrix.arch_name }}.zip
 
   release:
     name: Create GitHub Release
@@ -116,7 +116,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: agentwall-*
+          pattern: agentcontrol-*
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -167,7 +167,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:1.0.25,${{ env.IMAGE_NAME }}:v1.0.25
+          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:1.0.35,${{ env.IMAGE_NAME }}:v1.0.35
 
       - name: Build and push Dashboard API image
         uses: docker/build-push-action@v6
@@ -175,7 +175,7 @@ jobs:
           context: ./control-plane/api
           file: ./control-plane/api/Dockerfile
           push: true
-          tags: ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest
+          tags: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest
 
       - name: Build and push Dashboard Frontend image
         uses: docker/build-push-action@v6
@@ -183,7 +183,7 @@ jobs:
           context: ./control-plane/ui
           file: ./control-plane/ui/Dockerfile
           push: true
-          tags: ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest
+          tags: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest
 
       - name: Build and push Database image
         uses: docker/build-push-action@v6
@@ -191,6 +191,4 @@ jobs:
           context: ./control-plane/db
           file: ./control-plane/db/Dockerfile
           push: true
-          tags: ghcr.io/noviqtechnologies/agentwall-db:latest
-
-
+          tags: ghcr.io/noviqtechnologies/agentcontrol-db:latest

@@ -1,4 +1,4 @@
-name: AgentWall Assessment
+name: Agent Control Assessment
 
 on:
   pull_request:
@@ -16,18 +16,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install AgentWall
+      - name: Install Agent Control
         run: |
-          curl -sL https://raw.githubusercontent.com/vexa/agentwall/main/install.sh | bash
-          echo "$HOME/.agentwall/bin" >> $GITHUB_PATH
+          curl -sL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
+          echo "$HOME/.agentcontrol/bin" >> $GITHUB_PATH
 
       - name: Validate Policy Format
         run: |
-          # Use AgentWall to lint/validate the policy file
-          # Adjust the policy path depending on where it's stored
-          agentwall lint policy.yaml
+          agentcontrol lint agentcontrol-policy.yaml
 
       - name: Run Shadow Analysis
         run: |
-          # Example step showing how to run agentwall in test mode
-          agentwall test --gateway "http://test-environment" --policy policy.yaml test_fixtures/mcp_traffic.json
+          agentcontrol test --gateway "http://test-environment" --policy agentcontrol-policy.yaml test_fixtures/mcp_traffic.json
