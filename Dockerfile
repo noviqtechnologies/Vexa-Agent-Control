@@ -15,8 +15,8 @@ COPY . .
 # Build using BuildKit cache mounts for ultra-fast incremental compilation
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target \
-    cargo build --release --bin agentwall && \
-    cp /build/target/release/agentwall /usr/local/bin/agentwall
+    cargo build --release --bin agentcontrol && \
+    cp /build/target/release/agentcontrol /usr/local/bin/agentcontrol
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -29,30 +29,30 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled binary from the builder's global path
-COPY --from=builder /usr/local/bin/agentwall /usr/local/bin/agentwall
+COPY --from=builder /usr/local/bin/agentcontrol /usr/local/bin/agentcontrol
 
 # Copy example policy and docs
 COPY policy.example.yaml /app/policy.example.yaml
 
 # Create directory for audit logs with correct permissions
-RUN mkdir -p /var/log/agentwall && chmod 755 /var/log/agentwall
+RUN mkdir -p /var/log/agentcontrol && chmod 755 /var/log/agentcontrol
 
 # Non-root user for security
-RUN useradd -r -s /bin/false -d /app agentwall && \
-    chown -R agentwall:agentwall /app /var/log/agentwall
-USER agentwall
+RUN useradd -r -s /bin/false -d /app agentcontrol && \
+    chown -R agentcontrol:agentcontrol /app /var/log/agentcontrol
+USER agentcontrol
 
 # Default environment
-ENV AGENTWALL_LISTEN=0.0.0.0:8080 \
-    AGENTWALL_LOG_PATH=/var/log/agentwall/audit.log \
-    AGENTWALL_MCP_URL=http://mock-mcp:3000 \
-    AGENTWALL_DRY_RUN=false
+ENV AGENTCONTROL_LISTEN=0.0.0.0:8080 \
+    AGENTCONTROL_LOG_PATH=/var/log/agentcontrol/audit.log \
+    AGENTCONTROL_MCP_URL=http://mock-mcp:3000 \
+    AGENTCONTROL_DRY_RUN=false
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-    CMD agentwall --version || exit 1
+    CMD agentcontrol --version || exit 1
 
 EXPOSE 8080
 
-ENTRYPOINT ["agentwall"]
+ENTRYPOINT ["agentcontrol"]
 CMD ["start"]

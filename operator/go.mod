@@ -1,4 +1,4 @@
-module github.com/noviqtechnologies/agentwall/operator
+module github.com/noviqtechnologies/agentcontrol/operator
 
 go 1.22.0
 

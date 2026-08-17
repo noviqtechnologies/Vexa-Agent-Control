@@ -1,4 +1,4 @@
-# AgentWall Dashboard Launcher (PowerShell - Windows / macOS / Linux with pwsh)
+# Vexa Agent Control Dashboard Launcher (PowerShell - Windows / macOS / Linux with pwsh)
 # Usage: .\run-demo.ps1   (Windows)   |   pwsh ./run-demo.ps1   (macOS/Linux)
 
 $DASHBOARD_URL = "http://localhost:8081"
@@ -9,7 +9,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $composeFile = Join-Path $scriptDir "control-plane\docker-compose.yml"
 
 Write-Host ""
-Write-Host "  Building and starting AgentWall Dashboard..." -ForegroundColor Cyan
+Write-Host "  Building and starting Vexa Agent Control Dashboard..." -ForegroundColor Cyan
 Write-Host ""
 
 docker compose -f "$composeFile" up --detach --build
@@ -66,7 +66,7 @@ foreach ($line in $logs) {
 $line = "-" * 62
 Write-Host "  $line" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "   AgentWall Dashboard is ready!" -ForegroundColor Green
+Write-Host "   Vexa Agent Control Dashboard is ready!" -ForegroundColor Green
 Write-Host ""
 Write-Host "   Dashboard URL   " -ForegroundColor Gray -NoNewline
 Write-Host $DASHBOARD_URL       -ForegroundColor Yellow

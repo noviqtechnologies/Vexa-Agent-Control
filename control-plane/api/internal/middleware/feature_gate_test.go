@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 )
 
 func TestRequireFeature_Allowed(t *testing.T) {

@@ -24,7 +24,7 @@ func NewIssuer(privKey ed25519.PrivateKey) *Issuer {
 }
 
 func NewIssuerFromEnv() (*Issuer, error) {
-	keyHex := os.Getenv("AGENTWALL_LICENSE_SIGNING_KEY")
+	keyHex := os.Getenv("AGENTCONTROL_LICENSE_SIGNING_KEY")
 	if keyHex == "" {
 		// If no key is configured in env, check if dev mode or generate an ephemeral fallback key
 		if os.Getenv("DEV_MODE") == "true" {
@@ -38,7 +38,7 @@ func NewIssuerFromEnv() (*Issuer, error) {
 
 	decoded, err := hex.DecodeString(keyHex)
 	if err != nil {
-		return nil, fmt.Errorf("decode AGENTWALL_LICENSE_SIGNING_KEY hex: %w", err)
+		return nil, fmt.Errorf("decode AGENTCONTROL_LICENSE_SIGNING_KEY hex: %w", err)
 	}
 
 	var privKey ed25519.PrivateKey

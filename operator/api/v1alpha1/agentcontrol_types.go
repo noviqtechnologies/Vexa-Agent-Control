@@ -18,8 +18,8 @@ type IdentityConfig struct {
 // permitted so agents can still resolve the gateway's service name.
 //
 // All fields except Enforced are optional and fall back to conventions:
-//   AgentPodSelector    -> {agentwall.io/agent: "true"}
-//   GatewayPodSelector  -> {agentwall.io/gateway: "true"}
+//   AgentPodSelector    -> {agentcontrol.io/agent: "true"}
+//   GatewayPodSelector  -> {agentcontrol.io/gateway: "true"}
 //   MCPPort             -> 8080
 //
 // Existing CRs written before these fields were introduced remain valid; the
@@ -30,12 +30,12 @@ type NetworkPolicyConfig struct {
 	Enforced bool `json:"enforced,omitempty"`
 
 	// AgentPodSelector selects the agent pods that will be restricted.
-	// If empty, defaults to {"agentwall.io/agent": "true"}.
+	// If empty, defaults to {"agentcontrol.io/agent": "true"}.
 	// +optional
 	AgentPodSelector map[string]string `json:"agentPodSelector,omitempty"`
 
 	// GatewayPodSelector selects the gateway pod(s) that agents are allowed
-	// to reach. If empty, defaults to {"agentwall.io/gateway": "true"}.
+	// to reach. If empty, defaults to {"agentcontrol.io/gateway": "true"}.
 	// +optional
 	GatewayPodSelector map[string]string `json:"gatewayPodSelector,omitempty"`
 
@@ -46,9 +46,9 @@ type NetworkPolicyConfig struct {
 	MCPPort int32 `json:"mcpPort,omitempty"`
 }
 
-// AgentWallPolicySpec defines the desired state of AgentWallPolicy
-type AgentWallPolicySpec struct {
-	// GatewayImage defines the AgentWall image to inject
+// AgentControlPolicySpec defines the desired state of AgentControlPolicy
+type AgentControlPolicySpec struct {
+	// GatewayImage defines the Agent Control image to inject
 	GatewayImage string `json:"gatewayImage,omitempty"`
 
 	// Policy contains the inline YAML policy definition
@@ -61,8 +61,8 @@ type AgentWallPolicySpec struct {
 	NetworkPolicy NetworkPolicyConfig `json:"networkPolicy,omitempty"`
 }
 
-// AgentWallPolicyStatus defines the observed state of AgentWallPolicy
-type AgentWallPolicyStatus struct {
+// AgentControlPolicyStatus defines the observed state of AgentControlPolicy
+type AgentControlPolicyStatus struct {
 	// Phase is the current state of the policy
 	Phase string `json:"phase,omitempty"`
 
@@ -80,24 +80,24 @@ type AgentWallPolicyStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// AgentWallPolicy is the Schema for the agentwallpolicies API
-type AgentWallPolicy struct {
+// AgentControlPolicy is the Schema for the agentcontrolpolicies API
+type AgentControlPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AgentWallPolicySpec   `json:"spec,omitempty"`
-	Status AgentWallPolicyStatus `json:"status,omitempty"`
+	Spec   AgentControlPolicySpec   `json:"spec,omitempty"`
+	Status AgentControlPolicyStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// AgentWallPolicyList contains a list of AgentWallPolicy
-type AgentWallPolicyList struct {
+// AgentControlPolicyList contains a list of AgentControlPolicy
+type AgentControlPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AgentWallPolicy `json:"items"`
+	Items           []AgentControlPolicy `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&AgentWallPolicy{}, &AgentWallPolicyList{})
+	SchemeBuilder.Register(&AgentControlPolicy{}, &AgentControlPolicyList{})
 }

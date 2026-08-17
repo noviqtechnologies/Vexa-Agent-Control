@@ -1,7 +1,7 @@
-use agentwall::identity::audit_log::{IdentityAuditLogger, IdentityEventType};
-use agentwall::identity::credential::{AgentCredential, CredentialType, ToolScope};
-use agentwall::identity::scope_validator::{CredentialScopeCheckResult, IdentityScopeValidator};
-use agentwall::identity::vault::{
+use agentcontrol::identity::audit_log::{IdentityAuditLogger, IdentityEventType};
+use agentcontrol::identity::credential::{AgentCredential, CredentialType, ToolScope};
+use agentcontrol::identity::scope_validator::{CredentialScopeCheckResult, IdentityScopeValidator};
+use agentcontrol::identity::vault::{
     AwsSecretsManagerAdapter, IssuedCredential, VaultAdapter, VaultConfig, VaultError,
 };
 
@@ -120,7 +120,7 @@ fn test_audit_hmac_chain_valid() {
 
     logger
         .append(
-            agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
+            agentcontrol::identity::audit_log::IdentityAuditEntryBuilder::new(
                 IdentityEventType::Issued,
                 "agent-1",
                 "cred-1",
@@ -133,7 +133,7 @@ fn test_audit_hmac_chain_valid() {
         .unwrap();
     logger
         .append(
-            agentwall::identity::audit_log::IdentityAuditEntryBuilder::new(
+            agentcontrol::identity::audit_log::IdentityAuditEntryBuilder::new(
                 IdentityEventType::Rotated,
                 "agent-1",
                 "cred-2",

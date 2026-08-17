@@ -25,7 +25,7 @@ These are the primary entry points for operators at each deployment tier. Each g
 | [compliance_mapping.md](compliance_mapping.md) | Multi-framework compliance mapping (OWASP ASI 2026, SOC 2, ISO 27001, NIST AI RMF) |
 | [oidc_identity_binding.md](oidc_identity_binding.md) | OIDC identity provider integration guide (Okta, Keycloak, Entra ID, Auth0, AWS Cognito, PingIdentity) |
 | [adr_benchmark.md](adr_benchmark.md) | ADR (AI Detection & Response) security benchmark suite reference (303 tasks across 17 attack classes) |
-| [agentwall_architecture.md](agentwall_architecture.md) | Detailed system architecture specification, 6-pass security pipeline, and component interaction flows |
+| [agentcontrol_architecture.md](agentcontrol_architecture.md) | Detailed system architecture specification, 6-pass security pipeline, and component interaction flows |
 | [configuration.md](configuration.md) | Deep-dive configuration reference for Schema v2 policy files, DLP regex, spend caps, and environment variables |
 | [deployment.md](deployment.md) | Step-by-step installation & operation for macOS, Linux, Windows, Docker Compose, Kubernetes Helm, and HAR containers |
 | [integrations.md](integrations.md) | Ecosystem integrations guide for IDE wrappers, stdio proxies, Vault adapters, and SIEM exporters |

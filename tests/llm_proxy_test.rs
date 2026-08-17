@@ -1,4 +1,4 @@
-use agentwall::policy::loader::load_policy;
+use agentcontrol::policy::loader::load_policy;
 
 #[test]
 fn test_llm_policy_schema_parsing() {
@@ -27,7 +27,7 @@ llm:
 
     let res = load_policy(&file_path, None);
     match res {
-        agentwall::policy::loader::PolicyLoadResult::Loaded { policy, .. } => {
+        agentcontrol::policy::loader::PolicyLoadResult::Loaded { policy, .. } => {
             assert!(policy.llm.is_some());
             let llm = policy.llm.unwrap();
             assert_eq!(llm.providers.unwrap().len(), 2);

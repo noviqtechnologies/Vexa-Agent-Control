@@ -1,13 +1,13 @@
 # Enterprise Fleet — User Guide
 
-> **Target Audience:** Platform engineers and Security architects deploying AgentWall as a high-availability, cloud-native gateway fleet on Kubernetes for enterprise production workloads.
+> **Target Audience:** Platform engineers and Security architects deploying Agent Control as a high-availability, cloud-native gateway fleet on Kubernetes for enterprise production workloads.
 > Requires Kubernetes v1.26+, Helm v3+, and a domain TLS certificate.
 
 ---
 
 ## What This Profile Provides
 
-The **Enterprise Fleet** profile delivers the full AgentWall security stack on Kubernetes with production-grade reliability, cryptographic privacy, and zero-trust enforcement across multi-tenant agent fleets.
+The **Enterprise Fleet** profile delivers the full Agent Control security stack on Kubernetes with production-grade reliability, cryptographic privacy, and zero-trust enforcement across multi-tenant agent fleets.
 
 > [!NOTE]
 > All Workstation Sidecar and Team Control Hub capabilities are **fully included** in this profile. This guide covers the additional enterprise-exclusive capabilities.
@@ -22,8 +22,8 @@ The **Enterprise Fleet** profile delivers the full AgentWall security stack on K
 | **OWASP Agentic Top 10 (ASI 2026) Coverage** | Full architectural alignment with 8/10 full coverage, 1/10 partial, and automated audit evidence CLI |
 | **Provider Key AES-256-GCM Encryption** | AES-256-GCM encrypted database custody for LLM provider API keys using 32-byte master key |
 | **Offline Ed25519 Licensing & Seat Gating** | Ed25519-signed JWT licensing with zero telemetry and automatic seat enforcement (429 HTTP rejection) |
-| **Air-Gapped OIDC & JWKS Support** | Offline disk-based JWKS key loading (`auth.jwks_file`) and `agentwall identity export-jwks` CLI tool |
-| **Compliance Control Mapping & Evidence CLI** | Automated report generator (`agentwall compliance report`) mapped to OWASP ASI 2026, SOC 2, ISO 27001, and NIST AI RMF |
+| **Air-Gapped OIDC & JWKS Support** | Offline disk-based JWKS key loading (`auth.jwks_file`) and `agentcontrol identity export-jwks` CLI tool |
+| **Compliance Control Mapping & Evidence CLI** | Automated report generator (`agentcontrol compliance report`) mapped to OWASP ASI 2026, SOC 2, ISO 27001, and NIST AI RMF |
 | **Centralized Hub SIEM Aggregation** | Multi-gateway log fan-in and batch export to Splunk HEC, Datadog Logs, or OpenSearch |
 | **Hardened WebSocket Egress Tunneling** | Secure WebSocket proxy connecting remote cloud agents to local on-premise MCP servers (<5ms latency) |
 | **Real-Time Threat Intelligence Feed** | Dynamically ingests Vexa AI Malware signature feeds via SSE — updates DLP patterns in-flight without downtime |
@@ -83,21 +83,21 @@ The **Enterprise Fleet** profile delivers the full AgentWall security stack on K
 ### Step 1 — Create Namespace & TLS Secret
 
 ```bash
-kubectl create namespace agentwall-system
+kubectl create namespace agentcontrol-system
 
-kubectl create secret tls agentwall-tls \
+kubectl create secret tls agentcontrol-tls \
   --cert=/etc/certs/tls.crt \
   --key=/etc/certs/tls.key \
-  -n agentwall-system
+  -n agentcontrol-system
 ```
 
-### Step 2 — Deploy AgentWall Stack via Helm
+### Step 2 — Deploy Agent Control Stack via Helm
 
 ```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
+helm install agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --set gateway.tls.enabled=true \
-  --set gateway.tls.secretName="agentwall-tls" \
+  --set gateway.tls.secretName="agentcontrol-tls" \
   --set gateway.oidcIssuer="https://auth.corp.com/oauth2/default" \
   --set gateway.siem.backend="splunk" \
   --set gateway.siem.endpoint="https://splunk.corp.com:8088/services/collector/event" \
@@ -112,7 +112,7 @@ helm install agentwall ./chart \
 | Helm Key | Description | Example |
 |---|---|---|
 | `gateway.tls.enabled` | Enable `rustls` TLS termination | `true` |
-| `gateway.tls.secretName` | K8s TLS secret name | `agentwall-tls` |
+| `gateway.tls.secretName` | K8s TLS secret name | `agentcontrol-tls` |
 | `gateway.oidcIssuer` | OIDC provider discovery URL | `https://auth.corp.com/oauth2/default` |
 | `gateway.siem.backend` | SIEM target (`splunk`, `datadog`, `opensearch`) | `splunk` |
 | `gateway.siem.endpoint` | SIEM ingestion endpoint URL | `https://splunk.corp.com:8088/...` |
@@ -128,7 +128,7 @@ helm install agentwall ./chart \
 ### Step 1 — Verify Kubernetes Workload Health
 
 ```bash
-kubectl get pods -n agentwall-system -o wide
+kubectl get pods -n agentcontrol-system -o wide
 ```
 
 **Expected output:** All pods showing status `Running` and readiness `1/1`.
@@ -140,7 +140,7 @@ This confirms gateway pods, Control Hub API, PostgreSQL, and frontend deployment
 ### Step 2 — Inspect Gateway Container Logs
 
 ```bash
-kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway --tail=100
+kubectl logs -n agentcontrol-system -l app.kubernetes.io/component=gateway --tail=100
 ```
 
 **Expected log entries:**
@@ -159,7 +159,7 @@ This validates TLS binding, OIDC provider discovery, and SIEM telemetry streamin
 ### Step 3 — Execute Automated Policy Smoke Test
 
 ```bash
-agentwall test --policy agentwall-policy.yaml --gateway https://agentwall.corp.com fixtures/smoke_test.json
+agentcontrol test --policy agentcontrol-policy.yaml --gateway https://agentcontrol.corp.com fixtures/smoke_test.json
 ```
 
 **Expected output:** A terminal test report summarizing passed assertions and policy enforcement checks.
@@ -172,27 +172,27 @@ This provides end-to-end empirical verification of governance policy enforcement
 
 Check your enterprise SIEM dashboard (e.g., Splunk, Datadog):
 - **Splunk:** Confirm events appearing in the configured index (e.g., `security_events`).
-- **Datadog:** Confirm events visible under the `agentwall` log source in the Logs Explorer.
+- **Datadog:** Confirm events visible under the `agentcontrol` log source in the Logs Explorer.
 - **OIDC Provider:** Verify audit logs show valid `sub`, `iss`, and `aud` claim bindings for each gateway session.
 
 ---
 
 ## 4. Hardened Agent Container Runtime (HAR)
 
-The HAR is a pre-built, distroless/Alpine OCI sidecar image designed as an entrypoint proxy for Kubernetes pods. It embeds the full AgentWall gateway in a **<100 MB** container.
+The HAR is a pre-built, distroless/Alpine OCI sidecar image designed as an entrypoint proxy for Kubernetes pods. It embeds the full Agent Control gateway in a **<100 MB** container.
 
 ### Build the HAR Image
 
 ```bash
-docker build -f Dockerfile.har -t agentwall-har:2.0 .
+docker build -f Dockerfile.har -t agentcontrol-har:2.0 .
 ```
 
 ### Run Standalone (Testing)
 
 ```bash
 docker run \
-  -e AGENTWALL_POLICY_PATH=/etc/agentwall/policy.yaml \
-  agentwall-har:2.0
+  -e AGENTWALL_POLICY_PATH=/etc/agentcontrol/policy.yaml \
+  agentcontrol-har:2.0
 ```
 
 ### Deploy as Kubernetes Sidecar
@@ -209,38 +209,38 @@ spec:
           value: "http://localhost:8080"
         - name: HTTPS_PROXY
           value: "http://localhost:8080"
-    - name: agentwall-sidecar
-      image: agentwall-har:2.0
+    - name: agentcontrol-sidecar
+      image: agentcontrol-har:2.0
       env:
         - name: AGENTWALL_POLICY_PATH
-          value: /etc/agentwall/policy.yaml
+          value: /etc/agentcontrol/policy.yaml
         - name: AGENTWALL_LISTEN
           value: "0.0.0.0:8080"
       volumeMounts:
         - name: policy-config
-          mountPath: /etc/agentwall
+          mountPath: /etc/agentcontrol
   volumes:
 
 ---
 
 ## 5. Enterprise MDM Fleet Deployment Templates
 
-Enterprise security administrators can deploy AgentWall across developer fleets using MDM platforms (Jamf Pro, Kandji, Microsoft Intune, Ansible).
+Enterprise security administrators can deploy Agent Control across developer fleets using MDM platforms (Jamf Pro, Kandji, Microsoft Intune, Ansible).
 
 ### 1. macOS MDM Deployment (Jamf Pro / Kandji)
 
 **Script Payload (Jamf Script Editor / Kandji Custom Script):**
 ```bash
 #!/bin/bash
-# Jamf Pro / Kandji Managed Deployment Script for AgentWall
+# Jamf Pro / Kandji Managed Deployment Script for Agent Control
 export AGENTWALL_TOKEN="TOK-ENTERPRISE-TOKEN-892A"
-export AGENTWALL_HUB_URL="https://agentwall.corp.com"
+export AGENTWALL_HUB_URL="https://agentcontrol.corp.com"
 
 # Install binary and run automated enrollment & daemon registration
-curl -fsSL https://agentwall.corp.com/install.sh | bash
+curl -fsSL https://agentcontrol.corp.com/install.sh | bash
 
 # Ensure system LaunchDaemon is active
-launchctl load -w /Library/LaunchDaemons/io.vexasec.agentwall.plist || true
+launchctl load -w /Library/LaunchDaemons/io.vexasec.agentcontrol.plist || true
 ```
 
 ### 2. Windows MDM Deployment (Microsoft Intune Win32App)
@@ -249,56 +249,56 @@ launchctl load -w /Library/LaunchDaemons/io.vexasec.agentwall.plist || true
 ```powershell
 <#
 .SYNOPSIS
-    Microsoft Intune Win32App Deployment Script for AgentWall Sentry Service
+    Microsoft Intune Win32App Deployment Script for Agent Control Sentry Service
 #>
 $env:AGENTWALL_TOKEN = "TOK-ENTERPRISE-TOKEN-892A"
-$env:AGENTWALL_HUB_URL = "https://agentwall.corp.com"
+$env:AGENTWALL_HUB_URL = "https://agentcontrol.corp.com"
 
-irm https://agentwall.corp.com/install.ps1 | iex
+irm https://agentcontrol.corp.com/install.ps1 | iex
 
-# Start AgentWall SCM Service
-Start-Service -Name "AgentWallSentry" -ErrorAction SilentlyContinue
+# Start Agent Control SCM Service
+Start-Service -Name "Agent ControlSentry" -ErrorAction SilentlyContinue
 ```
 
 ### 3. Linux Fleet Ansible Playbook
 
 ```yaml
 ---
-- name: Deploy AgentWall Persistent Security Sentry Daemon
+- name: Deploy Agent Control Persistent Security Sentry Daemon
   hosts: developer_workstations
   become: yes
   vars:
     enrollment_token: "TOK-ENTERPRISE-TOKEN-892A"
-    hub_url: "https://agentwall.corp.com"
+    hub_url: "https://agentcontrol.corp.com"
 
   tasks:
-    - name: Download & install AgentWall binary
-      shell: "curl -fsSL https://agentwall.corp.com/install.sh | AGENTWALL_TOKEN='{{ enrollment_token }}' AGENTWALL_HUB_URL='{{ hub_url }}' bash"
+    - name: Download & install Agent Control binary
+      shell: "curl -fsSL https://agentcontrol.corp.com/install.sh | AGENTWALL_TOKEN='{{ enrollment_token }}' AGENTWALL_HUB_URL='{{ hub_url }}' bash"
       args:
-        creates: /usr/local/bin/agentwall
+        creates: /usr/local/bin/agentcontrol
 
-    - name: Ensure agentwall.service is enabled and running
+    - name: Ensure agentcontrol.service is enabled and running
       systemd:
-        name: agentwall
+        name: agentcontrol
         state: started
         enabled: yes
 ```
     - name: policy-config
       configMap:
-        name: agentwall-policy
+        name: agentcontrol-policy
 ```
 
 **What You Achieve:**
-- Every AI agent container in your K8s fleet gets full AgentWall governance — DLP scanning, prompt injection protection, audit logging, OIDC binding, and spend control — without modifying agent application code.
+- Every AI agent container in your K8s fleet gets full Agent Control governance — DLP scanning, prompt injection protection, audit logging, OIDC binding, and spend control — without modifying agent application code.
 
 ---
 
 ## 5. Hardened WebSocket Egress Tunneling
 
-Bridge cloud-hosted agents to local on-premise MCP servers securely via the AgentWall WebSocket proxy:
+Bridge cloud-hosted agents to local on-premise MCP servers securely via the Agent Control WebSocket proxy:
 
 ```
-Cloud Agent Pod ──► AgentWall Gateway (K8s) ──WSS──► AgentWall Tunnel (On-Prem) ──► MCP Server
+Cloud Agent Pod ──► Agent Control Gateway (K8s) ──WSS──► Agent Control Tunnel (On-Prem) ──► MCP Server
 ```
 
 - **Latency:** <5ms frame latency.
@@ -307,15 +307,15 @@ Cloud Agent Pod ──► AgentWall Gateway (K8s) ──WSS──► AgentWall T
 
 Enable in Helm:
 ```bash
-helm upgrade agentwall ./chart \
-  --namespace agentwall-system \
+helm upgrade agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --set gateway.websocketTunnel.enabled=true \
   --set gateway.websocketTunnel.upstreamUrl="wss://tunnel.on-prem.corp.com:8443"
 ```
 
 Or via CLI (on-prem tunnel endpoint):
 ```bash
-agentwall start \
+agentcontrol start \
   --centralized \
   --listen 0.0.0.0:8080 \
   --ws-tunnel wss://tunnel.on-prem.corp.com:8443
@@ -325,16 +325,16 @@ agentwall start \
 
 ## 6. Real-Time Threat Intelligence Feed
 
-AgentWall subscribes to live Vexa AI Malware signature feeds via SSE, updating DLP regex patterns in-flight without dropping active connections or restarting gateway pods.
+Agent Control subscribes to live Vexa AI Malware signature feeds via SSE, updating DLP regex patterns in-flight without dropping active connections or restarting gateway pods.
 
 ```
-Vexa Threat Intel SSE Stream ──► AgentWall Gateway ──► In-memory DLP pattern update
+Vexa Threat Intel SSE Stream ──► Agent Control Gateway ──► In-memory DLP pattern update
 ```
 
 Enable in Helm:
 ```bash
-helm upgrade agentwall ./chart \
-  --namespace agentwall-system \
+helm upgrade agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --set gateway.threatIntel.enabled=true \
   --set gateway.threatIntel.feedUrl="https://feeds.vexasec.io/v1/patterns"
 ```
@@ -342,7 +342,7 @@ helm upgrade agentwall ./chart \
 Or via environment variable:
 ```bash
 export AGENTWALL_THREAT_INTEL_URL="https://feeds.vexasec.io/v1/patterns"
-agentwall start --centralized --listen 0.0.0.0:8080
+agentcontrol start --centralized --listen 0.0.0.0:8080
 ```
 
 **What You Achieve:**
@@ -355,13 +355,13 @@ New AI malware signatures are deployed to your entire gateway fleet within secon
 Encrypt audit log streams with your own Customer-Managed Key (AES-256-GCM) client-side **before** they are transmitted to your SIEM — ensuring Vexa and your SIEM provider have zero access to plaintext audit data.
 
 ```bash
-agentwall start \
+agentcontrol start \
   --centralized \
   --listen 0.0.0.0:8080 \
   --siem-backend splunk \
   --siem-endpoint https://splunk.corp.com:8088/services/collector/event \
   --siem-token "${SPLUNK_HEC_TOKEN}" \
-  --cmk-key-file /etc/agentwall/customer.key
+  --cmk-key-file /etc/agentcontrol/customer.key
 ```
 
 **Key Management Integration:**
@@ -382,15 +382,15 @@ Your SIEM receives AES-256-GCM encrypted payloads. Only systems holding your Cus
 
 ## 8. Pure-Rust TLS Termination
 
-AgentWall's HTTPS listener is powered by `rustls` — a memory-safe TLS implementation written entirely in Rust. This eliminates:
+Agent Control's HTTPS listener is powered by `rustls` — a memory-safe TLS implementation written entirely in Rust. This eliminates:
 - OpenSSL/LibreSSL C-library memory corruption vulnerabilities.
 - Buffer overflow attack surfaces.
 - Dependency on system-level TLS libraries (fully statically linked).
 
-**TLS is configured via Helm** (see [Step 2](#step-2--deploy-agentwall-stack-via-helm)) or via CLI:
+**TLS is configured via Helm** (see [Step 2](#step-2--deploy-agentcontrol-stack-via-helm)) or via CLI:
 
 ```bash
-agentwall start \
+agentcontrol start \
   --listen 0.0.0.0:443 \
   --tls-cert /etc/certs/tls.crt \
   --tls-key /etc/certs/tls.key \
@@ -408,22 +408,22 @@ Monitor the health and performance of your gateway fleet natively in Kubernetes:
 
 **Pod-level health:**
 ```bash
-kubectl get pods -n agentwall-system -o wide
-kubectl top pods -n agentwall-system
+kubectl get pods -n agentcontrol-system -o wide
+kubectl top pods -n agentcontrol-system
 ```
 
 **Real-time log streaming:**
 ```bash
-kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway -f
+kubectl logs -n agentcontrol-system -l app.kubernetes.io/component=gateway -f
 ```
 
 **Policy sync state verification:**
 ```bash
-kubectl logs -n agentwall-system -l app.kubernetes.io/component=gateway | grep "Policy"
+kubectl logs -n agentcontrol-system -l app.kubernetes.io/component=gateway | grep "Policy"
 ```
 
 **Enterprise Management Console:**
-Access the fleet-wide management console via your configured Kubernetes Ingress TLS endpoint (e.g., `https://agentwall-console.corp.com`). The console provides:
+Access the fleet-wide management console via your configured Kubernetes Ingress TLS endpoint (e.g., `https://agentcontrol-console.corp.com`). The console provides:
 - HAR container pod telemetry
 - Threat intelligence feed subscription status
 - Zero-knowledge CMK SIEM encryption status

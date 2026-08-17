@@ -2,37 +2,37 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-db
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-db
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.dashboardDbSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardDbSelectorLabels" . | nindent 4 }}
 spec:
-  serviceName: {{ include "agentwall.fullname" . }}-dashboard-db
+  serviceName: {{ include "agentcontrol.fullname" . }}-dashboard-db
   replicas: 1
   selector:
     matchLabels:
-      {{- include "agentwall.dashboardDbSelectorLabels" . | nindent 6 }}
+      {{- include "agentcontrol.dashboardDbSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentwall.dashboardDbSelectorLabels" . | nindent 8 }}
+        {{- include "agentcontrol.dashboardDbSelectorLabels" . | nindent 8 }}
     spec:
       securityContext:
         {{- toYaml .Values.dashboardDb.securityContext | nindent 8 }}
       containers:
       - name: postgres
-        image: {{ include "agentwall.dashboardDbImage" . }}
+        image: {{ include "agentcontrol.dashboardDbImage" . }}
         imagePullPolicy: {{ .Values.dashboardDb.image.pullPolicy }}
         env:
         - name: POSTGRES_USER
           value: dashboard
         - name: POSTGRES_DB
-          value: agentwall_dashboard
+          value: agentcontrol_dashboard
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "agentwall.fullname" . }}-dashboard-db
+              name: {{ include "agentcontrol.fullname" . }}-dashboard-db
               key: POSTGRES_PASSWORD
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
@@ -49,13 +49,13 @@ spec:
           {{- toYaml .Values.dashboardDb.resources | nindent 10 }}
         livenessProbe:
           exec:
-            command: ["pg_isready", "-U", "dashboard", "-d", "agentwall_dashboard"]
+            command: ["pg_isready", "-U", "dashboard", "-d", "agentcontrol_dashboard"]
           initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           exec:
-            command: ["pg_isready", "-U", "dashboard", "-d", "agentwall_dashboard"]
+            command: ["pg_isready", "-U", "dashboard", "-d", "agentcontrol_dashboard"]
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3

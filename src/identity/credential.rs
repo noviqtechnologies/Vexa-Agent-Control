@@ -1,7 +1,7 @@
 //! FR-22: Agent credential data model and JWT issuance
 //!
 //! Defines `AgentCredential` — the credential binding record stored locally
-//! at `~/.agentwall/credentials/<agent_name>.json`.
+//! at `~/.agentcontrol/credentials/<agent_name>.json`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -71,7 +71,7 @@ pub struct ToolScope {
 
 /// The credential binding record stored locally.
 ///
-/// Written to `~/.agentwall/credentials/<agent_name>.json` after `identity create`.
+/// Written to `~/.agentcontrol/credentials/<agent_name>.json` after `identity create`.
 /// The raw credential value (JWT token / mTLS cert) is NOT stored here —
 /// it is returned to the caller at issuance time and must be stored securely
 /// by the agent runtime (e.g., injected as an environment variable by the K8s operator).
@@ -196,7 +196,7 @@ impl AgentCredential {
     pub fn credentials_dir() -> std::path::PathBuf {
         dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".agentwall")
+            .join(".agentcontrol")
             .join("credentials")
     }
 

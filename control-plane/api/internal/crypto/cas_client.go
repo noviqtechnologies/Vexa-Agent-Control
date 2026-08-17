@@ -85,7 +85,7 @@ func (s *SoftwareCASIssuer) SignCertificateRequest(ctx context.Context, csrPEM [
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Vexa AgentWall Enrolled Device"},
+			Organization: []string{"Vexa Agent Control Enrolled Device"},
 			CommonName:   fmt.Sprintf("vexa-device-%s", hex.EncodeToString(serialNumber.Bytes()[:4])),
 		},
 		NotBefore:             now.Add(-5 * time.Minute),

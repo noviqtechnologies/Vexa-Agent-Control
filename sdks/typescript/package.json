@@ -1,5 +1,5 @@
 {
-  "name": "@vexa/agentwall",
+  "name": "@vexa/agentcontrol",
   "version": "1.0.0",
   "description": "Zero-dependency TypeScript client SDK for Vexa Agent Control AI security gateway & firewall",
   "main": "dist/index.js",

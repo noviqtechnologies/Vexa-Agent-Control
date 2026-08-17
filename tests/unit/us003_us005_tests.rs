@@ -1,9 +1,9 @@
 //! Unit tests verifying US-003 and US-005 acceptance criteria.
 
-use agentwall::policy::dlp::{DlpAction, DlpScanner};
-use agentwall::policy::engine::EvalResult;
-use agentwall::policy::loader::{load_policy_from_str, PolicyLoadResult};
-use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
+use agentcontrol::policy::dlp::{DlpAction, DlpScanner};
+use agentcontrol::policy::engine::EvalResult;
+use agentcontrol::policy::loader::{load_policy_from_str, PolicyLoadResult};
+use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------

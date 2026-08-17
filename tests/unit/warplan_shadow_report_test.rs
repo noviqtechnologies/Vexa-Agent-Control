@@ -1,11 +1,11 @@
 //! Unit test suite for FR-301: Passive "Shadow AI" Discovery Mode & Risk Delta Reporting
 
-use agentwall::proxy::tunnel::HardenedEgressTunnel;
+use agentcontrol::proxy::tunnel::HardenedEgressTunnel;
 
 #[test]
 fn test_shadow_mode_hypothetical_verdict() {
     let tunnel = HardenedEgressTunnel::new(true); // shadow_mode = true
-    let mut frame = agentwall::proxy::tunnel::TunneledFrame {
+    let mut frame = agentcontrol::proxy::tunnel::TunneledFrame {
         session_id: "shadow-session-1".to_string(),
         payload: "Attempting secret leak sk-live-9999999".to_string(),
         is_binary: false,

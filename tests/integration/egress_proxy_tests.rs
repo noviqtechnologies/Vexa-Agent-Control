@@ -1,6 +1,6 @@
 //! FR-11: Full Egress Proxy Integration Tests
 //!
-//! Tests spawn the real agentwall binary in shadow mode and verify that:
+//! Tests spawn the real agentcontrol binary in shadow mode and verify that:
 //! - Standard HTTP (absolute-URI) fetch proxying works and is logged
 //! - HTTPS CONNECT tunnelling works and is logged
 //! - WebSocket upgrade proxying is logged
@@ -34,9 +34,9 @@ fn start_dummy_http_server() -> u16 {
     port
 }
 
-/// Shared helper: start the agentwall proxy, wait for readiness, return child handle.
+/// Shared helper: start the agentcontrol proxy, wait for readiness, return child handle.
 async fn start_proxy(port: u16) -> tokio::process::Child {
-    let bin = env!("CARGO_BIN_EXE_agentwall");
+    let bin = env!("CARGO_BIN_EXE_agentcontrol");
     let child = tokio::process::Command::new(bin)
         .args([
             "dev",
@@ -49,7 +49,7 @@ async fn start_proxy(port: u16) -> tokio::process::Child {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .expect("Failed to start agentwall proxy");
+        .expect("Failed to start agentcontrol proxy");
 
     // Give it time to bind and become ready
     sleep(Duration::from_secs(4)).await;

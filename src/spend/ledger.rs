@@ -69,9 +69,21 @@ impl SpendLedger {
         dashboard_client: Option<Arc<crate::control_plane_client::client::DashboardClient>>,
     ) -> Self {
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        let db_path = PathBuf::from(&home_dir)
-            .join(".agentwall")
-            .join("events.db");
+        let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
+        let old_dir = PathBuf::from(&home_dir).join(".agentwall");
+
+        if !new_dir.exists() {
+            let _ = std::fs::create_dir_all(&new_dir);
+            if old_dir.exists() {
+                let old_db = old_dir.join("events.db");
+                let new_db = new_dir.join("events.db");
+                if old_db.exists() && !new_db.exists() {
+                    let _ = std::fs::copy(&old_db, &new_db);
+                }
+            }
+        }
+
+        let db_path = new_dir.join("events.db");
 
         let start = Instant::now();
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB for spend");

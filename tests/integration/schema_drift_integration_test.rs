@@ -1,13 +1,13 @@
 //! Integration tests for FR-601: MCP Schema-Drift Detection
 
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::kill::KillMode;
-use agentwall::policy::engine::CompiledPolicy;
-use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::schema::SchemaDriftConfig;
-use agentwall::policy::schema_drift::SchemaDriftDetector;
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
-use agentwall::proxy::session::SessionContext;
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::kill::KillMode;
+use agentcontrol::policy::engine::CompiledPolicy;
+use agentcontrol::policy::safe_mode::SafeModeScanner;
+use agentcontrol::policy::schema::SchemaDriftConfig;
+use agentcontrol::policy::schema_drift::SchemaDriftDetector;
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
@@ -33,7 +33,7 @@ fn create_test_state_with_drift(
     let baseline_path = dir.path().join("baselines.json");
     let detector = Arc::new(SchemaDriftDetector::new(Some(baseline_path)));
 
-    let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
+    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
 
     let state = Arc::new(ProxyState {
         policy: std::sync::RwLock::new(Some(CompiledPolicy {
@@ -63,16 +63,16 @@ fn create_test_state_with_drift(
         ready: true,
         db_manager,
         response_scanner: Arc::new(
-            agentwall::policy::response_scanner::ResponseScanner::new().unwrap(),
+            agentcontrol::policy::response_scanner::ResponseScanner::new().unwrap(),
         ),
         response_scan_config: std::sync::RwLock::new(
-            agentwall::policy::response_scanner::ResponseScanConfig::default(),
+            agentcontrol::policy::response_scanner::ResponseScanConfig::default(),
         ),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
-            agentwall::policy::semantic::SemanticConfig::default(),
+        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
+        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
+            agentcontrol::policy::semantic::SemanticConfig::default(),
         )),
-        injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
+        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
         schema_drift_detector: detector,
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -85,7 +85,7 @@ fn create_test_state_with_drift(
         metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(256).0,
         credential_scope_validator: Arc::new(
-            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
         ),
         policy_path: None,
         gateway_start_time: std::time::Instant::now(),
@@ -159,7 +159,7 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
     );
     assert!(matches!(
         res1,
-        agentwall::policy::schema_drift::DriftResult::BaselineRecorded { .. }
+        agentcontrol::policy::schema_drift::DriftResult::BaselineRecorded { .. }
     ));
 
     // 3. Subsequent session with modified tool description triggers Drift
@@ -183,7 +183,7 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
         drift_cfg.as_ref(),
     );
     match res2 {
-        agentwall::policy::schema_drift::DriftResult::Drift {
+        agentcontrol::policy::schema_drift::DriftResult::Drift {
             server_name,
             modified_tools,
             action,
@@ -191,7 +191,7 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
         } => {
             assert_eq!(server_name, "sensor_server");
             assert_eq!(modified_tools, vec!["read_sensor".to_string()]);
-            assert_eq!(action, agentwall::policy::schema_drift::DriftAction::Block);
+            assert_eq!(action, agentcontrol::policy::schema_drift::DriftAction::Block);
         }
         other => panic!("Expected Drift, got {:?}", other),
     }

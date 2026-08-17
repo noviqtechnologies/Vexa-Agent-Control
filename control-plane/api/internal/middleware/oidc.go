@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/session"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 )
 
 type contextKey string
@@ -22,7 +22,7 @@ type UserClaims struct {
 }
 
 // PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
-// or the operator agentwall_session cookie. Fails closed if secret is empty.
+// or the operator agentcontrol_session cookie. Fails closed if secret is empty.
 func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +37,10 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 			}
 
 			// Fallback to session cookie (dashboard operators)
-			cookie, err := r.Cookie("agentwall_session")
+			cookie, err := r.Cookie("agentcontrol_session")
+			if err != nil {
+				cookie, err = r.Cookie("agentwall_session")
+			}
 			if err == nil {
 				sess, err := session.Validate(cookie.Value)
 				if err == nil {
@@ -58,11 +61,14 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 	}
 }
 
-// DashboardAuth validates the agentwall_session cookie for dashboard operators.
+// DashboardAuth validates the agentcontrol_session cookie for dashboard operators.
 func DashboardAuth() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("agentwall_session")
+			cookie, err := r.Cookie("agentcontrol_session")
+			if err != nil {
+				cookie, err = r.Cookie("agentwall_session")
+			}
 			if err != nil {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return

@@ -50,7 +50,7 @@ fn write_config(dir: &std::path::Path, content: &serde_json::Value) -> PathBuf {
 
 #[test]
 fn test_transformer_wrap_then_unwrap_cycle_1_server() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
 
     let mut entry = serde_json::json!({
         "command": "npx",
@@ -59,10 +59,10 @@ fn test_transformer_wrap_then_unwrap_cycle_1_server() {
     });
     let original = entry.clone();
 
-    transformer::wrap_entry(&mut entry, "/usr/bin/agentwall").unwrap();
+    transformer::wrap_entry(&mut entry, "/usr/bin/agentcontrol").unwrap();
 
     // Wrapped correctly
-    assert_eq!(entry["command"], "/usr/bin/agentwall");
+    assert_eq!(entry["command"], "/usr/bin/agentcontrol");
     assert_eq!(entry["args"][0], "stdio-proxy");
     assert_eq!(entry["args"][1], "--");
     assert_eq!(entry["args"][2], "npx");
@@ -81,43 +81,43 @@ fn test_transformer_wrap_then_unwrap_cycle_1_server() {
 
 #[test]
 fn test_wrap_all_servers_wraps_3_servers() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
 
     let mut config = fake_config_3_servers();
-    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
+    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
 
     assert_eq!(wrapped, 3);
     assert_eq!(already, 0);
 
-    // All servers use agentwall as command
+    // All servers use agentcontrol as command
     for (_name, entry) in config["mcpServers"].as_object().unwrap() {
-        assert_eq!(entry["command"], "/bin/agentwall");
+        assert_eq!(entry["command"], "/bin/agentcontrol");
         assert_eq!(entry["args"][0], "stdio-proxy");
     }
 }
 
 #[test]
 fn test_wrap_is_idempotent() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
 
     let mut config = fake_config_1_server();
 
     // First wrap
-    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
+    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
     assert_eq!(wrapped, 1);
     assert_eq!(already, 0);
 
     // Second wrap attempt: all already wrapped → AlreadyWrapped
-    let result = transformer::wrap_all_servers(&mut config, "/bin/agentwall");
+    let result = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol");
     assert!(matches!(
         result,
-        Err(agentwall::wrap::WrapError::AlreadyWrapped)
+        Err(agentcontrol::wrap::WrapError::AlreadyWrapped)
     ));
 }
 
 #[test]
 fn test_env_preserved_through_wrap_cycle() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
 
     let mut entry = serde_json::json!({
         "command": "npx",
@@ -125,7 +125,7 @@ fn test_env_preserved_through_wrap_cycle() {
         "env": { "SECRET_KEY": "super-secret-123", "PORT": "3000" }
     });
 
-    transformer::wrap_entry(&mut entry, "/bin/agentwall").unwrap();
+    transformer::wrap_entry(&mut entry, "/bin/agentcontrol").unwrap();
     assert_eq!(entry["env"]["SECRET_KEY"], "super-secret-123");
     assert_eq!(entry["env"]["PORT"], "3000");
 
@@ -136,7 +136,7 @@ fn test_env_preserved_through_wrap_cycle() {
 
 #[test]
 fn test_backup_and_prune() {
-    use agentwall::wrap::backup;
+    use agentcontrol::wrap::backup;
 
     let dir = tempdir().unwrap();
     let config = write_config(dir.path(), &fake_config_1_server());
@@ -145,7 +145,7 @@ fn test_backup_and_prune() {
     for i in 0..6usize {
         let ts = format!("20260512-{:06}", i * 1000);
         let bk = dir.path().join(format!(
-            "claude_desktop_config.json.agentwall-backup-{}",
+            "claude_desktop_config.json.agentcontrol-backup-{}",
             ts
         ));
         fs::write(&bk, "{}").unwrap();
@@ -160,7 +160,7 @@ fn test_backup_and_prune() {
         .filter(|e| {
             e.file_name()
                 .to_string_lossy()
-                .contains("agentwall-backup-")
+                .contains("agentcontrol-backup-")
         })
         .count();
     assert_eq!(count, 5);
@@ -171,14 +171,14 @@ fn test_backup_and_prune() {
 
 #[test]
 fn test_find_latest_backup() {
-    use agentwall::wrap::backup;
+    use agentcontrol::wrap::backup;
 
     let dir = tempdir().unwrap();
     write_config(dir.path(), &fake_config_1_server());
 
     for ts in &["20260512-100000", "20260512-110000", "20260512-120000"] {
         let bk = dir.path().join(format!(
-            "claude_desktop_config.json.agentwall-backup-{}",
+            "claude_desktop_config.json.agentcontrol-backup-{}",
             ts
         ));
         fs::write(&bk, "{}").unwrap();
@@ -190,7 +190,7 @@ fn test_find_latest_backup() {
 
 #[test]
 fn test_no_backup_returns_none() {
-    use agentwall::wrap::backup;
+    use agentcontrol::wrap::backup;
     let dir = tempdir().unwrap();
     write_config(dir.path(), &fake_config_1_server());
     assert!(backup::find_latest_backup(dir.path()).is_none());
@@ -198,23 +198,23 @@ fn test_no_backup_returns_none() {
 
 #[test]
 fn test_wrap_empty_servers_returns_error() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
     let mut config = serde_json::json!({ "mcpServers": {} });
-    let result = transformer::wrap_all_servers(&mut config, "/bin/agentwall");
+    let result = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol");
     assert!(matches!(
         result,
-        Err(agentwall::wrap::WrapError::NoMcpServers)
+        Err(agentcontrol::wrap::WrapError::NoMcpServers)
     ));
 }
 
 #[test]
 fn test_unwrap_restores_exact_original() {
-    use agentwall::wrap::transformer;
+    use agentcontrol::wrap::transformer;
 
     let original = fake_config_3_servers();
     let mut config = original.clone();
 
-    transformer::wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
+    transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
 
     // Unwrap all servers
     for (_name, entry) in config["mcpServers"].as_object_mut().unwrap() {
@@ -239,12 +239,12 @@ fn test_unwrap_restores_exact_original() {
 }
 
 #[test]
-fn test_absolute_agentwall_path_is_used() {
-    use agentwall::wrap::transformer;
+fn test_absolute_agentcontrol_path_is_used() {
+    use agentcontrol::wrap::transformer;
 
     let mut entry = serde_json::json!({ "command": "npx", "args": [] });
     // Simulate an absolute path
-    transformer::wrap_entry(&mut entry, "/home/alice/.local/bin/agentwall").unwrap();
+    transformer::wrap_entry(&mut entry, "/home/alice/.local/bin/agentcontrol").unwrap();
 
     let cmd = entry["command"].as_str().unwrap();
     assert!(

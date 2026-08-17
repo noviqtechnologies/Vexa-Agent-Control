@@ -179,7 +179,7 @@ impl TaskRunner {
                     ),
                     AttackCategory::ConfigOverride => (
                         "write_file",
-                        serde_json::json!({"path": "agentwall-policy.yaml"}),
+                        serde_json::json!({"path": "agentcontrol-policy.yaml"}),
                         true,
                     ),
                     AttackCategory::DDoSResourceExhaustion => (

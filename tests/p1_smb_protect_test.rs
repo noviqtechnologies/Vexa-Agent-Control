@@ -39,9 +39,9 @@ async fn test_p1_hitl_respond_payload_handling() {
 
 #[tokio::test]
 async fn test_p1_spend_tracking_ledger_persistence() {
-    let db = agentwall::proxy::db::DbManager::init();
+    let db = agentcontrol::proxy::db::DbManager::init();
     
-    let event = agentwall::proxy::db::EgressEvent {
+    let event = agentcontrol::proxy::db::EgressEvent {
         timestamp_ns: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

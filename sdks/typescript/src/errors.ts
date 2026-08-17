@@ -1,25 +1,25 @@
 /**
- * Exception types for AgentWall TypeScript client SDK.
+ * Exception types for AgentControl TypeScript client SDK.
  */
 
-export class AgentWallError extends Error {
+export class AgentControlError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "AgentWallError";
+    this.name = "AgentControlError";
   }
 }
 
-export class AgentWallConnectionError extends AgentWallError {
+export class AgentControlConnectionError extends AgentControlError {
   public readonly proxyUrl: string;
 
   constructor(message: string, proxyUrl: string) {
     super(`${message} (Proxy URL: ${proxyUrl})`);
-    this.name = "AgentWallConnectionError";
+    this.name = "AgentControlConnectionError";
     this.proxyUrl = proxyUrl;
   }
 }
 
-export class AgentWallDenied extends AgentWallError {
+export class AgentControlDenied extends AgentControlError {
   public readonly code: number;
   public readonly toolName?: string;
   public readonly ruleName: string;
@@ -35,7 +35,7 @@ export class AgentWallDenied extends AgentWallError {
     details?: Record<string, unknown>;
   }) {
     super(options.message);
-    this.name = "AgentWallDenied";
+    this.name = "AgentControlDenied";
     this.code = options.code ?? -32001;
     this.toolName = options.toolName;
     this.ruleName = options.ruleName ?? "default-deny";
@@ -44,7 +44,7 @@ export class AgentWallDenied extends AgentWallError {
   }
 }
 
-export class AgentWallApprovalPending extends AgentWallError {
+export class AgentControlApprovalPending extends AgentControlError {
   public readonly approvalId: string;
   public readonly approvalUrl?: string;
   public readonly timeoutSeconds: number;
@@ -56,19 +56,19 @@ export class AgentWallApprovalPending extends AgentWallError {
     timeoutSeconds?: number;
   }) {
     super(options.message);
-    this.name = "AgentWallApprovalPending";
+    this.name = "AgentControlApprovalPending";
     this.approvalId = options.approvalId;
     this.approvalUrl = options.approvalUrl;
     this.timeoutSeconds = options.timeoutSeconds ?? 60;
   }
 }
 
-export class AgentWallPivotError extends AgentWallError {
+export class AgentControlPivotError extends AgentControlError {
   public readonly attempts: number;
 
   constructor(message: string, attempts: number = 3) {
     super(message);
-    this.name = "AgentWallPivotError";
+    this.name = "AgentControlPivotError";
     this.attempts = attempts;
   }
 }

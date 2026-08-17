@@ -11,29 +11,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	agentwallv1alpha1 "github.com/noviqtechnologies/agentwall/operator/api/v1alpha1"
-	"github.com/noviqtechnologies/agentwall/operator/controllers"
+	agentcontrolv1alpha1 "github.com/noviqtechnologies/agentcontrol/operator/api/v1alpha1"
+	"github.com/noviqtechnologies/agentcontrol/operator/controllers"
 )
 
-func TestAgentWallPolicyReconciler(t *testing.T) {
+func TestAgent ControlPolicyReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_ = agentwallv1alpha1.AddToScheme(scheme)
+	_ = agentcontrolv1alpha1.AddToScheme(scheme)
 
-	policy := &agentwallv1alpha1.AgentWallPolicy{
+	policy := &agentcontrolv1alpha1.Agent ControlPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy",
 			Namespace: "default",
 		},
-		Spec: agentwallv1alpha1.AgentWallPolicySpec{
-			GatewayImage: "agentwall:test",
+		Spec: agentcontrolv1alpha1.Agent ControlPolicySpec{
+			GatewayImage: "agentcontrol:test",
 			Policy:       "default_action: deny\n",
 		},
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
 
-	r := &controllers.AgentWallPolicyReconciler{
+	r := &controllers.Agent ControlPolicyReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/handler"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/handler"
 )
 
 func TestCanonicalTranscript_FormattingAndVerification(t *testing.T) {

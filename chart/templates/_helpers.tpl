@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "agentwall.name" -}}
+{{- define "agentcontrol.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name (truncated at 63 chars).
 */}}
-{{- define "agentwall.fullname" -}}
+{{- define "agentcontrol.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,44 +24,44 @@ Create a default fully qualified app name (truncated at 63 chars).
 {{/*
 Chart label
 */}}
-{{- define "agentwall.chart" -}}
+{{- define "agentcontrol.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels applied to every resource in the chart.
 */}}
-{{- define "agentwall.labels" -}}
-helm.sh/chart: {{ include "agentwall.chart" . }}
-{{ include "agentwall.selectorLabels" . }}
+{{- define "agentcontrol.labels" -}}
+helm.sh/chart: {{ include "agentcontrol.chart" . }}
+{{ include "agentcontrol.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: agentwall
+app.kubernetes.io/part-of: agentcontrol
 {{- end }}
 
 {{/*
 Selector labels (subset of common labels that must not change on upgrade).
 */}}
-{{- define "agentwall.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}
+{{- define "agentcontrol.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Operator-specific selector labels.
 */}}
-{{- define "agentwall.operatorSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}-operator
+{{- define "agentcontrol.operatorSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}-operator
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: operator
 {{- end }}
 
 {{/*
 Gateway-specific selector labels. These are ALSO applied to the pod as
-`agentwall.io/gateway: "true"` so the NetworkPolicy default selector matches.
+`agentcontrol.io/gateway: "true"` so the NetworkPolicy default selector matches.
 */}}
-{{- define "agentwall.gatewaySelectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}-gateway
+{{- define "agentcontrol.gatewaySelectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}-gateway
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: gateway
 {{- end }}
@@ -69,19 +69,19 @@ app.kubernetes.io/component: gateway
 {{/*
 Service account name for the operator.
 */}}
-{{- define "agentwall.operatorServiceAccountName" -}}
-{{- printf "%s-operator" (include "agentwall.fullname" .) }}
+{{- define "agentcontrol.operatorServiceAccountName" -}}
+{{- printf "%s-operator" (include "agentcontrol.fullname" .) }}
 {{- end }}
 
 {{/*
 Container image reference — falls back to Chart.AppVersion when tag is empty.
 */}}
-{{- define "agentwall.operatorImage" -}}
+{{- define "agentcontrol.operatorImage" -}}
 {{- $tag := .Values.operator.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.operator.image.repository $tag -}}
 {{- end }}
 
-{{- define "agentwall.gatewayImage" -}}
+{{- define "agentcontrol.gatewayImage" -}}
 {{- $tag := .Values.gateway.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.gateway.image.repository $tag -}}
 {{- end }}
@@ -90,30 +90,30 @@ Container image reference — falls back to Chart.AppVersion when tag is empty.
 Resolve the ConfigMap name that holds the gateway policy — either the
 external one the user pointed at, or the chart-managed one.
 */}}
-{{- define "agentwall.policyConfigMapName" -}}
+{{- define "agentcontrol.policyConfigMapName" -}}
 {{- if .Values.gateway.policy.externalConfigMap -}}
 {{- .Values.gateway.policy.externalConfigMap -}}
 {{- else -}}
-{{- printf "%s-gateway-policy" (include "agentwall.fullname" .) -}}
+{{- printf "%s-gateway-policy" (include "agentcontrol.fullname" .) -}}
 {{- end -}}
 {{- end }}
 
 {{/*
 Resolve the TLS Secret name — either user-provided or chart-generated.
 */}}
-{{- define "agentwall.tlsSecretName" -}}
+{{- define "agentcontrol.tlsSecretName" -}}
 {{- if .Values.gateway.tls.secretName -}}
 {{- .Values.gateway.tls.secretName -}}
 {{- else -}}
-{{- printf "%s-gateway-tls" (include "agentwall.fullname" .) -}}
+{{- printf "%s-gateway-tls" (include "agentcontrol.fullname" .) -}}
 {{- end -}}
 {{- end }}
 
 {{/*
 FR-23: Dashboard API selector labels.
 */}}
-{{- define "agentwall.dashboardApiSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}-dashboard-api
+{{- define "agentcontrol.dashboardApiSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}-dashboard-api
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: dashboard-api
 {{- end }}
@@ -121,8 +121,8 @@ app.kubernetes.io/component: dashboard-api
 {{/*
 FR-23: Dashboard Frontend selector labels.
 */}}
-{{- define "agentwall.dashboardFrontendSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}-dashboard-frontend
+{{- define "agentcontrol.dashboardFrontendSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}-dashboard-frontend
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: dashboard-frontend
 {{- end }}
@@ -130,8 +130,8 @@ app.kubernetes.io/component: dashboard-frontend
 {{/*
 FR-23: Dashboard DB selector labels.
 */}}
-{{- define "agentwall.dashboardDbSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentwall.name" . }}-dashboard-db
+{{- define "agentcontrol.dashboardDbSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentcontrol.name" . }}-dashboard-db
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: dashboard-db
 {{- end }}
@@ -139,7 +139,7 @@ app.kubernetes.io/component: dashboard-db
 {{/*
 FR-23: Dashboard API image reference.
 */}}
-{{- define "agentwall.dashboardApiImage" -}}
+{{- define "agentcontrol.dashboardApiImage" -}}
 {{- $tag := .Values.dashboardApi.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.dashboardApi.image.repository $tag -}}
 {{- end }}
@@ -147,7 +147,7 @@ FR-23: Dashboard API image reference.
 {{/*
 FR-23: Dashboard Frontend image reference.
 */}}
-{{- define "agentwall.dashboardFrontendImage" -}}
+{{- define "agentcontrol.dashboardFrontendImage" -}}
 {{- $tag := .Values.dashboardFrontend.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.dashboardFrontend.image.repository $tag -}}
 {{- end }}
@@ -155,6 +155,6 @@ FR-23: Dashboard Frontend image reference.
 {{/*
 FR-23: Dashboard DB image reference.
 */}}
-{{- define "agentwall.dashboardDbImage" -}}
+{{- define "agentcontrol.dashboardDbImage" -}}
 {{- printf "%s:%s" .Values.dashboardDb.image.repository .Values.dashboardDb.image.tag -}}
 {{- end }}

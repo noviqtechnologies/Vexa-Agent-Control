@@ -1,6 +1,6 @@
 //! Integration test suite for FR-302 / NFR-301: Hardened Rust Egress Tunneling
 
-use agentwall::proxy::tunnel::{HardenedEgressTunnel, TunneledFrame};
+use agentcontrol::proxy::tunnel::{HardenedEgressTunnel, TunneledFrame};
 
 #[test]
 fn test_egress_tunnel_frame_throughput_and_latency_sla() {

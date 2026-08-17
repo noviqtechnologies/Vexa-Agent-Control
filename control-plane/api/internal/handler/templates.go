@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type TemplateHandler struct {

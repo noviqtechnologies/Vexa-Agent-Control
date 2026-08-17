@@ -1,6 +1,6 @@
 //! Integration test suite for FR-502: "Vexa-Scan" CLI for Developers
 
-use agentwall::policy::mcp_score::McpScorer;
+use agentcontrol::policy::mcp_score::McpScorer;
 
 #[test]
 fn test_vexa_scan_cli_execution() {

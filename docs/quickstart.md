@@ -25,7 +25,7 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
   ```
 
 > [!NOTE]
-> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place `agentcontrol` and legacy alias `agentwall` + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
+> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place `agentcontrol` and legacy alias `agentcontrol` + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
 
 > [!NOTE]
 > **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system.
@@ -55,7 +55,7 @@ Run `agentcontrol protect` to automatically discover and wrap your installed AI 
 *Vexa Agent Control is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
 
 > [!NOTE]
-> **One-Command Protection (`agentcontrol protect`):** Running `agentcontrol protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. The legacy `agentwall` alias is also supported.
+> **One-Command Protection (`agentcontrol protect`):** Running `agentcontrol protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. The legacy `agentcontrol` alias is also supported.
 
 ---
 
@@ -75,19 +75,19 @@ Open a **new, separate terminal window** and run the integration command:
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  agentwall.exe wrap claude
-  agentwall.exe status
+  agentcontrol.exe wrap claude
+  agentcontrol.exe status
   ```
-*(This command updates Claude Desktop's configuration file so its MCP tool traffic routes through the proxy. Running `agentwall status` verifies the wrapping status).*
+*(This command updates Claude Desktop's configuration file so its MCP tool traffic routes through the proxy. Running `agentcontrol status` verifies the wrapping status).*
 
 > [!TIP]
-> **New one-command option:** Instead of wrapping individual IDEs, you can use `agentwall protect` to auto-discover and wrap all supported IDEs simultaneously, start the gateway, and open the dashboard in one step:
+> **New one-command option:** Instead of wrapping individual IDEs, you can use `agentcontrol protect` to auto-discover and wrap all supported IDEs simultaneously, start the gateway, and open the dashboard in one step:
 > ```bash
-> agentwall protect          # macOS / Linux
-> agentwall.exe protect      # Windows
-> agentwall protect --dry-run  # Preview all changes without writing
+> agentcontrol protect          # macOS / Linux
+> agentcontrol.exe protect      # Windows
+> agentcontrol protect --dry-run  # Preview all changes without writing
 > ```
-> To undo everything at once: `agentwall unprotect`
+> To undo everything at once: `agentcontrol unprotect`
 
 ---
 
@@ -114,13 +114,13 @@ Open a **new, separate terminal window** and run the integration command:
   ```
 *(This sends simulated AI tool calls through `http://127.0.0.1:8080` to populate the dashboard immediately if you see "No tool calls recorded yet").*
 
-Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see AgentWall logging these actions in real time!
+Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see Agent Control logging these actions in real time!
 
 ---
 
 ## Understanding the Local Observability Dashboard
 
-When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard for monitoring agent activities—designed for non-security users to easily understand:
+When opening `http://127.0.0.1:8080`, Agent Control provides an intuitive dashboard for monitoring agent activities—designed for non-security users to easily understand:
 
 | Panel | Purpose & Description (Plain English) |
 | :--- | :--- |
@@ -131,7 +131,7 @@ When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard 
 | **05. Data Loss Prevention (DLP)** | Scans outgoing tool payloads to prevent accidental leakage of sensitive credentials, API keys, passwords, and personal information (PII). |
 | **06. Injection & Poisoning** | Detects prompt injection attempts and external data poisoning—where untrusted text tries to hijack agent instructions. |
 | **07. Semantic Scanner** | Uses behavioral analysis to flag unusual or out-of-context tool requests that differ from normal agent interaction patterns. |
-| **08. Generate Policy** | Automatically generates a baseline security policy (`agentwall-policy.yaml`) based on real observed agent traffic. |
+| **08. Generate Policy** | Automatically generates a baseline security policy (`agentcontrol-policy.yaml`) based on real observed agent traffic. |
 | **09. ADR Benchmark** | Standardized benchmark testing your agent's defense readiness against 303 security test cases across 17 attack categories. |
 
 **Dashboard highlights:**
@@ -144,7 +144,7 @@ When opening `http://127.0.0.1:8080`, AgentWall provides an intuitive dashboard 
 
 ## Step 4: Generate a Security Policy
 
-Now that AgentWall has seen what tools Claude needs to use, we can generate a security policy (a firewall rule) that *only* allows those specific actions and blocks everything else.
+Now that Agent Control has seen what tools Claude needs to use, we can generate a security policy (a firewall rule) that *only* allows those specific actions and blocks everything else.
 
 > 💡 **No More Blank YAML — Policy Marketplace**: Want to apply a pre-configured security posture instantly without generating or editing YAML? Open **Policy Marketplace** (`/policy/marketplace`) in the Control Hub to choose one-click templates like **Safe Cursor**, **Production Data Egress**, or **HIPAA Compliance**.
 
@@ -152,21 +152,21 @@ In your second terminal window, run:
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
-  agentwall generate-policy --decay-window 30
+  agentcontrol generate-policy --decay-window 30
   ```
 * **Windows (PowerShell):**
   ```powershell
-  agentwall.exe generate-policy --decay-window 30
+  agentcontrol.exe generate-policy --decay-window 30
   ```
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  agentwall.exe generate-policy --decay-window 30
+  agentcontrol.exe generate-policy --decay-window 30
   ```
 
-This creates an `agentwall-policy.yaml` file in your current folder. If you open this file, you will see something like this:
+This creates an `agentcontrol-policy.yaml` file in your current folder. If you open this file, you will see something like this:
 
 ```yaml
-# Auto-generated by AgentWall from 2 observed tool calls
+# Auto-generated by Agent Control from 2 observed tool calls
 version: "2"
 default_action: deny
 
@@ -186,7 +186,7 @@ tools:
         type: string
         required: true
         max_length: 128
-        # AgentWall observed Claude ran "whoami" and automatically allowed it
+        # Agent Control observed Claude ran "whoami" and automatically allowed it
         pattern: "^whoami$"
 
   - name: read_file
@@ -205,7 +205,7 @@ tools:
 
 ## Step 5: Enforce Policies & Observe DLP Shield
 
-`agentwall protect` runs in **Active Enforcement Mode** by default. All incoming tool calls and outgoing responses are checked against your `agentwall-policy.yaml` rules, instant secret DLP patterns, and dangerous path traversal checks.
+`agentcontrol protect` runs in **Active Enforcement Mode** by default. All incoming tool calls and outgoing responses are checked against your `agentcontrol-policy.yaml` rules, instant secret DLP patterns, and dangerous path traversal checks.
 
 ### Test the Firewall
 
@@ -229,42 +229,42 @@ Ask Claude / your agent to perform an unapproved action, such as accessing a res
   curl.exe -X POST http://127.0.0.1:8080/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/etc/shadow\"}},\"id\":1}"
   ```
 
-AgentWall will immediately intercept and **block** the tool request (`403 Forbidden` / default-deny policy rule match), preventing the agent call from executing. You have successfully secured your AI Agent!
+Agent Control will immediately intercept and **block** the tool request (`403 Forbidden` / default-deny policy rule match), preventing the agent call from executing. You have successfully secured your AI Agent!
 
 ---
 
-## Observation-Only Mode (`agentwall protect --shadow`)
+## Observation-Only Mode (`agentcontrol protect --shadow`)
 
 If you want to observe agent tool traffic without active blocking (for policy learning or risk auditing), pass the `--shadow` flag:
 
 ```bash
-agentwall protect --shadow          # macOS / Linux
-agentwall.exe protect --shadow      # Windows
+agentcontrol protect --shadow          # macOS / Linux
+agentcontrol.exe protect --shadow      # Windows
 ```
 
 > [!NOTE]
-> `agentwall dev` is deprecated in favor of `agentwall protect` and `agentwall protect --shadow`.
+> `agentcontrol dev` is deprecated in favor of `agentcontrol protect` and `agentcontrol protect --shadow`.
 
 ---
 
 ## Step 6: Clean Up (Optional)
 
-If you ever want to remove AgentWall from Claude Desktop and return to normal, simply run:
+If you ever want to remove Agent Control from Claude Desktop and return to normal, simply run:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
   # Remove from a single IDE:
-  agentwall unwrap claude
+  agentcontrol unwrap claude
 
-  # Or restore ALL IDEs at once (if you used 'agentwall protect'):
-  agentwall unprotect
+  # Or restore ALL IDEs at once (if you used 'agentcontrol protect'):
+  agentcontrol unprotect
   ```
 * **Windows (PowerShell / CMD):**
   ```powershell
-  agentwall.exe unwrap claude
+  agentcontrol.exe unwrap claude
   # Or:
-  agentwall.exe unprotect
+  agentcontrol.exe unprotect
   ```
 
 > [!NOTE]
-> `agentwall unprotect` verifies backup integrity before restoring each config. Use `--force` to skip verification if you need emergency recovery.
+> `agentcontrol unprotect` verifies backup integrity before restoring each config. Use `--force` to skip verification if you need emergency recovery.

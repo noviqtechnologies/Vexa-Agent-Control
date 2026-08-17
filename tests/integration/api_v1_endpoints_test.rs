@@ -13,7 +13,7 @@ impl Drop for ChildGuard {
 async fn test_api_v1_endpoints() {
     let listen_addr = "127.0.0.1:8089";
 
-    let bin = env!("CARGO_BIN_EXE_agentwall");
+    let bin = env!("CARGO_BIN_EXE_agentcontrol");
     let mut guard = ChildGuard(
         tokio::process::Command::new(bin)
             .arg("dev")
@@ -25,7 +25,7 @@ async fn test_api_v1_endpoints() {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("Failed to start agentwall dev server"),
+            .expect("Failed to start agentcontrol dev server"),
     );
 
     sleep(Duration::from_secs(4)).await;

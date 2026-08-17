@@ -1,27 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "agentwall.fullname" . }}-operator
+  name: {{ include "agentcontrol.fullname" . }}-operator
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.operatorSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.operatorSelectorLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.operator.replicas }}
   selector:
     matchLabels:
-      {{- include "agentwall.operatorSelectorLabels" . | nindent 6 }}
+      {{- include "agentcontrol.operatorSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentwall.operatorSelectorLabels" . | nindent 8 }}
+        {{- include "agentcontrol.operatorSelectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "agentwall.operatorServiceAccountName" . }}
+      serviceAccountName: {{ include "agentcontrol.operatorServiceAccountName" . }}
       securityContext:
         {{- toYaml .Values.operator.securityContext | nindent 8 }}
       containers:
       - name: manager
-        image: {{ include "agentwall.operatorImage" . }}
+        image: {{ include "agentcontrol.operatorImage" . }}
         imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
         args:
           - --metrics-bind-address=:{{ .Values.operator.metricsPort }}

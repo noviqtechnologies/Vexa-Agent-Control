@@ -86,7 +86,7 @@ fn gather_all() -> Vec<TargetInfo> {
         .collect()
 }
 
-/// Check whether all mcpServers in a config file are wrapped by AgentWall.
+/// Check whether all mcpServers in a config file are wrapped by Vexa Agent Control.
 /// Returns (total_servers, wrapped_servers).
 fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
     let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -102,7 +102,7 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
             .values()
             .filter(|v| {
                 if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
-                    cmd.to_lowercase().contains("agentwall")
+                    cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall")
                 } else {
                     false
                 }
@@ -137,7 +137,7 @@ pub fn print_all_targets() {
 
     // Header
     println!();
-    println!("{}", "AgentWall — IDE Config Status".bold().white());
+    println!("{}", "Vexa Agent Control — IDE Config Status".bold().white());
     println!("{}", "─".repeat(90).dimmed());
     println!(
         "  {:<18} {:<12} {:<8} {:<10} {}",
@@ -197,7 +197,7 @@ pub fn print_all_targets() {
                             "✔".green().to_string(),
                             format!("{}/{}", wrapped, total).red().bold().to_string(),
                             format!(
-                                "⚠ unwrapped! run: agentwall wrap {} {}",
+                                "⚠ unwrapped! run: agentcontrol wrap {} {}",
                                 t.name.to_lowercase().replace(' ', "-"),
                                 verified_label
                             ),
@@ -206,7 +206,7 @@ pub fn print_all_targets() {
                             "✔".green().to_string(),
                             format!("{}/{}", wrapped, total).yellow().to_string(),
                             format!(
-                                "⚠ partial — run: agentwall wrap {} {}",
+                                "⚠ partial — run: agentcontrol wrap {} {}",
                                 t.name.to_lowercase().replace(' ', "-"),
                                 verified_label
                             ),
@@ -268,7 +268,7 @@ pub fn gather_servers_for_snapshot(
                                     let wrapped = val
                                         .get("command")
                                         .and_then(|c| c.as_str())
-                                        .map(|cmd| cmd.to_lowercase().contains("agentwall"))
+                                        .map(|cmd| cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall"))
                                         .unwrap_or(false);
                                     let path_verified =
                                         t.verification == PathVerification::Verified;
@@ -338,7 +338,7 @@ mod tests {
         let config_path = temp_dir.path().join("config.toml");
         let content = r#"
 [mcp_servers.test_server]
-command = "agentwall"
+command = "agentcontrol"
 args = ["stdio-proxy", "--", "node", "server.js"]
 "#;
         std::fs::write(&config_path, content).unwrap();

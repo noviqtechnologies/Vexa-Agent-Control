@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-frontend-nginx
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-frontend-nginx
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
 data:
   default.conf: |
     server {
@@ -20,7 +20,7 @@ data:
 
         # Proxy API requests to dashboard-api.
         location /api/ {
-            proxy_pass http://{{ include "agentwall.fullname" . }}-dashboard-api:{{ .Values.dashboardApi.port }};
+            proxy_pass http://{{ include "agentcontrol.fullname" . }}-dashboard-api:{{ .Values.dashboardApi.port }};
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

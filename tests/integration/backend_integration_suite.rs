@@ -1,4 +1,4 @@
-//! Backend & Systems Integration Test Suite for AgentWall
+//! Backend & Systems Integration Test Suite for Agent Control
 //!
 //! Covers four primary interaction boundaries:
 //! 1. Component-to-Component (ProxyHandler <-> Policy Engine <-> Identity <-> DLP)
@@ -6,18 +6,18 @@
 //! 3. External Network Boundaries (Upstream MCP Mock Server & Connection Timeout Fallback)
 //! 4. State & Lifecycle (Multi-Step Budget Exhaustion & Dynamic Policy Hot-Reload)
 
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::audit::verifier::{verify_chain_with_secret, VerifyResult};
-use agentwall::kill::KillMode;
-use agentwall::policy::credential_scope::CredentialScopeValidator;
-use agentwall::policy::dlp::DlpScanner;
-use agentwall::policy::engine::{CompiledPolicy, CompiledTool};
-use agentwall::policy::injection::InjectionScanner;
-use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::semantic::{SemanticConfig, SemanticScanner};
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
-use agentwall::proxy::session::SessionContext;
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::audit::verifier::{verify_chain_with_secret, VerifyResult};
+use agentcontrol::kill::KillMode;
+use agentcontrol::policy::credential_scope::CredentialScopeValidator;
+use agentcontrol::policy::dlp::DlpScanner;
+use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool};
+use agentcontrol::policy::injection::InjectionScanner;
+use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
+use agentcontrol::policy::safe_mode::SafeModeScanner;
+use agentcontrol::policy::semantic::{SemanticConfig, SemanticScanner};
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
@@ -38,7 +38,7 @@ fn create_test_proxy_state(policy: Option<CompiledPolicy>) -> (Arc<ProxyState>, 
         include_params: true,
     };
     let audit_logger = Arc::new(AuditLogger::new(config).unwrap());
-    let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
+    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
 
     let state = Arc::new(ProxyState {
         policy: std::sync::RwLock::new(policy),
@@ -67,7 +67,7 @@ fn create_test_proxy_state(policy: Option<CompiledPolicy>) -> (Arc<ProxyState>, 
         semantic_scanner: Arc::new(SemanticScanner::new(SemanticConfig::default())),
         injection_scanner: Arc::new(InjectionScanner::default()),
         schema_drift_detector: Arc::new(
-            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
+            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),

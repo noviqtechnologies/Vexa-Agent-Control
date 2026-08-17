@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
 var (
@@ -123,7 +123,7 @@ func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (*model.Devi
 			COALESCE(d.architecture, 'x86_64') AS os_arch,
 			COALESCE(d.os_family, 'windows') AS os_family,
 			COALESCE(k.fingerprint, '') AS public_key,
-			COALESCE(d.os_version_summary, 'v1.0.32') AS agentwall_version,
+			COALESCE(d.os_version_summary, 'v1.0.32') AS agentcontrol_version,
 			d.state::text,
 			d.first_enrolled_at,
 			d.last_heartbeat_at,
@@ -134,7 +134,7 @@ func (s *Store) GetDeviceByID(ctx context.Context, deviceID string) (*model.Devi
 		WHERE d.id::text = $1 OR d.stable_device_id = $1
 		LIMIT 1
 	`, deviceID).Scan(
-		&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentWallVersion,
+		&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentControlVersion,
 		&state, &d.FirstEnrolledAt, &lastHb, &revokedAt, &d.UpdatedAt,
 	)
 
@@ -234,7 +234,7 @@ func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, 
 			COALESCE(d.architecture, 'x86_64') AS os_arch,
 			COALESCE(d.os_family, 'windows') AS os_family,
 			COALESCE(k.fingerprint, '') AS public_key,
-			COALESCE(d.os_version_summary, 'v1.0.32') AS agentwall_version,
+			COALESCE(d.os_version_summary, 'v1.0.32') AS agentcontrol_version,
 			CASE
 				WHEN d.state = 'REVOKED' THEN 'REVOKED'
 				WHEN d.state = 'PENDING' THEN 'PENDING'
@@ -275,7 +275,7 @@ func (s *Store) ListDevices(ctx context.Context, osFamily, statusFilter string, 
 		var d model.Device
 		var revokedAt *time.Time
 		if err := rows.Scan(
-			&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentWallVersion,
+			&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentControlVersion,
 			&d.ComplianceStatus, &d.FirstEnrolledAt, &d.LastHeartbeatAt, &d.IsRevoked, &revokedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, err

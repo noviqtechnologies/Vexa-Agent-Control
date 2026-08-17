@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 )
 
 type AlertHandler struct {

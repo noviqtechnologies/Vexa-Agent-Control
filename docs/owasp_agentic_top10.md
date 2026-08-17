@@ -17,7 +17,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ## Coverage Matrix
 
-| Risk ID | Vulnerability Title | AgentWall Status | Primary Enforcement Component | Evidence in Codebase |
+| Risk ID | Vulnerability Title | Agent Control Status | Primary Enforcement Component | Evidence in Codebase |
 |---|---|:---:|---|---|
 | **ASI01** | **Agent Goal Hijack** | ✅ **Full** | 6-Pass Normalizer & 9 Prompt Injection Scanners | [`src/policy/injection.rs`](../src/policy/injection.rs), [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs) |
 | **ASI02** | **Tool Misuse and Exploitation** | ✅ **Full** | Default-Deny Policy Engine & JSON Parameter Schema Validator | [`src/policy/engine.rs`](../src/policy/engine.rs), [`src/policy/schema.rs`](../src/policy/schema.rs) |
@@ -43,7 +43,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
                                                  │
                                                  ▼
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Vexa AgentWall — Out-of-Process Enforcement Boundary                                              │
+│ Vexa Agent Control — Out-of-Process Enforcement Boundary                                              │
 │                                                                                                   │
 │  ┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐                │
 │  │ 1. Identity (ASI03)   │──►│ 2. Schema (ASI02/04)  │──►│ 3. Injection (ASI01)  │                │
@@ -68,7 +68,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI01: Agent Goal Hijack
 - **Threat:** Adversarial inputs or indirect prompt injections override the agent's core system prompts or alter execution trajectory.
-- **AgentWall Mitigation:** Multi-pass normalizer (handling NFKC normalization, Base64 decoding, and leetspeak de-obfuscation) coupled with 9 prompt injection detectors and response poisoning checks.
+- **Agent Control Mitigation:** Multi-pass normalizer (handling NFKC normalization, Base64 decoding, and leetspeak de-obfuscation) coupled with 9 prompt injection detectors and response poisoning checks.
 - **Enforcement Point:** Out-of-process stream inspection prior to tool argument delivery and post-execution response sanitization.
 - **Code Evidence:** [`src/policy/injection.rs`](../src/policy/injection.rs), [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs).
 - **Status:** ✅ **Full**
@@ -77,7 +77,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI02: Tool Misuse and Exploitation
 - **Threat:** Agents invoke dangerous tools or supply malicious parameter payloads (e.g., path traversal, command injection, unconstrained SQL queries).
-- **AgentWall Mitigation:** Strict default-deny YAML policy engine, compiled JSON schema parameter bounds, path traversal validators (`..` rejection), and shell character blocking.
+- **Agent Control Mitigation:** Strict default-deny YAML policy engine, compiled JSON schema parameter bounds, path traversal validators (`..` rejection), and shell character blocking.
 - **Enforcement Point:** Intercepts every JSON-RPC `tools/call` on the wire; unknown or non-allowlisted tools are immediately rejected.
 - **Code Evidence:** [`src/policy/engine.rs`](../src/policy/engine.rs), [`src/policy/schema.rs`](../src/policy/schema.rs), [`src/policy/loader.rs`](../src/policy/loader.rs).
 - **Status:** ✅ **Full**
@@ -86,7 +86,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI03: Identity and Privilege Abuse
 - **Threat:** Unauthenticated agents or privilege-escalated sessions execute tools outside authorized tenant boundaries.
-- **AgentWall Mitigation:** Validates corporate OIDC JWT tokens (Okta, Keycloak, Entra ID), maps JWT group claims dynamically to tool permissions, and enforces per-tool `X-AgentWall-Credential-Scope` constraints.
+- **Agent Control Mitigation:** Validates corporate OIDC JWT tokens (Okta, Keycloak, Entra ID), maps JWT group claims dynamically to tool permissions, and enforces per-tool `X-Agent Control-Credential-Scope` constraints.
 - **Enforcement Point:** Session token validation on ingress and proxy boundary credential injection (stripping raw keys from agents).
 - **Code Evidence:** [`src/policy/identity.rs`](../src/policy/identity.rs), [`src/policy/credential_scope.rs`](../src/policy/credential_scope.rs).
 - **Status:** ✅ **Full**
@@ -95,10 +95,10 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI04: Agentic Supply Chain Vulnerabilities
 - **Threat:** Compromised third-party MCP servers, plugin updates, or altered tool definitions introduce malicious capabilities post-approval ("rug pulls").
-- **AgentWall Mitigation:** 
+- **Agent Control Mitigation:** 
   1. Static and dynamic manifest scoring via **MCP Security Scoring Engine** (0–100 Vexa Security Score).
   2. Runtime **Cross-Session Schema-Drift Detection** (ADR-011) that hashes tool catalogs and detects schema tampering across sessions.
-- **Known Gap:** AgentWall does not generate software bills of materials (SBOMs) for host binary dependencies.
+- **Known Gap:** Agent Control does not generate software bills of materials (SBOMs) for host binary dependencies.
 - **Code Evidence:** [`src/policy/mcp_score.rs`](../src/policy/mcp_score.rs), [`src/policy/schema_drift.rs`](../src/policy/schema_drift.rs).
 - **Status:** ✅ **Full**
 
@@ -106,7 +106,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI05: Unexpected Code Execution (RCE)
 - **Threat:** Agent execution leads to arbitrary shell command invocation, script execution, or binary tampering on the host machine.
-- **AgentWall Mitigation:** Safe Mode automatically blocks dangerous commands (`rm -rf`, `curl | bash`, reverse shells, `chmod`), prevents execution in sensitive paths, and protects configuration files with self-healing file locks.
+- **Agent Control Mitigation:** Safe Mode automatically blocks dangerous commands (`rm -rf`, `curl | bash`, reverse shells, `chmod`), prevents execution in sensitive paths, and protects configuration files with self-healing file locks.
 - **Code Evidence:** [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs), [`src/self_healing.rs`](../src/self_healing.rs).
 - **Status:** ✅ **Full**
 
@@ -114,8 +114,8 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI06: Memory and Context Poisoning
 - **Threat:** Malicious data persisted into vector databases, scratchpads, or long-term agent memory corrupts future reasoning cycles.
-- **AgentWall Mitigation:** Cryptographically chained HMAC-SHA256 audit logs provide tamper-evident history of all session decisions and responses. Response scanners redact sensitive tokens before context ingestion.
-- **Known Gap:** AgentWall does not provide direct application-layer sandboxing for third-party vector databases or agent memory snapshot verification.
+- **Agent Control Mitigation:** Cryptographically chained HMAC-SHA256 audit logs provide tamper-evident history of all session decisions and responses. Response scanners redact sensitive tokens before context ingestion.
+- **Known Gap:** Agent Control does not provide direct application-layer sandboxing for third-party vector databases or agent memory snapshot verification.
 - **Code Evidence:** [`src/audit/logger.rs`](../src/audit/logger.rs), [`src/policy/response_scanner.rs`](../src/policy/response_scanner.rs).
 - **Status:** ⚠️ **Partial**
 
@@ -123,8 +123,8 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI07: Insecure Inter-Agent Communication
 - **Threat:** Inter-agent messages lack cryptographic provenance, mutual authentication, or capability delegation boundaries across independent organizations.
-- **AgentWall Assessment:** AgentWall scopes identity to enterprise OIDC providers within an organization's trust domain. It does not implement decentralized DIDs or cross-organization agent federation protocols.
-- **Recommended Mitigation:** Deploy corporate IdP cross-tenant federation (e.g., Entra ID B2B or Okta Org2Org) upstream of AgentWall gateways.
+- **Agent Control Assessment:** Agent Control scopes identity to enterprise OIDC providers within an organization's trust domain. It does not implement decentralized DIDs or cross-organization agent federation protocols.
+- **Recommended Mitigation:** Deploy corporate IdP cross-tenant federation (e.g., Entra ID B2B or Okta Org2Org) upstream of Agent Control gateways.
 - **Code Evidence:** [`src/policy/identity.rs`](../src/policy/identity.rs), [`docs/LIMITATIONS.md`](../PRD/LIMITATIONS.md).
 - **Status:** ❌ **Scoped Gap**
 
@@ -132,7 +132,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI08: Cascading Agent Failures
 - **Threat:** Stuck agents trapped in repetitive failure cycles cause runaway LLM token spend, quota exhaustion, or cascading downstream outages.
-- **AgentWall Mitigation:** 
+- **Agent Control Mitigation:** 
   1. Built-in sliding-window cycle detector that returns `PivotError` (-32010) to force the model to attempt alternative strategies.
   2. Local SQLite token budget ledger enforcing session spend caps and concurrency ceilings.
 - **Code Evidence:** [`src/proxy/handler.rs`](../src/proxy/handler.rs), [`src/spend/ledger.rs`](../src/spend/ledger.rs).
@@ -142,7 +142,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI09: Human-Agent Trust Exploitation
 - **Threat:** Autonomous agents trigger irreversible, high-impact operations without explicit human authorization.
-- **AgentWall Mitigation:** Human-in-the-Loop (HITL) policy escalation ladder. High-risk operations prompt developers in the local web dashboard (`127.0.0.1:8080`) or dispatch asynchronous Slack/Teams webhooks verified via HMAC signatures.
+- **Agent Control Mitigation:** Human-in-the-Loop (HITL) policy escalation ladder. High-risk operations prompt developers in the local web dashboard (`127.0.0.1:8080`) or dispatch asynchronous Slack/Teams webhooks verified via HMAC signatures.
 - **Code Evidence:** [`src/policy/hitl.rs`](../src/policy/hitl.rs), [`src/proxy/server.rs`](../src/proxy/server.rs).
 - **Status:** ✅ **Full**
 
@@ -150,7 +150,7 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 ### ASI10: Rogue Agents & Unauthorized Egress
 - **Threat:** Uncontrolled agent processes bypass governance, modify proxy configurations, or open unmonitored egress channels.
-- **AgentWall Mitigation:** 
+- **Agent Control Mitigation:** 
   1. Background OS Sentry daemon (`systemd`, `launchd`, Windows SCM) with <300ms self-healing config protection.
   2. Ed25519 hardware-bound PKI device enrollment with instant web console device revocation (`/admin/devices`).
   3. Hardened Rust egress WebSocket tunneling with TLS 1.3 termination.
@@ -165,11 +165,11 @@ Generate automated compliance evidence reports directly from production audit lo
 
 ```bash
 # Verify cryptographic integrity of the audit log
-agentwall verify-log --path /var/log/agentwall/audit.jsonl
+agentcontrol verify-log --path /var/log/agentcontrol/audit.jsonl
 
 # Generate OWASP ASI compliance summary report
-agentwall report --compliance --format markdown
+agentcontrol report --compliance --format markdown
 
 # Export structured JSON evidence for enterprise security auditors
-agentwall report --compliance --format json --output owasp_asi_evidence.json
+agentcontrol report --compliance --format json --output owasp_asi_evidence.json
 ```

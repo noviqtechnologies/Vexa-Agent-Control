@@ -4,5 +4,5 @@ kind: Namespace
 metadata:
   name: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
 {{- end }}

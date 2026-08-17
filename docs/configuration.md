@@ -1,19 +1,19 @@
 # Configuration & Policies
 
-AgentWall's core enforcement logic is driven by Schema v2 YAML policy files.
+Agent Control's core enforcement logic is driven by Schema v2 YAML policy files.
 
 ## Zero-Configuration Default Policy & Audit Logging
 
-When running `agentwall protect` in a directory without an existing policy, AgentWall automatically generates a baseline `agentwall-policy.yaml` with out-of-the-box secret DLP rules:
+When running `agentcontrol protect` in a directory without an existing policy, Agent Control automatically generates a baseline `agentcontrol-policy.yaml` with out-of-the-box secret DLP rules:
 - **Sensitive File Protection:** Automatic sequence blocking when tool calls read `.env`, `.ssh/id_rsa`, or `~/.aws/credentials` followed by outbound execution.
 - **Path Traversal Shield:** Enforces canonical path verification on `read_file` and filesystem parameters.
-- **Default Audit Log Location:** Audit logs are saved to `~/.agentwall/audit.jsonl` by default (overridable via `--log-path` or `AGENTWALL_LOG_PATH`).
+- **Default Audit Log Location:** Audit logs are saved to `~/.agentcontrol/audit.jsonl` by default (overridable via `--log-path` or `AGENTWALL_LOG_PATH`).
 
 ## Policy Structure
 
 A policy file strictly defines the allowed actions, tools, and identity providers. The `default_action: deny` directive is required to ensure a fail-safe posture.
 
-Here is an example `agentwall-policy.yaml`:
+Here is an example `agentcontrol-policy.yaml`:
 
 ```yaml
 version: "2"
@@ -31,8 +31,8 @@ self_healing:
 auth:
   provider: okta
   jwks_uri: https://your-org.okta.com/oauth2/default/v1/keys
-  jwks_file: /etc/agentwall/jwks.json # Air-gapped deployment path (overrides jwks_uri)
-  audience: agentwall
+  jwks_file: /etc/agentcontrol/jwks.json # Air-gapped deployment path (overrides jwks_uri)
+  audience: agentcontrol
   issuer: https://your-org.okta.com
 
 # Identity provider for binding Agents to specific rules
@@ -85,14 +85,14 @@ tools:
 
 ## Zero-Downtime Policy Reloading
 
-AgentWall supports hot-reloading its configuration without dropping active connections. This is critical for centralized enforcement gateways.
+Agent Control supports hot-reloading its configuration without dropping active connections. This is critical for centralized enforcement gateways.
 
 - **Via API:** `curl -X POST http://localhost:8080/reload`
-- **Via Signal (Linux):** `kill -SIGHUP $(pidof agentwall)`
+- **Via Signal (Linux):** `kill -SIGHUP $(pidof agentcontrol)`
 
 ## Data Loss Prevention (DLP)
 
-AgentWall includes a DLP engine that scans outbound requests and inbound responses for sensitive data. 
+Agent Control includes a DLP engine that scans outbound requests and inbound responses for sensitive data. 
 It supports 21 built-in regex patterns, detecting:
 - AWS, Azure, and GCP Keys
 - GitHub and Slack Tokens
@@ -119,30 +119,30 @@ Sequence rule violations are written to the audit log with the matched rule ID a
 
 Safe Mode is an always-on enforcement layer that blocks dangerous tool calls without any policy configuration. It applies 15 tool-aware rules covering sensitive file access (SSH keys, `.env`, AWS credentials, kubeconfig, `/etc/shadow`, Docker config/socket), shell exfiltration (pipe-to-shell, netcat listeners, `rm -rf /`), and cloud metadata SSRF.
 
-Safe Mode runs before the policy engine and is not configurable — it cannot be disabled. It protects agents even in shadow mode (`agentwall dev`) where no policy file is loaded. For the full rule set, see `src/policy/safe_mode.rs`.
+Safe Mode runs before the policy engine and is not configurable — it cannot be disabled. It protects agents even in shadow mode (`agentcontrol dev`) where no policy file is loaded. For the full rule set, see `src/policy/safe_mode.rs`.
 
 ## Agent Identity & Credential Governance
 
-AgentWall introduces per-agent credential governance. Instead of hardcoding long-lived secrets into your AI Agents, you can provision short-lived, scoped credentials at runtime.
+Agent Control introduces per-agent credential governance. Instead of hardcoding long-lived secrets into your AI Agents, you can provision short-lived, scoped credentials at runtime.
 
 ```bash
 # Provision a scoped credential for an agent (1-hour TTL)
-agentwall identity create --agent my-agent --scope read-only --ttl 1h
+agentcontrol identity create --agent my-agent --scope read-only --ttl 1h
 
 # Rotate credentials
-agentwall identity rotate --agent my-agent
+agentcontrol identity rotate --agent my-agent
 
 # Set per-tool-call credential scoping
-agentwall identity scope --agent my-agent --tool execute_shell --deny
+agentcontrol identity scope --agent my-agent --tool execute_shell --deny
 ```
 
 ## ADR Security Benchmark
 
-The `agentwall bench` command stress-tests your gateway configuration against 303 curated tasks across 17 AI attack categories. It measures your detection and blocking rates and assigns an overall **A/B/C security grade**.
+The `agentcontrol bench` command stress-tests your gateway configuration against 303 curated tasks across 17 AI attack categories. It measures your detection and blocking rates and assigns an overall **A/B/C security grade**.
 
 ```bash
 # Run the full benchmark suite
-agentwall bench --full
+agentcontrol bench --full
 
 # Output: target/benchmark-report.html
 ```
@@ -151,7 +151,7 @@ For a complete description of all 17 attack categories, scoring methodology, and
 
 ## MCP Schema-Drift Detection (FR-601, ADR-011)
 
-The `schema_drift` stanza enables cross-session detection of tool catalog tampering ("rug pulls"). When an MCP server alters tool definitions, parameter schemas, or descriptions post-approval, AgentWall detects the hash mismatch and applies the configured action.
+The `schema_drift` stanza enables cross-session detection of tool catalog tampering ("rug pulls"). When an MCP server alters tool definitions, parameter schemas, or descriptions post-approval, Agent Control detects the hash mismatch and applies the configured action.
 
 ```yaml
 schema_drift:
@@ -193,7 +193,7 @@ Spend policies can be published via the Management Console (`/spend/limits`) or 
 | `action` | string | `hard_deny`, `warn` | `hard_deny` returns HTTP 429 before upstream dispatch; `warn` allows with audit log |
 
 ### Preflight Reservation & Settlement Invariants
-1. **Pre-dispatch Lock**: Before sending requests to providers (OpenAI, Anthropic, etc.), AgentWall locks the active `budget_windows` row `FOR UPDATE` and reserves the bounded maximum cost.
+1. **Pre-dispatch Lock**: Before sending requests to providers (OpenAI, Anthropic, etc.), Agent Control locks the active `budget_windows` row `FOR UPDATE` and reserves the bounded maximum cost.
 2. **Hard Limit Verification**: Invariant enforced: `reserved_microcents + settled_microcents + reserve_microcents <= limit_microcents`.
 3. **Settlement**: Upon receiving provider token counts (`prompt_tokens`, `completion_tokens`, `cached_tokens`), the reservation is converted to settled spend, and unused reserve balances are released immediately.
 4. **Auto-Sweeper**: A background sweeper automatically releases un-settled reservations older than 5 minutes.
@@ -202,7 +202,7 @@ Spend policies can be published via the Management Console (`/spend/limits`) or 
 
 ## 8. Sentry Daemon & IDE Auto-Enforcement Configuration
 
-The Sentry Daemon (`agentwall watch` / OS background service) runs locally on developer workstations to continuously watch and lock IDE proxy settings.
+The Sentry Daemon (`agentcontrol watch` / OS background service) runs locally on developer workstations to continuously watch and lock IDE proxy settings.
 
 ### Target Path Resolution Reference
 | IDE Target | Windows Resolution | macOS Resolution | Linux Resolution | Injected Config Key |
@@ -216,10 +216,10 @@ The Sentry Daemon (`agentwall watch` / OS background service) runs locally on de
 ### Sentry Daemon CLI Options
 ```bash
 # Watch all supported IDE configurations with event-driven self-healing
-agentwall watch --all
+agentcontrol watch --all
 
 # Inspect current IDE config paths, existence, and proxy lock states
-agentwall status
+agentcontrol status
 ```
 
 
@@ -231,7 +231,7 @@ Thin proxy client SDKs ([Python](../sdks/python) and [TypeScript](../sdks/typesc
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTWALL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote AgentWall security gateway. |
+| `AGENTWALL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote Agent Control security gateway. |
 | `AGENTWALL_AUTH_TOKEN` | `null` | Corporate OIDC JWT or bearer token for authenticated gateway clusters. |
 | `AGENTWALL_SESSION_ID` | Auto-generated UUID | Explicit session context identifier for multi-agent tracing. |
 -->

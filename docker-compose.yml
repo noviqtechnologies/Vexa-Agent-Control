@@ -1,10 +1,10 @@
 version: "3.9"
 
-# ─── AgentWall Local Development Stack — FR-203 ──────────────────────────────
+# ─── Agent Control Local Development Stack — FR-203 ──────────────────────────────
 #
 # Provides a fully self-contained local development environment:
 #
-#   agentwall   — the gateway (same binary as production)
+#   agentcontrol   — the gateway (same binary as production)
 #   mock-oidc   — a lightweight OIDC provider serving JWKS + signed JWTs
 #   mock-splunk — a Splunk HEC mock for SIEM export testing
 #   mock-mcp    — a minimal MCP tool server for end-to-end testing
@@ -31,7 +31,7 @@ services:
     volumes:
       - ./test-tools:/app
     command: >
-      sh -c "pip install cryptography pyjwt --quiet && python3 mock_oidc.py --port 8081 --audience agentwall"
+      sh -c "pip install cryptography pyjwt --quiet && python3 mock_oidc.py --port 8081 --audience agentcontrol"
     ports:
       - "8081:8081"
     healthcheck:
@@ -107,23 +107,23 @@ services:
       - "8080:8080"
     volumes:
       - ./test-tools/test-policy.yaml:/app/policy.yaml:ro
-      - agentcontrol-logs:/var/log/agentwall
+      - agentcontrol-logs:/var/log/agentcontrol
     environment:
       # Core gateway config
-      AGENTWALL_LISTEN: "0.0.0.0:8080"
-      AGENTWALL_MCP_URL: "http://mock-mcp:3000"
-      AGENTWALL_LOG_PATH: "/var/log/agentwall/audit.log"
-      AGENTWALL_DRY_RUN: "false"
+      AGENTCONTROL_LISTEN: "0.0.0.0:8080"
+      AGENTCONTROL_MCP_URL: "http://mock-mcp:3000"
+      AGENTCONTROL_LOG_PATH: "/var/log/agentcontrol/audit.log"
+      AGENTCONTROL_DRY_RUN: "false"
       POLICY_READ_SECRET: "local-dev-policy-read-secret"
 
       # OIDC — points to the local mock provider (AC-203-2: same code path as production)
-      AGENTWALL_OIDC_ISSUER: "http://mock-oidc:8081"
+      AGENTCONTROL_OIDC_ISSUER: "http://mock-oidc:8081"
 
       # SIEM export — points to local Splunk mock
-      AGENTWALL_SIEM_BACKEND: "splunk"
-      AGENTWALL_SIEM_ENDPOINT: "http://mock-splunk:8088/services/collector/event"
-      AGENTWALL_SIEM_TOKEN: "mock-splunk-token-for-local-dev"
-      AGENTWALL_SIEM_TIMEOUT: "2"
+      AGENTCONTROL_SIEM_BACKEND: "splunk"
+      AGENTCONTROL_SIEM_ENDPOINT: "http://mock-splunk:8088/services/collector/event"
+      AGENTCONTROL_SIEM_TOKEN: "mock-splunk-token-for-local-dev"
+      AGENTCONTROL_SIEM_TIMEOUT: "2"
 
       # Developer convenience: wildcard identity allowed in local dev
       ALLOW_WILDCARD_IDENTITY: "true"
@@ -139,7 +139,7 @@ services:
       mock-mcp:
         condition: service_started
     healthcheck:
-      test: ["CMD", "agentwall", "--version"]
+      test: ["CMD", "agentcontrol", "--version"]
       interval: 10s
       timeout: 5s
       retries: 5

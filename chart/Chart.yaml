@@ -1,18 +1,18 @@
 apiVersion: v2
-name: agentwall
+name: agentcontrol
 description: |
   VEXA Agent Control — centralized enterprise security gateway enforcing
   deterministic policies for AI agent tool calls over the Model Context
   Protocol (MCP).
 
   This chart deploys three components:
-    1. The AgentWall Kubernetes operator (reconciles AgentWallPolicy CRs)
-    2. The AgentWall gateway (the enforcement proxy binary)
-    3. A sample AgentWallPolicy CR (optional, disabled by default)
+    1. The Agent Control Kubernetes operator (reconciles Agent ControlPolicy CRs)
+    2. The Agent Control gateway (the enforcement proxy binary)
+    3. A sample Agent ControlPolicy CR (optional, disabled by default)
 
 type: application
 version: 0.1.0
-appVersion: "1.0.16"
+appVersion: "1.0.35"
 kubeVersion: ">=1.24.0-0"
 home: https://github.com/noviqtechnologies/Vexa-Agent-Control
 sources:

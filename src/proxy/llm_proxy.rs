@@ -42,14 +42,14 @@ pub async fn handle_request(
 
     let credential_header = req
         .headers()
-        .get("X-AgentWall-Credential")
+        .get("X-AgentControl-Credential").or_else(|| req.headers().get("X-AgentWall-Credential"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
     let scope_header = req
         .headers()
-        .get("X-AgentWall-Credential-Scope")
-        .or_else(|| req.headers().get("X-AgentWall-Scope"))
+        .get("X-AgentControl-Credential-Scope").or_else(|| req.headers().get("X-AgentControl-Scope")).or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
+        .or_else(|| req.headers().get("X-AgentControl-Scope").or_else(|| req.headers().get("X-AgentWall-Scope")))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 

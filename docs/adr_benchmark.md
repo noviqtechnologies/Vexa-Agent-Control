@@ -3,7 +3,7 @@
 > **What is ADR?**
 > **ADR** stands for **AI Detection & Response** — an AI governance framework that stress-tests your agent security gateway against real-world attack techniques. It encompasses stateful multi-step sequence rules, security benchmarking, and self-healing policy synthesis.
 
-AgentWall ships with a built-in **303-task ADR benchmark suite** that measures how effectively your current gateway configuration detects and blocks 17 categories of AI attack patterns. The benchmark runs entirely offline against a local gateway instance, so it produces reproducible results without any external dependencies.
+Agent Control ships with a built-in **303-task ADR benchmark suite** that measures how effectively your current gateway configuration detects and blocks 17 categories of AI attack patterns. The benchmark runs entirely offline against a local gateway instance, so it produces reproducible results without any external dependencies.
 
 ---
 
@@ -13,7 +13,7 @@ Without objective testing, it is difficult to know whether your policy covers th
 
 - Gives you a concrete **A/B/C security grade** across 17 attack dimensions.
 - Shows **per-category pass rates** so you know exactly which attack classes slip through.
-- Provides **comparative baselines** against GuardAgent, LlamaFirewall, and ALRPHFS — helping you understand how AgentWall's coverage compares.
+- Provides **comparative baselines** against GuardAgent, LlamaFirewall, and ALRPHFS — helping you understand how Agent Control's coverage compares.
 - Surfaces **actionable policy recommendations** so you can incrementally improve your score.
 
 ---
@@ -21,24 +21,24 @@ Without objective testing, it is difficult to know whether your policy covers th
 ## Running the Benchmark
 
 ### Prerequisites
-- AgentWall binary installed, **or** the project built from source (`cargo build --release`).
-- No active AgentWall gateway process required — the benchmark spawns its own internal gateway instance.
+- Agent Control binary installed, **or** the project built from source (`cargo build --release`).
+- No active Agent Control gateway process required — the benchmark spawns its own internal gateway instance.
 
 ### Command
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
-  agentwall bench --full
+  agentcontrol bench --full
   ```
 
 * **Windows (PowerShell):**
   ```powershell
-  agentwall.exe bench --full
+  agentcontrol.exe bench --full
   ```
 
 * **Windows (Command Prompt - CMD):**
   ```cmd
-  agentwall.exe bench --full
+  agentcontrol.exe bench --full
   ```
 
 *(When building from source: `cargo run -- bench --full`)*
@@ -47,7 +47,7 @@ The benchmark typically completes in under 60 seconds on a standard developer wo
 
 ### Output
 
-After completion, AgentWall writes the report to:
+After completion, Agent Control writes the report to:
 
 ```
 target/benchmark-report.html
@@ -69,7 +69,7 @@ Start-Process target/benchmark-report.html
 start target\benchmark-report.html
 ```
 
-The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also renders the report interactively after you run `agentwall dev`.
+The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also renders the report interactively after you run `agentcontrol dev`.
 
 ---
 
@@ -91,21 +91,21 @@ The score is a weighted average of all 17 category pass rates.
 
 The body of the report shows a card for each of the 17 attack categories, including:
 - A plain-English description of what the category tests.
-- The number of tasks that **passed** (AgentWall correctly blocked the attack) vs. **failed** (the attack was not caught).
+- The number of tasks that **passed** (Agent Control correctly blocked the attack) vs. **failed** (the attack was not caught).
 - A **pass rate percentage** and a color-coded severity badge.
 
 ### Comparative Baselines
 
-A bar chart compares AgentWall's overall score against published results for comparable tools:
+A bar chart compares Agent Control's overall score against published results for comparable tools:
 
 | Tool | Approximate Overall Score |
 |------|--------------------------|
-| **AgentWall** | Your score |
+| **Agent Control** | Your score |
 | GuardAgent | ~72% |
 | LlamaFirewall | ~68% |
 | ALRPHFS | ~65% |
 
-> **Note:** Baseline scores are derived from published research benchmarks and represent typical configurations. AgentWall's score depends on your specific policy configuration.
+> **Note:** Baseline scores are derived from published research benchmarks and represent typical configurations. Agent Control's score depends on your specific policy configuration.
 
 ---
 
@@ -206,7 +206,7 @@ tools:
 
 ## Benchmark in the Local Dashboard
 
-When `agentwall dev` is running, the **ADR Benchmark tab** in the sidebar at `http://127.0.0.1:8080` shows the results of the last `agentwall bench --full` run as an interactive embedded report. This allows you to:
+When `agentcontrol dev` is running, the **ADR Benchmark tab** in the sidebar at `http://127.0.0.1:8080` shows the results of the last `agentcontrol bench --full` run as an interactive embedded report. This allows you to:
 
 - See your **ADR Security Score Ring** (SVG gauge) at a glance.
 - Browse per-category results without leaving the dashboard.

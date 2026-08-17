@@ -1,5 +1,5 @@
 /**
- * Core type definitions for AgentWall TypeScript client SDK.
+ * Core type definitions for AgentControl TypeScript client SDK.
  */
 
 export type Verdict = "allow" | "deny" | "warn" | "escalate";
@@ -25,7 +25,7 @@ export interface GatewayStatus {
 
 export interface ClientOptions {
   /**
-   * Gateway URL (defaults to process.env.AGENTWALL_PROXY_URL or http://127.0.0.1:8080)
+   * Gateway URL (defaults to process.env.AGENTCONTROL_PROXY_URL or http://127.0.0.1:8080)
    */
   proxyUrl?: string;
   /**

@@ -417,7 +417,7 @@ export interface Device {
   os_arch: string
   os_family: string
   public_key: string
-  agentwall_version: string
+  agentcontrol_version: string
   compliance_status: 'COMPLIANT' | 'UNREACHABLE' | 'NON_COMPLIANT'
   mcp_servers_total: number
   mcp_servers_wrapped: number

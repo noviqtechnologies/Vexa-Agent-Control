@@ -6,13 +6,13 @@ Deploys the [Vexa Agent Control](https://github.com/noviqtechnologies/Vexa-Agent
 
 | Component | Purpose |
 |-----------|---------|
-| `AgentWallPolicy` CRD | Custom resource definition (optional, on by default) |
-| `agentwall-operator` Deployment | Reconciles `AgentWallPolicy` → ConfigMap + NetworkPolicy |
-| `agentwall-gateway` Deployment | The enforcement proxy (FR-5 §5.5) |
-| `agentwall-gateway` Service | ClusterIP fronting the gateway pods |
+| `Agent ControlPolicy` CRD | Custom resource definition (optional, on by default) |
+| `agentcontrol-operator` Deployment | Reconciles `Agent ControlPolicy` → ConfigMap + NetworkPolicy |
+| `agentcontrol-gateway` Deployment | The enforcement proxy (FR-5 §5.5) |
+| `agentcontrol-gateway` Service | ClusterIP fronting the gateway pods |
 | Gateway policy ConfigMap | The active policy (mounted into the gateway) |
 | Gateway TLS Secret | Optional; DEV self-signed or user-provided |
-| Sample `AgentWallPolicy` CR | Optional, off by default |
+| Sample `Agent ControlPolicy` CR | Optional, off by default |
 
 ## Prerequisites
 
@@ -25,20 +25,20 @@ Deploys the [Vexa Agent Control](https://github.com/noviqtechnologies/Vexa-Agent
 
 ```bash
 # Add the local chart directory
-helm install agentwall ./chart \
-  --namespace agentwall-system \
+helm install agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --create-namespace
 ```
 
 For production, pin your images explicitly:
 
 ```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
+helm install agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --create-namespace \
-  --set operator.image.repository=myregistry.example.com/agentwall-operator \
+  --set operator.image.repository=myregistry.example.com/agentcontrol-operator \
   --set operator.image.tag=v1.0.16 \
-  --set gateway.image.repository=myregistry.example.com/agentwall \
+  --set gateway.image.repository=myregistry.example.com/agentcontrol \
   --set gateway.image.tag=v1.0.16 \
   --set gateway.tls.enabled=true \
   --set gateway.tls.secretName=my-gateway-tls
@@ -52,9 +52,9 @@ helm install agentwall ./chart \
 # Create the Secret first
 kubectl create secret tls my-gateway-tls \
   --cert=cert.pem --key=key.pem \
-  -n agentwall-system
+  -n agentcontrol-system
 
-helm upgrade agentwall ./chart \
+helm upgrade agentcontrol ./chart \
   --set gateway.tls.enabled=true \
   --set gateway.tls.secretName=my-gateway-tls
 ```
@@ -62,15 +62,15 @@ helm upgrade agentwall ./chart \
 ### Enable TLS with a self-signed cert (DEV ONLY)
 
 ```bash
-helm upgrade agentwall ./chart \
+helm upgrade agentcontrol ./chart \
   --set gateway.tls.enabled=true \
   --set gateway.tls.createSelfSigned=true
 ```
 
 ### Enable NetworkPolicy enforcement
 
-Label your agent pods with `agentwall.io/agent=true`, then create an
-`AgentWallPolicy` CR (or edit `values.yaml`) with:
+Label your agent pods with `agentcontrol.io/agent=true`, then create an
+`Agent ControlPolicy` CR (or edit `values.yaml`) with:
 
 ```yaml
 policy:
@@ -96,18 +96,18 @@ Two options:
 
 ```bash
 # Option A: HTTP endpoint
-kubectl exec -n agentwall-system deploy/agentwall-gateway -- \
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- \
   wget -qO- --post-data '' http://localhost:8080/reload
 
 # Option B: SIGHUP
-POD=$(kubectl get pod -n agentwall-system -l app.kubernetes.io/component=gateway -o name | head -1)
-kubectl exec -n agentwall-system $POD -- kill -HUP 1
+POD=$(kubectl get pod -n agentcontrol-system -l app.kubernetes.io/component=gateway -o name | head -1)
+kubectl exec -n agentcontrol-system $POD -- kill -HUP 1
 ```
 
 ## Upgrade
 
 ```bash
-helm upgrade agentwall ./chart -n agentwall-system
+helm upgrade agentcontrol ./chart -n agentcontrol-system
 ```
 
 Rolling upgrades preserve request continuity as long as `gateway.replicas >= 2`.
@@ -117,12 +117,12 @@ have time to drain.
 ## Uninstall
 
 ```bash
-helm uninstall agentwall -n agentwall-system
+helm uninstall agentcontrol -n agentcontrol-system
 
 # CRDs are kept intentionally (helm.sh/resource-policy: keep) so existing
-# AgentWallPolicy CRs are not garbage-collected on uninstall. Remove them
+# Agent ControlPolicy CRs are not garbage-collected on uninstall. Remove them
 # explicitly if you really want them gone:
-kubectl delete crd agentwallpolicies.agentwall.io
+kubectl delete crd agentcontrolpolicies.agentcontrol.io
 ```
 
 ## Values reference
@@ -138,5 +138,5 @@ sections are marked `COMMON`.
 | §5.5.3 Deployable via Helm chart | This chart |
 | §5.5.4 Fail-closed on crash | Gateway binary (panic hook + JoinSet abort) |
 | §5.5.6 TLS on listener | `gateway.tls.enabled=true` + Secret with tls.crt/tls.key |
-| §5.5.8 NetworkPolicy | `AgentWallPolicy.spec.networkPolicy.enforced=true` |
+| §5.5.8 NetworkPolicy | `Agent ControlPolicy.spec.networkPolicy.enforced=true` |
 | AC-5.6 Hot-reload | `POST /reload` HTTP or SIGHUP to PID 1 |

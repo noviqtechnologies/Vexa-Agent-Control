@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/broker"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type BrokerV2Handler struct {

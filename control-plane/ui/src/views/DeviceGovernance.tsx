@@ -652,7 +652,7 @@ export default function DeviceGovernance() {
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'unix' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
                         const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
-                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="${generatedToken.token}" AGENTWALL_HUB_URL="${hubUrl}" bash`
+                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="${generatedToken.token}" AGENTCONTROL_HUB_URL="${hubUrl}" bash`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('unix')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -662,7 +662,7 @@ export default function DeviceGovernance() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#22c55e', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="{generatedToken.token}" AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
+                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="{generatedToken.token}" AGENTCONTROL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
                   </pre>
                 </div>
                 <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
@@ -674,7 +674,7 @@ export default function DeviceGovernance() {
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
                         const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
-                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token}"; $env:AGENTWALL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
+                        const cmd = `$env:AGENTCONTROL_TOKEN="${generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('win')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -684,7 +684,7 @@ export default function DeviceGovernance() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '12px', color: '#3b82f6', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    $env:AGENTWALL_TOKEN="{generatedToken.token}"; $env:AGENTWALL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install/team_otet.ps1 | iex
+                    $env:AGENTCONTROL_TOKEN="{generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install/team_otet.ps1 | iex
                   </pre>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

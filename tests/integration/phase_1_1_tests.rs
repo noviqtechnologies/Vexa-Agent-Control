@@ -1,5 +1,5 @@
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::report::{format_text_report, generate_report};
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::report::{format_text_report, generate_report};
 
 use tempfile::NamedTempFile;
 
@@ -82,7 +82,7 @@ async fn test_phase_1_1_developer_observability_report() {
     assert!(text_output.contains("Policy Violations (Dry-Run):"));
     assert!(text_output.contains("dangerous_tool"));
     assert!(
-        text_output.contains("Run `agentwall protect` to generate your rules.")
+        text_output.contains("Run `agentcontrol protect` to generate your rules.")
     );
     assert!(text_output.contains("CRITICAL: No policy loaded during this session."));
 }

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/session"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 )
 
 func TestRequireSaaSOperatorMiddleware(t *testing.T) {
@@ -17,7 +17,7 @@ func TestRequireSaaSOperatorMiddleware(t *testing.T) {
 	// 1. Regular admin user (is_saas_operator = false) -> Expected 403
 	regularCookie := session.Create("00000000-0000-0000-0000-000000000001", "admin-user", true, false)
 	req1 := httptest.NewRequest("GET", "/api/v1/operator/organizations", nil)
-	req1.AddCookie(&http.Cookie{Name: "agentwall_session", Value: regularCookie})
+	req1.AddCookie(&http.Cookie{Name: "agentcontrol_session", Value: regularCookie})
 	rec1 := httptest.NewRecorder()
 	handler.ServeHTTP(rec1, req1)
 
@@ -28,7 +28,7 @@ func TestRequireSaaSOperatorMiddleware(t *testing.T) {
 	// 2. SaaS Operator user (is_saas_operator = true) -> Expected 200
 	operatorCookie := session.Create("00000000-0000-0000-0000-000000000001", "operator-user", true, true)
 	req2 := httptest.NewRequest("GET", "/api/v1/operator/organizations", nil)
-	req2.AddCookie(&http.Cookie{Name: "agentwall_session", Value: operatorCookie})
+	req2.AddCookie(&http.Cookie{Name: "agentcontrol_session", Value: operatorCookie})
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
 

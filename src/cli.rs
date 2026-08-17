@@ -3,8 +3,8 @@
 //! ## v6.1 Deprecation Changes
 //!
 //! - `--kill-mode process` / `--kill-mode both` removed from `start` and `wrap`.
-//! - `agentwall init` is deprecated. Use a GitOps workflow instead.
-//! - `agentwall test` now accepts `--gateway` and `--oidc-token` for CI/CD integration.
+//! - `agentcontrol init` is deprecated. Use a GitOps workflow instead.
+//! - `agentcontrol test` now accepts `--gateway` and `--oidc-token` for CI/CD integration.
 
 use clap::{Parser, Subcommand};
 
@@ -26,7 +26,7 @@ pub enum Commands {
     /// Perform PKI Device Enrollment with Control Hub
     Enroll {
         /// One-Time Enrollment Token (OTET)
-        #[arg(long, env = "AGENTWALL_ENROLLMENT_TOKEN")]
+        #[arg(long, env = "AGENTCONTROL_ENROLLMENT_TOKEN")]
         token: String,
 
         /// Control Hub API URL
@@ -50,7 +50,7 @@ pub enum Commands {
         hub_url: String,
     },
 
-    /// Manage AgentWall persistent OS Sentry Service Daemon
+    /// Manage Agent Control persistent OS Sentry Service Daemon
     Service {
         #[command(subcommand)]
         action: ServiceCliAction,
@@ -80,7 +80,7 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         enforce: bool,
 
-        /// Enable local policy learning mode (synthesizes agentwall-policy.yaml from local dev traffic)
+        /// Enable local policy learning mode (synthesizes agentcontrol-policy.yaml from local dev traffic)
         #[arg(long, default_value_t = false)]
         learn: bool,
 
@@ -119,7 +119,7 @@ pub enum Commands {
     /// Run the gateway server
     Start(Box<StartArgs>),
 
-    /// Automatically wrap an existing agent command with AgentWall
+    /// Automatically wrap an existing agent command with AgentControl
     Wrap(Box<WrapArgs>),
 
     /// Validate a policy against a gateway instance using fixture test calls
@@ -145,12 +145,12 @@ pub enum Commands {
 
         /// Gateway endpoint URL for v6.1 gateway-mode validation (recommended)
         ///
-        /// Example: --gateway https://agentwall.internal.corp/
+        /// Example: --gateway https://agentcontrol.internal.corp/
         #[arg(long, env = "VEXA_GATEWAY_URL")]
         gateway: Option<String>,
 
         /// OIDC Bearer token for authenticating with the gateway
-        #[arg(long, env = "AGENTWALL_OIDC_TOKEN")]
+        #[arg(long, env = "AGENTCONTROL_OIDC_TOKEN")]
         oidc_token: Option<String>,
     },
 
@@ -172,7 +172,7 @@ pub enum Commands {
         log_path: String,
 
         /// Optional path to HMAC signing key file for full payload verification
-        #[arg(long, env = "AGENTWALL_KEY_FILE")]
+        #[arg(long, env = "AGENTCONTROL_KEY_FILE")]
         key_file: Option<String>,
     },
 
@@ -201,7 +201,7 @@ pub enum Commands {
     /// Run Vexa security scanner against local MCP server configurations
     Scan {
         /// Target policy or MCP configuration YAML file path
-        #[arg(long, default_value = "agentwall-policy.yaml")]
+        #[arg(long, default_value = "agentcontrol-policy.yaml")]
         path: String,
 
         /// Output format (text|json)
@@ -211,20 +211,20 @@ pub enum Commands {
 
     /// Generate a YAML security policy draft from observed shadow-mode traffic
     ///
-    /// Reads all tool-call events recorded by `agentwall dev` (shadow mode) from the
-    /// local SQLite database and produces a lint-passing `agentwall-policy.yaml` draft.
+    /// Reads all tool-call events recorded by `agentcontrol dev` (shadow mode) from the
+    /// local SQLite database and produces a lint-passing `agentcontrol-policy.yaml` draft.
     ///
     /// ## Workflow
     ///
-    /// 1. Run `agentwall dev` and route your agent's MCP traffic through it.
-    /// 2. Run `agentwall generate-policy` to draft the policy.
+    /// 1. Run `agentcontrol dev` and route your agent's MCP traffic through it.
+    /// 2. Run `agentcontrol generate-policy` to draft the policy.
     /// 3. Review and tighten the generated YAML.
-    /// 4. Run `agentwall lint agentwall-policy.yaml` to validate.
+    /// 4. Run `agentcontrol lint agentcontrol-policy.yaml` to validate.
     /// 5. Submit to your security/platform team for deployment to the centralized gateway.
     #[command(name = "generate-policy")]
     GeneratePolicy {
-        /// Output file path for the generated policy (default: ./agentwall-policy.yaml)
-        #[arg(long, default_value = "agentwall-policy.yaml")]
+        /// Output file path for the generated policy (default: ./agentcontrol-policy.yaml)
+        #[arg(long, default_value = "agentcontrol-policy.yaml")]
         output: String,
 
         /// Decay window in days for self-healing behavioral learning
@@ -255,7 +255,7 @@ pub enum Commands {
         command: ComplianceCommands,
     },
 
-    /// Restore AgentWall wrappers
+    /// Restore AgentControl wrappers
     Unwrap {
         /// Target to unwrap (e.g. claude)
         #[command(subcommand)]
@@ -289,7 +289,7 @@ pub enum Commands {
         shadow: bool,
 
         /// YAML policy file path
-        #[arg(long, default_value = "agentwall-policy.yaml")]
+        #[arg(long, default_value = "agentcontrol-policy.yaml")]
         policy: String,
     },
 
@@ -358,7 +358,7 @@ pub enum Commands {
     /// Monitors the config file of each selected IDE target via OS-native
     /// filesystem events (inotify / FSEvents / ReadDirectoryChangesW).
     /// When an unwrapped `mcpServers` entry is detected, the daemon calls
-    /// the same wrap logic as `agentwall wrap <target>` — closing the gap
+    /// the same wrap logic as `agentcontrol wrap <target>` — closing the gap
     /// before the IDE's next restart.
     ///
     /// NOTE: IDEs load `mcpServers` at process startup. This daemon does NOT
@@ -379,7 +379,7 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum WrapTarget {
-    /// Wrap Claude Desktop MCP servers with AgentWall
+    /// Wrap Claude Desktop MCP servers with AgentControl
     Claude {
         /// Preview what would change without writing (safe)
         #[arg(long, default_value_t = false)]
@@ -393,42 +393,42 @@ pub enum WrapTarget {
         #[arg(long, default_value_t = false)]
         block_on_secrets: bool,
     },
-    /// Wrap Cursor IDE with AgentWall
+    /// Wrap Cursor IDE with AgentControl
     Cursor {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap VS Code with AgentWall
+    /// Wrap VS Code with AgentControl
     Vscode {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap JetBrains IDEs with AgentWall
+    /// Wrap JetBrains IDEs with AgentControl
     Jetbrains {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap Zed Editor with AgentWall
+    /// Wrap Zed Editor with AgentControl
     Zed {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap Cline Extension with AgentWall
+    /// Wrap Cline Extension with AgentControl
     Cline {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap OpenCode with AgentWall
+    /// Wrap OpenCode with AgentControl
     Opencode {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap Antigravity IDE with AgentWall
+    /// Wrap Antigravity IDE with AgentControl
     Antigravity {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    /// Wrap ChatGPT Codex with AgentWall
+    /// Wrap ChatGPT Codex with AgentControl
     Codex {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
@@ -437,7 +437,7 @@ pub enum WrapTarget {
 
 #[derive(Subcommand)]
 pub enum UnwrapTarget {
-    /// Restore Claude Desktop config from the most recent AgentWall backup
+    /// Restore Claude Desktop config from the most recent AgentControl backup
     Claude {
         /// Restore even if backup is missing — prints manual cleanup instructions
         #[arg(long, default_value_t = false)]
@@ -517,7 +517,7 @@ pub enum WatchTarget {
 
 #[derive(Subcommand)]
 pub enum InitTarget {
-    /// Generate a Kubernetes sidecar manifest for AgentWall proxy
+    /// Generate a Kubernetes sidecar manifest for AgentControl proxy
     Sidecar {
         /// Upstream MCP server URL
         #[arg(long, default_value = "http://mcp-server:3000")]
@@ -587,7 +587,7 @@ pub enum IdentityCommands {
         deny: bool,
 
         /// Policy file to update (optional)
-        #[arg(long, default_value = "agentwall-policy.yaml")]
+        #[arg(long, default_value = "agentcontrol-policy.yaml")]
         policy: String,
     },
 
@@ -667,7 +667,7 @@ pub enum ComplianceCommands {
 
 #[derive(Subcommand)]
 pub enum ServiceCliAction {
-    /// Install and register AgentWall as a persistent OS background service
+    /// Install and register AgentControl as a persistent OS background service
     Install {
         /// Control Hub API URL
         #[arg(
@@ -702,31 +702,31 @@ pub enum ServiceCliAction {
 #[derive(clap::Args, Debug, Clone)]
 pub struct StartArgs {
     /// YAML policy file path
-    #[arg(long, env = "AGENTWALL_POLICY_PATH")]
+    #[arg(long, env = "AGENTCONTROL_POLICY_PATH")]
     pub policy: Option<String>,
 
     /// Gateway listen address
-    #[arg(long, env = "AGENTWALL_LISTEN", default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "AGENTCONTROL_LISTEN", default_value = "127.0.0.1:8080")]
     pub listen: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
+    #[arg(long, env = "AGENTCONTROL_LOG_PATH", default_value = "~/.agentcontrol/audit.jsonl")]
     pub log_path: String,
 
     /// Upstream MCP server URL
     #[arg(
         long,
-        env = "AGENTWALL_MCP_URL",
+        env = "AGENTCONTROL_MCP_URL",
         default_value = "http://127.0.0.1:3000"
     )]
     pub mcp_url: String,
 
     /// Agent PID (ignored in v6.1 — process kill is removed)
-    #[arg(long, env = "AGENTWALL_AGENT_PID", hide = true)]
+    #[arg(long, env = "AGENTCONTROL_AGENT_PID", hide = true)]
     pub agent_pid: Option<u32>,
 
     /// Read agent PID from file (ignored in v6.1 — process kill is removed)
-    #[arg(long, env = "AGENTWALL_AGENT_PID_FILE", hide = true)]
+    #[arg(long, env = "AGENTCONTROL_AGENT_PID_FILE", hide = true)]
     pub agent_pid_file: Option<String>,
 
     /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
@@ -738,7 +738,7 @@ pub struct StartArgs {
     pub log_max_bytes: u64,
 
     /// Dry-run mode: log violations but allow calls
-    #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
+    #[arg(long, env = "AGENTCONTROL_DRY_RUN", default_value_t = false)]
     pub dry_run: bool,
 
     /// Max tool calls per second (overrides policy)
@@ -746,11 +746,11 @@ pub struct StartArgs {
     pub rate_limit: Option<u32>,
 
     /// OIDC issuer URL for identity binding. Required for enterprise deployments.
-    #[arg(long, env = "AGENTWALL_OIDC_ISSUER")]
+    #[arg(long, env = "AGENTCONTROL_OIDC_ISSUER")]
     pub oidc_issuer: Option<String>,
 
     /// Write session report on shutdown
-    #[arg(long, env = "AGENTWALL_REPORT_PATH")]
+    #[arg(long, env = "AGENTCONTROL_REPORT_PATH")]
     pub report_path: Option<String>,
 
     /// Enable balanced security profile
@@ -774,47 +774,47 @@ pub struct StartArgs {
     pub max_scan_bytes: usize,
 
     /// SIEM backend to export audit events to
-    #[arg(long, env = "AGENTWALL_SIEM_BACKEND", default_value = "local")]
+    #[arg(long, env = "AGENTCONTROL_SIEM_BACKEND", default_value = "local")]
     pub siem_backend: String,
 
     /// SIEM ingestion endpoint URL
-    #[arg(long, env = "AGENTWALL_SIEM_ENDPOINT", default_value = "")]
+    #[arg(long, env = "AGENTCONTROL_SIEM_ENDPOINT", default_value = "")]
     pub siem_endpoint: String,
 
     /// SIEM authentication token
-    #[arg(long, env = "AGENTWALL_SIEM_TOKEN", default_value = "")]
+    #[arg(long, env = "AGENTCONTROL_SIEM_TOKEN", default_value = "")]
     pub siem_token: String,
 
     /// SIEM export per-request timeout in seconds (default: 2)
-    #[arg(long, env = "AGENTWALL_SIEM_TIMEOUT", default_value_t = 2)]
+    #[arg(long, env = "AGENTCONTROL_SIEM_TIMEOUT", default_value_t = 2)]
     pub siem_timeout_secs: u64,
 
     /// Include raw tool call parameters in the audit log
-    #[arg(long, env = "AGENTWALL_INCLUDE_PARAMS", default_value_t = false)]
+    #[arg(long, env = "AGENTCONTROL_INCLUDE_PARAMS", default_value_t = false)]
     pub include_params: bool,
 
     /// Enable shadow mode: observe all traffic without enforcement
-    #[arg(long, env = "AGENTWALL_SHADOW_MODE", default_value_t = false)]
+    #[arg(long, env = "AGENTCONTROL_SHADOW_MODE", default_value_t = false)]
     pub shadow_mode: bool,
 
     /// Upgrade credential scope mismatches from WARN to DENY
     #[arg(
         long,
-        env = "AGENTWALL_STRICT_CREDENTIAL_SCOPE",
+        env = "AGENTCONTROL_STRICT_CREDENTIAL_SCOPE",
         default_value_t = false
     )]
     pub strict_credential_scope: bool,
 
     /// TLS certificate chain PEM file for HTTPS listener
-    #[arg(long, env = "AGENTWALL_TLS_CERT")]
+    #[arg(long, env = "AGENTCONTROL_TLS_CERT")]
     pub tls_cert: Option<String>,
 
     /// TLS private key PEM file for HTTPS listener
-    #[arg(long, env = "AGENTWALL_TLS_KEY")]
+    #[arg(long, env = "AGENTCONTROL_TLS_KEY")]
     pub tls_key: Option<String>,
 
     /// Run in centralized mode: binds to 0.0.0.0 by default, enables Hub credential management.
-    #[arg(long, env = "AGENTWALL_CENTRALIZED", default_value_t = false)]
+    #[arg(long, env = "AGENTCONTROL_CENTRALIZED", default_value_t = false)]
     pub centralized: bool,
 }
 
@@ -823,7 +823,7 @@ impl StartArgs {
         Self {
             policy: None,
             listen: "127.0.0.1:8080".to_string(),
-            log_path: "~/.agentwall/audit.jsonl".to_string(),
+            log_path: "~/.agentcontrol/audit.jsonl".to_string(),
             mcp_url: "http://127.0.0.1:3000".to_string(),
             agent_pid: None,
             agent_pid_file: None,
@@ -871,7 +871,7 @@ pub struct WrapArgs {
     pub policy: Option<String>,
 
     /// Dry-run mode: log violations but allow calls
-    #[arg(long, env = "AGENTWALL_DRY_RUN", default_value_t = false)]
+    #[arg(long, env = "AGENTCONTROL_DRY_RUN", default_value_t = false)]
     pub dry_run: bool,
 
     /// Kill mode [DEPRECATED in v6.1 — only 'connection' is supported]
@@ -879,7 +879,7 @@ pub struct WrapArgs {
     pub kill_mode: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTWALL_LOG_PATH", default_value = "~/.agentwall/audit.jsonl")]
+    #[arg(long, env = "AGENTCONTROL_LOG_PATH", default_value = "~/.agentcontrol/audit.jsonl")]
     pub log_path: String,
 
     /// Enable balanced security profile

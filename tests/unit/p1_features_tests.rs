@@ -1,6 +1,6 @@
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::proxy::handler::RateLimiter;
-use agentwall::report::generate_report;
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::proxy::handler::RateLimiter;
+use agentcontrol::report::generate_report;
 use std::time::Duration;
 
 #[test]

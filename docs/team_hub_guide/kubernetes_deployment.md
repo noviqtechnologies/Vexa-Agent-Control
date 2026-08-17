@@ -1,12 +1,12 @@
 # Team Control Hub — Kubernetes Deployment Guide
 
-> **Target Audience:** DevOps Engineers, Platform Security Teams, and Infrastructure Leads deploying AgentWall Team Control Hub in production Kubernetes clusters across **Linux**, **macOS**, and **Windows**.
+> **Target Audience:** DevOps Engineers, Platform Security Teams, and Infrastructure Leads deploying Agent Control Team Control Hub in production Kubernetes clusters across **Linux**, **macOS**, and **Windows**.
 
 ---
 
 ## Overview
 
-The **Kubernetes Deployment** guide covers high-availability, multi-replica production deployments of the **AgentWall Team Control Hub** using Helm (`./chart`), Custom Resource Definitions (`AgentWallPolicy`), and the Kubernetes Operator (`agentwall-operator`).
+The **Kubernetes Deployment** guide covers high-availability, multi-replica production deployments of the **Agent Control Team Control Hub** using Helm (`./chart`), Custom Resource Definitions (`Agent ControlPolicy`), and the Kubernetes Operator (`agentcontrol-operator`).
 
 For Local Development and Docker testing, see → [Local Development Guide](local_development.md).  
 For Enterprise Fleet security options (pure-Rust TLS, CMK SIEM encryption, HAR runtime), see → [Enterprise Fleet User Guide](../enterprise_guide.md).
@@ -24,7 +24,7 @@ Before starting, ensure your cluster and deployment client environment meet the 
 - **Dynamic Storage Provisioner** (Persistent Volume provider) if enabling PostgreSQL for the SaaS Dashboard (`dashboardDb.enabled=true`).
 
 ### Tooling Requirements Across All Operating Systems
-- **Git v2.38+** — required to clone the AgentWall repository from GitHub.
+- **Git v2.38+** — required to clone the Agent Control repository from GitHub.
 - **Kubectl v1.24+** — configured with cluster-admin access to your target Kubernetes context.
 - **Helm v3.10+** — installed on your client machine.
 
@@ -52,54 +52,54 @@ Before starting, ensure your cluster and deployment client environment meet the 
 
 ### Step 1: Clone Repository & Create System Namespace
 
-Clone the AgentWall repository to obtain the Helm chart directory (`./chart`) and navigate to the project root:
+Clone the Agent Control repository to obtain the Helm chart directory (`./chart`) and navigate to the project root:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
-kubectl create namespace agentwall-system
+kubectl create namespace agentcontrol-system
 ```
 
 #### Windows (PowerShell):
 ```powershell
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
-kubectl create namespace agentwall-system
+kubectl create namespace agentcontrol-system
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
-kubectl create namespace agentwall-system
+kubectl create namespace agentcontrol-system
 ```
 
 ---
 
 ### Step 2: Configure Ingress TLS Secrets
 
-Create a Kubernetes TLS secret in the `agentwall-system` namespace containing your domain's TLS certificate and private key:
+Create a Kubernetes TLS secret in the `agentcontrol-system` namespace containing your domain's TLS certificate and private key:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-kubectl create secret tls agentwall-gateway-tls \
+kubectl create secret tls agentcontrol-gateway-tls \
   --cert=path/to/tls.crt \
   --key=path/to/tls.key \
-  -n agentwall-system
+  -n agentcontrol-system
 ```
 
 #### Windows (PowerShell):
 ```powershell
-kubectl create secret tls agentwall-gateway-tls `
+kubectl create secret tls agentcontrol-gateway-tls `
   --cert=path/to/tls.crt `
   --key=path/to/tls.key `
-  -n agentwall-system
+  -n agentcontrol-system
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-kubectl create secret tls agentwall-gateway-tls --cert=path/to/tls.crt --key=path/to/tls.key -n agentwall-system
+kubectl create secret tls agentcontrol-gateway-tls --cert=path/to/tls.crt --key=path/to/tls.key -n agentcontrol-system
 ```
 
 > [!TIP]
@@ -109,59 +109,59 @@ kubectl create secret tls agentwall-gateway-tls --cert=path/to/tls.crt --key=pat
 
 ### Step 3: Deploy Full Stack via Helm
 
-Deploy the HA AgentWall gateway cluster, operator, Control Hub API, PostgreSQL database, and Web Console using Helm:
+Deploy the HA Agent Control gateway cluster, operator, Control Hub API, PostgreSQL database, and Web Console using Helm:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
+helm install agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --create-namespace \
   --set gateway.tls.enabled=true \
-  --set gateway.tls.secretName=agentwall-gateway-tls \
+  --set gateway.tls.secretName=agentcontrol-gateway-tls \
   --set gateway.replicas=3 \
   --set gateway.mcpUrl="http://your-mcp-service:3000" \
   --set dashboardApi.enabled=true \
   --set dashboardDb.enabled=true \
   --set dashboardFrontend.enabled=true \
   --set dashboardApi.oidc.issuer=https://your-idp.example.com \
-  --set dashboardApi.oidc.clientId=agentwall-dashboard
+  --set dashboardApi.oidc.clientId=agentcontrol-dashboard
 ```
 
 #### Windows (PowerShell):
 ```powershell
-helm install agentwall .\chart `
-  --namespace agentwall-system `
+helm install agentcontrol .\chart `
+  --namespace agentcontrol-system `
   --create-namespace `
   --set gateway.tls.enabled=true `
-  --set gateway.tls.secretName=agentwall-gateway-tls `
+  --set gateway.tls.secretName=agentcontrol-gateway-tls `
   --set gateway.replicas=3 `
   --set gateway.mcpUrl="http://your-mcp-service:3000" `
   --set dashboardApi.enabled=true `
   --set dashboardDb.enabled=true `
   --set dashboardFrontend.enabled=true `
   --set dashboardApi.oidc.issuer=https://your-idp.example.com `
-  --set dashboardApi.oidc.clientId=agentwall-dashboard
+  --set dashboardApi.oidc.clientId=agentcontrol-dashboard
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-helm install agentwall .\chart --namespace agentwall-system --create-namespace --set gateway.tls.enabled=true --set gateway.tls.secretName=agentwall-gateway-tls --set gateway.replicas=3 --set gateway.mcpUrl="http://your-mcp-service:3000" --set dashboardApi.enabled=true --set dashboardDb.enabled=true --set dashboardFrontend.enabled=true --set dashboardApi.oidc.issuer=https://your-idp.example.com --set dashboardApi.oidc.clientId=agentwall-dashboard
+helm install agentcontrol .\chart --namespace agentcontrol-system --create-namespace --set gateway.tls.enabled=true --set gateway.tls.secretName=agentcontrol-gateway-tls --set gateway.replicas=3 --set gateway.mcpUrl="http://your-mcp-service:3000" --set dashboardApi.enabled=true --set dashboardDb.enabled=true --set dashboardFrontend.enabled=true --set dashboardApi.oidc.issuer=https://your-idp.example.com --set dashboardApi.oidc.clientId=agentcontrol-dashboard
 ```
 
 ---
 
-### Step 4: Apply `AgentWallPolicy` CRDs & Operator Reconciliation
+### Step 4: Apply `Agent ControlPolicy` CRDs & Operator Reconciliation
 
-The Helm chart registers the `AgentWallPolicy` Custom Resource Definition (CRD) and deploys `agentwall-operator`.
+The Helm chart registers the `Agent ControlPolicy` Custom Resource Definition (CRD) and deploys `agentcontrol-operator`.
 
 Create a custom policy CR manifest (`policy.yaml`):
 
 ```yaml
-apiVersion: agentwall.io/v1alpha1
-kind: AgentWallPolicy
+apiVersion: agentcontrol.io/v1alpha1
+kind: Agent ControlPolicy
 metadata:
   name: team-production-policy
-  namespace: agentwall-system
+  namespace: agentcontrol-system
 spec:
   policy: |
     version: "2.0"
@@ -180,9 +180,9 @@ spec:
     enforced: true
     mcpPort: 8080
     agentPodSelector:
-      agentwall.io/agent: "true"
+      agentcontrol.io/agent: "true"
     gatewayPodSelector:
-      agentwall.io/gateway: "true"
+      agentcontrol.io/gateway: "true"
 ```
 
 Apply the policy manifest to the cluster:
@@ -198,7 +198,7 @@ kubectl apply -f policy.yaml
 ```
 
 > [!NOTE]
-> **Operator Egress NetworkPolicy Enforcement:** When `spec.networkPolicy.enforced: true` is configured, label your AI agent application pods with `agentwall.io/agent=true`. The `agentwall-operator` will automatically generate a Kubernetes `NetworkPolicy` restricting agent pod egress strictly to the gateway on port `8080` (+DNS).
+> **Operator Egress NetworkPolicy Enforcement:** When `spec.networkPolicy.enforced: true` is configured, label your AI agent application pods with `agentcontrol.io/agent=true`. The `agentcontrol-operator` will automatically generate a Kubernetes `NetworkPolicy` restricting agent pod egress strictly to the gateway on port `8080` (+DNS).
 
 ---
 
@@ -208,23 +208,23 @@ After completing the deployment, perform the following verification steps to ens
 
 ### Step 1: Verify Pod & Deployment Status
 
-Check that all pods in `agentwall-system` are in the `Running` state:
+Check that all pods in `agentcontrol-system` are in the `Running` state:
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-kubectl get pods -n agentwall-system
+kubectl get pods -n agentcontrol-system
 ```
 
 **Expected Output:**
 ```
 NAME                                          READY   STATUS    RESTARTS   AGE
-agentwall-dashboard-api-7b89799-x2k9s         1/1     Running   0          2m
-agentwall-dashboard-db-0                      1/1     Running   0          2m
-agentwall-dashboard-frontend-5b4d45-98k21     1/1     Running   0          2m
-agentwall-gateway-69d58d9766-4k1lm            1/1     Running   0          2m
-agentwall-gateway-69d58d9766-m29pq            1/1     Running   0          2m
-agentwall-gateway-69d58d9766-z88np            1/1     Running   0          2m
-agentwall-operator-8687d46c4f-l8s7b           1/1     Running   0          2m
+agentcontrol-dashboard-api-7b89799-x2k9s         1/1     Running   0          2m
+agentcontrol-dashboard-db-0                      1/1     Running   0          2m
+agentcontrol-dashboard-frontend-5b4d45-98k21     1/1     Running   0          2m
+agentcontrol-gateway-69d58d9766-4k1lm            1/1     Running   0          2m
+agentcontrol-gateway-69d58d9766-m29pq            1/1     Running   0          2m
+agentcontrol-gateway-69d58d9766-z88np            1/1     Running   0          2m
+agentcontrol-operator-8687d46c4f-l8s7b           1/1     Running   0          2m
 ```
 
 ---
@@ -236,7 +236,7 @@ Forward the gateway service port locally to test the `/healthz` endpoint:
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # In Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 # In Terminal 2:
 curl -i http://127.0.0.1:8080/healthz
@@ -245,7 +245,7 @@ curl -i http://127.0.0.1:8080/healthz
 #### Windows (PowerShell):
 ```powershell
 # In Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 # In Terminal 2:
 curl.exe -i http://127.0.0.1:8080/healthz
@@ -254,7 +254,7 @@ curl.exe -i http://127.0.0.1:8080/healthz
 #### Windows (Command Prompt - CMD):
 ```cmd
 :: In Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 :: In Terminal 2:
 curl.exe -i http://127.0.0.1:8080/healthz
@@ -271,10 +271,10 @@ Inspect the enforcement logs from the gateway cluster or operator:
 #### Linux / macOS / Windows (All Shells):
 ```bash
 # Gateway deployment logs
-kubectl logs -n agentwall-system deploy/agentwall-gateway --tail=50 -f
+kubectl logs -n agentcontrol-system deploy/agentcontrol-gateway --tail=50 -f
 
 # Operator logs
-kubectl logs -n agentwall-system deploy/agentwall-operator --tail=50 -f
+kubectl logs -n agentcontrol-system deploy/agentcontrol-operator --tail=50 -f
 ```
 
 ---
@@ -287,12 +287,12 @@ To update Helm release configurations or upgrade component image tags:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-helm upgrade agentwall ./chart -n agentwall-system
+helm upgrade agentcontrol ./chart -n agentcontrol-system
 ```
 
 #### Windows (PowerShell / CMD):
 ```powershell
-helm upgrade agentwall .\chart -n agentwall-system
+helm upgrade agentcontrol .\chart -n agentcontrol-system
 ```
 
 *When `gateway.replicas >= 2`, Kubernetes performs rolling updates with a 5-second `preStop` request drain to preserve traffic continuity.*
@@ -307,55 +307,55 @@ If you update custom policies directly on disk or in ConfigMaps outside the SSE 
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-kubectl exec -n agentwall-system deploy/agentwall-gateway -- \
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- \
   wget -qO- --post-data '' http://localhost:8080/reload
 ```
 
 #### Windows (PowerShell):
 ```powershell
-kubectl exec -n agentwall-system deploy/agentwall-gateway -- `
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- `
   wget -qO- --post-data '' http://localhost:8080/reload
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-kubectl exec -n agentwall-system deploy/agentwall-gateway -- wget -qO- --post-data '' http://localhost:8080/reload
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- wget -qO- --post-data '' http://localhost:8080/reload
 ```
 
 #### Method B: Process SIGHUP Signal
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-POD=$(kubectl get pod -n agentwall-system -l app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n agentwall-system $POD -- kill -HUP 1
+POD=$(kubectl get pod -n agentcontrol-system -l app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n agentcontrol-system $POD -- kill -HUP 1
 ```
 
 #### Windows (PowerShell):
 ```powershell
-$POD = (kubectl get pod -n agentwall-system -l app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n agentwall-system $POD -- kill -HUP 1
+$POD = (kubectl get pod -n agentcontrol-system -l app.kubernetes.io/component=gateway -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n agentcontrol-system $POD -- kill -HUP 1
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-kubectl exec -n agentwall-system deploy/agentwall-gateway -- kill -HUP 1
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- kill -HUP 1
 ```
 
 ---
 
 ### Uninstalling the Deployment
 
-To cleanly remove all AgentWall resources and Helm releases:
+To cleanly remove all Agent Control resources and Helm releases:
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-helm uninstall agentwall -n agentwall-system
+helm uninstall agentcontrol -n agentcontrol-system
 ```
 
 *Note: CRDs are retained intentionally on Helm uninstall (`helm.sh/resource-policy: keep`) to protect active policy data. To delete CRDs explicitly:*
 
 ```bash
-kubectl delete crd agentwallpolicies.agentwall.io
+kubectl delete crd agentcontrolpolicies.agentcontrol.io
 ```
 
 ---

@@ -70,20 +70,27 @@ pub struct DbManager {
 }
 
 impl DbManager {
-    /// Initialise the manager, opening/creating the DB file under $HOME/.agentwall/events.db.
+    /// Initialise the manager, opening/creating the DB file under $HOME/.agentcontrol/events.db.
     /// Spawns a background thread that processes commands.
     pub fn init() -> Self {
         // Resolve path
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        let db_path = PathBuf::from(&home_dir)
-            .join(".agentwall")
-            .join("events.db");
-        // Ensure directory exists
-        if let Some(parent) = db_path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).expect("Failed to create .agentwall directory");
+        let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
+        let old_dir = PathBuf::from(&home_dir).join(".agentwall");
+
+        if !new_dir.exists() {
+            let _ = fs::create_dir_all(&new_dir);
+            // Auto-migrate legacy database and credentials if they exist
+            if old_dir.exists() {
+                let old_db = old_dir.join("events.db");
+                let new_db = new_dir.join("events.db");
+                if old_db.exists() && !new_db.exists() {
+                    let _ = fs::copy(&old_db, &new_db);
+                }
             }
         }
+
+        let db_path = new_dir.join("events.db");
         // Open connection (will create file if missing)
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB");
         // Ensure schema exists

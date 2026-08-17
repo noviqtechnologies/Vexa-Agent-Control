@@ -45,7 +45,7 @@ impl DeviceIdentity {
             }
         }
 
-        // 2. Try loading from fallback file ~/.agentwall/device_identity.key (and other Windows profiles if Session 0)
+        // 2. Try loading from fallback file ~/.agentcontrol/device_identity.key (and other Windows profiles if Session 0)
         let mut candidate_paths = Vec::new();
         if let Ok(key_path) = get_key_filepath() {
             candidate_paths.push(key_path);
@@ -53,7 +53,7 @@ impl DeviceIdentity {
         #[cfg(windows)]
         {
             for profile in crate::service::windows_profiles::enumerate_user_profiles() {
-                let p = profile.join(".agentwall").join("device_identity.key");
+                let p = profile.join(".agentcontrol").join("device_identity.key");
                 if !candidate_paths.contains(&p) {
                     candidate_paths.push(p);
                 }
@@ -145,7 +145,7 @@ fn get_hostname() -> String {
 
 fn get_key_filepath() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
-    let dir = home.join(".agentwall");
+    let dir = home.join(".agentcontrol");
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     }
@@ -182,19 +182,19 @@ fn save_fallback_file(path: &PathBuf, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Persist signed Device JWT token returned by Control Hub to ~/.agentwall/device_token
+/// Persist signed Device JWT token returned by Control Hub to ~/.agentcontrol/device_token
 pub fn save_device_token(token: &str) -> Result<(), String> {
     let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
-    let dir = home.join(".agentwall");
+    let dir = home.join(".agentcontrol");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let token_path = dir.join("device_token");
     fs::write(&token_path, token).map_err(|e| format!("cannot write device token: {}", e))
 }
 
-/// Load saved Device JWT token from ~/.agentwall/device_token (with Windows Session 0 fallback)
+/// Load saved Device JWT token from ~/.agentcontrol/device_token (with Windows Session 0 fallback)
 pub fn load_device_token() -> Option<String> {
     if let Some(home) = dirs::home_dir() {
-        let token_path = home.join(".agentwall").join("device_token");
+        let token_path = home.join(".agentcontrol").join("device_token");
         if let Ok(content) = fs::read_to_string(&token_path) {
             let trimmed = content.trim();
             if !trimmed.is_empty() {
@@ -206,7 +206,7 @@ pub fn load_device_token() -> Option<String> {
     #[cfg(windows)]
     {
         for profile in crate::service::windows_profiles::enumerate_user_profiles() {
-            let token_path = profile.join(".agentwall").join("device_token");
+            let token_path = profile.join(".agentcontrol").join("device_token");
             if let Ok(content) = fs::read_to_string(&token_path) {
                 let trimmed = content.trim();
                 if !trimmed.is_empty() {
@@ -319,7 +319,7 @@ struct CertBlock {
 pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     if token.is_empty() {
         eprintln!(
-            "{} Enrollment token is required (--token or AGENTWALL_ENROLLMENT_TOKEN)",
+            "{} Enrollment token is required (--token or AGENTCONTROL_ENROLLMENT_TOKEN)",
             "✖".red()
         );
         return 1;
@@ -338,8 +338,8 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     );
 
     let home_dir = match dirs::home_dir() {
-        Some(h) => h.join(".agentwall"),
-        None => PathBuf::from(".agentwall"),
+        Some(h) => h.join(".agentcontrol"),
+        None => PathBuf::from(".agentcontrol"),
     };
     let key_mgr = IdentityKeyManager::new(&home_dir);
 

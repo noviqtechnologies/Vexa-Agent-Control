@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type EnrollmentHandler struct {
@@ -36,7 +36,7 @@ type EnrollRequest struct {
 	OSArch           string `json:"os_arch"`
 	OSFamily         string `json:"os_family"`
 	PublicKey        string `json:"public_key"`
-	AgentWallVersion string `json:"agentwall_version"`
+	AgentControlVersion string `json:"agentcontrol_version"`
 }
 
 type EnrollResponse struct {
@@ -71,8 +71,8 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 	if req.OSArch == "" {
 		req.OSArch = "unknown"
 	}
-	if req.AgentWallVersion == "" {
-		req.AgentWallVersion = "1.0.23"
+	if req.AgentControlVersion == "" {
+		req.AgentControlVersion = "1.0.23"
 	}
 
 	dev := model.Device{
@@ -81,7 +81,7 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 		OSArch:            req.OSArch,
 		OSFamily:          req.OSFamily,
 		PublicKey:         req.PublicKey,
-		AgentWallVersion:  req.AgentWallVersion,
+		AgentControlVersion:  req.AgentControlVersion,
 		MCPServersTotal:   0,
 		MCPServersWrapped: 0,
 	}
@@ -100,7 +100,7 @@ func (h *EnrollmentHandler) PostEnroll(w http.ResponseWriter, r *http.Request) {
 		"os_family": req.OSFamily,
 		"exp":       expiresAt.Unix(),
 		"iat":       time.Now().Unix(),
-		"iss":       "agentwall-hub",
+		"iss":       "agentcontrol-hub",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

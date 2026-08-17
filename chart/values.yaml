@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# AgentWall Helm Chart Values
+# Agent Control Helm Chart Values
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Every value has a comment explaining what it does and why the default is
@@ -13,11 +13,11 @@ namespace:
   # existing namespace or a namespace controller (e.g. Argo project).
   create: true
   # Name of the namespace to create/use. Referenced by RBAC bindings too.
-  name: agentwall-system
+  name: agentcontrol-system
 
 # ─── CRDs ──────────────────────────────────────────────────────────────────
 crds:
-  # Install the AgentWallPolicy CRD as part of this chart. Set to false if
+  # Install the Agent ControlPolicy CRD as part of this chart. Set to false if
   # you install CRDs out-of-band (recommended for prod: install once cluster
   # wide via a separate `helm install --set crds.install=true` step, then
   # deploy the app chart with crds.install=false).
@@ -27,7 +27,7 @@ crds:
 operator:
   # COMMON. Container image for the operator.
   image:
-    repository: noviqtech/agentwall-operator
+    repository: noviqtech/agentcontrol-operator
     tag: ""   # defaults to Chart.appVersion — override to pin an exact digest
     pullPolicy: IfNotPresent
 
@@ -77,7 +77,7 @@ gateway:
 
   # COMMON. Container image for the gateway.
   image:
-    repository: noviqtech/agentwall
+    repository: noviqtech/agentcontrol
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
 
@@ -136,7 +136,7 @@ gateway:
   oidcIssuer: ""
 
   # Audit log destination. "" means container stdout only. Set a path like
-  # /var/log/agentwall/audit.log with a matching volumeMount to persist.
+  # /var/log/agentcontrol/audit.log with a matching volumeMount to persist.
   logPath: ""
 
   # SIEM export (FR-203). "none" disables. Set to "splunk" or "elastic" to
@@ -197,7 +197,7 @@ gateway:
 dashboardApi:
   enabled: false
   image:
-    repository: noviqtech/agentwall-dashboard-api
+    repository: noviqtech/agentcontrol-dashboard-api
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
   replicas: 1
@@ -234,7 +234,7 @@ dashboardApi:
 dashboardFrontend:
   enabled: false
   image:
-    repository: noviqtech/agentwall-dashboard-frontend
+    repository: noviqtech/agentcontrol-dashboard-frontend
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
   replicas: 1
@@ -300,8 +300,8 @@ dashboardDb:
     capabilities:
       drop: ["ALL"]
 
-# ─── Sample AgentWallPolicy CR ─────────────────────────────────────────────
-# Optional convenience: create an AgentWallPolicy CR as part of the chart
+# ─── Sample Agent ControlPolicy CR ─────────────────────────────────────────────
+# Optional convenience: create an Agent ControlPolicy CR as part of the chart
 # install. Handy for demos; disable in production and manage CRs separately.
 policy:
   create: false

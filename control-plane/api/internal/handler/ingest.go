@@ -5,10 +5,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 )
 
 type IngestHandler struct {

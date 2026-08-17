@@ -5,8 +5,8 @@
 //! They operate directly against the gateway handler and credential scope
 //! validator logic for deterministic, fast CI coverage.
 
-use agentwall::policy::credential_scope::{CredentialScopeResult, CredentialScopeValidator};
-use agentwall::policy::engine::{CompiledPolicy, CompiledTool, EvalResult};
+use agentcontrol::policy::credential_scope::{CredentialScopeResult, CredentialScopeValidator};
+use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool, EvalResult};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -158,7 +158,7 @@ fn test_ac5_8_strict_mode_denies_missing_header() {
     );
     assert!(
         matches!(result, CredentialScopeResult::Insufficient { .. }),
-        "Strict mode must DENY when no X-AgentWall-Credential-Scope header is present"
+        "Strict mode must DENY when no X-Agent Control-Credential-Scope header is present"
     );
 }
 
@@ -211,7 +211,7 @@ tools:
         required: true
 "#;
 
-    let policy_file: agentwall::policy::schema::PolicyFile =
+    let policy_file: agentcontrol::policy::schema::PolicyFile =
         serde_yaml::from_str(yaml).expect("v2.0 policy YAML should parse without error");
 
     let tools = policy_file.tools.expect("tools must be present");

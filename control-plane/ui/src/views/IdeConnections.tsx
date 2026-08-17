@@ -2,64 +2,64 @@ const IDE_INTEGRATIONS = [
   {
     id: 'claude',
     name: 'Claude Desktop',
-    wrapCmd: 'agentwall wrap claude',
-    unwrapCmd: 'agentwall unwrap claude',
+    wrapCmd: 'agentcontrol wrap claude',
+    unwrapCmd: 'agentcontrol unwrap claude',
     description: 'Wraps Claude Desktop to route all MCP traffic through Agent Control.',
   },
   {
     id: 'cursor',
     name: 'Cursor',
-    wrapCmd: 'agentwall wrap cursor',
-    unwrapCmd: 'agentwall unwrap cursor',
+    wrapCmd: 'agentcontrol wrap cursor',
+    unwrapCmd: 'agentcontrol unwrap cursor',
     description: 'Patches Cursor IDE configuration to use Agent Control as an MCP proxy.',
   },
   {
     id: 'codex',
     name: 'ChatGPT Codex',
-    wrapCmd: 'agentwall wrap codex',
-    unwrapCmd: 'agentwall unwrap codex',
+    wrapCmd: 'agentcontrol wrap codex',
+    unwrapCmd: 'agentcontrol unwrap codex',
     description: 'Intercepts ChatGPT Codex agent environment configuration.',
   },
   {
     id: 'vscode',
     name: 'VS Code',
-    wrapCmd: 'agentwall wrap vscode',
-    unwrapCmd: 'agentwall unwrap vscode',
+    wrapCmd: 'agentcontrol wrap vscode',
+    unwrapCmd: 'agentcontrol unwrap vscode',
     description: 'Configures VS Code extensions to route agent traffic through the proxy.',
   },
   {
     id: 'jetbrains',
     name: 'JetBrains IDEs',
-    wrapCmd: 'agentwall wrap jetbrains',
-    unwrapCmd: 'agentwall unwrap jetbrains',
+    wrapCmd: 'agentcontrol wrap jetbrains',
+    unwrapCmd: 'agentcontrol unwrap jetbrains',
     description: 'Supports IntelliJ, PyCharm, GoLand, and other JetBrains products.',
   },
   {
     id: 'zed',
     name: 'Zed Editor',
-    wrapCmd: 'agentwall wrap zed',
-    unwrapCmd: 'agentwall unwrap zed',
+    wrapCmd: 'agentcontrol wrap zed',
+    unwrapCmd: 'agentcontrol unwrap zed',
     description: 'Patches Zed\'s agent configuration to use Agent Control.',
   },
   {
     id: 'cline',
     name: 'Cline',
-    wrapCmd: 'agentwall wrap cline',
-    unwrapCmd: 'agentwall unwrap cline',
+    wrapCmd: 'agentcontrol wrap cline',
+    unwrapCmd: 'agentcontrol unwrap cline',
     description: 'Wraps Cline (AI coding assistant) to intercept MCP tool calls.',
   },
   {
     id: 'opencode',
     name: 'OpenCode',
-    wrapCmd: 'agentwall wrap opencode',
-    unwrapCmd: 'agentwall unwrap opencode',
+    wrapCmd: 'agentcontrol wrap opencode',
+    unwrapCmd: 'agentcontrol unwrap opencode',
     description: 'Routes OpenCode agent traffic through the Agent Control proxy.',
   },
   {
     id: 'antigravity',
     name: 'Antigravity',
-    wrapCmd: 'agentwall wrap antigravity',
-    unwrapCmd: 'agentwall unwrap antigravity',
+    wrapCmd: 'agentcontrol wrap antigravity',
+    unwrapCmd: 'agentcontrol unwrap antigravity',
     description: 'Integrates with the Antigravity IDE for full egress observation.',
   },
 ]
@@ -100,7 +100,7 @@ export default function IdeConnections() {
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-            Start Agent Control in shadow mode first (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>agentwall dev</code>), then run individual target wrap commands or run bulk sweep: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--success)' }}>agentwall wrap --all</code>.
+            Start Agent Control in shadow mode first (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>agentcontrol dev</code>), then run individual target wrap commands or run bulk sweep: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--success)' }}>agentcontrol wrap --all</code>.
           </p>
         </div>
       </div>
@@ -160,16 +160,16 @@ export default function IdeConnections() {
               Py
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Python Client SDK (<code>agentwall</code>)</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Python Client SDK (<code>agentcontrol</code>)</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>MIT-licensed lightweight proxy client with <code>@client.governed</code> decorator</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
-            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#38bdf8' }}>pip install agentwall</code>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#38bdf8' }}>pip install agentcontrol</code>
             <button
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '2px 6px' }}
-              onClick={() => navigator.clipboard?.writeText('pip install agentwall')}
+              onClick={() => navigator.clipboard?.writeText('pip install agentcontrol')}
               title="Copy"
             >
               Copy
@@ -177,7 +177,7 @@ export default function IdeConnections() {
           </div>
 
           <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '12px', fontSize: 12, fontFamily: 'var(--font-mono)', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-            <span style={{ color: '#ec4899' }}>from</span> agentwall <span style={{ color: '#ec4899' }}>import</span> AgentControlClient, AgentWallDenied<br/><br/>
+            <span style={{ color: '#ec4899' }}>from</span> agentwall <span style={{ color: '#ec4899' }}>import</span> AgentControlClient, AgentControlDenied<br/><br/>
             client = AgentControlClient()  <span style={{ color: 'var(--text-muted)' }}># Connects to 127.0.0.1:8080</span><br/><br/>
             <span style={{ color: '#38bdf8' }}>@client.governed</span><br/>
             <span style={{ color: '#ec4899' }}>def</span> <span style={{ color: '#22c55e' }}>execute_query</span>(sql: <span style={{ color: '#eab308' }}>str</span>):<br/>
@@ -192,16 +192,16 @@ export default function IdeConnections() {
               TS
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>TypeScript Client SDK (<code>@vexa/agentwall</code>)</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>TypeScript Client SDK (<code>@vexa/agentcontrol</code>)</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Zero-dependency TypeScript/Node.js client for AI agent pipelines</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
-            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#60a5fa' }}>npm install @vexa/agentwall</code>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#60a5fa' }}>npm install @vexa/agentcontrol</code>
             <button
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '2px 6px' }}
-              onClick={() => navigator.clipboard?.writeText('npm install @vexa/agentwall')}
+              onClick={() => navigator.clipboard?.writeText('npm install @vexa/agentcontrol')}
               title="Copy"
             >
               Copy
@@ -209,7 +209,7 @@ export default function IdeConnections() {
           </div>
 
           <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '12px', fontSize: 12, fontFamily: 'var(--font-mono)', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-            <span style={{ color: '#ec4899' }}>import</span> &#123; AgentControlClient &#125; <span style={{ color: '#ec4899' }}>from</span> <span style={{ color: '#a78bfa' }}>"@vexa/agentwall"</span>;<br/><br/>
+            <span style={{ color: '#ec4899' }}>import</span> &#123; AgentControlClient &#125; <span style={{ color: '#ec4899' }}>from</span> <span style={{ color: '#a78bfa' }}>"@vexa/agentcontrol"</span>;<br/><br/>
             <span style={{ color: '#ec4899' }}>const</span> client = <span style={{ color: '#ec4899' }}>new</span> AgentControlClient();<br/><br/>
             <span style={{ color: '#ec4899' }}>const</span> governedTool = client.governed(<span style={{ color: '#a78bfa' }}>"read_file"</span>, <span style={{ color: '#ec4899' }}>async</span> (args) =&gt; &#123;<br/>
             &nbsp;&nbsp;<span style={{ color: '#ec4899' }}>return</span> fs.readFile(args.path, <span style={{ color: '#a78bfa' }}>"utf-8"</span>);<br/>

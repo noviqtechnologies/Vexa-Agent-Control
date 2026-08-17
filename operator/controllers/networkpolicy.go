@@ -6,7 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	agentwallv1alpha1 "github.com/noviqtechnologies/agentwall/operator/api/v1alpha1"
+	agentcontrolv1alpha1 "github.com/noviqtechnologies/agentcontrol/operator/api/v1alpha1"
 )
 
 // Convention labels and defaults used by generated NetworkPolicies.
@@ -28,34 +28,34 @@ const (
 	// DefaultAgentLabelKey is the label agent pods use to opt into
 	// egress restriction. Combined with DefaultAgentLabelValue, this
 	// forms the default AgentPodSelector.
-	DefaultAgentLabelKey   = "agentwall.io/agent"
+	DefaultAgentLabelKey   = "agentcontrol.io/agent"
 	DefaultAgentLabelValue = "true"
 
 	// DefaultGatewayLabelKey is the label the gateway pod carries.
-	DefaultGatewayLabelKey   = "agentwall.io/gateway"
+	DefaultGatewayLabelKey   = "agentcontrol.io/gateway"
 	DefaultGatewayLabelValue = "true"
 
-	// NetworkPolicyNameSuffix is appended to the AgentWallPolicy name to
+	// NetworkPolicyNameSuffix is appended to the AgentControlPolicy name to
 	// derive the NetworkPolicy name. Keeping this deterministic makes
 	// reconciliation lookups trivial.
-	NetworkPolicyNameSuffix = "-agentwall-egress"
+	NetworkPolicyNameSuffix = "-agentcontrol-egress"
 
 	// ManagedByLabelKey identifies resources owned by the operator.
 	ManagedByLabelKey   = "app.kubernetes.io/managed-by"
-	ManagedByLabelValue = "agentwall-operator"
+	ManagedByLabelValue = "agentcontrol-operator"
 
-	// PolicyRefLabelKey links a generated resource back to its AgentWallPolicy.
-	PolicyRefLabelKey = "agentwall.io/policy"
+	// PolicyRefLabelKey links a generated resource back to its AgentControlPolicy.
+	PolicyRefLabelKey = "agentcontrol.io/policy"
 )
 
 // networkPolicyName returns the deterministic name of the NetworkPolicy
-// generated for a given AgentWallPolicy.
+// generated for a given AgentControlPolicy.
 func networkPolicyName(policyName string) string {
 	return policyName + NetworkPolicyNameSuffix
 }
 
 // buildNetworkPolicy constructs the desired NetworkPolicy for a given
-// AgentWallPolicy. The output is DENY-BY-DEFAULT for egress with two
+// AgentControlPolicy. The output is DENY-BY-DEFAULT for egress with two
 // explicit allow rules:
 //
 //  1. Egress to gateway pods on the MCP port (TCP)
@@ -66,7 +66,7 @@ func networkPolicyName(policyName string) string {
 // declared above. Callers still need to set the owner reference via
 // controller-runtime's SetControllerReference so garbage collection
 // works when the parent CR is deleted.
-func buildNetworkPolicy(policy *agentwallv1alpha1.AgentWallPolicy) *networkingv1.NetworkPolicy {
+func buildNetworkPolicy(policy *agentcontrolv1alpha1.AgentControlPolicy) *networkingv1.NetworkPolicy {
 	agentSelector := policy.Spec.NetworkPolicy.AgentPodSelector
 	if len(agentSelector) == 0 {
 		agentSelector = map[string]string{DefaultAgentLabelKey: DefaultAgentLabelValue}

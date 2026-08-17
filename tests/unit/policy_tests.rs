@@ -9,8 +9,8 @@ use regex::Regex;
 use serde_json::json;
 use std::sync::Arc;
 
-use agentwall::policy::engine::{CompiledParam, CompiledPolicy, CompiledTool, EvalResult};
-use agentwall::policy::schema::ParamType;
+use agentcontrol::policy::engine::{CompiledParam, CompiledPolicy, CompiledTool, EvalResult};
+use agentcontrol::policy::schema::ParamType;
 
 // ---------------------------------------------------------------------------
 // Helpers

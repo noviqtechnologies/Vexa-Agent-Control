@@ -28,7 +28,7 @@ impl PolicyShardResolver {
         map.insert(policy.task_id.clone(), policy);
     }
 
-    /// Resolves policy override by matching headers `X-AgentWall-Task-ID` or `X-AgentWall-Project-ID`.
+    /// Resolves policy override by matching headers `X-AgentControl-Task-ID` or `X-AgentControl-Project-ID`.
     pub fn resolve(&self, task_id: Option<&str>, project_id: Option<&str>) -> Option<TaskPolicy> {
         let map = self.shards.read().unwrap();
         if let Some(tid) = task_id {

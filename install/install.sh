@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[*] AgentWall Installer (Standalone Developer Edition)"
+echo "[*] Vexa Agent Control Installer (Standalone Developer Edition)"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -24,8 +24,8 @@ fi
 echo "[*] Detected OS: $OS"
 echo "[*] Detected Arch: $ARCH"
 
-VERSION="${AGENTWALL_VERSION:-}"
-MODE="${AGENTWALL_MODE:-solo}"
+VERSION="${AGENTCONTROL_VERSION:-}"
+MODE="${AGENTCONTROL_MODE:-solo}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -74,21 +74,21 @@ echo "[*] Target version: $VERSION"
 LOCALBIN="$HOME/.local/bin"
 mkdir -p "$LOCALBIN"
 INSTALLED_VERSION=""
-if command -v agentwall &>/dev/null || [ -f "${LOCALBIN}/agentwall" ]; then
-  INSTALLED_VERSION=$("${LOCALBIN}/agentwall" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+if command -v agentcontrol &>/dev/null || [ -f "${LOCALBIN}/agentcontrol" ]; then
+  INSTALLED_VERSION=$("${LOCALBIN}/agentcontrol" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 fi
 
 if [[ -n "$INSTALLED_VERSION" && "v${INSTALLED_VERSION}" == "$VERSION" ]]; then
   echo ""
-  echo "[✓] AgentWall $VERSION is already installed and up to date."
+  echo "[✓] Vexa Agent Control $VERSION is already installed and up to date."
   exit 0
 elif [[ -n "$INSTALLED_VERSION" ]]; then
   echo "[*] Upgrading v$INSTALLED_VERSION → ${VERSION}..."
 else
-  echo "[*] Fresh install of AgentWall $VERSION..."
+  echo "[*] Fresh install of Vexa Agent Control $VERSION..."
 fi
 
-ASSET_NAME="agentwall-${VERSION}-${OS}-${ARCH}.zip"
+ASSET_NAME="agentcontrol-${VERSION}-${OS}-${ARCH}.zip"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 ASSET_URL="${BASE_URL}/${ASSET_NAME}"
 CHECKSUMS_URL="${BASE_URL}/checksums.txt"
@@ -141,16 +141,16 @@ echo "[✓] Checksum verified successfully."
 echo "[*] Extracting package..."
 unzip -q -o "${TEMPDIR}/asset.zip" -d "$TEMPDIR"
 
-BINARY_PATH=$(find "$TEMPDIR" -type f \( -name "agentwall" -o -name "agentwall.exe" \) | head -1 || true)
+BINARY_PATH=$(find "$TEMPDIR" -type f \( -name "agentcontrol" -o -name "agentcontrol.exe" \) | head -1 || true)
 if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
-  echo "[!] Error: Failed to locate agentwall binary inside the extracted archive."
+  echo "[!] Error: Failed to locate agentcontrol binary inside the extracted archive."
   exit 1
 fi
 
 echo "[*] Installing binary to ${LOCALBIN}/agentcontrol..."
 cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
 chmod +x "${LOCALBIN}/agentcontrol"
-ln -sf "${LOCALBIN}/agentcontrol" "${LOCALBIN}/agentwall" || cp "$BINARY_PATH" "${LOCALBIN}/agentwall"
+ln -sf "${LOCALBIN}/agentcontrol" "${LOCALBIN}/agentcontrol" || cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
 
 QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
 if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
@@ -159,7 +159,7 @@ if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
 fi
 
 echo ""
-echo "[✓] Vexa Agent Control $VERSION successfully installed to ${LOCALBIN}/agentcontrol (and alias agentwall)"
+echo "[✓] Vexa Agent Control $VERSION successfully installed to ${LOCALBIN}/agentcontrol (and alias agentcontrol)"
 echo ""
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then

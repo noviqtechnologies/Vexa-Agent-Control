@@ -1,6 +1,6 @@
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::audit::verifier::{verify_chain_with_secret, VerifyResult};
-use agentwall::report::generate_report;
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::audit::verifier::{verify_chain_with_secret, VerifyResult};
+use agentcontrol::report::generate_report;
 use serde_json::json;
 use std::fs;
 use std::sync::Arc;
@@ -331,8 +331,8 @@ async fn test_siem_export_failure_fallback_logs_locally() {
         session_id: "siem-fail-session".to_string(),
         session_secret: vec![0x33; 32],
         max_bytes: 1024 * 1024,
-        siem_exporter: Some(agentwall::audit::siem::SiemExporter::new(
-            agentwall::audit::siem::SiemBackend::Splunk,
+        siem_exporter: Some(agentcontrol::audit::siem::SiemExporter::new(
+            agentcontrol::audit::siem::SiemBackend::Splunk,
             "http://192.0.2.1:8088/services/collector/event".to_string(),
             "dummy_token".to_string(),
             1, // 1s timeout

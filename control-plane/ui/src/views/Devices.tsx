@@ -303,7 +303,7 @@ export default function Devices() {
         ) : filteredDevices.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
             <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>No enrolled developer workstations found.</p>
-            <p style={{ fontSize: 13, marginTop: 6 }}>Click <strong>"+ Generate Enrollment Token"</strong> above or run <code>agentwall enroll</code> on a workstation to onboard it.</p>
+            <p style={{ fontSize: 13, marginTop: 6 }}>Click <strong>"+ Generate Enrollment Token"</strong> above or run <code>agentcontrol enroll</code> on a workstation to onboard it.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -675,7 +675,7 @@ export default function Devices() {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'unix' ? 'var(--success)' : 'var(--bg-surface-3)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="${generatedToken.token}" AGENTWALL_HUB_URL="${hubUrl}" bash`
+                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="${generatedToken.token}" AGENTCONTROL_HUB_URL="${hubUrl}" bash`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('unix')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -685,7 +685,7 @@ export default function Devices() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '11px', color: '#10b981', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTWALL_TOKEN="{generatedToken.token}" AGENTWALL_HUB_URL="{hubUrl}" bash
+                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="{generatedToken.token}" AGENTCONTROL_HUB_URL="{hubUrl}" bash
                   </pre>
                 </div>
 
@@ -698,7 +698,7 @@ export default function Devices() {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? 'var(--success)' : 'var(--bg-surface-3)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `$env:AGENTWALL_TOKEN="${generatedToken.token}"; $env:AGENTWALL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
+                        const cmd = `$env:AGENTCONTROL_TOKEN="${generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('win')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -708,11 +708,11 @@ export default function Devices() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '11px', color: '#38bdf8', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-                    $env:AGENTWALL_TOKEN="{generatedToken.token}"; $env:AGENTWALL_HUB_URL="{hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex
+                    $env:AGENTCONTROL_TOKEN="{generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="{hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex
                   </pre>
                 </div>
 
-                {/* AgentWall CLI Direct Command */}
+                {/* Agent Control CLI Direct Command */}
                 <div style={{ padding: '12px', backgroundColor: 'var(--bg-surface-0)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>Direct CLI:</div>
@@ -721,7 +721,7 @@ export default function Devices() {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'cli' ? 'var(--success)' : 'var(--bg-surface-3)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `agentwall enroll --hub ${hubUrl} --token ${generatedToken.token}`
+                        const cmd = `agentcontrol enroll --hub ${hubUrl} --token ${generatedToken.token}`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('cli')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -731,7 +731,7 @@ export default function Devices() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '11px', color: '#a78bfa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-                    agentwall enroll --hub {hubUrl} --token {generatedToken.token}
+                    agentcontrol enroll --hub {hubUrl} --token {generatedToken.token}
                   </pre>
                 </div>
 

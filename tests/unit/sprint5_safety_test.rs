@@ -1,14 +1,14 @@
-use agentwall::audit::logger::AuditLogger;
-use agentwall::kill::KillMode;
-use agentwall::policy::credential_scope::CredentialScopeValidator;
-use agentwall::policy::engine::{CompiledPolicy, CompiledTool};
-use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::schema::{
+use agentcontrol::audit::logger::AuditLogger;
+use agentcontrol::kill::KillMode;
+use agentcontrol::policy::credential_scope::CredentialScopeValidator;
+use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool};
+use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
+use agentcontrol::policy::safe_mode::SafeModeScanner;
+use agentcontrol::policy::schema::{
     CycleAction, CycleDetectionConfig, FirewallConfig, SpendCapsConfig,
 };
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
-use agentwall::proxy::session::SessionContext;
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
     let log_path = std::env::temp_dir().join(format!("vexa_test_s5_{}.log", uuid::Uuid::new_v4()));
     let audit_logger = Arc::new(
-        AuditLogger::new(agentwall::audit::logger::AuditLoggerConfig {
+        AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
             log_path,
             session_id: "test-session".to_string(),
             session_secret: b"secret-12345678901234567890123456789012".to_vec(),
@@ -27,7 +27,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         .unwrap(),
     );
 
-    let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
+    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
 
     Arc::new(ProxyState {
         policy: std::sync::RwLock::new(policy),
@@ -46,13 +46,13 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         db_manager,
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: Arc::new(agentwall::policy::semantic::SemanticScanner::new(
-            agentwall::policy::semantic::SemanticConfig::default(),
+        dlp_scanner: Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
+        semantic_scanner: Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
+            agentcontrol::policy::semantic::SemanticConfig::default(),
         )),
-        injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
+        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
         schema_drift_detector: Arc::new(
-            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
+            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),

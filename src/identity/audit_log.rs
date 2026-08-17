@@ -12,7 +12,7 @@
 //! Each entry is HMAC-SHA256 chained to the previous entry, providing
 //! tamper-evident audit history.
 //!
-//! File location: `~/.agentwall/identity_audit.log`
+//! File location: `~/.agentcontrol/identity_audit.log`
 
 use chrono::Utc;
 use hmac::{Hmac, Mac};
@@ -95,7 +95,7 @@ pub struct IdentityAuditLogger {
 }
 
 impl IdentityAuditLogger {
-    /// Create a new logger pointing at `~/.agentwall/identity_audit.log`.
+    /// Create a new logger pointing at `~/.agentcontrol/identity_audit.log`.
     pub fn new() -> Self {
         let path = identity_log_path();
         Self { log_path: path }
@@ -314,7 +314,7 @@ impl IdentityAuditEntryBuilder {
 fn identity_log_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".agentwall")
+        .join(".agentcontrol")
         .join("identity_audit.log")
 }
 

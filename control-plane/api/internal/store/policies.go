@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
 func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Policy, error) {

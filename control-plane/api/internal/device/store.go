@@ -272,7 +272,7 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 			COALESCE(d.stable_device_id, d.id::text) AS hostname,
 			COALESCE(d.owner_subject, d.display_name, 'Developer Workstation') AS user_identifier,
 			COALESCE(d.os_family, 'windows') AS os,
-			COALESCE(d.os_version_summary, 'v1.0.34') AS os_version,
+			COALESCE(d.os_version_summary, 'v1.0.35') AS os_version,
 			d.state::text AS enrollment_status,
 			d.last_heartbeat_at,
 			CASE

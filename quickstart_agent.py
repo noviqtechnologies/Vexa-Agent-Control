@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vexa AgentWall — Cross-Platform Demonstration Client Script
+Vexa Agent Control — Cross-Platform Demonstration Client Script
 Compatible with Python 3.6+ on Windows, macOS, Linux, and WSL.
 No external dependencies required (uses built-in standard library).
 """
@@ -46,19 +46,19 @@ def send_request(url, payload=None, headers=None, method="POST"):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Vexa AgentWall — Interactive Demonstration Workflow Client",
+        description="Vexa Agent Control — Interactive Demonstration Workflow Client",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
-  python quickstart_agent.py agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
-  python quickstart_agent.py http://agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
-  python quickstart_agent.py agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com --proxy-port 8080 --dashboard-port 8081
+  python quickstart_agent.py agentcontrol-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
+  python quickstart_agent.py http://agentcontrol-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com 8080 8081
+  python quickstart_agent.py agentcontrol-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com --proxy-port 8080 --dashboard-port 8081
 """
     )
     parser.add_argument(
         "endpoint",
         nargs="?",
         default=None,
-        help="Target host or endpoint URL (e.g. agentwall-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com)"
+        help="Target host or endpoint URL (e.g. agentcontrol-ecs-alb-1035383404.eu-west-1.elb.amazonaws.com)"
     )
     parser.add_argument(
         "proxy_port_pos",
@@ -128,7 +128,7 @@ def main():
     dashboard_port = args.dashboard_port_flag or args.dashboard_port_pos
 
     # Determine input endpoint from positional arg, flag, or environment variable
-    input_endpoint = args.proxy_url_flag or args.endpoint or os.environ.get("AGENTWALL_PROXY_URL", "http://127.0.0.1:8080")
+    input_endpoint = args.proxy_url_flag or args.endpoint or os.environ.get("AGENTCONTROL_PROXY_URL", "http://127.0.0.1:8080")
     proxy_url = normalize_url(input_endpoint, port_override=proxy_port)
 
     if args.dashboard_url_flag:
@@ -153,7 +153,7 @@ def main():
     }
 
     print("============================================================")
-    print(" 🚀 Vexa AgentWall — Interactive Demonstration Workflow")
+    print(" 🚀 Vexa Agent Control — Interactive Demonstration Workflow")
     print("============================================================")
     print(f" Platform Detected      : {sys.platform} (Python {sys.version.split()[0]})")
     print(f" Proxy Security Endpoint : {proxy_url}")
@@ -182,7 +182,7 @@ def main():
         {
             "id": 3,
             "name": "write_file",
-            "args": {"path": "audit_report.txt", "content": "Vexa AgentWall local security evaluation log"},
+            "args": {"path": "audit_report.txt", "content": "Vexa Agent Control local security evaluation log"},
             "note": "State mutation file write operation"
         },
         {
@@ -425,7 +425,7 @@ def main():
         send_request(f"{dashboard_api_url}/credentials", cred, ingest_headers)
 
     print("============================================================")
-    print(" 🎉 All AgentWall Security Telemetry Workflows Completed!")
+    print(" 🎉 All Agent Control Security Telemetry Workflows Completed!")
     print("============================================================")
     print(" 💡 Next Step: Open or refresh http://127.0.0.1:8080/ in your browser")
     print("    to inspect live telemetry across all dashboard panels:")

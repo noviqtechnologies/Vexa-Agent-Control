@@ -7,29 +7,29 @@ Release:   {{ .Release.Name }}
 
 ━━━ COMPONENTS DEPLOYED ━━━
 
-  ✓ Operator:  {{ include "agentwall.fullname" . }}-operator
+  ✓ Operator:  {{ include "agentcontrol.fullname" . }}-operator
   {{- if .Values.gateway.enabled }}
-  ✓ Gateway:   {{ include "agentwall.fullname" . }}-gateway (Service on port {{ .Values.gateway.service.port }})
+  ✓ Gateway:   {{ include "agentcontrol.fullname" . }}-gateway (Service on port {{ .Values.gateway.service.port }})
   {{- end }}
   {{- if .Values.crds.install }}
-  ✓ CRD:       agentwallpolicies.agentwall.io
+  ✓ CRD:       agentcontrolpolicies.agentcontrol.io
   {{- end }}
 
 ━━━ QUICK VERIFICATION ━━━
 
 1. Watch the operator come up:
 
-   kubectl -n {{ .Values.namespace.name }} rollout status deploy/{{ include "agentwall.fullname" . }}-operator
+   kubectl -n {{ .Values.namespace.name }} rollout status deploy/{{ include "agentcontrol.fullname" . }}-operator
 
 {{- if .Values.gateway.enabled }}
 
 2. Watch the gateway come up:
 
-   kubectl -n {{ .Values.namespace.name }} rollout status deploy/{{ include "agentwall.fullname" . }}-gateway
+   kubectl -n {{ .Values.namespace.name }} rollout status deploy/{{ include "agentcontrol.fullname" . }}-gateway
 
 3. Port-forward and hit /healthz:
 
-   kubectl -n {{ .Values.namespace.name }} port-forward svc/{{ include "agentwall.fullname" . }}-gateway {{ .Values.gateway.service.port }}
+   kubectl -n {{ .Values.namespace.name }} port-forward svc/{{ include "agentcontrol.fullname" . }}-gateway {{ .Values.gateway.service.port }}
    {{- if .Values.gateway.tls.enabled }}
    curl -k https://localhost:{{ .Values.gateway.service.port }}/healthz
    {{- else }}
@@ -39,23 +39,23 @@ Release:   {{ .Release.Name }}
 
 {{- if .Values.policy.create }}
 
-4. Inspect the sample AgentWallPolicy CR:
+4. Inspect the sample Agent ControlPolicy CR:
 
-   kubectl -n {{ .Values.namespace.name }} get agentwallpolicy {{ .Values.policy.name }} -o yaml
+   kubectl -n {{ .Values.namespace.name }} get agentcontrolpolicy {{ .Values.policy.name }} -o yaml
 
 {{- if .Values.policy.networkPolicyEnforced }}
 5. Verify the generated NetworkPolicy (FR-5 §5.5.8):
 
-   kubectl -n {{ .Values.namespace.name }} get networkpolicy {{ .Values.policy.name }}-agentwall-egress -o yaml
+   kubectl -n {{ .Values.namespace.name }} get networkpolicy {{ .Values.policy.name }}-agentcontrol-egress -o yaml
 
-   Only pods labeled  agentwall.io/agent=true  in this namespace are affected.
+   Only pods labeled  agentcontrol.io/agent=true  in this namespace are affected.
    Their egress is restricted to the gateway pod on port {{ .Values.gateway.service.port }} + DNS.
 {{- end }}
 {{- end }}
 
 ━━━ NEXT STEPS ━━━
 
-• Create your own AgentWallPolicy: see docs/policy-schema.md
+• Create your own Agent ControlPolicy: see docs/policy-schema.md
 • Enable TLS on the gateway: set gateway.tls.enabled=true
 • Enable NetworkPolicy enforcement: set networkPolicy.enforced=true on your CR
 • Trigger policy hot-reload: kubectl exec -it <gateway-pod> -- kill -HUP 1

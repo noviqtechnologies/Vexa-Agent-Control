@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-api
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-api
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -15,5 +15,5 @@ spec:
     targetPort: http
     protocol: TCP
   selector:
-    {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 4 }}
 {{- end }}

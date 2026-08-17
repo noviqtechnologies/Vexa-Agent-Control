@@ -20,7 +20,7 @@ pub fn wrap_generic(
     let is_toml = config_path.extension().and_then(|e| e.to_str()) == Some("toml");
     let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
 
-    let agentwall_bin = std::env::current_exe()
+    let agentcontrol_bin = std::env::current_exe()
         .map_err(|e| WrapError::NoBinaryPath(e.to_string()))?
         .to_string_lossy()
         .to_string();
@@ -45,7 +45,7 @@ pub fn wrap_generic(
                     .get("command")
                     .and_then(|c| c.as_str())
                     .unwrap_or("");
-                if current_cmd.to_lowercase().contains("agentwall") {
+                if current_cmd.to_lowercase().contains("agentcontrol") || current_cmd.to_lowercase().contains("agentwall") {
                     continue; // already wrapped
                 }
 
@@ -65,7 +65,7 @@ pub fn wrap_generic(
 
                 srv_table.insert(
                     "command".to_string(),
-                    toml::Value::String(agentwall_bin.clone()),
+                    toml::Value::String(agentcontrol_bin.clone()),
                 );
                 srv_table.insert("args".to_string(), toml::Value::Array(new_args));
                 wrapped_count += 1;
@@ -123,7 +123,7 @@ pub fn wrap_generic(
         }
 
         let mut modified = config.clone();
-        let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentwall_bin)?;
+        let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentcontrol_bin)?;
 
         if dry_run {
             println!(
@@ -221,7 +221,7 @@ pub fn print_wrap_summary_generic(ide_name: &str, result: &WrapResult) {
     println!(
         "{} {}",
         "✔".green().bold(),
-        format!("AgentWall wrapped {}.", ide_name).green().bold()
+        format!("Vexa Agent Control wrapped {}.", ide_name).green().bold()
     );
     println!(
         "  {} Config:            {}",
@@ -245,7 +245,7 @@ pub fn print_unwrap_summary_generic(ide_name: &str, result: &UnwrapResult) {
     println!(
         "{} {}",
         "✔".green().bold(),
-        format!("AgentWall removed from {}.", ide_name)
+        format!("Vexa Agent Control removed from {}.", ide_name)
             .green()
             .bold()
     );

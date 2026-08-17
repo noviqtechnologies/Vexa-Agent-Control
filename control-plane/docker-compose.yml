@@ -5,9 +5,9 @@ services:
     container_name: vexa-agentcontrol-postgres
     image: postgres:16
     environment:
-      POSTGRES_USER: agentwall
+      POSTGRES_USER: agentcontrol
       POSTGRES_PASSWORD: devpassword
-      POSTGRES_DB: agentwall
+      POSTGRES_DB: agentcontrol
     ports:
       - "5433:5432"
     volumes:
@@ -16,15 +16,15 @@ services:
       # 000001_init_schema     -> core tables
       # 000002_auth_and_policy -> auth providers + policies table
       # 000003_seed_default_policy -> seeds v1.0.0 policy so the gateway has something to load
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentwall -d agentwall"]
+      test: ["CMD-SHELL", "pg_isready -U agentcontrol -d agentcontrol"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 10s
 
-  # AgentWall / AgentControl Gateway
+  # Agent Control / AgentControl Gateway
   # The enforcement engine that proxies MCP tool calls through policy evaluation.
   # Policy is fetched from PostgreSQL via the dashboard API on startup, then
   # polled every POLICY_POLL_INTERVAL_SECS seconds for live admin updates.
@@ -44,7 +44,7 @@ services:
       - "8080:8080"
     environment:
       # Gateway listen address (all interfaces inside the container)
-      AGENTWALL_LISTEN: "0.0.0.0:8080"
+      AGENTCONTROL_LISTEN: "0.0.0.0:8080"
 
       # Dashboard API URL — tells the gateway WHERE to fetch the active policy.
       # Uses Docker DNS service name; resolves to the dashboard-api container.
@@ -62,11 +62,11 @@ services:
       # Default: 30. Lower values mean faster propagation but more API calls.
       POLICY_POLL_INTERVAL_SECS: "30"
 
-      AGENTWALL_LOG_PATH: "/var/log/agentwall/audit.log"
+      AGENTCONTROL_LOG_PATH: "/var/log/agentcontrol/audit.log"
     # No --policy flag — policy comes from PostgreSQL via DASHBOARD_API_URL.
     command: ["start"]
     healthcheck:
-      test: ["CMD-SHELL", "agentwall --version || exit 1"]
+      test: ["CMD-SHELL", "agentcontrol --version || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -81,7 +81,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://agentwall:devpassword@postgres:5432/agentwall?sslmode=disable
+      DATABASE_URL: postgres://agentcontrol:devpassword@postgres:5432/agentcontrol?sslmode=disable
       DASHBOARD_PORT: "8400"
       DEV_MODE: "true"
       ALLOW_DEV_MODE: "true"
@@ -119,7 +119,7 @@ services:
       # Each service gets its own network namespace, so the Fargate default
       # (127.0.0.1:8400) is unreachable. Docker DNS resolves 'dashboard-api'
       # to the API container's internal IP inside the Compose bridge network.
-      AGENTWALL_API_UPSTREAM: "dashboard-api:8400"
+      AGENTCONTROL_API_UPSTREAM: "dashboard-api:8400"
 
 volumes:
   agentcontrol_pg_data:

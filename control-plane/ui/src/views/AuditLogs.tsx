@@ -72,7 +72,7 @@ export default function AuditLogs() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `agentwall-audit-${Date.now()}.csv`
+    a.download = `agentcontrol-audit-${Date.now()}.csv`
     a.click()
     URL.revokeObjectURL(url)
     setDownloading(false)

@@ -1,4 +1,4 @@
-//! `agentwall watch` — event-driven daemon that auto-wraps MCP server entries.
+//! `agentcontrol watch` — event-driven daemon that auto-wraps MCP server entries.
 //!
 //! ## Design decisions
 //!
@@ -62,7 +62,7 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     if active.is_empty() {
         eprintln!(
             "{} No targets selected. Use --all to watch verified targets, \
-             or specify a target subcommand (e.g. agentwall watch claude).",
+             or specify a target subcommand (e.g. agentcontrol watch claude).",
             "✖".red()
         );
         return 1;
@@ -73,7 +73,7 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     println!(
         "{} {}",
         "●".green().bold(),
-        "AgentWall Watch — daemon starting".bold().white()
+        "Vexa Agent Control Watch — daemon starting".bold().white()
     );
     println!("{}", "─".repeat(70).dimmed());
     for at in &active {
@@ -387,7 +387,7 @@ fn handle_event(
             Some(f) => f,
             None => continue,
         };
-        if filename.ends_with(".agentwall-tmp") || filename.contains("agentwall-backup-") {
+        if filename.ends_with(".agentcontrol-tmp") || filename.ends_with(".agentwall-tmp") || filename.contains("agentcontrol-backup-") || filename.contains("agentwall-backup-") {
             continue;
         }
 

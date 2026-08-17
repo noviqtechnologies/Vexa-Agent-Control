@@ -1,13 +1,13 @@
 /**
- * Zero-dependency native fetch transport for AgentWall gateway.
+ * Zero-dependency native fetch transport for AgentControl gateway.
  */
 
 import {
-  AgentWallConnectionError,
-  AgentWallDenied,
-  AgentWallApprovalPending,
-  AgentWallPivotError,
-  AgentWallError,
+  AgentControlConnectionError,
+  AgentControlDenied,
+  AgentControlApprovalPending,
+  AgentControlPivotError,
+  AgentControlError,
 } from "./errors.js";
 import { ToolCallResult, GatewayStatus, ClientOptions } from "./types.js";
 
@@ -21,8 +21,8 @@ function resolveProxyUrl(options?: ClientOptions): string {
     if (process.env.AGENT_CONTROL_PROXY_URL) {
       return process.env.AGENT_CONTROL_PROXY_URL.replace(/\/+$/, "");
     }
-    if (process.env.AGENTWALL_PROXY_URL) {
-      return process.env.AGENTWALL_PROXY_URL.replace(/\/+$/, "");
+    if (process.env.AGENTCONTROL_PROXY_URL) {
+      return process.env.AGENTCONTROL_PROXY_URL.replace(/\/+$/, "");
     }
     if (process.env.HTTP_PROXY) {
       return process.env.HTTP_PROXY.replace(/\/+$/, "");
@@ -41,7 +41,7 @@ export class HttpTransport {
     this.authToken =
       options?.authToken ||
       (typeof process !== "undefined"
-        ? process.env?.AGENT_CONTROL_AUTH_TOKEN || process.env?.AGENTWALL_AUTH_TOKEN
+        ? process.env?.AGENT_CONTROL_AUTH_TOKEN || process.env?.AGENTCONTROL_AUTH_TOKEN
         : undefined);
     this.timeoutMs = options?.timeoutMs ?? 30000;
   }
@@ -58,7 +58,7 @@ export class HttpTransport {
         policyLoaded: ready,
       };
     } catch (err: unknown) {
-      throw new AgentWallConnectionError(
+      throw new AgentControlConnectionError(
         `Failed to connect to gateway: ${err instanceof Error ? err.message : String(err)}`,
         this.proxyUrl
       );
@@ -85,7 +85,7 @@ export class HttpTransport {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "X-AgentWall-Session-ID": sid,
+      "X-AgentControl-Session-ID": sid,
     };
     if (this.authToken) {
       headers["Authorization"] = `Bearer ${this.authToken}`;
@@ -100,14 +100,14 @@ export class HttpTransport {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err: unknown) {
-      throw new AgentWallConnectionError(
+      throw new AgentControlConnectionError(
         `Gateway request failed: ${err instanceof Error ? err.message : String(err)}`,
         this.proxyUrl
       );
     }
 
     if (resp.status === 401) {
-      throw new AgentWallDenied({
+      throw new AgentControlDenied({
         message: "Unauthorized: Invalid OIDC or API token",
         code: 401,
         toolName,
@@ -119,12 +119,12 @@ export class HttpTransport {
       data = await resp.json();
     } catch {
       if (!resp.ok) {
-        throw new AgentWallDenied({
+        throw new AgentControlDenied({
           message: `Gateway returned HTTP ${resp.status}`,
           toolName,
         });
       }
-      throw new AgentWallError("Invalid JSON response from gateway");
+      throw new AgentControlError("Invalid JSON response from gateway");
     }
 
     if (data.error) {
@@ -134,16 +134,16 @@ export class HttpTransport {
       const errData = err.data ?? {};
 
       if (code === -32010) {
-        throw new AgentWallPivotError(msg, errData.attempts ?? 3);
+        throw new AgentControlPivotError(msg, errData.attempts ?? 3);
       } else if (code === -32005 || msg.toLowerCase().includes("approval")) {
-        throw new AgentWallApprovalPending({
+        throw new AgentControlApprovalPending({
           message: msg,
           approvalId: errData.approval_id ?? reqId,
           approvalUrl: errData.approval_url,
           timeoutSeconds: errData.timeout_seconds ?? 60,
         });
       } else {
-        throw new AgentWallDenied({
+        throw new AgentControlDenied({
           message: msg,
           code,
           toolName,

@@ -1,7 +1,7 @@
 //! IDE wrapping and MCP server proxy interception management subsystem (FR-304).
 //!
 //! Intercepts MCP server configurations across supported AI IDEs (Claude Desktop, Cursor,
-//! VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity) to route tool execution through AgentWall.
+//! VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity) to route tool execution through Agent Control.
 
 pub mod backup;
 pub mod claude;
@@ -56,7 +56,7 @@ impl From<std::io::Error> for WrapError {
     }
 }
 
-/// Executes the `agentwall wrap` command for a specific IDE target.
+/// Executes the `agentcontrol wrap` command for a specific IDE target.
 ///
 /// # Arguments
 /// * `target` - Target IDE configuration enum variant.
@@ -203,7 +203,7 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
     0
 }
 
-/// Executes the `agentwall unwrap` command for a specific IDE target.
+/// Executes the `agentcontrol unwrap` command for a specific IDE target.
 ///
 /// # Arguments
 /// * `target` - Target IDE unwrap configuration enum variant.
@@ -250,18 +250,18 @@ pub fn run_unwrap_target(target: &UnwrapTarget) -> i32 {
     }
 }
 
-/// Run `agentwall status` — enumerate all 8 targets and print their wrap state.
+/// Run `agentcontrol status` — enumerate all 8 targets and print their wrap state.
 pub fn run_status() -> i32 {
     status::print_all_targets();
     0
 }
 
-/// Run `agentwall watch` — start the event-driven wrap daemon.
+/// Run `agentcontrol watch` — start the event-driven wrap daemon.
 pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     watch::run_watch(all, target)
 }
 
-/// Executes `agentwall unprotect` — restores configurations across all supported IDE targets from backups (FR-1.4).
+/// Executes `agentcontrol unprotect` — restores configurations across all supported IDE targets from backups (FR-1.4).
 pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
     println!(
         "{} Unprotecting all IDE configurations...",
@@ -367,7 +367,7 @@ fn open_browser(url: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Executes `agentwall protect` — Automated discovery, atomic wrapping, gateway startup, and dashboard launch (FR-1.1, FR-1.2, FR-1.3).
+/// Executes `agentcontrol protect` — Automated discovery, atomic wrapping, gateway startup, and dashboard launch (FR-1.1, FR-1.2, FR-1.3).
 pub fn run_protect_orchestration(
     dry_run: bool,
     no_browser: bool,
@@ -377,7 +377,7 @@ pub fn run_protect_orchestration(
     policy: &str,
 ) -> i32 {
     println!(
-        "{} Initializing AgentWall One-Command Protection...",
+        "{} Initializing Agent Control One-Command Protection...",
         "🛡".cyan().bold()
     );
 

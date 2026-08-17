@@ -17,7 +17,7 @@ tools: []
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("agentwall").unwrap();
+    let mut cmd = Command::cargo_bin("agentcontrol").unwrap();
     cmd.arg("promote")
         .arg("--policy")
         .arg(policy_path.to_str().unwrap());
@@ -46,7 +46,7 @@ tools:
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("agentwall").unwrap();
+    let mut cmd = Command::cargo_bin("agentcontrol").unwrap();
     cmd.arg("promote")
         .arg("--policy")
         .arg(policy_path.to_str().unwrap());
@@ -74,7 +74,7 @@ tools:
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("agentwall").unwrap();
+    let mut cmd = Command::cargo_bin("agentcontrol").unwrap();
     cmd.arg("promote")
         .arg("--policy")
         .arg(policy_path.to_str().unwrap());
@@ -102,7 +102,7 @@ tools:
     )
     .unwrap();
 
-    let mut cmd = Command::cargo_bin("agentwall").unwrap();
+    let mut cmd = Command::cargo_bin("agentcontrol").unwrap();
     cmd.arg("promote")
         .arg("--policy")
         .arg(policy_path.to_str().unwrap());

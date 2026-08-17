@@ -402,7 +402,7 @@ pub fn format_text_report(report: &SessionReport) -> String {
     if report.policy_hash.is_none() || report.dry_run {
         out.push_str(&format!(
             "    Run `{}` to generate your rules.\n",
-            "agentwall protect".cyan()
+            "agentcontrol protect".cyan()
         ));
     } else {
         out.push_str("    Review denied calls and refine your policy regex patterns.\n");

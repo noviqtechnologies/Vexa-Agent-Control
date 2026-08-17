@@ -1,12 +1,12 @@
 # Team Control Hub — Local Development Guide
 
-> **Target Audience:** Developers, Security Testing Engineers, and DevOps Engineers evaluating, testing, or developing the AgentWall Team Control Hub locally using Docker and native binaries.
+> **Target Audience:** Developers, Security Testing Engineers, and DevOps Engineers evaluating, testing, or developing the Agent Control Team Control Hub locally using Docker and native binaries.
 
 ---
 
 ## Overview
 
-The **Local Development** guide covers setting up, running, and testing the **AgentWall Team Control Hub** on a local developer machine using code downloaded/cloned from GitHub. It provides OS-specific instructions for **Linux**, **macOS**, and **Windows** (PowerShell & Command Prompt).
+The **Local Development** guide covers setting up, running, and testing the **Agent Control Team Control Hub** on a local developer machine using code downloaded/cloned from GitHub. It provides OS-specific instructions for **Linux**, **macOS**, and **Windows** (PowerShell & Command Prompt).
 
 For Workstation Sidecar setup, see → [Workstation Sidecar Guide](../workstation_guide.md).  
 For Production Kubernetes deployment, see → [Kubernetes Deployment Guide](kubernetes_deployment.md).
@@ -19,7 +19,7 @@ Before starting, ensure your local development environment meets the following r
 
 ### Tooling Requirements Across All Operating Systems
 
-- **Git v2.38+** — required to clone the AgentWall repository from GitHub.
+- **Git v2.38+** — required to clone the Agent Control repository from GitHub.
 - **Docker Engine / Docker Desktop v24.0+** — installed and actively running.
 - **Docker Compose v2.20+** — required to orchestrate multi-container services.
 - **Rust Toolchain (Optional, for building native binary from source):** Rust 1.75+ (`cargo`).
@@ -44,7 +44,7 @@ Ensure the following ports are free on your host machine:
 - `8081`: Control Hub UI (React Management Console)
 - `8400`: Control Hub API (Go REST API)
 - `5433`: PostgreSQL 16 Database
-- `8080`: AgentWall Enforcement Gateway
+- `8080`: Agent Control Enforcement Gateway
 
 ---
 
@@ -73,7 +73,7 @@ cd Vexa-Agent-Control\control-plane
 ```
 
 > [!TIP]
-> **Already inside the repository?** If you have already cloned or downloaded the source code, open your shell in the repository root folder (`agentwall/`) and run `cd control-plane`.
+> **Already inside the repository?** If you have already cloned or downloaded the source code, open your shell in the repository root folder (`agentcontrol/`) and run `cd control-plane`.
 
 ---
 
@@ -112,23 +112,23 @@ docker compose up -d --build
 
 ### Step 3: (Optional) Build Native Rust Binary from Source
 
-If you want to run the native AgentWall gateway binary directly on your host machine alongside Docker Compose:
+If you want to run the native Agent Control gateway binary directly on your host machine alongside Docker Compose:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # Navigate to repository root
 cd ..
-cargo build --bin agentwall
+cargo build --bin agentcontrol
 ```
-*(Binary output: `./target/debug/agentwall`)*
+*(Binary output: `./target/debug/agentcontrol`)*
 
 #### Windows (PowerShell / CMD):
 ```powershell
 # Navigate to repository root
 cd ..
-cargo build --bin agentwall
+cargo build --bin agentcontrol
 ```
-*(Binary output: `.\target\debug\agentwall.exe`)*
+*(Binary output: `.\target\debug\agentcontrol.exe`)*
 
 ---
 
@@ -136,7 +136,7 @@ cargo build --bin agentwall
 
 > [!NOTE]
 > **Multi-Terminal Workflow**:
-> - **Terminal 1**: `agentwall start` runs a persistent foreground gateway process. Keep Terminal 1 active to maintain active SSE connections.
+> - **Terminal 1**: `agentcontrol start` runs a persistent foreground gateway process. Keep Terminal 1 active to maintain active SSE connections.
 > - **Terminal 2**: Use a second terminal to trigger requests, view logs, or run verification commands.
 >
 > **Port Notice**: Docker Compose maps a `gateway` container to port `8080`. If starting a native gateway binary on port `8080`, stop the container first (`docker compose stop gateway`) or use another port (e.g. `--listen 127.0.0.1:8082`).
@@ -148,13 +148,13 @@ export POLICY_READ_SECRET="local-dev-policy-read-secret"
 export GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
 # Option A: Running globally installed binary
-agentwall start \
+agentcontrol start \
   --listen 127.0.0.1:8080 \
   --centralized \
   --log-path ./team-audit.log
 
 # Option B: Running compiled binary from repo root
-./target/debug/agentwall start \
+./target/debug/agentcontrol start \
   --listen 127.0.0.1:8080 \
   --centralized \
   --log-path ./team-audit.log
@@ -167,13 +167,13 @@ $env:POLICY_READ_SECRET="local-dev-policy-read-secret"
 $env:GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
 # Option A: Running globally installed binary
-agentwall.exe start `
+agentcontrol.exe start `
   --listen 127.0.0.1:8080 `
   --centralized `
   --log-path .\team-audit.log
 
 # Option B: Running compiled binary from repo root
-.\target\debug\agentwall.exe start `
+.\target\debug\agentcontrol.exe start `
   --listen 127.0.0.1:8080 `
   --centralized `
   --log-path .\team-audit.log
@@ -186,10 +186,10 @@ set POLICY_READ_SECRET=local-dev-policy-read-secret
 set GATEWAY_SECRET=local-dev-shared-secret-change-me
 
 :: Option A: Running globally installed binary
-agentwall.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
+agentcontrol.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
 
 :: Option B: Running compiled binary from repo root
-.\target\debug\agentwall.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
+.\target\debug\agentcontrol.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
 ```
 
 ---
@@ -269,25 +269,25 @@ curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-sess
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # Option A: System installed binary (in PATH)
-agentwall verify-log ./team-audit.log
+agentcontrol verify-log ./team-audit.log
 
 # Option B: Compiled binary (if inside control-plane directory)
-../target/debug/agentwall verify-log ./team-audit.log
+../target/debug/agentcontrol verify-log ./team-audit.log
 
 # Option C: Compiled binary (if inside repository root directory)
-./target/debug/agentwall verify-log ./team-audit.log
+./target/debug/agentcontrol verify-log ./team-audit.log
 ```
 
 #### Windows (PowerShell / CMD):
 ```powershell
 # Option A: System installed binary (in PATH)
-agentwall.exe verify-log .\team-audit.log
+agentcontrol.exe verify-log .\team-audit.log
 
 # Option B: Compiled binary (if inside control-plane directory)
-..\target\debug\agentwall.exe verify-log .\team-audit.log
+..\target\debug\agentcontrol.exe verify-log .\team-audit.log
 
 # Option C: Compiled binary (if inside repository root directory)
-.\target\debug\agentwall.exe verify-log .\team-audit.log
+.\target\debug\agentcontrol.exe verify-log .\team-audit.log
 ```
 
 **Expected Output:**

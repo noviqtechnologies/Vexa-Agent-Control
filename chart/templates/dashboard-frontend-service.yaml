@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-frontend
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-frontend
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.dashboardFrontendSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardFrontendSelectorLabels" . | nindent 4 }}
 spec:
   type: {{ .Values.dashboardFrontend.service.type }}
   ports:
@@ -15,5 +15,5 @@ spec:
     targetPort: http
     protocol: TCP
   selector:
-    {{- include "agentwall.dashboardFrontendSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardFrontendSelectorLabels" . | nindent 4 }}
 {{- end }}

@@ -1189,7 +1189,7 @@
                       <span class="empty-icon">👁</span>
                       <h3>Awaiting incoming tool calls</h3>
                       <p>Ensure your AI agent is configured to route traffic through the Agent Control proxy.</p>
-                      <span class="cmd-hint">AGENTWALL_PROXY_URL=http://localhost:8080</span>
+                      <span class="cmd-hint">AGENTCONTROL_PROXY_URL=http://localhost:8080</span>
                     </div>
                   </td>
                 </tr>
@@ -1478,7 +1478,7 @@ const tool = client.governed("name", async (args) =&gt; {
           <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">
             Reads all events from <code
               style="font-family:var(--font-mono); color:var(--accent)">~/.agentwall/events.db</code> and produces a
-            draft <code style="font-family:var(--font-mono); color:var(--accent)">agentwall-policy.yaml</code>.
+            draft <code style="font-family:var(--font-mono); color:var(--accent)">agentcontrol-policy.yaml</code>.
           </p>
 
           <button class="btn btn-primary btn-lg" id="btn-generate">
@@ -1490,7 +1490,7 @@ const tool = client.governed("name", async (args) =&gt; {
         <pre id="policy-output"></pre>
 
         <div class="policy-actions" id="policy-actions" style="display:none;">
-          <button class="btn btn-primary" id="btn-download">⬇ Download agentwall-policy.yaml</button>
+          <button class="btn btn-primary" id="btn-download">⬇ Download agentcontrol-policy.yaml</button>
           <button class="btn" id="btn-copy-policy">📋 Copy to Clipboard</button>
         </div>
       </div>
@@ -2191,7 +2191,7 @@ const tool = client.governed("name", async (args) =&gt; {
         if (reloadNotice) {
           reloadNotice.style.display = '';
           reloadNotice.innerHTML = `<span style="color:var(--amber);">⚠</span> No policy file configured.
-            Run <code style="color:var(--accent);">agentwall protect --policy agentwall-policy.yaml</code>
+            Run <code style="color:var(--accent);">agentwall protect --policy agentcontrol-policy.yaml</code>
             to enable hot-reloading, or use the <strong>✨ Live Policy Wizard</strong> to generate one.`;
         }
       }
@@ -2521,7 +2521,7 @@ const tool = client.governed("name", async (args) =&gt; {
       <span class="empty-icon">👁</span>
       <h3>No tool calls recorded yet</h3>
       <p>Start your AI agent and point it to the proxy.</p>
-      <span class="cmd-hint">AGENTWALL_PROXY_URL=http://localhost:8080</span>
+      <span class="cmd-hint">AGENTCONTROL_PROXY_URL=http://localhost:8080</span>
     </div></td></tr>`;
         return;
       }
@@ -3371,7 +3371,7 @@ const tool = client.governed("name", async (args) =&gt; {
       const blob = new Blob([lastPolicyYaml], { type: 'text/yaml' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'agentwall-policy.yaml';
+      a.download = 'agentcontrol-policy.yaml';
       a.click();
       URL.revokeObjectURL(a.href);
       toast('Policy downloaded.', 'info');

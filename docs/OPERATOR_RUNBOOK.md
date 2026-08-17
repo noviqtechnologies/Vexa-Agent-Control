@@ -62,7 +62,7 @@ If a revoked device is recovered or wiped:
 
 ## 4. Provider Broker & Capability Management
 
-AgentWall manages provider master keys directly in **GCP Secret Manager**.
+Agent Control manages provider master keys directly in **GCP Secret Manager**.
 * **Zero Keys on Endpoints**: Endpoints never receive raw OpenAI or Anthropic API keys.
 * **Per-Device Capabilities**: Scopes can be limited to specific model families (e.g. `gpt-4.1-mini` or `claude-3-5-sonnet`) and project references via `PUT /api/v2/admin/devices/{id}/provider-capabilities`.
 
@@ -120,14 +120,14 @@ curl -X GET "https://console.vexasec.io/api/v2/spend/events?limit=50" \
 View the real-time compliance status of all developer machines:
 ```bash
 curl -X GET https://console.vexasec.io/api/v1/devices \
-  -H "Cookie: agentwall_session=<SESSION_COOKIE>"
+  -H "Cookie: agentcontrol_session=<SESSION_COOKIE>"
 ```
 
 ### 2. Investigating Configuration Tampering Incidents
 Inspect the forensic tamper and self-healing log:
 ```bash
 curl -X GET https://console.vexasec.io/api/v1/devices/tamper-log \
-  -H "Cookie: agentwall_session=<SESSION_COOKIE>"
+  -H "Cookie: agentcontrol_session=<SESSION_COOKIE>"
 ```
 Any developer attempt to clear `cursor.models.openaiBaseUrl` or point IDEs directly to public AI endpoints is automatically healed in $<500\text{ ms}$ and permanently recorded with event type `AUTO_HEALED` or `CONFIG_TAMPERED`.
 
@@ -153,7 +153,7 @@ echo -n "<64-hex-char-private-seed>" | gcloud secrets versions add vexa-prod-lic
 ```bash
 # Provision 15-day Free Trial
 curl -X POST https://console.vexasec.io/api/v1/operator/organizations \
-  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>" \
+  -H "Cookie: agentcontrol_session=<OPERATOR_COOKIE>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Acme Health",
@@ -170,7 +170,7 @@ curl -X POST https://console.vexasec.io/api/v1/operator/organizations \
 ```bash
 # Renew for 365 days
 curl -X POST https://console.vexasec.io/api/v1/operator/organizations/<ORG_ID>/renew-license \
-  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>" \
+  -H "Cookie: agentcontrol_session=<OPERATOR_COOKIE>" \
   -H "Content-Type: application/json" \
   -d '{
     "additional_days": 365,

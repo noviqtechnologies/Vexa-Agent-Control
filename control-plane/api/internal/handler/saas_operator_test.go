@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 )
 
 func TestTierToFeatures(t *testing.T) {

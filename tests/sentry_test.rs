@@ -1,6 +1,6 @@
 //! Sentry & IDE Configuration Auto-Enforcement Tests
 
-use agentwall::wrap::ide_config::{ensure_json_proxy_setting, IdeConfigStatus};
+use agentcontrol::wrap::ide_config::{ensure_json_proxy_setting, IdeConfigStatus};
 use serde_json::Value;
 use std::fs;
 use tempfile::tempdir;
@@ -23,7 +23,7 @@ fn test_cursor_config_injection_and_tamper_healing() {
         &cursor_settings,
         &["cursor.models.openaiBaseUrl"],
         "http://127.0.0.1:8080/v1",
-        Some(("cursor.models.apiKey", "agentwall-local-key")),
+        Some(("cursor.models.apiKey", "agentcontrol-local-key")),
     )
     .unwrap();
 
@@ -37,7 +37,7 @@ fn test_cursor_config_injection_and_tamper_healing() {
         parsed["cursor.models.openaiBaseUrl"],
         "http://127.0.0.1:8080/v1"
     );
-    assert_eq!(parsed["cursor.models.apiKey"], "agentwall-local-key");
+    assert_eq!(parsed["cursor.models.apiKey"], "agentcontrol-local-key");
     assert_eq!(parsed["editor.fontSize"], 14);
     assert_eq!(parsed["workbench.colorTheme"], "One Dark Pro");
 
@@ -56,7 +56,7 @@ fn test_cursor_config_injection_and_tamper_healing() {
         &cursor_settings,
         &["cursor.models.openaiBaseUrl"],
         "http://127.0.0.1:8080/v1",
-        Some(("cursor.models.apiKey", "agentwall-local-key")),
+        Some(("cursor.models.apiKey", "agentcontrol-local-key")),
     )
     .unwrap();
 

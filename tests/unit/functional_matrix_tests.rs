@@ -4,8 +4,8 @@
 use std::fs;
 use tempfile::NamedTempFile;
 
-use agentwall::policy::loader::{load_policy_from_str, PolicyLoadResult};
-use agentwall::validate;
+use agentcontrol::policy::loader::{load_policy_from_str, PolicyLoadResult};
+use agentcontrol::validate;
 
 // ---------------------------------------------------------------------------
 // 1. Policy Loader & YAML Syntax Error Handling
@@ -306,8 +306,8 @@ tools:
 // 5. DLP & Secret Scanning
 // ---------------------------------------------------------------------------
 
-use agentwall::policy::dlp::{DlpAction, DlpScanner};
-use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
+use agentcontrol::policy::dlp::{DlpAction, DlpScanner};
+use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner, ScanResult};
 use serde_json::json;
 
 #[test]
@@ -387,7 +387,7 @@ fn test_matrix_response_scanner_secret_leak_prevention() {
 // 6. Audit Logger & Security Payload Storage
 // ---------------------------------------------------------------------------
 
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
 use tempfile::tempdir;
 
 #[tokio::test]

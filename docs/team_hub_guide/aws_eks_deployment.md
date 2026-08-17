@@ -1,17 +1,17 @@
 # Team Control Hub — AWS EKS Deployment & Uninstallation Guide
 
-> **Target Audience:** Cloud Engineers, DevOps Engineers, Platform Security Teams, and Infrastructure Leads deploying or evaluating the **AgentWall Team Control Hub** on **Amazon Web Services (AWS) Elastic Kubernetes Service (EKS)** across **Linux**, **macOS**, and **Windows**.
+> **Target Audience:** Cloud Engineers, DevOps Engineers, Platform Security Teams, and Infrastructure Leads deploying or evaluating the **Agent Control Team Control Hub** on **Amazon Web Services (AWS) Elastic Kubernetes Service (EKS)** across **Linux**, **macOS**, and **Windows**.
 
 ---
 
 ## Overview
 
-This guide provides an end-to-end operational walkthrough for deploying, validating, and uninstalling the **AgentWall Team Control Hub** on **AWS EKS**. It covers:
+This guide provides an end-to-end operational walkthrough for deploying, validating, and uninstalling the **Agent Control Team Control Hub** on **AWS EKS**. It covers:
 
 1. AWS Infrastructure Prerequisites & Tools (Linux, macOS, Windows).
 2. EKS Cluster & Storage Driver Provisioning (`eksctl` / AWS CLI).
 3. AWS Load Balancer & TLS Certificate Configuration (AWS ACM / Ingress).
-4. Production Helm Deployment & Custom Resource (`AgentWallPolicy`) Reconciliation.
+4. Production Helm Deployment & Custom Resource (`Agent ControlPolicy`) Reconciliation.
 5. Post-Deployment Multi-OS Validation & Health Verification.
 6. Complete Uninstallation & Infrastructure Teardown.
 
@@ -34,7 +34,7 @@ Before starting, ensure your local workstation and AWS account meet the followin
 - **eksctl v0.140+** — CLI tool for creating and managing EKS clusters.
 - **Kubectl v1.24+** — Kubernetes command-line tool.
 - **Helm v3.10+** — Package manager for Kubernetes.
-- **Git v2.38+** — To clone the AgentWall repository.
+- **Git v2.38+** — To clone the Agent Control repository.
 
 ---
 
@@ -131,7 +131,7 @@ aws sts get-caller-identity
 
 ### Step 1: Create the EKS Cluster with NetworkPolicy Support
 
-AgentWall requires a Kubernetes cluster with multi-replica node capacity and NetworkPolicy support (for agent egress isolation).
+Agent Control requires a Kubernetes cluster with multi-replica node capacity and NetworkPolicy support (for agent egress isolation).
 
 Create an EKS cluster configuration file `eks-cluster.yaml`:
 
@@ -140,7 +140,7 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-  name: agentwall-eks-cluster
+  name: agentcontrol-eks-cluster
   region: us-east-1
   version: "1.28"
 
@@ -150,7 +150,7 @@ vpc:
     privateAccess: true
 
 managedNodeGroups:
-  - name: agentwall-workers
+  - name: agentcontrol-workers
     instanceType: t3.medium
     desiredCapacity: 3
     minSize: 2
@@ -177,7 +177,7 @@ eksctl create cluster -f eks-cluster.yaml
 
 Update your local `kubeconfig`:
 ```bash
-aws eks update-kubeconfig --region us-east-1 --name agentwall-eks-cluster
+aws eks update-kubeconfig --region us-east-1 --name agentcontrol-eks-cluster
 ```
 
 Verify cluster nodes:
@@ -211,25 +211,25 @@ If using AWS ACM and AWS Load Balancer Controller:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-kubectl create namespace agentwall-system
-kubectl create secret tls agentwall-gateway-tls \
+kubectl create namespace agentcontrol-system
+kubectl create secret tls agentcontrol-gateway-tls \
   --cert=path/to/tls.crt \
   --key=path/to/tls.key \
-  -n agentwall-system
+  -n agentcontrol-system
 ```
 
 #### Windows (PowerShell):
 ```powershell
-kubectl create namespace agentwall-system
-kubectl create secret tls agentwall-gateway-tls `
+kubectl create namespace agentcontrol-system
+kubectl create secret tls agentcontrol-gateway-tls `
   --cert=path/to/tls.crt `
   --key=path/to/tls.key `
-  -n agentwall-system
+  -n agentcontrol-system
 ```
 
 ---
 
-## 4. Deploy AgentWall via Helm
+## 4. Deploy Agent Control via Helm
 
 ### Step 1: Clone Repository & Navigate to Chart Directory
 
@@ -247,8 +247,8 @@ Execute the Helm installation command configured for AWS EKS:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-helm install agentwall ./chart \
-  --namespace agentwall-system \
+helm install agentcontrol ./chart \
+  --namespace agentcontrol-system \
   --create-namespace \
   --set gateway.tls.enabled=true \
   --set gateway.tls.createSelfSigned=true \
@@ -261,8 +261,8 @@ helm install agentwall ./chart \
 
 #### Windows (PowerShell):
 ```powershell
-helm install agentwall .\chart `
-  --namespace agentwall-system `
+helm install agentcontrol .\chart `
+  --namespace agentcontrol-system `
   --create-namespace `
   --set gateway.tls.enabled=true `
   --set gateway.tls.createSelfSigned=true `
@@ -275,21 +275,21 @@ helm install agentwall .\chart `
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-helm install agentwall .\chart --namespace agentwall-system --create-namespace --set gateway.tls.enabled=true --set gateway.tls.createSelfSigned=true --set gateway.replicas=3 --set dashboardApi.enabled=true --set dashboardDb.enabled=true --set dashboardDb.storageClass=gp3 --set dashboardFrontend.enabled=true
+helm install agentcontrol .\chart --namespace agentcontrol-system --create-namespace --set gateway.tls.enabled=true --set gateway.tls.createSelfSigned=true --set gateway.replicas=3 --set dashboardApi.enabled=true --set dashboardDb.enabled=true --set dashboardDb.storageClass=gp3 --set dashboardFrontend.enabled=true
 ```
 
 ---
 
-### Step 3: Apply `AgentWallPolicy` CRDs & Operator Reconciliation
+### Step 3: Apply `Agent ControlPolicy` CRDs & Operator Reconciliation
 
 Create custom policy file `policy.yaml`:
 
 ```yaml
-apiVersion: agentwall.io/v1alpha1
-kind: AgentWallPolicy
+apiVersion: agentcontrol.io/v1alpha1
+kind: Agent ControlPolicy
 metadata:
   name: aws-production-policy
-  namespace: agentwall-system
+  namespace: agentcontrol-system
 spec:
   policy: |
     version: "2.0"
@@ -308,9 +308,9 @@ spec:
     enforced: true
     mcpPort: 8080
     agentPodSelector:
-      agentwall.io/agent: "true"
+      agentcontrol.io/agent: "true"
     gatewayPodSelector:
-      agentwall.io/gateway: "true"
+      agentcontrol.io/gateway: "true"
 ```
 
 Apply manifest:
@@ -326,26 +326,26 @@ Perform the following steps across your OS terminal to verify the AWS EKS deploy
 
 ### Step 1: Verify Pod & Deployment Status
 
-Check that all pods in `agentwall-system` are in the `Running` state and persistent storage is bound:
+Check that all pods in `agentcontrol-system` are in the `Running` state and persistent storage is bound:
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-kubectl get pods,pvc -n agentwall-system
+kubectl get pods,pvc -n agentcontrol-system
 ```
 
 **Expected Output:**
 ```
 NAME                                          READY   STATUS    RESTARTS   AGE
-pod/agentwall-dashboard-api-7b89799-x2k9s     1/1     Running   0          3m
-pod/agentwall-dashboard-db-0                  1/1     Running   0          3m
-pod/agentwall-dashboard-frontend-5b4d45-98k21 1/1     Running   0          3m
-pod/agentwall-gateway-69d58d9766-4k1lm        1/1     Running   0          3m
-pod/agentwall-gateway-69d58d9766-m29pq        1/1     Running   0          3m
-pod/agentwall-gateway-69d58d9766-z88np        1/1     Running   0          3m
-pod/agentwall-operator-8687d46c4f-l8s7b       1/1     Running   0          3m
+pod/agentcontrol-dashboard-api-7b89799-x2k9s     1/1     Running   0          3m
+pod/agentcontrol-dashboard-db-0                  1/1     Running   0          3m
+pod/agentcontrol-dashboard-frontend-5b4d45-98k21 1/1     Running   0          3m
+pod/agentcontrol-gateway-69d58d9766-4k1lm        1/1     Running   0          3m
+pod/agentcontrol-gateway-69d58d9766-m29pq        1/1     Running   0          3m
+pod/agentcontrol-gateway-69d58d9766-z88np        1/1     Running   0          3m
+pod/agentcontrol-operator-8687d46c4f-l8s7b       1/1     Running   0          3m
 
 NAME                                           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-persistentvolumeclaim/data-agentwall-db-0      Bound    pvc-a1b2c3d4-5678-90ab-cdef-1234567890ab   10Gi       RWO            gp3            3m
+persistentvolumeclaim/data-agentcontrol-db-0      Bound    pvc-a1b2c3d4-5678-90ab-cdef-1234567890ab   10Gi       RWO            gp3            3m
 ```
 
 ---
@@ -357,7 +357,7 @@ Forward service port `8080` locally to execute end-to-end health checks:
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 # Terminal 2:
 curl -i http://127.0.0.1:8080/healthz
@@ -366,7 +366,7 @@ curl -i http://127.0.0.1:8080/healthz
 #### Windows (PowerShell):
 ```powershell
 # Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 # Terminal 2:
 curl.exe -i http://127.0.0.1:8080/healthz
@@ -375,7 +375,7 @@ curl.exe -i http://127.0.0.1:8080/healthz
 #### Windows (Command Prompt - CMD):
 ```cmd
 :: Terminal 1:
-kubectl port-forward svc/agentwall-gateway 8080:8080 -n agentwall-system
+kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
 
 :: Terminal 2:
 curl.exe -i http://127.0.0.1:8080/healthz
@@ -391,10 +391,10 @@ Check logs from the multi-replica gateway cluster and operator:
 
 ```bash
 # Gateway cluster logs
-kubectl logs -n agentwall-system deploy/agentwall-gateway --tail=50 -f
+kubectl logs -n agentcontrol-system deploy/agentcontrol-gateway --tail=50 -f
 
 # Operator reconciliation logs
-kubectl logs -n agentwall-system deploy/agentwall-operator --tail=50 -f
+kubectl logs -n agentcontrol-system deploy/agentcontrol-operator --tail=50 -f
 ```
 
 ---
@@ -409,20 +409,20 @@ Uninstall the Helm release and delete custom policy resources:
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-# 1. Delete AgentWall Policy CRDs
-kubectl delete agentwallpolicy aws-production-policy -n agentwall-system --ignore-not-found
+# 1. Delete Agent Control Policy CRDs
+kubectl delete agentcontrolpolicy aws-production-policy -n agentcontrol-system --ignore-not-found
 
 # 2. Uninstall Helm release
-helm uninstall agentwall -n agentwall-system
+helm uninstall agentcontrol -n agentcontrol-system
 
 # 3. Delete registered CRD schema
-kubectl delete crd agentwallpolicies.agentwall.io --ignore-not-found
+kubectl delete crd agentcontrolpolicies.agentcontrol.io --ignore-not-found
 
 # 4. Delete Persistent Volume Claims (EBS Volumes)
-kubectl delete pvc --all -n agentwall-system
+kubectl delete pvc --all -n agentcontrol-system
 
 # 5. Delete namespace
-kubectl delete namespace agentwall-system
+kubectl delete namespace agentcontrol-system
 ```
 
 ---
@@ -433,7 +433,7 @@ Use `eksctl` to automatically delete all AWS resources associated with the clust
 
 #### Linux / macOS / Windows (All Shells):
 ```bash
-eksctl delete cluster --name agentwall-eks-cluster --region us-east-1
+eksctl delete cluster --name agentcontrol-eks-cluster --region us-east-1
 ```
 
 ---
@@ -444,12 +444,12 @@ Verify that no orphaned EBS volumes or EKS resources remain:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentwall-eks-cluster,Values=owned" --region us-east-1
+aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentcontrol-eks-cluster,Values=owned" --region us-east-1
 ```
 
 #### Windows (PowerShell):
 ```powershell
-aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentwall-eks-cluster,Values=owned" --region us-east-1
+aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentcontrol-eks-cluster,Values=owned" --region us-east-1
 ```
 
 **Expected Output:** `Volumes: []` (Empty array).
@@ -462,8 +462,8 @@ aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentwall-eks
 | :--- | :--- | :--- |
 | **Tooling Setup** | Install AWS CLI, `eksctl`, `kubectl`, `helm` | ✅ |
 | **Cluster Launch** | `eksctl create cluster -f eks-cluster.yaml` | ✅ |
-| **Helm Install** | `helm install agentwall ./chart -n agentwall-system` | ✅ |
+| **Helm Install** | `helm install agentcontrol ./chart -n agentcontrol-system` | ✅ |
 | **CRD Policy Apply** | `kubectl apply -f policy.yaml` | ✅ |
 | **Health Validation** | `curl.exe http://127.0.0.1:8080/healthz` | ✅ |
-| **Helm Teardown** | `helm uninstall agentwall -n agentwall-system` | ✅ |
-| **Cluster Teardown** | `eksctl delete cluster --name agentwall-eks-cluster` | ✅ |
+| **Helm Teardown** | `helm uninstall agentcontrol -n agentcontrol-system` | ✅ |
+| **Cluster Teardown** | `eksctl delete cluster --name agentcontrol-eks-cluster` | ✅ |

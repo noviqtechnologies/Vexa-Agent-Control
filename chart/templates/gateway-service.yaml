@@ -2,15 +2,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "agentwall.fullname" . }}-gateway
+  name: {{ include "agentcontrol.fullname" . }}-gateway
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.gatewaySelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 4 }}
 spec:
   type: {{ .Values.gateway.service.type }}
   selector:
-    {{- include "agentwall.gatewaySelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 4 }}
   ports:
   - name: {{ if .Values.gateway.tls.enabled }}https{{ else }}http{{ end }}
     port: {{ .Values.gateway.service.port }}

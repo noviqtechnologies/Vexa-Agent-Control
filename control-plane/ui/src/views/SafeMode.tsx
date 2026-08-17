@@ -96,7 +96,7 @@ export default function SafeMode() {
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           Safe Mode is <strong style={{ color: 'var(--text-primary)' }}>enabled by default</strong> and
           cannot be disabled at runtime. It applies before the policy engine — it protects agents even
-          in shadow mode (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'rgba(255,255,255,0.07)', padding: '1px 5px', borderRadius: 3 }}>agentwall dev</code>)
+          in shadow mode (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'rgba(255,255,255,0.07)', padding: '1px 5px', borderRadius: 3 }}>agentcontrol dev</code>)
           where no policy file is loaded. Each rule targets only the relevant parameter type (file
           path, command, or URL), minimizing false positives.
         </p>

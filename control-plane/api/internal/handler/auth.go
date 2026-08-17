@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/session"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 	"golang.org/x/oauth2"
 )
 
@@ -80,7 +80,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Check Global Bootstrap Token, Secret Manager Session Secret, or SAAS_OPERATOR_PASSWORD
 	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
-	sessionSecret := os.Getenv("AGENTWALL_SESSION_SECRET")
+	sessionSecret := os.Getenv("AGENTCONTROL_SESSION_SECRET")
 	isDevMode := os.Getenv("DEV_MODE") == "true"
 	
 	isSecretMatch := (BootstrapToken != "" && req.Password == BootstrapToken) ||
@@ -151,7 +151,7 @@ func isRequestSecure(r *http.Request) bool {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	isSecure := isRequestSecure(r)
 	http.SetCookie(w, &http.Cookie{
-		Name:     "agentwall_session",
+		Name:     "agentcontrol_session",
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
@@ -285,7 +285,7 @@ func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, r *http.Request, t
 	isSecure := isRequestSecure(r)
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "agentwall_session",
+		Name:     "agentcontrol_session",
 		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
@@ -308,7 +308,7 @@ func (h *AuthHandler) CheckBootstrap() {
 		return
 	}
 
-	if sessSec := os.Getenv("AGENTWALL_SESSION_SECRET"); sessSec != "" {
+	if sessSec := os.Getenv("AGENTCONTROL_SESSION_SECRET"); sessSec != "" {
 		BootstrapToken = sessSec
 		log.Printf("INFO: SaaS Platform Super-Admin Master Secret loaded from Secret Manager.")
 		return

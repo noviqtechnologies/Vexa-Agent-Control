@@ -40,7 +40,7 @@ tools:
     // The Python test-tools logic serves as the true integration test when run
     // via a bash script in CI. Here we use the vexa check CLI.
 
-    let mut cmd = Command::cargo_bin("agentwall").unwrap();
+    let mut cmd = Command::cargo_bin("agentcontrol").unwrap();
     cmd.arg("test")
         .arg("--policy")
         .arg(policy_file.path())

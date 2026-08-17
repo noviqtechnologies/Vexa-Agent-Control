@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 )
 
 type Config struct {
@@ -22,14 +22,14 @@ type Config struct {
 	// GatewaySecret (which is gateway → dashboard-api for ingest).
 	PolicyReadSecret string
 
-	// GatewayURL is the internal URL of the AgentWall gateway (e.g.
+	// GatewayURL is the internal URL of the Agent Control gateway (e.g.
 	// http://agentwall-gateway:8080). Used to proxy policy-read requests.
 	GatewayURL string
 
 	// ProviderKeyEncryptionSecret is the 32-byte key used to encrypt provider API keys in DB.
 	ProviderKeyEncryptionSecret []byte
 
-	// LicenseKey is the Ed25519-signed JWT license key for AgentWall Hub.
+	// LicenseKey is the Ed25519-signed JWT license key for Agent Control Hub.
 	LicenseKey string
 
 	// DevMode disables auth requirements. Requires BOTH DEV_MODE=true AND
@@ -58,7 +58,7 @@ func Load() (*Config, error) {
 	gatewaySecret := os.Getenv("GATEWAY_SECRET")
 	policyReadSecret := os.Getenv("POLICY_READ_SECRET")
 	gatewayURL := os.Getenv("GATEWAY_URL")
-	licenseKey := os.Getenv("AGENTWALL_HUB_LICENSE_KEY")
+	licenseKey := os.Getenv("AGENTCONTROL_HUB_LICENSE_KEY")
 
 	encryptionHex := os.Getenv("PROVIDER_KEY_ENCRYPTION_SECRET")
 	var encryptionSecret []byte

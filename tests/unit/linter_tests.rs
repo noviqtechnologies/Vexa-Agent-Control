@@ -1,4 +1,4 @@
-use agentwall::lint;
+use agentcontrol::lint;
 use std::fs;
 use tempfile::NamedTempFile;
 

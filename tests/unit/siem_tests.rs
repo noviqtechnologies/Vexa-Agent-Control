@@ -1,5 +1,5 @@
-use agentwall::audit::logger::{AuditEntry, ZERO_HMAC};
-use agentwall::audit::siem::{try_export, SiemBackend, SiemExporter};
+use agentcontrol::audit::logger::{AuditEntry, ZERO_HMAC};
+use agentcontrol::audit::siem::{try_export, SiemBackend, SiemExporter};
 
 #[test]
 fn test_siem_backend_parsing() {

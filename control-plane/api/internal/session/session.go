@@ -23,7 +23,7 @@ func init() {
 		}
 	}
 
-	if envSecret := os.Getenv("AGENTWALL_SESSION_SECRET"); envSecret != "" {
+	if envSecret := os.Getenv("AGENTCONTROL_SESSION_SECRET"); envSecret != "" {
 		Secret = []byte(envSecret)
 	} else {
 		Secret = make([]byte, 32)

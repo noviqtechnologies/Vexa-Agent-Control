@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type EnrollmentV2Handler struct {

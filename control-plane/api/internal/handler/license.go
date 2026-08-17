@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 )
 
 type LicenseHandler struct {

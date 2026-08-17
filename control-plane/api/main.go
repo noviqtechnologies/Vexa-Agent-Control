@@ -12,16 +12,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/broker"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/config"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/crypto"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/device"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/handler"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/spend"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/handler"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 func main() {
@@ -96,7 +96,7 @@ func main() {
 			activeClaims = license.CommunityClaims()
 		}
 	} else {
-		log.Println("no AGENTWALL_HUB_LICENSE_KEY provided, running in Community mode (10 seats)")
+		log.Println("no AGENTCONTROL_HUB_LICENSE_KEY provided, running in Community mode (10 seats)")
 		activeClaims = license.CommunityClaims()
 	}
 

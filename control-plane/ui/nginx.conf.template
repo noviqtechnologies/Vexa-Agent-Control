@@ -10,17 +10,17 @@ server {
     }
 
     # Proxy API requests to dashboard-api.
-    # The upstream host:port is resolved from the AGENTWALL_API_UPSTREAM environment
+    # The upstream host:port is resolved from the AGENTCONTROL_API_UPSTREAM environment
     # variable at container startup via nginx:alpine envsubst templating.
     #
     #   ECS Fargate (shared network namespace)  → default 127.0.0.1:8400
     #   Docker Compose (per-service namespace)  → dashboard-api:8400  (set in compose file)
     #
-    # NGINX_ENVSUBST_FILTER=AGENTWALL_ ensures only AGENTWALL_* variables are
+    # NGINX_ENVSUBST_FILTER=AGENTCONTROL_ ensures only AGENTCONTROL_* variables are
     # substituted so NGINX's own runtime variables ($uri, $host, $remote_addr, etc.)
     # pass through unchanged.
     location /api/ {
-        proxy_pass http://${AGENTWALL_API_UPSTREAM};
+        proxy_pass http://${AGENTCONTROL_API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

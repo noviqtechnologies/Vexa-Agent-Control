@@ -38,8 +38,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "agentwall"
-version = "1.0.33"
+name = "agentcontrol"
+version = "1.0.34"
 dependencies = [
  "aes-gcm",
  "assert_cmd",

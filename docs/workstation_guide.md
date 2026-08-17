@@ -27,7 +27,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 1. [Prerequisites](#1-prerequisites)
 2. [Installation](#2-installation)
 3. [Step-by-Step: Getting Started](#3-step-by-step-getting-started)
-   - [Step 1 — Protect & Launch (Recommended)](#step-1--protect--launch-recommended) | [Manual: `agentwall dev`](#step-1b--manual-launch-agentwall-dev)
+   - [Step 1 — Protect & Launch (Recommended)](#step-1--protect--launch-recommended) | [Manual: `agentcontrol dev`](#step-1b--manual-launch-agentcontrol-dev)
    - [Step 2 — Route Agent HTTP Traffic Through Proxy](#step-2--route-agent-http-traffic-through-proxy)
    - [Step 3 — Wrap Stdio Tools & Desktop IDEs](#step-3--wrap-stdio-tools--desktop-ides)
    - [Step 4 — Auto-Generate Security Policy](#step-4--auto-generate-security-policy)
@@ -64,7 +64,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 # Install latest release (mandatory SHA-256 verified, strict error handling)
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 
-agentwall --version
+agentcontrol --version
 ```
 
 > [!TIP]
@@ -72,19 +72,19 @@ agentwall --version
 
 ### Persistent OS Sentry Daemon & File Locking
 
-Instead of manually running `agentwall start` in terminal, install AgentWall as an always-on background OS daemon with read-only file locks:
+Instead of manually running `agentcontrol start` in terminal, install Agent Control as an always-on background OS daemon with read-only file locks:
 
 ```bash
 # Install persistent systemd (Linux) or launchd (macOS) service
 # All three flags are required — they must match your Control Plane API configuration.
-agentwall service install \
+agentcontrol service install \
   --hub-url       "https://hub.corp.com" \
   --gateway-secret    "<GATEWAY_SECRET>" \
   --policy-read-secret "<POLICY_READ_SECRET>" \
   --agent-id      "dev-$(hostname)"   # optional: sets a friendly name in the dashboard
 
 # Check daemon status
-agentwall service status
+agentcontrol service status
 ```
 
 > [!IMPORTANT]
@@ -116,7 +116,7 @@ agentwall service status
 # Install latest release (mandatory SHA-256 verified, auto-adds to user PATH)
 irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
 
-agentwall.exe --version
+agentcontrol.exe --version
 ```
 
 > [!NOTE]
@@ -126,18 +126,18 @@ agentwall.exe --version
 > **Enterprise / Team enrollment?** Use the separate `team_otet.ps1` script instead. See the [Team Control Hub Guide](team_hub_guide.md).
 
 > **Important — Installer Elevation & Administrator Permissions:**
-> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentwall service install` runs automatically and sets all secrets at System scope.**
-> - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in an elevated Administrator session installs the binary and configures the `AgentWallSentry` SCM Service. Run `agentwall service install` afterwards with your real secrets:
+> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentcontrol service install` runs automatically and sets all secrets at System scope.**
+> - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in an elevated Administrator session installs the binary and configures the `Agent ControlSentry` SCM Service. Run `agentcontrol service install` afterwards with your real secrets:
 >   ```powershell
 >   # Run in an elevated (Administrator) PowerShell session:
->   agentwall.exe service install `
+>   agentcontrol.exe service install `
 >     --hub-url            "http://localhost:8400" `
 >     --gateway-secret     "<GATEWAY_SECRET>" `
 >     --policy-read-secret "<POLICY_READ_SECRET>" `
 >     --agent-id           "dev-workstation-01"   # optional
 >   ```
 >   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the service, so Sentry reads the correct secrets on first boot.
-> - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentwall watch --all`** in a standard user terminal.
+> - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentcontrol watch --all`** in a standard user terminal.
 
 
 **Permanent PATH configuration (run once — survives terminal restarts):**
@@ -165,51 +165,51 @@ agentwall.exe --version
 
 ### Step 1 — Protect & Launch (Recommended)
 
-The fastest path from zero to full protection. Run **one command** and AgentWall handles everything:
-1. Auto-generates a baseline `agentwall-policy.yaml` with DLP secret rules if no policy exists
+The fastest path from zero to full protection. Run **one command** and Agent Control handles everything:
+1. Auto-generates a baseline `agentcontrol-policy.yaml` with DLP secret rules if no policy exists
 2. Discovers all installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex) and atomically wraps their MCP configs
-3. Starts the local gateway proxy listening on `127.0.0.1:8080` (audit log → `~/.agentwall/audit.jsonl`)
+3. Starts the local gateway proxy listening on `127.0.0.1:8080` (audit log → `~/.agentcontrol/audit.jsonl`)
 4. Opens the local developer dashboard in your default browser
 
 ```bash
-agentwall protect                # macOS / Linux
-agentwall protect --enforce      # Start immediately in active-blocking mode
-agentwall protect --dry-run      # Preview all changes without writing to disk
+agentcontrol protect                # macOS / Linux
+agentcontrol protect --enforce      # Start immediately in active-blocking mode
+agentcontrol protect --dry-run      # Preview all changes without writing to disk
 ```
 
 **Windows (PowerShell):**
 ```powershell
-agentwall.exe protect
+agentcontrol.exe protect
 ```
 
 **What You Will See:**
 A terminal summary listing every IDE discovered, configs patched, and the baseline policy generated. Your default browser opens automatically at `http://127.0.0.1:8080`.
 
 **What You Achieve:**
-Full IDE protection + real-time agent event monitoring with zero manual configuration. Reverse everything cleanly with `agentwall unprotect`.
+Full IDE protection + real-time agent event monitoring with zero manual configuration. Reverse everything cleanly with `agentcontrol unprotect`.
 
 > [!NOTE]
-> **`agentwall init` is deprecated.** All zero-config setup is now handled by `agentwall protect` in a single step.
+> **`agentcontrol init` is deprecated.** All zero-config setup is now handled by `agentcontrol protect` in a single step.
 
 ---
 
-### Step 1b — Observation-Only Mode (`agentwall protect --shadow`)
+### Step 1b — Observation-Only Mode (`agentcontrol protect --shadow`)
 
 If you want to observe agent traffic *without* active policy enforcement (for risk auditing or policy learning), pass the `--shadow` flag:
 
 ```bash
-agentwall protect --shadow          # macOS / Linux
-agentwall.exe protect --shadow      # Windows
+agentcontrol protect --shadow          # macOS / Linux
+agentcontrol.exe protect --shadow      # Windows
 ```
 
 > [!NOTE]
-> `agentwall dev` is deprecated in favor of `agentwall protect` and `agentwall protect --shadow`.
+> `agentcontrol dev` is deprecated in favor of `agentcontrol protect` and `agentcontrol protect --shadow`.
 
 **What You Achieve:**
 Real-time agent event monitoring is active. All traffic passing through the proxy appears instantly in the dashboard without active blocking, allowing you to assess agent behavior before enforcing policy rules.
 
 > [!TIP]
-> **Populating Test Telemetry:** `quickstart_agent.py` is automatically installed alongside the `agentwall` binary into your PATH. If your browser dashboard shows *"No tool calls recorded yet"*, run the test script in a separate terminal to populate all dashboard panels:
+> **Populating Test Telemetry:** `quickstart_agent.py` is automatically installed alongside the `agentcontrol` binary into your PATH. If your browser dashboard shows *"No tool calls recorded yet"*, run the test script in a separate terminal to populate all dashboard panels:
 > ```bash
 > python quickstart_agent.py
 > ```
@@ -218,7 +218,7 @@ Real-time agent event monitoring is active. All traffic passing through the prox
 
 ### Step 2 — Route Agent HTTP Traffic Through Proxy
 
-Redirect HTTP/HTTPS requests from your AI agents or SDKs through AgentWall by setting standard proxy environment variables:
+Redirect HTTP/HTTPS requests from your AI agents or SDKs through Agent Control by setting standard proxy environment variables:
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
@@ -245,7 +245,7 @@ set AGENTWALL_PROXY_URL=http://127.0.0.1:8080
 Live HTTP requests from Python/Node AI scripts immediately appear in the browser dashboard.
 
 **What You Achieve:**
-All outgoing agent HTTP API calls (e.g., to OpenAI or Anthropic) are intercepted and recorded in `~/.agentwall/events.db`.
+All outgoing agent HTTP API calls (e.g., to OpenAI or Anthropic) are intercepted and recorded in `~/.agentcontrol/events.db`.
 
 ---
 
@@ -260,100 +260,100 @@ Secure Model Context Protocol (MCP) tool calls and desktop AI applications by wr
 **Linux / macOS (Bash / Zsh):**
 ```bash
 mkdir -p ~/workspace
-agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+agentcontrol dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
 ```
 
 **Windows (PowerShell):**
 ```powershell
 New-Item -ItemType Directory -Path "$HOME\workspace" -Force
-agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
+agentcontrol.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "$HOME\workspace"
 ```
 
 **Windows (Command Prompt - CMD):**
 ```cmd
 if not exist "%USERPROFILE%\workspace" mkdir "%USERPROFILE%\workspace"
-agentwall.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "%USERPROFILE%\workspace"
+agentcontrol.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "%USERPROFILE%\workspace"
 ```
 
 > [!TIP]
 > If `npx` is not found automatically (common with nvm/brew/fnm on macOS), pass the full path:
 > ```bash
-> agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
+> agentcontrol dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
 > ```
 
 **What You Will See:**
-`AgentWall MCP Security Proxy` initialization header in your terminal.
+`Agent Control MCP Security Proxy` initialization header in your terminal.
 
 #### Wrap a Desktop IDE
 
-AgentWall automatically patches the MCP configuration file of the target IDE — no manual JSON editing required. Supported targets:
+Agent Control automatically patches the MCP configuration file of the target IDE — no manual JSON editing required. Supported targets:
 
 > [!TIP]
-> **One-command protection:** Instead of wrapping IDEs one by one, use `agentwall protect` to discover and wrap **all** supported IDEs simultaneously, start the gateway, and open the dashboard:
+> **One-command protection:** Instead of wrapping IDEs one by one, use `agentcontrol protect` to discover and wrap **all** supported IDEs simultaneously, start the gateway, and open the dashboard:
 > ```bash
-> agentwall protect             # macOS / Linux — wraps all IDEs in one pass
-> agentwall.exe protect         # Windows
-> agentwall protect --dry-run   # Preview changes without writing to disk
-> agentwall protect --enforce   # Start immediately in active-blocking mode
+> agentcontrol protect             # macOS / Linux — wraps all IDEs in one pass
+> agentcontrol.exe protect         # Windows
+> agentcontrol protect --dry-run   # Preview changes without writing to disk
+> agentcontrol protect --enforce   # Start immediately in active-blocking mode
 > ```
-> To restore every IDE to its original config: `agentwall unprotect` (verifies backup integrity before restoring).
+> To restore every IDE to its original config: `agentcontrol unprotect` (verifies backup integrity before restoring).
 
 | IDE / Client | Wrap Command | Unprotect |
 |---|---|---|
-| Claude Desktop | `agentwall wrap claude` | `agentwall unwrap claude` |
-| Cursor | `agentwall wrap cursor` | `agentwall unwrap cursor` |
-| VS Code | `agentwall wrap vscode` | `agentwall unwrap vscode` |
-| JetBrains IDEs | `agentwall wrap jetbrains` | `agentwall unwrap jetbrains` |
-| Zed | `agentwall wrap zed` | `agentwall unwrap zed` |
-| Cline | `agentwall wrap cline` | `agentwall unwrap cline` |
-| OpenCode | `agentwall wrap opencode` | `agentwall unwrap opencode` |
-| Antigravity IDE | `agentwall wrap antigravity` | `agentwall unwrap antigravity` |
+| Claude Desktop | `agentcontrol wrap claude` | `agentcontrol unwrap claude` |
+| Cursor | `agentcontrol wrap cursor` | `agentcontrol unwrap cursor` |
+| VS Code | `agentcontrol wrap vscode` | `agentcontrol unwrap vscode` |
+| JetBrains IDEs | `agentcontrol wrap jetbrains` | `agentcontrol unwrap jetbrains` |
+| Zed | `agentcontrol wrap zed` | `agentcontrol unwrap zed` |
+| Cline | `agentcontrol wrap cline` | `agentcontrol unwrap cline` |
+| OpenCode | `agentcontrol wrap opencode` | `agentcontrol unwrap opencode` |
+| Antigravity IDE | `agentcontrol wrap antigravity` | `agentcontrol unwrap antigravity` |
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
-agentwall wrap claude      # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
-agentwall status           # inspect active wrappers and proxy health
+agentcontrol wrap claude      # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
+agentcontrol status           # inspect active wrappers and proxy health
 ```
 
 **Windows (PowerShell / CMD):**
 ```powershell
-agentwall.exe wrap claude  # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
-agentwall.exe status       # inspect active wrappers and proxy health
+agentcontrol.exe wrap claude  # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
+agentcontrol.exe status       # inspect active wrappers and proxy health
 ```
 
 > [!IMPORTANT]
-> **Restart your IDE** after running `agentwall wrap <target>`. IDE processes read MCP configuration strictly at application startup.
+> **Restart your IDE** after running `agentcontrol wrap <target>`. IDE processes read MCP configuration strictly at application startup.
 
 **What You Achieve:**
-MCP tool calls (file manipulation, shell execution, etc.) are proxied and governed by AgentWall. The IDE itself requires no plugin installation.
+MCP tool calls (file manipulation, shell execution, etc.) are proxied and governed by Agent Control. The IDE itself requires no plugin installation.
 
 ---
 
 ### Step 4 — Auto-Generate Security Policy
 
 > [!TIP]
-> **Using `agentwall protect`?** A baseline `agentwall-policy.yaml` is automatically created for you with P0 DLP secret rules when no policy file exists. You can skip this step and refine the generated policy manually.
+> **Using `agentcontrol protect`?** A baseline `agentcontrol-policy.yaml` is automatically created for you with P0 DLP secret rules when no policy file exists. You can skip this step and refine the generated policy manually.
 
 After running your agents or IDE tools, generate a YAML security policy derived from the observed traffic. This is a **one-time learning step** — run it after observation, not during.
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
-agentwall generate-policy --decay-window 30
+agentcontrol generate-policy --decay-window 30
 ```
 
 **Windows (PowerShell / CMD):**
 ```powershell
-agentwall.exe generate-policy --decay-window 30
+agentcontrol.exe generate-policy --decay-window 30
 ```
 
 **What You Will See:**
-Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentwall/events.db` (or `%USERPROFILE%\.agentwall\events.db`).
+Terminal output displaying a newly generated `policy.yaml` rule set based on recorded events in `~/.agentcontrol/events.db` (or `%USERPROFILE%\.agentcontrol\events.db`).
 
 **What You Achieve:**
 A tailored, baseline security policy automatically crafted for your specific agent tools — without manual YAML writing.
 
 > [!TIP]
-> Run `agentwall generate-policy --decay-window 7` to weight recent traffic more heavily (7-day window). Use `--decay-window 30` for a broader 30-day baseline.
+> Run `agentcontrol generate-policy --decay-window 7` to weight recent traffic more heavily (7-day window). Use `--decay-window 30` for a broader 30-day baseline.
 
 For complete YAML policy authoring and the v2 schema reference, see → [Common Reference Guide — YAML Policies](common_guide.md#writing-yaml-policies-v2-schema).
 
@@ -365,12 +365,12 @@ Evaluate how well your policy configuration detects and blocks 303 real-world AI
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
-agentwall bench --full
+agentcontrol bench --full
 ```
 
 **Windows (PowerShell / CMD):**
 ```powershell
-agentwall.exe bench --full
+agentcontrol.exe bench --full
 ```
 
 *(When building from source: `cargo run -- bench --full`)*
@@ -395,7 +395,7 @@ For the full benchmark reference (all 17 attack categories and scoring methodolo
 Audit your local MCP server definitions and receive a Vexa Security Score (0–100) before deploying to production:
 
 ```bash
-agentwall scan --path agentwall-policy.yaml
+agentcontrol scan --path agentcontrol-policy.yaml
 ```
 
 **What You Will See:**
@@ -408,7 +408,7 @@ A Vexa Security Score you can use as a CI/CD quality gate to prevent insecure MC
 
 ## 4. Safe Mode & Default-Deny Guardrails
 
-AgentWall ships with **15 out-of-the-box safe-mode rules** that are active by default — no policy file required. These rules automatically block the most common dangerous AI agent behaviors:
+Agent Control ships with **15 out-of-the-box safe-mode rules** that are active by default — no policy file required. These rules automatically block the most common dangerous AI agent behaviors:
 
 | Rule Category | Example Detections |
 |---|---|
@@ -420,12 +420,12 @@ AgentWall ships with **15 out-of-the-box safe-mode rules** that are active by de
 
 To view wrapper status and gateway health:
 ```bash
-agentwall status
+agentcontrol status
 ```
 
 To enable **enforcing (blocking) mode** after observation:
 ```bash
-agentwall start --policy agentwall-policy.yaml --listen 127.0.0.1:8080
+agentcontrol start --policy agentcontrol-policy.yaml --listen 127.0.0.1:8080
 ```
 
 For full policy authoring, see → [Common Reference Guide — YAML Policies](common_guide.md#writing-yaml-policies-v2-schema).
@@ -434,7 +434,7 @@ For full policy authoring, see → [Common Reference Guide — YAML Policies](co
 
 ## 5. Prompt Injection Protection
 
-AgentWall includes **9 active prompt injection scanners** that inspect both inbound tool call parameters and outbound tool response payloads:
+Agent Control includes **9 active prompt injection scanners** that inspect both inbound tool call parameters and outbound tool response payloads:
 
 | Scanner | What It Detects |
 |---|---|
@@ -459,16 +459,16 @@ Injection detections appear in real time in the local dashboard under the **Thre
 ### Run Shadow Mode
 
 ```bash
-agentwall start --shadow-mode --log-path audit.log
+agentcontrol start --shadow-mode --log-path audit.log
 ```
 
-Or use `agentwall dev` (shadow mode is the default for the `dev` subcommand).
+Or use `agentcontrol dev` (shadow mode is the default for the `dev` subcommand).
 
 ### Generate a Risk Delta Report
 
 After agents have run and traffic has been logged:
 ```bash
-agentwall report audit.log --risk
+agentcontrol report audit.log --risk
 ```
 
 The report summarizes:
@@ -488,7 +488,7 @@ The following technical reference sections apply across all deployment profiles 
 |---|---|
 | Writing YAML Policies (v2.2 Schema) | [common_guide.md → YAML Policies](common_guide.md#writing-yaml-policies-v2-schema) |
 | MCP Schema-Drift Detection (FR-601) | [user_guide.md → Schema Drift](user_guide.md#12-mcp-schema-drift-detection--client-sdks-v22) |
-<!-- | Python SDK (`agentwall`) & TypeScript SDK (`@vexa/agentwall`) | [user_guide.md → Client SDKs](user_guide.md#python-client-sdk-agentwall) | -->
+<!-- | Python SDK (`agentcontrol`) & TypeScript SDK (`@vexa/agentcontrol`) | [user_guide.md → Client SDKs](user_guide.md#python-client-sdk-agentcontrol) | -->
 | OWASP Agentic Top 10 (ASI 2026) Architecture | [owasp_agentic_top10.md](owasp_agentic_top10.md) |
 | Configuring Data Loss Prevention (DLP) | [common_guide.md → DLP](common_guide.md#configuring-data-loss-prevention-dlp) |
 | Setting Up OIDC Identity Binding | [common_guide.md → OIDC](common_guide.md#setting-up-oidc-identity-binding) |

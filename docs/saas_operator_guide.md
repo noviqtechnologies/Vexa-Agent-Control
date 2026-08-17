@@ -90,11 +90,11 @@ If a customer admin lost their setup token before initial login:
 ```bash
 # 1. List all tenants
 curl -X GET https://console.vexasec.io/api/v1/operator/organizations \
-  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>"
+  -H "Cookie: agentcontrol_session=<OPERATOR_COOKIE>"
 
 # 2. Onboard tenant via API
 curl -X POST https://console.vexasec.io/api/v1/operator/organizations \
-  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>" \
+  -H "Cookie: agentcontrol_session=<OPERATOR_COOKIE>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Globex Corp",
@@ -108,5 +108,5 @@ curl -X POST https://console.vexasec.io/api/v1/operator/organizations \
 
 # 3. Platform Health & Aggregate KPIs
 curl -X GET https://console.vexasec.io/api/v1/operator/stats \
-  -H "Cookie: agentwall_session=<OPERATOR_COOKIE>"
+  -H "Cookie: agentcontrol_session=<OPERATOR_COOKIE>"
 ```

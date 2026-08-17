@@ -8,7 +8,7 @@
 //! - `AzureKeyVaultAdapter` — Azure Key Vault (Managed Identity)
 //!
 //! The active backend is selected from the `identity.provider` field in the
-//! policy YAML or via `AGENTWALL_IDENTITY_BACKEND` environment variable.
+//! policy YAML or via `AGENTCONTROL_IDENTITY_BACKEND` environment variable.
 
 use crate::logging::{self, Level};
 use serde_json::json;
@@ -78,7 +78,7 @@ impl VaultConfig {
     /// This allows CI/CD systems and K8s operator secret injection to override
     /// the policy-file values without modifying the policy.
     pub fn from_env(policy_provider: &str, policy_vault_addr: Option<&str>) -> Self {
-        let backend = std::env::var("AGENTWALL_IDENTITY_BACKEND")
+        let backend = std::env::var("AGENTCONTROL_IDENTITY_BACKEND")
             .unwrap_or_else(|_| policy_provider.to_string());
 
         let vault_addr = std::env::var("VAULT_ADDR")

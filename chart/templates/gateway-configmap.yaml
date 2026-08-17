@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "agentwall.policyConfigMapName" . }}
+  name: {{ include "agentcontrol.policyConfigMapName" . }}
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.gatewaySelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 4 }}
 data:
   policy.yaml: |
 {{ .Values.gateway.policy.inline | indent 4 }}

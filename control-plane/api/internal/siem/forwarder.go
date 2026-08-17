@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
 type Backend string
@@ -168,8 +168,8 @@ func (f *Forwarder) sendSplunk(batch []*EnrichedEvent) error {
 	for _, evt := range batch {
 		payload := map[string]interface{}{
 			"time":       evt.TimestampMs / 1000,
-			"sourcetype": "agentwall-hub",
-			"source":     "agentwall-control-plane",
+			"sourcetype": "agentcontrol-hub",
+			"source":     "agentcontrol-control-plane",
 			"event":      evt,
 		}
 		data, _ := json.Marshal(payload)
@@ -200,8 +200,8 @@ func (f *Forwarder) sendDatadog(batch []*EnrichedEvent) error {
 	var datadogEvents []map[string]interface{}
 	for _, evt := range batch {
 		datadogEvents = append(datadogEvents, map[string]interface{}{
-			"ddsource": "agentwall",
-			"service":  "agentwall-hub",
+			"ddsource": "agentcontrol",
+			"service":  "agentcontrol-hub",
 			"hostname": evt.GatewayID,
 			"message":  evt,
 			"org_id":   evt.OrgID,

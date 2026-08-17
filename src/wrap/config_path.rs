@@ -185,11 +185,11 @@ pub fn codex_config_path() -> Result<PathBuf, WrapError> {
     })
 }
 
-/// Returns the path to the ~/.agent-control/ config directory (with fallback to ~/.agentwall/).
+/// Returns the path to the ~/.agent-control/ config directory (with fallback to ~/.agentcontrol/).
 pub fn agent_control_config_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| {
         let new_dir = h.join(".agent-control");
-        let old_dir = h.join(".agentwall");
+        let old_dir = h.join(".agentcontrol");
         if old_dir.exists() && !new_dir.exists() {
             old_dir
         } else {

@@ -1,14 +1,14 @@
 /**
- * @vexa/agentwall — TypeScript client SDK for Vexa Agent Control AI Security Gateway & Firewall.
+ * @vexa/agentcontrol — TypeScript client SDK for Vexa Agent Control AI Security Gateway & Firewall.
  */
 
-export { AgentWallClient, AgentWallClient as AgentControlClient } from "./client.js";
+export { AgentControlClient, AgentControlClient as AgentControlClient } from "./client.js";
 export {
-  AgentWallError,
-  AgentWallDenied,
-  AgentWallApprovalPending,
-  AgentWallPivotError,
-  AgentWallConnectionError,
+  AgentControlError,
+  AgentControlDenied,
+  AgentControlApprovalPending,
+  AgentControlPivotError,
+  AgentControlConnectionError,
 } from "./errors.js";
 export type {
   Verdict,

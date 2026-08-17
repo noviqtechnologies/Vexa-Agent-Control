@@ -1,4 +1,4 @@
-use agentwall::local_dashboard::local_dashboard_html as dashboard_html;
+use agentcontrol::local_dashboard::local_dashboard_html as dashboard_html;
 
 #[test]
 fn test_dashboard_html_is_embedded() {

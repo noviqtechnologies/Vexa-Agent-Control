@@ -1,7 +1,7 @@
 //! Unit tests for FR-601: MCP Schema-Drift Detection
 
-use agentwall::policy::schema::SchemaDriftConfig;
-use agentwall::policy::schema_drift::{DriftAction, DriftResult, SchemaDriftDetector};
+use agentcontrol::policy::schema::SchemaDriftConfig;
+use agentcontrol::policy::schema_drift::{DriftAction, DriftResult, SchemaDriftDetector};
 use serde_json::json;
 
 #[test]

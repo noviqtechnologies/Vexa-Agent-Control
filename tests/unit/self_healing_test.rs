@@ -1,5 +1,5 @@
-use agentwall::self_healing::{ConfidenceDecay, AnomalyScorer, SuggestionEngine};
-use agentwall::proxy::db::EgressEvent;
+use agentcontrol::self_healing::{ConfidenceDecay, AnomalyScorer, SuggestionEngine};
+use agentcontrol::proxy::db::EgressEvent;
 
 #[test]
 fn test_confidence_decay() {

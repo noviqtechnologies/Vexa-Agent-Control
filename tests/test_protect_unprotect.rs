@@ -1,4 +1,4 @@
-//! Integration tests for `agentwall protect` / `agentwall unprotect` CLI commands
+//! Integration tests for `agentcontrol protect` / `agentcontrol unprotect` CLI commands
 //! and associated backup / configuration-wrapping subsystem.
 //!
 //! Tests cover:
@@ -48,7 +48,7 @@ fn write_empty_config(dir: &Path, filename: &str) -> PathBuf {
 #[cfg(test)]
 mod backup_integrity_tests {
     use super::*;
-    use agentwall::wrap::backup;
+    use agentcontrol::wrap::backup;
 
     #[test]
     fn valid_backup_passes_integrity_check() {
@@ -105,17 +105,17 @@ mod backup_integrity_tests {
 #[cfg(test)]
 mod backup_lifecycle_tests {
     use super::*;
-    use agentwall::wrap::backup;
+    use agentcontrol::wrap::backup;
 
     #[test]
-    fn backup_name_contains_agentwall_prefix_and_timestamp() {
+    fn backup_name_contains_agentcontrol_prefix_and_timestamp() {
         let dir = tempdir().unwrap();
         let config = write_valid_mcp_config(dir.path(), "claude_desktop_config.json");
         let backup_path = backup::create_backup(&config).unwrap();
         let name = backup_path.file_name().unwrap().to_string_lossy();
         assert!(
-            name.contains("agentwall-backup-"),
-            "Backup filename must contain 'agentwall-backup-' prefix, got: {name}"
+            name.contains("agentcontrol-backup-"),
+            "Backup filename must contain 'agentcontrol-backup-' prefix, got: {name}"
         );
         // Timestamp is at least 14 digits (YYYYMMDD + HHMMSS)
         let digits: String = name.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -139,7 +139,7 @@ mod backup_lifecycle_tests {
     fn find_latest_backup_returns_most_recent_by_timestamp() {
         let dir = tempdir().unwrap();
         for ts in &["20260512-100000", "20260512-110000", "20260512-120000"] {
-            let name = format!("config.json.agentwall-backup-{ts}");
+            let name = format!("config.json.agentcontrol-backup-{ts}");
             fs::write(dir.path().join(&name), r#"{"mcpServers":{}}"#).unwrap();
         }
         let latest = backup::find_latest_backup(dir.path())
@@ -165,7 +165,7 @@ mod backup_lifecycle_tests {
 #[cfg(test)]
 mod dry_run_tests {
     use super::*;
-    use agentwall::wrap::generic_ide;
+    use agentcontrol::wrap::generic_ide;
 
     #[test]
     fn dry_run_leaves_config_unmodified() {
@@ -181,7 +181,7 @@ mod dry_run_tests {
         let backups: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().contains("agentwall-backup-"))
+            .filter(|e| e.file_name().to_string_lossy().contains("agentcontrol-backup-"))
             .collect();
         assert!(backups.is_empty(), "dry-run must not create any backup files");
     }
@@ -195,7 +195,7 @@ mod dry_run_tests {
             let backups: Vec<_> = fs::read_dir(dir.path())
                 .unwrap()
                 .filter_map(|e| e.ok())
-                .filter(|e| e.file_name().to_string_lossy().contains("agentwall-backup-"))
+                .filter(|e| e.file_name().to_string_lossy().contains("agentcontrol-backup-"))
                 .collect();
             assert!(!backups.is_empty(), "A successful wrap must create a timestamped backup (FR-1.2)");
         }
@@ -207,7 +207,7 @@ mod dry_run_tests {
 #[cfg(test)]
 mod unprotect_tests {
     use super::*;
-    use agentwall::wrap::generic_ide;
+    use agentcontrol::wrap::generic_ide;
 
     #[test]
     fn unwrap_restores_config_from_valid_backup() {
@@ -229,7 +229,7 @@ mod unprotect_tests {
         let config_path = write_valid_mcp_config(dir.path(), "cursor.json");
 
         // Plant a corrupt backup file
-        let corrupt_backup = dir.path().join("cursor.json.agentwall-backup-20260811-120000");
+        let corrupt_backup = dir.path().join("cursor.json.agentcontrol-backup-20260811-120000");
         fs::write(&corrupt_backup, b"CORRUPT DATA").unwrap();
 
         let result = generic_ide::unwrap_generic("Cursor", config_path, /*force=*/ false);
@@ -245,7 +245,7 @@ mod unprotect_tests {
         let config_path = write_valid_mcp_config(dir.path(), "cursor.json");
 
         // Plant a valid backup
-        let backup_path = dir.path().join("cursor.json.agentwall-backup-20260811-120000");
+        let backup_path = dir.path().join("cursor.json.agentcontrol-backup-20260811-120000");
         fs::write(&backup_path, r#"{"mcpServers":{}}"#).unwrap();
 
         // --force should not panic regardless of outcome
@@ -296,7 +296,7 @@ mod api_mode_toggle_tests {
 
 #[cfg(test)]
 mod api_policy_wizard_tests {
-    use agentwall::policy::engine::CompiledPolicy;
+    use agentcontrol::policy::engine::CompiledPolicy;
 
     #[test]
     fn valid_wizard_yaml_compiles_successfully() {

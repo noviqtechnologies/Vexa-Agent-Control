@@ -6,9 +6,9 @@ use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_stdio_bridge() {
-    let bin = env!("CARGO_BIN_EXE_agentwall");
+    let bin = env!("CARGO_BIN_EXE_agentcontrol");
 
-    // Spawn agentwall in stdio mode
+    // Spawn agentcontrol in stdio mode
     let mut child = Command::new(bin)
         .args([
             "dev",
@@ -24,7 +24,7 @@ async fn test_stdio_bridge() {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("Failed to start agentwall stdio proxy");
+        .expect("Failed to start agentcontrol stdio proxy");
 
     // Give it a moment to initialize
     sleep(Duration::from_millis(500)).await;

@@ -1,7 +1,7 @@
 //! FR-5: Credential Scope Validator (stub — FR-22 Identity Platform integration pending)
 //!
 //! Reads `credential_scope` arrays from policy tool blocks and validates them against
-//! the `X-AgentWall-Credential-Scope` HTTP header sent by identity-aware agents.
+//! the `X-AgentControl-Credential-Scope` HTTP header sent by identity-aware agents.
 //!
 //! ## Behavior (v2.0 stub)
 //!
@@ -51,7 +51,7 @@ impl CredentialScopeValidator {
     /// # Arguments
     /// * `tool_name` — name of the tool being called.
     /// * `required_scopes` — scopes required by the policy for this tool (from `credential_scope:`).
-    /// * `agent_scope_header` — value of the `X-AgentWall-Credential-Scope` header, if present.
+    /// * `agent_scope_header` — value of the `X-AgentControl-Credential-Scope` header, if present.
     /// * `session_id` — for audit logging.
     pub fn validate(
         &self,
@@ -80,7 +80,7 @@ impl CredentialScopeValidator {
                         "tool": tool_name,
                         "session": session_id,
                         "required_scopes": required_scopes,
-                        "note": "Agent sent no X-AgentWall-Credential-Scope header. FR-22 Identity Platform integration pending.",
+                        "note": "Agent sent no X-AgentControl-Credential-Scope header. FR-22 Identity Platform integration pending.",
                         "strict": self.strict,
                     }),
                 );
@@ -88,7 +88,7 @@ impl CredentialScopeValidator {
                 if self.strict {
                     return CredentialScopeResult::Insufficient {
                         reason: format!(
-                            "Tool '{}' requires credential scope {:?} but agent sent no X-AgentWall-Credential-Scope header. \
+                            "Tool '{}' requires credential scope {:?} but agent sent no X-AgentControl-Credential-Scope header. \
                              Use --strict-credential-scope=false to warn instead of deny.",
                             tool_name, required_scopes
                         ),

@@ -4,7 +4,8 @@ use super::WrapError;
 use chrono::Local;
 use std::path::{Path, PathBuf};
 
-const BACKUP_SUFFIX_PREFIX: &str = "agentwall-backup-";
+const BACKUP_SUFFIX_PREFIX: &str = "agentcontrol-backup-";
+const LEGACY_BACKUP_SUFFIX_PREFIX: &str = "agentwall-backup-";
 #[allow(dead_code)]
 const MAX_BACKUPS: usize = 5;
 
@@ -68,7 +69,7 @@ pub fn verify_backup_integrity(backup_path: &Path) -> Result<(), WrapError> {
     Ok(())
 }
 
-/// List all agentwall backup files in a directory.
+/// List all agentcontrol and legacy agentwall backup files in a directory.
 fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
     let entries = std::fs::read_dir(config_dir)?;
     let backups = entries
@@ -77,7 +78,7 @@ fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n.contains(BACKUP_SUFFIX_PREFIX))
+                .map(|n| n.contains(BACKUP_SUFFIX_PREFIX) || n.contains(LEGACY_BACKUP_SUFFIX_PREFIX))
                 .unwrap_or(false)
         })
         .collect();

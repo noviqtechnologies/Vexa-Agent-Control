@@ -1,5 +1,5 @@
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig, ZERO_HMAC};
-use agentwall::audit::verifier::{verify_chain, verify_chain_with_secret, VerifyResult};
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig, ZERO_HMAC};
+use agentcontrol::audit::verifier::{verify_chain, verify_chain_with_secret, VerifyResult};
 use serde_json::json;
 use std::fs;
 use tempfile::tempdir;

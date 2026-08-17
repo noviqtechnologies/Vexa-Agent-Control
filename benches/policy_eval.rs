@@ -11,8 +11,8 @@ use regex::Regex;
 use serde_json::json;
 use std::sync::Arc;
 
-use agentwall::policy::engine::{CompiledParam, CompiledPolicy, CompiledTool};
-use agentwall::policy::schema::ParamType;
+use agentcontrol::policy::engine::{CompiledParam, CompiledPolicy, CompiledTool};
+use agentcontrol::policy::schema::ParamType;
 
 // ---------------------------------------------------------------------------
 // Policy construction helpers

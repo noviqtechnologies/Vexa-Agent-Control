@@ -12,7 +12,7 @@ interface ContainerNode {
 export const HarFleetTelemetry: React.FC = () => {
   const nodes: ContainerNode[] = [
     {
-      podId: 'agentwall-har-pod-88a',
+      podId: 'agentcontrol-har-pod-88a',
       environment: 'Kubernetes Cluster / EKS',
       imageSize: '84.2 MB (Alpine)',
       status: 'Healthy',
@@ -20,7 +20,7 @@ export const HarFleetTelemetry: React.FC = () => {
       p95Latency: '1.8 ms',
     },
     {
-      podId: 'agentwall-har-obot-02',
+      podId: 'agentcontrol-har-obot-02',
       environment: 'Obot Agent Platform',
       imageSize: '91.0 MB (Distroless)',
       status: 'Healthy',

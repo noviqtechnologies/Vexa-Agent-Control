@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/license"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/sse"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 )
 
 func TestLicenseHandler_GetStatus_Community(t *testing.T) {

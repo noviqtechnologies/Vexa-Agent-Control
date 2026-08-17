@@ -15,32 +15,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	agentwallv1alpha1 "github.com/noviqtechnologies/agentwall/operator/api/v1alpha1"
+	agentcontrolv1alpha1 "github.com/noviqtechnologies/agentcontrol/operator/api/v1alpha1"
 )
 
-// AgentWallPolicyReconciler reconciles a AgentWallPolicy object
-type AgentWallPolicyReconciler struct {
+// AgentControlPolicyReconciler reconciles a AgentControlPolicy object
+type AgentControlPolicyReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=agentwall.io,resources=agentwallpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=agentwall.io,resources=agentwallpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=agentcontrol.io,resources=agentcontrolpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=agentcontrol.io,resources=agentcontrolpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
-func (r *AgentWallPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AgentControlPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Fetch the AgentWallPolicy instance
-	var policy agentwallv1alpha1.AgentWallPolicy
+	// Fetch the AgentControlPolicy instance
+	var policy agentcontrolv1alpha1.AgentControlPolicy
 	if err := r.Get(ctx, req.NamespacedName, &policy); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("AgentWallPolicy resource not found. Ignoring since object must be deleted")
+			logger.Info("AgentControlPolicy resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get AgentWallPolicy")
+		logger.Error(err, "Failed to get AgentControlPolicy")
 		return ctrl.Result{}, err
 	}
 
@@ -62,7 +62,7 @@ func (r *AgentWallPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	policy.Status.LastReconcileTime = time.Now().Format(time.RFC3339)
 	policy.Status.NetworkPolicyName = npName
 	if err := r.Status().Update(ctx, &policy); err != nil {
-		logger.Error(err, "Failed to update AgentWallPolicy status")
+		logger.Error(err, "Failed to update AgentControlPolicy status")
 		return ctrl.Result{}, err
 	}
 
@@ -73,7 +73,7 @@ func (r *AgentWallPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // in the policy's namespace with the desired policy YAML. This preserves the
 // original controller behavior verbatim; only its packaging (extracted method)
 // has changed.
-func (r *AgentWallPolicyReconciler) reconcileConfigMap(ctx context.Context, policy *agentwallv1alpha1.AgentWallPolicy) error {
+func (r *AgentControlPolicyReconciler) reconcileConfigMap(ctx context.Context, policy *agentcontrolv1alpha1.AgentControlPolicy) error {
 	logger := log.FromContext(ctx)
 
 	cmName := policy.Name + "-policy-config"
@@ -118,7 +118,7 @@ func (r *AgentWallPolicyReconciler) reconcileConfigMap(ctx context.Context, poli
 //
 // Returns the NetworkPolicy name that should be reflected on Status. When
 // enforcement is off, returns "" so the status field is cleared on next update.
-func (r *AgentWallPolicyReconciler) reconcileNetworkPolicy(ctx context.Context, policy *agentwallv1alpha1.AgentWallPolicy) (string, error) {
+func (r *AgentControlPolicyReconciler) reconcileNetworkPolicy(ctx context.Context, policy *agentcontrolv1alpha1.AgentControlPolicy) (string, error) {
 	logger := log.FromContext(ctx)
 
 	npName := networkPolicyName(policy.Name)
@@ -206,9 +206,9 @@ func isManagedByUs(obj metav1.Object) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *AgentWallPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AgentControlPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&agentwallv1alpha1.AgentWallPolicy{}).
+		For(&agentcontrolv1alpha1.AgentControlPolicy{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Complete(r)

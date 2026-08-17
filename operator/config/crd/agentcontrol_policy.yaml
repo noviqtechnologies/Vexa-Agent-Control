@@ -1,20 +1,20 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: agentwallpolicies.agentwall.io
+  name: agentcontrolpolicies.agentcontrol.io
 spec:
-  group: agentwall.io
+  group: agentcontrol.io
   names:
-    kind: AgentWallPolicy
-    listKind: AgentWallPolicyList
-    plural: agentwallpolicies
-    singular: agentwallpolicy
+    kind: AgentControlPolicy
+    listKind: AgentControlPolicyList
+    plural: agentcontrolpolicies
+    singular: agentcontrolpolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AgentWallPolicy is the Schema for the agentwallpolicies API
+        description: AgentControlPolicy is the Schema for the agentcontrolpolicies API
         properties:
           apiVersion:
             type: string
@@ -23,7 +23,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AgentWallPolicySpec defines the desired state of AgentWallPolicy
+            description: AgentControlPolicySpec defines the desired state of AgentControlPolicy
             properties:
               gatewayImage:
                 type: string
@@ -49,14 +49,14 @@ spec:
                       type: string
                     description: |
                       Labels selecting agent pods that will be restricted.
-                      Defaults to {agentwall.io/agent: "true"} if empty.
+                      Defaults to {agentcontrol.io/agent: "true"} if empty.
                     type: object
                   gatewayPodSelector:
                     additionalProperties:
                       type: string
                     description: |
                       Labels selecting the gateway pod that agents are allowed
-                      to reach. Defaults to {agentwall.io/gateway: "true"} if empty.
+                      to reach. Defaults to {agentcontrol.io/gateway: "true"} if empty.
                     type: object
                   mcpPort:
                     description: TCP port the gateway listens on. Defaults to 8080.
@@ -67,7 +67,7 @@ spec:
                 type: object
             type: object
           status:
-            description: AgentWallPolicyStatus defines the observed state of AgentWallPolicy
+            description: AgentControlPolicyStatus defines the observed state of AgentControlPolicy
             properties:
               gatewayPodName:
                 type: string

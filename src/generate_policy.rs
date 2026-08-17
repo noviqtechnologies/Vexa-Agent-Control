@@ -1,7 +1,7 @@
 //! FR-4: Auto-Policy Generation from Observed Traffic.
 //!
 //! Analyses all recorded tool-call events from the SQLite event store and
-//! produces a lint-passing `agentwall-policy.yaml` draft.
+//! produces a lint-passing `agentcontrol-policy.yaml` draft.
 //!
 //! ## Design decisions (approved 2026-06-11)
 //! - `observed_pattern` is emitted as a YAML comment (informational, not enforced).
@@ -280,7 +280,7 @@ fn with_headroom(raw: usize, floor: usize) -> usize {
 
 /// Generate a full FR-4 compliant YAML policy draft from the observed events.
 ///
-/// The output is a valid `agentwall-policy.yaml` that passes `agentwall lint`
+/// The output is a valid `agentcontrol-policy.yaml` that passes `agentwall lint`
 /// (exit code 0). Every observed tool is allowlisted with inferred parameter
 /// constraints, confidence level, risk tier, and an anomalies section.
 pub fn generate_from_events(events: &[EgressEvent], decay_window_days: u32) -> String {
@@ -407,7 +407,7 @@ tools: []
 # Observation window: {} to {}
 # Tools observed: {}
 # Review this policy carefully before enabling enforcement.
-# Run: agentwall lint agentwall-policy.yaml
+# Run: agentwall lint agentcontrol-policy.yaml
 
 version: \"2.1\"
 default_action: deny

@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    AgentWall Binary Installer for Windows (Standalone Developer Edition).
+    Vexa Agent Control Binary Installer for Windows (Standalone Developer Edition).
     Usage: irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
            .\install.ps1 [-Version <VERSION>]    # omit -Version to install the latest release
 #>
 
 param(
-    [string]$Version = $env:AGENTWALL_VERSION
+    [string]$Version = $env:AGENTCONTROL_VERSION
 )
 
 & {
@@ -21,19 +21,19 @@ param(
     $ColorYellow = "Yellow"
 
     Write-Host "=============================================" -ForegroundColor $ColorCyan
-    Write-Host "          AgentWall Installer              " -ForegroundColor $ColorCyan
+    Write-Host "          Vexa Agent Control Installer              " -ForegroundColor $ColorCyan
     Write-Host "=============================================" -ForegroundColor $ColorCyan
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    if (-not $Version) { $Version = $env:AGENTWALL_VERSION }
+    if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
         try {
             $ReleaseJson = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
-                -Headers @{ "User-Agent" = "AgentWall-Installer" }
+                -Headers @{ "User-Agent" = "AgentControl-Installer" }
             $Version = $ReleaseJson.tag_name
         } catch {
             Write-Host "[!] Failed to fetch latest version: $_" -ForegroundColor $ColorRed
@@ -60,7 +60,7 @@ param(
     Write-Host "Target version: $Version" -ForegroundColor $ColorGreen
 
     # 2. Check currently installed version
-    $FinalBinaryPath = Join-Path $InstallDir "agentwall.exe"
+    $FinalBinaryPath = Join-Path $InstallDir "agentcontrol.exe"
     $InstalledVersion = $null
     if (Test-Path $FinalBinaryPath) {
         try {
@@ -78,13 +78,13 @@ param(
         Write-Host "Fresh install of Vexa Agent Control $Version..." -ForegroundColor $ColorCyan
     }
 
-    $AssetName = "agentwall-$Version-windows-$ArchTarget.zip"
+    $AssetName = "agentcontrol-$Version-windows-$ArchTarget.zip"
     $BaseUrl   = "https://github.com/$Repo/releases/download/$Version"
     $AssetUrl  = "$BaseUrl/$AssetName"
     $ChecksumsUrl = "$BaseUrl/checksums.txt"
 
     # 3. Create Temp Dir
-    $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) "AgentWallInstall"
+    $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) "AgentControlInstall"
     if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
 
@@ -137,11 +137,11 @@ param(
     $ExtractDir = Join-Path $TempDir "extracted"
     Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
 
-    $ExtractedBinary = Get-ChildItem -Path $ExtractDir -Recurse -Filter "agentwall*" |
+    $ExtractedBinary = Get-ChildItem -Path $ExtractDir -Recurse -Filter "agentcontrol*" |
         Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
 
     if (-not $ExtractedBinary) {
-        Write-Host "Could not locate agentwall binary inside extracted archive." -ForegroundColor $ColorRed
+        Write-Host "Could not locate agentcontrol binary inside extracted archive." -ForegroundColor $ColorRed
         throw "Binary missing in archive"
     }
 
@@ -154,7 +154,7 @@ param(
     $AgentControlPath = Join-Path $InstallDir "agentcontrol.exe"
     Copy-Item -Path $ExtractedBinary.FullName -Destination $AgentControlPath -Force
     Copy-Item -Path $ExtractedBinary.FullName -Destination $FinalBinaryPath -Force
-    Write-Host "Installed as agentcontrol.exe (and alias agentwall.exe)" -ForegroundColor $ColorGreen
+    Write-Host "Installed as agentcontrol.exe (and alias agentcontrol.exe)" -ForegroundColor $ColorGreen
 
     $QuickstartScript = Get-ChildItem -Path $ExtractDir -Recurse -Filter "quickstart_agent.py" | Select-Object -First 1
     $QuickstartTarget = Join-Path $InstallDir "quickstart_agent.py"

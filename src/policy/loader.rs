@@ -252,7 +252,7 @@ fn compile_policy_yaml(
                              Policy Schema v2 requires inline JSON Schema for all object and array \
                              parameters (v6.1 — blind pass-through removal). \
                              Add a 'schema:' block or change the parameter type to 'string'. \
-                             See docs/VexaAgentWall-PRD-v6.1.md §6.2 for the migration guide.",
+                             See docs/VexaVexa Agent Control-PRD-v6.1.md §6.2 for the migration guide.",
                             tool.name, param.name, param.param_type
                         )));
                     }
@@ -452,7 +452,7 @@ fn compile_policy_yaml(
         validator.clone().start_background_rotation();
 
         // FR-L07: Soft warning if > 2 OIDC IdPs configured without a Hub license key
-        if std::env::var("AGENTWALL_HUB_LICENSE_KEY").is_err() {
+        if std::env::var("AGENTCONTROL_HUB_LICENSE_KEY").is_err() {
             if let Some(auth_cfg) = &policy_file.auth {
                 let count = auth_cfg.issuers.as_ref().map(|i| i.len()).unwrap_or(1);
                 if count > 2 {
@@ -461,7 +461,7 @@ fn compile_policy_yaml(
                         "oidc_idp_limit_exceeded_community",
                         serde_json::json!({
                             "configured_issuers": count,
-                            "recommendation": "AgentWall Team Community supports 2 IdPs. Upgrade to VexaSec Team for unlimited enterprise SSO.",
+                            "recommendation": "Vexa Agent Control Team Community supports 2 IdPs. Upgrade to VexaSec Team for unlimited enterprise SSO.",
                             "action": "allowed_soft_warning"
                         }),
                     );

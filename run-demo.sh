@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AgentWall Dashboard Launcher (Bash - macOS / Linux)
+# Vexa Agent Control Dashboard Launcher (Bash - macOS / Linux)
 # Usage: ./run-demo.sh
 
 set -e
@@ -22,7 +22,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo ""
-echo -e "  ${CYAN}Building and starting AgentWall Dashboard...${NC}"
+echo -e "  ${CYAN}Building and starting Vexa Agent Control Dashboard...${NC}"
 echo ""
 
 docker compose -f "$COMPOSE_FILE" up -d --build
@@ -68,7 +68,7 @@ BOOTSTRAP_TOKEN=$(docker compose -f "$COMPOSE_FILE" logs dashboard-api 2>&1 | \
 LINE="--------------------------------------------------------------"
 echo -e "  ${DARK_GRAY}$LINE${NC}"
 echo ""
-echo -e "   ${GREEN}AgentWall Dashboard is ready!${NC}"
+echo -e "   ${GREEN}Vexa Agent Control Dashboard is ready!${NC}"
 echo ""
 echo -e "   ${GRAY}Dashboard URL   ${NC}${YELLOW}$DASHBOARD_URL${NC}"
 echo ""

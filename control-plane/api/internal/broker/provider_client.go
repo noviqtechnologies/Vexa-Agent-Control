@@ -43,7 +43,7 @@ func (c *GenericProviderClient) ForwardLLMRequest(ctx context.Context, provider,
 				"index": 0,
 				"message": map[string]string{
 					"role":    "assistant",
-					"content": "Vexa AgentWall Brokered Response",
+					"content": "Vexa Agent Control Brokered Response",
 				},
 				"finish_reason": "stop",
 			},

@@ -1,6 +1,6 @@
 //! Unit test suite for FR-403: Real-time Threat Intelligence Feed
 
-use agentwall::policy::threat_intel::{ThreatIntelFeed, ThreatSignature};
+use agentcontrol::policy::threat_intel::{ThreatIntelFeed, ThreatSignature};
 
 #[test]
 fn test_threat_intel_signature_matching() {

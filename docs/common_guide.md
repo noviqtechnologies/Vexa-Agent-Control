@@ -52,11 +52,11 @@
 
 ## 1. Writing YAML Policies (v2 Schema)
 
-AgentWall policies use strict, explicit YAML configuration files conforming to the **v2 schema**. AgentWall operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
+Agent Control policies use strict, explicit YAML configuration files conforming to the **v2 schema**. Agent Control operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
 
 ### Policy Marketplace ("No More Blank YAML")
 
-Writing security policies from scratch can be challenging. AgentWall includes a **Policy Marketplace** in the Web Console (`/policy/marketplace`) with **One-Click Templates**:
+Writing security policies from scratch can be challenging. Agent Control includes a **Policy Marketplace** in the Web Console (`/policy/marketplace`) with **One-Click Templates**:
 
 - **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration sequences.
 - **Production Data Egress Control**: Locks outbound network requests to internal company domain wildcards, enables loop prevention firewalls, and enforces MCP schema-drift blocking.
@@ -92,7 +92,7 @@ default_action: deny
 # 1. Identity & OIDC Binding
 identity_binding:
   oidc_discovery_url: "https://auth.corp.com/.well-known/openid-configuration"
-  allowed_audiences: ["agentwall-gateway-prod"]
+  allowed_audiences: ["agentcontrol-gateway-prod"]
   group_claim: "groups"
 
 # 2. Policy Bindings (Group & Subject Mappings)
@@ -182,7 +182,7 @@ loop_detection:
 
 # 7. Audit & SIEM Export
 audit:
-  log_file: "/var/log/agentwall/audit.jsonl"
+  log_file: "/var/log/agentcontrol/audit.jsonl"
   siem_export:
     type: "splunk_hec"
     endpoint: "https://splunk.corp.com:8088/services/collector/event"
@@ -230,7 +230,7 @@ For complex object parameters, supply standard JSON Schema contracts under the `
 
 ## 2. Configuring Data Loss Prevention (DLP)
 
-AgentWall includes an inline DLP engine that scans MCP tool parameters, tool response payloads, and outbound LLM prompts for sensitive credentials, keys, and PII.
+Agent Control includes an inline DLP engine that scans MCP tool parameters, tool response payloads, and outbound LLM prompts for sensitive credentials, keys, and PII.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
@@ -244,7 +244,7 @@ AgentWall includes an inline DLP engine that scans MCP tool parameters, tool res
 
 ### Built-In Regex Detectors (21 patterns)
 
-AgentWall ships with **21 built-in regex detectors** sourced from the compiled binary:
+Agent Control ships with **21 built-in regex detectors** sourced from the compiled binary:
 
 | Pattern Name | Description | Regex Pattern | Default Action |
 |---|---|---|---|
@@ -292,7 +292,7 @@ dlp:
 
 ### Deep Scanning & Entropy Analysis
 
-In addition to regex patterns, AgentWall performs deep heuristic inspection:
+In addition to regex patterns, Agent Control performs deep heuristic inspection:
 
 1. **Recursive Base64 Decoding** — Automatically decodes Base64-encoded payload segments up to 3 layers deep before applying DLP scanners.
 2. **Shannon Entropy Analysis** — Flags high-entropy random strings (entropy > 4.5 bits/char on strings longer than 32 characters), identifying obfuscated secret keys.
@@ -305,7 +305,7 @@ In addition to regex patterns, AgentWall performs deep heuristic inspection:
 Scan and redact secret leakage in incoming tool response payloads before returning them to the agent:
 
 ```bash
-agentwall start \
+agentcontrol start \
   --policy policy.yaml \
   --scan-responses \
   --block-on-secrets \
@@ -322,7 +322,7 @@ agentwall start \
 
 ## 3. Setting Up OIDC Identity Binding
 
-AgentWall binds agent sessions and tool call execution to cryptographic OIDC identities, ensuring zero-trust attribution and access enforcement.
+Agent Control binds agent sessions and tool call execution to cryptographic OIDC identities, ensuring zero-trust attribution and access enforcement.
 
 > [!NOTE]
 > For complete step-by-step configuration guides, claims mappings, and policy examples for **Okta**, **Keycloak**, **Microsoft Entra ID**, **Auth0**, **AWS Cognito**, **Google Workspace**, and **PingIdentity**, see the dedicated [OIDC Identity Binding & Auth Provider Guide](oidc_identity_binding.md).
@@ -335,13 +335,13 @@ In your YAML policy, define the `identity` configuration:
 identity:
   provider: "oidc"
   issuer: "https://auth.yourorg.com/oauth2/default"
-  audience: "agentwall-gateway-prod"
+  audience: "agentcontrol-gateway-prod"
   group_claim_key: "groups"    # IdP-specific claim key (e.g., "cognito:groups", "memberOf")
 ```
 
 Or pass the discovery issuer via command line:
 ```bash
-agentwall start --policy policy.yaml --oidc-issuer https://auth.yourorg.com
+agentcontrol start --policy policy.yaml --oidc-issuer https://auth.yourorg.com
 ```
 
 ---
@@ -360,34 +360,34 @@ agentwall start --policy policy.yaml --oidc-issuer https://auth.yourorg.com
 4. **Strict Scope Mode** — Upgrade scope mismatches to hard `403 Forbidden` denials:
    ```bash
    export AGENTWALL_STRICT_CREDENTIAL_SCOPE=true
-   agentwall start --policy policy.yaml
+   agentcontrol start --policy policy.yaml
    ```
 
 ---
 
 ### Agent Short-Lived Credential CLI
 
-Manage short-lived agent credentials directly via the `agentwall identity` subcommand suite:
+Manage short-lived agent credentials directly via the `agentcontrol identity` subcommand suite:
 
 ```bash
 # Provision short-lived credential
-agentwall identity create --agent financial-agent-01 --scope "file:read" --ttl 1h
+agentcontrol identity create --agent financial-agent-01 --scope "file:read" --ttl 1h
 
 # Rotate agent credentials (zero-downtime with 30-second drain)
-agentwall identity rotate --agent financial-agent-01 --drain-secs 30
+agentcontrol identity rotate --agent financial-agent-01 --drain-secs 30
 
 # Configure per-tool scoping rules
-agentwall identity scope --agent financial-agent-01 --tool execute_shell --deny
+agentcontrol identity scope --agent financial-agent-01 --tool execute_shell --deny
 
 # Audit identity history (HMAC-chained trail)
-agentwall identity audit --agent financial-agent-01 --verify
+agentcontrol identity audit --agent financial-agent-01 --verify
 ```
 
 ---
 
 ## 4. Connecting to the Control Hub
 
-The **Control Hub** acts as the central control plane for AgentWall fleets, providing real-time policy hot-reloading, secret custody, and centralized telemetry aggregation.
+The **Control Hub** acts as the central control plane for Agent Control fleets, providing real-time policy hot-reloading, secret custody, and centralized telemetry aggregation.
 
 ### Hub Architecture & API Specifications
 
@@ -422,7 +422,7 @@ Gateway                                               Control Hub API
 
 1. **Central Custody** — API keys are encrypted with AES-256-GCM and stored in the Hub database.
 2. **Gateway Ingestion** — Authorized gateways fetch encrypted key blocks via `GET /api/v1/credentials/:provider` at bootstrap.
-3. **Outbound Injection** — AgentWall verifies authorization, injects the real `Authorization: Bearer sk-...` key, and strips the agent's temporary credential before forwarding to OpenAI/Anthropic.
+3. **Outbound Injection** — Agent Control verifies authorization, injects the real `Authorization: Bearer sk-...` key, and strips the agent's temporary credential before forwarding to OpenAI/Anthropic.
 
 ---
 
@@ -453,7 +453,7 @@ Gateways periodically flush audit logs to the Control Hub via `POST /api/v1/tele
 
 ## 5. Verifying Audit Logs
 
-AgentWall records tamper-evident, cryptographically chained audit logs to ensure regulatory compliance and forensic accountability.
+Agent Control records tamper-evident, cryptographically chained audit logs to ensure regulatory compliance and forensic accountability.
 
 ### HMAC Cryptographic Hash Chaining
 
@@ -469,10 +469,10 @@ If an attacker attempts to modify, delete, or re-order any historical audit line
 
 ```bash
 # Basic verification
-agentwall verify-log audit.log
+agentcontrol verify-log audit.log
 
 # With custom signing keys
-agentwall verify-log audit.log --key-file /etc/agentwall/audit.key
+agentcontrol verify-log audit.log --key-file /etc/agentcontrol/audit.key
 ```
 
 **Sample output:**
@@ -488,14 +488,14 @@ agentwall verify-log audit.log --key-file /etc/agentwall/audit.key
 
 **Generate session reports:**
 ```bash
-agentwall report audit.log --format json --output report.json
+agentcontrol report audit.log --format json --output report.json
 ```
 
 **Stream to SIEM platforms in real time:**
 
 **Splunk HEC:**
 ```bash
-agentwall start \
+agentcontrol start \
   --policy policy.yaml \
   --siem-backend splunk \
   --siem-endpoint https://splunk.corp.com:8088/services/collector/event \
@@ -504,7 +504,7 @@ agentwall start \
 
 **Datadog:**
 ```bash
-agentwall start \
+agentcontrol start \
   --policy policy.yaml \
   --siem-backend datadog \
   --siem-endpoint https://http-intake.logs.datadoghq.com/api/v2/logs \
@@ -513,10 +513,10 @@ agentwall start \
 
 **OpenSearch:**
 ```bash
-agentwall start \
+agentcontrol start \
   --policy policy.yaml \
   --siem-backend opensearch \
-  --siem-endpoint https://opensearch.corp.com/agentwall-logs/_doc \
+  --siem-endpoint https://opensearch.corp.com/agentcontrol-logs/_doc \
   --siem-token "user:password"
 ```
 
@@ -526,9 +526,9 @@ agentwall start \
 
 ## 6. Stateful Sequence Rules (ADR Framework)
 
-> **ADR** = **AI Detection & Response** — a security framework that extends AgentWall with stateful multi-step attack detection, security benchmarking, and self-healing policy synthesis.
+> **ADR** = **AI Detection & Response** — a security framework that extends Agent Control with stateful multi-step attack detection, security benchmarking, and self-healing policy synthesis.
 
-Standard tool allowlisting evaluates each tool call in isolation. Many real-world attacks unfold across multiple steps — a legitimate-looking `read_file` followed by an `http_post` to an external endpoint is an exfiltration chain that neither call reveals alone. AgentWall's **ADR Sequence Engine** solves this with per-session sliding-window call history.
+Standard tool allowlisting evaluates each tool call in isolation. Many real-world attacks unfold across multiple steps — a legitimate-looking `read_file` followed by an `http_post` to an external endpoint is an exfiltration chain that neither call reveals alone. Agent Control's **ADR Sequence Engine** solves this with per-session sliding-window call history.
 
 ### How the Sequence Engine Works
 
@@ -601,13 +601,13 @@ sequence_rules:
 
 ## 7. ADR Security Benchmark
 
-The `agentwall bench` command runs an offline **303-task benchmark suite** against a local AgentWall gateway instance. It measures how well your current policy configuration detects and blocks 17 categories of AI attack patterns.
+The `agentcontrol bench` command runs an offline **303-task benchmark suite** against a local Agent Control gateway instance. It measures how well your current policy configuration detects and blocks 17 categories of AI attack patterns.
 
 ### Running the Benchmark
 
 ```bash
 # Run all 303 tasks across all 17 attack categories
-agentwall bench --full
+agentcontrol bench --full
 
 # Or when building from source
 cargo run -- bench --full
@@ -634,7 +634,7 @@ The report shows:
 The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) renders the latest benchmark report interactively:
 
 ```bash
-agentwall dev
+agentcontrol dev
 ```
 
 Then click **ADR Benchmark** in the sidebar to view your security score ring and per-category breakdown.
@@ -673,12 +673,12 @@ For the full benchmark reference including all 17 attack categories and scoring 
 
 ### Passive Shadow AI Risk Delta Reports
 
-Run AgentWall in non-blocking observation mode to audit agent traffic before enabling enforcement:
+Run Agent Control in non-blocking observation mode to audit agent traffic before enabling enforcement:
 
 ```bash
-agentwall start --shadow-mode --log-path audit.log
+agentcontrol start --shadow-mode --log-path audit.log
 # Generate Risk Delta report summarizing hypothetical blocks and PII exfiltrations
-agentwall report audit.log --risk
+agentcontrol report audit.log --risk
 ```
 
 ### Vexa Security Scanning (vexa-scan)
@@ -686,7 +686,7 @@ agentwall report audit.log --risk
 Scan MCP server definitions and security policy schemas before deployment:
 
 ```bash
-agentwall scan --path agentwall-policy.yaml
+agentcontrol scan --path agentcontrol-policy.yaml
 ```
 
 ### WebSocket Egress Tunneling
@@ -694,7 +694,7 @@ agentwall scan --path agentwall-policy.yaml
 Bridge cloud agents with local MCP tools over a secure Rust WebSocket tunnel with sub-5ms latency and inline DLP:
 
 ```bash
-agentwall start --centralized --listen 0.0.0.0:8080
+agentcontrol start --centralized --listen 0.0.0.0:8080
 ```
 
 ### Human-in-the-Loop (HITL) Webhooks
@@ -710,10 +710,10 @@ hitl_escalation:
 
 ### Hardened Agent Containers (HAR)
 
-Deploy AgentWall as an entrypoint proxy inside OCI container environments (Kubernetes) using the lightweight image (<100MB):
+Deploy Agent Control as an entrypoint proxy inside OCI container environments (Kubernetes) using the lightweight image (<100MB):
 
 ```bash
-docker build -f Dockerfile.har -t agentwall-har:v2.0 .
+docker build -f Dockerfile.har -t agentcontrol-har:v2.0 .
 ```
 
 ---
@@ -727,7 +727,7 @@ docker build -f Dockerfile.har -t agentwall-har:v2.0 .
 [ERROR] Failed to load policy: unknown field `allowed_tools` at line 14 column 3
 ```
 - **Cause:** Schema v2 enforces `#[serde(deny_unknown_fields)]`. Obsolete v1 policy fields are rejected.
-- **Solution:** Run `agentwall lint agentwall-policy.yaml` to identify invalid syntax. Update tool definitions to conform to the v2 specification.
+- **Solution:** Run `agentcontrol lint agentcontrol-policy.yaml` to identify invalid syntax. Update tool definitions to conform to the v2 specification.
 
 #### Error: Missing TLS Certificate Pair
 ```
@@ -750,7 +750,7 @@ docker build -f Dockerfile.har -t agentwall-har:v2.0 .
 }
 ```
 - **Cause:** The requested tool is not explicitly listed in `tools:` with `action: allow`.
-- **Solution:** Add the tool entry to `agentwall-policy.yaml` or use `agentwall identity scope --agent <name> --tool exec_shell --allow`.
+- **Solution:** Add the tool entry to `agentcontrol-policy.yaml` or use `agentcontrol identity scope --agent <name> --tool exec_shell --allow`.
 
 #### Error 403 `DLP_BLOCKED`
 ```json
@@ -768,16 +768,16 @@ docker build -f Dockerfile.har -t agentwall-har:v2.0 .
 
 ## 2.5 CLI Tooling Reference (License & Compliance)
 
-### License Key Tooling (`agentwall license`)
+### License Key Tooling (`agentcontrol license`)
 
-AgentWall Team & Enterprise licensing utilizes Ed25519-signed JWT license tokens.
+Agent Control Team & Enterprise licensing utilizes Ed25519-signed JWT license tokens.
 
 ```bash
 # 1. Generate an Ed25519 signing keypair for license issuance
-agentwall license keygen --output /path/to/license_key
+agentcontrol license keygen --output /path/to/license_key
 
 # 2. Generate a signed license JWT token for an organization
-agentwall license generate \
+agentcontrol license generate \
   --org "AcmeCorp" \
   --tier "team" \
   --seats 25 \
@@ -786,24 +786,24 @@ agentwall license generate \
   --features spend_caps,siem_aggregation
 ```
 
-### Compliance Report Generator (`agentwall compliance`)
+### Compliance Report Generator (`agentcontrol compliance`)
 
 Generate automated compliance mapping reports (SOC2, ISO 27001, NIST SP 800-207, EU AI Act, HIPAA) directly from audit logs:
 
 ```bash
 # Generate markdown compliance report
-agentwall compliance report --log-path ./audit.log --format markdown --output ./compliance_report.md
+agentcontrol compliance report --log-path ./audit.log --format markdown --output ./compliance_report.md
 
 # Output JSON report to stdout
-agentwall compliance report --log-path ./audit.log --format json
+agentcontrol compliance report --log-path ./audit.log --format json
 ```
 
-### Identity JWKS Export (`agentwall identity export-jwks`)
+### Identity JWKS Export (`agentcontrol identity export-jwks`)
 
 Export public JWKS keys from an OIDC issuer for air-gapped or offline gateway deployments:
 
 ```bash
-agentwall identity export-jwks --issuer https://auth.yourorg.com --output ./jwks.json
+agentcontrol identity export-jwks --issuer https://auth.yourorg.com --output ./jwks.json
 ```
 
 ---
@@ -844,7 +844,7 @@ agentwall identity export-jwks --issuer https://auth.yourorg.com --output ./jwks
 
 ### Executable & PATH Troubleshooting
 
-#### Issue: `agentwall: command not found` across terminal restarts
+#### Issue: `agentcontrol: command not found` across terminal restarts
 
 Persist the installation directory in your shell configuration:
 
@@ -875,17 +875,17 @@ Persist the installation directory in your shell configuration:
 
 #### Issue: `✖ Stdio proxy error: No such file or directory (os error 2)`
 
-- **Cause 1 — `npx` not in PATH:** On macOS, Node/nvm/brew/fnm binaries may reside in a non-standard path that `agentwall` cannot resolve automatically.
+- **Cause 1 — `npx` not in PATH:** On macOS, Node/nvm/brew/fnm binaries may reside in a non-standard path that `agentcontrol` cannot resolve automatically.
   - **Solution:** Pass the full path using `$(which npx)`:
     ```bash
-    agentwall dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
+    agentcontrol dev --stdio -- $(which npx) -y @modelcontextprotocol/server-filesystem ~/workspace
     ```
 
 - **Cause 2 — Target directory missing:**
   - **Solution:** Ensure the path exists before running:
     ```bash
     mkdir -p ~/workspace
-    agentwall dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
+    agentcontrol dev --stdio -- npx -y @modelcontextprotocol/server-filesystem ~/workspace
     ```
 
 ### Environment Variables Reference
@@ -905,29 +905,29 @@ Persist the installation directory in your shell configuration:
 
 #### Linux DBus SecretService & Headless Fallback
 - **Issue:** On headless Linux servers (SSH/CI-CD) without an active X11/DBus session bus, `keyring` may fail to store Ed25519 device keys.
-- **Solution:** AgentWall automatically falls back to Machine-ID derived AES-256 encrypted file storage (`/etc/machine-id` or `/var/lib/dbus/machine-id`) at `~/.agentwall/device_identity.key` with restricted POSIX `0600` permissions.
+- **Solution:** Agent Control automatically falls back to Machine-ID derived AES-256 encrypted file storage (`/etc/machine-id` or `/var/lib/dbus/machine-id`) at `~/.agentcontrol/device_identity.key` with restricted POSIX `0600` permissions.
 
 #### macOS Keychain Authorization Prompts
-- **Issue:** macOS prompts for keychain access approval when running `agentwall enroll`.
-- **Solution:** Click **Always Allow** to permit the `agentwall` binary to read and store the Ed25519 device private key in macOS Keychain Services (`security-framework`).
+- **Issue:** macOS prompts for keychain access approval when running `agentcontrol enroll`.
+- **Solution:** Click **Always Allow** to permit the `agentcontrol` binary to read and store the Ed25519 device private key in macOS Keychain Services (`security-framework`).
 
 #### Windows Session 0 Multi-User Profile Resolution
 - **Issue:** When running as a Windows Service under `NT AUTHORITY\SYSTEM` in Session 0, `%USERPROFILE%` evaluates to `C:\Windows\System32\config\systemprofile`.
-- **Solution:** AgentWall's Windows SCM engine automatically resolves all human user profile directories in `C:\Users\*` via `ProfileList` registry keys (`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList`), watching and locking IDE configs across all developer accounts on the machine.
+- **Solution:** Agent Control's Windows SCM engine automatically resolves all human user profile directories in `C:\Users\*` via `ProfileList` registry keys (`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList`), watching and locking IDE configs across all developer accounts on the machine.
 
 #### WSL / WSL2 Path Interop
 - **Issue:** Developer uses Cursor or Claude Desktop on Windows host while running agent scripts inside WSL2.
-- **Solution:** AgentWall in WSL automatically detects `/proc/sys/kernel/osrelease` containing `microsoft` and resolves Windows host paths (`/mnt/c/Users/<user>/AppData/Roaming/...`) alongside Linux native paths (`~/.config/`).
+- **Solution:** Agent Control in WSL automatically detects `/proc/sys/kernel/osrelease` containing `microsoft` and resolves Windows host paths (`/mnt/c/Users/<user>/AppData/Roaming/...`) alongside Linux native paths (`~/.config/`).
 
 ---
 
 ### IDE Wrapping & Watch Daemon Diagnostics
 
-#### Issue: IDE MCP tools not routing through AgentWall after `agentwall wrap`
+#### Issue: IDE MCP tools not routing through Agent Control after `agentcontrol wrap`
 
 - **Cause:** IDE processes (Claude Desktop, Cursor, VS Code) read `mcpServers` configuration strictly at application startup.
-- **Solution:** Restart the IDE process completely after running `agentwall wrap <target>`.
-- **Diagnostic:** Run `agentwall status` to inspect path resolution, file existence, and wrap status across all IDE targets.
+- **Solution:** Restart the IDE process completely after running `agentcontrol wrap <target>`.
+- **Diagnostic:** Run `agentcontrol status` to inspect path resolution, file existence, and wrap status across all IDE targets.
 
 ---
 
@@ -957,4 +957,4 @@ Persist the installation directory in your shell configuration:
 }
 ```
 - **Cause:** The agent invoked the exact same tool call and parameters repeatedly, tripping cycle detection.
-- **Solution:** AgentWall returned a `PivotError` instructing the agent to break out of its loop. Check agent prompt logic or adjust `loop_detection.threshold` in policy configuration.
+- **Solution:** Agent Control returned a `PivotError` instructing the agent to break out of its loop. Check agent prompt logic or adjust `loop_detection.threshold` in policy configuration.

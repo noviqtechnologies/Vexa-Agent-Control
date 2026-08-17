@@ -2,10 +2,10 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-egress
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-egress
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
 spec:
   # Allow gateway pods to reach dashboard-api on its service port.
   # Without this rule, a cluster-wide default-deny or future gateway
@@ -14,14 +14,14 @@ spec:
   # so the dashboard would stop receiving events with no obvious signal.
   podSelector:
     matchLabels:
-      agentwall.io/gateway: "true"
+      agentcontrol.io/gateway: "true"
   policyTypes:
   - Egress
   egress:
   - to:
     - podSelector:
         matchLabels:
-          {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 10 }}
+          {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 10 }}
     ports:
     - port: {{ .Values.dashboardApi.port }}
       protocol: TCP

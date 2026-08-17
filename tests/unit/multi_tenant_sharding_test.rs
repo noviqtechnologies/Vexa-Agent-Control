@@ -1,6 +1,6 @@
 //! Unit test suite for FR-402 / NFR-304: Multi-Tenant Policy Sharding
 
-use agentwall::policy::sharding::{PolicyShardResolver, TaskPolicy};
+use agentcontrol::policy::sharding::{PolicyShardResolver, TaskPolicy};
 
 #[test]
 fn test_multi_tenant_sharded_policy_resolution() {

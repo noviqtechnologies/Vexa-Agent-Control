@@ -18,7 +18,7 @@ var defaultPublicKeyBytes = []byte{
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 }
 
-// Claims represents the decoded AgentWall license JWT payload.
+// Claims represents the decoded Agent Control license JWT payload.
 type Claims struct {
 	OrgID     string   `json:"sub"`
 	Tier      string   `json:"tier"`
@@ -29,7 +29,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Validator verifies Ed25519-signed AgentWall license JWTs.
+// Validator verifies Ed25519-signed Agent Control license JWTs.
 type Validator struct {
 	publicKey ed25519.PublicKey
 }
@@ -46,7 +46,7 @@ func NewValidator(pubKeyBytes []byte) (*Validator, error) {
 
 // NewValidatorFromEnv constructs a Validator using env var or fallback.
 func NewValidatorFromEnv() (*Validator, error) {
-	if pubKeyPath := os.Getenv("AGENTWALL_LICENSE_PUB_KEY_PATH"); pubKeyPath != "" {
+	if pubKeyPath := os.Getenv("AGENTCONTROL_LICENSE_PUB_KEY_PATH"); pubKeyPath != "" {
 		data, err := os.ReadFile(pubKeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("read public key from %s: %w", pubKeyPath, err)

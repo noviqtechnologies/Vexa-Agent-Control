@@ -14,15 +14,27 @@ tfplan
 *.tfvars
 !*.tfvars.example
 
-# Audit Logs and Backups (FR-104, FR-109)
+# Audit Logs and Backups
 *.log
 *.bak
 *.sig
+*.agentcontrol-backup-*
+*.agentwall-backup-*
+*.agentcontrol-tmp
+*.agentwall-tmp
 
-# Reports
+# Reports & Metrics
 session-report.json
 report.json
 matrix_results.json
+
+# Local SQLite & Credentials (if generated in root during local runs)
+*.db
+*.db-shm
+*.db-wal
+audit.key
+device_identity.key
+device_token
 
 # HTML & CSS (local dashboard html & control-plane UI are tracked)
 *.html
@@ -39,45 +51,62 @@ matrix_results.json
 *.swo
 .DS_Store
 Thumbs.db
+.claude/
 
-# Compiled artifacts in root
+# Compiled binaries & packages in root
 vexa
 vexa.exe
 agent
 agent.exe
+agentcontrol
+agentcontrol.exe
 agentwall
 agentwall.exe
+dashboard-api
+dashboard-api.exe
+control-plane-api
+control-plane-api.exe
 *.pdb
 *.zip
 vexa-mvp1/
+agentcontrol-pkg/
 agentwall-pkg/
 Cargo.lock
 
-# Manual test runs
-manual_test/*.log
-manual_test/*.bak
-tests/tmp_*
+# Frontend & UI build artifacts
+node_modules/
+**/node_modules/
+control-plane/ui/dist/
+dist/
+*.tsbuildinfo
 
-# Local policies
-policy.yaml
-policy.yaml.bak
-
-# Python caches
+# Python caches & build artifacts
 __pycache__/
 **/__pycache__/
 *.pyc
-
-# Tooling artifacts
-test-tools/**/target/
-node_modules/
-**/node_modules/
+*.pyo
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+htmlcov/
 
 # SDK Build Artifacts (Python & TypeScript)
 sdks/**/dist/
 sdks/**/build/
 sdks/**/*.egg-info/
 sdks/**/.pytest_cache/
-*.tsbuildinfo
+
+# Manual test runs & temp folders
+manual_test/*.log
+manual_test/*.bak
+tests/tmp_*
+tmp_*
+
+# Local policies
+policy.yaml
+policy.yaml.bak
+agentcontrol-policy.yaml.bak
+agentwall-policy.yaml.bak
 
 # MCP Schema Drift baselines & compliance evidence exports
 schema_baselines.json
@@ -85,14 +114,14 @@ schema_baselines.json.bak
 baselines.json
 *evidence.json
 
-# Environment variables
+# Environment variables & secrets
 .env
 .env.*
+!*.env.example
+test-cert.pem
+*cookies*.txt
 
-# Generated test plan docs (covered by formal test suite)
+# Generated test plan docs
 tests/PHASE1_VERIFICATION_TEST_PLAN.docx
 tests/PHASE1_VERIFICATION_TEST_PLAN.md
 tests/fixtures/README.md
-test-cert.pem 
-.claude/
-*cookies*.txt

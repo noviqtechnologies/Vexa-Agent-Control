@@ -8,7 +8,7 @@ type Device struct {
 	OSArch            string                 `json:"os_arch"`
 	OSFamily          string                 `json:"os_family"`
 	PublicKey         string                 `json:"public_key"`
-	AgentWallVersion  string                 `json:"agentwall_version"`
+	AgentControlVersion  string                 `json:"agentcontrol_version"`
 	ComplianceStatus  string                 `json:"compliance_status"`
 	MCPServersTotal   int                    `json:"mcp_servers_total"`
 	MCPServersWrapped int                    `json:"mcp_servers_wrapped"`

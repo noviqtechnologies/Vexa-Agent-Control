@@ -1,4 +1,4 @@
-use agentwall::spend::{SpendCheckResult, SpendLedger};
+use agentcontrol::spend::{SpendCheckResult, SpendLedger};
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -27,7 +27,7 @@ async fn test_spend_ledger_basic() {
 
 #[test]
 fn test_money_microcents_math_and_serde() {
-    use agentwall::spend::types::{MoneyMicrocents, InputTokens, OutputTokens, SpendV2AuthorizeReq};
+    use agentcontrol::spend::types::{MoneyMicrocents, InputTokens, OutputTokens, SpendV2AuthorizeReq};
 
     let ten_dollars = MoneyMicrocents::from_dollars(10.0);
     assert_eq!(ten_dollars.as_microcents(), 1_000_000_000);

@@ -4,7 +4,7 @@
 //! audience/issuer validation, missing kid, cache miss path, and
 //! the `is_ready` fail-closed check.
 
-use agentwall::policy::identity::{Claims, IdentityValidator};
+use agentcontrol::policy::identity::{Claims, IdentityValidator};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -90,7 +90,7 @@ fn make_token(issuer: &str, audience: &str, sub: &str, exp_offset_secs: i64) -> 
 #[tokio::test]
 async fn test_ac201_2_valid_token_returns_sub() {
     let issuer = "https://example.com";
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = make_validator(issuer, audience);
     let token = make_token(issuer, audience, "agent-alpha", 3600);
 
@@ -104,7 +104,7 @@ async fn test_ac201_2_valid_token_returns_sub() {
 #[tokio::test]
 async fn test_ac201_2_expired_token_rejected() {
     let issuer = "https://example.com";
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = make_validator(issuer, audience);
     // Expire 2 minutes ago (beyond 60s clock skew)
     let token = make_token(issuer, audience, "agent-alpha", -120);
@@ -122,7 +122,7 @@ async fn test_ac201_2_expired_token_rejected() {
 #[tokio::test]
 async fn test_ac201_2_wrong_audience_rejected() {
     let issuer = "https://example.com";
-    let v = make_validator(issuer, "agentwall");
+    let v = make_validator(issuer, "agentcontrol");
     // Token issued for a different audience
     let token = make_token(issuer, "other-service", "agent-alpha", 3600);
 
@@ -140,9 +140,9 @@ async fn test_ac201_2_wrong_audience_rejected() {
 
 #[tokio::test]
 async fn test_ac201_2_wrong_issuer_rejected() {
-    let v = make_validator("https://expected-issuer.com", "agentwall");
+    let v = make_validator("https://expected-issuer.com", "agentcontrol");
     // Token was issued by a different issuer
-    let token = make_token("https://attacker.com", "agentwall", "agent-alpha", 3600);
+    let token = make_token("https://attacker.com", "agentcontrol", "agent-alpha", 3600);
 
     let result = v.validate_token(&token).await;
     assert!(result.is_err());
@@ -159,7 +159,7 @@ async fn test_ac201_2_wrong_issuer_rejected() {
 #[tokio::test]
 async fn test_ac201_2_missing_kid_rejected() {
     let issuer = "https://example.com";
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = make_validator(issuer, audience);
     let encoding_key = EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).unwrap();
     let claims = Claims {
@@ -186,7 +186,7 @@ async fn test_ac201_2_missing_kid_rejected() {
 #[tokio::test]
 async fn test_ac201_2_hmac_algorithm_rejected() {
     let issuer = "https://example.com";
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = make_validator(issuer, audience);
     let hmac_key = EncodingKey::from_secret(b"super-secret");
     let claims = Claims {
@@ -217,7 +217,7 @@ async fn test_ac201_2_hmac_algorithm_rejected() {
 async fn test_ac201_2_unknown_kid_fail_closed() {
     // Validator with keys for "test-kid" only
     let issuer = "https://example.com";
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = make_validator(issuer, audience);
     let encoding_key = EncodingKey::from_rsa_pem(RSA_PRIVATE_PEM).unwrap();
     let claims = Claims {
@@ -260,7 +260,7 @@ async fn test_ac201_5_not_ready_when_no_keys() {
 
 #[tokio::test]
 async fn test_ac201_5_ready_when_key_present() {
-    let v = make_validator("https://example.com", "agentwall");
+    let v = make_validator("https://example.com", "agentcontrol");
     assert!(v.is_ready().await, "Should be ready after key is inserted");
 }
 
@@ -283,7 +283,7 @@ fn test_ac201_5_custom_cache_ttl_applied() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_ac201_2_jwk_refresh_race() {
     let issuer = "http://198.51.100.1:80"; // Point to an inaccessible IP to delay refresh
-    let audience = "agentwall";
+    let audience = "agentcontrol";
     let v = IdentityValidator::new(
         issuer.to_string(),
         audience.to_string(),

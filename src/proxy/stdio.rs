@@ -221,7 +221,7 @@ pub async fn run_stdio_bridge(
         vec![],
         local_policy,
         None,
-        std::env::var("AGENTWALL_CREDENTIAL_ID").ok(),
+        std::env::var("AGENTCONTROL_CREDENTIAL_ID").ok(),
     ));
 
     // FR-303b: Track forwarded tools by their JSON-RPC ID for response correlation.
@@ -924,7 +924,7 @@ pub async fn run_stdio_to_http_bridge(
         vec![],
         local_policy,
         None,
-        std::env::var("AGENTWALL_CREDENTIAL_ID").ok(),
+        std::env::var("AGENTCONTROL_CREDENTIAL_ID").ok(),
     ));
 
     while let Some(msg) = agent_reader.next().await {

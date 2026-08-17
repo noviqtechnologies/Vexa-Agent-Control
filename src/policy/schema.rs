@@ -348,7 +348,7 @@ pub struct ToolRule {
     pub identity: Option<String>,
 
     /// FR-5 v2.0: Required credential scopes for this tool.
-    /// Agents must present one of these scopes via X-AgentWall-Credential-Scope header.
+    /// Agents must present one of these scopes via X-AgentControl-Credential-Scope header.
     /// Empty or absent = no scope restriction.
     /// Full enforcement requires FR-22 (Agent Identity Platform).
     #[serde(default)]

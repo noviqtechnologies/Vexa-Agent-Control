@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	agentwallv1alpha1 "github.com/noviqtechnologies/agentwall/operator/api/v1alpha1"
-	"github.com/noviqtechnologies/agentwall/operator/controllers"
+	agentcontrolv1alpha1 "github.com/noviqtechnologies/agentcontrol/operator/api/v1alpha1"
+	"github.com/noviqtechnologies/agentcontrol/operator/controllers"
 )
 
 var (
@@ -22,7 +22,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(agentwallv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(agentcontrolv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -45,18 +45,18 @@ func main() {
 		Scheme:           scheme,
 		Metrics:          metricsserver.Options{BindAddress: metricsAddr},
 		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: "agentwall.io",
+		LeaderElectionID: "agentcontrol.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	if err = (&controllers.AgentWallPolicyReconciler{
+	if err = (&controllers.AgentControlPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AgentWallPolicy")
+		setupLog.Error(err, "unable to create controller", "controller", "AgentControlPolicy")
 		os.Exit(1)
 	}
 

@@ -2,26 +2,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-api
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-api
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.dashboardApi.replicas }}
   selector:
     matchLabels:
-      {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 6 }}
+      {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentwall.dashboardApiSelectorLabels" . | nindent 8 }}
+        {{- include "agentcontrol.dashboardApiSelectorLabels" . | nindent 8 }}
     spec:
       securityContext:
         {{- toYaml .Values.dashboardApi.securityContext | nindent 8 }}
       containers:
       - name: dashboard-api
-        image: {{ include "agentwall.dashboardApiImage" . }}
+        image: {{ include "agentcontrol.dashboardApiImage" . }}
         imagePullPolicy: {{ .Values.dashboardApi.image.pullPolicy }}
         env:
         - name: DASHBOARD_PORT
@@ -29,12 +29,12 @@ spec:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: {{ include "agentwall.fullname" . }}-dashboard-db
+              name: {{ include "agentcontrol.fullname" . }}-dashboard-db
               key: DATABASE_URL
         - name: GATEWAY_SECRET
           valueFrom:
             secretKeyRef:
-              name: {{ include "agentwall.fullname" . }}-dashboard-gateway-secret
+              name: {{ include "agentcontrol.fullname" . }}-dashboard-gateway-secret
               key: GATEWAY_SECRET
         - name: OIDC_ISSUER
           value: {{ .Values.dashboardApi.oidc.issuer | quote }}
@@ -43,10 +43,10 @@ spec:
         - name: POLICY_READ_SECRET
           valueFrom:
             secretKeyRef:
-              name: {{ include "agentwall.fullname" . }}-dashboard-policy-read-secret
+              name: {{ include "agentcontrol.fullname" . }}-dashboard-policy-read-secret
               key: POLICY_READ_SECRET
         - name: GATEWAY_URL
-          value: "http://{{ include "agentwall.fullname" . }}-gateway:{{ .Values.gateway.service.port }}"
+          value: "http://{{ include "agentcontrol.fullname" . }}-gateway:{{ .Values.gateway.service.port }}"
         ports:
         - name: http
           containerPort: {{ .Values.dashboardApi.port }}

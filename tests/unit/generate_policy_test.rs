@@ -1,5 +1,5 @@
-use agentwall::generate_policy::generate_from_events;
-use agentwall::proxy::db::EgressEvent;
+use agentcontrol::generate_policy::generate_from_events;
+use agentcontrol::proxy::db::EgressEvent;
 use std::time::Instant;
 
 fn make_event(tool: &str, params: &str, timestamp: &str) -> EgressEvent {
@@ -59,7 +59,7 @@ fn test_ac4_1_lint_passes() {
 
     // We expect warning 2 because the policy has mutation tools with no validators
     // Let's just check it doesn't fail with 1 (fatal/error)
-    let exit_code = agentwall::lint::execute(path).unwrap();
+    let exit_code = agentcontrol::lint::execute(path).unwrap();
     assert!(
         exit_code == 0 || exit_code == 2,
         "Linter returned fatal error code {}",
@@ -244,7 +244,7 @@ fn test_large_event_set() {
 
 #[test]
 fn test_generate_default_baseline_policy() {
-    let yaml = agentwall::generate_policy::generate_default_baseline_policy();
+    let yaml = agentcontrol::generate_policy::generate_default_baseline_policy();
     assert!(yaml.contains("version: \"2.1\""));
     assert!(yaml.contains("auto_block_sensitive_exfiltration"));
     assert!(yaml.contains("read_file"));
@@ -252,7 +252,7 @@ fn test_generate_default_baseline_policy() {
     assert!(yaml.contains("firewall:"));
 
     let file = write_temp_policy(&yaml);
-    let exit_code = agentwall::lint::execute(file.path().to_str().unwrap()).unwrap();
+    let exit_code = agentcontrol::lint::execute(file.path().to_str().unwrap()).unwrap();
     assert!(
         exit_code == 0 || exit_code == 2,
         "Baseline policy should be lint-passing, got: {}",
@@ -271,7 +271,7 @@ fn test_multiline_string_value_escaping() {
     let yaml = generate_from_events(&events, 30);
 
     // Verify CompiledPolicy can parse generated YAML without error
-    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    let compiled = agentcontrol::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
     assert!(
         compiled.is_ok(),
         "Generated YAML failed to parse: {:?}",
@@ -279,7 +279,7 @@ fn test_multiline_string_value_escaping() {
     );
 
     let file = write_temp_policy(&yaml);
-    let exit_code = agentwall::lint::execute(file.path().to_str().unwrap()).unwrap();
+    let exit_code = agentcontrol::lint::execute(file.path().to_str().unwrap()).unwrap();
     assert!(
         exit_code == 0 || exit_code == 2,
         "Generated policy with multiline string should pass linting, got: {}",
@@ -296,7 +296,7 @@ fn test_tool_and_param_name_with_colons_escaped() {
     let events = vec![make_event("api:call", &payload.to_string(), "2026-08-12T10:00:00Z")];
     let yaml = generate_from_events(&events, 30);
 
-    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    let compiled = agentcontrol::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
     assert!(
         compiled.is_ok(),
         "Generated YAML with colons in tool/param names failed to parse: {:?}",
@@ -320,7 +320,7 @@ fn test_multiline_rsa_key_not_in_enum() {
         "Multiline RSA key should be excluded from # enum:"
     );
 
-    let compiled = agentwall::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
+    let compiled = agentcontrol::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
     assert!(
         compiled.is_ok(),
         "Generated YAML with multiline RSA key write_file failed to parse: {:?}",

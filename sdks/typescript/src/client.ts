@@ -1,11 +1,11 @@
 /**
- * AgentWall client implementation for TypeScript / JavaScript runtimes.
+ * AgentControl client implementation for TypeScript / JavaScript runtimes.
  */
 
 import { HttpTransport } from "./transport.js";
 import { ClientOptions, GatewayStatus, ToolCallResult } from "./types.js";
 
-export class AgentWallClient {
+export class AgentControlClient {
   private readonly transport: HttpTransport;
 
   constructor(options?: ClientOptions | string) {
@@ -28,7 +28,7 @@ export class AgentWallClient {
   }
 
   /**
-   * Routes a tool call through AgentWall out-of-process gateway for policy evaluation.
+   * Routes a tool call through AgentControl out-of-process gateway for policy evaluation.
    *
    * @param toolName Target tool name (e.g., 'read_file')
    * @param args Tool parameters dictionary
@@ -44,7 +44,7 @@ export class AgentWallClient {
 
   /**
    * Wraps an existing tool execution function so that every execution is first
-   * authorized by the AgentWall security gateway before the underlying handler executes.
+   * authorized by the AgentControl security gateway before the underlying handler executes.
    *
    * @param toolName The name of the tool as configured in the policy
    * @param fn The implementation function

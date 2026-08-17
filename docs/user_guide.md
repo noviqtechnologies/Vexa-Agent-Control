@@ -31,7 +31,7 @@ Autonomous AI agents possess powerful capabilities — reading files, running te
 
 ### The 6-Pass Security Pipeline
 
-Every agent tool call and LLM egress payload traversing AgentWall passes sequentially through a 6-pass deterministic pipeline before reaching upstream servers:
+Every agent tool call and LLM egress payload traversing Agent Control passes sequentially through a 6-pass deterministic pipeline before reaching upstream servers:
 
 ```
   [ Operating Surfaces & IDEs ] ──► (Claude Desktop / Cursor / VS Code / Antigravity / CLI)
@@ -65,17 +65,17 @@ Every agent tool call and LLM egress payload traversing AgentWall passes sequent
 ```
 
 > [!NOTE]
-> **Boundary of Protection:** AgentWall governs all tool calls and network egress routed through its local proxy and wrapped IDE configurations. It is designed to work in synergy with host EDR and OS security policies.
+> **Boundary of Protection:** Agent Control governs all tool calls and network egress routed through its local proxy and wrapped IDE configurations. It is designed to work in synergy with host EDR and OS security policies.
 
 ---
 
 ## 2. Operating Profile Selection
 
-AgentWall adapts to your infrastructure across three operational deployment profiles:
+Agent Control adapts to your infrastructure across three operational deployment profiles:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   AgentWall Operating Profiles                                  │
+│                                   Agent Control Operating Profiles                                  │
 ├──────────────────────────┬───────────────────────────────┬──────────────────────────────────────┤
 │ 1. Workstation Sidecar   │ 2. Team Control Hub           │ 3. Enterprise Fleet                  │
 │    • Individual Devs     │    • Engineering Teams        │    • Enterprise Production Fleet     │
@@ -86,7 +86,7 @@ AgentWall adapts to your infrastructure across three operational deployment prof
 └──────────────────────────┴───────────────────────────────┴──────────────────────────────────────┘
 ```
 
-1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides one-command discovery and wrapping of all installed IDEs (`agentwall protect`), 15 out-of-the-box safe mode rules, inline DLP, passive shadow discovery, and an embedded browser dashboard on `http://127.0.0.1:8080`.
+1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides one-command discovery and wrapping of all installed IDEs (`agentcontrol protect`), 15 out-of-the-box safe mode rules, inline DLP, passive shadow discovery, and an embedded browser dashboard on `http://127.0.0.1:8080`.
 2. **[Team Control Hub](team_hub_guide.md)** — Self-hosted centralized management plane deployed via Docker Compose (Go REST API on `:8400`, React Management Console on `:8081`, PostgreSQL database). Coordinates distributed gateways with real-time SSE policy push, OIDC identity binding, centralized provider key custody, and authoritative spend ledgers.
 3. **[Enterprise Fleet](enterprise_guide.md)** — High-availability Kubernetes Helm deployment (`./chart`) featuring the Hardened Agent Container Runtime (HAR) sidecar image (`Dockerfile.har`), hardened WebSocket egress tunneling, offline Ed25519 licensing, pure-Rust TLS (`rustls`), and zero-knowledge customer-managed key (CMK) SIEM export.
 
@@ -96,19 +96,19 @@ AgentWall adapts to your infrastructure across three operational deployment prof
 
 | Capability | Workstation Sidecar | Team Control Hub | Enterprise Fleet | Primary Command / Interface |
 |---|:---:|:---:|:---:|---|
-| **Default-Deny Policy Engine** | ✓ | ✓ | ✓ | `agentwall start` / `agentwall protect` |
+| **Default-Deny Policy Engine** | ✓ | ✓ | ✓ | `agentcontrol start` / `agentcontrol protect` |
 | **Policy Marketplace (One-Click Templates)** | ✓ | ✓ | ✓ | Web Console `/policy/marketplace` |
 | **15 Out-of-the-Box Safe Rules** | ✓ | ✓ | ✓ | Active by default (no YAML needed) |
 | **9 Prompt Injection Scanners** | ✓ | ✓ | ✓ | Built-in 6-pass normalizer |
 | **Dual-Pass DLP Secret Redaction** | ✓ | ✓ | ✓ | 21 built-in regex detectors |
-| **Shadow AI Discovery & Risk Delta** | ✓ | ✓ | ✓ | `agentwall dev` / `agentwall report --risk` |
-| **MCP Security Scoring (0–100)** | ✓ | ✓ | ✓ | `agentwall scan` |
-| **Multi-IDE Auto-Wrapping (9 IDEs)** | ✓ | ✓ | ✓ | `agentwall protect` / `agentwall wrap` |
-| **Event-Driven Config Watcher Daemon** | ✓ | ✓ | ✓ | `agentwall watch --all` |
-| **Hardware PKI Device Enrollment** | ✓ | ✓ | ✓ | `agentwall enroll` |
-| **Persistent OS Sentry Service** | ✓ | ✓ | ✓ | `agentwall service install` |
-| **ADR Security Benchmark (303 Tasks)** | ✓ | ✓ | ✓ | `agentwall bench --full` |
-| **Automated Compliance Reports** | ✓ | ✓ | ✓ | `agentwall compliance report` |
+| **Shadow AI Discovery & Risk Delta** | ✓ | ✓ | ✓ | `agentcontrol dev` / `agentcontrol report --risk` |
+| **MCP Security Scoring (0–100)** | ✓ | ✓ | ✓ | `agentcontrol scan` |
+| **Multi-IDE Auto-Wrapping (9 IDEs)** | ✓ | ✓ | ✓ | `agentcontrol protect` / `agentcontrol wrap` |
+| **Event-Driven Config Watcher Daemon** | ✓ | ✓ | ✓ | `agentcontrol watch --all` |
+| **Hardware PKI Device Enrollment** | ✓ | ✓ | ✓ | `agentcontrol enroll` |
+| **Persistent OS Sentry Service** | ✓ | ✓ | ✓ | `agentcontrol service install` |
+| **ADR Security Benchmark (303 Tasks)** | ✓ | ✓ | ✓ | `agentcontrol bench --full` |
+| **Automated Compliance Reports** | ✓ | ✓ | ✓ | `agentcontrol compliance report` |
 | **Zero Master Key Custody** | — | ✓ | ✓ | Centralized Vault / Hub Injection |
 | **Authoritative Spend Ledger** | — | ✓ | ✓ | Web Console `/spend/status` |
 | **Centralized SSE Policy Push** | — | ✓ | ✓ | SSE stream `/api/v1/policy/subscribe` |
@@ -125,9 +125,9 @@ AgentWall adapts to your infrastructure across three operational deployment prof
 
 ## 4. Workstation Quickstart & Single-Command Protection
 
-The fastest path to complete local AI security is **One-Command Protection** via `agentwall protect`.
+The fastest path to complete local AI security is **One-Command Protection** via `agentcontrol protect`.
 
-### Step 1: Install the AgentWall Binary
+### Step 1: Install the Agent Control Binary
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
@@ -146,28 +146,28 @@ The fastest path to complete local AI security is **One-Command Protection** via
 
 ### Step 2: Run One-Command Protection
 
-Execute `agentwall protect` in your terminal:
+Execute `agentcontrol protect` in your terminal:
 
 ```bash
 # macOS / Linux
-agentwall protect
+agentcontrol protect
 
 # Windows (PowerShell / CMD)
-agentwall.exe protect
+agentcontrol.exe protect
 ```
 
-**What `agentwall protect` performs automatically:**
-1. 🛡 **Generates Baseline Policy:** Creates `agentwall-policy.yaml` with baseline P0 DLP rules (blocking `.env`, `.ssh/id_rsa`, `~/.aws/credentials`) if no policy file exists.
+**What `agentcontrol protect` performs automatically:**
+1. 🛡 **Generates Baseline Policy:** Creates `agentcontrol-policy.yaml` with baseline P0 DLP rules (blocking `.env`, `.ssh/id_rsa`, `~/.aws/credentials`) if no policy file exists.
 2. 🔍 **Auto-Discovers Installed IDEs:** Scans for Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, and Codex.
 3. 🔒 **Atomically Wraps Configurations:** Updates MCP configs to route through the gateway while creating timestamped backups before writing.
-4. 🚀 **Starts Security Gateway:** Binds the local proxy to `127.0.0.1:8080` and streams structured JSONL logs to `~/.agentwall/audit.jsonl`.
+4. 🚀 **Starts Security Gateway:** Binds the local proxy to `127.0.0.1:8080` and streams structured JSONL logs to `~/.agentcontrol/audit.jsonl`.
 5. 🌐 **Launches Local Dashboard:** Automatically opens your default web browser to `http://127.0.0.1:8080`.
 
 ```bash
 # Useful flags:
-agentwall protect --dry-run   # Preview all discovery & wrapping actions without modifying files
-agentwall protect --shadow    # Launch in passive observation mode (no active blocking)
-agentwall protect --no-browser # Start gateway without opening browser automatically
+agentcontrol protect --dry-run   # Preview all discovery & wrapping actions without modifying files
+agentcontrol protect --shadow    # Launch in passive observation mode (no active blocking)
+agentcontrol protect --no-browser # Start gateway without opening browser automatically
 ```
 
 ### Step 3: Verify with Instant Telemetry
@@ -187,35 +187,35 @@ python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 To cleanly restore all IDE configurations from their original backups:
 
 ```bash
-agentwall unprotect            # macOS / Linux (verifies backup integrity)
-agentwall.exe unprotect        # Windows
-agentwall.exe unprotect --force # Emergency recovery: force restore
+agentcontrol unprotect            # macOS / Linux (verifies backup integrity)
+agentcontrol.exe unprotect        # Windows
+agentcontrol.exe unprotect --force # Emergency recovery: force restore
 ```
 
 ---
 
 ## 5. Multi-IDE Integration & File-Lock Management
 
-AgentWall natively discovers, wraps, and monitors 9 leading AI coding environments:
+Agent Control natively discovers, wraps, and monitors 9 leading AI coding environments:
 
 | IDE / Target | Wrap Command | Config File Location | Interception Behavior |
 |---|---|---|---|
-| **Claude Desktop** | `agentwall wrap claude` | `claude_desktop_config.json` | Replaces stdio commands with AgentWall proxy wrapper |
-| **Cursor** | `agentwall wrap cursor` | Cursor `User/settings.json` | Intercepts MCP server registrations & tool invocations |
-| **VS Code** | `agentwall wrap vscode` | `.vscode/mcp.json` / Extension storage | Governs extension-based MCP tool calls |
-| **JetBrains** | `agentwall wrap jetbrains` | JetBrains AI assistant settings | Wraps external MCP servers with default-deny rules |
-| **Zed Editor** | `agentwall wrap zed` | `~/.config/zed/settings.json` | Injects security proxy into Zed language model config |
-| **Cline Extension** | `agentwall wrap cline` | Cline extension settings | Intercepts autonomous tool execution and shell commands |
-| **OpenCode** | `agentwall wrap opencode` | OpenCode configuration | Secures tool parameter payloads and audits activity |
-| **Antigravity IDE** | `agentwall wrap antigravity` | Antigravity settings / MCP config | Governs tool calls and surfaces interactive HITL modals |
-| **ChatGPT Codex** | `agentwall wrap codex` | Codex CLI / API settings | Scopes credentials and blocks prompt injections |
+| **Claude Desktop** | `agentcontrol wrap claude` | `claude_desktop_config.json` | Replaces stdio commands with Agent Control proxy wrapper |
+| **Cursor** | `agentcontrol wrap cursor` | Cursor `User/settings.json` | Intercepts MCP server registrations & tool invocations |
+| **VS Code** | `agentcontrol wrap vscode` | `.vscode/mcp.json` / Extension storage | Governs extension-based MCP tool calls |
+| **JetBrains** | `agentcontrol wrap jetbrains` | JetBrains AI assistant settings | Wraps external MCP servers with default-deny rules |
+| **Zed Editor** | `agentcontrol wrap zed` | `~/.config/zed/settings.json` | Injects security proxy into Zed language model config |
+| **Cline Extension** | `agentcontrol wrap cline` | Cline extension settings | Intercepts autonomous tool execution and shell commands |
+| **OpenCode** | `agentcontrol wrap opencode` | OpenCode configuration | Secures tool parameter payloads and audits activity |
+| **Antigravity IDE** | `agentcontrol wrap antigravity` | Antigravity settings / MCP config | Governs tool calls and surfaces interactive HITL modals |
+| **ChatGPT Codex** | `agentcontrol wrap codex` | Codex CLI / API settings | Scopes credentials and blocks prompt injections |
 
 ### Checking Wrap Status
 
-Run `agentwall status` to inspect all 9 targets:
+Run `agentcontrol status` to inspect all 9 targets:
 
 ```bash
-agentwall status
+agentcontrol status
 ```
 
 Output:
@@ -237,15 +237,15 @@ Output:
 
 ### Event-Driven Configuration Watcher Daemon
 
-AI IDEs or extensions may rewrite their configuration files. The AgentWall watcher daemon monitors configuration files via native OS filesystem events (`ReadDirectoryChangesW` on Windows, `FSEvents` on macOS, `inotify` on Linux):
+AI IDEs or extensions may rewrite their configuration files. The Agent Control watcher daemon monitors configuration files via native OS filesystem events (`ReadDirectoryChangesW` on Windows, `FSEvents` on macOS, `inotify` on Linux):
 
 ```bash
 # Watch all verified IDE targets in the background:
-agentwall watch --all
+agentcontrol watch --all
 
 # Watch a specific IDE target:
-agentwall watch claude
-agentwall watch cursor
+agentcontrol watch claude
+agentcontrol watch cursor
 ```
 
 When an unwrapped entry is detected, the watcher re-wraps the configuration within `<300ms` and records a security audit log.
@@ -259,7 +259,7 @@ For team and enterprise environments, workstations are bound to the central Cont
 ### Hardware-Bound Device Enrollment
 
 ```bash
-agentwall enroll --token "TOK-ONE-TIME-TOKEN" --hub-url "http://localhost:8400"
+agentcontrol enroll --token "TOK-ONE-TIME-TOKEN" --hub-url "http://localhost:8400"
 ```
 
 **Cryptographic Enrollment Flow:**
@@ -270,21 +270,21 @@ agentwall enroll --token "TOK-ONE-TIME-TOKEN" --hub-url "http://localhost:8400"
 
 ### Persistent OS Sentry Background Daemon
 
-Install AgentWall as a system-level background daemon that boots with the operating system:
+Install Agent Control as a system-level background daemon that boots with the operating system:
 
 ```bash
 # Install Sentry Daemon (Windows SCM / macOS launchd / Linux systemd)
-agentwall service install \
+agentcontrol service install \
   --hub-url "http://localhost:8400" \
   --gateway-secret "your-gateway-secret" \
   --policy-read-secret "your-policy-read-secret" \
   --agent-id "dev-workstation-01"
 
 # Check daemon health
-agentwall service status
+agentcontrol service status
 
 # Uninstall Sentry Daemon
-agentwall service uninstall
+agentcontrol service uninstall
 ```
 
 **Sentry Protection Mechanics:**
@@ -296,7 +296,7 @@ agentwall service uninstall
 
 ## 7. Policy Configuration & Automated Rule Synthesis
 
-AgentWall enforces zero-trust rules defined in `agentwall-policy.yaml` (Schema v2).
+Agent Control enforces zero-trust rules defined in `agentcontrol-policy.yaml` (Schema v2).
 
 ### Baseline Policy Structure
 
@@ -308,7 +308,7 @@ default_action: deny
 identity:
   provider: "oidc"
   issuer: "https://auth.corp.local/oauth2/default"
-  audience: "agentwall-gateway-prod"
+  audience: "agentcontrol-gateway-prod"
   group_claim_key: "groups"
 
 # 2. Group Policy Bindings
@@ -373,34 +373,34 @@ firewall:
 
 ### Auto-Synthesizing Policies from Shadow Traffic
 
-You don't need to write policies by hand. Run `agentwall dev` or `agentwall protect --shadow` during development to observe normal agent behavior, then synthesize a strict, lint-passing policy draft:
+You don't need to write policies by hand. Run `agentcontrol dev` or `agentcontrol protect --shadow` during development to observe normal agent behavior, then synthesize a strict, lint-passing policy draft:
 
 ```bash
 # Synthesize policy from recorded shadow SQLite database
-agentwall generate-policy --decay-window 30 --output agentwall-policy.yaml
+agentcontrol generate-policy --decay-window 30 --output agentcontrol-policy.yaml
 ```
 
 ### Policy Linting, Validation & CI/CD Testing
 
 ```bash
 # 1. Lint policy YAML for structural errors & security warnings
-agentwall lint agentwall-policy.yaml
+agentcontrol lint agentcontrol-policy.yaml
 
 # 2. Test a single tool call payload offline against the policy
-agentwall validate --policy agentwall-policy.yaml --tool read_file --payload payload.json
+agentcontrol validate --policy agentcontrol-policy.yaml --tool read_file --payload payload.json
 
 # 3. Validate policy fixtures against a running gateway in CI/CD pipelines
-agentwall test --policy agentwall-policy.yaml --gateway "http://127.0.0.1:8080" fixture.json
+agentcontrol test --policy agentcontrol-policy.yaml --gateway "http://127.0.0.1:8080" fixture.json
 
 # 4. Cryptographically sign policy with Ed25519 key for production promotion
-agentwall promote --policy agentwall-policy.yaml --key ./keys/prod.key
+agentcontrol promote --policy agentcontrol-policy.yaml --key ./keys/prod.key
 ```
 
 ---
 
 ## 8. Data Loss Prevention (DLP) & Prompt Injection Defense
 
-AgentWall acts as a dual-pass firewall examining both outbound tool arguments and inbound execution responses.
+Agent Control acts as a dual-pass firewall examining both outbound tool arguments and inbound execution responses.
 
 ### 21 Built-In Regex DLP Detectors
 
@@ -432,7 +432,7 @@ Normalized text is evaluated against 9 active injection scanners blocking:
 
 ## 9. Authoritative LLM Spend Governance
 
-AgentWall includes an authoritative PostgreSQL-backed spend management engine that prevents budget runaways and token exhaustion.
+Agent Control includes an authoritative PostgreSQL-backed spend management engine that prevents budget runaways and token exhaustion.
 
 ```
 Agent Request ──► [ Preflight Reservation ] ──► (Sufficient Budget?)
@@ -444,7 +444,7 @@ Agent Request ──► [ Preflight Reservation ] ──► (Sufficient Budget?)
 
 ### Preflight Budget Invariants
 - **Integer Microcents Math:** All token calculations use integer microcents ($1.00 = 100,000,000 µ¢) to eliminate floating-point rounding errors.
-- **Pre-Dispatch Bounded Reservations:** Before forwarding a prompt to an LLM provider, AgentWall calculates maximum potential cost based on model pricing rules and reserves the amount.
+- **Pre-Dispatch Bounded Reservations:** Before forwarding a prompt to an LLM provider, Agent Control calculates maximum potential cost based on model pricing rules and reserves the amount.
 - **Fail-Closed Hard Deny:** If `active_reservations + settled_spend > limit`, the gateway rejects the request with HTTP 429 (`spend_budget_exhausted`). No upstream provider tokens are consumed.
 
 ### Requesting a Budget Increase
@@ -460,7 +460,7 @@ Agent Request ──► [ Preflight Reservation ] ──► (Sufficient Budget?)
 High-risk actions (e.g., database drops, production deployments, sensitive file access) can be routed for human authorization.
 
 ### Real-Time Interactive Browser Modals
-When running locally (`agentwall protect` / `agentwall dev`), dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:8080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
+When running locally (`agentcontrol protect` / `agentcontrol dev`), dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:8080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
 
 ### Asynchronous Slack / MS Teams / Webhook Queue
 For team and enterprise deployments, the gateway dispatches an async webhook payload containing:
@@ -473,7 +473,7 @@ Approvers submit decisions via HTTP callback:
 ```bash
 curl -X POST http://localhost:8080/api/v1/hitl/respond \
   -H "Content-Type: application/json" \
-  -H "X-AgentWall-Signature: <HMAC_SIGNATURE>" \
+  -H "X-Agent Control-Signature: <HMAC_SIGNATURE>" \
   -d '{"request_id": "req-9842", "decision": "approve"}'
 ```
 
@@ -485,7 +485,7 @@ Every tool call, policy evaluation, DLP finding, and administrative action is re
 
 ### HMAC-SHA256 Hash Chaining
 
-Each record in `~/.agentwall/audit.jsonl` contains the SHA-256 hash of the preceding record:
+Each record in `~/.agentcontrol/audit.jsonl` contains the SHA-256 hash of the preceding record:
 $$\text{Hash}_n = \text{HMAC-SHA256}(\text{Record}_n \parallel \text{Hash}_{n-1}, K_{\text{audit}})$$
 
 If any record is altered or deleted, the hash chain breaks immediately.
@@ -494,10 +494,10 @@ If any record is altered or deleted, the hash chain breaks immediately.
 
 ```bash
 # Verify HMAC integrity across the entire audit log
-agentwall verify-log ~/.agentwall/audit.jsonl
+agentcontrol verify-log ~/.agentcontrol/audit.jsonl
 
 # Verify with custom HMAC key file
-agentwall verify-log ~/.agentwall/audit.jsonl --key-file ./keys/audit.key
+agentcontrol verify-log ~/.agentcontrol/audit.jsonl --key-file ./keys/audit.key
 ```
 
 ### Automated Compliance Evidence Generation
@@ -506,15 +506,15 @@ Generate audit evidence reports mapped directly to **SOC 2 Type II**, **ISO 2700
 
 ```bash
 # Generate Markdown compliance report
-agentwall compliance report --log-path ~/.agentwall/audit.jsonl --format markdown --output compliance-report.md
+agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format markdown --output compliance-report.md
 
 # Output JSON structured report for automated compliance platforms
-agentwall compliance report --log-path ~/.agentwall/audit.jsonl --format json
+agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format json
 ```
 
 ### Compliance Framework Mappings
 
-| Standard | Control ID | Control Title | AgentWall Verification Evidence |
+| Standard | Control ID | Control Title | Agent Control Verification Evidence |
 |---|---|---|---|
 | **SOC 2 Type II** | CC6.1 | Logical Access & Least Privilege | HMAC-chained audit log & tool parameter allowlists |
 | **SOC 2 Type II** | CC6.6 | Boundary Defense for AI Systems | Safe mode rules, injection scanners & cycle detection |
@@ -528,30 +528,30 @@ agentwall compliance report --log-path ~/.agentwall/audit.jsonl --format json
 
 | Command | Arguments / Flags | Description |
 |---|---|---|
-| `agentwall protect` | `--dry-run`, `--shadow`, `--no-browser`, `--listen <ADDR>`, `--policy <PATH>` | Single-command automated discovery, atomic IDE wrapping, gateway launch, and dashboard opening |
-| `agentwall unprotect` | `--dry-run`, `--force` | Reverts all IDE configurations from backups and verifies integrity |
-| `agentwall status` | *(none)* | Displays active wrap state, paths, and existence for all 9 IDE targets |
-| `agentwall wrap <target>` | `claude`, `cursor`, `vscode`, `jetbrains`, `zed`, `cline`, `opencode`, `antigravity`, `codex`, or `--all` | Wraps specified IDE configuration(s) with timestamped backup creation |
-| `agentwall unwrap <target>` | `<target>`, `--force` | Restores specified IDE configuration from its backup |
-| `agentwall watch` | `--all`, or `<target>` | Starts the OS filesystem watcher daemon for auto-rewrapping on configuration drift |
-| `agentwall dev` | `--listen <ADDR>`, `--stdio`, `--enforce`, `--learn`, `--dual-agent`, `-- <cmd>` | Starts shadow observation proxy or stdio wrapper with learning mode |
-| `agentwall start` | `--policy <PATH>`, `--listen <ADDR>`, `--centralized`, `--tls-cert <CERT>`, `--tls-key <KEY>` | Runs the centralized production security gateway daemon |
-| `agentwall service` | `install`, `uninstall`, `status` | Manages persistent OS background Sentry service (Windows SCM, macOS launchd, Linux systemd) |
-| `agentwall enroll` | `--token <OTET>`, `--hub-url <URL>` | Performs hardware-bound Ed25519 PKI device enrollment with Control Hub |
-| `agentwall generate-policy` | `--decay-window <DAYS>`, `--output <PATH>` | Synthesizes a lint-passing `agentwall-policy.yaml` from recorded shadow traffic |
-| `agentwall scan` | `--path <PATH>`, `--format <text\|json>` | Audits local MCP configuration and assigns 0–100 Vexa Security Score |
-| `agentwall bench` | `--full`, `--compare-baselines`, `--visualize`, `--output <PATH>` | Runs 303-task ADR security benchmark across 17 attack categories |
-| `agentwall compliance report` | `--log-path <PATH>`, `--format <markdown\|json>`, `--output <PATH>` | Generates SOC 2, ISO 27001, and NIST AI RMF compliance evidence reports |
-| `agentwall identity create` | `--agent <NAME>`, `--scope <SCOPE>`, `--ttl <TTL>` | Provisions a scoped, short-lived credential for an agent |
-| `agentwall identity rotate` | `--agent <NAME>`, `--drain-secs <SECS>` | Rotates active agent credential with zero downtime |
-| `agentwall identity audit` | `--agent <NAME>`, `--verify` | Displays HMAC-chained credential lifecycle audit log |
-| `agentwall verify-log` | `<LOG_PATH>`, `--key-file <KEY>` | Verifies cryptographic HMAC-SHA256 hash chain of an audit log |
-| `agentwall report` | `<LOG_PATH>`, `--output <PATH>`, `--risk`, `--format <json\|text>` | Generates session summary report or shadow Risk Delta analysis |
-| `agentwall lint` | `<POLICY_PATH>` | Checks YAML policy syntax, parameter schemas, and security bounds |
-| `agentwall validate` | `--policy <PATH>`, `--tool <NAME>`, `--payload <JSON_FILE>` | Evaluates tool call payload offline against policy rules |
-| `agentwall test` | `--policy <PATH>`, `--gateway <URL>`, `--oidc-token <JWT>`, `<FIXTURE>` | Validates policy test fixtures in CI/CD pipeline against gateway |
-| `agentwall license keygen` | `--output <DIR>` | Generates Ed25519 keypair for enterprise license generation |
-| `agentwall license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
+| `agentcontrol protect` | `--dry-run`, `--shadow`, `--no-browser`, `--listen <ADDR>`, `--policy <PATH>` | Single-command automated discovery, atomic IDE wrapping, gateway launch, and dashboard opening |
+| `agentcontrol unprotect` | `--dry-run`, `--force` | Reverts all IDE configurations from backups and verifies integrity |
+| `agentcontrol status` | *(none)* | Displays active wrap state, paths, and existence for all 9 IDE targets |
+| `agentcontrol wrap <target>` | `claude`, `cursor`, `vscode`, `jetbrains`, `zed`, `cline`, `opencode`, `antigravity`, `codex`, or `--all` | Wraps specified IDE configuration(s) with timestamped backup creation |
+| `agentcontrol unwrap <target>` | `<target>`, `--force` | Restores specified IDE configuration from its backup |
+| `agentcontrol watch` | `--all`, or `<target>` | Starts the OS filesystem watcher daemon for auto-rewrapping on configuration drift |
+| `agentcontrol dev` | `--listen <ADDR>`, `--stdio`, `--enforce`, `--learn`, `--dual-agent`, `-- <cmd>` | Starts shadow observation proxy or stdio wrapper with learning mode |
+| `agentcontrol start` | `--policy <PATH>`, `--listen <ADDR>`, `--centralized`, `--tls-cert <CERT>`, `--tls-key <KEY>` | Runs the centralized production security gateway daemon |
+| `agentcontrol service` | `install`, `uninstall`, `status` | Manages persistent OS background Sentry service (Windows SCM, macOS launchd, Linux systemd) |
+| `agentcontrol enroll` | `--token <OTET>`, `--hub-url <URL>` | Performs hardware-bound Ed25519 PKI device enrollment with Control Hub |
+| `agentcontrol generate-policy` | `--decay-window <DAYS>`, `--output <PATH>` | Synthesizes a lint-passing `agentcontrol-policy.yaml` from recorded shadow traffic |
+| `agentcontrol scan` | `--path <PATH>`, `--format <text\|json>` | Audits local MCP configuration and assigns 0–100 Vexa Security Score |
+| `agentcontrol bench` | `--full`, `--compare-baselines`, `--visualize`, `--output <PATH>` | Runs 303-task ADR security benchmark across 17 attack categories |
+| `agentcontrol compliance report` | `--log-path <PATH>`, `--format <markdown\|json>`, `--output <PATH>` | Generates SOC 2, ISO 27001, and NIST AI RMF compliance evidence reports |
+| `agentcontrol identity create` | `--agent <NAME>`, `--scope <SCOPE>`, `--ttl <TTL>` | Provisions a scoped, short-lived credential for an agent |
+| `agentcontrol identity rotate` | `--agent <NAME>`, `--drain-secs <SECS>` | Rotates active agent credential with zero downtime |
+| `agentcontrol identity audit` | `--agent <NAME>`, `--verify` | Displays HMAC-chained credential lifecycle audit log |
+| `agentcontrol verify-log` | `<LOG_PATH>`, `--key-file <KEY>` | Verifies cryptographic HMAC-SHA256 hash chain of an audit log |
+| `agentcontrol report` | `<LOG_PATH>`, `--output <PATH>`, `--risk`, `--format <json\|text>` | Generates session summary report or shadow Risk Delta analysis |
+| `agentcontrol lint` | `<POLICY_PATH>` | Checks YAML policy syntax, parameter schemas, and security bounds |
+| `agentcontrol validate` | `--policy <PATH>`, `--tool <NAME>`, `--payload <JSON_FILE>` | Evaluates tool call payload offline against policy rules |
+| `agentcontrol test` | `--policy <PATH>`, `--gateway <URL>`, `--oidc-token <JWT>`, `<FIXTURE>` | Validates policy test fixtures in CI/CD pipeline against gateway |
+| `agentcontrol license keygen` | `--output <DIR>` | Generates Ed25519 keypair for enterprise license generation |
+| `agentcontrol license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
 
 ---
 
@@ -566,6 +566,6 @@ For deep architectural specifications, protocol designs, and framework-specific 
 - 🛡️ **[OWASP Agentic Top 10 (ASI 2026)](owasp_agentic_top10.md)** — Architectural security mapping, evidence, and mitigations.
 - 🔑 **[OIDC Identity Binding Guide](oidc_identity_binding.md)** — Step-by-step setup for Okta, Keycloak, Entra ID, Auth0, and PingIdentity.
 - 📊 **[ADR Security Benchmark Guide](adr_benchmark.md)** — 303 benchmark scenarios and comparative evaluation methodology.
-- 🏗️ **[System Architecture Specification](agentwall_architecture.md)** — 6-pass security pipeline and internal component mechanics.
+- 🏗️ **[System Architecture Specification](agentcontrol_architecture.md)** — 6-pass security pipeline and internal component mechanics.
 - 🚀 **[Deployment & Installation Guide](deployment.md)** — Multi-platform installation reference across Linux, macOS, and Windows.
 - ⚡ **[Quickstart Guide](quickstart.md)** — 5-minute hands-on walkthrough.

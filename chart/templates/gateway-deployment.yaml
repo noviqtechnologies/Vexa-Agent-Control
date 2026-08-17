@@ -2,26 +2,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "agentwall.fullname" . }}-gateway
+  name: {{ include "agentcontrol.fullname" . }}-gateway
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.gatewaySelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.gateway.replicas }}
   strategy:
     {{- toYaml .Values.gateway.strategy | nindent 4 }}
   selector:
     matchLabels:
-      {{- include "agentwall.gatewaySelectorLabels" . | nindent 6 }}
+      {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentwall.gatewaySelectorLabels" . | nindent 8 }}
+        {{- include "agentcontrol.gatewaySelectorLabels" . | nindent 8 }}
         # FR-5 §5.5.8: convention label so the default NetworkPolicy
-        # gatewayPodSelector ({agentwall.io/gateway: "true"}) matches
+        # gatewayPodSelector ({agentcontrol.io/gateway: "true"}) matches
         # this pod out-of-the-box.
-        agentwall.io/gateway: "true"
+        agentcontrol.io/gateway: "true"
       annotations:
         # Trigger a rolling restart whenever the policy ConfigMap or TLS
         # Secret content changes. Without these annotations, `helm upgrade`
@@ -36,12 +36,12 @@ spec:
         {{- toYaml .Values.gateway.securityContext | nindent 8 }}
       containers:
       - name: gateway
-        image: {{ include "agentwall.gatewayImage" . }}
+        image: {{ include "agentcontrol.gatewayImage" . }}
         imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
         args:
           - "start"
           - "--policy"
-          - "/etc/agentwall/policy.yaml"
+          - "/etc/agentcontrol/policy.yaml"
           - "--listen"
           - "0.0.0.0:{{ .Values.gateway.service.port }}"
           - "--mcp-url"
@@ -65,9 +65,9 @@ spec:
           {{- if .Values.gateway.tls.enabled }}
           # FR-5 §5.5.6: TLS listener
           - "--tls-cert"
-          - "/etc/agentwall/tls/tls.crt"
+          - "/etc/agentcontrol/tls/tls.crt"
           - "--tls-key"
-          - "/etc/agentwall/tls/tls.key"
+          - "/etc/agentcontrol/tls/tls.key"
           {{- end }}
           {{- if .Values.gateway.features.dryRun }}
           - "--dry-run"
@@ -94,16 +94,16 @@ spec:
           {{- end }}
           {{- if .Values.dashboardApi.enabled }}
           - name: DASHBOARD_API_URL
-            value: "http://{{ include "agentwall.fullname" . }}-dashboard-api:{{ .Values.dashboardApi.port }}"
+            value: "http://{{ include "agentcontrol.fullname" . }}-dashboard-api:{{ .Values.dashboardApi.port }}"
           - name: GATEWAY_SECRET
             valueFrom:
               secretKeyRef:
-                name: {{ include "agentwall.fullname" . }}-dashboard-gateway-secret
+                name: {{ include "agentcontrol.fullname" . }}-dashboard-gateway-secret
                 key: GATEWAY_SECRET
           - name: POLICY_READ_SECRET
             valueFrom:
               secretKeyRef:
-                name: {{ include "agentwall.fullname" . }}-dashboard-policy-read-secret
+                name: {{ include "agentcontrol.fullname" . }}-dashboard-policy-read-secret
                 key: POLICY_READ_SECRET
           {{- end }}
         ports:
@@ -112,11 +112,11 @@ spec:
           protocol: TCP
         volumeMounts:
         - name: policy
-          mountPath: /etc/agentwall
+          mountPath: /etc/agentcontrol
           readOnly: true
         {{- if .Values.gateway.tls.enabled }}
         - name: tls
-          mountPath: /etc/agentwall/tls
+          mountPath: /etc/agentcontrol/tls
           readOnly: true
         {{- end }}
         # Writable tmpfs — the gateway uses /tmp for scratch, and
@@ -155,11 +155,11 @@ spec:
       volumes:
       - name: policy
         configMap:
-          name: {{ include "agentwall.policyConfigMapName" . }}
+          name: {{ include "agentcontrol.policyConfigMapName" . }}
       {{- if .Values.gateway.tls.enabled }}
       - name: tls
         secret:
-          secretName: {{ include "agentwall.tlsSecretName" . }}
+          secretName: {{ include "agentcontrol.tlsSecretName" . }}
           defaultMode: 0400
       {{- end }}
       - name: tmp

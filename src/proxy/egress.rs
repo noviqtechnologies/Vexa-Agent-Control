@@ -285,11 +285,11 @@ pub async fn handle_egress(
                 let err_res = Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .header(
-                        "X-AgentWall-Block-Reason",
+                        "X-AgentControl-Block-Reason",
                         format!("dlp:{}", dlp_findings[0].pattern_name),
                     )
                     .body(Full::new(Bytes::from(
-                        "AgentWall Blocked: Secret DLP Violation",
+                        "Vexa Agent Control Blocked: Secret DLP Violation",
                     )))
                     .unwrap();
 
@@ -346,9 +346,9 @@ pub async fn handle_egress(
                     verdict = "deny".to_string();
                     let err_res = Response::builder()
                         .status(StatusCode::FORBIDDEN)
-                        .header("X-AgentWall-Block-Reason", "budget_exhausted")
+                        .header("X-AgentControl-Block-Reason", "budget_exhausted")
                         .body(Full::new(Bytes::from(format!(
-                            "AgentWall Blocked: Spend cap exhausted (Limit: ${:.2}, Spent: ${:.2})",
+                            "Vexa Agent Control Blocked: Spend cap exhausted (Limit: ${:.2}, Spent: ${:.2})",
                             cap_cents as f64 / 100.0,
                             spent_cents as f64 / 100.0
                         ))))
@@ -547,9 +547,9 @@ pub async fn handle_egress(
                 if is_blocked {
                     Response::builder()
                         .status(StatusCode::FORBIDDEN)
-                        .header("X-AgentWall-Block-Reason", "injection_detected")
+                        .header("X-AgentControl-Block-Reason", "injection_detected")
                         .body(Full::new(Bytes::from(
-                            "AgentWall Blocked: Prompt Injection Detected",
+                            "Vexa Agent Control Blocked: Prompt Injection Detected",
                         )))
                         .unwrap()
                 } else {

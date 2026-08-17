@@ -1,6 +1,6 @@
 //! Unit test suite for FR-304 / NFR-303: HITL Policy Escalation & HMAC Callback Verification
 
-use agentwall::policy::hitl::{EscalationRequest, EscalationResponse, HitlManager};
+use agentcontrol::policy::hitl::{EscalationRequest, EscalationResponse, HitlManager};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 

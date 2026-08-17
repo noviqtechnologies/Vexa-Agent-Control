@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/spend"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 )
 
 func TestSpendV2Handler_Authorize_PriceUnknown(t *testing.T) {

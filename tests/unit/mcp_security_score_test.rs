@@ -1,6 +1,6 @@
 //! Unit test suite for FR-303: Verified MCP Security Scoring Engine
 
-use agentwall::policy::mcp_score::McpScorer;
+use agentcontrol::policy::mcp_score::McpScorer;
 
 #[test]
 fn test_mcp_security_scorer_safe_tool() {

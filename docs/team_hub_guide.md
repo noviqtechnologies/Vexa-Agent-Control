@@ -6,7 +6,7 @@
 
 ## What This Profile Provides
 
-The **Team Control Hub** profile extends AgentWall governance beyond a single developer workstation. It introduces a self-hosted central control plane — a Go REST API, React Management Console, and PostgreSQL database — coordinating distributed gateway instances across your entire organization.
+The **Team Control Hub** profile extends Agent Control governance beyond a single developer workstation. It introduces a self-hosted central control plane — a Go REST API, React Management Console, and PostgreSQL database — coordinating distributed gateway instances across your entire organization.
 
 > [!NOTE]
 > All Workstation Sidecar capabilities (safe-mode rules, DLP scanning, prompt injection protection, IDE wrapping, ADR benchmark) are **fully included** in this profile. This guide covers centralized deployment and control capabilities.
@@ -44,7 +44,7 @@ Choose the deployment method that fits your environment requirements:
 ```
 
 - **[Local Development & Testing Guide](team_hub_guide/local_development.md)** — Step-by-step instructions for running Team Hub locally using Docker Compose (`docker compose up -d --build`), executing native gateways, connecting local agent workflows, and verifying audit logs.
-- **[Kubernetes Deployment Guide](team_hub_guide/kubernetes_deployment.md)** — Comprehensive documentation for deploying Team Hub to production Kubernetes clusters using Helm (`./chart`), managing TLS secrets, configuring `AgentWallPolicy` CRDs, and handling zero-downtime rolling upgrades.
+- **[Kubernetes Deployment Guide](team_hub_guide/kubernetes_deployment.md)** — Comprehensive documentation for deploying Team Hub to production Kubernetes clusters using Helm (`./chart`), managing TLS secrets, configuring `Agent ControlPolicy` CRDs, and handling zero-downtime rolling upgrades.
 
 ---
 
@@ -88,7 +88,7 @@ Gateway                                               Control Hub API
   export POLICY_READ_SECRET="your-policy-read-secret"
   export GATEWAY_SECRET="your-gateway-secret"
 
-  agentwall start --listen 0.0.0.0:8080 --centralized
+  agentcontrol start --listen 0.0.0.0:8080 --centralized
   ```
 
 * **Windows (PowerShell):**
@@ -97,14 +97,14 @@ Gateway                                               Control Hub API
   $env:POLICY_READ_SECRET="your-policy-read-secret"
   $env:GATEWAY_SECRET="your-gateway-secret"
 
-  agentwall.exe start --listen 0.0.0.0:8080 --centralized
+  agentcontrol.exe start --listen 0.0.0.0:8080 --centralized
   ```
 
 ---
 
 ## 2. OIDC Identity Binding
 
-AgentWall supports two distinct authentication paths:
+Agent Control supports two distinct authentication paths:
 
 ### Path A: Instant Local Team Management (Default)
 Org Admins can immediately invite colleagues under **Users & Roles** using standard email and password credentials. No IdP configuration required.
@@ -116,7 +116,7 @@ When corporate identity compliance is required, bind your corporate Identity Pro
 
 ## 3. Vault & API Key Custody (Zero-Trust BYOK)
 
-AgentWall implements customer-isolated encrypted credential storage using AES-256-GCM. 
+Agent Control implements customer-isolated encrypted credential storage using AES-256-GCM. 
 - SaaS Platform Operators **never** have visibility into customer LLM keys.
 - Organization Admins configure keys inside their tenant console under **Settings ➔ LLM Providers**.
 - Workstations and Gateways receive scoped credentials with automated TTL expiration.
@@ -156,7 +156,7 @@ Control Hub tracks heartbeat checkins emitted every 60 seconds from background S
 
 | Status Badge | State Criteria | System Security Action | Operational Meaning |
 |---|---|---|---|
-| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$, IDE base URLs locked, AND $100\%$ MCP servers wrapped | Device active, full API & proxy access granted | Workstation is fully governed. All tool calls and LLM completions pass through AgentWall DLP & spend ledger. |
+| **`COMPLIANT`** (Green) | Heartbeat $\le 3\text{ min}$, IDE base URLs locked, AND $100\%$ MCP servers wrapped | Device active, full API & proxy access granted | Workstation is fully governed. All tool calls and LLM completions pass through Agent Control DLP & spend ledger. |
 | **`OFFLINE`** (Gray) | Heartbeat $> 3\text{ min}$ | Warning logged | Machine is idle, asleep, offline, or sentry daemon connection was temporarily interrupted. |
 | **`NON_COMPLIANT`** (Red) | IDE Base URL modified/bypassed OR unwrapped tools detected | Console alerts dispatched, compliance violation logged | **Zero-Trust Drift**: At least 1 IDE or MCP tool has bypassed the proxy. Sentry Daemon executes auto-healing. |
 | **`REVOKED`** (Red) | Manually revoked by Admin | 401 Unauthorized returned to device | Hardware certificate invalidated; all telemetry & gateway requests blocked. |

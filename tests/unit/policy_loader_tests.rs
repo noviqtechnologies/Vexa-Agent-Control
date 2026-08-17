@@ -11,8 +11,8 @@
 use std::io::Write;
 use tempfile::NamedTempFile;
 
-use agentwall::policy::engine::EvalResult;
-use agentwall::policy::loader::{load_policy, PolicyLoadResult};
+use agentcontrol::policy::engine::EvalResult;
+use agentcontrol::policy::loader::{load_policy, PolicyLoadResult};
 
 // ---------------------------------------------------------------------------
 // Utility: write a YAML string to a temp file and return the path.
@@ -466,7 +466,7 @@ tools:
 
 fn extract_loaded(
     path: &std::path::Path,
-) -> (agentwall::policy::engine::CompiledPolicy, Vec<String>) {
+) -> (agentcontrol::policy::engine::CompiledPolicy, Vec<String>) {
     match load_policy(path, None) {
         PolicyLoadResult::Loaded {
             policy, warnings, ..

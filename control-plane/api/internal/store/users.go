@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
 func (s *Store) GetUserByEmail(ctx context.Context, tenantID, authProviderID, email string) (*model.User, error) {

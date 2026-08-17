@@ -113,7 +113,7 @@ pub fn ensure_json_proxy_setting(
     Ok(false)
 }
 
-/// Enforces AgentWall proxy configuration across a named IDE target
+/// Enforces Agent Control proxy configuration across a named IDE target
 pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus, String> {
     let mut status = IdeConfigStatus {
         name: name.to_string(),
@@ -140,7 +140,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
         if status.installed {
             let key_spec = match name {
-                "cursor" => ("cursor.models.openaiBaseUrl", Some(("cursor.models.apiKey", "agentwall-local-key"))),
+                "cursor" => ("cursor.models.openaiBaseUrl", Some(("cursor.models.apiKey", "agentcontrol-local-key"))),
                 "vscode" => ("cline.baseUrl", None),
                 "zed" => ("language_models.openai.api_url", None),
                 "windsurf" => ("openai.baseUrl", None),

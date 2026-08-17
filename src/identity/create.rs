@@ -92,7 +92,7 @@ pub fn run_identity_create(
             );
             eprintln!(
                 "{}",
-                "  Or set AGENTWALL_IDENTITY_BACKEND=aws-secrets-manager to use AWS SM.".yellow()
+                "  Or set AGENTCONTROL_IDENTITY_BACKEND=aws-secrets-manager to use AWS SM.".yellow()
             );
             return 1;
         }
@@ -228,7 +228,7 @@ pub fn run_identity_create(
     );
     println!(
         "  {}",
-        "  Inject as: export AGENTWALL_AGENT_TOKEN=\"<token>\"".dimmed()
+        "  Inject as: export AGENTCONTROL_AGENT_TOKEN=\"<token>\"".dimmed()
     );
     println!("{}", "─".repeat(60).cyan());
 

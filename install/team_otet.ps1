@@ -1,4 +1,4 @@
-# PowerShell Installer for AgentWall Team OTET Enterprise Provisioning
+# PowerShell Installer for Vexa Agent Control Team OTET Enterprise Provisioning
 $ErrorActionPreference = "Stop"
 
 $ColorGreen = "Green"
@@ -6,17 +6,17 @@ $ColorYellow = "Yellow"
 $ColorCyan = "Cyan"
 $ColorRed = "Red"
 
-Write-Host "[*] AgentWall Team OTET Enterprise Provisioning Installer" -ForegroundColor $ColorCyan
+Write-Host "[*] Vexa Agent Control Team OTET Enterprise Provisioning Installer" -ForegroundColor $ColorCyan
 
-$Token = $env:AGENTWALL_TOKEN
-if (!$Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
+$Token = $env:AGENTCONTROL_TOKEN
+if (!$Token) { $Token = $env:AGENTCONTROL_ENROLLMENT_TOKEN }
 $HubUrl = $env:DASHBOARD_API_URL
-if (!$HubUrl) { $HubUrl = $env:AGENTWALL_HUB_URL }
+if (!$HubUrl) { $HubUrl = $env:AGENTCONTROL_HUB_URL }
 if (!$HubUrl) { $HubUrl = "http://localhost:8400" }
 
 if (!$Token) {
     Write-Host "[!] Error: Enterprise enrollment token required." -ForegroundColor $ColorRed
-    Write-Host "    Set `$env:AGENTWALL_TOKEN = '<TOKEN>' before running this script." -ForegroundColor $ColorYellow
+    Write-Host "    Set `$env:AGENTCONTROL_TOKEN = '<TOKEN>' before running this script." -ForegroundColor $ColorYellow
     exit 1
 }
 
@@ -29,7 +29,7 @@ $Repo = "noviqtechnologies/Vexa-Agent-Control"
 $ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
 
 try {
-    $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentWall-Installer" }
+    $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
     $Version = $ReleaseJson[0].tag_name
 } catch {
     Write-Host "[!] Failed to fetch version info: $_" -ForegroundColor $ColorRed
@@ -40,19 +40,19 @@ Write-Host "[*] Version: $Version | Hub: $HubUrl" -ForegroundColor $ColorGreen
 
 $LocalBinDir = "$env:USERPROFILE\.local\bin"
 if (!(Test-Path $LocalBinDir)) { New-Item -ItemType Directory -Path $LocalBinDir -Force | Out-Null }
-$FinalBinaryPath = Join-Path $LocalBinDir "agentwall.exe"
+$FinalBinaryPath = Join-Path $LocalBinDir "agentcontrol.exe"
 
-$AssetName = "agentwall-$Version-windows-$ArchStr.zip"
+$AssetName = "agentcontrol-$Version-windows-$ArchStr.zip"
 $DownloadUrl = "https://github.com/$Repo/releases/download/$Version/$AssetName"
-$TempZip = Join-Path $env:TEMP "agentwall_asset.zip"
-$TempExtract = Join-Path $env:TEMP "agentwall_extract"
+$TempZip = Join-Path $env:TEMP "agentcontrol_asset.zip"
+$TempExtract = Join-Path $env:TEMP "agentcontrol_extract"
 if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force | Out-Null }
 
 Write-Host "[*] Downloading asset package..." -ForegroundColor $ColorCyan
 Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
-$ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentwall.exe" | Select-Object -First 1
+$ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol.exe" | Select-Object -First 1
 
 # Gracefully stop running service and kill any lingering user processes to avoid binary file-lock
 $RunningService = Get-Service AgentControlSentry -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
@@ -76,12 +76,12 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
 try {
     # Sync user credentials to SYSTEM service profile if elevated
-    $SystemAgentWall = "C:\Windows\System32\config\systemprofile\.agentwall"
+    $SystemAgentWall = "C:\Windows\System32\config\systemprofile\.agentcontrol"
     if (!(Test-Path $SystemAgentWall)) {
         New-Item -ItemType Directory -Path $SystemAgentWall -Force -ErrorAction SilentlyContinue | Out-Null
     }
-    if (Test-Path "$env:USERPROFILE\.agentwall") {
-        Copy-Item -Path "$env:USERPROFILE\.agentwall\*" -Destination $SystemAgentWall -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path "$env:USERPROFILE\.agentcontrol") {
+        Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentWall -Recurse -Force -ErrorAction SilentlyContinue
     }
     [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
     if ($env:GATEWAY_SECRET) {
@@ -98,5 +98,5 @@ Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor 
 
 Write-Host "`n[+] Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
 Write-Host "Get started by running:" -ForegroundColor $ColorGreen
-Write-Host "  agentwall protect" -ForegroundColor $ColorGreen
+Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
 Write-Host ""

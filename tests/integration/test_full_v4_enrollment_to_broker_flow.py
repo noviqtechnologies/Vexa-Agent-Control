@@ -1,5 +1,5 @@
 """
-End-to-End Integration Test: Vexa AgentWall v4.0 Target Contract
+End-to-End Integration Test: Vexa Agent Control v4.0 Target Contract
 Simulates complete lifecycle:
   1. Token Creation via Operator API
   2. Two-Key Generation (Ed25519 Identity + ECDSA P-256 CSR)
@@ -61,7 +61,7 @@ def simulate_full_target_contract_flow():
     assert device_state == "COMPLIANT", "Only COMPLIANT devices can access broker"
     broker_response = {
         "model": "gpt-4.1-mini",
-        "choices": [{"message": {"role": "assistant", "content": "Vexa AgentWall Brokered Response"}}],
+        "choices": [{"message": {"role": "assistant", "content": "Vexa Agent Control Brokered Response"}}],
         "usage": {"total_tokens": 23}
     }
     print(f"[OK] Brokered Execution Success: {broker_response['choices'][0]['message']['content']}")

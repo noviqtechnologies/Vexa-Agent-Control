@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/device"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 )
 
 type DeviceHandler struct {

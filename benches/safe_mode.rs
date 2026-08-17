@@ -1,4 +1,4 @@
-use agentwall::policy::safe_mode::SafeModeScanner;
+use agentcontrol::policy::safe_mode::SafeModeScanner;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::json;
 

@@ -1,4 +1,4 @@
-use agentwall::validate;
+use agentcontrol::validate;
 use std::fs;
 use tempfile::NamedTempFile;
 

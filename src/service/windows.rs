@@ -3,6 +3,7 @@
 #[cfg(windows)]
 use colored::*;
 
+#[cfg(windows)]
 fn sanitize_url(url: &str) -> String {
     let mut s = url.trim().to_string();
     while s.starts_with("http://http://") {

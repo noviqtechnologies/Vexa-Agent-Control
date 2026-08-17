@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "agentwall.fullname" . }}-dashboard-frontend
+  name: {{ include "agentcontrol.fullname" . }}-dashboard-frontend
   namespace: {{ .Values.namespace.name }}
   labels:
-    {{- include "agentwall.labels" . | nindent 4 }}
-    {{- include "agentwall.dashboardFrontendSelectorLabels" . | nindent 4 }}
+    {{- include "agentcontrol.labels" . | nindent 4 }}
+    {{- include "agentcontrol.dashboardFrontendSelectorLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.dashboardFrontend.replicas }}
   selector:
     matchLabels:
-      {{- include "agentwall.dashboardFrontendSelectorLabels" . | nindent 6 }}
+      {{- include "agentcontrol.dashboardFrontendSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentwall.dashboardFrontendSelectorLabels" . | nindent 8 }}
+        {{- include "agentcontrol.dashboardFrontendSelectorLabels" . | nindent 8 }}
       annotations:
         checksum/nginx-config: {{ include (print $.Template.BasePath "/dashboard-frontend-nginx-configmap.yaml") . | sha256sum }}
     spec:
@@ -23,7 +23,7 @@ spec:
         {{- toYaml .Values.dashboardFrontend.securityContext | nindent 8 }}
       containers:
       - name: frontend
-        image: {{ include "agentwall.dashboardFrontendImage" . }}
+        image: {{ include "agentcontrol.dashboardFrontendImage" . }}
         imagePullPolicy: {{ .Values.dashboardFrontend.image.pullPolicy }}
         ports:
         - name: http
@@ -60,7 +60,7 @@ spec:
       volumes:
       - name: nginx-config
         configMap:
-          name: {{ include "agentwall.fullname" . }}-dashboard-frontend-nginx
+          name: {{ include "agentcontrol.fullname" . }}-dashboard-frontend-nginx
       - name: tmp
         emptyDir:
           medium: Memory

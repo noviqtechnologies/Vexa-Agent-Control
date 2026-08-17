@@ -1,11 +1,11 @@
-use agentwall::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentwall::kill::KillMode;
-use agentwall::policy::engine::CompiledPolicy;
-use agentwall::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentwall::policy::safe_mode::SafeModeScanner;
-use agentwall::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
-use agentwall::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
-use agentwall::proxy::session::SessionContext;
+use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::kill::KillMode;
+use agentcontrol::policy::engine::CompiledPolicy;
+use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
+use agentcontrol::policy::safe_mode::SafeModeScanner;
+use agentcontrol::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
@@ -23,7 +23,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
     };
     let audit_logger = Arc::new(AuditLogger::new(config).unwrap());
 
-    let db_manager = Arc::new(agentwall::proxy::db::DbManager::init());
+    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
 
     Arc::new(ProxyState {
         policy: std::sync::RwLock::new(policy),
@@ -33,7 +33,7 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         listen_is_loopback: true,
         policy_read_secret: None,
         credential_scope_validator: Arc::new(
-            agentwall::policy::credential_scope::CredentialScopeValidator::new(false),
+            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
         ),
         audit_logger,
         session_id: "multi-tenant-test-session".to_string(),
@@ -50,13 +50,13 @@ fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
         db_manager,
         response_scanner: Arc::new(ResponseScanner::new().unwrap()),
         response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: std::sync::Arc::new(agentwall::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentwall::policy::semantic::SemanticScanner::new(
-            agentwall::policy::semantic::SemanticConfig::default(),
+        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
+        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
+            agentcontrol::policy::semantic::SemanticConfig::default(),
         )),
-        injection_scanner: Arc::new(agentwall::policy::injection::InjectionScanner::default()),
+        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
         schema_drift_detector: Arc::new(
-            agentwall::policy::schema_drift::SchemaDriftDetector::default(),
+            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
         ),
         tool_history: std::sync::Mutex::new(Vec::new()),
         sessions: dashmap::DashMap::new(),
@@ -368,7 +368,7 @@ async fn test_hot_reload_policy_isolation() {
     // Policy 1 (Allows 'read_file')
     let policy_v1 = CompiledPolicy {
         max_calls_per_second: 0,
-        tools: vec![agentwall::policy::engine::CompiledTool {
+        tools: vec![agentcontrol::policy::engine::CompiledTool {
             name: "read_file".to_string(),
             action: "allow".to_string(),
             risk: None,
@@ -563,7 +563,7 @@ async fn test_session_ttl_expiry() {
 
     // We can't mock Instant easily without a crate like `mock_instant`, but we can verify the constant is 4 hours
     assert_eq!(
-        agentwall::proxy::session::SESSION_TTL_SECS,
+        agentcontrol::proxy::session::SESSION_TTL_SECS,
         4 * 60 * 60,
         "TTL must be 4 hours"
     );

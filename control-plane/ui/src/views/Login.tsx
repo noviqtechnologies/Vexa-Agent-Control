@@ -266,7 +266,7 @@ export default function Login() {
         <div className="soc-login-footer">
           <span>🔒 FIPS / HMAC Audit Chain Verified</span>
           <span>&bull;</span>
-          <span>Zero-Trust Control Plane v1.0.34</span>
+          <span>Zero-Trust Control Plane v1.0.35</span>
         </div>
       </div>
     </div>

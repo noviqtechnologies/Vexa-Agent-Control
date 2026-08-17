@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/noviqtechnologies/agentwall/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type HeartbeatHandler struct {
@@ -21,7 +21,7 @@ type HeartbeatRequest struct {
 	DeviceID          string                 `json:"device_id"`
 	Hostname          string                 `json:"hostname"`
 	OSArch            string                 `json:"os_arch"`
-	AgentWallVersion  string                 `json:"agentwall_version"`
+	AgentControlVersion  string                 `json:"agentcontrol_version"`
 	DaemonStatus      string                 `json:"daemon_status"`
 	IDEChecksums       map[string]interface{} `json:"ide_checksums"`
 	MCPServersTotal   int                    `json:"mcp_servers_total"`

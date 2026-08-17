@@ -14,7 +14,7 @@ async fn test_dashboard_api_endpoints() {
     let listen_addr = "127.0.0.1:8085";
 
     // Spawn proxy server in shadow mode for testing
-    let bin = env!("CARGO_BIN_EXE_agentwall");
+    let bin = env!("CARGO_BIN_EXE_agentcontrol");
     let mut guard = ChildGuard(
         tokio::process::Command::new(bin)
             .arg("dev")
@@ -26,7 +26,7 @@ async fn test_dashboard_api_endpoints() {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("Failed to start agentwall proxy"),
+            .expect("Failed to start agentcontrol proxy"),
     );
 
     // Wait for server to start

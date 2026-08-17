@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    AgentWall Binary Uninstaller for Windows.
+    Vexa Agent Control Binary Uninstaller for Windows.
     Usage: .\uninstall.ps1 [-KeepConfig]
 #>
 
@@ -22,8 +22,8 @@ param(
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $AgentControlBin = Join-Path $InstallDir "agentcontrol.exe"
-    $AgentWallBin = Join-Path $InstallDir "agentwall.exe"
-    $ActiveBin = if (Test-Path $AgentControlBin) { $AgentControlBin } else { $AgentWallBin }
+    $Agent ControlBin = Join-Path $InstallDir "agentwall.exe"
+    $ActiveBin = if (Test-Path $AgentControlBin) { $AgentControlBin } else { $Agent ControlBin }
 
     # Step 1: Unwrap all IDE targets (restore original MCP configurations)
     if (Test-Path $ActiveBin) {
@@ -46,7 +46,7 @@ param(
     }
 
     # Fallback check using Windows Service Controller (sc.exe)
-    foreach ($ServiceName in @("AgentControlSentry", "AgentWallSentry")) {
+    foreach ($ServiceName in @("AgentControlSentry", "Agent ControlSentry")) {
         $Svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         if ($Svc) {
             Write-Host "[*] Cleaning remaining service registration for $ServiceName via sc.exe..." -ForegroundColor $ColorYellow
@@ -61,7 +61,7 @@ param(
     Write-Host "[*] Step 3/4: Removing binary executables..." -ForegroundColor $ColorCyan
     $FilesToRemove = @(
         $AgentControlBin,
-        $AgentWallBin,
+        $Agent ControlBin,
         (Join-Path $InstallDir "quickstart_agent.py")
     )
 

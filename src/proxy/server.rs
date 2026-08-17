@@ -530,13 +530,13 @@ async fn handle_request(
             .map(|s| s.to_string());
         let credential_header = req
             .headers()
-            .get("X-AgentWall-Credential")
+            .get("X-AgentControl-Credential").or_else(|| req.headers().get("X-AgentWall-Credential"))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
         let scope_header = req
             .headers()
-            .get("X-AgentWall-Credential-Scope")
-            .or_else(|| req.headers().get("X-AgentWall-Scope"))
+            .get("X-AgentControl-Credential-Scope").or_else(|| req.headers().get("X-AgentControl-Scope")).or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
+            .or_else(|| req.headers().get("X-AgentControl-Scope").or_else(|| req.headers().get("X-AgentWall-Scope")))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
@@ -788,7 +788,7 @@ async fn handle_request(
             None => {
                 let err = serde_json::json!({
                     "error": "No policy file path configured. Pass --policy <path> when starting the gateway to enable hot-reloading.",
-                    "hint": "agentwall protect --policy agentwall-policy.yaml"
+                    "hint": "agentwall protect --policy agentcontrol-policy.yaml"
                 });
                 return Ok(json_response(StatusCode::BAD_REQUEST, &err));
             }
@@ -1060,7 +1060,7 @@ async fn handle_request(
                     match crate::policy::engine::CompiledPolicy::from_yaml_str(yaml_content) {
                         Ok(new_policy) => {
                             // 2. Save YAML to active policy file or fallback default
-                            let target_path = state.policy_path.as_deref().unwrap_or("agentwall-policy.yaml");
+                            let target_path = state.policy_path.as_deref().unwrap_or("agentcontrol-policy.yaml");
                             if let Err(e) = std::fs::write(target_path, yaml_content) {
                                 let err = serde_json::json!({"error": format!("Failed to write policy file: {}", e)});
                                 return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
@@ -1122,14 +1122,14 @@ async fn handle_request(
 
     let credential_header = req
         .headers()
-        .get("X-AgentWall-Credential")
+        .get("X-AgentControl-Credential").or_else(|| req.headers().get("X-AgentWall-Credential"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
     let scope_header = req
         .headers()
-        .get("X-AgentWall-Credential-Scope")
-        .or_else(|| req.headers().get("X-AgentWall-Scope"))
+        .get("X-AgentControl-Credential-Scope").or_else(|| req.headers().get("X-AgentControl-Scope")).or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
+        .or_else(|| req.headers().get("X-AgentControl-Scope").or_else(|| req.headers().get("X-AgentWall-Scope")))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
