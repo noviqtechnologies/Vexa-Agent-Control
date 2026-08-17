@@ -107,9 +107,8 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
     );
 
     let device_identity = crate::identity::device::DeviceIdentity::load_or_create().ok();
-    let device_id = device_identity
-        .as_ref()
-        .map(|id| id.device_id.clone())
+    let device_id = crate::identity::device::load_device_token()
+        .or_else(|| device_identity.as_ref().map(|id| id.device_id.clone()))
         .unwrap_or_else(|| "gw-default".to_string());
 
     let hostname = std::env::var("HOSTNAME")
@@ -155,16 +154,22 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
 
         let base_url = std::env::var("DASHBOARD_API_URL")
             .unwrap_or_else(|_| "http://localhost:8400".to_string());
-        let secret = std::env::var("GATEWAY_SECRET")
-            .unwrap_or_else(|_| "local-dev-shared-secret-change-me".to_string());
 
         let heartbeat_url = format!("{}/api/v1/ingest/heartbeat", base_url.trim_end_matches('/'));
 
         let mut req = client.post(&heartbeat_url).json(&payload);
 
-        // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint
-        let auth_token = if !secret.is_empty() {
-            secret.clone()
+        // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint.
+        // Prioritizes explicit GATEWAY_SECRET, then enrolled device_token, and lastly dev fallback.
+        let auth_token = if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
+            let s = secret.trim().to_string();
+            if !s.is_empty() {
+                s
+            } else if let Some(token) = crate::identity::device::load_device_token() {
+                token
+            } else {
+                "local-dev-shared-secret-change-me".to_string()
+            }
         } else if let Some(token) = crate::identity::device::load_device_token() {
             token
         } else {
@@ -175,20 +180,33 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
 
         match req.send().await {
             Ok(res) if res.status().is_success() => {
-                // Heartbeat accepted cleanly
+                crate::service::eventlog::log_info(
+                    1001,
+                    &format!("Heartbeat accepted cleanly by Hub ({}) for device {}", base_url, device_id),
+                );
             }
             Ok(res) => {
+                let status = res.status().as_u16();
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
                     "heartbeat_rejected",
-                    serde_json::json!({"status": res.status().as_u16()}),
+                    serde_json::json!({"status": status}),
+                );
+                crate::service::eventlog::log_warn(
+                    1002,
+                    &format!("Heartbeat rejected by Hub ({}) with HTTP status: {}", base_url, status),
                 );
             }
             Err(e) => {
+                let err_str = e.to_string();
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
                     "heartbeat_failed",
-                    serde_json::json!({"error": e.to_string()}),
+                    serde_json::json!({"error": &err_str}),
+                );
+                crate::service::eventlog::log_error(
+                    1003,
+                    &format!("Failed to connect to Hub ({}) for heartbeat: {}", base_url, err_str),
                 );
             }
         }

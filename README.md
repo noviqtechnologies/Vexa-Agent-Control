@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.33-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.34-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>

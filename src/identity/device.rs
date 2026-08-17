@@ -45,30 +45,45 @@ impl DeviceIdentity {
             }
         }
 
-        // 2. Try loading from fallback file ~/.agentwall/device_identity.key
-        let key_path = get_key_filepath()?;
-        if key_path.exists() {
-            if let Ok(secret_hex) = fs::read_to_string(&key_path) {
-                let trimmed = secret_hex.trim();
-                if let Ok(bytes) = hex::decode(trimmed) {
-                    if bytes.len() == 32 {
-                        let mut arr = [0u8; 32];
-                        arr.copy_from_slice(&bytes);
-                        let signing_key = SigningKey::from_bytes(&arr);
-                        let verifying_key: VerifyingKey = signing_key.verifying_key();
-                        let pub_hex = hex::encode(verifying_key.as_bytes());
-                        let device_id = derive_device_id(&hostname, &pub_hex);
+        // 2. Try loading from fallback file ~/.agentwall/device_identity.key (and other Windows profiles if Session 0)
+        let mut candidate_paths = Vec::new();
+        if let Ok(key_path) = get_key_filepath() {
+            candidate_paths.push(key_path);
+        }
+        #[cfg(windows)]
+        {
+            for profile in crate::service::windows_profiles::enumerate_user_profiles() {
+                let p = profile.join(".agentwall").join("device_identity.key");
+                if !candidate_paths.contains(&p) {
+                    candidate_paths.push(p);
+                }
+            }
+        }
 
-                        // Try writing to OS keyring for future runs
-                        if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
-                            let _ = entry.set_password(trimmed);
+        for key_path in candidate_paths {
+            if key_path.exists() {
+                if let Ok(secret_hex) = fs::read_to_string(&key_path) {
+                    let trimmed = secret_hex.trim();
+                    if let Ok(bytes) = hex::decode(trimmed) {
+                        if bytes.len() == 32 {
+                            let mut arr = [0u8; 32];
+                            arr.copy_from_slice(&bytes);
+                            let signing_key = SigningKey::from_bytes(&arr);
+                            let verifying_key: VerifyingKey = signing_key.verifying_key();
+                            let pub_hex = hex::encode(verifying_key.as_bytes());
+                            let device_id = derive_device_id(&hostname, &pub_hex);
+
+                            // Try writing to OS keyring for future runs
+                            if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
+                                let _ = entry.set_password(trimmed);
+                            }
+
+                            return Ok(Self {
+                                device_id,
+                                public_key_hex: pub_hex,
+                                signing_key,
+                            });
                         }
-
-                        return Ok(Self {
-                            device_id,
-                            public_key_hex: pub_hex,
-                            signing_key,
-                        });
                     }
                 }
             }
@@ -87,7 +102,8 @@ impl DeviceIdentity {
         }
 
         // Store in fallback file with restricted permissions
-        save_fallback_file(&key_path, &secret_hex)?;
+        let primary_key_path = get_key_filepath()?;
+        save_fallback_file(&primary_key_path, &secret_hex)?;
 
         Ok(Self {
             device_id,
@@ -175,17 +191,32 @@ pub fn save_device_token(token: &str) -> Result<(), String> {
     fs::write(&token_path, token).map_err(|e| format!("cannot write device token: {}", e))
 }
 
-/// Load saved Device JWT token from ~/.agentwall/device_token
+/// Load saved Device JWT token from ~/.agentwall/device_token (with Windows Session 0 fallback)
 pub fn load_device_token() -> Option<String> {
-    let home = dirs::home_dir()?;
-    let token_path = home.join(".agentwall").join("device_token");
-    let content = fs::read_to_string(token_path).ok()?;
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
+    if let Some(home) = dirs::home_dir() {
+        let token_path = home.join(".agentwall").join("device_token");
+        if let Ok(content) = fs::read_to_string(&token_path) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
     }
+
+    #[cfg(windows)]
+    {
+        for profile in crate::service::windows_profiles::enumerate_user_profiles() {
+            let token_path = profile.join(".agentwall").join("device_token");
+            if let Ok(content) = fs::read_to_string(&token_path) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 use colored::*;

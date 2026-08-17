@@ -53,6 +53,16 @@ Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
 $ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentwall.exe" | Select-Object -First 1
+
+# Gracefully stop running service and kill any lingering user processes to avoid binary file-lock
+$RunningService = Get-Service AgentControlSentry -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
+if ($RunningService) {
+    Write-Host "[*] Stopping active AgentControlSentry service for update..." -ForegroundColor $ColorYellow
+    Stop-Service AgentControlSentry -Force -ErrorAction SilentlyContinue
+}
+Get-Process agentwall, agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
 Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
 
@@ -65,6 +75,19 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
 try {
+    # Sync user credentials to SYSTEM service profile if elevated
+    $SystemAgentWall = "C:\Windows\System32\config\systemprofile\.agentwall"
+    if (!(Test-Path $SystemAgentWall)) {
+        New-Item -ItemType Directory -Path $SystemAgentWall -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+    if (Test-Path "$env:USERPROFILE\.agentwall") {
+        Copy-Item -Path "$env:USERPROFILE\.agentwall\*" -Destination $SystemAgentWall -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
+    if ($env:GATEWAY_SECRET) {
+        [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")
+    }
+
     & $FinalBinaryPath service install --hub-url $HubUrl
 } catch {
     Write-Host "[!] Note: Sentry service installation requires Administrator privileges." -ForegroundColor $ColorYellow

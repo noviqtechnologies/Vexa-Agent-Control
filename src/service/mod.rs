@@ -4,6 +4,7 @@ pub mod linux;
 pub mod macos;
 pub mod windows;
 pub mod windows_profiles;
+pub mod eventlog;
 
 use colored::*;
 use std::env;

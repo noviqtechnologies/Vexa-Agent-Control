@@ -49,10 +49,61 @@ pub fn install_windows_service(
     let _ = std::process::Command::new("setx")
         .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
         .output();
+    if !_gateway_secret.trim().is_empty() {
+        let _ = std::process::Command::new("setx")
+            .args(&["/M", "GATEWAY_SECRET", _gateway_secret.trim()])
+            .output();
+    }
     if let Some(id) = agent_id {
         let _ = std::process::Command::new("setx")
             .args(&["/M", "AGENT_ID", id])
             .output();
+    }
+
+    // ── Register EventLog Application Source in Windows Registry ──
+    let _ = std::process::Command::new("reg")
+        .args(&[
+            "add",
+            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
+            "/v",
+            "EventMessageFile",
+            "/t",
+            "REG_EXPAND_SZ",
+            "/d",
+            r"%SystemRoot%\System32\netmsg.dll",
+            "/f",
+        ])
+        .output();
+    let _ = std::process::Command::new("reg")
+        .args(&[
+            "add",
+            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
+            "/v",
+            "TypesSupported",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            "7",
+            "/f",
+        ])
+        .output();
+
+    // ── Propagate invoking user's .agentwall credentials to SYSTEM service profile ──
+    if let Some(user_home) = dirs::home_dir() {
+        let user_agentwall = user_home.join(".agentwall");
+        let system_agentwall = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentwall");
+        if user_agentwall.exists() && user_agentwall != system_agentwall {
+            let _ = std::fs::create_dir_all(&system_agentwall);
+            if let Ok(entries) = std::fs::read_dir(&user_agentwall) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let dest = system_agentwall.join(entry.file_name());
+                        let _ = std::fs::copy(&path, dest);
+                    }
+                }
+            }
+        }
     }
 
     println!("  Creating service entry {}...", "AgentControlSentry".cyan());
@@ -83,6 +134,18 @@ pub fn install_windows_service(
         println!(
             "  Note: Service created, but auto-start attempt returned: {}",
             e
+        );
+        crate::service::eventlog::log_warn(
+            2003,
+            &format!("AgentControlSentry auto-start attempt returned: {}", e),
+        );
+    } else {
+        crate::service::eventlog::log_info(
+            2001,
+            &format!(
+                "AgentControlSentry Windows SCM service installed and running. Hub URL: {}",
+                clean_hub_url
+            ),
         );
     }
 
@@ -136,6 +199,8 @@ pub fn uninstall_windows_service() -> Result<(), String> {
         let _ = service.stop();
         let _ = service.delete();
     }
+
+    crate::service::eventlog::log_info(2002, "AgentControlSentry Windows SCM service uninstalled.");
 
     println!(
         "{} Agent Control Windows SCM service uninstalled.",
@@ -206,12 +271,16 @@ pub mod service_dispatcher_handler {
             process_id: None,
         });
 
+        crate::service::eventlog::log_info(2004, "AgentControlSentry Windows SCM service started and active.");
+
         if let Ok(mut guard) = SERVICE_RUNNER.lock() {
             if let Some(runner) = guard.take() {
                 let code = runner();
                 EXIT_CODE.store(code, Ordering::SeqCst);
             }
         }
+
+        crate::service::eventlog::log_info(2005, "AgentControlSentry Windows SCM service stopping.");
 
         let _ = status_handle.set_service_status(ServiceStatus {
             service_type: ServiceType::OWN_PROCESS,
