@@ -367,7 +367,7 @@ pub async fn evaluate_jsonrpc(
     };
 
     if let Some((action, max_attempts)) = cycle_action_to_take {
-        // Cycle detected
+        // Cycle detected — always write to the durable audit log.
         let _ = state
             .audit_logger
             .write_entry(
@@ -387,20 +387,26 @@ pub async fn evaluate_jsonrpc(
                 None,
             )
             .await;
-        logging::log_event(
-            Level::Warn,
-            "firewall_cycle_block",
-            json!({
-                "tool": tool_name,
-                "session": &session.session_id,
-                "consecutive_calls": max_attempts,
-                "action": match action {
-                    CycleAction::PivotError => "pivot_error",
-                    CycleAction::Block => "block",
-                    CycleAction::PauseInteractive => "pause_interactive",
-                }
-            }),
-        );
+        // P2-c fix: Only emit the firewall_cycle_block event to stderr for actions that need
+        // immediate operator attention (Block / PauseInteractive). PivotError returns a graceful
+        // JSON-RPC error to the client and is recorded in audit.jsonl — printing a raw JSON line
+        // to the terminal on every cycle-detected pivot creates confusing startup noise.
+        if !matches!(action, CycleAction::PivotError) {
+            logging::log_event(
+                Level::Warn,
+                "firewall_cycle_block",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "consecutive_calls": max_attempts,
+                    "action": match action {
+                        CycleAction::PivotError => "pivot_error",
+                        CycleAction::Block => "block",
+                        CycleAction::PauseInteractive => "pause_interactive",
+                    }
+                }),
+            );
+        }
 
         match action {
             CycleAction::PivotError => {

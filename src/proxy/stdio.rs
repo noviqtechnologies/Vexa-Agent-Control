@@ -247,25 +247,146 @@ pub async fn run_stdio_bridge(
                                 .to_string()
                         };
 
+                        let req_body_preview = serde_json::to_string(&json).ok()
+                            .map(|s| s.chars().take(512).collect::<String>());
+                        let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
                         let action = evaluate_jsonrpc(&state, &local_session, &json).await;
                         match action {
                             ProxyAction::Forward => {
                                 // Track the tool name for response scanning using its ID
                                 if let Some(id) = json.get("id") {
-                                    forwarded_requests.insert(id.clone(), tool_name);
+                                    forwarded_requests.insert(id.clone(), tool_name.clone());
                                 }
+                                // P0 fix: persist tool_allow event to events.db so the dashboard
+                                // can observe real stdio traffic from wrapped clients.
+                                let event = crate::proxy::db::EgressEvent {
+                                    timestamp_ns,
+                                    session_id: local_session.session_id.clone(),
+                                    transport: "stdio".to_string(),
+                                    method: Some(tool_name.clone()),
+                                    target_host: "localhost".to_string(),
+                                    target_port: None,
+                                    url_path: Some(format!("/{}", tool_name)),
+                                    request_headers: None,
+                                    request_body: req_body_preview,
+                                    request_body_hash: None,
+                                    response_status: Some(200),
+                                    response_body: None,
+                                    response_body_hash: None,
+                                    dlp_findings: None,
+                                    injection_findings: None,
+                                    latency_ms: Some(0.0),
+                                    verdict: Some("allow".to_string()),
+                                    semantic_anomaly_score: None,
+                                    identity_context: None,
+                                    source: Some("production".to_string()),
+                                    policy_rule: Some("tool_allow".to_string()),
+                                };
+                                if let Ok(json_str) = serde_json::to_string(&event) {
+                                    let _ = state.event_tx.send(json_str);
+                                }
+                                let db = state.db_manager.clone();
+                                tokio::spawn(async move { let _ = db.insert(event).await; });
+
                                 if let Err(e) = upstream_writer.send(json).await {
                                     eprintln!("Error sending to upstream: {}", e);
                                     break;
                                 }
                             }
                             ProxyAction::Respond(resp) | ProxyAction::RespondWithStatus(_, resp) => {
+                                // P0 fix: persist tool_deny event — request blocked by policy before
+                                // reaching the upstream; record it in events.db for dashboard visibility.
+                                let verdict_detail = resp.get("error")
+                                    .and_then(|e| e.get("message"))
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("policy_violation")
+                                    .to_string();
+                                let policy_rule = resp.get("error")
+                                    .and_then(|e| e.get("data"))
+                                    .and_then(|d| d.get("rule"))
+                                    .and_then(|r| r.as_str())
+                                    .unwrap_or("tool_deny")
+                                    .to_string();
+                                let is_dlp = verdict_detail.to_lowercase().contains("dlp")
+                                    || verdict_detail.to_lowercase().contains("secret")
+                                    || verdict_detail.to_lowercase().contains("access key");
+                                let is_injection = verdict_detail.to_lowercase().contains("injection")
+                                    || verdict_detail.to_lowercase().contains("jailbreak")
+                                    || verdict_detail.to_lowercase().contains("override");
+
+                                let event = crate::proxy::db::EgressEvent {
+                                    timestamp_ns,
+                                    session_id: local_session.session_id.clone(),
+                                    transport: "stdio".to_string(),
+                                    method: Some(tool_name.clone()),
+                                    target_host: "localhost".to_string(),
+                                    target_port: None,
+                                    url_path: Some(format!("/{}", tool_name)),
+                                    request_headers: None,
+                                    request_body: req_body_preview,
+                                    request_body_hash: None,
+                                    response_status: Some(400),
+                                    response_body: Some(verdict_detail.clone()),
+                                    response_body_hash: None,
+                                    dlp_findings: if is_dlp {
+                                        Some(serde_json::json!({"blocked": verdict_detail}).to_string())
+                                    } else {
+                                        None
+                                    },
+                                    injection_findings: if is_injection {
+                                        Some(serde_json::json!({"blocked": verdict_detail}).to_string())
+                                    } else {
+                                        None
+                                    },
+                                    latency_ms: Some(0.0),
+                                    verdict: Some("deny".to_string()),
+                                    semantic_anomaly_score: None,
+                                    identity_context: None,
+                                    source: Some("production".to_string()),
+                                    policy_rule: Some(policy_rule),
+                                };
+                                if let Ok(json_str) = serde_json::to_string(&event) {
+                                    let _ = state.event_tx.send(json_str);
+                                }
+                                let db = state.db_manager.clone();
+                                tokio::spawn(async move { let _ = db.insert(event).await; });
+
                                 if let Err(e) = agent_writer.send(resp).await {
                                     eprintln!("Error sending to agent: {}", e);
                                     break;
                                 }
                             }
                             ProxyAction::KillAndRespond(resp) | ProxyAction::KillAndRespondWithStatus(_, resp) => {
+                                // P0 fix: persist kill-deny event before terminating.
+                                let event = crate::proxy::db::EgressEvent {
+                                    timestamp_ns,
+                                    session_id: local_session.session_id.clone(),
+                                    transport: "stdio".to_string(),
+                                    method: Some(tool_name.clone()),
+                                    target_host: "localhost".to_string(),
+                                    target_port: None,
+                                    url_path: Some(format!("/{}", tool_name)),
+                                    request_headers: None,
+                                    request_body: req_body_preview,
+                                    request_body_hash: None,
+                                    response_status: Some(403),
+                                    response_body: Some("kill_and_deny".to_string()),
+                                    response_body_hash: None,
+                                    dlp_findings: None,
+                                    injection_findings: None,
+                                    latency_ms: Some(0.0),
+                                    verdict: Some("deny".to_string()),
+                                    semantic_anomaly_score: None,
+                                    identity_context: None,
+                                    source: Some("production".to_string()),
+                                    policy_rule: Some("kill_and_deny".to_string()),
+                                };
+                                if let Ok(json_str) = serde_json::to_string(&event) {
+                                    let _ = state.event_tx.send(json_str);
+                                }
+                                let db = state.db_manager.clone();
+                                tokio::spawn(async move { let _ = db.insert(event).await; });
+
                                 let _ = agent_writer.send(resp).await;
                                 #[allow(deprecated)]
                                 if state.kill_mode == KillMode::Process || state.kill_mode == KillMode::Both {
@@ -277,11 +398,23 @@ pub async fn run_stdio_bridge(
                         }
                     }
                     Some(Err(e)) => {
-                        eprintln!("Error reading from agent: {}", e);
+                        // P2-b fix: distinguish genuine framing errors from normal EOF-adjacent
+                        // framing artifacts (e.g. "bytes remaining on stream" after a clean JSON
+                        // message). Real MCP clients close stdin cleanly after the last message;
+                        // this must not print noise to the terminal.
+                        let msg = e.to_string();
+                        if e.kind() == std::io::ErrorKind::UnexpectedEof
+                            || msg.contains("bytes remaining")
+                            || msg.contains("unexpected end of file")
+                        {
+                            // Normal stream close after valid JSON — silent exit.
+                        } else {
+                            eprintln!("Error reading from agent: {}", e);
+                        }
                         break;
                     }
                     None => {
-                        eprintln!("Agent EOF: Closing session.");
+                        // P2-b fix: clean EOF — client closed stdin normally, no need to log.
                         break;
                     }
                 }
@@ -303,11 +436,19 @@ pub async fn run_stdio_bridge(
                         }
                     }
                     Some(Err(e)) => {
-                        eprintln!("Error reading from upstream: {}", e);
+                        let msg = e.to_string();
+                        if e.kind() == std::io::ErrorKind::UnexpectedEof
+                            || msg.contains("bytes remaining")
+                            || msg.contains("unexpected end of file")
+                        {
+                            // Normal upstream EOF — silent.
+                        } else {
+                            eprintln!("Error reading from upstream: {}", e);
+                        }
                         break;
                     }
                     None => {
-                        eprintln!("Upstream EOF: Server process likely exited.");
+                        // Upstream closed — break silently, child.wait() arm will log exit status.
                         break;
                     }
                 }
@@ -316,6 +457,9 @@ pub async fn run_stdio_bridge(
             // Subprocess exited
             status = child.wait() => {
                 match status {
+                    Ok(s) if s.success() => {
+                        // Clean exit — no noise needed
+                    }
                     Ok(s) => eprintln!("Child process exited with status: {}", s),
                     Err(e) => eprintln!("Error waiting for child: {}", e),
                 }

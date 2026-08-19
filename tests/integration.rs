@@ -13,4 +13,8 @@ mod integration {
     mod stdio_tests;
     mod verify_probe_test;
     mod real_client_wrapper_fixture_test;
+    /// P1 fix: Real process-level stdio-proxy integration test.
+    /// Spawns the compiled binary + a Python echo upstream; validates upstream
+    /// reachability and events.db persistence (P0 + P1 acceptance criteria).
+    mod stdio_process_integration_test;
 }

@@ -95,6 +95,10 @@ impl DbManager {
         let db_path = new_dir.join("events.db");
         // Open connection (will create file if missing)
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB");
+        // Enable WAL mode so concurrent stdio-proxy processes can write without SQLITE_BUSY errors.
+        // WAL allows one writer + many readers simultaneously across processes (P0 fix).
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+            .expect("Failed to set WAL mode / busy timeout");
         // Ensure schema exists
         conn.execute(
             "CREATE TABLE IF NOT EXISTS egress_events (

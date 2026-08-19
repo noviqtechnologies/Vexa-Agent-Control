@@ -238,7 +238,10 @@ pub fn print_all_targets() {
                             format!("{}/{}", wrapped, total).red().bold().to_string(),
                             format!(
                                 "⚠ unwrapped! run: agentcontrol wrap {} {}",
-                                t.name.to_lowercase().replace(' ', "-"),
+                                // P2-a fix: map IDE display names to valid CLI wrap target names.
+                                // Previously used `.replace(' ', "-")` which produced invalid
+                                // targets like "claude-desktop" instead of the correct "claude".
+                                ide_wrap_target(t.name),
                                 verified_label
                             ),
                         ),
@@ -247,7 +250,7 @@ pub fn print_all_targets() {
                             format!("{}/{}", wrapped, total).yellow().to_string(),
                             format!(
                                 "⚠ partial — run: agentcontrol wrap {} {}",
-                                t.name.to_lowercase().replace(' ', "-"),
+                                ide_wrap_target(t.name),
                                 verified_label
                             ),
                         ),
@@ -278,6 +281,27 @@ pub fn print_all_targets() {
         "[unverified]".yellow()
     );
     println!();
+}
+
+/// Map an IDE display name to the valid `agentcontrol wrap <target>` CLI argument.
+///
+/// P2-a fix: `t.name.to_lowercase().replace(' ', "-")` previously produced
+/// invalid targets like "claude-desktop" (unrecognised by the CLI). This function
+/// returns the exact string accepted by the `wrap` subcommand for every known IDE.
+fn ide_wrap_target(name: &str) -> &str {
+    match name {
+        "Claude Desktop" => "claude",
+        "Cursor"         => "cursor",
+        "Codex"          => "codex",
+        "VS Code"        => "vscode",
+        "JetBrains"      => "jetbrains",
+        "Zed"            => "zed",
+        "Cline"          => "cline",
+        "OpenCode"       => "opencode",
+        "Antigravity"    => "antigravity",
+        // Fallback: lowercase with hyphens (safe for future targets).
+        _                => name,
+    }
 }
 
 /// Shorten a long path for table display (max 34 chars with ellipsis).

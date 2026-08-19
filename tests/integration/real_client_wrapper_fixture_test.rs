@@ -72,7 +72,16 @@ async fn test_real_client_ide_config_wrapping_lifecycle() {
 }
 
 #[tokio::test]
-async fn test_controlled_upstream_forwarding_and_policy_interception() {
+/// Unit test for SafeModeScanner policy decisions.
+///
+/// This test validates that the scanner correctly classifies safe vs. dangerous
+/// tool invocations using in-memory regex evaluation only. It does NOT:
+/// - Spawn a real `agentcontrol stdio-proxy` process.
+/// - Create a network connection or live MCP upstream.
+/// - Exchange actual newline-framed JSON-RPC messages.
+///
+/// For process-level integration coverage see `stdio_process_integration_test.rs`.
+async fn test_safe_mode_scanner_unit_interception() {
     let upstream_hits = Arc::new(AtomicUsize::new(0));
     let scanner = SafeModeScanner::new().expect("Failed to initialize SafeModeScanner");
 
