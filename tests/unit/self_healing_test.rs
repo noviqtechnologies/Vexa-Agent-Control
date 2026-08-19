@@ -67,6 +67,10 @@ fn test_suggestion_engine() {
             injection_findings: None,
             latency_ms: None,
             verdict: None,
+            semantic_anomaly_score: None,
+            identity_context: None,
+            source: Some("production".to_string()),
+            policy_rule: None,
         };
         events.push(event);
     }
@@ -91,6 +95,10 @@ fn test_suggestion_engine() {
         injection_findings: None,
         latency_ms: None,
         verdict: None,
+        semantic_anomaly_score: None,
+        identity_context: None,
+        source: Some("production".to_string()),
+        policy_rule: None,
     };
     events.push(anomalous_event);
     

@@ -64,6 +64,8 @@ async fn test_p1_spend_tracking_ledger_persistence() {
         verdict: Some("ALLOW".to_string()),
         semantic_anomaly_score: Some(0.01),
         identity_context: None,
+        source: Some("production".to_string()),
+        policy_rule: Some("default_allowlist".to_string()),
     };
 
     assert!(db.insert(event).await.is_ok());

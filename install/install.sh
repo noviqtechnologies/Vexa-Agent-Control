@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.37"
+FALLBACK_VERSION="v1.0.38"
 
 if [[ -z "$VERSION" ]]; then
   echo "[*] Fetching latest release version from GitHub..."
@@ -134,19 +134,28 @@ if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
       ACTUAL_HASH=$(shasum -a 256 "${TEMPDIR}/asset.zip" | awk '{print $1}')
     fi
 
-    if [[ -n "$ACTUAL_HASH" && "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
+    if [[ -z "$ACTUAL_HASH" ]]; then
+      echo "[!] FATAL: Cannot verify checksum — no sha256sum or shasum found on PATH. Aborting."
+      exit 1
+    fi
+
+    if [[ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
       echo "[!] FATAL: Cryptographic Checksum Mismatch!"
       echo "    Expected: $EXPECTED_HASH"
       echo "    Got:      $ACTUAL_HASH"
+      echo "    The release artifact may be corrupted or tampered with. Aborting installation."
       exit 1
     fi
     echo "[✓] SHA-256 Checksum verified successfully ($ACTUAL_HASH)."
   else
-    echo "[!] Notice: Asset $ASSET_NAME not listed in checksums.txt. Proceeding with TLS verification."
+    echo "[!] FATAL: Asset $ASSET_NAME not found in checksums.txt. Cannot verify integrity. Aborting."
+    exit 1
   fi
 else
-  echo "[!] Notice: Release tag $VERSION does not include checksums.txt manifest."
-  echo "    Verified download integrity via GitHub TLS transport."
+  echo "[!] FATAL: Could not download checksums.txt for integrity verification."
+  echo "    Release: $CHECKSUMS_URL"
+  echo "    Install from a trusted network or specify a version with a known-good checksum."
+  exit 1
 fi
 
 echo "[*] Extracting package..."
@@ -181,11 +190,14 @@ echo "┌───────────────────────�
 echo "│  ✨ Vexa Agent Control $VERSION successfully installed!                 │"
 echo "├────────────────────────────────────────────────────────────────────────┤"
 echo "│  Binary Location : ${LOCALBIN}/agentcontrol"
-echo "│  To start one-command protection right now in this terminal session:   │"
 echo "│                                                                        │"
-echo "│    export PATH=\"$LOCALBIN:\$PATH\" && agentcontrol protect              │"
+echo "│  ► Run in THIS terminal session right now (no restart needed):         │"
+echo "│                                                                        │"
+echo "│    export PATH=\"\$HOME/.local/bin:\$PATH\" && agentcontrol protect       │"
+echo "│                                                                        │"
+echo "│  ► For future sessions (already written to ~/.bashrc / ~/.zshrc):      │"
+echo "│                                                                        │"
+echo "│    agentcontrol protect                                                │"
 echo "│                                                                        │"
 echo "└────────────────────────────────────────────────────────────────────────┘"
 echo ""
-
-

@@ -16,15 +16,12 @@ impl DashboardClient {
     ///
     /// Falls back to local dev defaults if environment variables are unset.
     pub fn from_env() -> Option<Self> {
-        // Fallback to local development dashboard API URL if DASHBOARD_API_URL is not set
-        let base_url = std::env::var("DASHBOARD_API_URL").unwrap_or_else(|_| {
-            // LOCAL DEV FALLBACK: Connects to local docker-compose dashboard API by default
-            "http://localhost:8400".to_string()
-        });
+        let base_url = std::env::var("DASHBOARD_API_URL").ok()?;
+        if base_url.trim().is_empty() {
+            return None;
+        }
 
-        // Fallback to local development gateway secret if GATEWAY_SECRET is not set
         let secret = std::env::var("GATEWAY_SECRET").unwrap_or_else(|_| {
-            // LOCAL DEV FALLBACK: Matches default secret in dashboard/docker-compose.yml
             "local-dev-shared-secret-change-me".to_string()
         });
 

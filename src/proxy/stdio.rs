@@ -392,6 +392,8 @@ async fn stdio_scan_response(
                 verdict: Some("deny".to_string()),
                 semantic_anomaly_score: None,
                 identity_context: None,
+                source: Some("production".to_string()),
+                policy_rule: Some("INJ-04-AUDIT".to_string()),
             };
             if let Ok(json_str) = serde_json::to_string(&event) {
                 let _ = state.event_tx.send(json_str);
@@ -458,6 +460,8 @@ async fn stdio_scan_response(
                     verdict: Some("deny".to_string()),
                     semantic_anomaly_score: None,
                     identity_context: None,
+                    source: Some("production".to_string()),
+                    policy_rule: Some("INJ-SCAN-TIMEOUT".to_string()),
                 };
                 if let Ok(json_str) = serde_json::to_string(&event) {
                     let _ = state.event_tx.send(json_str);
@@ -547,6 +551,8 @@ async fn stdio_scan_response(
                 verdict: Some("allow".to_string()),
                 semantic_anomaly_score: None,
                 identity_context: None,
+                source: Some("production".to_string()),
+                policy_rule: Some("INJ-04-AUDIT-WARN".to_string()),
             };
             if let Ok(json_str) = serde_json::to_string(&event) {
                 let _ = state.event_tx.send(json_str);

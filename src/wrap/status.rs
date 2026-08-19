@@ -7,6 +7,46 @@ use std::path::{Path, PathBuf};
 
 use super::{config_path, transformer};
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IdeIntegrationSummary {
+    pub name: String,
+    pub path: String,
+    pub exists: bool,
+    pub is_wrapped: bool,
+    pub total_servers: usize,
+    pub wrapped_servers: usize,
+}
+
+pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
+    let targets = gather_all();
+    targets
+        .into_iter()
+        .map(|t| {
+            let (path_str, exists, is_wrapped, total, wrapped) = match &t.path_result {
+                Ok(path) => {
+                    let exists = path.exists();
+                    let (total, wrapped) = if exists {
+                        check_wrap_status(path).unwrap_or((0, 0))
+                    } else {
+                        (0, 0)
+                    };
+                    let is_wrapped = exists && total > 0 && wrapped == total;
+                    (path.to_string_lossy().to_string(), exists, is_wrapped, total, wrapped)
+                }
+                Err(e) => (format!("Path error: {}", e), false, false, 0, 0),
+            };
+            IdeIntegrationSummary {
+                name: t.name.to_string(),
+                path: path_str,
+                exists,
+                is_wrapped,
+                total_servers: total,
+                wrapped_servers: wrapped,
+            }
+        })
+        .collect()
+}
+
 /// Classification of a target's path resolution reliability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PathVerification {

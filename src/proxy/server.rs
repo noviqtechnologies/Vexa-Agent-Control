@@ -609,6 +609,19 @@ async fn handle_request(
                     }
                 }
             }
+            "/api/integrations" => {
+                let list = crate::wrap::status::get_all_integrations_summary();
+                let total_targets = list.len();
+                let total_discovered = list.iter().filter(|i| i.exists).count();
+                let total_protected = list.iter().filter(|i| i.is_wrapped).count();
+                let resp = serde_json::json!({
+                    "total_targets": total_targets,
+                    "total_discovered": total_discovered,
+                    "total_protected": total_protected,
+                    "integrations": list
+                });
+                return Ok(json_response(StatusCode::OK, &resp));
+            }
             "/api/benchmark" => {
                 let bench_json = serde_json::json!({
                     "score": 88.1,
@@ -1215,6 +1228,12 @@ async fn handle_request(
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
+    let source_header = req
+        .headers()
+        .get("X-AgentControl-Source").or_else(|| req.headers().get("X-AgentWall-Source"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
     // Read body
     let body_bytes = match http_body_util::BodyExt::collect(req.into_body()).await {
         Ok(collected) => collected.to_bytes(),
@@ -1359,6 +1378,35 @@ async fn handle_request(
             }
         }
 
+        let err_msg = response
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+
+        let (verdict_str, rule_str) = if dlp_findings_json.is_some() {
+            ("deny".to_string(), "DLP-01-HIGH-ENTROPY".to_string())
+        } else if injection_findings_json.is_some() {
+            ("deny".to_string(), "INJ-04-AUDIT".to_string())
+        } else if should_kill {
+            ("deny".to_string(), "KILL-SWITCH".to_string())
+        } else if err_msg.contains("Policy violation") || err_msg.contains("Cycle detected") || err_msg.contains("Rate limit") || err_msg.contains("Blocked") {
+            ("deny".to_string(), "policy_denied".to_string())
+        } else {
+            ("allow".to_string(), "default_allowlist".to_string())
+        };
+
+        let source_category = source_header
+            .unwrap_or_else(|| {
+                if session.session_id.contains("demo") || session.session_id.contains("simulated") {
+                    "simulated".to_string()
+                } else if session.session_id.contains("verify") || session.session_id.contains("probe") {
+                    "verification".to_string()
+                } else {
+                    "production".to_string()
+                }
+            });
+
         let event = crate::proxy::db::EgressEvent {
             timestamp_ns,
             session_id: session.session_id.clone(),
@@ -1376,13 +1424,11 @@ async fn handle_request(
             dlp_findings: dlp_findings_json.clone(),
             injection_findings: injection_findings_json.clone(),
             latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
-            verdict: Some(if should_kill || response.get("error").is_some() {
-                "deny".to_string()
-            } else {
-                "allow".to_string()
-            }),
+            verdict: Some(verdict_str.clone()),
             semantic_anomaly_score: None,
             identity_context: None,
+            source: Some(source_category),
+            policy_rule: Some(rule_str),
         };
         let db = state.db_manager.clone();
 
@@ -1397,7 +1443,7 @@ async fn handle_request(
         });
 
         if let Some(ref dc) = state.dashboard_client {
-            let decision = if should_kill || response.get("error").is_some() {
+            let decision = if verdict_str == "deny" {
                 control_plane_proto::redact::RawDecision::Denied
             } else {
                 control_plane_proto::redact::RawDecision::Allowed

@@ -24,7 +24,12 @@ import argparse
 
 def send_request(url, payload=None, headers=None, method="POST"):
     if headers is None:
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "X-AgentControl-Source": "simulated",
+        }
+    elif "X-AgentControl-Source" not in headers:
+        headers["X-AgentControl-Source"] = "simulated"
     
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)

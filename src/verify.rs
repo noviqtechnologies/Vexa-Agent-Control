@@ -78,7 +78,12 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             "arguments": { "path": "README.md" }
         }
     });
-    let res1 = client.post(normalized_gw).json(&p1_body).send().await;
+    let res1 = client
+        .post(normalized_gw)
+        .header("X-AgentControl-Source", "verification")
+        .json(&p1_body)
+        .send()
+        .await;
     let lat1 = t1.elapsed().as_millis();
 
     let (pass1, status1, req_id1, rule1, details1) = match res1 {
@@ -173,7 +178,12 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             }
         }
     });
-    let res2 = client.post(normalized_gw).json(&p2_body).send().await;
+    let res2 = client
+        .post(normalized_gw)
+        .header("X-AgentControl-Source", "verification")
+        .json(&p2_body)
+        .send()
+        .await;
     let lat2 = t2.elapsed().as_millis();
 
     let (pass2, status2, req_id2, rule2, details2) = match res2 {
@@ -263,7 +273,12 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             }
         }
     });
-    let res3 = client.post(normalized_gw).json(&p3_body).send().await;
+    let res3 = client
+        .post(normalized_gw)
+        .header("X-AgentControl-Source", "verification")
+        .json(&p3_body)
+        .send()
+        .await;
     let lat3 = t3.elapsed().as_millis();
 
     let (pass3, status3, req_id3, rule3, details3) = match res3 {

@@ -613,7 +613,7 @@
         <span>Gateway: <strong id="sidebar-gw-port">127.0.0.1:8080</strong></span>
         <span class="badge green" id="sidebar-gw-badge">LIVE</span>
       </div>
-      <div style="color: var(--text-muted); font-size: 0.68rem;">v1.0.37 Standalone Dev</div>
+      <div style="color: var(--text-muted); font-size: 0.68rem;">v1.0.38 Standalone Dev</div>
     </div>
   </nav>
 
@@ -628,7 +628,7 @@
         </div>
         <div style="font-size: 0.8rem; color: var(--text-muted);">
           Posture: <strong id="header-mode-text" style="color: var(--green);">ENFORCE</strong>
-          <span style="margin-left: 8px; color: var(--text-muted);">(<span id="header-ide-count">2/2</span> IDEs Protected)</span>
+          <span style="margin-left: 8px; color: var(--text-muted);">(<span id="header-ide-count">0/9</span> IDEs Protected)</span>
         </div>
       </div>
 
@@ -897,10 +897,10 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <div>
                 <h3 style="font-size: 0.95rem; color: var(--text-bright);">Active Policy: <code style="color: var(--accent);">agentcontrol-policy.yaml</code></h3>
-                <p style="font-size: 0.75rem; color: var(--text-muted);">Validated against schema v2. Changes require explicit review and hot-reload.</p>
+                <p style="font-size: 0.75rem; color: var(--text-muted);">Validated against schema v2. Changes require explicit pre-flight diff review and hot-reload.</p>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="savePolicyDirect()">
-                💾 Save & Hot-Reload Policy
+              <button class="btn btn-primary btn-sm" onclick="savePolicyWithPreflight()">
+                💾 Review &amp; Hot-Reload Policy
               </button>
             </div>
             <textarea id="policy-yaml-main" class="wizard-editor" style="height: 380px;"></textarea>
@@ -922,32 +922,10 @@
               </thead>
               <tbody id="integrations-table-body">
                 <tr>
-                  <td><strong>Claude Desktop</strong></td>
-                  <td><code>~/.config/Claude/claude_desktop_config.json</code></td>
-                  <td><span class="badge green">PROTECTED</span></td>
-                  <td>2 servers</td>
-                  <td><button class="btn btn-sm" onclick="toast('Config verified', 'info')">Verify</button></td>
-                </tr>
-                <tr>
-                  <td><strong>Cursor IDE</strong></td>
-                  <td><code>~/.cursor/mcp.json</code></td>
-                  <td><span class="badge green">PROTECTED</span></td>
-                  <td>1 server</td>
-                  <td><button class="btn btn-sm" onclick="toast('Config verified', 'info')">Verify</button></td>
-                </tr>
-                <tr>
-                  <td><strong>VS Code (Copilot)</strong></td>
-                  <td><code>~/.vscode/mcp.json</code></td>
-                  <td><span class="badge amber">UNWRAPPED</span></td>
-                  <td>0 servers</td>
-                  <td><button class="btn btn-sm btn-primary" onclick="toast('Run: agentcontrol wrap vscode in terminal', 'info')">Wrap</button></td>
-                </tr>
-                <tr>
-                  <td><strong>Antigravity IDE</strong></td>
-                  <td><code>~/.antigravity/mcp_config.json</code></td>
-                  <td><span class="badge green">PROTECTED</span></td>
-                  <td>1 server</td>
-                  <td><button class="btn btn-sm" onclick="toast('Config verified', 'info')">Verify</button></td>
+                  <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">
+                    <div style="font-size:1.2rem;">⏳</div>
+                    Loading integration status...
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1176,6 +1154,24 @@
     </div>
   </div>
 
+  <!-- Policy Pre-Flight Review Modal -->
+  <div id="policy-preflight-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 640px; width: 90%;">
+      <h3 style="font-family: var(--font-head); color: var(--text-bright); margin-bottom: 8px;">⚠️ Policy Hot-Reload — Pre-Flight Review</h3>
+      <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+        Review the policy YAML below before applying it live. This will replace the active runtime policy and immediately affect all tool call enforcement decisions.
+      </p>
+      <pre id="policy-preflight-preview" style="background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-bright); max-height: 280px; overflow-y: auto; margin-bottom: 16px; white-space: pre-wrap; word-break: break-all;"></pre>
+      <div style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; font-size: 0.78rem; color: var(--red);">
+        ⚠️ <strong>Live impact:</strong> Policy changes take effect immediately. Ensure schema is valid before confirming.
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn" onclick="document.getElementById('policy-preflight-modal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" style="background: linear-gradient(135deg, var(--red), #c94040);" onclick="savePolicyDirect()">🔥 Confirm &amp; Hot-Reload</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
@@ -1307,6 +1303,48 @@
       } catch (e) {
         console.warn("Telemetry refresh failed:", e);
       }
+      // Also refresh integrations status
+      try {
+        const iRes = await fetch('/api/integrations');
+        if (iRes.ok) {
+          const data = await iRes.json();
+          const ideCount = document.getElementById('header-ide-count');
+          if (ideCount) ideCount.textContent = `${data.total_protected}/${data.total_targets}`;
+          renderIntegrationsTable(data.integrations || []);
+        }
+      } catch (e) {
+        console.warn("Integrations refresh failed:", e);
+      }
+    }
+
+    function renderIntegrationsTable(integrations) {
+      const tbody = document.getElementById('integrations-table-body');
+      if (!tbody) return;
+      if (integrations.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">No IDE targets found</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = integrations.map(i => {
+        const badge = i.is_wrapped
+          ? `<span class="badge green">PROTECTED</span>`
+          : i.exists
+          ? `<span class="badge amber">UNWRAPPED</span>`
+          : `<span class="badge" style="background:rgba(48,54,61,0.4);color:var(--text-muted);">NOT FOUND</span>`;
+        const serverText = i.exists ? `${i.wrapped_servers}/${i.total_servers} servers` : '—';
+        const shortPath = i.path.length > 60 ? '…' + i.path.slice(-57) : i.path;
+        const action = i.is_wrapped
+          ? `<button class="btn btn-sm" onclick="toast('${escHtml(i.name)} config verified', 'info')">Verify</button>`
+          : i.exists
+          ? `<button class="btn btn-sm btn-primary" onclick="toast('Run: agentcontrol wrap in terminal', 'info')">Wrap</button>`
+          : `<button class="btn btn-sm" disabled title="IDE not installed">N/A</button>`;
+        return `<tr>
+          <td><strong>${escHtml(i.name)}</strong></td>
+          <td><code style="font-size:0.72rem;">${escHtml(shortPath)}</code></td>
+          <td>${badge}</td>
+          <td>${serverText}</td>
+          <td>${action}</td>
+        </tr>`;
+      }).join('');
     }
 
     function renderOverview(events) {
@@ -1343,11 +1381,16 @@
       tbody.innerHTML = recent.map((e, idx) => {
         const isDeny = e.verdict === 'deny' || e.response_status === 403 || e.response_status === 400;
         const verdictBadge = isDeny ? '<span class="badge red">BLOCKED</span>' : '<span class="badge green">ALLOWED</span>';
-        const isSim = e.session_id && e.session_id.includes('demo');
-        const sourceBadge = isSim ? '<span class="badge simulated">SIMULATED</span>' : '<span class="badge real">REAL</span>';
         const eventId = e.id ? `evt_${String(e.id).padStart(6, '0')}` : `evt_01J${idx}`;
         const preview = maskSensitivePayload(e.request_body || '{}').slice(0, 45);
-        const rule = e.dlp_findings ? 'DLP-HIGH-ENTROPY' : e.injection_findings ? 'INJ-OVERRIDE' : 'default-developer-tools';
+        const rule = e.policy_rule || (e.dlp_findings ? 'DLP-HIGH-ENTROPY' : e.injection_findings ? 'INJ-OVERRIDE' : 'default-developer-tools');
+        const isSim = (e.source === 'simulated');
+        const isVerify = (e.source === 'verification');
+        const sourceBadge = isVerify
+          ? '<span class="badge blue">VERIFY</span>'
+          : isSim
+          ? '<span class="badge simulated">SIMULATED</span>'
+          : '<span class="badge real">REAL</span>';
 
         return `<tr>
           <td><code style="color:var(--accent); font-size:0.75rem;">${eventId}</code></td>
@@ -1369,14 +1412,19 @@
       }
 
       tbody.innerHTML = events.slice(-50).reverse().map((e) => {
-        const isDeny = e.verdict === 'deny' || e.response_status === 403 || e.response_status === 400;
+        const isDeny = e.verdict === 'deny';
         const verdictBadge = isDeny ? '<span class="badge red">BLOCKED</span>' : '<span class="badge green">ALLOWED</span>';
         const verdictKey = isDeny ? 'deny' : 'allow';
-        const isSim = e.session_id && e.session_id.includes('demo');
-        const sourceKey = isSim ? 'simulated' : 'real';
-        const sourceBadge = isSim ? '<span class="badge simulated">SIMULATED</span>' : '<span class="badge real">REAL</span>';
+        const isSim = (e.source === 'simulated');
+        const isVerify = (e.source === 'verification');
+        const sourceKey = isVerify ? 'verification' : (isSim ? 'simulated' : 'production');
+        const sourceBadge = isVerify
+          ? '<span class="badge blue">VERIFY</span>'
+          : isSim
+          ? '<span class="badge simulated">SIMULATED</span>'
+          : '<span class="badge real">REAL</span>';
         const preview = maskSensitivePayload(e.request_body || '{}').slice(0, 50);
-        const disposition = isDeny ? 'Policy Denied' : 'Allowed &amp; Recorded';
+        const disposition = escHtml(e.policy_rule || (isDeny ? 'Policy Denied' : 'Allowed &amp; Recorded'));
         const toolName = escHtml(e.url_path || 'read_file');
         const ts = e.ts ? new Date(e.ts).toLocaleTimeString() : new Date().toLocaleTimeString();
 
@@ -1401,7 +1449,12 @@
       const rows = document.querySelectorAll('#timeline-events-body tr[data-source]');
       let visibleCount = 0;
       rows.forEach(row => {
-        const matchSource = sourceFilter === 'all' || row.dataset.source === sourceFilter;
+        const rowSource = row.dataset.source; // 'production' | 'simulated' | 'verification'
+        let matchSource = false;
+        if (sourceFilter === 'all') matchSource = true;
+        else if (sourceFilter === 'real') matchSource = (rowSource === 'production');
+        else if (sourceFilter === 'simulated') matchSource = (rowSource === 'simulated');
+        else matchSource = (rowSource === sourceFilter);
         const matchVerdict = verdictFilter === 'all' || row.dataset.verdict === verdictFilter;
         const matchSearch = !search || (row.dataset.tool && row.dataset.tool.includes(search)) || row.textContent.toLowerCase().includes(search);
         const visible = matchSource && matchVerdict && matchSearch;
@@ -1475,10 +1528,15 @@
           ? '<span class="badge red">INJECTION</span>'
           : '<span class="badge amber">RISK</span>';
         const disp = '<span class="badge red">DENIED</span>';
-        const rule = isDlp ? 'DLP-HIGH-ENTROPY-01' : isInj ? 'INJ-SYSTEM-OVERRIDE' : 'POLICY-HIGH-RISK';
+        const rule = e.policy_rule || (isDlp ? 'DLP-HIGH-ENTROPY-01' : isInj ? 'INJ-SYSTEM-OVERRIDE' : 'POLICY-HIGH-RISK');
         const preview = maskSensitivePayload(e.request_body || '{}');
-        const isSim = e.session_id && e.session_id.includes('demo');
-        const sourceBadge = isSim ? '<span class="badge simulated">SIMULATED</span>' : '<span class="badge real">REAL</span>';
+        const isSim = (e.source === 'simulated');
+        const isVerify = (e.source === 'verification');
+        const sourceBadge = isVerify
+          ? '<span class="badge blue">VERIFY</span>'
+          : isSim
+          ? '<span class="badge simulated">SIMULATED</span>'
+          : '<span class="badge real">REAL</span>';
 
         return `<tr data-category="${dataCategory}">
           <td>${cat}</td>
@@ -1562,12 +1620,28 @@
       }
     }
 
+    async function savePolicyWithPreflight() {
+      const editor = document.getElementById('policy-yaml-main');
+      if (!editor || !editor.value) {
+        toast('Policy content cannot be empty', 'error');
+        return;
+      }
+      // Show pre-flight diff/review modal
+      const modal = document.getElementById('policy-preflight-modal');
+      const previewEl = document.getElementById('policy-preflight-preview');
+      if (previewEl) previewEl.textContent = editor.value;
+      if (modal) modal.classList.add('open');
+    }
+
     async function savePolicyDirect() {
       const editor = document.getElementById('policy-yaml-main');
       if (!editor || !editor.value) {
         toast('Policy content cannot be empty', 'error');
         return;
       }
+      // Close pre-flight modal if open
+      const modal = document.getElementById('policy-preflight-modal');
+      if (modal) modal.classList.remove('open');
       try {
         const res = await fetch('/api/policy/save-and-reload', {
           method: 'POST',

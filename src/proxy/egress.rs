@@ -75,6 +75,8 @@ pub async fn handle_egress(
                 verdict: Some(final_verdict),
                 semantic_anomaly_score: None,
                 identity_context: None,
+                source: Some("production".to_string()),
+                policy_rule: Some("default_allowlist".to_string()),
             };
             if let Ok(json_str) = serde_json::to_string(&event) {
                 let _ = state_clone.event_tx.send(json_str);
@@ -129,6 +131,8 @@ pub async fn handle_egress(
                     verdict: Some("deny".to_string()),
                     semantic_anomaly_score: None,
                     identity_context: None,
+                    source: Some("production".to_string()),
+                    policy_rule: Some("WS-UPGRADE-FAILED".to_string()),
                 };
                 let _ = state.db_manager.insert(event).await;
                 return Ok(Response::builder()
@@ -209,6 +213,8 @@ pub async fn handle_egress(
                 verdict: Some("allow".to_string()),
                 semantic_anomaly_score: None,
                 identity_context: None,
+                source: Some("production".to_string()),
+                policy_rule: Some("default_allowlist".to_string()),
             };
             if let Ok(json_str) = serde_json::to_string(&event) {
                 let _ = state_clone.event_tx.send(json_str);
@@ -314,6 +320,8 @@ pub async fn handle_egress(
                     verdict: Some(verdict),
                     semantic_anomaly_score: None,
                     identity_context: None,
+                    source: Some("production".to_string()),
+                    policy_rule: Some("DLP-01-HIGH-ENTROPY".to_string()),
                 };
                 if let Ok(json_str) = serde_json::to_string(&event) {
                     let _ = state.event_tx.send(json_str);
@@ -374,6 +382,8 @@ pub async fn handle_egress(
                         verdict: Some(verdict),
                         semantic_anomaly_score: None,
                         identity_context: None,
+                        source: Some("production".to_string()),
+                        policy_rule: Some("SPEND-CAP-EXCEEDED".to_string()),
                     };
                     if let Ok(json_str) = serde_json::to_string(&event) {
                         let _ = state.event_tx.send(json_str);
@@ -586,6 +596,8 @@ pub async fn handle_egress(
         verdict: Some(verdict),
         semantic_anomaly_score: None,
         identity_context: None,
+        source: Some("production".to_string()),
+        policy_rule: Some("default_allowlist".to_string()),
     };
     if let Ok(json_str) = serde_json::to_string(&event) {
         let _ = state.event_tx.send(json_str);

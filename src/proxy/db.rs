@@ -27,6 +27,8 @@ pub struct EgressEvent {
     pub verdict: Option<String>,
     pub semantic_anomaly_score: Option<f64>,
     pub identity_context: Option<String>,
+    pub source: Option<String>,
+    pub policy_rule: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -115,7 +117,9 @@ impl DbManager {
                 latency_ms REAL,
                 verdict TEXT,
                 semantic_anomaly_score REAL,
-                identity_context TEXT
+                identity_context TEXT,
+                source TEXT,
+                policy_rule TEXT
             )",
             [],
         )
@@ -129,6 +133,16 @@ impl DbManager {
         .ok();
         conn.execute(
             "ALTER TABLE egress_events ADD COLUMN identity_context TEXT",
+            [],
+        )
+        .ok();
+        conn.execute(
+            "ALTER TABLE egress_events ADD COLUMN source TEXT",
+            [],
+        )
+        .ok();
+        conn.execute(
+            "ALTER TABLE egress_events ADD COLUMN policy_rule TEXT",
             [],
         )
         .ok();
@@ -148,8 +162,9 @@ impl DbManager {
                         let sql = "INSERT INTO egress_events (
                                 timestamp_ns, session_id, transport, method, target_host, target_port, url_path,
                                 request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash,
-                                dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                                dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context,
+                                source, policy_rule
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         let params_arr = params![
                             event.timestamp_ns,
                             event.session_id,
@@ -169,7 +184,9 @@ impl DbManager {
                             event.latency_ms,
                             event.verdict,
                             event.semantic_anomaly_score,
-                            event.identity_context
+                            event.identity_context,
+                            event.source,
+                            event.policy_rule
                         ];
                         if let Some(ref mut tx) = tx {
                             tx.execute(sql, params_arr).ok();
@@ -179,7 +196,7 @@ impl DbManager {
                     }
                     DbCmd::Fetch { limit, responder } => {
                         let mut stmt = conn.prepare(
-                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context FROM egress_events ORDER BY id DESC LIMIT ?",
+                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id DESC LIMIT ?",
                             )
                             .expect("Failed to prepare fetch stmt");
                         let rows = stmt
@@ -204,6 +221,8 @@ impl DbManager {
                                     verdict: row.get(16)?,
                                     semantic_anomaly_score: row.get(17).unwrap_or(None),
                                     identity_context: row.get(18).unwrap_or(None),
+                                    source: row.get(19).unwrap_or(None),
+                                    policy_rule: row.get(20).unwrap_or(None),
                                 })
                             })
                             .expect("Failed to query events");
@@ -216,7 +235,7 @@ impl DbManager {
                     DbCmd::FetchAll { limit, responder } => {
                         // Oldest-first ordering for policy generation corpus (FR-4)
                         let mut stmt = conn.prepare(
-                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context FROM egress_events ORDER BY id ASC LIMIT ?",
+                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id ASC LIMIT ?",
                             )
                             .expect("Failed to prepare fetch-all stmt");
                         let rows = stmt
@@ -241,6 +260,8 @@ impl DbManager {
                                     verdict: row.get(16)?,
                                     semantic_anomaly_score: row.get(17).unwrap_or(None),
                                     identity_context: row.get(18).unwrap_or(None),
+                                    source: row.get(19).unwrap_or(None),
+                                    policy_rule: row.get(20).unwrap_or(None),
                                 })
                             })
                             .expect("Failed to query all events");

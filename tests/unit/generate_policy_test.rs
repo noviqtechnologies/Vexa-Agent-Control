@@ -27,6 +27,8 @@ fn make_event(tool: &str, params: &str, timestamp: &str) -> EgressEvent {
         verdict: Some("allow".to_string()),
         semantic_anomaly_score: None,
         identity_context: None,
+        source: Some("production".to_string()),
+        policy_rule: Some("default_allowlist".to_string()),
     }
 }
 

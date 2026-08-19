@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.37-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.38-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -42,11 +42,11 @@ Install the statically-linked `agentcontrol` binary and run `agentcontrol protec
 
 **macOS / Linux / WSL (Bash / Zsh):**
 ```bash
-# Install latest release (mandatory SHA-256 verified, strict error handling)
+# Install latest release (mandatory SHA-256 verified, strict fail-closed)
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 
-# One-command zero-config security
-agentcontrol protect
+# Activate in the CURRENT terminal session immediately (no restart needed):
+export PATH="$HOME/.local/bin:$PATH" && agentcontrol protect
 
 # Verify live enforcement in 1 second with the 3-point smoke test probe:
 agentcontrol verify

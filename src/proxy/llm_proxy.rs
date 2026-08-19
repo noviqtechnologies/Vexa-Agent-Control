@@ -486,6 +486,8 @@ pub async fn handle_request(
                 verdict: Some("allow".to_string()),
                 semantic_anomaly_score: None,
                 identity_context: session.identity_sub.clone(),
+                source: Some("production".to_string()),
+                policy_rule: Some("llm_egress_allowlist".to_string()),
             };
 
             let db = state.db_manager.clone();
