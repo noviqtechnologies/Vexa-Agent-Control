@@ -25,10 +25,10 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
   ```
 
 > [!NOTE]
-> **`install/install.sh`** and **`install/install.ps1`** are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), and place `agentcontrol` and legacy alias `agentcontrol` + `quickstart_agent.py` into `~/.local/bin` (Linux/macOS) or `%USERPROFILE%\.local\bin` (Windows). The Windows script automatically adds the directory to your user `PATH`.
+> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They resolve the **latest release** from GitHub via a resilient 3-tier fallback chain (GitHub API &rarr; HTTP Redirect Scraping &rarr; Stable Pinned Release), verify **SHA-256 integrity**, and install `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install directory to your user `PATH`.
 
 > [!NOTE]
-> **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system.
+> **Prerequisites for `quickstart_agent.py`**: Running the demonstration test script requires **Python 3.8+** installed on your system. All fixture-generated telemetry is explicitly badged `[SIMULATED]` in the local dashboard.
 
 > [!TIP]
 > **Enterprise Team enrollment?** Use the separate `team_otet.sh` / `team_otet.ps1` scripts instead. See the [Team Control Hub Guide](team_hub_guide.md).
@@ -132,26 +132,23 @@ To check IDE wrap status or manually wrap individual IDEs:
 
 ---
 
-## Understanding the Local Observability Dashboard
+## Understanding the Local Developer Dashboard
 
-When opening `http://127.0.0.1:8080`, Agent Control provides an intuitive dashboard for monitoring agent activities:
+When opening `http://127.0.0.1:8080`, Agent Control presents a modern, 4-destination interface designed around trust coherence and rapid triage:
 
-| Panel | Purpose & Description |
+| Destination | Purpose & Key Features |
 | :--- | :--- |
-| **01. Tool Inventory** | Overview of all AI tools/APIs called, tracking execution frequencies and risk tiers (Tier 1/2/3). |
-| **02. Session Timeline** | Real-time live log of tool calls with universal sensitive payload masking (AWS keys, tokens, SSNs). |
-| **03. Parameter Explorer** | Inspect input arguments and parameters passed by your agent with inferred types and distributions. |
-| **04. Risk Flags** | Automatically flags high-risk tool operations requiring oversight. |
-| **05. Data Loss Prevention (DLP)** | Content-aware secret scanning preventing exfiltration of keys, passwords, and PII. |
-| **06. Injection & Poisoning** | Detects prompt injections, homoglyphs, and system prompt override attempts. |
-| **07. Semantic Scanner** | Behavioral analysis flagging anomalous out-of-context tool invocations. |
-| **08. Generate Policy & Simulation** | Generates baseline `agentcontrol-policy.yaml` with **🧪 Dry-Run Simulation** against historical events. |
-| **09. ADR Benchmark** | Standardized benchmark testing defenses across 303 test cases and 17 attack categories. |
+| **01. Overview** | Immediate answers to: *Is the gateway working? What happened? Do I need to act?* Displays protection status, real-time decision counters, recent real-time decisions, and a single contextual next action. |
+| **02. Activity Stream** | Chronological record of all tool invocations with toggleable **Timeline Stream** and **Tool Summary** views, plus an expandable diagnostic Event Drawer with full JSON-RPC inspectability. |
+| **03. Detections & DLP** | Consolidated security findings across Data Loss Prevention (DLP), Prompt Injections, High-Risk Flags, and Behavioral Anomalies with exact policy rule justifications and safely masked secret previews. |
+| **04. Policy & Gateway** | View and hot-reload active `agentcontrol-policy.yaml` rules, review candidate suggestions, monitor IDE discovery and config wrap status, and inspect gateway listener health. |
 
-**Dashboard highlights:**
-- **Security Posture Toggle** — Switch between SHADOW and ENFORCE modes in real-time.
-- **Dry-Run Policy Simulation** — Test candidate policies against historical SQLite telemetry before reloading.
-- **Sensitive Data Masking** — All AWS keys, Bearer tokens, DB credentials, and SSNs are masked from cleartext display.
+**Persistent Header & Safety Guardrails:**
+- **Gateway Health Badge** — Real-time state (`Healthy`, `Degraded`, `Disconnected`) linking directly to diagnostic details.
+- **Posture Selector** — Switch between **Shadow** (observation only) and **Enforce** (active blocking) with a confirmation modal safeguard.
+- **Universal Payload Redaction** — All AWS access keys, Bearer tokens, DB credentials, and SSNs are masked before rendering on any dashboard surface.
+- **Explicit Telemetry Badging** — Synthetic and test records are visibly badged `[SIMULATED]` to prevent confusion with real agent traffic.
+- **✨ Live Policy Synthesizer** — An on-demand side drawer that auto-generates least-privilege YAML rules on explicit user click.
 
 ---
 

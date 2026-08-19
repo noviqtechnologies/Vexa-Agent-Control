@@ -207,8 +207,8 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
         println!("  ℹ To route custom agents or CLI tools through the gateway, set:");
         println!("    export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080");
         println!("    export HTTP_PROXY=http://127.0.0.1:8080");
-        println!("  ℹ To verify gateway security features with sample telemetry, run:");
-        println!("    python3 quickstart_agent.py");
+        println!("  ℹ To verify gateway security assertions immediately, run:");
+        println!("    agentcontrol verify");
     }
     0
 }
@@ -358,8 +358,8 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
     if err_count > 0 { 2 } else { 0 }
 }
 
-/// Helper to open a URL in the user's default web browser across OS platforms.
-fn open_browser(url: &str) -> std::io::Result<()> {
+/// Helper to open a URL in the user's default web browser across OS platforms and WSL environments.
+pub fn open_browser(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -372,6 +372,29 @@ fn open_browser(url: &str) -> std::io::Result<()> {
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
+        // Detect WSL environment
+        if let Ok(version) = std::fs::read_to_string("/proc/version") {
+            let v_lower = version.to_lowercase();
+            if v_lower.contains("microsoft") || v_lower.contains("wsl") {
+                if std::process::Command::new("wslview").arg(url).spawn().is_ok() {
+                    return Ok(());
+                }
+                if std::process::Command::new("/mnt/c/Windows/System32/cmd.exe")
+                    .args(["/c", "start", "", url])
+                    .spawn()
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Headless container check: if DISPLAY and WAYLAND_DISPLAY are empty, skip browser launch silently
+        let is_headless = std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err();
+        if is_headless {
+            return Ok(());
+        }
+
         std::process::Command::new("xdg-open").arg(url).spawn()?;
     }
     Ok(())

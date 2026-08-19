@@ -28,7 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    $FallbackVersion = "v1.0.35"
+    $FallbackVersion = "v1.0.37"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
@@ -110,30 +110,32 @@ param(
         }
     }
 
-    # 5. Checksum Verification
-    Write-Host "Verifying SHA-256 cryptographic checksum..."
-    $HasChecksumFile = $false
+    # 5. Checksum Verification (Fail-Closed)
+    Write-Host "Verifying SHA-256 cryptographic checksum..." -ForegroundColor $ColorCyan
     try {
         Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath -UseBasicParsing
-        $HasChecksumFile = $true
     } catch {
-        Write-Host "[!] Notice: Checksum manifest not published for this tag. Skipping hash assertion." -ForegroundColor $ColorYellow
+        Write-Host "[!] FATAL: Checksum manifest not published for release $Version." -ForegroundColor $ColorRed
+        Write-Host "    Installation halted in accordance with strict security posture." -ForegroundColor $ColorRed
+        throw "Checksum manifest missing."
     }
 
-    if ($HasChecksumFile) {
-        $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match $AssetName })
-        if ($ExpectedHashStr) {
-            $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
-            $ActualHash   = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
-            if ($ExpectedHash -ne $ActualHash) {
-                Write-Host "Checksum mismatch! Expected: $ExpectedHash, Got: $ActualHash" -ForegroundColor $ColorRed
-                throw "Cryptographic SHA-256 Checksum Mismatch!"
-            }
-            Write-Host "Checksum verified successfully: $ActualHash" -ForegroundColor $ColorGreen
-        } else {
-            Write-Host "[!] Notice: Asset $AssetName not found in checksums.txt. Proceeding." -ForegroundColor $ColorYellow
-        }
+    $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match $AssetName })
+    if (-not $ExpectedHashStr) {
+        Write-Host "[!] FATAL: Asset $AssetName is not listed in checksums.txt." -ForegroundColor $ColorRed
+        throw "Release asset digest missing from manifest."
     }
+
+    $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
+    $ActualHash   = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
+
+    if ($ExpectedHash -ne $ActualHash) {
+        Write-Host "[!] FATAL: Cryptographic Checksum Mismatch!" -ForegroundColor $ColorRed
+        Write-Host "    Expected: $ExpectedHash" -ForegroundColor $ColorRed
+        Write-Host "    Got:      $ActualHash" -ForegroundColor $ColorRed
+        throw "Cryptographic SHA-256 Checksum Mismatch!"
+    }
+    Write-Host "[✓] Cryptographic SHA-256 checksum verified: $ActualHash" -ForegroundColor $ColorGreen
 
     # 6. Extract ZIP
     Write-Host "Extracting archive..."
@@ -157,7 +159,6 @@ param(
     $AgentControlPath = Join-Path $InstallDir "agentcontrol.exe"
     Copy-Item -Path $ExtractedBinary.FullName -Destination $AgentControlPath -Force
     Copy-Item -Path $ExtractedBinary.FullName -Destination $FinalBinaryPath -Force
-    Write-Host "Installed as agentcontrol.exe (and alias agentcontrol.exe)" -ForegroundColor $ColorGreen
 
     $QuickstartScript = Get-ChildItem -Path $ExtractDir -Recurse -Filter "quickstart_agent.py" | Select-Object -First 1
     $QuickstartTarget = Join-Path $InstallDir "quickstart_agent.py"
@@ -171,12 +172,19 @@ param(
         $NewPath = "$InstallDir;$CurrentPath".Replace(";;", ";")
         [Environment]::SetEnvironmentVariable("PATH", $NewPath, [EnvironmentVariableTarget]::User)
         $env:Path = "$InstallDir;$env:Path"
-        Write-Host "Added $InstallDir to PATH." -ForegroundColor $ColorYellow
     }
 
     Remove-Item $TempDir -Recurse -Force | Out-Null
 
-    Write-Host "`n[+] Vexa Agent Control $Version installed successfully!" -ForegroundColor $ColorGreen
-    Write-Host "To secure all AI IDEs and launch local protection:"
-    Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
+    Write-Host ""
+    Write-Host "┌────────────────────────────────────────────────────────────────────────┐" -ForegroundColor $ColorCyan
+    Write-Host "│  ✨ Vexa Agent Control $Version successfully installed!                 │" -ForegroundColor $ColorCyan
+    Write-Host "├────────────────────────────────────────────────────────────────────────┤" -ForegroundColor $ColorCyan
+    Write-Host "│  Binary Location : $FinalBinaryPath" -ForegroundColor $ColorCyan
+    Write-Host "│  To start one-command protection right now in PowerShell:              │" -ForegroundColor $ColorCyan
+    Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
+    Write-Host "│    `$env:Path = `"$InstallDir;`$env:Path`"; agentcontrol protect           │" -ForegroundColor $ColorGreen
+    Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
+    Write-Host "└────────────────────────────────────────────────────────────────────────┘" -ForegroundColor $ColorCyan
+    Write-Host ""
 }

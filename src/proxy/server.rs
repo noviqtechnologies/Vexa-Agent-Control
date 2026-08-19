@@ -639,6 +639,18 @@ async fn handle_request(
                         .unwrap());
                 }
             }
+            "/api/policy" | "/api/v1/policy/active" => {
+                let target_path = state.policy_path.as_deref().unwrap_or("agentcontrol-policy.yaml");
+                let yaml = std::fs::read_to_string(target_path).unwrap_or_else(|_| {
+                    crate::generate_policy::generate_default_baseline_policy()
+                });
+                let resp = serde_json::json!({
+                    "path": target_path,
+                    "yaml": yaml,
+                    "loaded": state.policy_loaded.load(std::sync::atomic::Ordering::Relaxed)
+                });
+                return Ok(json_response(StatusCode::OK, &resp));
+            }
             "/metrics" => {
                 return Ok(prometheus_metrics_response(&state));
             }

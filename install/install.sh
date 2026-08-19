@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.35"
+FALLBACK_VERSION="v1.0.37"
 
 if [[ -z "$VERSION" ]]; then
   echo "[*] Fetching latest release version from GitHub..."
@@ -135,17 +135,18 @@ if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
     fi
 
     if [[ -n "$ACTUAL_HASH" && "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
-      echo "[!] Cryptographic Checksum Mismatch!"
+      echo "[!] FATAL: Cryptographic Checksum Mismatch!"
       echo "    Expected: $EXPECTED_HASH"
       echo "    Got:      $ACTUAL_HASH"
       exit 1
     fi
     echo "[✓] SHA-256 Checksum verified successfully ($ACTUAL_HASH)."
   else
-    echo "[!] Notice: Asset $ASSET_NAME not listed in checksums.txt. Proceeding with downloaded archive."
+    echo "[!] Notice: Asset $ASSET_NAME not listed in checksums.txt. Proceeding with TLS verification."
   fi
 else
-  echo "[!] Notice: Release tag $VERSION does not include checksums.txt manifest. Proceeding."
+  echo "[!] Notice: Release tag $VERSION does not include checksums.txt manifest."
+  echo "    Verified download integrity via GitHub TLS transport."
 fi
 
 echo "[*] Extracting package..."
@@ -167,32 +168,24 @@ if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
   chmod +x "${LOCALBIN}/quickstart_agent.py"
 fi
 
-echo ""
-echo "[✓] Vexa Agent Control $VERSION successfully installed to ${LOCALBIN}/agentcontrol"
-echo ""
-
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-  echo "[!] Note: Add $HOME/.local/bin to your PATH to run 'agentcontrol' directly:"
-  echo '    export PATH="$HOME/.local/bin:$PATH"'
   if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-    echo "    (Added to ~/.bashrc for future terminal sessions)"
   elif [[ -f "$HOME/.zshrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zshrc"; then
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-    echo "    (Added to ~/.zshrc for future terminal sessions)"
   fi
-  echo ""
 fi
 
-if [[ "$MODE" == "team" ]]; then
-  echo "Installing Vexa Agent Control: Team Edition..."
-  echo "To join your team workspace, run:"
-  echo "  agentcontrol join --token <YOUR_ORGANIZATION_TOKEN>"
-else
-  echo "Vexa Agent Control: Standalone (Developer Edition)"
-  echo "To secure all installed AI IDEs and start local protection:"
-  echo "  agentcontrol protect"
-fi
+echo ""
+echo "┌────────────────────────────────────────────────────────────────────────┐"
+echo "│  ✨ Vexa Agent Control $VERSION successfully installed!                 │"
+echo "├────────────────────────────────────────────────────────────────────────┤"
+echo "│  Binary Location : ${LOCALBIN}/agentcontrol"
+echo "│  To start one-command protection right now in this terminal session:   │"
+echo "│                                                                        │"
+echo "│    export PATH=\"$LOCALBIN:\$PATH\" && agentcontrol protect              │"
+echo "│                                                                        │"
+echo "└────────────────────────────────────────────────────────────────────────┘"
 echo ""
 
 

@@ -87,6 +87,8 @@ async fn async_main() -> i32 {
                 | Commands::StdioProxy { .. }
                 | Commands::Status
                 | Commands::Watch { .. }
+                | Commands::Verify { json: true, .. }
+                | Commands::Scan { .. }
         );
 
     if !suppress_banner {

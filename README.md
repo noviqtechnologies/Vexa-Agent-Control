@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.36-green.svg?style=flat-square" alt="Version"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.37-green.svg?style=flat-square" alt="Version"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
@@ -72,7 +72,7 @@ agentcontrol.exe verify
 ```
 
 > [!NOTE]
-> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), install `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install dir to your user `PATH`.
+> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They resolve the **latest release** from GitHub via a resilient 3-tier fallback chain (GitHub API &rarr; HTTP Redirect Scraping &rarr; Stable Pinned Release), verify **SHA-256 integrity**, and install `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install directory to your user `PATH`.
 
 **What `agentcontrol protect` does on first run:**
 1. 🛡 **Auto-generates** `agentcontrol-policy.yaml` with baseline P0 DLP secret rules (blocks `.env`, `.ssh/id_rsa`, `~/.aws/credentials` exfiltration) if no policy exists
@@ -105,12 +105,16 @@ agentcontrol.exe unprotect        # Windows
 agentcontrol.exe unprotect --force  # Emergency: skip backup integrity check
 ```
 
-**Local Dashboard highlights** (auto-opens at `http://127.0.0.1:8080`):
-- 🔄 **Shadow ↔ Enforce toggle** — switch security posture live without restarting
-- 💰 **Live Spend** — real-time LLM token cost accumulator
-- 🛡 **Risks Blocked** — live count of denied injections, sensitive reads, and policy violations
-- 🎯 **Mission Mode** — guided test: ask your AI to read `/etc/shadow` to prove real-time blocking
-- 🪄 **Quick Policy** — one-click security rule generator per tool in the inventory table
+**Local Dashboard Highlights** (auto-opens at `http://127.0.0.1:8080`):
+- 🧭 **4-Destination Information Architecture**:
+  - **Overview** — Instant answers to: *Is the gateway working? What happened? Do I need to act?* Displays protection health, decision counts, and recent real-time decisions.
+  - **Activity Stream** — Full chronological log of tool calls with toggleable **Timeline Stream** and **Tool Summary** views, plus an expandable diagnostic Event Drawer.
+  - **Detections & DLP** — Unified findings for DLP secret leaks, prompt injections, and high-risk operations with policy rule justification.
+  - **Policy & Gateway** — Live YAML policy editor, candidate suggestions, IDE integration status matrix, and gateway listeners.
+- 📌 **Persistent Top Header** — Real-time Gateway Health (`Healthy`, `Degraded`, `Disconnected`), Mode Selector (`Shadow` / `Enforce`) with confirmation safeguard, and Integration Coverage.
+- 🔒 **Universal Payload Redaction** — Strict masking across all views guarantees that AWS keys, tokens, SSNs, DB connection strings, and private keys are never exposed in plaintext.
+- 🏷️ **Explicit Simulation Badges** — Demonstration data is visibly badged `[SIMULATED]` to prevent confusion with production traffic.
+- ✨ **On-Demand Policy Wizard** — Closed by default; synthesizes least-privilege YAML rules on explicit user click.
 
 > 💡 **Generating Instant Test Telemetry**: If the dashboard shows *"No tool calls recorded yet"*, run the included test script in a new terminal:
 >
