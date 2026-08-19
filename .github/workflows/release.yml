@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -127,13 +128,15 @@ jobs:
           cat checksums.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
+          name: Vexa Agent Control ${{ env.VERSION }}
           files: |
             artifacts/**/*.zip
             artifacts/checksums.txt
           generate_release_notes: true
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -146,6 +149,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Extract version
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep -m 1 "^version = " Cargo.toml | cut -d '"' -f 2)
+          echo "VERSION=v$VERSION" >> $GITHUB_ENV
 
       - name: Lowercase repository name
         id: repo
@@ -177,7 +187,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:1.0.35,${{ env.IMAGE_NAME }}:v1.0.35
+          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:${{ env.VERSION }}
 
       - name: Build and push Dashboard API image
         uses: docker/build-push-action@v6
