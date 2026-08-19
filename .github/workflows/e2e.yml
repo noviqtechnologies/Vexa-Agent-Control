@@ -5,6 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   e2e-matrix:
@@ -14,15 +15,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            shell: bash
             bin_name: agentcontrol
           - os: macos-latest
-            shell: bash
             bin_name: agentcontrol
           - os: windows-latest
-            shell: pwsh
             bin_name: agentcontrol.exe
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout Code
@@ -38,32 +39,18 @@ jobs:
         run: cargo build --release
 
       - name: Test Dry-Run Protect
-        shell: ${{ matrix.shell }}
-        run: |
-          ./target/release/${{ matrix.bin_name }} protect --dry-run
+        run: ./target/release/${{ matrix.bin_name }} protect --dry-run
 
       - name: Test Status Command
-        shell: ${{ matrix.shell }}
-        run: |
-          ./target/release/${{ matrix.bin_name }} status
+        run: ./target/release/${{ matrix.bin_name }} status
 
       - name: Run Live Verification Smoke Test (Background Gateway)
-        shell: ${{ matrix.shell }}
         run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            $proc = Start-Process -FilePath "./target/release/${{ matrix.bin_name }}" -ArgumentList "protect --no-browser" -PassThru
-            Start-Sleep -Seconds 4
-            ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:8080"
-            Stop-Process -Id $proc.Id -Force
-          else
-            ./target/release/${{ matrix.bin_name }} protect --no-browser &
-            GATEWAY_PID=$!
-            sleep 4
-            ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:8080"
-            kill $GATEWAY_PID || true
-          fi
+          ./target/release/${{ matrix.bin_name }} protect --no-browser &
+          GATEWAY_PID=$!
+          sleep 4
+          ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:8080"
+          kill -9 $GATEWAY_PID || true
 
       - name: Test Dry-Run Unprotect
-        shell: ${{ matrix.shell }}
-        run: |
-          ./target/release/${{ matrix.bin_name }} unprotect --dry-run
+        run: ./target/release/${{ matrix.bin_name }} unprotect --dry-run
