@@ -394,7 +394,11 @@ pub async fn evaluate_jsonrpc(
                 "tool": tool_name,
                 "session": &session.session_id,
                 "consecutive_calls": max_attempts,
-                "action": format!("{:?}", action)
+                "action": match action {
+                    CycleAction::PivotError => "pivot_error",
+                    CycleAction::Block => "block",
+                    CycleAction::PauseInteractive => "pause_interactive",
+                }
             }),
         );
 

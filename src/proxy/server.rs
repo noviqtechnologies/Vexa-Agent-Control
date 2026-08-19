@@ -1387,7 +1387,7 @@ async fn handle_request(
         let (verdict_str, rule_str) = if dlp_findings_json.is_some() {
             ("deny".to_string(), "DLP-01-HIGH-ENTROPY".to_string())
         } else if injection_findings_json.is_some() {
-            ("deny".to_string(), "INJ-04-AUDIT".to_string())
+            ("deny".to_string(), "INJ-04-OVERRIDE".to_string())
         } else if should_kill {
             ("deny".to_string(), "KILL-SWITCH".to_string())
         } else if err_msg.contains("Policy violation") || err_msg.contains("Cycle detected") || err_msg.contains("Rate limit") || err_msg.contains("Blocked") {

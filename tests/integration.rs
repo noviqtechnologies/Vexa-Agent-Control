@@ -11,4 +11,5 @@ mod integration {
     mod proxy_test;
     mod schema_drift_integration_test;
     mod stdio_tests;
+    mod verify_probe_test;
 }

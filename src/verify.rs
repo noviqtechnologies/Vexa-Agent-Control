@@ -86,7 +86,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         .await;
     let lat1 = t1.elapsed().as_millis();
 
-    let (pass1, status1, req_id1, rule1, details1) = match res1 {
+    let (pass1, actual_status1, status1, req_id1, rule1, details1) = match res1 {
         Ok(r) => {
             let status = r.status().as_u16();
             let json_body: Value = r.json().await.unwrap_or(Value::Null);
@@ -105,6 +105,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 if msg.contains("Upstream error") || msg.contains("Connection refused") {
                     (
                         true,
+                        status,
                         "ALLOWED (STANDALONE MOCK)".to_string(),
                         req_id,
                         Some("default_allowlist".to_string()),
@@ -113,6 +114,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 } else if msg.contains("Policy violation") {
                     (
                         false,
+                        status,
                         "BLOCKED".to_string(),
                         req_id,
                         None,
@@ -121,6 +123,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 } else {
                     (
                         true,
+                        status,
                         "ALLOWED & RECORDED".to_string(),
                         req_id,
                         Some("default_allowlist".to_string()),
@@ -130,6 +133,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             } else if status == 200 {
                 (
                     true,
+                    status,
                     "ALLOWED & RECORDED".to_string(),
                     req_id,
                     Some("default_allowlist".to_string()),
@@ -138,6 +142,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             } else {
                 (
                     false,
+                    status,
                     format!("HTTP {}", status),
                     req_id,
                     None,
@@ -145,13 +150,13 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 )
             }
         }
-        Err(e) => (false, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
     };
 
     reports.push(ProbeReport {
         name: "1. Safe Tool Call (read_file)".to_string(),
         passed: pass1,
-        http_status: 200,
+        http_status: actual_status1,
         verdict: status1,
         expected: "ALLOWED (HTTP 200)".to_string(),
         request_id: req_id1,
@@ -186,7 +191,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         .await;
     let lat2 = t2.elapsed().as_millis();
 
-    let (pass2, status2, req_id2, rule2, details2) = match res2 {
+    let (pass2, actual_status2, status2, req_id2, rule2, details2) = match res2 {
         Ok(r) => {
             let status = r.status().as_u16();
             let json_body: Value = r.json().await.unwrap_or(Value::Null);
@@ -209,6 +214,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             if (status == 400 || status == 403) && (err_msg.contains("dlp:") || err_msg.contains("Policy violation")) {
                 (
                     true,
+                    status,
                     "BLOCKED (DLP-01)".to_string(),
                     req_id,
                     Some("DLP-01-HIGH-ENTROPY".to_string()),
@@ -218,6 +224,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 // Redaction mode
                 (
                     true,
+                    status,
                     "REDACTED (DLP-01)".to_string(),
                     req_id,
                     Some("DLP-01-REDACT".to_string()),
@@ -226,6 +233,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             } else if status == 200 && json_body.get("error").is_some() && err_msg.contains("dlp") {
                 (
                     true,
+                    status,
                     "BLOCKED & AUDITED".to_string(),
                     req_id,
                     Some("DLP-01".to_string()),
@@ -234,6 +242,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             } else {
                 (
                     false,
+                    status,
                     format!("HTTP {} ({})", status, err_msg),
                     req_id,
                     None,
@@ -241,13 +250,13 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 )
             }
         }
-        Err(e) => (false, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
     };
 
     reports.push(ProbeReport {
         name: "2. DLP Secret Leak (AWS Key & SSN)".to_string(),
         passed: pass2,
-        http_status: 400,
+        http_status: actual_status2,
         verdict: status2,
         expected: "MASKED / BLOCKED (DLP-01)".to_string(),
         request_id: req_id2,
@@ -281,7 +290,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         .await;
     let lat3 = t3.elapsed().as_millis();
 
-    let (pass3, status3, req_id3, rule3, details3) = match res3 {
+    let (pass3, actual_status3, status3, req_id3, rule3, details3) = match res3 {
         Ok(r) => {
             let status = r.status().as_u16();
             let json_body: Value = r.json().await.unwrap_or(Value::Null);
@@ -307,39 +316,49 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             {
                 (
                     true,
+                    status,
                     "BLOCKED (INJ-04)".to_string(),
                     req_id,
                     Some("INJ-04-OVERRIDE".to_string()),
                     format!("System prompt override intercepted ({})", err_msg),
                 )
-            } else if status == 200 {
-                // In shadow mode or audited warning mode
+            } else if status == 200 && json_body.get("error").is_some() && (err_msg.contains("injection") || err_msg.contains("INJ-04")) {
                 (
                     true,
-                    "INTERCEPTED & FLAGGED".to_string(),
+                    status,
+                    "INTERCEPTED & AUDITED".to_string(),
                     req_id,
                     Some("INJ-04-AUDIT".to_string()),
-                    "Prompt injection pattern detected and flagged in audit trail".to_string(),
+                    "Prompt injection pattern detected and recorded in audit trail".to_string(),
                 )
             } else {
                 (
                     false,
-                    format!("HTTP {} ({})", status, err_msg),
+                    status,
+                    if status == 200 && (err_msg.contains("Upstream error") || err_msg.contains("Network error")) {
+                        "ALLOWED (UPSTREAM LEAK)".to_string()
+                    } else {
+                        format!("HTTP {} ({})", status, err_msg)
+                    },
                     req_id,
                     None,
-                    "Prompt injection assertion failed".to_string(),
+                    if err_msg.contains("Upstream error") {
+                        "Gateway allowed and forwarded injection payload upstream instead of intercepting".to_string()
+                    } else {
+                        "Prompt injection assertion failed — policy did not intercept injection payload".to_string()
+                    },
                 )
             }
         }
-        Err(e) => (false, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
     };
 
     reports.push(ProbeReport {
         name: "3. Prompt Injection (System Override)".to_string(),
         passed: pass3,
-        http_status: 400,
+        http_status: actual_status3,
         verdict: status3,
-        expected: "INTERCEPTED / AUDITED (INJ-04)".to_string(),
+        expected: "BLOCKED (INJ-04)".to_string(),
         request_id: req_id3,
         policy_rule: rule3,
         latency_ms: lat3,

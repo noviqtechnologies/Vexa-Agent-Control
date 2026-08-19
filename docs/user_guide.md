@@ -170,7 +170,27 @@ agentcontrol protect --shadow    # Launch in passive observation mode (no active
 agentcontrol protect --no-browser # Start gateway without opening browser automatically
 ```
 
-### Step 3: Verify with Instant Telemetry
+### Step 3: Run Live 3-Point Security Verification
+
+In a second terminal window, run the canonical verification probe to assert active gateway defenses:
+
+```bash
+# macOS / Linux / WSL
+agentcontrol verify
+
+# Windows (PowerShell)
+agentcontrol.exe verify
+
+# JSON Output (CI / Scripting)
+agentcontrol verify --json
+```
+
+The verifier executes 3 automated assertions against the running gateway:
+1. **Safe Tool Execution:** Asserts baseline operations like `read_file` are allowed (`HTTP 200`).
+2. **DLP Secret Shield:** Asserts high-entropy secrets and SSNs are blocked (`HTTP 400`, `DLP-01-HIGH-ENTROPY`).
+3. **Prompt Injection Shield:** Asserts system prompt overrides and jailbreaks are blocked (`HTTP 400`, `INJ-04-OVERRIDE`).
+
+### Step 4: Verify with Instant Telemetry
 
 If you have not connected an IDE yet, generate simulated tool calls to verify the dashboard:
 
@@ -182,7 +202,7 @@ python3 ~/.local/bin/quickstart_agent.py
 python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
 ```
 
-### Step 4: Revert Anytime
+### Step 5: Revert Anytime
 
 To cleanly restore all IDE configurations from their original backups:
 

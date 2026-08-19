@@ -503,6 +503,28 @@ fn print_banner() {
     println!("└────────────────────────────────────────────────────────────┘");
 }
 
+fn resolve_audit_log_path() -> std::path::PathBuf {
+    if let Ok(env_path) = std::env::var("AGENTCONTROL_LOG_PATH").or_else(|_| std::env::var("AGENTWALL_LOG_PATH")) {
+        let p = if env_path.starts_with("~/") || env_path.starts_with("~\\") {
+            if let Some(home) = dirs::home_dir() {
+                home.join(&env_path[2..])
+            } else {
+                std::path::PathBuf::from(env_path)
+            }
+        } else {
+            std::path::PathBuf::from(env_path)
+        };
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        return p;
+    }
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let agent_dir = home.join(".agentcontrol");
+    let _ = std::fs::create_dir_all(&agent_dir);
+    agent_dir.join("audit.jsonl")
+}
+
 #[allow(deprecated)]
 async fn run_stdio_proxy(
     args: Vec<String>,
@@ -518,13 +540,7 @@ async fn run_stdio_proxy(
     let session_secret = resolve_hmac_key();
     let session_id = uuid::Uuid::new_v4().to_string();
 
-    // Resolve log path relative to binary (ensures writability when run from Claude)
-    let bin_path =
-        std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentcontrol.exe"));
-    let log_path = bin_path
-        .parent()
-        .unwrap_or(std::path::Path::new("."))
-        .join("audit.log");
+    let log_path = resolve_audit_log_path();
 
     let audit_logger = match AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
         log_path,
@@ -2007,13 +2023,8 @@ async fn run_dev(
     let session_secret: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
     let session_id = uuid::Uuid::new_v4().to_string();
 
-    // Resolve log path (same as stdio proxy)
-    let bin_path =
-        std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("agentcontrol.exe"));
-    let log_path = bin_path
-        .parent()
-        .unwrap_or(std::path::Path::new("."))
-        .join("audit.log");
+    // Resolve canonical audit log path (~/.agentcontrol/audit.jsonl)
+    let log_path = resolve_audit_log_path();
 
     let audit_logger = match AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
         log_path,

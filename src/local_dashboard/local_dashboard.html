@@ -463,12 +463,13 @@
       border-left: 1px solid var(--border);
       box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
       z-index: 1000;
-      display: flex;
+      display: none;
       flex-direction: column;
       transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .wizard-drawer.open {
+      display: flex;
       right: 0;
     }
 
@@ -670,7 +671,7 @@
             <div class="card-label">1. Protection Status</div>
             <div class="card-value" style="color: var(--green);" id="ov-status-val">Active Enforcement</div>
             <div class="card-meta">
-              <span id="ov-integration-summary">Claude Desktop & Cursor Intercepted</span>
+              <span id="ov-integration-summary">No supported IDEs configured yet (0/9 Protected)</span>
             </div>
           </div>
           <div class="card">
@@ -1311,6 +1312,19 @@
           const ideCount = document.getElementById('header-ide-count');
           if (ideCount) ideCount.textContent = `${data.total_protected}/${data.total_targets}`;
           renderIntegrationsTable(data.integrations || []);
+
+          const summaryEl = document.getElementById('ov-integration-summary');
+          if (summaryEl) {
+            if (data.total_protected === 0) {
+              summaryEl.textContent = `No supported IDEs configured yet (0/${data.total_targets || 9} Protected)`;
+            } else {
+              const activeNames = (data.integrations || [])
+                .filter(i => i.is_wrapped)
+                .map(i => i.name)
+                .join(', ');
+              summaryEl.textContent = `${data.total_protected}/${data.total_targets} Protected: ${activeNames}`;
+            }
+          }
         }
       } catch (e) {
         console.warn("Integrations refresh failed:", e);
@@ -1552,7 +1566,12 @@
     // ── Live Policy Wizard & Drawer ──────────────────────────────────────────
     function openPolicyWizard() {
       const drawer = document.getElementById('policy-wizard-drawer');
-      if (drawer) drawer.classList.add('open');
+      if (drawer) {
+        drawer.style.display = 'flex';
+        // force layout reflow before adding open class for smooth transition
+        void drawer.offsetWidth;
+        drawer.classList.add('open');
+      }
       const editor = document.getElementById('wizard-yaml-editor');
       if (editor && (!editor.value || editor.value.trim().length === 0)) {
         fetchWizardPolicy();
@@ -1561,7 +1580,14 @@
 
     function closePolicyWizard() {
       const drawer = document.getElementById('policy-wizard-drawer');
-      if (drawer) drawer.classList.remove('open');
+      if (drawer) {
+        drawer.classList.remove('open');
+        setTimeout(() => {
+          if (!drawer.classList.contains('open')) {
+            drawer.style.display = 'none';
+          }
+        }, 300);
+      }
     }
 
     async function fetchWizardPolicy() {

@@ -75,8 +75,8 @@ In a **separate terminal window**, run the live 3-point security verification pr
 **Sample Output:**
 ```text
   ✔ [1/3] 1. Safe Tool Call (read_file)          ➔ ALLOWED & RECORDED (3ms)
-  ✔ [2/3] 2. DLP Secret Leak (AWS Key & SSN)     ➔ MASKED / AUDITED (2ms)
-  ✔ [3/3] 3. Prompt Injection (System Override)  ➔ INTERCEPTED & FLAGGED (2ms)
+  ✔ [2/3] 2. DLP Secret Leak (AWS Key & SSN)     ➔ BLOCKED (DLP-01) (2ms)
+  ✔ [3/3] 3. Prompt Injection (System Override)  ➔ BLOCKED (INJ-04) (2ms)
 ────────────────────────────────────────────────────────────────────────
   ✨ All 3 Security Assertions Verified in 12ms!
 ```
