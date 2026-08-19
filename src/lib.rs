@@ -21,6 +21,7 @@ pub mod report;
 pub mod self_healing;
 pub mod service;
 pub mod validate;
+pub mod verify;
 pub mod wrap;
 
 pub mod compliance;

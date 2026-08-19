@@ -224,21 +224,21 @@ Redirect HTTP/HTTPS requests from your AI agents or SDKs through Agent Control b
 ```bash
 export HTTP_PROXY=http://127.0.0.1:8080
 export HTTPS_PROXY=http://127.0.0.1:8080
-export AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
 ```
 
 **Windows (PowerShell):**
 ```powershell
 $env:HTTP_PROXY="http://127.0.0.1:8080"
 $env:HTTPS_PROXY="http://127.0.0.1:8080"
-$env:AGENTWALL_PROXY_URL="http://127.0.0.1:8080"
+$env:AGENTCONTROL_PROXY_URL="http://127.0.0.1:8080"
 ```
 
 **Windows (Command Prompt / CMD):**
 ```cmd
 set HTTP_PROXY=http://127.0.0.1:8080
 set HTTPS_PROXY=http://127.0.0.1:8080
-set AGENTWALL_PROXY_URL=http://127.0.0.1:8080
+set AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
 ```
 
 **What You Will See:**

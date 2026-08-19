@@ -375,6 +375,17 @@ pub enum Commands {
         #[command(subcommand)]
         target: Option<WatchTarget>,
     },
+
+    /// Run live security verification probe against gateway (3-point smoke test)
+    Verify {
+        /// Gateway URL to test (default: http://127.0.0.1:8080)
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        gateway: String,
+
+        /// Output results as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]

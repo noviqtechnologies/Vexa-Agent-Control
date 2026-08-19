@@ -459,6 +459,44 @@ pub async fn handle_request(
                 )
                 .await;
 
+            let egress_event = crate::proxy::db::EgressEvent {
+                timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                session_id: session.session_id.clone(),
+                transport: "llm".to_string(),
+                method: Some("POST".to_string()),
+                target_host: match provider_name.as_str() {
+                    "anthropic" => "api.anthropic.com".to_string(),
+                    "openai" => "api.openai.com".to_string(),
+                    "groq" => "api.groq.com".to_string(),
+                    "together" => "api.together.xyz".to_string(),
+                    "mistral" => "api.mistral.ai".to_string(),
+                    _ => "api.openai.com".to_string(),
+                },
+                target_port: Some(443),
+                url_path: Some(format!("/v1/chat/completions?model={}", model)),
+                request_headers: None,
+                request_body: Some(serde_json::to_string(&body).unwrap_or_default()),
+                request_body_hash: None,
+                response_status: Some(status.as_u16() as i64),
+                response_body: None,
+                response_body_hash: None,
+                dlp_findings: None,
+                injection_findings: None,
+                latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                verdict: Some("allow".to_string()),
+                semantic_anomaly_score: None,
+                identity_context: session.identity_sub.clone(),
+            };
+
+            let db = state.db_manager.clone();
+            if let Ok(json_str) = serde_json::to_string(&egress_event) {
+                let _ = state.event_tx.send(json_str);
+            }
+            tokio::spawn(async move {
+                let _ = db.insert(egress_event).await;
+                db.prune();
+            });
+
             let mut builder = Response::builder().status(status);
             builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
 

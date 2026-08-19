@@ -726,8 +726,10 @@ async fn handle_request(
                                 serde_json::json!({
                                     "name": name,
                                     "confidence_decay": decay,
+                                    "activity_recency": decay,
                                     "last_seen": last_ns,
-                                    "stale": decay < stale_threshold
+                                    "stale": decay < stale_threshold,
+                                    "signal_type": "Operational activity recency — not a security verdict"
                                 })
                             })
                             .collect();
@@ -788,7 +790,7 @@ async fn handle_request(
             None => {
                 let err = serde_json::json!({
                     "error": "No policy file path configured. Pass --policy <path> when starting the gateway to enable hot-reloading.",
-                    "hint": "agentwall protect --policy agentcontrol-policy.yaml"
+                    "hint": "agentcontrol protect --policy agentcontrol-policy.yaml"
                 });
                 return Ok(json_response(StatusCode::BAD_REQUEST, &err));
             }
@@ -942,6 +944,74 @@ async fn handle_request(
                 return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
             }
         }
+    }
+
+    // Policy Simulation & Staging endpoint (P2-2)
+    if method == hyper::Method::POST && path == "/api/policy/simulate" {
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                let policy_yaml = val.get("policy_yaml").and_then(|p| p.as_str()).unwrap_or_default();
+                if policy_yaml.trim().is_empty() {
+                    let err = serde_json::json!({"error": "Missing or empty policy_yaml in request body"});
+                    return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+                }
+
+                let parsed_res: Result<crate::policy::schema::PolicyFile, _> = serde_yaml::from_str(policy_yaml);
+                match parsed_res {
+                    Ok(candidate_policy) => {
+                        let events = state.db_manager.get_all_events(100).await.unwrap_or_default();
+                        let total_simulated = events.len();
+                        let mut simulated_allowed = 0;
+                        let mut simulated_blocked = 0;
+
+                        let tools_vec = candidate_policy.tools.unwrap_or_default();
+                        let tools_len = tools_vec.len();
+                        let allowed_tools: std::collections::HashSet<String> = tools_vec
+                            .into_iter()
+                            .map(|t| t.name)
+                            .collect();
+
+                        for ev in &events {
+                            if let Some(ref tool) = ev.url_path {
+                                if allowed_tools.is_empty() || allowed_tools.contains(tool) {
+                                    simulated_allowed += 1;
+                                } else {
+                                    simulated_blocked += 1;
+                                }
+                            } else {
+                                simulated_allowed += 1;
+                            }
+                        }
+
+                        let res_json = serde_json::json!({
+                            "valid": true,
+                            "version": candidate_policy.version,
+                            "default_action": candidate_policy.default_action,
+                            "tools_defined": tools_len,
+                            "simulated_events": total_simulated,
+                            "simulated_allowed": simulated_allowed,
+                            "simulated_blocked": simulated_blocked,
+                            "impact_assessment": if simulated_blocked > 0 {
+                                format!("Simulation: {}/{} historical requests would be blocked under candidate policy.", simulated_blocked, total_simulated)
+                            } else {
+                                "Simulation: 100% of observed historical requests are compatible with this policy.".to_string()
+                            }
+                        });
+                        return Ok(json_response(StatusCode::OK, &res_json));
+                    }
+                    Err(e) => {
+                        let err_json = serde_json::json!({
+                            "valid": false,
+                            "error": format!("YAML Schema error: {}", e)
+                        });
+                        return Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &err_json));
+                    }
+                }
+            }
+        }
+        let err = serde_json::json!({"error": "Invalid request payload"});
+        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
     }
 
     // Section 6: HITL approval response endpoint

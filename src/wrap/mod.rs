@@ -200,6 +200,16 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
         already_wrapped_count.to_string().bold(),
         not_found_count.to_string().dimmed()
     );
+
+    if wrapped_count == 0 && already_wrapped_count == 0 {
+        println!();
+        println!("  ℹ No supported AI IDE configurations were automatically detected.");
+        println!("  ℹ To route custom agents or CLI tools through the gateway, set:");
+        println!("    export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080");
+        println!("    export HTTP_PROXY=http://127.0.0.1:8080");
+        println!("  ℹ To verify gateway security features with sample telemetry, run:");
+        println!("    python3 quickstart_agent.py");
+    }
     0
 }
 

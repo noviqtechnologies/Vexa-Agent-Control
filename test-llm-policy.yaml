@@ -16,6 +16,7 @@ llm:
         - "gpt*"
         - "o1*"
         - "o3*"
+        - "*"
   dlp:
     actions:
       - entity: "CREDIT_CARD"

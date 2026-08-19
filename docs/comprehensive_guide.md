@@ -25,7 +25,7 @@ Set standard proxy variables in your terminal before running your AI agent:
 ```bash
 export HTTP_PROXY=http://localhost:8080
 export HTTPS_PROXY=http://localhost:8080
-export AGENTWALL_PROXY_URL=http://localhost:8080
+export AGENTCONTROL_PROXY_URL=http://localhost:8080
 python my_agent.py
 ```
 
@@ -33,7 +33,7 @@ python my_agent.py
 ```powershell
 $env:HTTP_PROXY="http://localhost:8080"
 $env:HTTPS_PROXY="http://localhost:8080"
-$env:AGENTWALL_PROXY_URL="http://localhost:8080"
+$env:AGENTCONTROL_PROXY_URL="http://localhost:8080"
 python my_agent.py
 ```
 
@@ -41,7 +41,7 @@ python my_agent.py
 ```cmd
 set HTTP_PROXY=http://localhost:8080
 set HTTPS_PROXY=http://localhost:8080
-set AGENTWALL_PROXY_URL=http://localhost:8080
+set AGENTCONTROL_PROXY_URL=http://localhost:8080
 python my_agent.py
 ```
 

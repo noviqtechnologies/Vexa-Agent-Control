@@ -424,6 +424,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             .await
         }
         Commands::Unprotect { dry_run, force } => agentcontrol::wrap::run_unprotect_all(dry_run, force),
+        Commands::Verify { gateway, json } => agentcontrol::verify::run_verification_probe(&gateway, json).await,
         Commands::Status => agentcontrol::wrap::run_status(),
         Commands::Watch { all, target } => agentcontrol::wrap::run_watch(all, target),
         Commands::StdioProxy {
@@ -758,8 +759,31 @@ async fn run_start(
         .filter(|s| !s.is_empty());
 
     let (compiled_policy, _policy_hash, _warnings, policy_loaded) =
-        if let Some(ref api_url) = dashboard_api_url {
-            // (a) Fetch from dashboard API — policy is stored in PostgreSQL
+        if let Some(ref path) = policy_path {
+            // (a) Local YAML file — explicitly provided via --policy CLI flag
+            print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
+            match load_policy(Path::new(path), oidc_issuer) {
+                PolicyLoadResult::Loaded {
+                    policy,
+                    raw_hash,
+                    warnings,
+                } => {
+                    println!("{}", "OK".green().bold());
+                    (Some(policy), raw_hash, warnings, true)
+                }
+                PolicyLoadResult::Degraded { reason } => {
+                    println!("{}", "DEGRADED".yellow().bold());
+                    log_warn!("policy_degraded", "reason": reason);
+                    (None, "sha256:none".to_string(), vec![], false)
+                }
+                PolicyLoadResult::Fatal { error } => {
+                    println!("{}", "FAILED".red().bold());
+                    log_error!("startup_error", "reason": error.to_string());
+                    return 1;
+                }
+            }
+        } else if let Some(ref api_url) = dashboard_api_url {
+            // (b) Fetch from dashboard API — policy is stored in PostgreSQL
             print!(
                 "{} Fetching policy from dashboard API ({})... ",
                 "ℹ".blue(),
@@ -774,62 +798,6 @@ async fn run_start(
                 )
             });
             match remote_result {
-                PolicyLoadResult::Loaded {
-                    policy,
-                    raw_hash,
-                    warnings,
-                } => {
-                    println!("{}", "OK".green().bold());
-                    (Some(policy), raw_hash, warnings, true)
-                }
-                PolicyLoadResult::Degraded { reason } => {
-                    // No policy in DB yet — try file fallback
-                    println!("{} ({})", "NO POLICY IN DB".yellow().bold(), reason);
-                    if let Some(ref path) = policy_path {
-                        print!(
-                            "{} Falling back to policy file {}... ",
-                            "ℹ".blue(),
-                            path.yellow()
-                        );
-                        match load_policy(Path::new(path), oidc_issuer.clone()) {
-                            PolicyLoadResult::Loaded {
-                                policy,
-                                raw_hash,
-                                warnings,
-                            } => {
-                                println!("{}", "OK".green().bold());
-                                (Some(policy), raw_hash, warnings, true)
-                            }
-                            PolicyLoadResult::Degraded { reason } => {
-                                println!("{}", "DEGRADED".yellow().bold());
-                                log_warn!("policy_degraded", "reason": reason);
-                                (None, "sha256:none".to_string(), vec![], false)
-                            }
-                            PolicyLoadResult::Fatal { error } => {
-                                println!("{}", "FAILED".red().bold());
-                                log_error!("startup_error", "reason": error.to_string());
-                                return 1;
-                            }
-                        }
-                    } else {
-                        println!(
-                            "{} {}",
-                            "🛡".green(),
-                            "Safe Mode enabled — no policy in DB and no --policy file.".green()
-                        );
-                        (None, "sha256:none".to_string(), vec![], false)
-                    }
-                }
-                PolicyLoadResult::Fatal { error } => {
-                    println!("{}", "FAILED".red().bold());
-                    log_error!("startup_error", "reason": error.to_string());
-                    return 1;
-                }
-            }
-        } else if let Some(ref path) = policy_path {
-            // (b) Local YAML file — used when no dashboard API is configured
-            print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
-            match load_policy(Path::new(path), oidc_issuer) {
                 PolicyLoadResult::Loaded {
                     policy,
                     raw_hash,
@@ -1241,19 +1209,21 @@ async fn run_start(
     // Background policy push subscriber — only active when DASHBOARD_API_URL is set.
     // Listens for Server-Sent Events (SSE) from the Hub to instantly hot-swap
     // the policy and credentials in memory.
-    if let Some(api_url) = dashboard_api_url {
-        let sub_state = state.clone();
-        let sub_secret = policy_read_secret_env.unwrap_or_default();
-        tokio::spawn(async move {
-            println!(
-                "{} Connected to Hub for real-time policy push (SSE)",
-                "🔄".blue()
-            );
-            agentcontrol::control_plane_client::subscribe::start_policy_subscriber(
-                api_url, sub_secret, sub_state,
-            )
-            .await;
-        });
+    if policy_path.is_none() {
+        if let Some(api_url) = dashboard_api_url {
+            let sub_state = state.clone();
+            let sub_secret = policy_read_secret_env.unwrap_or_default();
+            tokio::spawn(async move {
+                println!(
+                    "{} Connected to Hub for real-time policy push (SSE)",
+                    "🔄".blue()
+                );
+                agentcontrol::control_plane_client::subscribe::start_policy_subscriber(
+                    api_url, sub_secret, sub_state,
+                )
+                .await;
+            });
+        }
     }
 
     // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)

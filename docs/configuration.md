@@ -231,8 +231,8 @@ Thin proxy client SDKs ([Python](../sdks/python) and [TypeScript](../sdks/typesc
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTWALL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote Agent Control security gateway. |
-| `AGENTWALL_AUTH_TOKEN` | `null` | Corporate OIDC JWT or bearer token for authenticated gateway clusters. |
-| `AGENTWALL_SESSION_ID` | Auto-generated UUID | Explicit session context identifier for multi-agent tracing. |
+| `AGENTCONTROL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote Agent Control security gateway. |
+| `AGENTCONTROL_AUTH_TOKEN` | `null` | Corporate OIDC JWT or bearer token for authenticated gateway clusters. |
+| `AGENTCONTROL_SESSION_ID` | Auto-generated UUID | Explicit session context identifier for multi-agent tracing. |
 -->
 

@@ -155,7 +155,7 @@ For full details, see → [Team Control Hub Guide — Docker Deployment](team_hu
 
 ## 🛠️ Building from Source
 
-If you prefer building Agent Control directly from source, you will need the Rust toolchain (Rust 1.89+):
+If you prefer building Agent Control directly from source, you will need the Rust toolchain (Rust 1.80+ Stable):
 
 ### Prerequisites
 - **Rust Toolchain:** Install via [rustup.rs](https://rustup.rs) (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)

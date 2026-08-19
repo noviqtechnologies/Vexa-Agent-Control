@@ -118,11 +118,21 @@ jobs:
           path: artifacts
           pattern: agentcontrol-*
 
+      - name: Generate Checksums Manifest
+        shell: bash
+        run: |
+          cd artifacts
+          find . -type f -name "*.zip" -exec sha256sum {} + | sed 's|./[^/]*/||' > checksums.txt
+          echo "Generated checksums.txt:"
+          cat checksums.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.VERSION }}
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*.zip
+            artifacts/checksums.txt
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

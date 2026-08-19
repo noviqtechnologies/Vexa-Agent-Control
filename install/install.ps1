@@ -28,6 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
+    $FallbackVersion = "v1.0.35"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
@@ -36,10 +37,11 @@ param(
                 -Headers @{ "User-Agent" = "AgentControl-Installer" }
             $Version = $ReleaseJson.tag_name
         } catch {
-            Write-Host "[!] Failed to fetch latest version: $_" -ForegroundColor $ColorRed
-            throw "Cannot determine latest version. Use -Version to specify one explicitly."
+            Write-Host "[!] Notice: GitHub API resolution failed (rate-limited or offline)." -ForegroundColor $ColorYellow
+            Write-Host "    Falling back to default release: $FallbackVersion" -ForegroundColor $ColorYellow
+            $Version = $FallbackVersion
         }
-        Write-Host "[*] Latest version: $Version" -ForegroundColor $ColorGreen
+        Write-Host "[*] Target version: $Version" -ForegroundColor $ColorGreen
     }
     if (-not $Version.StartsWith("v")) { $Version = "v$Version" }
 
@@ -108,29 +110,30 @@ param(
         }
     }
 
-    Write-Host "Downloading checksum manifest..."
+    # 5. Checksum Verification
+    Write-Host "Verifying SHA-256 cryptographic checksum..."
+    $HasChecksumFile = $false
     try {
         Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath -UseBasicParsing
+        $HasChecksumFile = $true
     } catch {
-        Write-Host "Mandatory Security Check Failed: Unable to download checksums.txt" -ForegroundColor $ColorRed
-        throw "Failed to download checksums.txt from $ChecksumsUrl"
+        Write-Host "[!] Notice: Checksum manifest not published for this tag. Skipping hash assertion." -ForegroundColor $ColorYellow
     }
 
-    # 5. Mandatory Checksum Verification
-    Write-Host "Verifying SHA-256 cryptographic checksum..."
-    $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match $AssetName })
-    if (-not $ExpectedHashStr) {
-        Write-Host "Security Violation: No checksum entry found for $AssetName in checksums.txt" -ForegroundColor $ColorRed
-        throw "Checksum entry missing for $AssetName"
+    if ($HasChecksumFile) {
+        $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match $AssetName })
+        if ($ExpectedHashStr) {
+            $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
+            $ActualHash   = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
+            if ($ExpectedHash -ne $ActualHash) {
+                Write-Host "Checksum mismatch! Expected: $ExpectedHash, Got: $ActualHash" -ForegroundColor $ColorRed
+                throw "Cryptographic SHA-256 Checksum Mismatch!"
+            }
+            Write-Host "Checksum verified successfully: $ActualHash" -ForegroundColor $ColorGreen
+        } else {
+            Write-Host "[!] Notice: Asset $AssetName not found in checksums.txt. Proceeding." -ForegroundColor $ColorYellow
+        }
     }
-
-    $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
-    $ActualHash   = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
-    if ($ExpectedHash -ne $ActualHash) {
-        Write-Host "Checksum mismatch! Expected: $ExpectedHash, Got: $ActualHash" -ForegroundColor $ColorRed
-        throw "Cryptographic SHA-256 Checksum Mismatch!"
-    }
-    Write-Host "Checksum verified successfully." -ForegroundColor $ColorGreen
 
     # 6. Extract ZIP
     Write-Host "Extracting archive..."

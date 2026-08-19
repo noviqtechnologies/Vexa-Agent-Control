@@ -1477,7 +1477,7 @@ const tool = client.governed("name", async (args) =&gt; {
           <h3>Generate from Observed Traffic</h3>
           <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">
             Reads all events from <code
-              style="font-family:var(--font-mono); color:var(--accent)">~/.agentwall/events.db</code> and produces a
+              style="font-family:var(--font-mono); color:var(--accent)">~/.agentcontrol/events.db</code> and produces a
             draft <code style="font-family:var(--font-mono); color:var(--accent)">agentcontrol-policy.yaml</code>.
           </p>
 
@@ -1489,10 +1489,12 @@ const tool = client.governed("name", async (args) =&gt; {
 
         <pre id="policy-output"></pre>
 
-        <div class="policy-actions" id="policy-actions" style="display:none;">
+        <div class="policy-actions" id="policy-actions" style="display:none; gap:10px; flex-wrap:wrap; margin-top:16px;">
           <button class="btn btn-primary" id="btn-download">⬇ Download agentcontrol-policy.yaml</button>
           <button class="btn" id="btn-copy-policy">📋 Copy to Clipboard</button>
+          <button class="btn" id="btn-simulate-policy" style="border-color:var(--accent); color:var(--accent); font-weight:700;">🧪 Dry-Run Simulation</button>
         </div>
+        <div id="policy-simulation-output" style="display:none; margin-top:14px; padding:14px; border-radius:var(--radius-sm); border:1px solid var(--accent); background:rgba(83,155,245,0.06); font-size:0.85rem; font-family:var(--font-mono); color:var(--text-bright);"></div>
       </div>
 
       <!-- Panel 09: Gateway Status & Live Controls -->
@@ -2186,12 +2188,12 @@ const tool = client.governed("name", async (args) =&gt; {
         if (reloadBtn) {
           reloadBtn.disabled = true;
           reloadBtn.style.opacity = '0.4';
-          reloadBtn.title = 'Pass --policy <path> when running agentwall protect to enable hot-reload';
+          reloadBtn.title = 'Pass --policy <path> when running agentcontrol protect to enable hot-reload';
         }
         if (reloadNotice) {
           reloadNotice.style.display = '';
           reloadNotice.innerHTML = `<span style="color:var(--amber);">⚠</span> No policy file configured.
-            Run <code style="color:var(--accent);">agentwall protect --policy agentcontrol-policy.yaml</code>
+            Run <code style="color:var(--accent);">agentcontrol protect --policy agentcontrol-policy.yaml</code>
             to enable hot-reloading, or use the <strong>✨ Live Policy Wizard</strong> to generate one.`;
         }
       }
@@ -2295,6 +2297,32 @@ const tool = client.governed("name", async (args) =&gt; {
         .replace(/"/g, '&quot;');
     }
 
+    // Universal sensitive payload redactor for secure display (DLP consistency)
+    function maskSensitivePayload(rawStr) {
+      if (!rawStr) return '{}';
+      try {
+        let text = typeof rawStr === 'string' ? rawStr : JSON.stringify(rawStr, null, 2);
+        // 1. AWS Access Keys & API Keys (AKIA...)
+        text = text.replace(/\b(AKIA[0-9A-Z]{16})\b/g, m => m.slice(0, 4) + '****' + m.slice(-4));
+        // 2. Secret keys / Generic API tokens
+        text = text.replace(/(["']?(?:api[_-]?key|secret|token|password|auth|bearer)["']?\s*[:=]\s*["'])([^"'\s]{6,})(["'])/gi, (m, p1, p2, p3) => {
+          const masked = p2.length > 8 ? p2.slice(0, 3) + '****' + p2.slice(-3) : '********';
+          return p1 + masked + p3;
+        });
+        // 3. Bearer tokens in raw strings
+        text = text.replace(/(Bearer\s+)[A-Za-z0-9_\-\.]{8,}/gi, '$1[REDACTED_TOKEN]');
+        // 4. SSN
+        text = text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '***-**-****');
+        // 5. Database Connection URIs with embedded passwords
+        text = text.replace(/((?:postgres|postgresql|mysql|mongodb|redis):\/\/[^:]+:)([^@]+)(@)/gi, '$1****$3');
+        // 6. RSA / Private Keys
+        text = text.replace(/-----BEGIN[ A-Z0-9_-]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z0-9_-]*PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n[REDACTED_RSA_KEY]\n-----END PRIVATE KEY-----');
+        return text;
+      } catch {
+        return String(rawStr);
+      }
+    }
+
     function inferType(val) {
       if (val === null || val === undefined) return 'null';
       if (typeof val === 'boolean') return 'boolean';
@@ -2314,13 +2342,12 @@ const tool = client.governed("name", async (args) =&gt; {
       return '';
     }
 
-    const DESTRUCTIVE_RE = /\b(delete|drop|wipe|rm|remove|execute|bash|shell)\b/i;
-    const TIER1_RE = DESTRUCTIVE_RE;
+    const TIER1_RE = /\b(exec|shell|bash|cmd|run_command|system|delete|drop|wipe|rm|remove|kill|eval|spawn|clock|shutdown|leak_secret|admin)\b/i;
+    const TIER2_RE = /\b(write|create|modify|alter|update|insert|send|post|http|fetch|query|database|email|sync|upload|download|run_llm|configure)\b/i;
 
     function riskTier(toolName) {
       if (TIER1_RE.test(toolName)) return { tier: 'TIER_1', cls: 'red', label: 'TIER 1' };
-      if (/\b(write|insert|update|send|post|query|database|email|message)\b/i.test(toolName))
-        return { tier: 'TIER_2', cls: 'amber', label: 'TIER 2' };
+      if (TIER2_RE.test(toolName)) return { tier: 'TIER_2', cls: 'amber', label: 'TIER 2' };
       return { tier: 'TIER_3', cls: 'green', label: 'TIER 3' };
     }
 
@@ -2583,7 +2610,11 @@ const tool = client.governed("name", async (args) =&gt; {
 
       const paramsStr = event.request_body || '{}';
       let paramPreview = '';
-      try { paramPreview = JSON.stringify(JSON.parse(paramsStr)).slice(0, 80); } catch { paramPreview = paramsStr.slice(0, 80); }
+      try {
+        paramPreview = maskSensitivePayload(JSON.stringify(JSON.parse(paramsStr))).slice(0, 80);
+      } catch {
+        paramPreview = maskSensitivePayload(paramsStr).slice(0, 80);
+      }
 
       const row = document.createElement('div');
       row.className = 'tl-row' + (isDenied ? ' blocked-row' : '');
@@ -2594,7 +2625,7 @@ const tool = client.governed("name", async (args) =&gt; {
         try {
           const parsed = JSON.parse(event.dlp_findings);
           if (parsed && parsed.findings && parsed.findings.length > 0) {
-            const listItems = parsed.findings.map(f => `<li style="margin-left: 16px; margin-top: 4px;">${escHtml(f)}</li>`).join('');
+            const listItems = parsed.findings.map(f => `<li style="margin-left: 16px; margin-top: 4px;">${escHtml(maskSensitivePayload(f))}</li>`).join('');
             dlpBlockHtml = `
           <div class="json-label" style="color: var(--red); display: flex; align-items: center; gap: 6px; font-weight: 700; margin-top: 12px; font-size: 0.75rem;">
             🛡️ Content-Aware DLP Finding
@@ -2609,7 +2640,7 @@ const tool = client.governed("name", async (args) =&gt; {
         } catch (e) {
           dlpBlockHtml = `
         <div class="json-label" style="color: var(--red); margin-top: 12px;">🛡️ DLP Finding</div>
-        <div class="json-block" style="border-color: var(--red); color: #ffb4b0;">${escHtml(event.dlp_findings)}</div>
+        <div class="json-block" style="border-color: var(--red); color: #ffb4b0;">${escHtml(maskSensitivePayload(event.dlp_findings))}</div>
       `;
         }
       }
@@ -2680,9 +2711,9 @@ const tool = client.governed("name", async (args) =&gt; {
       ${injectionBlockHtml}
       ${semanticBlockHtml}
       <div class="json-label">Parameters / Payload</div>
-      <div class="json-block">${escHtml((() => { try { return JSON.stringify(JSON.parse(paramsStr), null, 2); } catch { return paramsStr; } })())}</div>
+      <div class="json-block">${escHtml(maskSensitivePayload((() => { try { return JSON.stringify(JSON.parse(paramsStr), null, 2); } catch { return paramsStr; } })()))}</div>
       <div class="json-label">Response</div>
-      <div class="json-block">${escHtml((() => { try { return JSON.stringify(JSON.parse(event.response_body || '{}'), null, 2); } catch { return (event.response_body || ''); } })())}</div>
+      <div class="json-block">${escHtml(maskSensitivePayload((() => { try { return JSON.stringify(JSON.parse(event.response_body || '{}'), null, 2); } catch { return (event.response_body || ''); } })()))}</div>
     </div>`;
 
       row.addEventListener('click', () => row.classList.toggle('expanded'));
@@ -3384,6 +3415,34 @@ const tool = client.governed("name", async (args) =&gt; {
         toast('Copied to clipboard!', 'success');
       } catch {
         toast('Copy failed — use the download button instead.', 'error');
+      }
+    });
+
+    document.getElementById('btn-simulate-policy').addEventListener('click', async () => {
+      if (!lastPolicyYaml) return;
+      const simBox = document.getElementById('policy-simulation-output');
+      simBox.style.display = 'block';
+      simBox.innerHTML = '<span style="color:var(--accent);">⏳ Running dry-run simulation against SQLite historical telemetry...</span>';
+      try {
+        const res = await fetch('/api/policy/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ policy_yaml: lastPolicyYaml })
+        });
+        const data = await res.json();
+        if (res.ok && data.valid) {
+          simBox.innerHTML = `
+            <div style="font-weight:700; color:var(--green); margin-bottom:6px;">✔ Policy Simulation Succeeded</div>
+            <div><strong>Policy:</strong> ${escHtml(data.policy_name)} (v${escHtml(data.version || '1.0')})</div>
+            <div><strong>Tools Defined:</strong> ${data.tools_defined}</div>
+            <div><strong>Simulated Events:</strong> ${data.simulated_events} (${data.simulated_allowed} allowed, ${data.simulated_blocked} blocked)</div>
+            <div style="margin-top:6px; color:var(--text-main);">${escHtml(data.impact_assessment)}</div>
+          `;
+        } else {
+          simBox.innerHTML = `<div style="color:var(--red); font-weight:700;">❌ Simulation Failed:</div><div>${escHtml(data.error || 'Invalid policy format')}</div>`;
+        }
+      } catch (e) {
+        simBox.innerHTML = `<div style="color:var(--red);">❌ Simulation error: ${escHtml(e.message)}</div>`;
       }
     });
 

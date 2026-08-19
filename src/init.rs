@@ -23,7 +23,7 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
     println!(
         "{} {}",
         "ℹ".yellow().bold(),
-        "Notice: 'agentwall init' is deprecated in v6.1. Use 'agentwall protect' for one-command zero-config security.".yellow()
+        "Notice: 'agentcontrol init' is deprecated. Use 'agentcontrol protect' for one-command zero-config security.".yellow()
     );
     if let Some(t) = target {
         match t {
@@ -33,7 +33,7 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
 
     println!("{}", "VEXA Agent Control — One-Command Protection Notice".bold().cyan());
     println!("To discover IDEs, auto-generate local policies, and start protection, run:\n");
-    println!("  {}", "agentwall protect".bold().green());
+    println!("  {}", "agentcontrol protect".bold().green());
     println!();
 
 

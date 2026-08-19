@@ -37,7 +37,7 @@ Before getting started, ensure you have **Claude Desktop** (or Cursor, VS Code, 
 
 ## Step 1: Secure Your IDE & Start Gateway
 
-Run `agentcontrol protect` to automatically discover and wrap your installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), auto-generate a baseline `agent-control-policy.yaml` if missing, start the local gateway proxy (writing logs to `~/.agent-control/audit.jsonl`), and open the embedded dashboard in your default browser:
+Run `agentcontrol protect` to automatically discover and wrap your installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), auto-generate a baseline `agentcontrol-policy.yaml` if missing, start the local gateway proxy (writing logs to `~/.agentcontrol/audit.jsonl` and database to `~/.agentcontrol/events.db`), and open the embedded dashboard in your default browser:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
@@ -55,48 +55,65 @@ Run `agentcontrol protect` to automatically discover and wrap your installed AI 
 *Vexa Agent Control is now running, listening on `http://127.0.0.1:8080`, and has opened the embedded local dashboard in your browser.*
 
 > [!NOTE]
-> **One-Command Protection (`agentcontrol protect`):** Running `agentcontrol protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step. The legacy `agentcontrol` alias is also supported.
+> **One-Command Protection (`agentcontrol protect`):** Running `agentcontrol protect` handles discovery, baseline policy generation, atomic config wrapping, and local console launch in a single step.
 
 ---
 
-## Step 2: Connect Claude Desktop to Agent Control
+## Step 2: Instant Security Verification Smoke Test (60-Second Proof)
 
-Open a **new, separate terminal window** and run the integration command:
+In a **separate terminal window**, run the live 3-point security verification probe to confirm gateway health, DLP redaction, and prompt injection defenses in milliseconds:
 
 * **macOS / Linux (Bash / Zsh):**
   ```bash
-  agentcontrol wrap claude
-  agentcontrol status
+  agentcontrol verify
   ```
 * **Windows (PowerShell):**
   ```powershell
-  agentcontrol.exe wrap claude
-  agentcontrol.exe status
+  agentcontrol.exe verify
   ```
-* **Windows (Command Prompt - CMD):**
-  ```cmd
-  agentcontrol.exe wrap claude
-  agentcontrol.exe status
-  ```
-*(This command updates Claude Desktop's configuration file so its MCP tool traffic routes through the proxy. Running `agentcontrol status` verifies the wrapping status).*
 
-> [!TIP]
-> **New one-command option:** Instead of wrapping individual IDEs, you can use `agentcontrol protect` to auto-discover and wrap all supported IDEs simultaneously, start the gateway, and open the dashboard in one step:
-> ```bash
-> agentcontrol protect          # macOS / Linux
-> agentcontrol.exe protect      # Windows
-> agentcontrol protect --dry-run  # Preview all changes without writing
-> ```
-> To undo everything at once: `agentcontrol unprotect`
+**Sample Output:**
+```text
+  ✔ [1/3] 1. Safe Tool Call (read_file)          ➔ ALLOWED & RECORDED (3ms)
+  ✔ [2/3] 2. DLP Secret Leak (AWS Key & SSN)     ➔ MASKED / AUDITED (2ms)
+  ✔ [3/3] 3. Prompt Injection (System Override)  ➔ INTERCEPTED & FLAGGED (2ms)
+────────────────────────────────────────────────────────────────────────
+  ✨ All 3 Security Assertions Verified in 12ms!
+```
 
 ---
 
-## Step 3: Run a Real-World Scenario
+## Step 3: Connect Claude Desktop or Custom Agents
+
+To check IDE wrap status or manually wrap individual IDEs:
+
+* **macOS / Linux (Bash / Zsh):**
+  ```bash
+  agentcontrol status
+  agentcontrol wrap claude
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  agentcontrol.exe status
+  agentcontrol.exe wrap claude
+  ```
+
+*(Running `agentcontrol status` verifies that your IDE configs are actively protected).*
+
+> [!TIP]
+> **Custom Agents / CLI Tools:** If you build custom Python or Node.js agents, route their HTTP/MCP traffic to the gateway with:
+> ```bash
+> export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
+> export HTTP_PROXY=http://127.0.0.1:8080
+> ```
+
+---
+
+## Step 4: Run a Real-World Scenario or Demonstration
 
 1. Ensure standard filesystem / command MCP server tools are connected to Claude Desktop (or use standard file / search tools enabled in your IDE / agent).
-2. Open **Claude Desktop** on your computer.
-3. Ask Claude to perform a tool call. For example, type:
-   > *"Can you list the files in my current workspace folder?"* or *"Can you inspect the files in my directory?"*
+2. Open **Claude Desktop** or your IDE and ask your agent:
+   > *"Can you list the files in my current workspace folder?"*
 
 *Alternatively, run the instant test demonstration script to populate all telemetry without configuring an IDE (requires **Python 3.8+**):*
 
@@ -112,33 +129,29 @@ Open a **new, separate terminal window** and run the integration command:
   ```cmd
   python "%USERPROFILE%\.local\bin\quickstart_agent.py"
   ```
-*(This sends simulated AI tool calls through `http://127.0.0.1:8080` to populate the dashboard immediately if you see "No tool calls recorded yet").*
-
-Claude / your agent will call its configured MCP tools. Meanwhile, in your first terminal window and at `http://127.0.0.1:8080`, you will see Agent Control logging these actions in real time!
 
 ---
 
 ## Understanding the Local Observability Dashboard
 
-When opening `http://127.0.0.1:8080`, Agent Control provides an intuitive dashboard for monitoring agent activities—designed for non-security users to easily understand:
+When opening `http://127.0.0.1:8080`, Agent Control provides an intuitive dashboard for monitoring agent activities:
 
-| Panel | Purpose & Description (Plain English) |
+| Panel | Purpose & Description |
 | :--- | :--- |
-| **01. Tool Inventory** | Overview of all AI tools/APIs your agent has called, tracking total calls, last execution time, and safety risk tiers. Each tool has a 🪄 **Quick Policy** button to apply a standard security rule instantly. |
-| **02. Session Timeline** | Real-time live log of every single request, command, and tool call executed by your AI agent in chronological order. |
-| **03. Parameter Explorer** | Select any observed tool to inspect the exact input arguments, text strings, commands, or file paths passed by your agent, including inferred data types and detected data patterns. |
-| **04. Risk Flags** | Automatically flags high-risk tool operations (such as system file edits or command executions) requiring oversight. |
-| **05. Data Loss Prevention (DLP)** | Scans outgoing tool payloads to prevent accidental leakage of sensitive credentials, API keys, passwords, and personal information (PII). |
-| **06. Injection & Poisoning** | Detects prompt injection attempts and external data poisoning—where untrusted text tries to hijack agent instructions. |
-| **07. Semantic Scanner** | Uses behavioral analysis to flag unusual or out-of-context tool requests that differ from normal agent interaction patterns. |
-| **08. Generate Policy** | Automatically generates a baseline security policy (`agentcontrol-policy.yaml`) based on real observed agent traffic. |
-| **09. ADR Benchmark** | Standardized benchmark testing your agent's defense readiness against 303 security test cases across 17 attack categories. |
+| **01. Tool Inventory** | Overview of all AI tools/APIs called, tracking execution frequencies and risk tiers (Tier 1/2/3). |
+| **02. Session Timeline** | Real-time live log of tool calls with universal sensitive payload masking (AWS keys, tokens, SSNs). |
+| **03. Parameter Explorer** | Inspect input arguments and parameters passed by your agent with inferred types and distributions. |
+| **04. Risk Flags** | Automatically flags high-risk tool operations requiring oversight. |
+| **05. Data Loss Prevention (DLP)** | Content-aware secret scanning preventing exfiltration of keys, passwords, and PII. |
+| **06. Injection & Poisoning** | Detects prompt injections, homoglyphs, and system prompt override attempts. |
+| **07. Semantic Scanner** | Behavioral analysis flagging anomalous out-of-context tool invocations. |
+| **08. Generate Policy & Simulation** | Generates baseline `agentcontrol-policy.yaml` with **🧪 Dry-Run Simulation** against historical events. |
+| **09. ADR Benchmark** | Standardized benchmark testing defenses across 303 test cases and 17 attack categories. |
 
 **Dashboard highlights:**
-- **Security Posture Toggle** — Use the SHADOW ↔ ENFORCE switch in the sidebar to enable active blocking without restarting the proxy.
-- **Live Spend** — Tracks estimated LLM token cost in real-time (`$0.000` initially, accumulates as tool calls flow through).
-- **Risks Blocked** — Live counter of denied tool calls (injections, sensitive path reads, policy violations).
-- **Mission Mode Banner** — Guided test: ask your AI to read `/etc/shadow` to prove real-time detection and blocking.
+- **Security Posture Toggle** — Switch between SHADOW and ENFORCE modes in real-time.
+- **Dry-Run Policy Simulation** — Test candidate policies against historical SQLite telemetry before reloading.
+- **Sensitive Data Masking** — All AWS keys, Bearer tokens, DB credentials, and SSNs are masked from cleartext display.
 
 ---
 

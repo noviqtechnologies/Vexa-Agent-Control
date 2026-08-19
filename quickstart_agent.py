@@ -275,7 +275,7 @@ def main():
     ]
 
     for inj_call in injection_calls:
-        print(f"[ATTACK] Tool Execution: '{inj_call['name']}' (Prompt Injection)")
+        print(f"[ATTACK] Tool Execution: '{inj_call['name']}' (Simulated Prompt Injection)")
         print(f"         Purpose       : {inj_call['note']}")
         code, res = send_request(proxy_url, {
             "jsonrpc": "2.0",
@@ -283,13 +283,18 @@ def main():
             "method": "tools/call",
             "params": {"name": inj_call["name"], "arguments": inj_call["args"]}
         })
-        print("         Status        : 🛡 INJECTION INTERCEPTED & BLOCKED (Increments 'Injections Blocked' Counter)")
+        if code == 403 or (isinstance(res, dict) and ("error" in res or res.get("verdict") == "deny")):
+            print("         Status        : 🛡 [SIMULATED] INJECTION INTERCEPTED & BLOCKED (Recorded in Dashboard)")
+        elif code == 200:
+            print("         Status        : 👁 [SIMULATED] OBSERVED & AUDITED (Recorded in Dashboard)")
+        else:
+            print(f"         Status        : ⚠ [SIMULATED] Gateway responded (HTTP {code})")
         print()
 
     # ------------------------------------------------------------------
     # 4. DLP (Data Loss Prevention) Secret Leakage Simulation
     # ------------------------------------------------------------------
-    print("\nStep 4: Simulating Secret Credentials Leakage (Populating 'Secrets Blocked' Counter & Panel 05)...")
+    print("\nStep 4: Simulating Secret Credentials Leakage (Testing DLP Shield & Panel 05)...")
     print("-" * 65)
 
     dlp_calls = [
@@ -325,7 +330,7 @@ def main():
     ]
 
     for dlp_call in dlp_calls:
-        print(f"[DLP] Tool Execution   : '{dlp_call['name']}' (Secret Payload)")
+        print(f"[DLP] Tool Execution   : '{dlp_call['name']}' (Simulated Secret Payload)")
         print(f"      Purpose          : {dlp_call['note']}")
         code, res = send_request(proxy_url, {
             "jsonrpc": "2.0",
@@ -333,7 +338,12 @@ def main():
             "method": "tools/call",
             "params": {"name": dlp_call["name"], "arguments": dlp_call["args"]}
         })
-        print("      Status           : 🛡 SECRET INTERCEPTED & BLOCKED (Increments 'Secrets Blocked' Counter)")
+        if code == 403 or (isinstance(res, dict) and ("error" in res or res.get("verdict") == "deny")):
+            print("      Status           : 🛡 [SIMULATED] SECRET INTERCEPTED & MASKED (Recorded in Dashboard)")
+        elif code == 200:
+            print("      Status           : 👁 [SIMULATED] OBSERVED & DLP AUDITED (Recorded in Dashboard)")
+        else:
+            print(f"      Status           : ⚠ [SIMULATED] Gateway responded (HTTP {code})")
         print()
 
     # ------------------------------------------------------------------
@@ -362,7 +372,7 @@ def main():
         "method": "tools/call",
         "params": {"name": spend_call["name"], "arguments": spend_call["args"]}
     })
-    print("        Status         : 💰 SPEND TELEMETRY AUDITED (Updates 'Live Spend' counter in Dashboard)")
+    print("        Status         : 💰 [SIMULATED] SPEND TELEMETRY AUDITED (Updates 'Live Spend' counter in Dashboard)")
     print()
 
     # ------------------------------------------------------------------
@@ -382,7 +392,7 @@ def main():
         "note": "Out-of-context system clock alteration during a standard documentation editing session"
     }
 
-    print(f"[SEMANTIC] Tool Execution : '{semantic_call['name']}' (Behavioral Anomaly)")
+    print(f"[SEMANTIC] Tool Execution : '{semantic_call['name']}' (Simulated Behavioral Anomaly)")
     print(f"           Purpose        : {semantic_call['note']}")
     code, res = send_request(proxy_url, {
         "jsonrpc": "2.0",
@@ -390,7 +400,7 @@ def main():
         "method": "tools/call",
         "params": {"name": semantic_call["name"], "arguments": semantic_call["args"]}
     })
-    print("           Status         : 👁 OUT-OF-CONTEXT ANOMALY DETECTED (Check 'Semantic Scanner' Panel)")
+    print("           Status         : 👁 [SIMULATED] ANOMALY DETECTED (Check 'Semantic Scanner' Panel)")
     print()
 
     # ------------------------------------------------------------------
@@ -399,10 +409,18 @@ def main():
     print("\nStep 7: Verifying ADR (AI Detection & Response) Security Benchmark Posture...")
     print("-" * 65)
     code, bench_res = send_request(f"{proxy_url}/api/benchmark", method="GET")
-    score = bench_res.get("score", 88.1) if isinstance(bench_res, dict) else 88.1
-    print(f"[BENCHMARK] Security Audit Score : {score}/100 (Grade A)")
-    print(f"            Attack Categories    : 17/17 Covered (303 Security Test Cases)")
-    print("            Status               : 🛡 PASSED (Check 'ADR Benchmark' Panel)")
+    if code == 200 and isinstance(bench_res, dict) and "score" in bench_res:
+        score = bench_res.get("score", 0)
+        grade = bench_res.get("grade", "Grade A")
+        tasks = bench_res.get("tasks_executed", 303)
+        cats_tested = bench_res.get("categories_tested", 17)
+        cats_total = bench_res.get("categories_total", 17)
+        print(f"[BENCHMARK] Security Audit Score : {score}/100 ({grade})")
+        print(f"            Attack Categories    : {cats_tested}/{cats_total} Covered ({tasks} Security Test Cases)")
+        print("            Status               : 🛡 PASSED (Check 'ADR Benchmark' Panel)")
+    else:
+        print(f"[BENCHMARK] Security Audit Score : ⚠ Unavailable (HTTP {code})")
+        print("            Status               : ℹ Baseline score not returned by proxy. Run 'agentcontrol bench' to generate.")
     print()
 
     # ------------------------------------------------------------------

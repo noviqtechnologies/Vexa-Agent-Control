@@ -378,7 +378,30 @@ fn compile_policy_yaml(
         }
     }
 
-    let tools = policy_file.tools.unwrap_or_default();
+    let mut tools = policy_file.tools.unwrap_or_default();
+    if let Some(rules) = policy_file.rules {
+        for r in rules {
+            match r {
+                super::schema::RuleEntry::Tool(t) => tools.push(t),
+                super::schema::RuleEntry::Grouped(g) => {
+                    if let Some(tool_names) = g.tools {
+                        for t_name in tool_names {
+                            tools.push(super::schema::ToolRule {
+                                name: t_name,
+                                action: g.action.clone(),
+                                risk: None,
+                                parameters: None,
+                                identity: None,
+                                credential_scope: vec![],
+                                semantic_anomaly_threshold: None,
+                                a2a_trust_level: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
     let compiled_tools = match compile_tools(&tools, &mut warnings) {
         Ok(ct) => ct,
         Err(e) => return PolicyLoadResult::Fatal { error: e },

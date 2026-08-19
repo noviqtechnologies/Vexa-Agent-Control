@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.35-green.svg?style=flat-square" alt="Version"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.89%2B-orange.svg?style=flat-square" alt="Rust"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.36-green.svg?style=flat-square" alt="Version"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
   <a href="docs/owasp_agentic_top10.md"><img src="https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square" alt="OWASP ASI 2026"></a>
@@ -47,6 +47,9 @@ curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Contro
 
 # One-command zero-config security
 agentcontrol protect
+
+# Verify live enforcement in 1 second with the 3-point smoke test probe:
+agentcontrol verify
 ```
 
 **Windows (PowerShell):**
@@ -56,31 +59,35 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 
 # One-command zero-config security
 agentcontrol.exe protect
+
+# Verify live enforcement in 1 second with the 3-point smoke test probe:
+agentcontrol.exe verify
 ```
 
 **Windows (Command Prompt):**
 ```cmd
 curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
 agentcontrol.exe protect
+agentcontrol.exe verify
 ```
 
 > [!NOTE]
-> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), install `agentcontrol` and legacy alias `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install dir to your user `PATH`.
+> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They auto-fetch the **latest release** from GitHub by default (override with `-v <tag>` / `-Version <tag>`), enforce a **mandatory SHA-256 checksum** (halt on mismatch or missing `checksums.txt`), install `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install dir to your user `PATH`.
 
 **What `agentcontrol protect` does on first run:**
-1. 🛡 **Auto-generates** `agent-control-policy.yaml` with baseline P0 DLP secret rules (blocks `.env`, `.ssh/id_rsa`, `~/.aws/credentials` exfiltration) — if no policy exists (automatically falls back to `agentcontrol-policy.yaml` if present)
+1. 🛡 **Auto-generates** `agentcontrol-policy.yaml` with baseline P0 DLP secret rules (blocks `.env`, `.ssh/id_rsa`, `~/.aws/credentials` exfiltration) if no policy exists
 2. 🔍 **Discovers** all installed AI IDEs — Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex — and atomically wraps their MCP configs (timestamped backups created before any change)
-3. 🚀 **Starts** the local security gateway on `127.0.0.1:8080` — audit log written to `~/.agent-control/audit.jsonl`
+3. 🚀 **Starts** the local security gateway on `127.0.0.1:8080` — audit log written to `~/.agentcontrol/audit.jsonl` and database to `~/.agentcontrol/events.db`
 4. 🌐 **Opens** the Local Dashboard in your browser at `http://127.0.0.1:8080`
 
 > [!NOTE]
-> `agentcontrol protect` is the recommended single-step entry point for all zero-config local setups. The legacy `agentcontrol` command is retained as a 100% backward-compatible alias.
+> `agentcontrol protect` is the recommended single-step entry point for all zero-config local setups.
 
 **Optional flags:**
 ```bash
 agentcontrol protect --dry-run                                   # Preview all changes without writing to disk
 agentcontrol protect --shadow                                    # Start in observation-only (shadow) mode without blocking
-agentcontrol protect --log-path ~/.agent-control/audit.jsonl     # Override default audit log location
+agentcontrol protect --log-path ~/.agentcontrol/audit.jsonl     # Override default audit log location
 agentcontrol protect --listen 127.0.0.1:9090                     # Use a custom listen address
 ```
 
@@ -88,7 +95,7 @@ agentcontrol protect --listen 127.0.0.1:9090                     # Use a custom 
 ```powershell
 agentcontrol.exe protect --dry-run
 agentcontrol.exe protect --shadow
-agentcontrol.exe protect --log-path "$env:USERPROFILE\.agent-control\audit.jsonl"
+agentcontrol.exe protect --log-path "$env:USERPROFILE\.agentcontrol\audit.jsonl"
 ```
 
 **To restore all IDEs to their original configs:**
@@ -174,7 +181,7 @@ docker run -e AGENT_CONTROL_POLICY_PATH=/etc/agent-control/policy.yaml agent-con
 
 ### Build from Source
 
-Requires Rust 1.89+ toolchain:
+Requires Rust 1.80+ (Stable) toolchain:
 
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git

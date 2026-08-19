@@ -13,7 +13,9 @@
 use serde::Deserialize;
 
 /// The supported policy schema versions.
-pub const SUPPORTED_VERSIONS: &[&str] = &["1", "2", "2.1", "2.2"];
+pub const SUPPORTED_VERSIONS: &[&str] = &[
+    "1", "1.0", "1.0.0", "2", "2.0", "2.0.0", "2.1", "2.1.0", "2.2", "2.2.0",
+];
 
 /// FR-601: MCP Schema-Drift Detection configuration (Schema v2.2)
 #[derive(Debug, Clone, serde::Serialize, Deserialize, PartialEq)]
@@ -44,6 +46,23 @@ pub struct SequenceRuleSpec {
     pub consequent_tools: Vec<String>,
     pub action: String, // "block", "deny", "warn"
     pub message: Option<String>,
+}
+
+/// Flexible rule entry supporting standard tool rules or grouped tool rules
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum RuleEntry {
+    Tool(ToolRule),
+    Grouped(GroupedRule),
+}
+
+/// Grouped tool rule format from DB seed policies
+#[derive(Debug, Clone, Deserialize)]
+pub struct GroupedRule {
+    pub name: Option<String>,
+    pub action: String,
+    pub tools: Option<Vec<String>>,
+    pub parameters: Option<serde_json::Value>,
 }
 
 /// Top-level policy document.
@@ -78,6 +97,9 @@ pub struct PolicyFile {
     /// Tool allowlist. Empty = all denied.
     pub tools: Option<Vec<ToolRule>>,
 
+    /// Legacy / DB seed rules field.
+    pub rules: Option<Vec<RuleEntry>>,
+
     /// Agent identity configuration (FR-22).
     pub agents: Option<Vec<AgentIdentityPolicy>>,
 
@@ -98,6 +120,9 @@ pub struct PolicyFile {
 
     /// FR-601: MCP schema-drift detection configuration (v2.2).
     pub schema_drift: Option<SchemaDriftConfig>,
+
+    /// Optional safe mode enforcement toggle from centralized control plane.
+    pub enforce_safe_mode: Option<bool>,
 }
 
 /// LLM API configuration block.
