@@ -70,6 +70,8 @@ fn make_policy(n: usize) -> CompiledPolicy {
         firewall: None,
         spend_caps: None,
         llm: None,
+        sequence_rules: vec![],
+        schema_drift: None,
     }
 }
 
@@ -113,6 +115,8 @@ fn make_policy_with_schema() -> CompiledPolicy {
         firewall: None,
         spend_caps: None,
         llm: None,
+        sequence_rules: vec![],
+        schema_drift: None,
     }
 }
 

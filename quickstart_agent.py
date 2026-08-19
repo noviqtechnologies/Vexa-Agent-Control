@@ -220,16 +220,16 @@ def main():
         print()
 
     # ------------------------------------------------------------------
-    # 2. Risk Flags & Shell Command Anomaly Simulation
+    # 2. Destructive Command & Safe Mode Shield Simulation
     # ------------------------------------------------------------------
-    print("\nStep 2: Simulating High-Risk Tool Execution (Testing Risk Flags Engine)...")
+    print("\nStep 2: Simulating Destructive Command Execution (Testing Safe Mode Shield)...")
     print("-" * 65)
 
     risk_call = {
         "id": 5,
         "name": "exec_shell",
         "args": {"command": "rm -rf / --no-preserve-root", "timeout_sec": 10},
-        "note": "Potentially destructive shell command execution (Risk Flag Anomaly)"
+        "note": "Destructive root filesystem wipe execution (Safe Mode Block Assertion)"
     }
 
     print(f"[AGENT] Tool Execution: '{risk_call['name']}'")
@@ -240,7 +240,12 @@ def main():
         "method": "tools/call",
         "params": {"name": risk_call["name"], "arguments": risk_call["args"]}
     })
-    print("        Status        : ⚠ ANOMALY AUDITED & FLAGGED (Check 'Risk Flags' Panel)")
+    if code in (400, 403) or (isinstance(res, dict) and "error" in res):
+        err_val = res.get("error", {})
+        errMsg = err_val.get("message", str(err_val)) if isinstance(err_val, dict) else str(err_val)
+        print(f"        Status        : 🚫 BLOCKED BY SAFE MODE POLICY ({errMsg})")
+    else:
+        print("        Status        : ⚠ ANOMALY AUDITED & RECORDED (Observed in Dashboard)")
     print()
 
     # ------------------------------------------------------------------

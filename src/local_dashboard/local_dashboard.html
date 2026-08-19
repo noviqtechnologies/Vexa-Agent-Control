@@ -614,7 +614,7 @@
         <span>Gateway: <strong id="sidebar-gw-port">127.0.0.1:8080</strong></span>
         <span class="badge green" id="sidebar-gw-badge">LIVE</span>
       </div>
-      <div style="color: var(--text-muted); font-size: 0.68rem;">v1.0.38 Standalone Dev</div>
+      <div id="sidebar-version" style="color: var(--text-muted); font-size: 0.68rem;">v1.0.40 Standalone Dev</div>
     </div>
   </nav>
 
@@ -1328,6 +1328,24 @@
         }
       } catch (e) {
         console.warn("Integrations refresh failed:", e);
+      }
+
+      // Also refresh gateway status and dynamic version
+      try {
+        const sRes = await fetch('/api/v1/status');
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          if (sData.version) {
+            const verEl = document.getElementById('sidebar-version');
+            if (verEl) verEl.textContent = `v${sData.version} Standalone Dev`;
+          }
+          if (sData.mode) {
+            const modeEl = document.getElementById('header-mode-text');
+            if (modeEl) modeEl.textContent = sData.mode.toUpperCase();
+          }
+        }
+      } catch (e) {
+        console.warn("Gateway status refresh failed:", e);
       }
     }
 

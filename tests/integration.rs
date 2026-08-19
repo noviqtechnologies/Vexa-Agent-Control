@@ -12,4 +12,5 @@ mod integration {
     mod schema_drift_integration_test;
     mod stdio_tests;
     mod verify_probe_test;
+    mod real_client_wrapper_fixture_test;
 }

@@ -156,17 +156,27 @@ const FILE_TOOLS: &[&str] = &[
     "view_file",
     "read",
     "write",
+    "open_file",
+    "get_file",
 ];
 const COMMAND_TOOLS: &[&str] = &[
     "exec_command",
+    "exec_shell",
+    "execute_command",
     "run_shell",
     "bash",
+    "sh",
+    "zsh",
     "run_command",
     "execute",
     "terminal",
     "shell",
+    "exec",
+    "system",
+    "cmd",
+    "powershell",
 ];
-const URL_TOOLS: &[&str] = &["fetch", "http_get", "http_post", "http_request"];
+const URL_TOOLS: &[&str] = &["fetch", "http_get", "http_post", "http_request", "curl", "wget"];
 
 /// Map a tool name to a (target, param_name) pair.
 fn tool_scan_target(tool_name: &str) -> Option<(RuleTarget, &'static str)> {
@@ -359,17 +369,32 @@ impl SafeModeScanner {
     }
 }
 
-/// Extract a named parameter from tool arguments, supporting common nesting patterns.
+/// Extract a named parameter from tool arguments, supporting common nesting and alias patterns.
 fn extract_param(params: &Value, param_name: &str) -> String {
-    // Direct field: params.path, params.command, params.url
-    if let Some(v) = params.get(param_name) {
-        return value_to_string(v);
-    }
+    let aliases: &[&str] = match param_name {
+        "command" => &["command", "cmd", "script", "code", "input"],
+        "path" => &["path", "file", "filepath", "filename", "uri", "target"],
+        "url" => &["url", "uri", "endpoint", "target", "address"],
+        _ => &[param_name],
+    };
 
-    // Nested in "arguments": params.arguments.path
-    if let Some(args) = params.get("arguments") {
-        if let Some(v) = args.get(param_name) {
-            return value_to_string(v);
+    for &key in aliases {
+        // Direct field: params.path, params.command, params.url
+        if let Some(v) = params.get(key) {
+            let s = value_to_string(v);
+            if !s.is_empty() {
+                return s;
+            }
+        }
+
+        // Nested in "arguments": params.arguments.path
+        if let Some(args) = params.get("arguments") {
+            if let Some(v) = args.get(key) {
+                let s = value_to_string(v);
+                if !s.is_empty() {
+                    return s;
+                }
+            }
         }
     }
 
@@ -762,5 +787,25 @@ mod tests {
     fn legacy_scan_allows_safe() {
         let s = scanner();
         assert!(s.scan(&json!({"command": "ls -la"})).is_none());
+    }
+
+    #[test]
+    fn exec_shell_alias_and_cmd_param_blocked() {
+        let s = scanner();
+        let m = s
+            .scan_tool(
+                "exec_shell",
+                &json!({"command": "rm -rf / --no-preserve-root", "timeout_sec": 10}),
+            )
+            .unwrap();
+        assert_eq!(m.category, ThreatCategory::Destructive);
+
+        let m2 = s
+            .scan_tool(
+                "exec_command",
+                &json!({"arguments": {"cmd": "rm -rf /"}}),
+            )
+            .unwrap();
+        assert_eq!(m2.category, ThreatCategory::Destructive);
     }
 }
