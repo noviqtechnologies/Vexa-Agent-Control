@@ -167,6 +167,81 @@ fn which_windows(program: &str) -> Result<String, ()> {
     Err(())
 }
 
+/// Extracts canonical decision evidence from a JSON-RPC error response,
+/// preserving DLP and injection classifications, exact rule IDs, and findings.
+fn extract_decision_evidence(
+    resp: &serde_json::Value,
+) -> (
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+) {
+    let err = resp.get("error");
+    let verdict_detail = err
+        .and_then(|e| e.get("message"))
+        .and_then(|m| m.as_str())
+        .unwrap_or("policy_violation")
+        .to_string();
+
+    let rule_from_data = err
+        .and_then(|e| e.get("data"))
+        .and_then(|d| d.get("rule"))
+        .and_then(|r| r.as_str())
+        .map(|s| s.to_string());
+
+    let detail_lower = verdict_detail.to_lowercase();
+    let is_dlp = detail_lower.contains("dlp")
+        || detail_lower.contains("secret")
+        || detail_lower.contains("access key");
+    let is_injection = detail_lower.contains("injection")
+        || detail_lower.contains("jailbreak")
+        || detail_lower.contains("override");
+
+    let (policy_rule, dlp_findings, injection_findings) = if let Some(rule) = rule_from_data {
+        let dlp = if is_dlp {
+            Some(serde_json::json!({"blocked": verdict_detail}).to_string())
+        } else {
+            None
+        };
+        let inj = if is_injection {
+            Some(serde_json::json!({"blocked": verdict_detail}).to_string())
+        } else {
+            None
+        };
+        (rule, dlp, inj)
+    } else if is_dlp {
+        (
+            "DLP-01-HIGH-ENTROPY".to_string(),
+            Some(serde_json::json!({"blocked": verdict_detail}).to_string()),
+            None,
+        )
+    } else if is_injection {
+        (
+            "INJ-04-OVERRIDE".to_string(),
+            None,
+            Some(serde_json::json!({"blocked": verdict_detail}).to_string()),
+        )
+    } else {
+        ("tool_deny".to_string(), None, None)
+    };
+
+    let response_status = Some(400);
+    let response_body = Some(verdict_detail);
+    let verdict = "deny".to_string();
+
+    (
+        response_status,
+        response_body,
+        dlp_findings,
+        injection_findings,
+        Some(policy_rule),
+        verdict,
+    )
+}
+
 pub async fn run_stdio_bridge(
     state: Arc<ProxyState>,
     mut command: Command,
@@ -294,25 +369,9 @@ pub async fn run_stdio_bridge(
                                 }
                             }
                             ProxyAction::Respond(resp) | ProxyAction::RespondWithStatus(_, resp) => {
-                                // P0 fix: persist tool_deny event — request blocked by policy before
-                                // reaching the upstream; record it in events.db for dashboard visibility.
-                                let verdict_detail = resp.get("error")
-                                    .and_then(|e| e.get("message"))
-                                    .and_then(|m| m.as_str())
-                                    .unwrap_or("policy_violation")
-                                    .to_string();
-                                let policy_rule = resp.get("error")
-                                    .and_then(|e| e.get("data"))
-                                    .and_then(|d| d.get("rule"))
-                                    .and_then(|r| r.as_str())
-                                    .unwrap_or("tool_deny")
-                                    .to_string();
-                                let is_dlp = verdict_detail.to_lowercase().contains("dlp")
-                                    || verdict_detail.to_lowercase().contains("secret")
-                                    || verdict_detail.to_lowercase().contains("access key");
-                                let is_injection = verdict_detail.to_lowercase().contains("injection")
-                                    || verdict_detail.to_lowercase().contains("jailbreak")
-                                    || verdict_detail.to_lowercase().contains("override");
+                                // P0 fix: persist canonical tool_deny event with full threat fidelity
+                                let (response_status, response_body, dlp_findings, injection_findings, policy_rule, verdict) =
+                                    extract_decision_evidence(&resp);
 
                                 let event = crate::proxy::db::EgressEvent {
                                     timestamp_ns,
@@ -325,25 +384,17 @@ pub async fn run_stdio_bridge(
                                     request_headers: None,
                                     request_body: req_body_preview,
                                     request_body_hash: None,
-                                    response_status: Some(400),
-                                    response_body: Some(verdict_detail.clone()),
+                                    response_status,
+                                    response_body,
                                     response_body_hash: None,
-                                    dlp_findings: if is_dlp {
-                                        Some(serde_json::json!({"blocked": verdict_detail}).to_string())
-                                    } else {
-                                        None
-                                    },
-                                    injection_findings: if is_injection {
-                                        Some(serde_json::json!({"blocked": verdict_detail}).to_string())
-                                    } else {
-                                        None
-                                    },
+                                    dlp_findings,
+                                    injection_findings,
                                     latency_ms: Some(0.0),
-                                    verdict: Some("deny".to_string()),
+                                    verdict: Some(verdict),
                                     semantic_anomaly_score: None,
                                     identity_context: None,
                                     source: Some("production".to_string()),
-                                    policy_rule: Some(policy_rule),
+                                    policy_rule,
                                 };
                                 if let Ok(json_str) = serde_json::to_string(&event) {
                                     let _ = state.event_tx.send(json_str);
@@ -357,7 +408,11 @@ pub async fn run_stdio_bridge(
                                 }
                             }
                             ProxyAction::KillAndRespond(resp) | ProxyAction::KillAndRespondWithStatus(_, resp) => {
-                                // P0 fix: persist kill-deny event before terminating.
+                                // P0 fix: persist canonical denial event with complete threat findings
+                                // before terminating child process.
+                                let (response_status, response_body, dlp_findings, injection_findings, policy_rule, verdict) =
+                                    extract_decision_evidence(&resp);
+
                                 let event = crate::proxy::db::EgressEvent {
                                     timestamp_ns,
                                     session_id: local_session.session_id.clone(),
@@ -369,17 +424,17 @@ pub async fn run_stdio_bridge(
                                     request_headers: None,
                                     request_body: req_body_preview,
                                     request_body_hash: None,
-                                    response_status: Some(403),
-                                    response_body: Some("kill_and_deny".to_string()),
+                                    response_status,
+                                    response_body,
                                     response_body_hash: None,
-                                    dlp_findings: None,
-                                    injection_findings: None,
+                                    dlp_findings,
+                                    injection_findings,
                                     latency_ms: Some(0.0),
-                                    verdict: Some("deny".to_string()),
+                                    verdict: Some(verdict),
                                     semantic_anomaly_score: None,
                                     identity_context: None,
                                     source: Some("production".to_string()),
-                                    policy_rule: Some("kill_and_deny".to_string()),
+                                    policy_rule,
                                 };
                                 if let Ok(json_str) = serde_json::to_string(&event) {
                                     let _ = state.event_tx.send(json_str);

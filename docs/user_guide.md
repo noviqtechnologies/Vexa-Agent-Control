@@ -257,18 +257,48 @@ Output:
 
 ### Event-Driven Configuration Watcher Daemon
 
-AI IDEs or extensions may rewrite their configuration files. The Agent Control watcher daemon monitors configuration files via native OS filesystem events (`ReadDirectoryChangesW` on Windows, `FSEvents` on macOS, `inotify` on Linux):
+### Stdio Proxy Architecture & Transparent Interception
 
-```bash
-# Watch all verified IDE targets in the background:
-agentcontrol watch --all
+When wrapping IDE configurations like Claude Desktop, Agent Control substitutes the direct MCP server binary invocation with:
 
-# Watch a specific IDE target:
-agentcontrol watch claude
-agentcontrol watch cursor
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "agentcontrol",
+      "args": ["stdio-proxy", "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/workspace"]
+    }
+  }
+}
 ```
 
-When an unwrapped entry is detected, the watcher re-wraps the configuration within `<300ms` and records a security audit log.
+**Interception & Decision Lifecycle:**
+1. **Zero-Latency Transparent Stream:** MCP client (IDE) communicates via standard JSON-RPC over stdin/stdout.
+2. **Deterministic Pre-Execution Evaluation:** Tool requests (`tools/call`) are evaluated against active policies and regex engines before any byte reaches the upstream process.
+3. **Canonical Threat Classification:** Hostile payloads are halted immediately with JSON-RPC error responses, preserving exact threat classifications:
+   - **DLP Exfiltration Attempts:** Gated and persisted as `DLP-01-HIGH-ENTROPY` with structured DLP finding metadata.
+   - **Prompt Injection & System Overrides:** Gated and persisted as `INJ-04-OVERRIDE` with injection finding metadata.
+   - **Safe Permitted Operations:** Forwarded transparently to upstream server and recorded as `tool_allow` / `default_allowlist`.
+4. **Cross-Process WAL Persistence:** All policy decisions are atomically committed to `~/.agentcontrol/events.db` (using SQLite Write-Ahead Logging) and badged as **REAL** in the local dashboard (`http://127.0.0.1:8080`).
+
+### Custom IDE Config Paths & Non-Standard Environments
+
+If your IDE is installed in a non-standard location or marked as unverified in `agentcontrol status`, you can protect it manually using either of the following approaches:
+
+1. **Direct CLI Wrapping in Custom Configs:**
+   Update your IDE's MCP JSON config manually by prefixing your command with `agentcontrol stdio-proxy --`:
+   ```json
+   "command": "agentcontrol",
+   "args": ["stdio-proxy", "--", "python3", "my_mcp_server.py"]
+   ```
+
+2. **Environment Variable Overrides:**
+   Point Agent Control to custom config directories using environment variables before running `agentcontrol protect`:
+   ```bash
+   export CLAUDE_CONFIG_DIR="/custom/path/to/Claude"
+   export CURSOR_CONFIG_DIR="/custom/path/to/Cursor"
+   agentcontrol protect
+   ```
 
 ---
 

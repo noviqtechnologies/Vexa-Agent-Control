@@ -224,9 +224,8 @@ fn test_stdio_proxy_process_integration() {
         upstream_calls[0]
     );
 
-    // ── Assert events.db persistence (P0 validation) ─────────────────────────────
-    // All 3 policy decisions (1 allow + 2 deny) must be recorded in events.db.
-    // This assertion validates the P0 fix: db_manager.insert() in stdio.rs.
+    // ── Assert events.db persistence & semantic threat fidelity (P0 & P1 validation) ───
+    // All 3 policy decisions (1 allow + 2 deny) must be recorded in events.db with exact threat classifications.
     let db_path = dirs::home_dir()
         .expect("home dir")
         .join(".agentcontrol")
@@ -238,19 +237,80 @@ fn test_stdio_proxy_process_integration() {
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .expect("open events.db for verification");
-        let stdio_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM egress_events \
-                 WHERE transport='stdio' AND source='production'",
-                [],
-                |row| row.get(0),
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT verdict, policy_rule, dlp_findings, injection_findings FROM egress_events \
+                 WHERE transport='stdio' AND source='production' ORDER BY id DESC LIMIT 3",
             )
-            .unwrap_or(0);
+            .expect("prepare select from egress_events");
+
+        let events: Vec<(String, Option<String>, Option<String>, Option<String>)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .expect("query events")
+            .filter_map(|r| r.ok())
+            .collect();
+
         assert!(
-            stdio_count >= 3,
-            "events.db must contain >=3 stdio/production events (1 allow + 2 deny). \
-             Found {}. P0 fix (db_manager.insert in stdio.rs) may not be active.",
-            stdio_count
+            events.len() >= 3,
+            "events.db must contain >=3 stdio/production events. Found {}.",
+            events.len()
+        );
+
+        // events[0]: 3rd request (Prompt Injection)
+        let (inj_verdict, inj_rule, _inj_dlp, inj_findings) = &events[0];
+        assert_eq!(
+            inj_verdict, "deny",
+            "Injection event must have verdict='deny'"
+        );
+        assert_eq!(
+            inj_rule.as_deref(),
+            Some("INJ-04-OVERRIDE"),
+            "Injection event must retain canonical policy_rule='INJ-04-OVERRIDE', got {:?}",
+            inj_rule
+        );
+        assert!(
+            inj_findings.is_some(),
+            "Injection event must have non-empty injection_findings JSON"
+        );
+
+        // events[1]: 2nd request (DLP Secret Exfiltration)
+        let (dlp_verdict, dlp_rule, dlp_findings, _dlp_inj) = &events[1];
+        assert_eq!(dlp_verdict, "deny", "DLP event must have verdict='deny'");
+        assert_eq!(
+            dlp_rule.as_deref(),
+            Some("DLP-01-HIGH-ENTROPY"),
+            "DLP event must retain canonical policy_rule='DLP-01-HIGH-ENTROPY', got {:?}",
+            dlp_rule
+        );
+        assert!(
+            dlp_findings.is_some(),
+            "DLP event must have non-empty dlp_findings JSON"
+        );
+
+        // events[2]: 1st request (Safe Tool Call)
+        let (safe_verdict, safe_rule, safe_dlp, safe_inj) = &events[2];
+        assert_eq!(
+            safe_verdict, "allow",
+            "Safe event must have verdict='allow'"
+        );
+        assert_eq!(
+            safe_rule.as_deref(),
+            Some("tool_allow"),
+            "Safe event must have policy_rule='tool_allow', got {:?}",
+            safe_rule
+        );
+        assert!(safe_dlp.is_none(), "Safe event must have no DLP findings");
+        assert!(
+            safe_inj.is_none(),
+            "Safe event must have no injection findings"
         );
     } else {
         eprintln!(

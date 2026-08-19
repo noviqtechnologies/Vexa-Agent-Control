@@ -38,6 +38,12 @@ jobs:
       - name: Build Binary
         run: cargo build --release
 
+      - name: Run Unit and Integration Tests
+        run: cargo test --release
+
+      - name: Run Process-Level Stdio Integration Test
+        run: cargo test -p agentcontrol --test integration stdio_process_integration -- --nocapture
+
       - name: Test Dry-Run Protect
         run: ./target/release/${{ matrix.bin_name }} protect --dry-run
 

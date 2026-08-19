@@ -494,13 +494,23 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
 
 fn print_banner() {
     let version = env!("CARGO_PKG_VERSION");
-    println!("┌────────────────────────────────────────────────────────────┐");
+    println!("{}", "┌────────────────────────────────────────────────────────────────────────────────┐".cyan());
     println!(
-        "│  {}  {}  │",
-        "🛡 VEXA AGENT CONTROL — Local AI Firewall & Security Gateway".bold().cyan(),
-        format!("v{}", version).dimmed()
+        "│  {}  {} │",
+        "🛡️  VEXA AGENT CONTROL — Intelligent MCP Security Gateway".bold().cyan(),
+        format!("(v{})", version).dimmed()
     );
-    println!("└────────────────────────────────────────────────────────────┘");
+    println!(
+        "│  Gateway: {}  •  Dashboard: {}          │",
+        "http://127.0.0.1:8080".green(),
+        "http://127.0.0.1:8080".cyan()
+    );
+    println!(
+        "│  Transport: {}   •  Enforcement: {} │",
+        "stdio / HTTP proxy".yellow(),
+        "ACTIVE (DLP + Injection Guard)".green().bold()
+    );
+    println!("{}", "└────────────────────────────────────────────────────────────────────────────────┘".cyan());
 }
 
 fn resolve_audit_log_path() -> std::path::PathBuf {
@@ -606,7 +616,7 @@ async fn run_stdio_proxy(
         policy: std::sync::RwLock::new(None), // Safe Mode only for Claude wrap
         audit_logger,
         session_id,
-        kill_mode: KillMode::Process,
+        kill_mode: KillMode::Connection,
         agent_pid: None,
         upstream_url: "".to_string(),
         dry_run: false,
@@ -2090,7 +2100,7 @@ async fn run_dev(
         policy: std::sync::RwLock::new(compiled_policy),
         audit_logger,
         session_id,
-        kill_mode: KillMode::Process,
+        kill_mode: KillMode::Connection,
         agent_pid: None,
         upstream_url: mcp_url,
         dry_run: false,

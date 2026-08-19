@@ -1341,6 +1341,20 @@ async fn handle_deny(
         }),
     );
 
+    let rule_id = if reason.to_lowercase().contains("dlp")
+        || reason.to_lowercase().contains("secret")
+        || reason.to_lowercase().contains("access key")
+    {
+        "DLP-01-HIGH-ENTROPY"
+    } else if reason.to_lowercase().contains("injection")
+        || reason.to_lowercase().contains("jailbreak")
+        || reason.to_lowercase().contains("override")
+    {
+        "INJ-04-OVERRIDE"
+    } else {
+        "tool_deny"
+    };
+
     let error_response = json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -1349,6 +1363,7 @@ async fn handle_deny(
             "message": format!("Policy violation: {}", reason),
             "data": {
                 "session_id": session_id,
+                "rule": rule_id,
                 "parameter":  failing_param,
                 "validator":  failing_validator,
                 "kill_mode":  state.kill_mode.as_str()

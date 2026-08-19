@@ -1387,8 +1387,10 @@
         if (e.url_path) uniqueTools.add(e.url_path);
         const isDeny = e.verdict === 'deny' || e.response_status === 403 || e.response_status === 400;
         if (isDeny) blocked++; else allowed++;
-        if (e.dlp_findings) dlp++;
-        if (e.injection_findings) inj++;
+        const isDlp = !!e.dlp_findings || (e.policy_rule && e.policy_rule.includes('DLP'));
+        const isInj = !!e.injection_findings || (e.policy_rule && (e.policy_rule.includes('INJ') || e.policy_rule.includes('INJECTION')));
+        if (isDlp) dlp++;
+        if (isInj) inj++;
       });
 
       document.getElementById('ov-decisions-val').textContent = events.length;
@@ -1551,8 +1553,8 @@
       }
 
       tbody.innerHTML = flagged.map(e => {
-        const isDlp = !!e.dlp_findings;
-        const isInj = !!e.injection_findings;
+        const isDlp = !!e.dlp_findings || (e.policy_rule && e.policy_rule.includes('DLP'));
+        const isInj = !isDlp && (!!e.injection_findings || (e.policy_rule && (e.policy_rule.includes('INJ') || e.policy_rule.includes('INJECTION'))));
         const dataCategory = isDlp ? 'dlp' : isInj ? 'injection' : 'risk';
         const cat = isDlp
           ? '<span class="badge red">DLP / SECRETS</span>'
@@ -1560,7 +1562,7 @@
           ? '<span class="badge red">INJECTION</span>'
           : '<span class="badge amber">RISK</span>';
         const disp = '<span class="badge red">DENIED</span>';
-        const rule = e.policy_rule || (isDlp ? 'DLP-HIGH-ENTROPY-01' : isInj ? 'INJ-SYSTEM-OVERRIDE' : 'POLICY-HIGH-RISK');
+        const rule = e.policy_rule || (isDlp ? 'DLP-01-HIGH-ENTROPY' : isInj ? 'INJ-04-OVERRIDE' : 'POLICY-HIGH-RISK');
         const preview = maskSensitivePayload(e.request_body || '{}');
         const isSim = (e.source === 'simulated');
         const isVerify = (e.source === 'verification');
