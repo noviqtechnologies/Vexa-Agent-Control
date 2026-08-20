@@ -345,3 +345,23 @@ func (s *Store) InsertTamperLog(ctx context.Context, tenantID string, log *model
 	`, tenantID, log.DeviceID, log.TargetIDE, log.DetectedDiff, log.ActionTaken)
 	return err
 }
+
+// ValidateDeviceToken returns true if the token matches an enrolled/active device or enrollment.
+func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
+	if token == "" {
+		return false
+	}
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM devices 
+			WHERE (id::text = $1 OR stable_device_id = $1)
+			  AND state != 'REVOKED'
+			UNION
+			SELECT 1 FROM device_enrollments
+			WHERE (device_id::text = $1 OR hostname = $1)
+			  AND enrollment_status != 'REVOKED'
+		)
+	`, token).Scan(&exists)
+	return err == nil && exists
+}

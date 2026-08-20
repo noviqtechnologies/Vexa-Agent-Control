@@ -92,16 +92,21 @@ func DashboardAuth() func(http.Handler) http.Handler {
 	}
 }
 
-// GatewayAuth validates the shared HMAC secret the gateway uses for
-// ingest endpoints. Fails closed if secret is empty.
-func GatewayAuth(secret string) func(http.Handler) http.Handler {
+// DeviceValidator is an interface for validating enrolled device IDs/tokens.
+type DeviceValidator interface {
+	ValidateDeviceToken(ctx context.Context, token string) bool
+}
+
+// GatewayAuth validates either:
+// 1. The shared HMAC secret the gateway uses (GATEWAY_SECRET)
+// 2. An enrolled device token or device ID in the database
+func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler) http.Handler {
+	var v DeviceValidator
+	if len(validator) > 0 {
+		v = validator[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if secret == "" {
-				http.Error(w, `{"error":"gateway authentication unconfigured"}`, http.StatusUnauthorized)
-				return
-			}
-
 			auth := r.Header.Get("Authorization")
 			if !strings.HasPrefix(auth, "Bearer ") {
 				http.Error(w, `{"error":"missing gateway token"}`, http.StatusUnauthorized)
@@ -109,12 +114,17 @@ func GatewayAuth(secret string) func(http.Handler) http.Handler {
 			}
 			token := strings.TrimPrefix(auth, "Bearer ")
 
-			if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
-				http.Error(w, `{"error":"invalid gateway token"}`, http.StatusForbidden)
+			if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			if v != nil && v.ValidateDeviceToken(r.Context(), token) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			http.Error(w, `{"error":"invalid gateway token"}`, http.StatusForbidden)
 		})
 	}
 }

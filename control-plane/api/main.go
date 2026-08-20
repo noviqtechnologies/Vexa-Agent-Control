@@ -213,11 +213,11 @@ func main() {
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/active", policyMgmtH.GetActive)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/active", policyMgmtH.GetActive)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
-	r.With(middleware.GatewayAuth(cfg.GatewaySecret)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
-	// Ingest endpoints — gateway auth (shared secret / device JWT), NOT OIDC.
+	// Ingest endpoints — gateway auth (shared secret / enrolled device ID), NOT OIDC.
 	r.Route("/api/v1/ingest", func(r chi.Router) {
-		r.Use(middleware.GatewayAuth(cfg.GatewaySecret))
+		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db))
 		r.Post("/events", ingestH.PostEvent)
 		r.Post("/alerts", ingestH.PostAlert)
 		r.Post("/credentials", ingestH.PostCredential)
