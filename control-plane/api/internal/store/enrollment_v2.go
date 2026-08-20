@@ -150,6 +150,11 @@ func (s *Store) AtomicallyConsumeOTET(
 		INSERT INTO enrollment_challenges (
 			tenant_id, transaction_id, challenge_hash, transcript_sha256, expires_at
 		) VALUES ($1, $2, $3, '', $4)
+		ON CONFLICT (transaction_id) DO UPDATE SET
+			challenge_hash = EXCLUDED.challenge_hash,
+			transcript_sha256 = '',
+			expires_at = EXCLUDED.expires_at,
+			created_at = now()
 		RETURNING id;
 	`
 	err = tx.QueryRow(ctx, insertChallengeQuery, tenID, txID, challengeHash, expiryTime).Scan(&challengeID)
