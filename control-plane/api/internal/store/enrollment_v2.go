@@ -145,16 +145,12 @@ func (s *Store) AtomicallyConsumeOTET(
 		return "", "", "", fmt.Errorf("insert enrollment transaction: %w", err)
 	}
 
-	// 4. Create Challenge
+	// 4. Delete any stale challenge for this transaction and insert fresh challenge
+	_, _ = tx.Exec(ctx, `DELETE FROM enrollment_challenges WHERE transaction_id = $1`, txID)
 	insertChallengeQuery := `
 		INSERT INTO enrollment_challenges (
 			tenant_id, transaction_id, challenge_hash, transcript_sha256, expires_at
 		) VALUES ($1, $2, $3, '', $4)
-		ON CONFLICT (transaction_id) DO UPDATE SET
-			challenge_hash = EXCLUDED.challenge_hash,
-			transcript_sha256 = '',
-			expires_at = EXCLUDED.expires_at,
-			created_at = now()
 		RETURNING id;
 	`
 	err = tx.QueryRow(ctx, insertChallengeQuery, tenID, txID, challengeHash, expiryTime).Scan(&challengeID)
