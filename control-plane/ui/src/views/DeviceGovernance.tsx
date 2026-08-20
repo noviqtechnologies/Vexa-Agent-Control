@@ -50,7 +50,7 @@ export default function DeviceGovernance() {
   const [deviceLabel, setDeviceLabel] = useState('')
   const [ttlHours, setTtlHours] = useState(24)
   const [tokenError, setTokenError] = useState<string | null>(null)
-  const [copiedField, setCopiedField] = useState<'unix' | 'win' | null>(null)
+  const [copiedField, setCopiedField] = useState<'unix' | 'win' | 'cli' | null>(null)
 
   const [allDevices, setAllDevices] = useState<Device[]>([])
 
@@ -637,61 +637,94 @@ export default function DeviceGovernance() {
                   <button type="submit" className="btn btn-primary">Generate Single-Use Token</button>
                 </div>
               </form>
-            ) : (
-              <div>
-                <div style={{ padding: '10px 12px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', marginBottom: '16px' }}>
-                  <span style={{ color: '#22c55e', fontWeight: 700, display: 'block', fontSize: '13px' }}>✔ One-Time Token Created</span>
-                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Single-use (max_uses=1), expires in {ttlHours} hours. Transmit via secure private channel.</span>
-                </div>
-                <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '12px', color: '#888' }}>Enrollment Command (Linux / macOS):</div>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'unix' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      onClick={() => {
-                        const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
-                        const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="${generatedToken.token}" AGENTCONTROL_HUB_URL="${hubUrl}" bash`
-                        navigator.clipboard.writeText(cmd)
-                        setCopiedField('unix')
-                        setTimeout(() => setCopiedField(null), 2000)
-                      }}
-                    >
-                      {copiedField === 'unix' ? 'Copied!' : 'Copy'}
-                    </button>
+            ) : (() => {
+                const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
+                return (
+                  <div>
+                    <div style={{ padding: '12px 14px', backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 'var(--radius-sm, 6px)', marginBottom: '16px' }}>
+                      <span style={{ color: 'var(--success, #10b981)', fontWeight: 700, display: 'block', fontSize: '13px' }}>✔ One-Time Enrollment Token Generated</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary, #a1a1aa)' }}>Single-use token valid for {ttlHours} hours. Transmit over a secure private channel.</span>
+                    </div>
+
+                    {/* macOS / Linux Command */}
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-surface-0, #111)', border: '1px solid var(--border, #27272a)', borderRadius: 'var(--radius-sm, 6px)', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #888)' }}>macOS / Linux (Bash):</div>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'unix' ? 'var(--success, #10b981)' : 'var(--bg-surface-3, #333)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                          onClick={() => {
+                            const cmd = `curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="${generatedToken.token}" AGENTCONTROL_HUB_URL="${hubUrl}" bash`
+                            navigator.clipboard.writeText(cmd)
+                            setCopiedField('unix')
+                            setTimeout(() => setCopiedField(null), 2000)
+                          }}
+                        >
+                          {copiedField === 'unix' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <pre style={{ margin: 0, fontSize: '11px', color: '#10b981', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>
+                        curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="{generatedToken.token}" AGENTCONTROL_HUB_URL="{hubUrl}" bash
+                      </pre>
+                    </div>
+
+                    {/* Windows Command */}
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-surface-0, #111)', border: '1px solid var(--border, #27272a)', borderRadius: 'var(--radius-sm, 6px)', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #888)' }}>Windows (PowerShell):</div>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? 'var(--success, #10b981)' : 'var(--bg-surface-3, #333)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                          onClick={() => {
+                            const cmd = `$env:AGENTCONTROL_TOKEN="${generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
+                            navigator.clipboard.writeText(cmd)
+                            setCopiedField('win')
+                            setTimeout(() => setCopiedField(null), 2000)
+                          }}
+                        >
+                          {copiedField === 'win' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <pre style={{ margin: 0, fontSize: '11px', color: '#38bdf8', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>
+                        $env:AGENTCONTROL_TOKEN="{generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="{hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex
+                      </pre>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span>ℹ️</span>
+                        <span><strong>Note:</strong> Sentry service installation requires Administrator privileges on Windows (run PowerShell as Administrator).</span>
+                      </div>
+                    </div>
+
+                    {/* Direct CLI Command */}
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-surface-0, #111)', border: '1px solid var(--border, #27272a)', borderRadius: 'var(--radius-sm, 6px)', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #888)' }}>Direct CLI:</div>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'cli' ? 'var(--success, #10b981)' : 'var(--bg-surface-3, #333)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                          onClick={() => {
+                            const cmd = `agentcontrol enroll --hub ${hubUrl} --token ${generatedToken.token}`
+                            navigator.clipboard.writeText(cmd)
+                            setCopiedField('cli')
+                            setTimeout(() => setCopiedField(null), 2000)
+                          }}
+                        >
+                          {copiedField === 'cli' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <pre style={{ margin: 0, fontSize: '11px', color: '#a78bfa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>
+                        agentcontrol enroll --hub {hubUrl} --token {generatedToken.token}
+                      </pre>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="button" className="btn btn-primary" onClick={() => { setShowTokenModal(false); setCopiedField(null); }}>Done</button>
+                    </div>
                   </div>
-                  <pre style={{ margin: 0, fontSize: '12px', color: '#22c55e', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    curl -fsSL https://vexasec.io/install/team_otet.sh | AGENTCONTROL_TOKEN="{generatedToken.token}" AGENTCONTROL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}" bash
-                  </pre>
-                </div>
-                <div style={{ padding: '12px', backgroundColor: '#111', borderRadius: '6px', marginBottom: '16px', position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '12px', color: '#888' }}>Enrollment Command (Windows PowerShell):</div>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'win' ? '#22c55e' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      onClick={() => {
-                        const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
-                        const cmd = `$env:AGENTCONTROL_TOKEN="${generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="${hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex`
-                        navigator.clipboard.writeText(cmd)
-                        setCopiedField('win')
-                        setTimeout(() => setCopiedField(null), 2000)
-                      }}
-                    >
-                      {copiedField === 'win' ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  <pre style={{ margin: 0, fontSize: '12px', color: '#3b82f6', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    $env:AGENTCONTROL_TOKEN="{generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'}"; irm https://vexasec.io/install/team_otet.ps1 | iex
-                  </pre>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn btn-primary" onClick={() => { setShowTokenModal(false); setCopiedField(null); }}>Done</button>
-                </div>
-              </div>
-            )}
+                )
+              })()}
           </div>
         </div>
       )}

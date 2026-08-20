@@ -10,8 +10,8 @@ Write-Host "[*] Vexa Agent Control Team OTET Enterprise Provisioning Installer" 
 
 $Token = $env:AGENTCONTROL_TOKEN
 if (!$Token) { $Token = $env:AGENTCONTROL_ENROLLMENT_TOKEN }
-$HubUrl = $env:DASHBOARD_API_URL
-if (!$HubUrl) { $HubUrl = $env:AGENTCONTROL_HUB_URL }
+$HubUrl = $env:AGENTCONTROL_HUB_URL
+if (!$HubUrl) { $HubUrl = $env:DASHBOARD_API_URL }
 if (!$HubUrl) { $HubUrl = "http://localhost:8400" }
 
 if (!$Token) {
@@ -60,7 +60,7 @@ if ($RunningService) {
     Write-Host "[*] Stopping active AgentControlSentry service for update..." -ForegroundColor $ColorYellow
     Stop-Service AgentControlSentry -Force -ErrorAction SilentlyContinue
 }
-Get-Process agentwall, agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
 Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
@@ -76,12 +76,12 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
 try {
     # Sync user credentials to SYSTEM service profile if elevated
-    $SystemAgentWall = "C:\Windows\System32\config\systemprofile\.agentcontrol"
-    if (!(Test-Path $SystemAgentWall)) {
-        New-Item -ItemType Directory -Path $SystemAgentWall -Force -ErrorAction SilentlyContinue | Out-Null
+    $SystemAgentControl = "C:\Windows\System32\config\systemprofile\.agentcontrol"
+    if (!(Test-Path $SystemAgentControl)) {
+        New-Item -ItemType Directory -Path $SystemAgentControl -Force -ErrorAction SilentlyContinue | Out-Null
     }
     if (Test-Path "$env:USERPROFILE\.agentcontrol") {
-        Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentWall -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
     }
     [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
     if ($env:GATEWAY_SECRET) {

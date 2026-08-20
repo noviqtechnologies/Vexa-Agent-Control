@@ -710,6 +710,10 @@ export default function Devices() {
                   <pre style={{ margin: 0, fontSize: '11px', color: '#38bdf8', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
                     $env:AGENTCONTROL_TOKEN="{generatedToken.token}"; $env:AGENTCONTROL_HUB_URL="{hubUrl}"; irm https://vexasec.io/install/team_otet.ps1 | iex
                   </pre>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span>ℹ️</span>
+                    <span><strong>Note:</strong> Sentry service installation requires Administrator privileges on Windows (run PowerShell as Administrator).</span>
+                  </div>
                 </div>
 
                 {/* Agent Control CLI Direct Command */}

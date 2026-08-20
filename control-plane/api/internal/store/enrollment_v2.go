@@ -68,6 +68,7 @@ func (s *Store) AtomicallyConsumeOTET(
 	txExpiry time.Duration,
 ) (txID string, challengeID string, tenantID string, err error) {
 	tokSum := sha256.Sum256([]byte(rawToken))
+	hexStr := hex.EncodeToString(tokSum[:])
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -75,11 +76,11 @@ func (s *Store) AtomicallyConsumeOTET(
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Lock and validate token row
+	// 1. Lock and validate token row (matching both raw 32-byte and 64-byte hex string encodings)
 	tokenQuery := `
 		SELECT id, tenant_id, status, current_uses, max_uses, expires_at
 		FROM enrollment_tokens
-		WHERE token_hash = $1
+		WHERE token_hash = $1 OR token_hash = $2
 		FOR UPDATE;
 	`
 	var tID, tenID string
@@ -87,7 +88,7 @@ func (s *Store) AtomicallyConsumeOTET(
 	var currentUses, maxUses int
 	var tokenExpiresAt time.Time
 
-	err = tx.QueryRow(ctx, tokenQuery, tokSum[:]).Scan(
+	err = tx.QueryRow(ctx, tokenQuery, tokSum[:], []byte(hexStr)).Scan(
 		&tID, &tenID, &status, &currentUses, &maxUses, &tokenExpiresAt,
 	)
 	if err != nil {
