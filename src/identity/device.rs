@@ -418,7 +418,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     let start_res = match client.post(&start_endpoint).json(&start_payload).send().await {
         Ok(res) => res,
         Err(e) => {
-            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), start_endpoint, e);
+            let mut err_msg = format!("{}", e);
+            let mut source = std::error::Error::source(&e);
+            while let Some(s) = source {
+                err_msg.push_str(&format!(" -> {}", s));
+                source = std::error::Error::source(s);
+            }
+            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), start_endpoint, err_msg);
             return 1;
         }
     };
@@ -470,7 +476,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     let complete_res = match client.post(&complete_endpoint).json(&complete_payload).send().await {
         Ok(res) => res,
         Err(e) => {
-            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), complete_endpoint, e);
+            let mut err_msg = format!("{}", e);
+            let mut source = std::error::Error::source(&e);
+            while let Some(s) = source {
+                err_msg.push_str(&format!(" -> {}", s));
+                source = std::error::Error::source(s);
+            }
+            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), complete_endpoint, err_msg);
             return 1;
         }
     };
