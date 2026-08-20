@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentcontrol"
-version = "1.0.46"
+version = "1.0.47"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -124,7 +124,8 @@ futures-util = "0.3.32"
 bip39 = "2.2.2"
 unicode-normalization = "0.1.25"
 urlencoding = "2.1.3"
-tokio-rustls = "0.26"
+tokio-rustls = { version = "0.26", features = ["ring", "default"] }
+rustls = { version = "0.23", features = ["ring", "std"] }
 rustls-pemfile = "2"
 toml = "1.1.3"
 
