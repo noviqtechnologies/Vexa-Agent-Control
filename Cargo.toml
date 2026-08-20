@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentcontrol"
-version = "1.0.47"
+version = "1.0.48"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -96,8 +96,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Random
 rand = "0.8"
 
-# Reqwest HTTP Client
-reqwest = { version = "0.12", features = ["json", "default-tls", "blocking", "stream"] }
+# Reqwest HTTP Client — pure-Rust TLS (rustls) with OS native root certs.
+# Avoids openssl-sys dependency so cross-compilation to musl targets works.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "rustls-tls-native-roots", "blocking", "stream"] }
 eventsource-stream = "0.2"
 
 rusqlite = { version = "0.31", features = ["bundled"] }
