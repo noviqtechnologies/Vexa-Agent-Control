@@ -162,18 +162,16 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
         let mut req = client.post(&heartbeat_url).json(&payload);
 
         // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint.
-        // Prioritizes explicit GATEWAY_SECRET, then enrolled device_token, and lastly dev fallback.
-        let auth_token = if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
+        // Prioritizes enrolled device_token, then explicit GATEWAY_SECRET (ignoring dev placeholder), and lastly fallback.
+        let auth_token = if let Some(token) = crate::identity::device::load_device_token() {
+            token
+        } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty() {
+            if !s.is_empty() && s != "local-dev-shared-secret-change-me" {
                 s
-            } else if let Some(token) = crate::identity::device::load_device_token() {
-                token
             } else {
                 "local-dev-shared-secret-change-me".to_string()
             }
-        } else if let Some(token) = crate::identity::device::load_device_token() {
-            token
         } else {
             "local-dev-shared-secret-change-me".to_string()
         };

@@ -93,8 +93,10 @@ try {
         Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
     }
     [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
-    if ($env:GATEWAY_SECRET) {
+    if ($env:GATEWAY_SECRET -and $env:GATEWAY_SECRET -ne "local-dev-shared-secret-change-me") {
         [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")
+    } else {
+        [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $null, "Machine")
     }
 
     & $FinalBinaryPath service install --hub-url $HubUrl

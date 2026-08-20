@@ -182,17 +182,36 @@ fn save_fallback_file(path: &PathBuf, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Persist signed Device JWT token returned by Control Hub to ~/.agentcontrol/device_token
+/// Persist signed Device JWT token returned by Control Hub to ~/.agentcontrol/device_token and ProgramData
 pub fn save_device_token(token: &str) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
-    let dir = home.join(".agentcontrol");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let token_path = dir.join("device_token");
-    fs::write(&token_path, token).map_err(|e| format!("cannot write device token: {}", e))
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".agentcontrol");
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(dir.join("device_token"), token);
+    }
+    #[cfg(windows)]
+    {
+        let program_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
+        let _ = fs::create_dir_all(&program_data);
+        let _ = fs::write(program_data.join("device_token"), token);
+    }
+    Ok(())
 }
 
-/// Load saved Device JWT token from ~/.agentcontrol/device_token (with Windows Session 0 fallback)
+/// Load saved Device JWT token from ~/.agentcontrol/device_token or ProgramData (with Windows Session 0 fallback)
 pub fn load_device_token() -> Option<String> {
+    #[cfg(windows)]
+    {
+        // 1. Check C:\ProgramData\AgentControl\device_token (machine-wide store)
+        let prog_data_token = std::path::PathBuf::from(r"C:\ProgramData\AgentControl\device_token");
+        if let Ok(content) = fs::read_to_string(&prog_data_token) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
     if let Some(home) = dirs::home_dir() {
         let token_path = home.join(".agentcontrol").join("device_token");
         if let Ok(content) = fs::read_to_string(&token_path) {
