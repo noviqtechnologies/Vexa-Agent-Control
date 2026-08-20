@@ -180,48 +180,32 @@ func (s *Store) GetDeviceByID(ctx context.Context, tenantID, deviceID string) (*
 
 // UpdateDeviceHeartbeat updates last_heartbeat_at and re-evaluates compliance status.
 func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, tenantID, deviceID string, mcpTotal, mcpWrapped int, checksums map[string]interface{}) error {
-	if tenantID == "" {
-		tenantID = s.ResolveTenantIDForAgent(ctx, deviceID)
-	}
 	status := "COMPLIANT"
 	if mcpWrapped < mcpTotal && mcpTotal > 0 {
 		status = "NON_COMPLIANT"
 	}
 
-	res, err := s.pool.Exec(ctx, `
+	// Update devices table
+	_, err := s.pool.Exec(ctx, `
 		UPDATE devices
 		SET last_heartbeat_at = NOW(),
 		    state = CASE WHEN state = 'REVOKED' THEN 'REVOKED'::device_state ELSE $2::device_state END,
 		    updated_at = NOW()
-		WHERE (id::text = $1 OR stable_device_id = $1) AND tenant_id = $3 AND state != 'REVOKED'
-	`, deviceID, status, tenantID)
-
+		WHERE (id::text = $1 OR stable_device_id = $1) AND state != 'REVOKED'
+	`, deviceID, status)
 	if err != nil {
 		return err
 	}
-	if res.RowsAffected() == 0 {
-		d, getErr := s.GetDeviceByID(ctx, tenantID, deviceID)
-		if getErr == nil && d != nil && d.IsRevoked {
-			return ErrDeviceRevoked
-		}
-		// Auto-register device on heartbeat ingest if not yet in database
-		_, insertErr := s.pool.Exec(ctx, `
-			INSERT INTO devices (
-				tenant_id, stable_device_id, display_name, os_family,
-				architecture, state, first_enrolled_at, last_heartbeat_at,
-				created_at, updated_at
-			) VALUES (
-				$1, $2, $2, 'linux',
-				'x86_64', 'COMPLIANT', NOW(), NOW(),
-				NOW(), NOW()
-			)
-			ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET
-				state = 'COMPLIANT',
-				last_heartbeat_at = NOW(),
-				updated_at = NOW()
-		`, tenantID, deviceID)
-		return insertErr
-	}
+
+	// Also update device_enrollments table
+	_, _ = s.pool.Exec(ctx, `
+		UPDATE device_enrollments
+		SET last_heartbeat_at = NOW(),
+		    enrollment_status = 'ACTIVE',
+		    updated_at = NOW()
+		WHERE (device_id::text = $1 OR hostname = $1) AND enrollment_status != 'REVOKED'
+	`, deviceID)
+
 	return nil
 }
 

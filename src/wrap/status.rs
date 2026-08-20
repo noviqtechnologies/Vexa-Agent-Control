@@ -127,6 +127,87 @@ fn gather_all() -> Vec<TargetInfo> {
 }
 
 /// Check whether all mcpServers in a config file are wrapped by Vexa Agent Control.
+/// Helper to strip comments and trailing commas from JSONC (e.g. Zed / VS Code configs)
+fn strip_json_comments(input: &str) -> String {
+    let mut cleaned = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if chars[i] == '\\' {
+                escaped = true;
+            } else if chars[i] == '"' {
+                in_string = false;
+            }
+            cleaned.push(chars[i]);
+            i += 1;
+        } else {
+            if chars[i] == '"' {
+                in_string = true;
+                cleaned.push(chars[i]);
+                i += 1;
+            } else if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '/' {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            } else if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '*' {
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            } else {
+                cleaned.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    let mut res = String::new();
+    let mut in_str = false;
+    let mut esc = false;
+    let clean_chars: Vec<char> = cleaned.chars().collect();
+    let mut j = 0;
+    while j < clean_chars.len() {
+        if in_str {
+            if esc {
+                esc = false;
+            } else if clean_chars[j] == '\\' {
+                esc = true;
+            } else if clean_chars[j] == '"' {
+                in_str = false;
+            }
+            res.push(clean_chars[j]);
+            j += 1;
+        } else {
+            if clean_chars[j] == '"' {
+                in_str = true;
+                res.push(clean_chars[j]);
+                j += 1;
+            } else if clean_chars[j] == ',' {
+                let mut k = j + 1;
+                while k < clean_chars.len() && clean_chars[k].is_whitespace() {
+                    k += 1;
+                }
+                if k < clean_chars.len() && (clean_chars[k] == '}' || clean_chars[k] == ']') {
+                    j += 1;
+                } else {
+                    res.push(clean_chars[j]);
+                    j += 1;
+                }
+            } else {
+                res.push(clean_chars[j]);
+                j += 1;
+            }
+        }
+    }
+    res
+}
+
+/// Check whether all mcpServers in a config file are wrapped by Vexa Agent Control.
 /// Returns (total_servers, wrapped_servers).
 fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
     let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -150,10 +231,21 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
             .count();
         Ok((total, wrapped))
     } else {
-        let config: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| format!("invalid JSON: {}", e))?;
+        let config: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => {
+                let stripped = strip_json_comments(&raw);
+                serde_json::from_str(&stripped).map_err(|e| format!("invalid JSON: {}", e))?
+            }
+        };
 
-        let servers = match config.get("mcpServers").and_then(|v| v.as_object()) {
+        let servers = config
+            .get("mcpServers")
+            .or_else(|| config.get("context_servers"))
+            .or_else(|| config.get("experimental.context_servers"))
+            .and_then(|v| v.as_object());
+
+        let servers = match servers {
             Some(s) => s,
             None => return Ok((0, 0)),
         };
@@ -347,20 +439,34 @@ pub fn gather_servers_for_snapshot(
                                 }
                             }
                         }
-                    } else if let Ok(config) = serde_json::from_str::<serde_json::Value>(&raw) {
-                        if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object())
-                        {
-                            for (name, val) in servers {
-                                let wrapped = transformer::is_already_wrapped(val);
-                                let path_verified = t.verification == PathVerification::Verified;
-                                servers_meta.push(
-                                    control_plane_proto::mcp_server::SanitizedMcpServerMeta {
-                                        ide_target: t.name.to_string(),
-                                        server_name: name.to_string(),
-                                        wrapped,
-                                        path_verified,
-                                    },
-                                );
+                    } else {
+                        let config: Result<serde_json::Value, _> = match serde_json::from_str(&raw) {
+                            Ok(v) => Ok(v),
+                            Err(_) => {
+                                let stripped = strip_json_comments(&raw);
+                                serde_json::from_str(&stripped)
+                            }
+                        };
+                        if let Ok(config) = config {
+                            let servers = config
+                                .get("mcpServers")
+                                .or_else(|| config.get("context_servers"))
+                                .or_else(|| config.get("experimental.context_servers"))
+                                .and_then(|v| v.as_object());
+
+                            if let Some(servers) = servers {
+                                for (name, val) in servers {
+                                    let wrapped = transformer::is_already_wrapped(val);
+                                    let path_verified = t.verification == PathVerification::Verified;
+                                    servers_meta.push(
+                                        control_plane_proto::mcp_server::SanitizedMcpServerMeta {
+                                            ide_target: t.name.to_string(),
+                                            server_name: name.to_string(),
+                                            wrapped,
+                                            path_verified,
+                                        },
+                                    );
+                                }
                             }
                         }
                     }
@@ -377,16 +483,20 @@ pub fn gather_servers_for_snapshot(
 
 pub fn gather_and_send_mcp_servers_snapshot() {
     if let Some(client) = crate::control_plane_client::client::DashboardClient::from_env() {
-        // Fallback to agent-<user>-<hostname> if AGENT_ID is not explicitly configured
-        let agent_id = std::env::var("AGENT_ID").unwrap_or_else(|_| {
-            let user = std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "user".to_string());
-            let hostname = std::env::var("HOSTNAME")
-                .or_else(|_| std::env::var("COMPUTERNAME"))
-                .unwrap_or_else(|_| "host".to_string());
-            format!("agent-{}-{}", user, hostname).to_lowercase()
-        });
+        let device_identity = crate::identity::device::DeviceIdentity::load_or_create().ok();
+        let agent_id = std::env::var("AGENT_ID")
+            .ok()
+            .or_else(|| crate::identity::device::load_device_token())
+            .or_else(|| device_identity.as_ref().map(|id| id.device_id.clone()))
+            .unwrap_or_else(|| {
+                let user = std::env::var("USER")
+                    .or_else(|_| std::env::var("USERNAME"))
+                    .unwrap_or_else(|_| "user".to_string());
+                let hostname = std::env::var("HOSTNAME")
+                    .or_else(|_| std::env::var("COMPUTERNAME"))
+                    .unwrap_or_else(|_| "host".to_string());
+                format!("agent-{}-{}", user, hostname).to_lowercase()
+            });
         let snapshot = gather_servers_for_snapshot(agent_id);
         client.send_mcp_server_snapshot(snapshot);
     }

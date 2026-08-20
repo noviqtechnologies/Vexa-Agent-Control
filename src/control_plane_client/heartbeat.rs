@@ -137,6 +137,9 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
     loop {
         interval.tick().await;
 
+        // Periodic fleet MCP server snapshot sync
+        crate::wrap::status::gather_and_send_mcp_servers_snapshot();
+
         let (checksums, total_servers, wrapped_servers) = compute_ide_checksums();
         let uptime_seconds = start_time.elapsed().as_secs();
 

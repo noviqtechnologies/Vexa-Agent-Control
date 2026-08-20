@@ -12,18 +12,30 @@ pub struct DashboardClient {
 }
 
 impl DashboardClient {
-    /// Constructs a `DashboardClient` from environment variables (`DASHBOARD_API_URL`, `GATEWAY_SECRET`).
+    /// Constructs a `DashboardClient` from environment variables (`AGENTCONTROL_HUB_URL`, `DASHBOARD_API_URL`, `GATEWAY_SECRET`, or device token).
     ///
     /// Falls back to local dev defaults if environment variables are unset.
     pub fn from_env() -> Option<Self> {
-        let base_url = std::env::var("DASHBOARD_API_URL").ok()?;
+        let base_url = std::env::var("AGENTCONTROL_HUB_URL")
+            .or_else(|_| std::env::var("AGENTWALL_HUB_URL"))
+            .or_else(|_| std::env::var("DASHBOARD_API_URL"))
+            .unwrap_or_else(|_| "https://console.vexasec.io".to_string());
         if base_url.trim().is_empty() {
             return None;
         }
 
-        let secret = std::env::var("GATEWAY_SECRET").unwrap_or_else(|_| {
+        let auth_token = if let Some(token) = crate::identity::device::load_device_token() {
+            token
+        } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
+            let s = secret.trim().to_string();
+            if !s.is_empty() && s != "local-dev-shared-secret-change-me" {
+                s
+            } else {
+                "local-dev-shared-secret-change-me".to_string()
+            }
+        } else {
             "local-dev-shared-secret-change-me".to_string()
-        });
+        };
 
         let http = reqwest::Client::builder()
             .no_proxy()
@@ -34,7 +46,7 @@ impl DashboardClient {
         Some(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
-            secret: format!("Bearer {}", secret),
+            secret: format!("Bearer {}", auth_token),
         })
     }
 

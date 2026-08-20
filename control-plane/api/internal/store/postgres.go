@@ -684,25 +684,10 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.agent_id, 
-		       COALESCE(m.ide_target, ''), 
-		       COALESCE(m.server_name, ''), 
-		       COALESCE(m.wrapped, false), 
-		       COALESCE(m.path_verified, false), 
-		       COALESCE(m.last_seen_at, a.last_seen_at)
-		FROM (
-			SELECT agent_id, last_seen_at, tenant_id FROM agents WHERE tenant_id = $1
-			UNION ALL
-			SELECT COALESCE(stable_device_id, id::text) AS agent_id, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, tenant_id
-			FROM devices
-			WHERE tenant_id = $1 AND COALESCE(stable_device_id, id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
-			UNION ALL
-			SELECT hostname AS agent_id, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, organization_id AS tenant_id
-			FROM device_enrollments
-			WHERE organization_id = $1 AND hostname NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
-		) a
-		LEFT JOIN mcp_servers m ON a.agent_id = m.agent_id AND m.tenant_id = $1
-		ORDER BY a.agent_id ASC, m.last_seen_at DESC
+		SELECT agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at
+		FROM mcp_servers
+		WHERE tenant_id = $1
+		ORDER BY last_seen_at DESC
 	`, tenantID)
 	if err != nil {
 		return nil, err

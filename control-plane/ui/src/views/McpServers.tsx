@@ -59,13 +59,16 @@ export default function McpServers() {
     return agentId || '-'
   }
 
+  // Filter out empty rows without server name for metrics
+  const validServers = useMemo(() => servers.filter((s) => s.server_name && s.server_name.trim().length > 0), [servers])
+
   // Summary Metrics
   const metrics = useMemo(() => {
-    const total = servers.length
-    const wrapped = servers.filter((s) => s.wrapped).length
-    const verified = servers.filter((s) => s.path_verified).length
-    const uniqueHosts = new Set(servers.map((s) => getHostname(s.agent_id))).size
-    const uniqueIdes = new Set(servers.map((s) => s.ide_target).filter(Boolean)).size
+    const total = validServers.length
+    const wrapped = validServers.filter((s) => s.wrapped).length
+    const verified = validServers.filter((s) => s.path_verified).length
+    const uniqueHosts = new Set(validServers.map((s) => getHostname(s.agent_id))).size
+    const uniqueIdes = new Set(validServers.map((s) => s.ide_target).filter(Boolean)).size
     return {
       total,
       wrapped,
@@ -75,11 +78,11 @@ export default function McpServers() {
       uniqueHosts,
       uniqueIdes,
     }
-  }, [servers])
+  }, [validServers])
 
   // Filtered servers list
   const filteredServers = useMemo(() => {
-    return servers.filter((s) => {
+    return validServers.filter((s) => {
       const host = getHostname(s.agent_id).toLowerCase()
       const agent = (s.agent_id || '').toLowerCase()
       const server = (s.server_name || '').toLowerCase()
@@ -103,16 +106,16 @@ export default function McpServers() {
 
       return matchesSearch && matchesIde && matchesWrap
     })
-  }, [servers, searchQuery, ideFilter, wrapFilter])
+  }, [validServers, searchQuery, ideFilter, wrapFilter])
 
   // Unique list of IDE targets for dropdown
   const availableIdes = useMemo(() => {
     const ides = new Set<string>()
-    servers.forEach((s) => {
+    validServers.forEach((s) => {
       if (s.ide_target) ides.add(s.ide_target)
     })
     return Array.from(ides)
-  }, [servers])
+  }, [validServers])
 
   if (loading) return <div className="loading">Loading MCP servers...</div>
 

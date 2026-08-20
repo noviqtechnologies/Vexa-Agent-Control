@@ -7,13 +7,20 @@ const STDIO_PROXY_MARKER: &str = "stdio-proxy";
 
 /// Check whether an mcpServer entry is already wrapped by agentwall.
 pub fn is_already_wrapped(entry: &Value) -> bool {
-    // Check 1: command field equals agentwall binary path
-    // Check 2: first arg is "stdio-proxy"
     let first_arg = entry["args"]
         .as_array()
         .and_then(|a| a.first())
         .and_then(|v| v.as_str());
-    first_arg == Some(STDIO_PROXY_MARKER)
+    if first_arg == Some(STDIO_PROXY_MARKER) {
+        return true;
+    }
+    if let Some(cmd) = entry.get("command").and_then(|c| c.as_str()) {
+        let cmd_lower = cmd.to_lowercase();
+        if cmd_lower.contains("agentcontrol") || cmd_lower.contains("agentwall") {
+            return true;
+        }
+    }
+    false
 }
 
 /// Wrap a single mcpServer entry in-place.
