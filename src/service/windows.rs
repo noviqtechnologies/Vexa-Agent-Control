@@ -89,17 +89,17 @@ pub fn install_windows_service(
         ])
         .output();
 
-    // ── Propagate invoking user's .agentwall credentials to SYSTEM service profile ──
+    // ── Propagate invoking user's .agentcontrol credentials to SYSTEM service profile ──
     if let Some(user_home) = dirs::home_dir() {
-        let user_agentwall = user_home.join(".agentwall");
-        let system_agentwall = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentwall");
-        if user_agentwall.exists() && user_agentwall != system_agentwall {
-            let _ = std::fs::create_dir_all(&system_agentwall);
-            if let Ok(entries) = std::fs::read_dir(&user_agentwall) {
+        let user_agentcontrol = user_home.join(".agentcontrol");
+        let system_agentcontrol = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
+        if user_agentcontrol.exists() && user_agentcontrol != system_agentcontrol {
+            let _ = std::fs::create_dir_all(&system_agentcontrol);
+            if let Ok(entries) = std::fs::read_dir(&user_agentcontrol) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.is_file() {
-                        let dest = system_agentwall.join(entry.file_name());
+                        let dest = system_agentcontrol.join(entry.file_name());
                         let _ = std::fs::copy(&path, dest);
                     }
                 }
@@ -271,6 +271,27 @@ pub mod service_dispatcher_handler {
             wait_hint: Duration::default(),
             process_id: None,
         });
+
+        // Sync developer profile credentials to SYSTEM profile if missing
+        let system_agentcontrol = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
+        if !system_agentcontrol.join("device_token").exists() {
+            for profile in crate::service::windows_profiles::enumerate_user_profiles() {
+                let user_agentcontrol = profile.join(".agentcontrol");
+                if user_agentcontrol.join("device_token").exists() {
+                    let _ = std::fs::create_dir_all(&system_agentcontrol);
+                    if let Ok(entries) = std::fs::read_dir(&user_agentcontrol) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_file() {
+                                let dest = system_agentcontrol.join(entry.file_name());
+                                let _ = std::fs::copy(&path, dest);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
 
         crate::service::eventlog::log_info(2004, "AgentControlSentry Windows SCM service started and active.");
 
