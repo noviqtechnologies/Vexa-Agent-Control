@@ -330,6 +330,39 @@ func (s *Store) InsertTamperLog(ctx context.Context, tenantID string, log *model
 	return err
 }
 
+// ResolveDevicePrincipal returns the DevicePrincipal (with TenantID) for an enrolled token or device ID.
+func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*model.DevicePrincipal, bool) {
+	if token == "" {
+		return nil, false
+	}
+	var principal model.DevicePrincipal
+	// 1. Check devices table
+	err := s.pool.QueryRow(ctx, `
+		SELECT id::text, tenant_id::text
+		FROM devices
+		WHERE (id::text = $1 OR stable_device_id = $1)
+		  AND state != 'REVOKED'
+		LIMIT 1
+	`, token).Scan(&principal.DeviceID, &principal.TenantID)
+	if err == nil && principal.TenantID != "" {
+		return &principal, true
+	}
+
+	// 2. Check device_enrollments table
+	err = s.pool.QueryRow(ctx, `
+		SELECT device_id::text, organization_id::text
+		FROM device_enrollments
+		WHERE (device_id::text = $1 OR hostname = $1)
+		  AND enrollment_status != 'REVOKED'
+		LIMIT 1
+	`, token).Scan(&principal.DeviceID, &principal.TenantID)
+	if err == nil && principal.TenantID != "" {
+		return &principal, true
+	}
+
+	return nil, false
+}
+
 // ValidateDeviceToken returns true if the token matches an enrolled/active device or enrollment.
 func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	if token == "" {
@@ -349,3 +382,4 @@ func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	`, token).Scan(&exists)
 	return err == nil && exists
 }
+

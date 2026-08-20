@@ -113,17 +113,53 @@ impl DashboardClient {
     /// Transmits an MCP server snapshot synchronously to ensure complete delivery before process termination.
     pub fn send_mcp_server_snapshot(&self, snapshot: McpServerSnapshot) {
         let url = format!("{}/api/v1/ingest/mcp-servers", self.base_url);
+        let count = snapshot.servers.len();
+        let agent_id = snapshot.agent_id.clone();
         let req = self
             .http
             .post(&url)
             .header("Authorization", &self.secret)
             .json(&snapshot);
 
+        let send_fut = async move {
+            match req.send().await {
+                Ok(res) if res.status().is_success() => {
+                    crate::service::eventlog::log_info(
+                        1004,
+                        &format!("MCP server snapshot ({} servers) accepted by Hub for agent {}", count, agent_id),
+                    );
+                }
+                Ok(res) => {
+                    let status = res.status().as_u16();
+                    crate::logging::log_event(
+                        crate::logging::Level::Warn,
+                        "mcp_server_snapshot_rejected",
+                        serde_json::json!({"status": status, "agent_id": &agent_id}),
+                    );
+                    crate::service::eventlog::log_warn(
+                        1005,
+                        &format!("MCP server snapshot rejected by Hub with HTTP status: {}", status),
+                    );
+                }
+                Err(e) => {
+                    let err_str = e.to_string();
+                    crate::logging::log_event(
+                        crate::logging::Level::Warn,
+                        "mcp_server_snapshot_failed",
+                        serde_json::json!({"error": &err_str, "agent_id": &agent_id}),
+                    );
+                    crate::service::eventlog::log_error(
+                        1006,
+                        &format!("Failed to connect to Hub for MCP server snapshot: {}", err_str),
+                    );
+                }
+            }
+        };
+
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            let _ =
-                tokio::task::block_in_place(|| handle.block_on(async move { req.send().await }));
+            let _ = tokio::task::block_in_place(|| handle.block_on(send_fut));
         } else if let Ok(rt) = tokio::runtime::Runtime::new() {
-            let _ = rt.block_on(async move { req.send().await });
+            let _ = rt.block_on(send_fut);
         }
     }
 

@@ -62,32 +62,7 @@ pub fn install_windows_service(
     }
 
     // ── Register EventLog Application Source in Windows Registry ──
-    let _ = std::process::Command::new("reg")
-        .args(&[
-            "add",
-            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
-            "/v",
-            "EventMessageFile",
-            "/t",
-            "REG_EXPAND_SZ",
-            "/d",
-            r"%SystemRoot%\System32\netmsg.dll",
-            "/f",
-        ])
-        .output();
-    let _ = std::process::Command::new("reg")
-        .args(&[
-            "add",
-            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
-            "/v",
-            "TypesSupported",
-            "/t",
-            "REG_DWORD",
-            "/d",
-            "7",
-            "/f",
-        ])
-        .output();
+    ensure_eventlog_registered();
 
     // ── Propagate invoking user's .agentcontrol credentials to SYSTEM service profile ──
     if let Some(user_home) = dirs::home_dir() {
@@ -210,6 +185,39 @@ pub fn uninstall_windows_service() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+pub fn ensure_eventlog_registered() {
+    let _ = std::process::Command::new("reg")
+        .args(&[
+            "add",
+            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
+            "/v",
+            "EventMessageFile",
+            "/t",
+            "REG_EXPAND_SZ",
+            "/d",
+            r"%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll;%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\EventLogMessages.dll",
+            "/f",
+        ])
+        .output();
+    let _ = std::process::Command::new("reg")
+        .args(&[
+            "add",
+            r"HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\AgentControlSentry",
+            "/v",
+            "TypesSupported",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            "7",
+            "/f",
+        ])
+        .output();
+}
+
+#[cfg(not(windows))]
+pub fn ensure_eventlog_registered() {}
+
 #[cfg(not(windows))]
 pub fn uninstall_windows_service() -> Result<(), String> {
     Err("Windows SCM service uninstallation is only supported on Windows OS.".to_string())
@@ -292,6 +300,9 @@ pub mod service_dispatcher_handler {
                 }
             }
         }
+
+        // Auto-heal/register EventLog Application source in registry (runs as SYSTEM)
+        super::ensure_eventlog_registered();
 
         crate::service::eventlog::log_info(2004, "AgentControlSentry Windows SCM service started and active.");
 

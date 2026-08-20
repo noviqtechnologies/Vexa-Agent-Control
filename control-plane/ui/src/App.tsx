@@ -126,9 +126,8 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Active Policies', to: '/policy' },
-      { label: 'Policy Marketplace', to: '/policy/marketplace' },
       { label: 'Policy Editor', to: '/policy/edit' },
+      { label: 'Policy Marketplace', to: '/policy/marketplace' },
       { label: 'Group Policies', to: '/policy/group' },
       { label: 'Threat Intelligence', to: '/threats' },
       { label: 'Audit Logs', to: '/audit' },
@@ -494,7 +493,8 @@ export default function App() {
                       <Route path="/" element={<Navigate to="/fleet" replace />} />
                       <Route path="/fleet" element={<FleetOverview />} />
                       <Route path="/identity" element={<IdentityGovernance />} />
-                      <Route path="/policy" element={<PolicyInsights />} />
+                      <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
+                      <Route path="/policy/insights" element={<PolicyInsights />} />
                       <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
                       <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
                       <Route path="/policy/edit" element={<PolicyEditor />} />

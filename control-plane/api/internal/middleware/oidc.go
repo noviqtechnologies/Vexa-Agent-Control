@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 )
 
@@ -95,6 +96,7 @@ func DashboardAuth() func(http.Handler) http.Handler {
 // DeviceValidator is an interface for validating enrolled device IDs/tokens.
 type DeviceValidator interface {
 	ValidateDeviceToken(ctx context.Context, token string) bool
+	ResolveDevicePrincipal(ctx context.Context, token string) (*model.DevicePrincipal, bool)
 }
 
 // GatewayAuth validates either:
@@ -119,9 +121,16 @@ func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler)
 				return
 			}
 
-			if v != nil && v.ValidateDeviceToken(r.Context(), token) {
-				next.ServeHTTP(w, r)
-				return
+			if v != nil {
+				if principal, ok := v.ResolveDevicePrincipal(r.Context(), token); ok && principal != nil {
+					ctx := context.WithValue(r.Context(), DevicePrincipalKey, principal)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				if v.ValidateDeviceToken(r.Context(), token) {
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 
 			http.Error(w, `{"error":"invalid gateway token"}`, http.StatusForbidden)
