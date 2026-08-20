@@ -10,9 +10,13 @@ Write-Host "[*] Vexa Agent Control Team OTET Enterprise Provisioning Installer" 
 
 $Token = $env:AGENTCONTROL_TOKEN
 if (!$Token) { $Token = $env:AGENTCONTROL_ENROLLMENT_TOKEN }
+if (!$Token) { $Token = $env:AGENTWALL_TOKEN }
+if (!$Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
+
 $HubUrl = $env:AGENTCONTROL_HUB_URL
+if (!$HubUrl) { $HubUrl = $env:AGENTWALL_HUB_URL }
 if (!$HubUrl) { $HubUrl = $env:DASHBOARD_API_URL }
-if (!$HubUrl) { $HubUrl = "http://localhost:8400" }
+if (!$HubUrl) { $HubUrl = "https://console.vexasec.io" }
 
 if (!$Token) {
     Write-Host "[!] Error: Enterprise enrollment token required." -ForegroundColor $ColorRed

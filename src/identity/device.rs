@@ -325,7 +325,7 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         return 1;
     }
 
-    println!("{} AgentWall PKI Device Enrollment (v4.0 Protocol)", "●".green().bold());
+    println!("{} Vexa Agent Control PKI Device Enrollment (v4.0 Protocol)", "●".green().bold());
     let masked_token = if token.len() > 8 {
         format!("{}...{}", &token[..4], &token[token.len() - 4..])
     } else {

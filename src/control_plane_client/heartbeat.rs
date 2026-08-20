@@ -152,8 +152,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             uptime_seconds,
         };
 
-        let base_url = std::env::var("DASHBOARD_API_URL")
-            .unwrap_or_else(|_| "http://localhost:8400".to_string());
+        let base_url = std::env::var("AGENTCONTROL_HUB_URL")
+            .or_else(|_| std::env::var("AGENTWALL_HUB_URL"))
+            .or_else(|_| std::env::var("DASHBOARD_API_URL"))
+            .unwrap_or_else(|_| "https://console.vexasec.io".to_string());
 
         let heartbeat_url = format!("{}/api/v1/ingest/heartbeat", base_url.trim_end_matches('/'));
 

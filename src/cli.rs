@@ -32,8 +32,8 @@ pub enum Commands {
         /// Control Hub API URL
         #[arg(
             long,
-            env = "DASHBOARD_API_URL",
-            default_value = "http://localhost:8400"
+            env = "AGENTCONTROL_HUB_URL",
+            default_value = "https://console.vexasec.io"
         )]
         hub_url: String,
     },
@@ -683,8 +683,8 @@ pub enum ServiceCliAction {
         /// Control Hub API URL
         #[arg(
             long,
-            env = "DASHBOARD_API_URL",
-            default_value = "http://localhost:8400"
+            env = "AGENTCONTROL_HUB_URL",
+            default_value = "https://console.vexasec.io"
         )]
         hub_url: String,
 
