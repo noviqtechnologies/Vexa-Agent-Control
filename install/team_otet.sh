@@ -22,6 +22,10 @@ fi
 
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"
 HUB_URL="${AGENTCONTROL_HUB_URL:-${AGENTWALL_HUB_URL:-${DASHBOARD_API_URL:-https://console.vexasec.io}}}"
+if [[ "$HUB_URL" == "http://localhost:8400" ]]; then
+  HUB_URL="https://console.vexasec.io"
+fi
+export DASHBOARD_API_URL="$HUB_URL"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

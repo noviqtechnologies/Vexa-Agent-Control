@@ -15,8 +15,13 @@ if (!$Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
 
 $HubUrl = $env:AGENTCONTROL_HUB_URL
 if (!$HubUrl) { $HubUrl = $env:AGENTWALL_HUB_URL }
-if (!$HubUrl) { $HubUrl = $env:DASHBOARD_API_URL }
-if (!$HubUrl) { $HubUrl = "https://console.vexasec.io" }
+if (!$HubUrl -and $env:DASHBOARD_API_URL -and $env:DASHBOARD_API_URL -ne "http://localhost:8400") {
+    $HubUrl = $env:DASHBOARD_API_URL
+}
+if (!$HubUrl -or $HubUrl -eq "http://localhost:8400") {
+    $HubUrl = "https://console.vexasec.io"
+}
+$env:DASHBOARD_API_URL = $HubUrl
 
 if (!$Token) {
     Write-Host "[!] Error: Enterprise enrollment token required." -ForegroundColor $ColorRed
