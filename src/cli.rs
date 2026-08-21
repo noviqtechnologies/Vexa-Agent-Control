@@ -691,12 +691,12 @@ pub enum ServiceCliAction {
         /// Gateway shared secret — must match GATEWAY_SECRET configured on the Control Plane API.
         /// Can also be set via the GATEWAY_SECRET environment variable.
         #[arg(long, env = "GATEWAY_SECRET")]
-        gateway_secret: String,
+        gateway_secret: Option<String>,
 
         /// Policy read secret — must match POLICY_READ_SECRET configured on the Control Plane API.
         /// Can also be set via the POLICY_READ_SECRET environment variable.
         #[arg(long, env = "POLICY_READ_SECRET")]
-        policy_read_secret: String,
+        policy_read_secret: Option<String>,
 
         /// Agent identifier for this machine in the Control Plane dashboard.
         /// Defaults to agent-<username>-<hostname> at runtime if not specified.

@@ -33,8 +33,13 @@ pub fn wrap_claude(dry_run: bool, scan_responses: bool) -> Result<WrapResult, Wr
 
     // 2. Read & parse config
     let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
-    let config: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+    let config: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = super::strip_json_comments(&raw);
+            serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+        }
+    };
 
     // 3. Check mcpServers exists
     if config.get("mcpServers").is_none() {

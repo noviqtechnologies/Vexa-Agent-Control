@@ -13,8 +13,8 @@ use std::env;
 pub enum ServiceAction {
     Install {
         hub_url: String,
-        gateway_secret: String,
-        policy_read_secret: String,
+        gateway_secret: Option<String>,
+        policy_read_secret: Option<String>,
         agent_id: Option<String>,
     },
     Uninstall,
@@ -44,28 +44,31 @@ pub fn run_service(action: ServiceAction) -> i32 {
             println!("  Binary path: {}", current_exe.cyan());
             println!("  Hub URL: {}", hub_url.cyan());
 
+            let gw_sec = gateway_secret.as_deref().unwrap_or("");
+            let pol_sec = policy_read_secret.as_deref().unwrap_or("");
+
             let res = if cfg!(target_os = "windows") {
                 windows::install_windows_service(
                     &current_exe,
                     &hub_url,
-                    &gateway_secret,
-                    &policy_read_secret,
+                    gw_sec,
+                    pol_sec,
                     agent_id.as_deref(),
                 )
             } else if cfg!(target_os = "macos") {
                 macos::install_macos_service(
                     &current_exe,
                     &hub_url,
-                    &gateway_secret,
-                    &policy_read_secret,
+                    gw_sec,
+                    pol_sec,
                     agent_id.as_deref(),
                 )
             } else {
                 linux::install_linux_service(
                     &current_exe,
                     &hub_url,
-                    &gateway_secret,
-                    &policy_read_secret,
+                    gw_sec,
+                    pol_sec,
                     agent_id.as_deref(),
                 )
             };

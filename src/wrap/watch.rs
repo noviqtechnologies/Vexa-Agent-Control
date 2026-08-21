@@ -464,14 +464,17 @@ fn flush_debounce(
 fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>) {
     let config_path = &at.config_path;
 
-    // JSON-validate before calling wrap (skip mid-write partial files).
+    // JSON/TOML-validate before calling wrap (skip mid-write partial files).
     if config_path.exists() {
         match std::fs::read_to_string(config_path) {
             Err(_e) => {
                 return;
             }
             Ok(raw) => {
-                if serde_json::from_str::<serde_json::Value>(&raw).is_err() {
+                let valid = serde_json::from_str::<serde_json::Value>(&raw).is_ok()
+                    || serde_json::from_str::<serde_json::Value>(&super::strip_json_comments(&raw)).is_ok()
+                    || toml::from_str::<toml::Value>(&raw).is_ok();
+                if !valid {
                     return;
                 }
             }

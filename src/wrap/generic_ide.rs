@@ -108,17 +108,31 @@ pub fn wrap_generic(
             scan_responses: false,
         })
     } else {
-        let config: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        let config: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => {
+                let stripped = super::strip_json_comments(&raw);
+                serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+            }
+        };
 
-        if config.get("mcpServers").is_none() {
+        let servers = config
+            .get("mcpServers")
+            .or_else(|| config.get("context_servers"))
+            .or_else(|| config.get("experimental.context_servers"))
+            .and_then(|v| v.as_object())
+            .ok_or(WrapError::NoMcpServers)?;
+
+        let command_servers: Vec<&serde_json::Value> = servers
+            .values()
+            .filter(|v| v.get("command").and_then(|c| c.as_str()).is_some())
+            .collect();
+
+        if command_servers.is_empty() {
             return Err(WrapError::NoMcpServers);
         }
 
-        let servers = config["mcpServers"]
-            .as_object()
-            .ok_or(WrapError::NoMcpServers)?;
-        if !servers.is_empty() && servers.values().all(transformer::is_already_wrapped) {
+        if command_servers.iter().all(|v| transformer::is_already_wrapped(v)) {
             return Err(WrapError::AlreadyWrapped);
         }
 

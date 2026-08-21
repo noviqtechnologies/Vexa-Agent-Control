@@ -77,10 +77,16 @@ func (h *SaaSOperatorHandler) CreateOrganization(w http.ResponseWriter, r *http.
 		validDays = 365
 	}
 
+	// Compute expiration timestamp based on validity days
+	now := time.Now().UTC()
+	var expiresAt time.Time
+	hasExpiry := validDays > 0
+	if hasExpiry {
+		expiresAt = now.AddDate(0, 0, validDays)
+	}
+
 	// Auto-mint license JWT if issuer is available
 	var licenseJWT string
-	var expiresAt time.Time
-	hasExpiry := false
 	if h.licenseIssuer != nil {
 		features := license.TierToFeatures(req.LicenseTier)
 		jwtStr, exp, err := h.licenseIssuer.MintLicense(req.Slug, req.LicenseTier, req.MaxSeats, features, validDays, req.IsTrial)
@@ -226,16 +232,19 @@ func (h *SaaSOperatorHandler) RenewLicense(w http.ResponseWriter, r *http.Reques
 		req.AdditionalDays = 30
 	}
 
-	if h.licenseIssuer == nil {
-		http.Error(w, "automated license issuer not configured", http.StatusBadRequest)
-		return
-	}
+	var jwtStr string
+	now := time.Now().UTC()
+	newExpiry := now.AddDate(0, 0, req.AdditionalDays)
 
-	features := license.TierToFeatures(org.LicenseTier)
-	jwtStr, newExpiry, err := h.licenseIssuer.MintLicense(org.Slug, org.LicenseTier, org.MaxSeats, features, req.AdditionalDays, req.IsTrial)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to mint renewed license: %v", err), http.StatusInternalServerError)
-		return
+	if h.licenseIssuer != nil {
+		features := license.TierToFeatures(org.LicenseTier)
+		mintedJWT, exp, err := h.licenseIssuer.MintLicense(org.Slug, org.LicenseTier, org.MaxSeats, features, req.AdditionalDays, req.IsTrial)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to mint renewed license: %v", err), http.StatusInternalServerError)
+			return
+		}
+		jwtStr = mintedJWT
+		newExpiry = exp
 	}
 
 	trialDays := 0

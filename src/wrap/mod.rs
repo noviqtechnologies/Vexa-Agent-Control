@@ -56,6 +56,86 @@ impl From<std::io::Error> for WrapError {
     }
 }
 
+/// Helper to strip comments (// and /* */) and trailing commas from JSONC (e.g. Zed / VS Code / Cursor configs)
+pub fn strip_json_comments(input: &str) -> String {
+    let mut cleaned = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if chars[i] == '\\' {
+                escaped = true;
+            } else if chars[i] == '"' {
+                in_string = false;
+            }
+            cleaned.push(chars[i]);
+            i += 1;
+        } else {
+            if chars[i] == '"' {
+                in_string = true;
+                cleaned.push(chars[i]);
+                i += 1;
+            } else if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '/' {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+            } else if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '*' {
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+            } else {
+                cleaned.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    let mut res = String::new();
+    let mut in_str = false;
+    let mut esc = false;
+    let clean_chars: Vec<char> = cleaned.chars().collect();
+    let mut j = 0;
+    while j < clean_chars.len() {
+        if in_str {
+            if esc {
+                esc = false;
+            } else if clean_chars[j] == '\\' {
+                esc = true;
+            } else if clean_chars[j] == '"' {
+                in_str = false;
+            }
+            res.push(clean_chars[j]);
+            j += 1;
+        } else {
+            if clean_chars[j] == '"' {
+                in_str = true;
+                res.push(clean_chars[j]);
+                j += 1;
+            } else if clean_chars[j] == ',' {
+                let mut k = j + 1;
+                while k < clean_chars.len() && clean_chars[k].is_whitespace() {
+                    k += 1;
+                }
+                if k < clean_chars.len() && (clean_chars[k] == '}' || clean_chars[k] == ']') {
+                    j += 1;
+                } else {
+                    res.push(clean_chars[j]);
+                    j += 1;
+                }
+            } else {
+                res.push(clean_chars[j]);
+                j += 1;
+            }
+        }
+    }
+    res
+}
+
 /// Executes the `agentcontrol wrap` command for a specific IDE target.
 ///
 /// # Arguments
@@ -452,4 +532,41 @@ pub fn run_protect_orchestration(
 
     0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_json_comments_and_trailing_commas() {
+        let raw = r#"// Zed settings
+//
+// Comment header
+{
+  /* Block comment */
+  "context_servers": {
+    "mcp-server-github": {
+      "enabled": true,
+      "remote": false,
+      "settings": {
+        "token": "secret//not-a-comment",
+      },
+    },
+  },
+  "theme": {
+    "mode": "dark",
+    "light": "One Light",
+    "dark": "One Dark",
+  },
+}"#;
+        let cleaned = strip_json_comments(raw);
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&cleaned);
+        assert!(parsed.is_ok(), "Failed to parse stripped JSONC: {:?}", parsed.err());
+        let val = parsed.unwrap();
+        assert_eq!(val["context_servers"]["mcp-server-github"]["enabled"], true);
+        assert_eq!(val["context_servers"]["mcp-server-github"]["settings"]["token"], "secret//not-a-comment");
+        assert_eq!(val["theme"]["mode"], "dark");
+    }
+}
+
 

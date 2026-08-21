@@ -402,7 +402,11 @@ export default function SaaSOperator() {
                   <td>
                     {org.is_trial ? (
                       <span style={{ fontSize: 13, fontWeight: 600, color: org.days_remaining <= 3 ? '#ef4444' : '#f59e0b' }}>
-                        {org.days_remaining <= 0 ? 'Trial Expired' : `${org.days_remaining} days left`}
+                        {org.days_remaining <= 0
+                          ? 'Trial Expired'
+                          : org.days_remaining > 3650
+                          ? `${org.trial_days || 30} days left`
+                          : `${org.days_remaining} days left`}
                       </span>
                     ) : (
                       <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

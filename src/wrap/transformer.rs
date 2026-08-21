@@ -85,15 +85,22 @@ pub fn unwrap_entry(entry: &mut Value) -> Result<(), WrapError> {
     Ok(())
 }
 
-/// Apply wrap_entry to every server in the mcpServers map.
+/// Apply wrap_entry to every server in the mcpServers / context_servers map.
 /// Returns (wrapped_count, already_wrapped_count).
 pub fn wrap_all_servers(
     config: &mut Value,
     agentwall_bin: &str,
 ) -> Result<(usize, usize), WrapError> {
-    let servers = config["mcpServers"]
-        .as_object_mut()
-        .ok_or(WrapError::NoMcpServers)?;
+    let servers = if config.get_mut("mcpServers").is_some() {
+        config["mcpServers"].as_object_mut()
+    } else if config.get_mut("context_servers").is_some() {
+        config["context_servers"].as_object_mut()
+    } else if config.get_mut("experimental.context_servers").is_some() {
+        config["experimental.context_servers"].as_object_mut()
+    } else {
+        None
+    }
+    .ok_or(WrapError::NoMcpServers)?;
 
     if servers.is_empty() {
         return Err(WrapError::NoMcpServers);
@@ -101,12 +108,21 @@ pub fn wrap_all_servers(
 
     let mut wrapped = 0;
     let mut already = 0;
+    let mut command_based = 0;
     for (_name, entry) in servers.iter_mut() {
+        if entry.get("command").and_then(|c| c.as_str()).is_none() {
+            continue;
+        }
+        command_based += 1;
         match wrap_entry(entry, agentwall_bin) {
             Ok(()) => wrapped += 1,
             Err(WrapError::AlreadyWrapped) => already += 1,
             Err(e) => return Err(e),
         }
+    }
+
+    if command_based == 0 {
+        return Err(WrapError::NoMcpServers);
     }
 
     // If nothing was newly wrapped, all servers were already protected — idempotent rejection
@@ -117,17 +133,26 @@ pub fn wrap_all_servers(
     Ok((wrapped, already))
 }
 
-/// Apply unwrap_entry to every server in the mcpServers map.
+/// Apply unwrap_entry to every server in the mcpServers / context_servers map.
 /// Returns count of servers restored.
 pub fn unwrap_all_servers(config: &mut Value) -> Result<usize, WrapError> {
-    let servers = config["mcpServers"]
-        .as_object_mut()
-        .ok_or(WrapError::NoMcpServers)?;
+    let servers = if config.get_mut("mcpServers").is_some() {
+        config["mcpServers"].as_object_mut()
+    } else if config.get_mut("context_servers").is_some() {
+        config["context_servers"].as_object_mut()
+    } else if config.get_mut("experimental.context_servers").is_some() {
+        config["experimental.context_servers"].as_object_mut()
+    } else {
+        None
+    }
+    .ok_or(WrapError::NoMcpServers)?;
 
     let mut count = 0;
     for (_name, entry) in servers.iter_mut() {
-        unwrap_entry(entry)?;
-        count += 1;
+        if entry.get("command").and_then(|c| c.as_str()).is_some() {
+            unwrap_entry(entry)?;
+            count += 1;
+        }
     }
     Ok(count)
 }
@@ -251,6 +276,44 @@ mod tests {
     #[test]
     fn test_wrap_empty_mcp_servers_returns_error() {
         let mut config = json!({ "mcpServers": {} });
+        let result = wrap_all_servers(&mut config, "/bin/agentwall");
+        assert!(matches!(result, Err(WrapError::NoMcpServers)));
+    }
+
+    #[test]
+    fn test_wrap_zed_context_servers_with_extension_and_command() {
+        let mut config = json!({
+            "context_servers": {
+                "mcp-server-github": {
+                    "enabled": true,
+                    "remote": false,
+                    "settings": { "token": "abc" }
+                },
+                "local-mcp": {
+                    "command": "npx",
+                    "args": ["-y", "my-server"]
+                }
+            }
+        });
+        let (wrapped, already) = wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
+        assert_eq!(wrapped, 1);
+        assert_eq!(already, 0);
+        assert_eq!(config["context_servers"]["local-mcp"]["command"], "/bin/agentwall");
+        assert_eq!(config["context_servers"]["local-mcp"]["args"][0], "stdio-proxy");
+        // Extension without command is preserved unmodified
+        assert_eq!(config["context_servers"]["mcp-server-github"]["enabled"], true);
+    }
+
+    #[test]
+    fn test_wrap_zed_context_servers_only_extension_returns_no_mcp_servers() {
+        let mut config = json!({
+            "context_servers": {
+                "mcp-server-github": {
+                    "enabled": true,
+                    "remote": false
+                }
+            }
+        });
         let result = wrap_all_servers(&mut config, "/bin/agentwall");
         assert!(matches!(result, Err(WrapError::NoMcpServers)));
     }

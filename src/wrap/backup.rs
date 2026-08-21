@@ -63,9 +63,19 @@ pub fn verify_backup_integrity(backup_path: &Path) -> Result<(), WrapError> {
             "Backup file is empty (0 bytes)".to_string(),
         ));
     }
-    let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-        WrapError::InvalidJson(format!("Backup JSON corruption detected: {}", e))
-    })?;
+    if backup_path.extension().and_then(|e| e.to_str()) == Some("toml") {
+        let _: toml::Value = toml::from_str(&content).map_err(|e| {
+            WrapError::InvalidJson(format!("Backup TOML corruption detected: {}", e))
+        })?;
+    } else {
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&content).or_else(|_| {
+            let stripped = super::strip_json_comments(&content);
+            serde_json::from_str(&stripped)
+        });
+        if let Err(e) = parsed {
+            return Err(WrapError::InvalidJson(format!("Backup JSON corruption detected: {}", e)));
+        }
+    }
     Ok(())
 }
 

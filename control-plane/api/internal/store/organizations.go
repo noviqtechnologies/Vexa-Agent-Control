@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,6 +31,12 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS bootstrap_token_hint TEXT;
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS bootstrap_consumed_at TIMESTAMPTZ;
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+		-- Auto-repair legacy trial rows where trial_ends_at was left NULL
+		UPDATE tenants
+		SET trial_ends_at = created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval,
+		    license_expires_at = COALESCE(license_expires_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval)
+		WHERE is_trial = true AND trial_ends_at IS NULL;
 	`
 	_, err := s.pool.Exec(ctx, q)
 	return err
@@ -124,20 +131,28 @@ func (s *Store) ListOrganizations(ctx context.Context) ([]model.OrgSummary, erro
 		}
 		o.Status = model.OrganizationStatus(statusStr)
 
-		// Calculate days remaining
+		// Calculate days remaining with fallback
 		var expiryTarget *time.Time
-		if o.IsTrial && o.TrialEndsAt != nil {
-			expiryTarget = o.TrialEndsAt
+		if o.IsTrial {
+			if o.TrialEndsAt != nil {
+				expiryTarget = o.TrialEndsAt
+			} else if o.TrialDays > 0 {
+				fallback := o.CreatedAt.AddDate(0, 0, o.TrialDays)
+				expiryTarget = &fallback
+			} else if o.LicenseExpiresAt != nil {
+				expiryTarget = o.LicenseExpiresAt
+			}
 		} else if o.LicenseExpiresAt != nil {
 			expiryTarget = o.LicenseExpiresAt
 		}
 
 		if expiryTarget != nil {
 			diff := expiryTarget.Sub(now)
-			o.DaysRemaining = int(diff.Hours() / 24)
-			if o.DaysRemaining < 0 {
-				o.DaysRemaining = 0
+			days := int(math.Ceil(diff.Hours() / 24.0))
+			if days < 0 {
+				days = 0
 			}
+			o.DaysRemaining = days
 		} else {
 			o.DaysRemaining = 9999
 		}
@@ -292,8 +307,8 @@ func (s *Store) GetOrganizationStats(ctx context.Context) (*model.PlatformStats,
 	q := `
 		SELECT
 			(SELECT COUNT(*) FROM tenants),
-			(SELECT COUNT(*) FROM tenants WHERE is_trial = true AND trial_ends_at > now()),
-			(SELECT COUNT(*) FROM tenants WHERE (is_trial = true AND trial_ends_at BETWEEN now() AND now() + INTERVAL '7 days') OR (is_trial = false AND license_expires_at BETWEEN now() AND now() + INTERVAL '7 days')),
+			(SELECT COUNT(*) FROM tenants WHERE is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval) > now()),
+			(SELECT COUNT(*) FROM tenants WHERE (is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval) BETWEEN now() AND now() + INTERVAL '7 days') OR (is_trial = false AND license_expires_at BETWEEN now() AND now() + INTERVAL '7 days')),
 			(SELECT COALESCE(SUM(max_seats), 0) FROM tenants)
 	`
 	var stats model.PlatformStats
