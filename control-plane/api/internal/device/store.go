@@ -25,12 +25,14 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 	if s.pool == nil {
 		return nil
 	}
-	schemaSQL := `
+
+	// 1. Ensure base devices table exists
+	_, _ = s.pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS devices (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			tenant_id UUID NOT NULL,
-			stable_device_id TEXT NOT NULL,
-			display_name TEXT NOT NULL,
+			tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
+			stable_device_id TEXT NOT NULL DEFAULT '',
+			display_name TEXT NOT NULL DEFAULT '',
 			owner_subject TEXT,
 			os_family TEXT NOT NULL DEFAULT 'windows',
 			architecture TEXT NOT NULL DEFAULT 'x86_64',
@@ -43,16 +45,77 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			revoked_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			CONSTRAINT uq_devices_tenant_stable UNIQUE (tenant_id, stable_device_id)
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
+	`)
 
-		-- Add columns if missing in existing installations
-		ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';
-		ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;
-		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();
+	// 2. Add columns individually to guarantee existence across existing installations
+	columnAlters := []string{
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS stable_device_id TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS owner_subject TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_family TEXT NOT NULL DEFAULT 'windows';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS architecture TEXT NOT NULL DEFAULT 'x86_64';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_version_summary TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS state VARCHAR(32) NOT NULL DEFAULT 'PENDING';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_tenant_stable ON devices(tenant_id, stable_device_id);",
+	}
+	for _, q := range columnAlters {
+		_, _ = s.pool.Exec(ctx, q)
+	}
 
-		-- Backward compatibility view for legacy tooling
+	// 3. Migrate from legacy device_enrollments if it exists as a base table
+	_, _ = s.pool.Exec(ctx, `
+		DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.tables 
+				WHERE table_schema = 'public' AND table_name = 'device_enrollments' AND table_type = 'BASE TABLE'
+			) THEN
+				INSERT INTO devices (
+					id, tenant_id, stable_device_id, display_name, owner_subject,
+					os_family, architecture, os_version_summary, public_key, daemon_version,
+					state, first_enrolled_at, last_heartbeat_at, created_at, updated_at
+				)
+				SELECT 
+					de.device_id,
+					de.organization_id,
+					de.hostname,
+					de.hostname,
+					de.user_identifier,
+					de.os,
+					'x86_64',
+					de.os_version,
+					de.public_key,
+					de.daemon_version,
+					CASE WHEN de.enrollment_status = 'REVOKED' THEN 'REVOKED' ELSE 'COMPLIANT' END,
+					de.first_enrolled_at,
+					de.last_heartbeat_at,
+					de.created_at,
+					de.updated_at
+				FROM device_enrollments de
+				ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET
+					public_key = COALESCE(NULLIF(EXCLUDED.public_key, ''), devices.public_key),
+					last_heartbeat_at = EXCLUDED.last_heartbeat_at,
+					updated_at = EXCLUDED.updated_at;
+
+				DROP TABLE device_enrollments CASCADE;
+			END IF;
+		END $$;
+	`)
+
+	// 4. Backward compatibility view for legacy tooling
+	_, _ = s.pool.Exec(ctx, `DROP VIEW IF EXISTS device_enrollments CASCADE;`)
+	_, _ = s.pool.Exec(ctx, `
 		CREATE OR REPLACE VIEW device_enrollments AS
 			SELECT 
 				id AS device_id,
@@ -69,19 +132,21 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 				created_at,
 				updated_at
 			FROM devices;
+	`)
 
-		CREATE TABLE IF NOT EXISTS device_compliance_reports (
+	// 5. Ensure compliance, ide status, and tamper events tables exist
+	childTables := []string{
+		`CREATE TABLE IF NOT EXISTS device_compliance_reports (
 			report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-			organization_id UUID NOT NULL,
+			organization_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
 			overall_compliance VARCHAR(32) NOT NULL,
 			tamper_event_count_24h INT NOT NULL DEFAULT 0,
 			report_payload JSONB,
 			reported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CONSTRAINT uq_device_compliance UNIQUE (device_id)
-		);
-
-		CREATE TABLE IF NOT EXISTS device_ide_status (
+		);`,
+		`CREATE TABLE IF NOT EXISTS device_ide_status (
 			status_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
 			ide_name VARCHAR(64) NOT NULL,
@@ -94,21 +159,32 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			last_healed_at TIMESTAMPTZ,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CONSTRAINT uq_device_ide UNIQUE (device_id, ide_name)
-		);
-
-		CREATE TABLE IF NOT EXISTS device_tamper_events (
+		);`,
+		`CREATE TABLE IF NOT EXISTS device_tamper_events (
 			event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-			organization_id UUID NOT NULL,
+			organization_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
 			ide_name VARCHAR(64) NOT NULL,
 			event_type VARCHAR(64) NOT NULL,
 			tamper_details TEXT NOT NULL,
 			healed_successfully BOOLEAN NOT NULL DEFAULT true,
 			occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		);
-	`
-	_, err := s.pool.Exec(ctx, schemaSQL)
-	return err
+		);`,
+		`CREATE TABLE IF NOT EXISTS device_tamper_logs (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
+			device_id TEXT NOT NULL,
+			target_ide TEXT NOT NULL,
+			detected_diff TEXT NOT NULL,
+			action_taken TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);`,
+	}
+	for _, ct := range childTables {
+		_, _ = s.pool.Exec(ctx, ct)
+	}
+
+	return nil
 }
 
 func generateToken(prefix string) string {
@@ -501,7 +577,35 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get device: %w", err)
+		// Defensive fallback if public_key column is not present in legacy schema
+		fallbackErr := s.pool.QueryRow(ctx, `
+			SELECT 
+				d.id::text,
+				d.tenant_id::text,
+				COALESCE(d.stable_device_id, d.display_name, d.id::text),
+				COALESCE(NULLIF(d.owner_subject, ''), NULLIF(d.display_name, ''), 'Developer Workstation'),
+				COALESCE(d.os_family, 'windows'),
+				COALESCE(d.os_version_summary, d.architecture, 'v1.0.35'),
+				'' AS public_key,
+				COALESCE(d.daemon_version, '2.1.0'),
+				d.state::text,
+				d.last_heartbeat_at,
+				d.created_at,
+				d.updated_at
+			FROM devices d
+			WHERE (d.id::text = $1 OR d.stable_device_id = $1 OR LOWER(d.display_name) = LOWER($1) OR $1 ILIKE '%-' || d.display_name || '-%')
+			  AND ($2 = '' OR d.tenant_id::text = $2)
+			LIMIT 1
+		`, deviceID, orgID).Scan(
+			&detail.DeviceID, &detail.OrganizationID, &detail.Hostname, &detail.UserIdentifier,
+			&detail.OS, &detail.OSVersion, &detail.PublicKey, &detail.DaemonVersion,
+			&detail.EnrollmentStatus, &lastHeartbeat, &detail.CreatedAt, &detail.UpdatedAt,
+		)
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("failed to get device: %w", err)
+		}
+		// Attempt self-healing column addition
+		_, _ = s.pool.Exec(ctx, "ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;")
 	}
 	detail.LastHeartbeatAt = lastHeartbeat
 

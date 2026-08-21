@@ -127,19 +127,19 @@ export default function FleetOverview() {
       {/* Stat tiles */}
       {stats && (
         <div className="stats-grid soc-stats-grid">
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Device Governance">
+          <div className="card stat-tile soc-clickable-tile" title="Total Registered AI Agents">
             <div className="stat-header-row">
-              <div className="stat-label">Total Devices</div>
+              <div className="stat-label">Total Agents</div>
               <span className="soc-delta-badge delta-neutral">Fleet</span>
             </div>
             <div className="stat-value">{stats.total_agents}</div>
-            <div className="stat-subtext">Enrolled Machines</div>
+            <div className="stat-subtext">Protected AI Agents</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to view Compliant Active Devices">
+          <div className="card stat-tile soc-clickable-tile" title="Active Compliant AI Agents">
             <div className="stat-header-row">
-              <div className="stat-label">Active Devices</div>
-              <span className="soc-delta-badge delta-success">Compliant</span>
+              <div className="stat-label">Active Agents</div>
+              <span className="soc-delta-badge delta-success">Live</span>
             </div>
             <div className="stat-value" style={{ color: 'var(--success)' }}>{stats.active_agents}</div>
             <div className="stat-subtext">Compliant & Enforcing Zero-Trust</div>

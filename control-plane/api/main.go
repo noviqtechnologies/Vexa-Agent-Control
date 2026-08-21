@@ -52,6 +52,9 @@ func main() {
 	if err := db.EnsurePoliciesSchema(ctx); err != nil {
 		log.Printf("[policies] schema verification warning: %v", err)
 	}
+	if err := db.EnsureDevicesSchema(ctx); err != nil {
+		log.Printf("[devices] schema verification warning: %v", err)
+	}
 
 	// Initialize Spend v2 Store and Sweeper
 	spendStore := spend.NewStore(db.Pool())

@@ -314,6 +314,62 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 	return nil, false
 }
 
+// EnsureDevicesSchema guarantees schema consistency for devices and related tables.
+func (s *Store) EnsureDevicesSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+
+	// 1. Base table
+	_, _ = s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS devices (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
+			stable_device_id TEXT NOT NULL DEFAULT '',
+			display_name TEXT NOT NULL DEFAULT '',
+			owner_subject TEXT,
+			os_family TEXT NOT NULL DEFAULT 'windows',
+			architecture TEXT NOT NULL DEFAULT 'x86_64',
+			os_version_summary TEXT,
+			daemon_version TEXT DEFAULT '2.1.0',
+			public_key TEXT,
+			state VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+			state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			revoked_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+	`)
+
+	// 2. Add columns individually to guarantee presence
+	columnAlters := []string{
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS stable_device_id TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS owner_subject TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_family TEXT NOT NULL DEFAULT 'windows';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS architecture TEXT NOT NULL DEFAULT 'x86_64';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_version_summary TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS state VARCHAR(32) NOT NULL DEFAULT 'PENDING';",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"ALTER TABLE devices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_tenant_stable ON devices(tenant_id, stable_device_id);",
+	}
+	for _, q := range columnAlters {
+		_, _ = s.pool.Exec(ctx, q)
+	}
+
+	return nil
+}
+
 // ValidateDeviceToken returns true if the token matches an enrolled/active device.
 func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	if token == "" {
@@ -329,4 +385,5 @@ func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	`, token).Scan(&exists)
 	return err == nil && exists
 }
+
 

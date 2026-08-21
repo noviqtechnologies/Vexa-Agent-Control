@@ -205,36 +205,12 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 		SELECT
 			a.agent_id,
 			a.display_name,
-			a.status,
+			a.status::text AS status,
 			a.policy_version,
 			a.last_seen_at,
 			COALESCE(e.cnt, 0) AS event_count,
 			COALESCE(al.cnt, 0) AS alert_count
-		FROM (
-			SELECT agent_id, display_name, status::text AS status, policy_version, last_seen_at, tenant_id 
-			FROM agents 
-			WHERE tenant_id = $1
-			UNION ALL
-			SELECT 
-				COALESCE(d.stable_device_id, d.display_name, d.id::text) AS agent_id,
-				COALESCE(
-					NULLIF(d.owner_subject, ''),
-					NULLIF(d.display_name, ''),
-					'Developer Workstation'
-				) AS display_name,
-				CASE 
-					WHEN d.state = 'REVOKED' THEN 'revoked'
-					WHEN d.state = 'PENDING' THEN 'idle'
-					WHEN d.last_heartbeat_at >= NOW() - INTERVAL '3 minutes' THEN 'active'
-					ELSE 'idle'
-				END AS status,
-				'v1.0' AS policy_version,
-				COALESCE(d.last_heartbeat_at, d.created_at, NOW()) AS last_seen_at,
-				d.tenant_id
-			FROM devices d
-			WHERE d.tenant_id = $1
-			  AND COALESCE(d.stable_device_id, d.display_name, d.id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
-		) a
+		FROM agents a
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
@@ -248,6 +224,7 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 			WHERE al.tenant_id = $1
 			GROUP BY te.agent_id
 		) al ON al.agent_id = a.agent_id
+		WHERE a.tenant_id = $1
 		ORDER BY a.last_seen_at DESC
 		LIMIT $2 OFFSET $3
 	`, tenantID, limit, offset)
@@ -284,16 +261,8 @@ func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM (
-				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
-				UNION
-				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status != 'revoked'
-			) d),
-			(SELECT COUNT(*) FROM (
-				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
-				UNION
-				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status = 'active' AND last_seen_at >= NOW() - INTERVAL '3 minutes'
-			) d),
+			(SELECT COUNT(*) FROM agents WHERE tenant_id = $1 AND status != 'revoked'),
+			(SELECT COUNT(*) FROM agents WHERE tenant_id = $1 AND status = 'active' AND last_seen_at >= NOW() - INTERVAL '3 minutes'),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied'),
 			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1),
