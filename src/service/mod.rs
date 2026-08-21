@@ -41,7 +41,6 @@ pub fn run_service(action: ServiceAction) -> i32 {
                 "{} Installing Agent Control Persistent Sentry Daemon",
                 "●".green().bold()
             );
-            println!("  Binary path: {}", current_exe.cyan());
             println!("  Hub URL: {}", hub_url.cyan());
 
             let gw_sec = gateway_secret.as_deref().unwrap_or("");
@@ -107,7 +106,6 @@ pub fn run_service(action: ServiceAction) -> i32 {
             println!("{} Agent Control Service Daemon Status", "●".green().bold());
             println!("  OS Target: {}", std::env::consts::OS.cyan());
             println!("  Arch: {}", std::env::consts::ARCH.cyan());
-            println!("  Binary: {}", current_exe.dimmed());
 
             if cfg!(target_os = "windows") {
                 println!("  Service Name: AgentControlSentry (Windows SCM)");
