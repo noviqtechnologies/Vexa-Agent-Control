@@ -7,7 +7,7 @@ use std::path::PathBuf;
 /// Ensures that when running as a Windows Service (Session 0 under SYSTEM),
 /// IDE configs in developer accounts are properly discovered.
 #[cfg(windows)]
-fn get_windows_user_homes() -> Vec<PathBuf> {
+pub fn get_windows_user_homes() -> Vec<PathBuf> {
     let mut homes = Vec::new();
 
     // 1. If dirs::home_dir() is a real human user profile (not systemprofile), add it first

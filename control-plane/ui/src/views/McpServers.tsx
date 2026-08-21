@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 
 interface McpServer {
   agent_id: string
+  hostname?: string
   ide_target: string
   server_name: string
   wrapped: boolean
@@ -25,6 +26,7 @@ export default function McpServers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [hostFilter, setHostFilter] = useState('all')
   const [ideFilter, setIdeFilter] = useState('all')
   const [wrapFilter, setWrapFilter] = useState('all')
 
@@ -49,14 +51,17 @@ export default function McpServers() {
     fetchServers()
   }, [])
 
-  const getHostname = (agentId: string) => {
-    if (agentId && agentId.startsWith('agent-')) {
-      const parts = agentId.split('-')
+  const getHostname = (s: McpServer) => {
+    if (s.hostname && s.hostname.trim().length > 0 && s.hostname !== s.agent_id) {
+      return s.hostname
+    }
+    if (s.agent_id && s.agent_id.startsWith('agent-')) {
+      const parts = s.agent_id.split('-')
       if (parts.length >= 3) {
         return parts.slice(2).join('-')
       }
     }
-    return agentId || '-'
+    return s.hostname || s.agent_id || '-'
   }
 
   // Filter out empty rows without server name for metrics
@@ -67,7 +72,7 @@ export default function McpServers() {
     const total = validServers.length
     const wrapped = validServers.filter((s) => s.wrapped).length
     const verified = validServers.filter((s) => s.path_verified).length
-    const uniqueHosts = new Set(validServers.map((s) => getHostname(s.agent_id))).size
+    const uniqueHosts = new Set(validServers.map((s) => getHostname(s))).size
     const uniqueIdes = new Set(validServers.map((s) => s.ide_target).filter(Boolean)).size
     return {
       total,
@@ -83,7 +88,7 @@ export default function McpServers() {
   // Filtered servers list
   const filteredServers = useMemo(() => {
     return validServers.filter((s) => {
-      const host = getHostname(s.agent_id).toLowerCase()
+      const host = getHostname(s).toLowerCase()
       const agent = (s.agent_id || '').toLowerCase()
       const server = (s.server_name || '').toLowerCase()
       const ide = (s.ide_target || '').toLowerCase()
@@ -96,6 +101,9 @@ export default function McpServers() {
         server.includes(query) ||
         ide.includes(query)
 
+      const matchesHost =
+        hostFilter === 'all' || getHostname(s).toLowerCase() === hostFilter.toLowerCase()
+
       const matchesIde =
         ideFilter === 'all' || (s.ide_target && s.ide_target.toLowerCase().includes(ideFilter.toLowerCase()))
 
@@ -104,9 +112,19 @@ export default function McpServers() {
         (wrapFilter === 'wrapped' && s.wrapped) ||
         (wrapFilter === 'unwrapped' && !s.wrapped)
 
-      return matchesSearch && matchesIde && matchesWrap
+      return matchesSearch && matchesHost && matchesIde && matchesWrap
     })
-  }, [validServers, searchQuery, ideFilter, wrapFilter])
+  }, [validServers, searchQuery, hostFilter, ideFilter, wrapFilter])
+
+  // Unique list of Hosts for dropdown
+  const availableHosts = useMemo(() => {
+    const hosts = new Set<string>()
+    validServers.forEach((s) => {
+      const h = getHostname(s)
+      if (h && h !== '-') hosts.add(h)
+    })
+    return Array.from(hosts).sort()
+  }, [validServers])
 
   // Unique list of IDE targets for dropdown
   const availableIdes = useMemo(() => {
@@ -209,7 +227,7 @@ export default function McpServers() {
               <input
                 type="text"
                 className="soc-filter-input"
-                placeholder="Filter by agent, host, server, or IDE..."
+                placeholder="Filter by host, server, or IDE..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -219,6 +237,20 @@ export default function McpServers() {
                 </button>
               )}
             </div>
+
+            <select
+              className="soc-select-filter"
+              value={hostFilter}
+              onChange={(e) => setHostFilter(e.target.value)}
+              aria-label="Filter by Host Name"
+            >
+              <option value="all">All Hosts</option>
+              {availableHosts.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </select>
 
             <select
               className="soc-select-filter"
@@ -252,7 +284,6 @@ export default function McpServers() {
           <table className="soc-table">
             <thead>
               <tr>
-                <th>Agent ID</th>
                 <th>Host Name</th>
                 <th>IDE Target</th>
                 <th>Server Name</th>
@@ -265,7 +296,7 @@ export default function McpServers() {
             <tbody>
               {filteredServers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="empty-state">
+                  <td colSpan={7} className="empty-state">
                     {servers.length === 0
                       ? 'No MCP servers found.'
                       : 'No MCP servers match the current search filters.'}
@@ -274,12 +305,9 @@ export default function McpServers() {
               ) : (
                 filteredServers.map((s, i) => (
                   <tr key={`${s.agent_id}-${s.ide_target}-${s.server_name}-${i}`} className="soc-table-row">
-                    <td className="font-mono text-mono-id">
-                      {s.agent_id}
-                    </td>
                     <td>
                       <span className="soc-host-badge font-mono">
-                        {getHostname(s.agent_id)}
+                        {getHostname(s)}
                       </span>
                     </td>
                     <td>

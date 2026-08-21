@@ -303,22 +303,8 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
         })}
       </nav>
 
-      {/* Footer / Quick Search + User Identity Card + Logout */}
+      {/* Footer / Logout */}
       <div className="sidebar-footer">
-        {user && (
-          <div className="sidebar-user-card">
-            <div className="sidebar-user-meta">
-              <span className="sidebar-user-name" title={user.id}>{user.id}</span>
-              <span className="sidebar-tenant-name">
-                {user.is_saas_operator ? 'Root Operator' : (user.organization_name || 'Tenant Workspace')}
-              </span>
-            </div>
-            <span className={`soc-role-badge ${user.is_saas_operator ? 'role-operator' : user.is_admin ? 'role-tenant-admin' : 'role-user'}`}>
-              {user.is_saas_operator ? 'Operator' : 'Admin'}
-            </span>
-          </div>
-        )}
-
         <button type="button" className="sidebar-logout-btn" onClick={onLogout} title="Sign Out">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

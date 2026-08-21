@@ -142,8 +142,26 @@ export function AuthProvider({ children }: Props) {
         // Refresh session context
         await checkSession()
       } else {
-        const data = await res.text()
-        setError(data || 'Login failed')
+        if (res.status === 429) {
+          setError('Too many login attempts. Please wait a few moments and try again.')
+        } else if (res.status === 401) {
+          setError('Invalid email, username, or password.')
+        } else if (res.status === 403) {
+          setError('Access denied. You do not have permission to access this portal.')
+        } else if (res.status >= 500) {
+          setError(`Server error (${res.status}). Please check control plane logs or try again shortly.`)
+        } else {
+          try {
+            const data = await res.text()
+            if (!data || data.startsWith('<') || data.toLowerCase().includes('<!doctype')) {
+              setError(`Authentication failed with status ${res.status} (${res.statusText || 'Error'})`)
+            } else {
+              setError(data)
+            }
+          } catch {
+            setError(`Login failed (${res.status})`)
+          }
+        }
       }
     } catch (e) {
       setError('Network error')

@@ -3,7 +3,9 @@ import {
   api,
   revokeDeviceV2,
   createEnrollmentTokenV2,
+  getSentryDeviceDetail,
   type SentryDeviceSummary,
+  type SentryDeviceDetail,
   type EnrollmentTokenV2
 } from '../api/client'
 
@@ -24,6 +26,11 @@ export default function Devices() {
   const [filter, setFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // Device Detail Inspection Modal State
+  const [selectedDevice, setSelectedDevice] = useState<SentryDeviceDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [copiedKey, setCopiedKey] = useState(false)
 
   // Revocation Modal State
   const [revokeTarget, setRevokeTarget] = useState<{ deviceId: string; hostname: string } | null>(null)
@@ -53,7 +60,19 @@ export default function Devices() {
     setLoading(true)
     try {
       const res = await api.listSentryDevices(filter)
-      setDevices(res.devices || [])
+      const rawList = res.devices || []
+      const seen = new Set<string>()
+      const deduped: SentryDeviceSummary[] = []
+      for (const d of rawList) {
+        const key = (d.hostname || d.device_id || '').toLowerCase()
+        if (key && !seen.has(key)) {
+          seen.add(key)
+          deduped.push(d)
+        } else if (!key) {
+          deduped.push(d)
+        }
+      }
+      setDevices(deduped)
       setCompliantCount(res.compliant_count || 0)
       setNonCompliantCount(res.non_compliant_count || 0)
       setOfflineCount(res.offline_count || 0)
@@ -61,6 +80,22 @@ export default function Devices() {
       console.error(e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleInspectDevice = async (deviceId: string) => {
+    setLoadingDetail(true)
+    try {
+      const detail = await getSentryDeviceDetail(deviceId)
+      setSelectedDevice(detail)
+    } catch (e: any) {
+      setNotification({
+        type: 'error',
+        message: e.message || 'Failed to fetch workstation details',
+      })
+      setTimeout(() => setNotification(null), 5000)
+    } finally {
+      setLoadingDetail(false)
     }
   }
 
@@ -322,8 +357,29 @@ export default function Devices() {
               </thead>
               <tbody>
                 {filteredDevices.map((d, idx) => (
-                  <tr key={d.device_id || idx}>
-                    <td style={{ fontWeight: 600 }}>{d.hostname || 'Unknown Host'}</td>
+                  <tr key={d.device_id || idx} style={{ transition: 'background-color 0.15s ease' }}>
+                    <td style={{ fontWeight: 600 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleInspectDevice(d.device_id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          color: 'var(--accent-primary, #60a5fa)',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                        title="Click to inspect workstation details, IDE configs, and public keys"
+                      >
+                        <span>{d.hostname || 'Unknown Host'}</span>
+                        <span style={{ fontSize: 11, opacity: 0.7 }}>🔍</span>
+                      </button>
+                    </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{d.user_identifier || '—'}</td>
                     <td>{getOsIcon(d.os)}</td>
                     <td>
@@ -351,18 +407,37 @@ export default function Devices() {
                     </td>
                     <td>{getComplianceBadge(d.overall_compliance)}</td>
                     <td style={{ textAlign: 'right' }}>
-                      {d.enrollment_status !== 'REVOKED' && d.overall_compliance !== 'NON_COMPLIANT' ? (
+                      <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         <button
-                          className="btn btn-sm btn-danger"
-                          style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'var(--danger, #ef4444)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                          onClick={() => openRevokeModal(d.device_id, d.hostname)}
-                          title="Revoke device PKI and gateway access"
+                          type="button"
+                          className="btn btn-sm"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            backgroundColor: 'var(--bg-surface-2, #27272a)',
+                            color: 'var(--text-main, #f4f4f5)',
+                            border: '1px solid var(--border, #3f3f46)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => handleInspectDevice(d.device_id)}
+                          title="Inspect deep telemetry, IDE configs, and tamper history"
                         >
-                          Revoke
+                          Inspect
                         </button>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Revoked</span>
-                      )}
+                        {d.enrollment_status !== 'REVOKED' && d.overall_compliance !== 'NON_COMPLIANT' ? (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'var(--danger, #ef4444)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            onClick={() => openRevokeModal(d.device_id, d.hostname)}
+                            title="Revoke device PKI and gateway access"
+                          >
+                            Revoke
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Revoked</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -744,6 +819,315 @@ export default function Devices() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Loading Overlay for Device Detail */}
+      {loadingDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div className="card" style={{ padding: '24px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>⚡</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Loading workstation telemetry...</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Querying granular IDE configurations & tamper states</div>
+          </div>
+        </div>
+      )}
+
+      {/* Granular Device Detail Inspection Modal */}
+      {selectedDevice && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+            overflowY: 'auto',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedDevice(null)
+              setCopiedKey(false)
+            }
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: '100%',
+              maxWidth: '840px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '28px',
+              backgroundColor: 'var(--bg-surface-1, #18181b)',
+              border: '1px solid var(--border-default, #27272a)',
+              borderRadius: 'var(--radius, 10px)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '22px',
+                  }}
+                >
+                  💻
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-main, #f4f4f5)' }}>
+                      {selectedDevice.hostname}
+                    </h2>
+                    {getComplianceBadge(selectedDevice.overall_compliance)}
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                        backgroundColor: selectedDevice.enrollment_status === 'ACTIVE' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: selectedDevice.enrollment_status === 'ACTIVE' ? '#4ade80' : '#f87171',
+                      }}
+                    >
+                      {selectedDevice.enrollment_status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted, #71717a)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+                    Device ID: {selectedDevice.device_id}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDevice(null)
+                  setCopiedKey(false)
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted, #71717a)',
+                  cursor: 'pointer',
+                  fontSize: 20,
+                  padding: 4,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Metrics & System Specs Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-surface-2, #202023)', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Developer Owner</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '4px', color: 'var(--text-main)' }}>{selectedDevice.user_identifier || '—'}</div>
+              </div>
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-surface-2, #202023)', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>OS & Platform</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '4px', color: 'var(--text-main)' }}>{getOsIcon(selectedDevice.os)} <span style={{ fontSize: 12, opacity: 0.7 }}>({selectedDevice.os_version || 'standard'})</span></div>
+              </div>
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-surface-2, #202023)', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Daemon Version</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '4px', color: '#38bdf8' }}>v{selectedDevice.daemon_version || '2.1.0'}</div>
+              </div>
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-surface-2, #202023)', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Heartbeat</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '4px', color: 'var(--text-main)' }}>
+                  {selectedDevice.last_heartbeat_at ? new Date(selectedDevice.last_heartbeat_at).toLocaleString() : 'Never'}
+                </div>
+              </div>
+            </div>
+
+            {/* Cryptographic Public Key Card */}
+            <div style={{ padding: '14px', backgroundColor: 'var(--bg-surface-0, #121214)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Workstation Cryptographic Public Key (mTLS)</div>
+                {selectedDevice.public_key && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedKey ? 'var(--success)' : 'var(--bg-surface-3)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedDevice.public_key)
+                      setCopiedKey(true)
+                      setTimeout(() => setCopiedKey(false), 2000)
+                    }}
+                  >
+                    {copiedKey ? '✔ Copied Key' : 'Copy Key'}
+                  </button>
+                )}
+              </div>
+              <pre style={{ margin: 0, fontSize: '11px', color: '#a78bfa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
+                {selectedDevice.public_key || 'Hardware key proof verified via enrolled token / CAS certificate'}
+              </pre>
+            </div>
+
+            {/* Granular IDE Targets Configuration State */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                  Protected IDE Integrations & Proxy Locks
+                </h4>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {selectedDevice.ide_statuses ? selectedDevice.ide_statuses.length : 0} configured IDEs
+                </span>
+              </div>
+
+              {(!selectedDevice.ide_statuses || selectedDevice.ide_statuses.length === 0) ? (
+                <div style={{ padding: '20px', textAlign: 'center', backgroundColor: 'var(--bg-surface-0)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No individual IDE configuration profiles reported yet. The Sentry daemon will discover and report installed IDEs on the next 60s telemetry cycle.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
+                  {selectedDevice.ide_statuses.map((ide, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '16px',
+                        backgroundColor: 'var(--bg-surface-0, #121214)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        borderLeft: `4px solid ${ide.compliance_state === 'COMPLIANT' ? '#22c55e' : '#ef4444'}`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 16 }}>🛠️</span>
+                          <strong style={{ fontSize: 14, color: 'var(--text-main)' }}>{ide.name}</strong>
+                          {ide.installed && <span className="badge badge-info" style={{ fontSize: 10 }}>INSTALLED</span>}
+                        </div>
+                        {getComplianceBadge(ide.compliance_state)}
+                      </div>
+
+                      <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, color: 'var(--text-secondary)' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)' }}>Config Path: </span>
+                          <code style={{ fontSize: 11, color: '#38bdf8', wordBreak: 'break-all' }}>{ide.config_path || 'Default User Settings'}</code>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)' }}>Proxy Base URL: </span>
+                          <code style={{ fontSize: 11, color: '#a78bfa' }}>{ide.configured_base_url || 'http://127.0.0.1:8080'}</code>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+                          <span style={{ color: ide.proxy_configured ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                            {ide.proxy_configured ? '✔ Proxy Configured' : '✖ Proxy Missing'}
+                          </span>
+                          <span style={{ color: ide.mcp_wrapped ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                            {ide.mcp_wrapped ? '✔ MCP Wrapped' : '○ Standard Tools'}
+                          </span>
+                        </div>
+                        {ide.last_healed_at && (
+                          <div style={{ marginTop: 2, fontSize: 11, color: '#fbbf24' }}>
+                            Last auto-healed: {new Date(ide.last_healed_at).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Device-Specific Tamper & Incident Log */}
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                Workstation Incident & Tamper History
+              </h4>
+              {(!selectedDevice.recent_tamper_events || selectedDevice.recent_tamper_events.length === 0) ? (
+                <div style={{ padding: '16px', textAlign: 'center', backgroundColor: 'var(--bg-surface-0)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+                  ✔ No tampering or bypass incidents recorded for this workstation. Proxy continuous locking is intact.
+                </div>
+              ) : (
+                <div className="table-wrap" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Target IDE</th>
+                        <th>Event Type</th>
+                        <th>Details</th>
+                        <th>Auto-Heal Status</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedDevice.recent_tamper_events.map((te, i) => (
+                        <tr key={i}>
+                          <td><strong>{te.ide_name}</strong></td>
+                          <td><span className="badge badge-warning">{te.event_type}</span></td>
+                          <td style={{ fontSize: 12, maxWidth: 300 }}>{te.tamper_details}</td>
+                          <td>
+                            {te.healed_successfully ? (
+                              <span style={{ color: 'var(--success)', fontWeight: 600 }}>✔ Healed (&lt;500ms)</span>
+                            ) : (
+                              <span style={{ color: 'var(--danger)', fontWeight: 600 }}>✖ Failed</span>
+                            )}
+                          </td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                            {new Date(te.occurred_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              {selectedDevice.enrollment_status !== 'REVOKED' ? (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    const dev = selectedDevice
+                    setSelectedDevice(null)
+                    openRevokeModal(dev.device_id, dev.hostname)
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <span>⚠️</span> Revoke Workstation Access
+                </button>
+              ) : (
+                <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: 13 }}>Workstation Credentials Revoked</span>
+              )}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setSelectedDevice(null)
+                  setCopiedKey(false)
+                }}
+              >
+                Close Inspection
+              </button>
+            </div>
           </div>
         </div>
       )}

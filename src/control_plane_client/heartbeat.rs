@@ -215,6 +215,38 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
                 );
             }
         }
+
+        // 2. Transmit granular IDE telemetry to /api/v1/devices/{device_id}/telemetry
+        let proxy_url = std::env::var("AGENTCONTROL_LOCAL_PROXY_URL")
+            .or_else(|_| std::env::var("AGENTWALL_LOCAL_PROXY_URL"))
+            .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+
+        let ide_statuses = crate::wrap::ide_config::scan_all_ides(&proxy_url);
+        let overall = if ide_statuses.iter().any(|s| s.compliance_state == "BYPASSED" || s.compliance_state == "NON_COMPLIANT") {
+            "NON_COMPLIANT"
+        } else {
+            "COMPLIANT"
+        };
+
+        let telemetry_payload = serde_json::json!({
+            "device_id": device_id,
+            "overall_compliance": overall,
+            "ide_targets": ide_statuses,
+            "tamper_events": [],
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        });
+
+        let telemetry_url = format!("{}/api/v1/devices/{}/telemetry", base_url.trim_end_matches('/'), device_id);
+        let mut tel_req = client.post(&telemetry_url).json(&telemetry_payload);
+        tel_req = tel_req.header("Authorization", format!("Bearer {}", auth_token));
+        if let Ok(res) = tel_req.send().await {
+            if res.status().is_success() {
+                crate::service::eventlog::log_info(
+                    1004,
+                    &format!("Granular IDE telemetry synced cleanly with Hub ({})", base_url),
+                );
+            }
+        }
     }
 }
 

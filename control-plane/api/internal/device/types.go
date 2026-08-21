@@ -140,3 +140,24 @@ type ListTamperEventsResponse struct {
 	Events     []DeviceTamperEventLog `json:"events"`
 	TotalCount int                    `json:"total_count"`
 }
+
+// DeviceDetailResponse represents complete granular telemetry and governance detail for a single device
+type DeviceDetailResponse struct {
+	DeviceID           string                 `json:"device_id"`
+	OrganizationID     string                 `json:"organization_id"`
+	Hostname           string                 `json:"hostname"`
+	UserIdentifier     string                 `json:"user_identifier"`
+	OS                 string                 `json:"os"`
+	OSVersion          string                 `json:"os_version"`
+	PublicKey          string                 `json:"public_key"`
+	DaemonVersion      string                 `json:"daemon_version"`
+	EnrollmentStatus   string                 `json:"enrollment_status"`
+	LastHeartbeatAt    *time.Time             `json:"last_heartbeat_at,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+	OverallCompliance  string                 `json:"overall_compliance"`
+	TamperCount24h     int                    `json:"tamper_count_24h"`
+	IdeStatuses        []IdeTargetStatus      `json:"ide_statuses"`
+	RecentTamperEvents []DeviceTamperEventLog `json:"recent_tamper_events"`
+	ReportPayload      string                 `json:"report_payload,omitempty"`
+}

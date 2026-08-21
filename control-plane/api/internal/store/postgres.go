@@ -76,17 +76,17 @@ func (s *Store) CountDistinctAgents(ctx context.Context, tenantID string) (int, 
 	if tenantID != "" {
 		err = s.pool.QueryRow(ctx, `
 			SELECT COUNT(*) FROM (
-				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
+				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
 				UNION
-				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
+				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
 			) d
 		`, tenantID).Scan(&count)
 	} else {
 		err = s.pool.QueryRow(ctx, `
 			SELECT COUNT(*) FROM (
-				SELECT id::text FROM devices WHERE state != 'REVOKED'
+				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE state != 'REVOKED'
 				UNION
-				SELECT device_id::text FROM device_enrollments WHERE enrollment_status != 'REVOKED'
+				SELECT hostname AS did FROM device_enrollments WHERE enrollment_status != 'REVOKED'
 			) d
 		`).Scan(&count)
 	}
@@ -228,15 +228,44 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 			COALESCE(e.cnt, 0) AS event_count,
 			COALESCE(al.cnt, 0) AS alert_count
 		FROM (
-			SELECT agent_id, display_name, status::text AS status, policy_version, last_seen_at, tenant_id FROM agents WHERE tenant_id = $1
+			SELECT agent_id, display_name, status::text AS status, policy_version, last_seen_at, tenant_id 
+			FROM agents 
+			WHERE tenant_id = $1
 			UNION ALL
-			SELECT COALESCE(stable_device_id, id::text) AS agent_id, COALESCE(display_name, stable_device_id, id::text) AS display_name, state::text AS status, 'v1.0' AS policy_version, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, tenant_id
-			FROM devices
-			WHERE tenant_id = $1 AND COALESCE(stable_device_id, id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
-			UNION ALL
-			SELECT hostname AS agent_id, user_identifier AS display_name, enrollment_status::text AS status, 'v1.0' AS policy_version, COALESCE(last_heartbeat_at, created_at) AS last_seen_at, organization_id AS tenant_id
-			FROM device_enrollments
-			WHERE organization_id = $1 AND hostname NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+			SELECT 
+				COALESCE(de.hostname, d.hostname) AS agent_id,
+				COALESCE(
+					NULLIF(de.user_identifier, 'Developer Workstation'),
+					NULLIF(d.owner_subject, ''),
+					NULLIF(d.display_name, ''),
+					de.user_identifier,
+					d.display_name,
+					'Developer Workstation'
+				) AS display_name,
+				CASE 
+					WHEN d.state = 'REVOKED' OR de.enrollment_status = 'REVOKED' THEN 'revoked'
+					WHEN d.state = 'NON_COMPLIANT' OR de.enrollment_status = 'NON_COMPLIANT' THEN 'non_compliant'
+					WHEN COALESCE(de.last_heartbeat_at, d.last_heartbeat_at) >= NOW() - INTERVAL '3 minutes' THEN 'active'
+					ELSE 'idle'
+				END AS status,
+				'v1.0' AS policy_version,
+				COALESCE(de.last_heartbeat_at, d.last_heartbeat_at, d.created_at, de.created_at, NOW()) AS last_seen_at,
+				COALESCE(d.tenant_id, de.organization_id) AS tenant_id
+			FROM (
+				SELECT DISTINCT ON (tenant_id, COALESCE(stable_device_id, id::text))
+					id, tenant_id, COALESCE(stable_device_id, id::text) AS hostname, display_name, owner_subject, state, last_heartbeat_at, created_at
+				FROM devices
+				WHERE tenant_id = $1
+				ORDER BY tenant_id, COALESCE(stable_device_id, id::text), last_heartbeat_at DESC NULLS LAST
+			) d
+			FULL OUTER JOIN (
+				SELECT DISTINCT ON (organization_id, hostname)
+					device_id, organization_id, hostname, user_identifier, enrollment_status, last_heartbeat_at, created_at
+				FROM device_enrollments
+				WHERE organization_id = $1
+				ORDER BY organization_id, hostname, CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END, last_heartbeat_at DESC NULLS LAST
+			) de ON de.hostname = d.hostname OR de.device_id = d.id
+			WHERE COALESCE(de.hostname, d.hostname) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
 		) a
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
@@ -288,14 +317,18 @@ func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM (
-				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
+				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
 				UNION
-				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
+				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
+				UNION
+				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status != 'revoked'
 			) d),
 			(SELECT COUNT(*) FROM (
-				SELECT id::text FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
+				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
 				UNION
-				SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND enrollment_status = 'ACTIVE' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
+				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status = 'ACTIVE' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
+				UNION
+				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status = 'active' AND last_seen_at >= NOW() - INTERVAL '3 minutes'
 			) d),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1),
 			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied'),
@@ -627,6 +660,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationSQL string)
 
 type McpServerInventoryRow struct {
 	AgentID      string `json:"agent_id"`
+	HostName     string `json:"hostname,omitempty"`
 	IDETarget    string `json:"ide_target"`
 	ServerName   string `json:"server_name"`
 	Wrapped      bool   `json:"wrapped"`
@@ -656,10 +690,19 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, tenantID, agentID str
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at
-		FROM mcp_servers
-		WHERE tenant_id = $1 AND agent_id = $2
-		ORDER BY last_seen_at DESC
+		SELECT 
+			m.agent_id, 
+			COALESCE(NULLIF(d.hostname, ''), NULLIF(dev.display_name, ''), m.agent_id) AS hostname,
+			m.ide_target, 
+			m.server_name, 
+			m.wrapped, 
+			m.path_verified, 
+			m.last_seen_at
+		FROM mcp_servers m
+		LEFT JOIN device_enrollments d ON d.device_id::text = m.agent_id
+		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id
+		WHERE m.tenant_id = $1 AND m.agent_id = $2
+		ORDER BY m.last_seen_at DESC
 	`, tenantID, agentID)
 	if err != nil {
 		return nil, err
@@ -670,7 +713,7 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, tenantID, agentID str
 	for rows.Next() {
 		var sr McpServerInventoryRow
 		var lastSeen time.Time
-		if err := rows.Scan(&sr.AgentID, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
 			return nil, err
 		}
 		sr.LastSeenAt = lastSeen.Format(time.RFC3339)
@@ -684,10 +727,19 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT agent_id, ide_target, server_name, wrapped, path_verified, last_seen_at
-		FROM mcp_servers
-		WHERE tenant_id = $1
-		ORDER BY last_seen_at DESC
+		SELECT 
+			m.agent_id, 
+			COALESCE(NULLIF(d.hostname, ''), NULLIF(dev.display_name, ''), m.agent_id) AS hostname,
+			m.ide_target, 
+			m.server_name, 
+			m.wrapped, 
+			m.path_verified, 
+			m.last_seen_at
+		FROM mcp_servers m
+		LEFT JOIN device_enrollments d ON d.device_id::text = m.agent_id
+		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id
+		WHERE m.tenant_id = $1
+		ORDER BY m.last_seen_at DESC
 	`, tenantID)
 	if err != nil {
 		return nil, err
@@ -698,7 +750,7 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([
 	for rows.Next() {
 		var sr McpServerInventoryRow
 		var lastSeen time.Time
-		if err := rows.Scan(&sr.AgentID, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
 			return nil, err
 		}
 		sr.LastSeenAt = lastSeen.Format(time.RFC3339)

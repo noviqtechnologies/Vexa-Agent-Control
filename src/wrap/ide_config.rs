@@ -18,9 +18,51 @@ pub struct IdeConfigStatus {
 /// Resolves user settings.json path for Cursor across Windows, macOS, and Linux
 pub fn cursor_settings_path() -> Option<PathBuf> {
     match std::env::consts::OS {
-        "windows" => dirs::data_dir().map(|d| d.join("Cursor\\User\\settings.json")),
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/settings.json")),
-        "linux" => dirs::config_dir().map(|d| d.join("Cursor/User/settings.json")),
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = crate::wrap::config_path::get_windows_user_homes();
+                for home in &homes {
+                    let candidates = [
+                        home.join(r"AppData\Roaming\Cursor\User\settings.json"),
+                        home.join(r".cursor\mcp.json"),
+                    ];
+                    for c in candidates {
+                        if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                            return Some(c);
+                        }
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Some(first.join(r"AppData\Roaming\Cursor\User\settings.json"));
+                }
+            }
+            dirs::data_dir().map(|d| d.join("Cursor\\User\\settings.json"))
+        }
+        "macos" => {
+            let candidates = [
+                dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/settings.json")),
+                dirs::home_dir().map(|h| h.join(".cursor/mcp.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/settings.json"))
+        }
+        "linux" => {
+            let candidates = [
+                dirs::config_dir().map(|d| d.join("Cursor/User/settings.json")),
+                dirs::home_dir().map(|h| h.join(".cursor/mcp.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::config_dir().map(|d| d.join("Cursor/User/settings.json"))
+        }
         _ => None,
     }
 }
@@ -28,9 +70,51 @@ pub fn cursor_settings_path() -> Option<PathBuf> {
 /// Resolves user settings.json path for VS Code across Windows, macOS, and Linux
 pub fn vscode_settings_path() -> Option<PathBuf> {
     match std::env::consts::OS {
-        "windows" => dirs::data_dir().map(|d| d.join("Code\\User\\settings.json")),
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/settings.json")),
-        "linux" => dirs::config_dir().map(|d| d.join("Code/User/settings.json")),
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = crate::wrap::config_path::get_windows_user_homes();
+                for home in &homes {
+                    let candidates = [
+                        home.join(r"AppData\Roaming\Code\User\settings.json"),
+                        home.join(r"AppData\Roaming\Code\User\mcp.json"),
+                    ];
+                    for c in candidates {
+                        if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                            return Some(c);
+                        }
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Some(first.join(r"AppData\Roaming\Code\User\settings.json"));
+                }
+            }
+            dirs::data_dir().map(|d| d.join("Code\\User\\settings.json"))
+        }
+        "macos" => {
+            let candidates = [
+                dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/settings.json")),
+                dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/mcp.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/settings.json"))
+        }
+        "linux" => {
+            let candidates = [
+                dirs::config_dir().map(|d| d.join("Code/User/settings.json")),
+                dirs::config_dir().map(|d| d.join("Code/User/mcp.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::config_dir().map(|d| d.join("Code/User/settings.json"))
+        }
         _ => None,
     }
 }
@@ -38,8 +122,40 @@ pub fn vscode_settings_path() -> Option<PathBuf> {
 /// Resolves settings path for Zed Editor
 pub fn zed_settings_path() -> Option<PathBuf> {
     match std::env::consts::OS {
-        "windows" => dirs::data_local_dir().map(|d| d.join("Zed\\settings.json")),
-        "macos" | "linux" => dirs::config_dir().map(|d| d.join("zed/settings.json")),
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = crate::wrap::config_path::get_windows_user_homes();
+                for home in &homes {
+                    let candidates = [
+                        home.join(r"AppData\Local\Zed\settings.json"),
+                        home.join(r"AppData\Roaming\Zed\settings.json"),
+                        home.join(r".config\zed\settings.json"),
+                    ];
+                    for c in candidates {
+                        if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                            return Some(c);
+                        }
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Some(first.join(r"AppData\Local\Zed\settings.json"));
+                }
+            }
+            dirs::data_local_dir().map(|d| d.join("Zed\\settings.json"))
+        }
+        "macos" | "linux" => {
+            let candidates = [
+                dirs::config_dir().map(|d| d.join("zed/settings.json")),
+                dirs::home_dir().map(|h| h.join(".config/zed/settings.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::config_dir().map(|d| d.join("zed/settings.json"))
+        }
         _ => None,
     }
 }
@@ -47,9 +163,51 @@ pub fn zed_settings_path() -> Option<PathBuf> {
 /// Resolves config path for Windsurf / Codeium
 pub fn windsurf_settings_path() -> Option<PathBuf> {
     match std::env::consts::OS {
-        "windows" => dirs::data_dir().map(|d| d.join("Windsurf\\User\\settings.json")),
-        "macos" => dirs::home_dir().map(|h| h.join("Library/Application Support/Windsurf/User/settings.json")),
-        "linux" => dirs::config_dir().map(|d| d.join("Windsurf/User/settings.json")),
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = crate::wrap::config_path::get_windows_user_homes();
+                for home in &homes {
+                    let candidates = [
+                        home.join(r"AppData\Roaming\Windsurf\User\settings.json"),
+                        home.join(r".codeium\windsurf\mcp_config.json"),
+                    ];
+                    for c in candidates {
+                        if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                            return Some(c);
+                        }
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Some(first.join(r"AppData\Roaming\Windsurf\User\settings.json"));
+                }
+            }
+            dirs::data_dir().map(|d| d.join("Windsurf\\User\\settings.json"))
+        }
+        "macos" => {
+            let candidates = [
+                dirs::home_dir().map(|h| h.join("Library/Application Support/Windsurf/User/settings.json")),
+                dirs::home_dir().map(|h| h.join(".codeium/windsurf/mcp_config.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::home_dir().map(|h| h.join("Library/Application Support/Windsurf/User/settings.json"))
+        }
+        "linux" => {
+            let candidates = [
+                dirs::config_dir().map(|d| d.join("Windsurf/User/settings.json")),
+                dirs::home_dir().map(|h| h.join(".codeium/windsurf/mcp_config.json")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.exists() || c.parent().map(|p| p.exists()).unwrap_or(false) {
+                    return Some(c);
+                }
+            }
+            dirs::config_dir().map(|d| d.join("Windsurf/User/settings.json"))
+        }
         _ => None,
     }
 }
@@ -113,6 +271,35 @@ pub fn ensure_json_proxy_setting(
     Ok(false)
 }
 
+/// Checks if an MCP config file contains wrapped servers
+fn check_mcp_config_wrapped(path: &Path) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    if let Ok(raw) = fs::read_to_string(path) {
+        if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+            if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
+                if let Some(servers) = val.get("mcp_servers").and_then(|s| s.as_table()) {
+                    return servers.values().any(|v| {
+                        v.get("command")
+                            .and_then(|c| c.as_str())
+                            .map(|cmd| cmd.to_lowercase().contains("agentwall") || cmd.to_lowercase().contains("agentcontrol"))
+                            .unwrap_or(false)
+                    });
+                }
+            }
+        } else if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+            if let Some(servers) = v.get("mcpServers").and_then(|s| s.as_object()) {
+                return servers.values().any(|srv| crate::wrap::transformer::is_already_wrapped(srv));
+            }
+            if let Some(servers) = v.get("mcp_servers").and_then(|s| s.as_object()) {
+                return servers.values().any(|srv| crate::wrap::transformer::is_already_wrapped(srv));
+            }
+        }
+    }
+    false
+}
+
 /// Enforces Agent Control proxy configuration across a named IDE target
 pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus, String> {
     let mut status = IdeConfigStatus {
@@ -126,36 +313,157 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         last_healed_at: None,
     };
 
-    let path_opt = match name {
-        "cursor" => cursor_settings_path(),
-        "vscode" => vscode_settings_path(),
-        "zed" => zed_settings_path(),
-        "windsurf" => windsurf_settings_path(),
-        _ => None,
-    };
+    match name {
+        "cursor" => {
+            if let Some(path) = cursor_settings_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
-    if let Some(path) = path_opt {
-        status.config_path = Some(path.to_string_lossy().to_string());
-        status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                if status.installed {
+                    let key_spec = ("cursor.models.openaiBaseUrl", Some(("cursor.models.apiKey", "agentcontrol-local-key")));
+                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    if updated {
+                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    }
 
-        if status.installed {
-            let key_spec = match name {
-                "cursor" => ("cursor.models.openaiBaseUrl", Some(("cursor.models.apiKey", "agentcontrol-local-key"))),
-                "vscode" => ("cline.baseUrl", None),
-                "zed" => ("language_models.openai.api_url", None),
-                "windsurf" => ("openai.baseUrl", None),
-                _ => ("openai.baseUrl", None),
-            };
+                    if let Ok(mcp_path) = crate::wrap::config_path::cursor_config_path() {
+                        status.mcp_wrapped = check_mcp_config_wrapped(&mcp_path);
+                    }
 
-            let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
-            if updated {
-                status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
             }
-
-            status.proxy_configured = true;
-            status.configured_base_url = Some(proxy_url.to_string());
-            status.compliance_state = "COMPLIANT".to_string();
         }
+        "vscode" => {
+            if let Some(path) = vscode_settings_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    let key_spec = ("cline.baseUrl", None);
+                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    if updated {
+                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    }
+
+                    if let Ok(mcp_path) = crate::wrap::config_path::vscode_config_path() {
+                        status.mcp_wrapped = check_mcp_config_wrapped(&mcp_path);
+                    }
+
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "zed" => {
+            if let Some(path) = zed_settings_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    let key_spec = ("language_models.openai.api_url", None);
+                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    if updated {
+                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    }
+
+                    if let Ok(mcp_path) = crate::wrap::config_path::zed_config_path() {
+                        status.mcp_wrapped = check_mcp_config_wrapped(&mcp_path);
+                    }
+
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "windsurf" => {
+            if let Some(path) = windsurf_settings_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    let key_spec = ("openai.baseUrl", None);
+                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    if updated {
+                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    }
+
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "claude_desktop" => {
+            if let Ok(path) = crate::wrap::config_path::claude_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "jetbrains" => {
+            if let Ok(path) = crate::wrap::config_path::jetbrains_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "antigravity" => {
+            if let Ok(path) = crate::wrap::config_path::antigravity_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "codex" => {
+            if let Ok(path) = crate::wrap::config_path::codex_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        "opencode" => {
+            if let Ok(path) = crate::wrap::config_path::opencode_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
+        _ => {}
     }
 
     Ok(status)
@@ -163,7 +471,17 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
 /// Evaluates compliance state of all major IDEs
 pub fn scan_all_ides(expected_proxy_url: &str) -> Vec<IdeConfigStatus> {
-    let targets = vec!["cursor", "vscode", "zed", "windsurf"];
+    let targets = vec![
+        "cursor",
+        "vscode",
+        "windsurf",
+        "zed",
+        "claude_desktop",
+        "jetbrains",
+        "antigravity",
+        "codex",
+        "opencode",
+    ];
     let mut results = Vec::new();
 
     for target in targets {

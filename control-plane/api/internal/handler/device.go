@@ -133,3 +133,24 @@ func (h *DeviceHandler) ListTamperEvents(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
+
+// GetDevice handles GET /api/v1/devices/{id}
+func (h *DeviceHandler) GetDevice(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	if deviceID == "" {
+		http.Error(w, `{"error":"missing_device_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := middleware.ResolveTenantScope(r)
+
+	detail, err := h.store.GetDevice(r.Context(), orgID, deviceID)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(detail)
+}

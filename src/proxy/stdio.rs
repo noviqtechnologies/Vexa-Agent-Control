@@ -242,6 +242,49 @@ fn extract_decision_evidence(
     )
 }
 
+/// Helper to asynchronously transmit redacted telemetry to SaaS Central Hub if configured
+fn send_dashboard_event(
+    state: &ProxyState,
+    session: &crate::proxy::session::SessionContext,
+    tool_name: &str,
+    decision: control_plane_proto::redact::RawDecision,
+) {
+    if let Some(ref dc) = state.dashboard_client {
+        let agent_id_str = if let Some(sub) = session.identity_sub.as_deref() {
+            if !sub.is_empty() {
+                sub.to_string()
+            } else {
+                std::env::var("AGENT_ID").unwrap_or_else(|_| "workstation-agent".to_string())
+            }
+        } else {
+            std::env::var("AGENT_ID").unwrap_or_else(|_| "workstation-agent".to_string())
+        };
+
+        let tool_on_allowlist = {
+            let guard = state.policy.read().unwrap_or_else(|e| e.into_inner());
+            guard
+                .as_ref()
+                .map(|p| p.tools.iter().any(|t| t.name == tool_name))
+                .unwrap_or(false)
+        };
+
+        let raw = control_plane_proto::redact::RawEventForRedaction {
+            session_id: &session.session_id,
+            agent_id: &agent_id_str,
+            tool_name,
+            tool_name_is_allowlisted: tool_on_allowlist,
+            decision,
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+            dlp_findings: &[],
+            injection_findings: &[],
+            semantic_findings: &[],
+        };
+
+        let redacted = control_plane_proto::redact::redact_event(&raw);
+        dc.send_event(redacted);
+    }
+}
+
 pub async fn run_stdio_bridge(
     state: Arc<ProxyState>,
     mut command: Command,
@@ -363,6 +406,13 @@ pub async fn run_stdio_bridge(
                                 let db = state.db_manager.clone();
                                 tokio::spawn(async move { let _ = db.insert(event).await; });
 
+                                send_dashboard_event(
+                                    &state,
+                                    &local_session,
+                                    &tool_name,
+                                    control_plane_proto::redact::RawDecision::Allowed,
+                                );
+
                                 if let Err(e) = upstream_writer.send(json).await {
                                     eprintln!("Error sending to upstream: {}", e);
                                     break;
@@ -401,6 +451,13 @@ pub async fn run_stdio_bridge(
                                 }
                                 let db = state.db_manager.clone();
                                 tokio::spawn(async move { let _ = db.insert(event).await; });
+
+                                send_dashboard_event(
+                                    &state,
+                                    &local_session,
+                                    &tool_name,
+                                    control_plane_proto::redact::RawDecision::Denied,
+                                );
 
                                 if let Err(e) = agent_writer.send(resp).await {
                                     eprintln!("Error sending to agent: {}", e);
@@ -441,6 +498,13 @@ pub async fn run_stdio_bridge(
                                 }
                                 let db = state.db_manager.clone();
                                 tokio::spawn(async move { let _ = db.insert(event).await; });
+
+                                send_dashboard_event(
+                                    &state,
+                                    &local_session,
+                                    &tool_name,
+                                    control_plane_proto::redact::RawDecision::Denied,
+                                );
 
                                 let _ = agent_writer.send(resp).await;
                                 #[allow(deprecated)]
@@ -1135,9 +1199,27 @@ pub async fn run_stdio_to_http_bridge(
     while let Some(msg) = agent_reader.next().await {
         match msg {
             Ok(json) => {
+                let method = json.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                let tool_name = if method == "tools/list" {
+                    "tools/list".to_string()
+                } else {
+                    json.get("params")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string()
+                };
+
                 let action = evaluate_jsonrpc(&state, &local_session, &json).await;
                 match action {
                     ProxyAction::Forward => {
+                        send_dashboard_event(
+                            &state,
+                            &local_session,
+                            &tool_name,
+                            control_plane_proto::redact::RawDecision::Allowed,
+                        );
+
                         let response = crate::proxy::forward::forward_request(
                             &state.http_client,
                             &state.upstream_url,
@@ -1147,17 +1229,6 @@ pub async fn run_stdio_to_http_bridge(
 
                         match response {
                             Ok(resp) => {
-                                let method =
-                                    json.get("method").and_then(|m| m.as_str()).unwrap_or("");
-                                let tool_name = if method == "tools/list" {
-                                    "tools/list".to_string()
-                                } else {
-                                    json.get("params")
-                                        .and_then(|p| p.get("name"))
-                                        .and_then(|n| n.as_str())
-                                        .unwrap_or("")
-                                        .to_string()
-                                };
                                 let processed = stdio_scan_response(
                                     &state,
                                     &local_session.session_id,
@@ -1188,6 +1259,12 @@ pub async fn run_stdio_to_http_bridge(
                         }
                     }
                     ProxyAction::Respond(resp) | ProxyAction::RespondWithStatus(_, resp) => {
+                        send_dashboard_event(
+                            &state,
+                            &local_session,
+                            &tool_name,
+                            control_plane_proto::redact::RawDecision::Denied,
+                        );
                         if let Err(e) = agent_writer.send(resp).await {
                             eprintln!("Error sending to agent: {}", e);
                             break;
@@ -1195,6 +1272,12 @@ pub async fn run_stdio_to_http_bridge(
                     }
                     ProxyAction::KillAndRespond(resp)
                     | ProxyAction::KillAndRespondWithStatus(_, resp) => {
+                        send_dashboard_event(
+                            &state,
+                            &local_session,
+                            &tool_name,
+                            control_plane_proto::redact::RawDecision::Denied,
+                        );
                         let _ = agent_writer.send(resp).await;
                         break;
                     }

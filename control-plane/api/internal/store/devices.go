@@ -256,41 +256,61 @@ func (s *Store) ListDevices(ctx context.Context, tenantID, osFamily, statusFilte
 	}
 
 	rows, err := s.pool.Query(ctx, `
+		WITH deduped_enrollments AS (
+			SELECT DISTINCT ON (organization_id, hostname)
+				device_id, organization_id, hostname, user_identifier, os, os_version,
+				public_key, daemon_version, enrollment_status, last_heartbeat_at, created_at, updated_at
+			FROM device_enrollments
+			WHERE ($1 = '' OR organization_id::text = $1)
+			ORDER BY organization_id, hostname,
+				CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END,
+				last_heartbeat_at DESC NULLS LAST
+		),
+		deduped_devices AS (
+			SELECT DISTINCT ON (tenant_id, COALESCE(stable_device_id, id::text))
+				id, tenant_id, COALESCE(stable_device_id, id::text) AS hostname,
+				display_name, owner_subject, os_family, architecture, os_version_summary,
+				state, first_enrolled_at, last_heartbeat_at, revoked_at, created_at, updated_at
+			FROM devices
+			WHERE ($1 = '' OR tenant_id::text = $1)
+			ORDER BY tenant_id, COALESCE(stable_device_id, id::text),
+				last_heartbeat_at DESC NULLS LAST
+		),
+		unified AS (
+			SELECT 
+				COALESCE(d.id::text, de.device_id::text) AS device_id,
+				COALESCE(d.hostname, de.hostname) AS hostname,
+				COALESCE(d.architecture, 'x86_64') AS os_arch,
+				COALESCE(d.os_family, de.os, 'windows') AS os_family,
+				COALESCE(k.fingerprint, de.public_key, '') AS public_key,
+				COALESCE(d.os_version_summary, de.os_version, 'v1.0.32') AS agentcontrol_version,
+				CASE
+					WHEN COALESCE(d.state::text, de.enrollment_status) = 'REVOKED' THEN 'REVOKED'
+					WHEN COALESCE(d.state::text, de.enrollment_status) = 'PENDING' THEN 'PENDING'
+					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) IS NULL THEN 'UNREACHABLE'
+					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
+					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
+					ELSE COALESCE(d.state::text, de.enrollment_status, 'COMPLIANT')
+				END AS compliance_status,
+				COALESCE(d.first_enrolled_at, de.created_at, NOW()) AS first_enrolled_at,
+				COALESCE(d.last_heartbeat_at, de.last_heartbeat_at, d.first_enrolled_at, de.created_at, NOW()) AS last_heartbeat_at,
+				(COALESCE(d.state::text, de.enrollment_status) = 'REVOKED') AS is_revoked,
+				d.revoked_at,
+				COALESCE(d.updated_at, de.updated_at, NOW()) AS updated_at,
+				COALESCE(d.created_at, de.created_at, NOW()) AS created_at
+			FROM deduped_devices d
+			FULL OUTER JOIN deduped_enrollments de 
+			  ON de.hostname = d.hostname OR de.device_id = d.id
+			LEFT JOIN device_enrollment_keys k 
+			  ON d.id = k.device_id AND k.status = 'ACTIVE' AND k.tenant_id = d.tenant_id
+		)
 		SELECT 
-			d.id::text AS device_id,
-			COALESCE(d.stable_device_id, d.id::text) AS hostname,
-			COALESCE(d.architecture, 'x86_64') AS os_arch,
-			COALESCE(d.os_family, 'windows') AS os_family,
-			COALESCE(k.fingerprint, '') AS public_key,
-			COALESCE(d.os_version_summary, 'v1.0.32') AS agentcontrol_version,
-			CASE
-				WHEN d.state = 'REVOKED' THEN 'REVOKED'
-				WHEN d.state = 'PENDING' THEN 'PENDING'
-				WHEN d.last_heartbeat_at IS NULL THEN 'UNREACHABLE'
-				WHEN d.last_heartbeat_at < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
-				WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
-				ELSE d.state::text
-			END AS compliance_status,
-			d.first_enrolled_at,
-			COALESCE(d.last_heartbeat_at, d.first_enrolled_at) AS last_heartbeat_at,
-			(d.state = 'REVOKED') AS is_revoked,
-			d.revoked_at,
-			d.updated_at
-		FROM devices d
-		LEFT JOIN device_enrollment_keys k ON d.id = k.device_id AND k.status = 'ACTIVE' AND k.tenant_id = d.tenant_id
-		WHERE d.tenant_id = $1
-		  AND ($2 = '' OR d.os_family = $2)
-		  AND ($3 = '' OR (
-		      CASE
-		          WHEN d.state = 'REVOKED' THEN 'REVOKED'
-		          WHEN d.state = 'PENDING' THEN 'PENDING'
-		          WHEN d.last_heartbeat_at IS NULL THEN 'UNREACHABLE'
-		          WHEN d.last_heartbeat_at < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
-		          WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
-		          ELSE d.state::text
-		      END = $3
-		  ))
-		ORDER BY d.created_at DESC
+			u.device_id, u.hostname, u.os_arch, u.os_family, u.public_key, u.agentcontrol_version,
+			u.compliance_status, u.first_enrolled_at, u.last_heartbeat_at, u.is_revoked, u.revoked_at, u.updated_at
+		FROM unified u
+		WHERE ($2 = '' OR u.os_family = $2)
+		  AND ($3 = '' OR u.compliance_status = $3)
+		ORDER BY u.created_at DESC
 		LIMIT $4 OFFSET $5
 	`, tenantID, osFamily, statusFilter, limit, offset)
 

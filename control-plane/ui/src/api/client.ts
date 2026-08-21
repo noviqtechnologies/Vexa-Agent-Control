@@ -534,9 +534,44 @@ export interface ListSentryTamperEventsResponse {
   total_count: number
 }
 
+export interface IdeTargetDetail {
+  name: string
+  installed: boolean
+  config_path?: string
+  proxy_configured: boolean
+  configured_base_url?: string
+  mcp_wrapped: boolean
+  compliance_state: string
+  last_healed_at?: string
+}
+
+export interface SentryDeviceDetail {
+  device_id: string
+  organization_id: string
+  hostname: string
+  user_identifier: string
+  os: string
+  os_version: string
+  public_key: string
+  daemon_version: string
+  enrollment_status: string
+  last_heartbeat_at?: string
+  created_at: string
+  updated_at: string
+  overall_compliance: 'COMPLIANT' | 'NON_COMPLIANT' | 'OFFLINE'
+  tamper_count_24h: number
+  ide_statuses: IdeTargetDetail[]
+  recent_tamper_events: SentryTamperEvent[]
+  report_payload?: string
+}
+
 export async function listSentryDevices(complianceStatus = '', limit = 50): Promise<ListSentryDevicesResponse> {
   const query = complianceStatus ? `?compliance_status=${complianceStatus}&limit=${limit}` : `?limit=${limit}`
   return get<ListSentryDevicesResponse>(`/devices${query}`)
+}
+
+export async function getSentryDeviceDetail(deviceId: string): Promise<SentryDeviceDetail> {
+  return get<SentryDeviceDetail>(`/devices/${deviceId}`)
 }
 
 export async function listSentryTamperEvents(limit = 50): Promise<ListSentryTamperEventsResponse> {

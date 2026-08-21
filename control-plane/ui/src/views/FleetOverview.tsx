@@ -52,8 +52,20 @@ export default function FleetOverview() {
       api.listRecentAlerts(),
       (api.getLicenseStatus ? api.getLicenseStatus().catch(() => null) : Promise.resolve(null)),
     ]).then(([s, a, h, al, lic]) => {
+      const rawAgents = a || []
+      const seen = new Set<string>()
+      const dedupedAgents: AgentSummary[] = []
+      for (const ag of rawAgents) {
+        const k = (ag.agent_id || '').toLowerCase()
+        if (k && !seen.has(k)) {
+          seen.add(k)
+          dedupedAgents.push(ag)
+        } else if (!k) {
+          dedupedAgents.push(ag)
+        }
+      }
       setStats(s)
-      setAgents(a || [])
+      setAgents(dedupedAgents)
       setHeatmap(h || [])
       setAlerts(al || [])
       setLicenseStatus(lic)

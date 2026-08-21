@@ -266,6 +266,7 @@ func main() {
 		// Sentry Device Governance & Tamper Log
 		r.Get("/devices", deviceH.ListDevices)
 		r.Get("/devices/tamper-log", deviceH.ListTamperEvents)
+		r.Get("/devices/{id}", deviceH.GetDevice)
 
 		// Admin-only fleet routes
 		r.Route("/fleet/mcp-servers", func(r chi.Router) {
