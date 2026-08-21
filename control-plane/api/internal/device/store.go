@@ -26,43 +26,71 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 		return nil
 	}
 	schemaSQL := `
-		CREATE TABLE IF NOT EXISTS device_enrollments (
-			device_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			organization_id UUID NOT NULL,
-			hostname VARCHAR(255) NOT NULL,
-			user_identifier VARCHAR(255) NOT NULL,
-			os VARCHAR(32) NOT NULL,
-			os_version VARCHAR(255) NOT NULL,
-			public_key TEXT NOT NULL,
-			daemon_version VARCHAR(32) NOT NULL,
-			enrollment_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
-			last_heartbeat_at TIMESTAMPTZ,
+		CREATE TABLE IF NOT EXISTS devices (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL,
+			stable_device_id TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			owner_subject TEXT,
+			os_family TEXT NOT NULL DEFAULT 'windows',
+			architecture TEXT NOT NULL DEFAULT 'x86_64',
+			os_version_summary TEXT,
+			daemon_version TEXT DEFAULT '2.1.0',
+			public_key TEXT,
+			state VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+			state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			revoked_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			CONSTRAINT uq_device_org_host UNIQUE (organization_id, hostname, user_identifier)
+			CONSTRAINT uq_devices_tenant_stable UNIQUE (tenant_id, stable_device_id)
 		);
+
+		-- Add columns if missing in existing installations
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+		-- Backward compatibility view for legacy tooling
+		CREATE OR REPLACE VIEW device_enrollments AS
+			SELECT 
+				id AS device_id,
+				tenant_id AS organization_id,
+				COALESCE(stable_device_id, display_name) AS hostname,
+				COALESCE(owner_subject, display_name, 'Developer Workstation') AS user_identifier,
+				os_family AS os,
+				COALESCE(os_version_summary, architecture, 'v1.0') AS os_version,
+				COALESCE(public_key, '') AS public_key,
+				COALESCE(daemon_version, '2.1.0') AS daemon_version,
+				CASE WHEN state::text = 'REVOKED' THEN 'REVOKED' ELSE 'ACTIVE' END AS enrollment_status,
+				first_enrolled_at,
+				last_heartbeat_at,
+				created_at,
+				updated_at
+			FROM devices;
 
 		CREATE TABLE IF NOT EXISTS device_compliance_reports (
 			report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			device_id UUID NOT NULL REFERENCES device_enrollments(device_id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
 			organization_id UUID NOT NULL,
 			overall_compliance VARCHAR(32) NOT NULL,
 			tamper_event_count_24h INT NOT NULL DEFAULT 0,
-			report_payload JSONB NOT NULL,
+			report_payload JSONB,
 			reported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CONSTRAINT uq_device_compliance UNIQUE (device_id)
 		);
 
 		CREATE TABLE IF NOT EXISTS device_ide_status (
 			status_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			device_id UUID NOT NULL REFERENCES device_enrollments(device_id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
 			ide_name VARCHAR(64) NOT NULL,
 			is_installed BOOLEAN NOT NULL DEFAULT false,
-			config_path TEXT NOT NULL,
+			config_path TEXT NOT NULL DEFAULT '',
 			proxy_configured BOOLEAN NOT NULL DEFAULT false,
-			configured_base_url TEXT,
+			configured_base_url TEXT DEFAULT '',
 			mcp_wrapped BOOLEAN NOT NULL DEFAULT false,
-			compliance_state VARCHAR(32) NOT NULL,
+			compliance_state VARCHAR(32) NOT NULL DEFAULT 'COMPLIANT',
 			last_healed_at TIMESTAMPTZ,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CONSTRAINT uq_device_ide UNIQUE (device_id, ide_name)
@@ -70,7 +98,7 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 
 		CREATE TABLE IF NOT EXISTS device_tamper_events (
 			event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			device_id UUID NOT NULL REFERENCES device_enrollments(device_id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
 			organization_id UUID NOT NULL,
 			ide_name VARCHAR(64) NOT NULL,
 			event_type VARCHAR(64) NOT NULL,
@@ -89,7 +117,7 @@ func generateToken(prefix string) string {
 	return prefix + "_" + hex.EncodeToString(b)
 }
 
-// EnrollDevice registers or updates a workstation enrollment
+// EnrollDevice registers or updates a workstation in the devices table
 func (s *Store) EnrollDevice(ctx context.Context, orgID string, req *EnrollDeviceRequest) (*EnrollDeviceResponse, error) {
 	if s.pool == nil {
 		return nil, errors.New("database pool uninitialized")
@@ -113,19 +141,22 @@ func (s *Store) EnrollDevice(ctx context.Context, orgID string, req *EnrollDevic
 	var deviceID string
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO device_enrollments (
-			organization_id, hostname, user_identifier, os, os_version,
-			public_key, daemon_version, enrollment_status, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', now())
-		ON CONFLICT (organization_id, hostname, user_identifier)
+		INSERT INTO devices (
+			tenant_id, stable_device_id, display_name, owner_subject,
+			os_family, architecture, os_version_summary, public_key, daemon_version, state, state_changed_at, updated_at
+		) VALUES ($1, $2, $2, $3, $4, 'x86_64', $5, $6, $7, 'COMPLIANT', now(), now())
+		ON CONFLICT (tenant_id, stable_device_id)
 		DO UPDATE SET 
-			os = EXCLUDED.os,
-			os_version = EXCLUDED.os_version,
-			public_key = EXCLUDED.public_key,
+			display_name = EXCLUDED.display_name,
+			owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
+			os_family = EXCLUDED.os_family,
+			os_version_summary = EXCLUDED.os_version_summary,
+			public_key = COALESCE(NULLIF(EXCLUDED.public_key, ''), devices.public_key),
 			daemon_version = EXCLUDED.daemon_version,
-			enrollment_status = 'ACTIVE',
+			state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
+			last_heartbeat_at = now(),
 			updated_at = now()
-		RETURNING device_id, created_at
+		RETURNING id::text, created_at
 	`, orgID, req.Hostname, req.UserIdentifier, req.OS, req.OSVersion, req.PublicKey, req.DaemonVersion).
 		Scan(&deviceID, &createdAt)
 
@@ -159,98 +190,56 @@ func (s *Store) RecordTelemetry(ctx context.Context, orgID string, req *Telemetr
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Verify device exists and is ACTIVE
-	var status string
+	// 1. Resolve authoritative device in devices table
+	var canonicalDeviceID string
 	var registeredOrgID string
-	var canonicalDeviceID string = req.DeviceID
+	var devState string
 	var devHostname string
 
 	err = tx.QueryRow(ctx, `
-		SELECT device_id::text, enrollment_status, organization_id::text, hostname 
-		FROM device_enrollments 
-		WHERE device_id::text = $1 OR hostname = $1
-		ORDER BY CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END, last_heartbeat_at DESC NULLS LAST
+		SELECT id::text, tenant_id::text, state::text, COALESCE(stable_device_id, display_name, id::text)
+		FROM devices
+		WHERE id::text = $1 
+		   OR stable_device_id = $1 
+		   OR LOWER(display_name) = LOWER($1)
+		   OR $1 ILIKE '%-' || display_name || '-%'
 		LIMIT 1
-	`, req.DeviceID).Scan(&canonicalDeviceID, &status, &registeredOrgID, &devHostname)
+	`, req.DeviceID).Scan(&canonicalDeviceID, &registeredOrgID, &devState, &devHostname)
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Fallback: check if registered in devices table
-			var devTenantID string
-			var devState string
-			var devOS string
-			var devArch string
-			var devDisplayName string
-			devErr := tx.QueryRow(ctx, `
-				SELECT id::text, tenant_id::text, state::text, COALESCE(stable_device_id, id::text), COALESCE(os_family, 'windows'), COALESCE(architecture, 'x86_64'), COALESCE(owner_subject, display_name, 'Developer Workstation')
-				FROM devices
-				WHERE id::text = $1 OR stable_device_id = $1
-				LIMIT 1
-			`, req.DeviceID).Scan(&canonicalDeviceID, &devTenantID, &devState, &devHostname, &devOS, &devArch, &devDisplayName)
-
-			if devErr != nil {
-				if errors.Is(devErr, pgx.ErrNoRows) {
-					return nil, errors.New("device not found")
-				}
-				return nil, devErr
+			// Auto-provision workstation in devices table if new
+			if orgID == "" {
+				orgID = "00000000-0000-0000-0000-000000000001"
 			}
-
-			if devState == "REVOKED" {
-				return nil, errors.New("device enrollment is not active")
-			}
-
-			status = "ACTIVE"
-			registeredOrgID = devTenantID
-			if registeredOrgID == "" {
-				registeredOrgID = "00000000-0000-0000-0000-000000000001"
-			}
-
-			// Ensure entry in device_enrollments exists so FK constraints succeed
-			var existingEnrollmentID string
-			errLookup := tx.QueryRow(ctx, `
-				SELECT device_id::text 
-				FROM device_enrollments 
-				WHERE (organization_id = $1 AND hostname = $2) OR device_id::text = $3 
-				LIMIT 1
-			`, registeredOrgID, devHostname, canonicalDeviceID).Scan(&existingEnrollmentID)
-
-			if errLookup == nil && existingEnrollmentID != "" {
-				canonicalDeviceID = existingEnrollmentID
-			} else {
-				_, err = tx.Exec(ctx, `
-					INSERT INTO device_enrollments (
-						device_id, organization_id, hostname, user_identifier, os, os_version,
-						public_key, daemon_version, enrollment_status, last_heartbeat_at, created_at, updated_at
-					) VALUES ($1, $2, $3, $4, $5, $6, '', '2.1.0', 'ACTIVE', now(), now(), now())
-					ON CONFLICT (device_id) DO UPDATE SET last_heartbeat_at = now(), updated_at = now()
-				`, canonicalDeviceID, registeredOrgID, devHostname, devDisplayName, devOS, devArch)
-				if err != nil {
-					_ = tx.QueryRow(ctx, `SELECT device_id::text FROM device_enrollments WHERE organization_id = $1 AND hostname = $2 LIMIT 1`, registeredOrgID, devHostname).Scan(&canonicalDeviceID)
-				}
+			registeredOrgID = orgID
+			err = tx.QueryRow(ctx, `
+				INSERT INTO devices (
+					tenant_id, stable_device_id, display_name, os_family, architecture, state, last_heartbeat_at, created_at, updated_at
+				) VALUES ($1, $2, $2, 'windows', 'x86_64', 'COMPLIANT', now(), now(), now())
+				ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET last_heartbeat_at = now(), updated_at = now()
+				RETURNING id::text, tenant_id::text, state::text, stable_device_id
+			`, registeredOrgID, req.DeviceID).Scan(&canonicalDeviceID, &registeredOrgID, &devState, &devHostname)
+			if err != nil {
+				return nil, fmt.Errorf("device provision failed: %w", err)
 			}
 		} else {
 			return nil, err
 		}
 	}
 
-	if status != "ACTIVE" {
+	if devState == "REVOKED" {
 		return nil, errors.New("device enrollment is not active")
 	}
 
 	now := time.Now().UTC()
 
-	// 2. Update device last heartbeat across device_enrollments and devices
+	// 2. Update device heartbeat and compliance state in-place
 	_, err = tx.Exec(ctx, `
-		UPDATE device_enrollments SET last_heartbeat_at = $1, updated_at = $1 WHERE device_id::text = $2
-	`, now, canonicalDeviceID)
-	if err != nil {
-		return nil, err
-	}
-
-	_, _ = tx.Exec(ctx, `
 		UPDATE devices 
-		SET last_heartbeat_at = $1, state = 'COMPLIANT'::device_state, updated_at = $1 
-		WHERE (id::text = $2 OR stable_device_id = $3) AND state != 'REVOKED'
-	`, now, canonicalDeviceID, devHostname)
+		SET last_heartbeat_at = $1, state = 'COMPLIANT', updated_at = $1 
+		WHERE id::text = $2 AND state != 'REVOKED'
+	`, now, canonicalDeviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -336,69 +325,27 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		WITH deduped_enrollments AS (
-			SELECT DISTINCT ON (organization_id, hostname)
-				device_id, organization_id, hostname, user_identifier, os, os_version,
-				public_key, daemon_version, enrollment_status, last_heartbeat_at, created_at, updated_at
-			FROM device_enrollments
-			WHERE ($1 = '' OR organization_id::text = $1)
-			ORDER BY organization_id, hostname,
-				CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END,
-				last_heartbeat_at DESC NULLS LAST
-		),
-		deduped_devices AS (
-			SELECT DISTINCT ON (tenant_id, COALESCE(stable_device_id, id::text))
-				id, tenant_id, COALESCE(stable_device_id, id::text) AS hostname,
-				display_name, owner_subject, os_family, architecture, os_version_summary,
-				state, first_enrolled_at, last_heartbeat_at, created_at, updated_at
-			FROM devices
-			WHERE ($1 = '' OR tenant_id::text = $1)
-			ORDER BY tenant_id, COALESCE(stable_device_id, id::text),
-				last_heartbeat_at DESC NULLS LAST
-		),
-		unified AS (
-			SELECT 
-				COALESCE(de.device_id::text, d.id::text) AS device_id,
-				COALESCE(de.hostname, d.hostname) AS hostname,
-				COALESCE(
-					NULLIF(de.user_identifier, 'Developer Workstation'),
-					NULLIF(d.owner_subject, ''),
-					NULLIF(d.display_name, ''),
-					de.user_identifier,
-					'Developer Workstation'
-				) AS user_identifier,
-				COALESCE(de.os, d.os_family, 'windows') AS os,
-				COALESCE(de.os_version, d.os_version_summary, 'v1.0.35') AS os_version,
-				COALESCE(de.enrollment_status, d.state::text, 'ACTIVE') AS enrollment_status,
-				COALESCE(de.last_heartbeat_at, d.last_heartbeat_at) AS last_heartbeat_at,
-				d.state AS dev_state,
-				de.device_id AS de_device_id,
-				d.id AS dev_id
-			FROM deduped_devices d
-			FULL OUTER JOIN deduped_enrollments de 
-			  ON de.hostname = d.hostname OR de.device_id = d.id
-		)
 		SELECT 
-			u.device_id,
-			u.hostname,
-			u.user_identifier,
-			u.os,
-			u.os_version,
-			u.enrollment_status,
-			u.last_heartbeat_at,
+			d.id::text AS device_id,
+			COALESCE(d.stable_device_id, d.display_name, d.id::text) AS hostname,
+			COALESCE(NULLIF(d.owner_subject, ''), NULLIF(d.display_name, ''), 'Developer Workstation') AS user_identifier,
+			COALESCE(d.os_family, 'windows') AS os,
+			COALESCE(d.os_version_summary, d.architecture, 'v1.0') AS os_version,
+			d.state::text AS enrollment_status,
+			d.last_heartbeat_at,
 			CASE
-				WHEN COALESCE(u.dev_state::text, u.enrollment_status) = 'REVOKED' THEN 'NON_COMPLIANT'
+				WHEN d.state::text = 'REVOKED' THEN 'NON_COMPLIANT'
 				WHEN c.overall_compliance IS NOT NULL THEN c.overall_compliance
-				WHEN COALESCE(u.dev_state::text, u.enrollment_status) = 'PENDING' THEN 'OFFLINE'
-				WHEN u.last_heartbeat_at IS NULL THEN 'OFFLINE'
-				WHEN u.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'OFFLINE'
+				WHEN d.state::text = 'PENDING' THEN 'OFFLINE'
+				WHEN d.last_heartbeat_at IS NULL THEN 'OFFLINE'
+				WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'OFFLINE'
 				ELSE 'COMPLIANT'
 			END AS overall_compliance,
 			COALESCE(c.tamper_event_count_24h, 0) AS tamper_count_24h
-		FROM unified u
-		LEFT JOIN device_compliance_reports c 
-		  ON (c.device_id = u.de_device_id OR c.device_id = u.dev_id)
-		ORDER BY u.last_heartbeat_at DESC NULLS LAST
+		FROM devices d
+		LEFT JOIN device_compliance_reports c ON c.device_id = d.id
+		WHERE ($1 = '' OR d.tenant_id::text = $1)
+		ORDER BY d.last_heartbeat_at DESC NULLS LAST
 		LIMIT $2 OFFSET $3
 	`, orgID, limit, offset)
 	if err != nil {
@@ -436,14 +383,13 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 			offlineCount++
 		}
 
-		// Retrieve active IDE list for this device (unified across linked device_id and hostname)
+		// Retrieve active IDE list for this device directly by device_id
 		item.ActiveIDEs = []string{}
 		ideRows, ideErr := s.pool.Query(ctx, `
 			SELECT DISTINCT ide_name FROM device_ide_status 
-			WHERE (device_id::text = $1 OR device_id IN (SELECT de.device_id FROM device_enrollments de WHERE de.hostname = $2)) 
-			  AND is_installed = true
+			WHERE device_id::text = $1 AND is_installed = true
 			ORDER BY ide_name ASC
-		`, item.DeviceID, item.Hostname)
+		`, item.DeviceID)
 		if ideErr == nil {
 			for ideRows.Next() {
 				var name string
@@ -480,11 +426,11 @@ func (s *Store) ListTamperEvents(ctx context.Context, orgID string, limit, offse
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT 
-			e.event_id, e.device_id, d.hostname, d.user_identifier,
+			e.event_id, e.device_id, d.stable_device_id, COALESCE(d.owner_subject, d.display_name, 'Developer Workstation'),
 			e.ide_name, e.event_type, e.tamper_details, e.healed_successfully, e.occurred_at
 		FROM device_tamper_events e
-		JOIN device_enrollments d ON e.device_id = d.device_id
-		WHERE e.organization_id = $1
+		JOIN devices d ON e.device_id = d.id
+		WHERE ($1 = '' OR d.tenant_id::text = $1)
 		ORDER BY e.occurred_at DESC
 		LIMIT $2 OFFSET $3
 	`, orgID, limit, offset)
@@ -528,43 +474,26 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 		RecentTamperEvents: []DeviceTamperEventLog{},
 	}
 
-	// 1. Query unified device information
+	// 1. Query device information directly from devices
 	var lastHeartbeat *time.Time
 	err := s.pool.QueryRow(ctx, `
 		SELECT 
-			COALESCE(de.device_id::text, d.id::text, $1),
-			COALESCE(de.organization_id::text, d.tenant_id::text, $2),
-			COALESCE(de.hostname, d.stable_device_id, d.id::text, $1),
-			COALESCE(
-				NULLIF(de.user_identifier, 'Developer Workstation'),
-				NULLIF(d.owner_subject, ''),
-				NULLIF(d.display_name, ''),
-				de.user_identifier,
-				'Developer Workstation'
-			),
-			COALESCE(de.os, d.os_family, 'windows'),
-			COALESCE(de.os_version, d.os_version_summary, 'v1.0.35'),
-			COALESCE(de.public_key, ''),
-			COALESCE(de.daemon_version, '2.1.0'),
-			COALESCE(de.enrollment_status, d.state::text, 'ACTIVE'),
-			COALESCE(de.last_heartbeat_at, d.last_heartbeat_at),
-			COALESCE(de.created_at, d.created_at, now()),
-			COALESCE(de.updated_at, d.updated_at, now())
-		FROM (
-			SELECT id, tenant_id, stable_device_id, display_name, owner_subject, os_family, os_version_summary, state, last_heartbeat_at, created_at, updated_at
-			FROM devices
-			WHERE (id::text = $1 OR stable_device_id = $1)
-			  AND ($2 = '' OR tenant_id::text = $2)
-			LIMIT 1
-		) d
-		FULL OUTER JOIN (
-			SELECT device_id, organization_id, hostname, user_identifier, os, os_version, public_key, daemon_version, enrollment_status, last_heartbeat_at, created_at, updated_at
-			FROM device_enrollments
-			WHERE (device_id::text = $1 OR hostname = $1)
-			  AND ($2 = '' OR organization_id::text = $2)
-			ORDER BY CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END, last_heartbeat_at DESC NULLS LAST
-			LIMIT 1
-		) de ON de.hostname = d.stable_device_id OR de.device_id = d.id
+			d.id::text,
+			d.tenant_id::text,
+			COALESCE(d.stable_device_id, d.display_name, d.id::text),
+			COALESCE(NULLIF(d.owner_subject, ''), NULLIF(d.display_name, ''), 'Developer Workstation'),
+			COALESCE(d.os_family, 'windows'),
+			COALESCE(d.os_version_summary, d.architecture, 'v1.0.35'),
+			COALESCE(d.public_key, ''),
+			COALESCE(d.daemon_version, '2.1.0'),
+			d.state::text,
+			d.last_heartbeat_at,
+			d.created_at,
+			d.updated_at
+		FROM devices d
+		WHERE (d.id::text = $1 OR d.stable_device_id = $1 OR LOWER(d.display_name) = LOWER($1) OR $1 ILIKE '%-' || d.display_name || '-%')
+		  AND ($2 = '' OR d.tenant_id::text = $2)
+		LIMIT 1
 	`, deviceID, orgID).Scan(
 		&detail.DeviceID, &detail.OrganizationID, &detail.Hostname, &detail.UserIdentifier,
 		&detail.OS, &detail.OSVersion, &detail.PublicKey, &detail.DaemonVersion,
@@ -581,11 +510,10 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 	compErr := s.pool.QueryRow(ctx, `
 		SELECT overall_compliance, tamper_event_count_24h, report_payload::text
 		FROM device_compliance_reports
-		WHERE device_id::text = $1 
-		   OR device_id IN (SELECT de.device_id FROM device_enrollments de WHERE de.hostname = $2 OR de.device_id::text = $1)
+		WHERE device_id::text = $1
 		ORDER BY reported_at DESC
 		LIMIT 1
-	`, detail.DeviceID, detail.Hostname).Scan(&detail.OverallCompliance, &detail.TamperCount24h, &payload)
+	`, detail.DeviceID).Scan(&detail.OverallCompliance, &detail.TamperCount24h, &payload)
 	if compErr == nil {
 		detail.ReportPayload = string(payload)
 	}
@@ -603,14 +531,13 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 
 	// 3. Fetch all IDE configuration states
 	ideRows, ideErr := s.pool.Query(ctx, `
-		SELECT DISTINCT ON (ide_name)
+		SELECT 
 			ide_name, is_installed, config_path, proxy_configured,
 			COALESCE(configured_base_url, ''), mcp_wrapped, compliance_state, last_healed_at
 		FROM device_ide_status
-		WHERE device_id::text = $1 
-		   OR device_id IN (SELECT de.device_id FROM device_enrollments de WHERE de.hostname = $2 OR de.device_id::text = $1)
+		WHERE device_id::text = $1
 		ORDER BY ide_name ASC, updated_at DESC
-	`, detail.DeviceID, detail.Hostname)
+	`, detail.DeviceID)
 	if ideErr == nil {
 		defer ideRows.Close()
 		for ideRows.Next() {
@@ -629,11 +556,10 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 		SELECT 
 			event_id, device_id::text, ide_name, event_type, tamper_details, healed_successfully, occurred_at
 		FROM device_tamper_events
-		WHERE device_id::text = $1 
-		   OR device_id IN (SELECT de.device_id FROM device_enrollments de WHERE de.hostname = $2 OR de.device_id::text = $1)
+		WHERE device_id::text = $1
 		ORDER BY occurred_at DESC
 		LIMIT 20
-	`, detail.DeviceID, detail.Hostname)
+	`, detail.DeviceID)
 	if tamperErr == nil {
 		defer tamperRows.Close()
 		for tamperRows.Next() {
@@ -651,3 +577,4 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 
 	return detail, nil
 }
+

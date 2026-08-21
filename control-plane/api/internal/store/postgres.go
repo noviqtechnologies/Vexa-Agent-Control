@@ -75,19 +75,13 @@ func (s *Store) CountDistinctAgents(ctx context.Context, tenantID string) (int, 
 	var err error
 	if tenantID != "" {
 		err = s.pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM (
-				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
-				UNION
-				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
-			) d
+			SELECT COUNT(*) FROM devices 
+			WHERE tenant_id = $1 AND state != 'REVOKED'
 		`, tenantID).Scan(&count)
 	} else {
 		err = s.pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM (
-				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE state != 'REVOKED'
-				UNION
-				SELECT hostname AS did FROM device_enrollments WHERE enrollment_status != 'REVOKED'
-			) d
+			SELECT COUNT(*) FROM devices 
+			WHERE state != 'REVOKED'
 		`).Scan(&count)
 	}
 	return count, err
@@ -127,17 +121,6 @@ func (s *Store) ResolveTenantIDForAgent(ctx context.Context, agentID string) str
 	err = s.pool.QueryRow(ctx, `
 		SELECT tenant_id::text FROM agents 
 		WHERE agent_id = $1 
-		LIMIT 1
-	`, agentID).Scan(&tenantID)
-	if err == nil && tenantID != "" {
-		return tenantID
-	}
-	// 3. Check device_enrollments table
-	err = s.pool.QueryRow(ctx, `
-		SELECT organization_id::text FROM device_enrollments 
-		WHERE hostname = $1 
-		   OR device_id::text = $1 
-		   OR $1 ILIKE '%' || LOWER(hostname) || '%'
 		LIMIT 1
 	`, agentID).Scan(&tenantID)
 	if err == nil && tenantID != "" {
@@ -233,39 +216,24 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 			WHERE tenant_id = $1
 			UNION ALL
 			SELECT 
-				COALESCE(de.hostname, d.hostname) AS agent_id,
+				COALESCE(d.stable_device_id, d.display_name, d.id::text) AS agent_id,
 				COALESCE(
-					NULLIF(de.user_identifier, 'Developer Workstation'),
 					NULLIF(d.owner_subject, ''),
 					NULLIF(d.display_name, ''),
-					de.user_identifier,
-					d.display_name,
 					'Developer Workstation'
 				) AS display_name,
 				CASE 
-					WHEN d.state = 'REVOKED' OR de.enrollment_status = 'REVOKED' THEN 'revoked'
-					WHEN d.state = 'NON_COMPLIANT' OR de.enrollment_status = 'NON_COMPLIANT' THEN 'non_compliant'
-					WHEN COALESCE(de.last_heartbeat_at, d.last_heartbeat_at) >= NOW() - INTERVAL '3 minutes' THEN 'active'
+					WHEN d.state = 'REVOKED' THEN 'revoked'
+					WHEN d.state = 'PENDING' THEN 'idle'
+					WHEN d.last_heartbeat_at >= NOW() - INTERVAL '3 minutes' THEN 'active'
 					ELSE 'idle'
 				END AS status,
 				'v1.0' AS policy_version,
-				COALESCE(de.last_heartbeat_at, d.last_heartbeat_at, d.created_at, de.created_at, NOW()) AS last_seen_at,
-				COALESCE(d.tenant_id, de.organization_id) AS tenant_id
-			FROM (
-				SELECT DISTINCT ON (tenant_id, COALESCE(stable_device_id, id::text))
-					id, tenant_id, COALESCE(stable_device_id, id::text) AS hostname, display_name, owner_subject, state, last_heartbeat_at, created_at
-				FROM devices
-				WHERE tenant_id = $1
-				ORDER BY tenant_id, COALESCE(stable_device_id, id::text), last_heartbeat_at DESC NULLS LAST
-			) d
-			FULL OUTER JOIN (
-				SELECT DISTINCT ON (organization_id, hostname)
-					device_id, organization_id, hostname, user_identifier, enrollment_status, last_heartbeat_at, created_at
-				FROM device_enrollments
-				WHERE organization_id = $1
-				ORDER BY organization_id, hostname, CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END, last_heartbeat_at DESC NULLS LAST
-			) de ON de.hostname = d.hostname OR de.device_id = d.id
-			WHERE COALESCE(de.hostname, d.hostname) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
+				COALESCE(d.last_heartbeat_at, d.created_at, NOW()) AS last_seen_at,
+				d.tenant_id
+			FROM devices d
+			WHERE d.tenant_id = $1
+			  AND COALESCE(d.stable_device_id, d.display_name, d.id::text) NOT IN (SELECT agent_id FROM agents WHERE tenant_id = $1)
 		) a
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
@@ -319,14 +287,10 @@ func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats
 			(SELECT COUNT(*) FROM (
 				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED'
 				UNION
-				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status != 'REVOKED'
-				UNION
 				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status != 'revoked'
 			) d),
 			(SELECT COUNT(*) FROM (
 				SELECT COALESCE(stable_device_id, id::text) AS did FROM devices WHERE tenant_id = $1 AND state != 'REVOKED' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
-				UNION
-				SELECT hostname AS did FROM device_enrollments WHERE organization_id = $1 AND enrollment_status = 'ACTIVE' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'
 				UNION
 				SELECT agent_id AS did FROM agents WHERE tenant_id = $1 AND status = 'active' AND last_seen_at >= NOW() - INTERVAL '3 minutes'
 			) d),
@@ -699,8 +663,7 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, tenantID, agentID str
 			m.path_verified, 
 			m.last_seen_at
 		FROM mcp_servers m
-		LEFT JOIN device_enrollments d ON d.device_id::text = m.agent_id
-		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id
+		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id OR LOWER(dev.display_name) = LOWER(m.agent_id)
 		WHERE m.tenant_id = $1 AND m.agent_id = $2
 		ORDER BY m.last_seen_at DESC
 	`, tenantID, agentID)
@@ -729,15 +692,14 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, tenantID string) ([
 	rows, err := s.pool.Query(ctx, `
 		SELECT 
 			m.agent_id, 
-			COALESCE(NULLIF(d.hostname, ''), NULLIF(dev.display_name, ''), m.agent_id) AS hostname,
+			COALESCE(NULLIF(dev.display_name, ''), NULLIF(dev.stable_device_id, ''), m.agent_id) AS hostname,
 			m.ide_target, 
 			m.server_name, 
 			m.wrapped, 
 			m.path_verified, 
 			m.last_seen_at
 		FROM mcp_servers m
-		LEFT JOIN device_enrollments d ON d.device_id::text = m.agent_id
-		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id
+		LEFT JOIN devices dev ON dev.id::text = m.agent_id OR dev.stable_device_id = m.agent_id OR LOWER(dev.display_name) = LOWER(m.agent_id)
 		WHERE m.tenant_id = $1
 		ORDER BY m.last_seen_at DESC
 	`, tenantID)

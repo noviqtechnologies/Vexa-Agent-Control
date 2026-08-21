@@ -154,90 +154,64 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Mark device revoked in devices table if it exists
+	// 1. Mark device revoked in devices table
 	updateDevQuery := `
 		UPDATE devices
 		SET state = 'REVOKED', state_reason_code = 'OPERATOR_REVOCATION',
 		    revoked_at = now(), revoked_by_subject = $1, revocation_reason = $2,
 		    state_changed_at = now(), updated_at = now()
-		WHERE (id::text = $3 OR stable_device_id = $3) AND (tenant_id::text = $4 OR $4 = '')
-		RETURNING id::text;
+		WHERE (id::text = $3 OR stable_device_id = $3 OR LOWER(display_name) = LOWER($3)) AND (tenant_id::text = $4 OR $4 = '')
+		RETURNING id::text, tenant_id::text;
 	`
 	var actualDeviceID string
-	err = tx.QueryRow(ctx, updateDevQuery, actorSubject, reason, deviceID, tenantID).Scan(&actualDeviceID)
-	foundInDevices := (err == nil)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	var actualTenantID string
+	err = tx.QueryRow(ctx, updateDevQuery, actorSubject, reason, deviceID, tenantID).Scan(&actualDeviceID, &actualTenantID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrDeviceNotFoundV2
+		}
 		return fmt.Errorf("update device revoke: %w", err)
 	}
 
-	// 2. Also mark device revoked in device_enrollments table if it exists
-	updateEnrollmentQuery := `
-		UPDATE device_enrollments
-		SET enrollment_status = 'REVOKED', updated_at = now()
-		WHERE (device_id::text = $1 OR hostname = $1)
-		RETURNING device_id::text;
+	if tenantID == "" {
+		tenantID = actualTenantID
+	}
+
+	// 2. Also update device_compliance_reports
+	_, _ = tx.Exec(ctx, `
+		UPDATE device_compliance_reports
+		SET overall_compliance = 'NON_COMPLIANT', reported_at = now()
+		WHERE device_id::text = $1;
+	`, actualDeviceID)
+
+	// 3. Mark active certificates revoked
+	updateCertsQuery := `
+		UPDATE device_certificates
+		SET status = 'REVOKED', revoked_at = now(), revocation_reason = $1
+		WHERE (tenant_id::text = $2 OR $2 = '') AND device_id::text = $3 AND status = 'ACTIVE';
 	`
-	var enrollmentDevID string
-	err = tx.QueryRow(ctx, updateEnrollmentQuery, deviceID).Scan(&enrollmentDevID)
-	foundInEnrollments := (err == nil)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("update device_enrollments revoke: %w", err)
+	if _, err := tx.Exec(ctx, updateCertsQuery, reason, tenantID, actualDeviceID); err != nil {
+		return fmt.Errorf("update certs revoke: %w", err)
 	}
 
-	if !foundInDevices && !foundInEnrollments {
-		return ErrDeviceNotFoundV2
+	// 4. Revoke capabilities
+	updateCapsQuery := `
+		UPDATE device_provider_capabilities
+		SET status = 'REVOKED'
+		WHERE (tenant_id::text = $1 OR $1 = '') AND device_id::text = $2 AND status = 'ACTIVE';
+	`
+	if _, err := tx.Exec(ctx, updateCapsQuery, tenantID, actualDeviceID); err != nil {
+		return fmt.Errorf("update caps revoke: %w", err)
 	}
 
-	// If in device_enrollments, also update device_compliance_reports
-	if foundInEnrollments {
-		targetID := enrollmentDevID
-		if targetID == "" {
-			targetID = deviceID
-		}
-		_, _ = tx.Exec(ctx, `
-			UPDATE device_compliance_reports
-			SET overall_compliance = 'NON_COMPLIANT', reported_at = now()
-			WHERE device_id::text = $1;
-		`, targetID)
-	}
-
-	effectiveDeviceID := deviceID
-	if actualDeviceID != "" {
-		effectiveDeviceID = actualDeviceID
-	} else if enrollmentDevID != "" {
-		effectiveDeviceID = enrollmentDevID
-	}
-
-	// 3. Mark active certificates revoked (if present in devices)
-	if foundInDevices {
-		updateCertsQuery := `
-			UPDATE device_certificates
-			SET status = 'REVOKED', revoked_at = now(), revocation_reason = $1
-			WHERE (tenant_id::text = $2 OR $2 = '') AND device_id::text = $3 AND status = 'ACTIVE';
-		`
-		if _, err := tx.Exec(ctx, updateCertsQuery, reason, tenantID, actualDeviceID); err != nil {
-			return fmt.Errorf("update certs revoke: %w", err)
-		}
-
-		// 4. Revoke capabilities
-		updateCapsQuery := `
-			UPDATE device_provider_capabilities
-			SET status = 'REVOKED'
-			WHERE (tenant_id::text = $1 OR $1 = '') AND device_id::text = $2 AND status = 'ACTIVE';
-		`
-		if _, err := tx.Exec(ctx, updateCapsQuery, tenantID, actualDeviceID); err != nil {
-			return fmt.Errorf("update caps revoke: %w", err)
-		}
-
-		// 5. Record state history (only when foreign key devices(id) is satisfied)
-		historyQuery := `
-			INSERT INTO device_state_history (
-				tenant_id, device_id, prior_state, new_state, reason_code, actor_type, actor_subject, correlation_id
-			) VALUES ($1::uuid, $2::uuid, 'COMPLIANT', 'REVOKED', 'OPERATOR_REVOCATION', 'OPERATOR', NULLIF($3, ''), gen_random_uuid());
-		`
-		if _, err := tx.Exec(ctx, historyQuery, tenantID, actualDeviceID, actorSubject); err != nil {
-			return fmt.Errorf("insert history revoke: %w", err)
-		}
+	// 5. Record state history (only when foreign key devices(id) is satisfied)
+	historyQuery := `
+		INSERT INTO device_state_history (
+			tenant_id, device_id, prior_state, new_state, reason_code, actor_type, actor_subject, correlation_id
+		) VALUES ($1::uuid, $2::uuid, 'COMPLIANT', 'REVOKED', 'OPERATOR_REVOCATION', 'OPERATOR', NULLIF($3, ''), gen_random_uuid());
+	`
+	if _, err := tx.Exec(ctx, historyQuery, tenantID, actualDeviceID, actorSubject); err != nil {
+		return fmt.Errorf("insert history revoke: %w", err)
 	}
 
 	// 6. Audit & Outbox
@@ -248,7 +222,7 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 			$1::uuid, gen_random_uuid(), gen_random_uuid(), 'OPERATOR', $2, 'device.revoke', 'device', $3, 'SUCCESS', 'DEVICE_REVOKED'
 		);
 	`
-	if _, err := tx.Exec(ctx, auditQuery, tenantID, actorSubject, effectiveDeviceID); err != nil {
+	if _, err := tx.Exec(ctx, auditQuery, tenantID, actorSubject, actualDeviceID); err != nil {
 		return fmt.Errorf("insert audit revoke: %w", err)
 	}
 
@@ -257,7 +231,7 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 			tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
 		) VALUES ($1::uuid, 'device', $2, 'device.revoked', '2.0', jsonb_build_object('reason', $3::text));
 	`
-	if _, err := tx.Exec(ctx, outboxQuery, tenantID, effectiveDeviceID, reason); err != nil {
+	if _, err := tx.Exec(ctx, outboxQuery, tenantID, actualDeviceID, reason); err != nil {
 		return fmt.Errorf("insert outbox revoke: %w", err)
 	}
 

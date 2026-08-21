@@ -220,7 +220,13 @@ func (s *Store) CompleteEnrollmentTransaction(
 			os_family, os_version_summary, architecture, state, state_changed_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', now())
 		ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET
-			state = 'PENDING', updated_at = now()
+			display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), devices.display_name),
+			owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
+			os_family = EXCLUDED.os_family,
+			os_version_summary = EXCLUDED.os_version_summary,
+			architecture = EXCLUDED.architecture,
+			state = CASE WHEN devices.state = 'REVOKED' THEN 'REVOKED'::device_state ELSE 'PENDING'::device_state END,
+			updated_at = now()
 		RETURNING id, state;
 	`
 	err = tx.QueryRow(ctx, devQuery,

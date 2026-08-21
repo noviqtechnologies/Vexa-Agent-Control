@@ -185,28 +185,16 @@ func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, tenantID, deviceID st
 		status = "NON_COMPLIANT"
 	}
 
-	// Update devices table
+	// Update devices table directly
 	_, err := s.pool.Exec(ctx, `
 		UPDATE devices
 		SET last_heartbeat_at = NOW(),
 		    state = CASE WHEN state = 'REVOKED' THEN 'REVOKED'::device_state ELSE $2::device_state END,
 		    updated_at = NOW()
-		WHERE (id::text = $1 OR stable_device_id = $1) AND state != 'REVOKED'
+		WHERE (id::text = $1 OR stable_device_id = $1 OR LOWER(display_name) = LOWER($1) OR $1 ILIKE '%-' || display_name || '-%')
+		  AND state != 'REVOKED'
 	`, deviceID, status)
-	if err != nil {
-		return err
-	}
-
-	// Also update device_enrollments table
-	_, _ = s.pool.Exec(ctx, `
-		UPDATE device_enrollments
-		SET last_heartbeat_at = NOW(),
-		    enrollment_status = 'ACTIVE',
-		    updated_at = NOW()
-		WHERE (device_id::text = $1 OR hostname = $1) AND enrollment_status != 'REVOKED'
-	`, deviceID)
-
-	return nil
+	return err
 }
 
 // RevokeDevice sets state to REVOKED for a given device within a tenant.
@@ -219,28 +207,14 @@ func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) err
 		SET state = 'REVOKED',
 		    revoked_at = NOW(),
 		    updated_at = NOW()
-		WHERE (id::text = $1 OR stable_device_id = $1) AND tenant_id = $2
+		WHERE (id::text = $1 OR stable_device_id = $1 OR LOWER(display_name) = LOWER($1))
+		  AND ($2 = '' OR tenant_id::text = $2)
 	`, deviceID, tenantID)
 	if err != nil {
 		return err
 	}
 
-	enrollRes, err := s.pool.Exec(ctx, `
-		UPDATE device_enrollments
-		SET enrollment_status = 'REVOKED', updated_at = NOW()
-		WHERE (device_id::text = $1 OR hostname = $1) AND organization_id = $2
-	`, deviceID, tenantID)
-	if err != nil {
-		return err
-	}
-
-	_, _ = s.pool.Exec(ctx, `
-		UPDATE device_compliance_reports
-		SET overall_compliance = 'NON_COMPLIANT', reported_at = NOW()
-		WHERE device_id::text = $1 AND organization_id = $2
-	`, deviceID, tenantID)
-
-	if res.RowsAffected() == 0 && enrollRes.RowsAffected() == 0 {
+	if res.RowsAffected() == 0 {
 		return ErrDeviceNotFound
 	}
 	return nil
@@ -256,61 +230,31 @@ func (s *Store) ListDevices(ctx context.Context, tenantID, osFamily, statusFilte
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		WITH deduped_enrollments AS (
-			SELECT DISTINCT ON (organization_id, hostname)
-				device_id, organization_id, hostname, user_identifier, os, os_version,
-				public_key, daemon_version, enrollment_status, last_heartbeat_at, created_at, updated_at
-			FROM device_enrollments
-			WHERE ($1 = '' OR organization_id::text = $1)
-			ORDER BY organization_id, hostname,
-				CASE WHEN user_identifier != 'Developer Workstation' AND user_identifier != '' THEN 0 ELSE 1 END,
-				last_heartbeat_at DESC NULLS LAST
-		),
-		deduped_devices AS (
-			SELECT DISTINCT ON (tenant_id, COALESCE(stable_device_id, id::text))
-				id, tenant_id, COALESCE(stable_device_id, id::text) AS hostname,
-				display_name, owner_subject, os_family, architecture, os_version_summary,
-				state, first_enrolled_at, last_heartbeat_at, revoked_at, created_at, updated_at
-			FROM devices
-			WHERE ($1 = '' OR tenant_id::text = $1)
-			ORDER BY tenant_id, COALESCE(stable_device_id, id::text),
-				last_heartbeat_at DESC NULLS LAST
-		),
-		unified AS (
-			SELECT 
-				COALESCE(d.id::text, de.device_id::text) AS device_id,
-				COALESCE(d.hostname, de.hostname) AS hostname,
-				COALESCE(d.architecture, 'x86_64') AS os_arch,
-				COALESCE(d.os_family, de.os, 'windows') AS os_family,
-				COALESCE(k.fingerprint, de.public_key, '') AS public_key,
-				COALESCE(d.os_version_summary, de.os_version, 'v1.0.32') AS agentcontrol_version,
-				CASE
-					WHEN COALESCE(d.state::text, de.enrollment_status) = 'REVOKED' THEN 'REVOKED'
-					WHEN COALESCE(d.state::text, de.enrollment_status) = 'PENDING' THEN 'PENDING'
-					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) IS NULL THEN 'UNREACHABLE'
-					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
-					WHEN COALESCE(d.last_heartbeat_at, de.last_heartbeat_at) < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
-					ELSE COALESCE(d.state::text, de.enrollment_status, 'COMPLIANT')
-				END AS compliance_status,
-				COALESCE(d.first_enrolled_at, de.created_at, NOW()) AS first_enrolled_at,
-				COALESCE(d.last_heartbeat_at, de.last_heartbeat_at, d.first_enrolled_at, de.created_at, NOW()) AS last_heartbeat_at,
-				(COALESCE(d.state::text, de.enrollment_status) = 'REVOKED') AS is_revoked,
-				d.revoked_at,
-				COALESCE(d.updated_at, de.updated_at, NOW()) AS updated_at,
-				COALESCE(d.created_at, de.created_at, NOW()) AS created_at
-			FROM deduped_devices d
-			FULL OUTER JOIN deduped_enrollments de 
-			  ON de.hostname = d.hostname OR de.device_id = d.id
-			LEFT JOIN device_enrollment_keys k 
-			  ON d.id = k.device_id AND k.status = 'ACTIVE' AND k.tenant_id = d.tenant_id
-		)
 		SELECT 
-			u.device_id, u.hostname, u.os_arch, u.os_family, u.public_key, u.agentcontrol_version,
-			u.compliance_status, u.first_enrolled_at, u.last_heartbeat_at, u.is_revoked, u.revoked_at, u.updated_at
-		FROM unified u
-		WHERE ($2 = '' OR u.os_family = $2)
-		  AND ($3 = '' OR u.compliance_status = $3)
-		ORDER BY u.created_at DESC
+			d.id::text AS device_id,
+			COALESCE(d.stable_device_id, d.display_name, d.id::text) AS hostname,
+			COALESCE(d.architecture, 'x86_64') AS os_arch,
+			COALESCE(d.os_family, 'windows') AS os_family,
+			COALESCE(d.public_key, '') AS public_key,
+			COALESCE(d.os_version_summary, d.architecture, 'v1.0.32') AS agentcontrol_version,
+			CASE
+				WHEN d.state::text = 'REVOKED' THEN 'REVOKED'
+				WHEN d.state::text = 'PENDING' THEN 'PENDING'
+				WHEN d.last_heartbeat_at IS NULL THEN 'UNREACHABLE'
+				WHEN d.last_heartbeat_at < NOW() - INTERVAL '10 minutes' THEN 'NON_COMPLIANT'
+				WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'UNREACHABLE'
+				ELSE d.state::text
+			END AS compliance_status,
+			d.first_enrolled_at,
+			d.last_heartbeat_at,
+			(d.state::text = 'REVOKED') AS is_revoked,
+			d.revoked_at,
+			d.updated_at
+		FROM devices d
+		WHERE ($1 = '' OR d.tenant_id::text = $1)
+		  AND ($2 = '' OR d.os_family = $2)
+		  AND ($3 = '' OR d.state::text = $3)
+		ORDER BY d.created_at DESC
 		LIMIT $4 OFFSET $5
 	`, tenantID, osFamily, statusFilter, limit, offset)
 
@@ -356,24 +300,11 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 		return nil, false
 	}
 	var principal model.DevicePrincipal
-	// 1. Check devices table
 	err := s.pool.QueryRow(ctx, `
 		SELECT id::text, tenant_id::text
 		FROM devices
-		WHERE (id::text = $1 OR stable_device_id = $1)
+		WHERE (id::text = $1 OR stable_device_id = $1 OR LOWER(display_name) = LOWER($1) OR $1 ILIKE '%-' || display_name || '-%')
 		  AND state != 'REVOKED'
-		LIMIT 1
-	`, token).Scan(&principal.DeviceID, &principal.TenantID)
-	if err == nil && principal.TenantID != "" {
-		return &principal, true
-	}
-
-	// 2. Check device_enrollments table
-	err = s.pool.QueryRow(ctx, `
-		SELECT device_id::text, organization_id::text
-		FROM device_enrollments
-		WHERE (device_id::text = $1 OR hostname = $1)
-		  AND enrollment_status != 'REVOKED'
 		LIMIT 1
 	`, token).Scan(&principal.DeviceID, &principal.TenantID)
 	if err == nil && principal.TenantID != "" {
@@ -383,7 +314,7 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 	return nil, false
 }
 
-// ValidateDeviceToken returns true if the token matches an enrolled/active device or enrollment.
+// ValidateDeviceToken returns true if the token matches an enrolled/active device.
 func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	if token == "" {
 		return false
@@ -392,12 +323,8 @@ func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 	err := s.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM devices 
-			WHERE (id::text = $1 OR stable_device_id = $1)
+			WHERE (id::text = $1 OR stable_device_id = $1 OR LOWER(display_name) = LOWER($1))
 			  AND state != 'REVOKED'
-			UNION
-			SELECT 1 FROM device_enrollments
-			WHERE (device_id::text = $1 OR hostname = $1)
-			  AND enrollment_status != 'REVOKED'
 		)
 	`, token).Scan(&exists)
 	return err == nil && exists

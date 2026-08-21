@@ -249,7 +249,10 @@ CREATE TABLE IF NOT EXISTS devices (
     os_family         TEXT NOT NULL,
     architecture      TEXT NOT NULL,
     os_version_summary TEXT,
+    daemon_version     TEXT DEFAULT '2.1.0',
+    public_key         TEXT,
     state             device_state NOT NULL DEFAULT 'PENDING',
+    state_changed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     owner_subject     TEXT,
     first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -261,44 +264,71 @@ CREATE TABLE IF NOT EXISTS devices (
 
 CREATE INDEX IF NOT EXISTS idx_devices_tenant_state ON devices(tenant_id, state);
 CREATE INDEX IF NOT EXISTS idx_devices_tenant_heartbeat ON devices(tenant_id, last_heartbeat_at DESC);
+CREATE INDEX IF NOT EXISTS idx_devices_stable_id ON devices(stable_device_id);
 
-CREATE TABLE IF NOT EXISTS device_enrollments (
-    device_id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    hostname          TEXT NOT NULL,
-    user_identifier   TEXT NOT NULL,
-    os                TEXT NOT NULL,
-    os_version        TEXT NOT NULL,
-    enrollment_status TEXT NOT NULL DEFAULT 'PENDING',
-    first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_device_enrollments_org ON device_enrollments(organization_id, enrollment_status);
+-- Backward compatibility view for legacy tooling
+CREATE OR REPLACE VIEW device_enrollments AS
+    SELECT 
+        id AS device_id,
+        tenant_id AS organization_id,
+        COALESCE(stable_device_id, display_name) AS hostname,
+        COALESCE(owner_subject, display_name, 'Developer Workstation') AS user_identifier,
+        os_family AS os,
+        COALESCE(os_version_summary, architecture, 'v1.0') AS os_version,
+        COALESCE(public_key, '') AS public_key,
+        COALESCE(daemon_version, '2.1.0') AS daemon_version,
+        CASE WHEN state = 'REVOKED' THEN 'REVOKED' ELSE 'ACTIVE' END AS enrollment_status,
+        first_enrolled_at,
+        last_heartbeat_at,
+        created_at,
+        updated_at
+    FROM devices;
 
 CREATE TABLE IF NOT EXISTS device_compliance_reports (
     report_id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id                 UUID NOT NULL REFERENCES device_enrollments(device_id) ON DELETE CASCADE,
+    device_id                 UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     overall_compliance        TEXT NOT NULL,
     tamper_event_count_24h    INT NOT NULL DEFAULT 0,
     mcp_servers_total         INT NOT NULL DEFAULT 0,
     mcp_servers_wrapped       INT NOT NULL DEFAULT 0,
-    reported_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+    report_payload            JSONB,
+    reported_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_device_compliance UNIQUE (device_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_compliance_org_dev ON device_compliance_reports(organization_id, device_id);
 
 CREATE TABLE IF NOT EXISTS device_ide_status (
     status_id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    device_id                 UUID NOT NULL REFERENCES device_enrollments(device_id) ON DELETE CASCADE,
-    ide_type                  TEXT NOT NULL,
-    is_wrapped                BOOLEAN NOT NULL,
-    detected_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+    organization_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    device_id                 UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    ide_name                  TEXT NOT NULL,
+    is_installed              BOOLEAN NOT NULL DEFAULT false,
+    config_path               TEXT NOT NULL DEFAULT '',
+    proxy_configured          BOOLEAN NOT NULL DEFAULT false,
+    configured_base_url       TEXT DEFAULT '',
+    mcp_wrapped               BOOLEAN NOT NULL DEFAULT false,
+    compliance_state          TEXT NOT NULL DEFAULT 'COMPLIANT',
+    last_healed_at            TIMESTAMPTZ,
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_device_ide UNIQUE (device_id, ide_name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_device_ide_status_dev ON device_ide_status(device_id, ide_name);
+
+CREATE TABLE IF NOT EXISTS device_tamper_events (
+    event_id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id                 UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    organization_id           UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    ide_name                  VARCHAR(64) NOT NULL,
+    event_type                VARCHAR(64) NOT NULL,
+    tamper_details            TEXT NOT NULL,
+    healed_successfully       BOOLEAN NOT NULL DEFAULT true,
+    occurred_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_tamper_events_dev ON device_tamper_events(device_id, occurred_at DESC);
 
 CREATE TABLE IF NOT EXISTS device_tamper_logs (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
