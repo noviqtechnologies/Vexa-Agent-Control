@@ -36,3 +36,38 @@ func TestRequireSaaSOperatorMiddleware(t *testing.T) {
 		t.Errorf("expected 200 OK for operator, got %d", rec2.Code)
 	}
 }
+
+func TestSessionAuthOptional(t *testing.T) {
+	testOrgID := "11111111-2222-3333-4444-555555555555"
+	var extractedTenant string
+	handler := SessionAuthOptional()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		extractedTenant = ResolveTenantScope(r)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// 1. With valid session cookie for custom tenant
+	sessCookie := session.Create(testOrgID, "tenant-admin", true, false)
+	req1 := httptest.NewRequest("GET", "/api/v2/spend/policies", nil)
+	req1.AddCookie(&http.Cookie{Name: "agentcontrol_session", Value: sessCookie})
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+
+	if rec1.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec1.Code)
+	}
+	if extractedTenant != testOrgID {
+		t.Errorf("expected resolved tenant %s, got %s", testOrgID, extractedTenant)
+	}
+
+	// 2. Without session cookie -> should not fail, should resolve to default tenant
+	req2 := httptest.NewRequest("GET", "/api/v2/spend/policies", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec2.Code)
+	}
+	if extractedTenant != DefaultTenantID {
+		t.Errorf("expected resolved tenant %s, got %s", DefaultTenantID, extractedTenant)
+	}
+}

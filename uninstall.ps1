@@ -22,31 +22,31 @@ param(
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $AgentControlBin = Join-Path $InstallDir "agentcontrol.exe"
-    $Agent ControlBin = Join-Path $InstallDir "agentwall.exe"
-    $ActiveBin = if (Test-Path $AgentControlBin) { $AgentControlBin } else { $Agent ControlBin }
+    $LegacyBin = Join-Path $InstallDir "agentwall.exe"
+    $ActiveBin = if (Test-Path $AgentControlBin) { $AgentControlBin } elseif (Test-Path $LegacyBin) { $LegacyBin } else { $null }
 
-    # Step 1: Unwrap all IDE targets (restore original MCP configurations)
-    if (Test-Path $ActiveBin) {
-        Write-Host "[*] Step 1/4: Unwrapping MCP servers across all IDEs..." -ForegroundColor $ColorCyan
+    # Step 1: Unprotect all IDE targets (restore original MCP configurations from backups)
+    if ($ActiveBin -and (Test-Path $ActiveBin)) {
+        Write-Host "[*] Step 1/4: Restoring original MCP configurations across all IDEs..." -ForegroundColor $ColorCyan
         try {
-            & $ActiveBin unwrap --all 2>$null
+            & $ActiveBin unprotect --force 2>$null
         } catch {
-            Write-Host "[!] Notice: IDE unwrap skipped or completed with warnings." -ForegroundColor $ColorYellow
+            Write-Host "[!] Notice: IDE unprotect skipped or completed with warnings." -ForegroundColor $ColorYellow
         }
     } else {
-        Write-Host "[!] Notice: Binary not found; skipping IDE unwrap." -ForegroundColor $ColorYellow
+        Write-Host "[!] Notice: Binary not found; skipping IDE unprotect." -ForegroundColor $ColorYellow
     }
 
     # Step 2: Stop and uninstall persistent Windows SCM Service Daemon
     Write-Host "[*] Step 2/4: Stopping and removing Windows Service..." -ForegroundColor $ColorCyan
-    if (Test-Path $ActiveBin) {
+    if ($ActiveBin -and (Test-Path $ActiveBin)) {
         try {
             & $ActiveBin service uninstall 2>$null
         } catch { }
     }
 
     # Fallback check using Windows Service Controller (sc.exe)
-    foreach ($ServiceName in @("AgentControlSentry", "Agent ControlSentry")) {
+    foreach ($ServiceName in @("AgentControlSentry", "AgentWallSentry", "agentwall-sentry")) {
         $Svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         if ($Svc) {
             Write-Host "[*] Cleaning remaining service registration for $ServiceName via sc.exe..." -ForegroundColor $ColorYellow
@@ -61,7 +61,7 @@ param(
     Write-Host "[*] Step 3/4: Removing binary executables..." -ForegroundColor $ColorCyan
     $FilesToRemove = @(
         $AgentControlBin,
-        $Agent ControlBin,
+        $LegacyBin,
         (Join-Path $InstallDir "quickstart_agent.py")
     )
 
@@ -76,10 +76,10 @@ param(
         }
     }
 
-    # Step 4: Purge local configuration and PKI credentials (unless -KeepConfig specified)
+    # Step 4: Purge local configuration, logs, and PKI credentials (unless -KeepConfig specified)
     if (-not $KeepConfig) {
-        Write-Host "[*] Step 4/4: Purging configuration and credentials..." -ForegroundColor $ColorCyan
-        foreach ($dirName in @(".agent-control", ".agentwall")) {
+        Write-Host "[*] Step 4/4: Purging configuration, logs, and credentials..." -ForegroundColor $ColorCyan
+        foreach ($dirName in @(".agentcontrol", ".agent-control", ".agentwall")) {
             $ConfigDir = Join-Path $env:USERPROFILE $dirName
             if (Test-Path $ConfigDir) {
                 try {

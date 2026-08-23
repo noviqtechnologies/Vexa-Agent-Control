@@ -28,7 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    $FallbackVersion = "v1.0.40"
+    $FallbackVersion = "v1.0.56"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
@@ -56,6 +56,10 @@ param(
     if (-not $ArchTarget) {
         Write-Host "Unsupported Architecture: $ArchEnv" -ForegroundColor $ColorRed
         throw "Unsupported Architecture: $ArchEnv"
+    }
+
+    if ($ArchTarget -eq "aarch64") {
+        Write-Host "[!] Notice: Native Windows ARM64 binaries are experimental and require release asset agentcontrol-$Version-windows-aarch64.zip." -ForegroundColor $ColorYellow
     }
 
     Write-Host "Platform detected: windows-$ArchTarget" -ForegroundColor $ColorGreen

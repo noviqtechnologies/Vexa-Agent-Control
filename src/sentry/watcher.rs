@@ -71,6 +71,7 @@ impl SentryWatcher {
                                         eprintln!("{} [sentry] Failed to auto-heal {}: {}", "✖".red(), name, e);
                                     }
                                 }
+                                crate::wrap::status::gather_and_send_mcp_servers_snapshot();
                             }
                         }
                     }

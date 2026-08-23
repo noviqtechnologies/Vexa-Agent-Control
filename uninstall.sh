@@ -18,12 +18,12 @@ elif [ -f "${LOCALBIN}/agentwall" ]; then
   AGENTCONTROL_BIN="${LOCALBIN}/agentwall"
 fi
 
-# Step 1: Unwrap all IDE targets (restore original MCP configurations)
+# Step 1: Unprotect all IDE targets (restore original MCP configurations from backups)
 if [ -n "$AGENTCONTROL_BIN" ] && [ -x "$AGENTCONTROL_BIN" ]; then
-  echo "[*] Step 1/4: Unwrapping MCP servers across all IDEs..."
-  "$AGENTCONTROL_BIN" unwrap --all 2>/dev/null || echo "[!] Notice: IDE unwrap skipped or completed with warnings."
+  echo "[*] Step 1/4: Restoring original MCP configurations across all IDEs..."
+  "$AGENTCONTROL_BIN" unprotect --force 2>/dev/null || echo "[!] Notice: IDE unprotect skipped or completed with warnings."
 else
-  echo "[!] Notice: binary not found; skipping IDE unwrap step."
+  echo "[!] Notice: binary not found; skipping IDE unprotect step."
 fi
 
 # Step 2: Stop and uninstall persistent OS daemon service
@@ -43,7 +43,7 @@ if [[ "$OS" == *"darwin"* || "$OS" == *"mac"* ]]; then
   done
   echo "[✓] Removed macOS LaunchAgent plists."
 elif [[ "$OS" == *"linux"* ]]; then
-  for svc in "agent-control.service" "agentwall.service" "agentwall-sentry.service"; do
+  for svc in "agent-control.service" "agentcontrol.service" "agentwall.service" "agentwall-sentry.service"; do
     systemctl --user stop "$svc" 2>/dev/null || true
     systemctl --user disable "$svc" 2>/dev/null || true
     rm -f "$HOME/.config/systemd/user/$svc"
@@ -59,9 +59,9 @@ rm -f "${LOCALBIN}/agentwall"
 rm -f "${LOCALBIN}/quickstart_agent.py"
 echo "[✓] Removed binaries from ${LOCALBIN}."
 
-# Step 4: Purge local configuration and PKI credentials
-echo "[*] Step 4/4: Purging configuration and credentials..."
-for cdir in "$HOME/.agent-control" "$HOME/.agentwall"; do
+# Step 4: Purge local configuration, logs, and PKI credentials
+echo "[*] Step 4/4: Purging configuration, logs, and credentials..."
+for cdir in "$HOME/.agentcontrol" "$HOME/.agent-control" "$HOME/.agentwall"; do
   if [ -d "$cdir" ]; then
     rm -rf "$cdir"
     echo "[✓] Purged ${cdir}."

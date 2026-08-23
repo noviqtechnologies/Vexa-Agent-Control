@@ -1,536 +1,272 @@
-<h1 align="center">Vexa Agent Control</h1>
+# Vexa Agent Control
 
-<p align="center">
-  <strong>Enterprise-Grade Default-Deny AI Security Gateway & Firewall for MCP, HTTP, HTTPS, and WebSockets</strong>
-</p>
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.56-green.svg?style=flat-square)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
+[![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
+[![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)
 
-<p align="center">
-  Vexa Agent Control intercepts, sandboxes, audits, and actively enforces strict security policies on AI agent tool calls and outbound LLM API traffic across developer workstations, team staging environments, and production fleets. It features persistent OS Sentry daemon watching, hardware-bound Ed25519 PKI device enrollment, continuous <300ms self-healing file re-wrapping, inline DLP scanning, stateful multi-step sequence rules, OIDC identity binding, centralized API key custody, HMAC-chained tamper-evident audit logging, passive shadow discovery mode with Risk Delta reporting, verified MCP security scoring, Human-in-the-Loop policy escalation with HMAC-signed webhook callbacks, hardened WebSocket egress tunneling, real-time AI threat intelligence feed integration, multi-tenant project and task policy sharding, zero-knowledge customer-managed-key SIEM export, a pre-built Hardened Agent Container Runtime (HAR) for Kubernetes deployments, and a built-in ADR (AI Detection & Response) security benchmark suite.
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/Version-1.0.42-green.svg?style=flat-square" alt="Version"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square" alt="Rust"></a>
-  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=flat-square" alt="Go"></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue.svg?style=flat-square" alt="React"></a>
-  <a href="docs/owasp_agentic_top10.md"><img src="https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square" alt="OWASP ASI 2026"></a>
-  <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-Hub-1f6feb.svg?style=flat-square" alt="Documentation"></a>
-</p>
-
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#why-vexa-agent-control">Why Vexa Agent Control</a> ·
-  <a href="#capabilities-by-operating-profile">Capabilities</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#supported-operating-surfaces--ide-integrations">Supported IDEs</a> ·
-  <a href="#security-and-control">Security & Control</a> ·
-  <a href="#owasp-agentic-top-10-asi-2026-compliance">OWASP Compliance</a> ·
-  <a href="#deployment-options">Deployment options</a> ·
-  <a href="docs/README.md">Documentation</a>
-</p>
+> **Protect local AI-agent tool calls with a small, inspectable gateway.**
+>
+> Vexa Agent Control routes supported MCP and HTTP traffic through local policy checks, records security decisions, and helps developers catch secrets, prompt-injection patterns, and risky tool behavior before they leave the workstation.
+>
+> Start in observation mode if you are evaluating the tool. Move to enforcement only after you have verified the integration that you use.
 
 ---
 
-## Quick start
+## Navigation
 
-Vexa Agent Control can be deployed across multiple environments: as a zero-config standalone CLI sidecar on a developer workstation, via Docker Compose for engineering teams, as a Kubernetes Helm release for enterprise production fleets, or built directly from source.
+- [What Vexa Does Today](#what-vexa-does-today)
+- [Who Should Use It](#who-should-use-it)
+- [Supported Platforms](#supported-platforms)
+- [Verified Integrations](#verified-integrations)
+- [10-Minute Quickstart](#10-minute-quickstart)
+- [What Changes on Your Machine](#what-changes-on-your-machine)
+- [Modes Explained](#modes-explained)
+- [Small Team Path](#small-team-path)
+- [Troubleshooting & Removal](#troubleshooting--removal)
+- [Advanced & Enterprise](#advanced--enterprise)
+- [Documentation Index](#documentation-index)
 
-### Standalone Developer CLI
+---
 
-Install the statically-linked `agentcontrol` binary and run `agentcontrol protect` to go from zero to full IDE protection in one command — no Docker, no database, no config files required.
+## What Vexa Does Today
 
-**macOS / Linux / WSL (Bash / Zsh):**
+Vexa Agent Control acts as a local security sidecar and transparent proxy for AI agent tool calls:
+
+- **DLP & Secret Leak Prevention:** Detects AWS keys, OpenAI keys, SSH private keys, GitHub tokens, and high-entropy credentials before they leave your workstation.
+- **Prompt Injection & Loop Guards:** Evaluates tool arguments against deterministic rules and structural recursion limits.
+- **Config Backup & Transparent Wrapping:** Wraps local Model Context Protocol (MCP) server invocations with an inspectable stdio proxy, creating timestamped backups before touching any file.
+- **Tamper-Evident Audit Logging:** Emits durable, JSONL event records to `~/.agentcontrol/audit.jsonl` with optional HMAC signing.
+
+> [!IMPORTANT]
+> **Protection Boundary:** Vexa Agent Control only inspects traffic routed through wrapped MCP configurations or explicit HTTP proxy environment variables (`AGENTCONTROL_PROXY_URL` / `HTTP_PROXY`). It does not intercept raw network sockets or unwrapped processes.
+
+---
+
+## Who Should Use It
+
+| Profile | Typical Use Case | Recommended Starting Point |
+|---|---|---|
+| **Individual Developer** | Evaluating MCP tools, inspecting tool traffic, blocking accidental secret leakage. | [10-Minute Quickstart](#10-minute-quickstart) |
+| **Small AI Team / SMB** | Shared security policies across engineers, unified audit logging, spend caps. | [Small Team Hub Guide](docs/guides/small-team-hub.md) |
+| **Platform & Enterprise** | Kubernetes Helm sidecars, OIDC identity binding, SIEM forwarding, zero-knowledge CMK. | [Enterprise Reference](docs/advanced/enterprise.md) |
+
+---
+
+## Supported Platforms
+
+| Platform | Architecture | Status | Shell / Runtime Requirements | Notes |
+|---|---|---|---|---|
+| **macOS (Apple Silicon)** | `aarch64` (M1/M2/M3/M4) | **Supported** | Zsh / Bash | Mandatory SHA-256 verified |
+| **macOS (Intel)** | `x86_64` | **Supported** | Zsh / Bash | Mandatory SHA-256 verified |
+| **Linux** | `x86_64` / `aarch64` | **Supported** | Bash / Zsh (`curl`, `unzip`, `sha256sum`) | Ubuntu, Debian, Fedora, Arch, Alpine |
+| **WSL2** | `x86_64` | **Supported** | Bash / Zsh inside WSL | Protects Linux-side tools and agents |
+| **Windows 10/11** | `x86_64` (AMD64) | **Supported** | PowerShell 5.1+ / CMD | Auto-adds `%USERPROFILE%\.local\bin` to PATH |
+| **Windows on ARM** | `aarch64` | *Experimental* | PowerShell | Requires specific ARM64 release asset |
+
+---
+
+## Verified Integrations
+
+Trust has levels. Vexa classifies integrations based on end-to-end automated test validation:
+
+| Level | Client / IDE | Configuration Path Checked | Automatic Wrap Support |
+|---|---|---|---|
+| **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported |
+| **Verified** | **Cursor** | `~/.cursor/mcp.json` | Tested & fully supported |
+| **Verified** | **Codex** | `~/.codex/config.json` | Tested & fully supported |
+| **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported |
+| **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
+| **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080` | Manual proxy routing |
+
+---
+
+## 10-Minute Quickstart
+
+Follow this step-by-step developer journey to install, safely discover, protect one client, verify enforcement, and roll back.
+
+### Step 0: Preflight Check
+
+Confirm your local architecture and ensure port `8080` is available:
+
 ```bash
-# Install latest release (mandatory SHA-256 verified, strict fail-closed)
+# macOS / Linux / WSL
+uname -m && netstat -an | grep 8080 || echo "Port 8080 is available"
+```
+
+```powershell
+# Windows (PowerShell)
+$env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+```
+
+### Step 1: Install Vexa Agent Control
+
+Download and install the statically-linked binary to `~/.local/bin`:
+
+**macOS / Linux / WSL:**
+```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
-
-# Activate in the CURRENT terminal session immediately (no restart needed):
-export PATH="$HOME/.local/bin:$PATH" && agentcontrol protect
-
-# Verify live enforcement in 1 second with the 3-point smoke test probe:
-agentcontrol verify
+export PATH="$HOME/.local/bin:$PATH"
+agentcontrol --version
 ```
 
 **Windows (PowerShell):**
 ```powershell
-# Install latest release (mandatory SHA-256 verified, auto-adds to PATH)
 irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
-
-# One-command zero-config security
-agentcontrol.exe protect
-
-# Verify live enforcement in 1 second with the 3-point smoke test probe:
-agentcontrol.exe verify
+agentcontrol.exe --version
 ```
 
-**Windows (Command Prompt):**
-```cmd
-curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
-agentcontrol.exe protect
-agentcontrol.exe verify
-```
+- **Expected Result:** Prints `agentcontrol 1.0.56`.
+- **If it fails:** Verify curl / PowerShell connectivity; check [Platform Install Guides](docs/install/).
 
-> [!NOTE]
-> **`install/install.sh`** (Linux/macOS/WSL) and **`install/install.ps1`** (Windows) are the Standalone Developer installers. They resolve the **latest release** from GitHub via a resilient 3-tier fallback chain (GitHub API &rarr; HTTP Redirect Scraping &rarr; Stable Pinned Release), verify **SHA-256 integrity**, and install `agentcontrol` to `~/.local/bin` / `%USERPROFILE%\.local\bin`. The Windows script automatically adds the install directory to your user `PATH`.
+### Step 2: Inspect Discovered Clients (Safe Dry-Run)
 
-**What `agentcontrol protect` does on first run:**
-1. 🛡 **Auto-generates** `agentcontrol-policy.yaml` with baseline P0 DLP secret rules (blocks `.env`, `.ssh/id_rsa`, `~/.aws/credentials` exfiltration) if no policy exists
-2. 🔍 **Discovers** all installed AI IDEs — Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex — and atomically wraps their MCP configs (timestamped backups created before any change)
-3. 🚀 **Starts** the local security gateway on `127.0.0.1:8080` — audit log written to `~/.agentcontrol/audit.jsonl` and database to `~/.agentcontrol/events.db`
-4. 🌐 **Opens** the Local Dashboard in your browser at `http://127.0.0.1:8080`
-
-> [!NOTE]
-> `agentcontrol protect` is the recommended single-step entry point for all zero-config local setups.
-
-**Optional flags:**
-```bash
-agentcontrol protect --dry-run                                   # Preview all changes without writing to disk
-agentcontrol protect --shadow                                    # Start in observation-only (shadow) mode without blocking
-agentcontrol protect --log-path ~/.agentcontrol/audit.jsonl     # Override default audit log location
-agentcontrol protect --listen 127.0.0.1:9090                     # Use a custom listen address
-```
-
-**Windows (PowerShell) — optional flags:**
-```powershell
-agentcontrol.exe protect --dry-run
-agentcontrol.exe protect --shadow
-agentcontrol.exe protect --log-path "$env:USERPROFILE\.agentcontrol\audit.jsonl"
-```
-
-**To restore all IDEs to their original configs:**
-```bash
-agentcontrol unprotect            # macOS / Linux — verifies backup integrity before restoring
-agentcontrol.exe unprotect        # Windows
-agentcontrol.exe unprotect --force  # Emergency: skip backup integrity check
-```
-
-**Local Dashboard Highlights** (auto-opens at `http://127.0.0.1:8080`):
-- 🧭 **4-Destination Information Architecture**:
-  - **Overview** — Instant answers to: *Is the gateway working? What happened? Do I need to act?* Displays protection health, decision counts, and recent real-time decisions.
-  - **Activity Stream** — Full chronological log of tool calls with toggleable **Timeline Stream** and **Tool Summary** views, plus an expandable diagnostic Event Drawer.
-  - **Detections & DLP** — Unified findings for DLP secret leaks, prompt injections, and high-risk operations with policy rule justification.
-  - **Policy & Gateway** — Live YAML policy editor, candidate suggestions, IDE integration status matrix, and gateway listeners.
-- 📌 **Persistent Top Header** — Real-time Gateway Health (`Healthy`, `Degraded`, `Disconnected`), Mode Selector (`Shadow` / `Enforce`) with confirmation safeguard, and Integration Coverage.
-- 🔒 **Universal Payload Redaction** — Strict masking across all views guarantees that AWS keys, tokens, SSNs, DB connection strings, and private keys are never exposed in plaintext.
-- 🏷️ **Explicit Simulation Badges** — Demonstration data is visibly badged `[SIMULATED]` to prevent confusion with production traffic.
-- ✨ **On-Demand Policy Wizard** — Closed by default; synthesizes least-privilege YAML rules on explicit user click.
-
-> 💡 **Generating Instant Test Telemetry**: If the dashboard shows *"No tool calls recorded yet"*, run the included test script in a new terminal:
->
-> **macOS / Linux / WSL:**
-> ```bash
-> python3 ~/.local/bin/quickstart_agent.py
-> ```
->
-> **Windows (PowerShell):**
-> ```powershell
-> python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
-> ```
->
-> *(Requires Python 3.8+. The installer places `quickstart_agent.py` into `~/.local/bin` / `%USERPROFILE%\.local\bin`.)*
-
-**Enterprise Team OTET Provisioning** (enrollment + persistent Sentry daemon — use `team_otet.sh` / `team_otet.ps1`):
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/team_otet.sh | bash -s -- -t "TOK-YOUR-TOKEN" -u "http://localhost:8400"
-
-# Windows (PowerShell)
-$env:AGENT_CONTROL_TOKEN = "TOK-YOUR-TOKEN"
-$env:DASHBOARD_API_URL = "http://localhost:8400"
-irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/team_otet.ps1 | iex
-```
-
-### Team / Staging Control Hub (Docker Compose)
-
-Deploy the self-hosted Control Hub stack (Go REST API, React Management Console, PostgreSQL database) alongside gateway instances:
+Inspect which IDE configurations exist on your machine without modifying any files:
 
 ```bash
-# 1. Start the Control Hub stack
-cd control-plane
-docker compose up -d --build
-
-# 2. Start Gateway in Centralized Mode
-export DASHBOARD_API_URL="http://localhost:8400"
-export POLICY_READ_SECRET="team-policy-read-secret"
-export GATEWAY_SECRET="team-gateway-secret"
-
-agentcontrol start --listen 127.0.0.1:8080 --centralized --log-path ./team-audit.log
+agentcontrol status
+agentcontrol protect --dry-run
 ```
 
-Access the Team Management Console at `http://localhost:8081` and the Control Hub API at `http://localhost:8400`.
+- **Expected Result:** Prints the status table identifying **[verified]** vs **[unverified]** config files.
 
-### Enterprise Fleet Production (Kubernetes & Helm)
+### Step 3: Protect and Launch Local Gateway
 
-Deploy the high-availability gateway fleet and Hardened Agent Container Runtime (HAR) on Kubernetes:
+Run one-command protection to wrap discovered configs and launch the local security gateway:
 
 ```bash
-# 1. Create namespace & TLS secret
-kubectl create namespace agent-control-system
-kubectl create secret tls agent-control-tls --cert=/etc/certs/tls.crt --key=/etc/certs/tls.key -n agent-control-system
+# Start in observation (shadow) mode:
+agentcontrol protect --shadow
 
-# 2. Deploy via Helm Chart
-helm install agent-control ./chart \
-  --namespace agent-control-system \
-  --set gateway.tls.enabled=true \
-  --set gateway.tls.secretName="agent-control-tls" \
-  --set dashboardApi.enabled=true \
-  --set dashboardDb.enabled=true \
-  --set dashboardFrontend.enabled=true
-
-# 3. Build & run the HAR OCI sidecar container (<100MB distroless footprint)
-docker build -f Dockerfile.har -t agent-control-har:2.0 .
-docker run -e AGENT_CONTROL_POLICY_PATH=/etc/agent-control/policy.yaml agent-control-har:2.0
+# OR start in active enforcement mode (blocks secrets & prompt injections):
+agentcontrol protect
 ```
 
-### Build from Source
+- **Expected Result:** Discovered MCP configs are backed up and wrapped; local gateway starts on `http://127.0.0.1:8080` and opens the local dashboard.
+- **What Changes:** Configs are updated; backups saved to `<config_path>.bak.<timestamp>`.
 
-Requires Rust 1.80+ (Stable) toolchain:
+### Step 4: Verify Live Enforcement
+
+In a separate terminal, execute the 3-point live verification probe:
+
+```bash
+agentcontrol verify
+```
+
+- **Expected Result:**
+  ```text
+  ✔ [1/3] Safe Tool Execution (read_file)      ➔ ALLOWED
+  ✔ [2/3] DLP Exfiltration Guard (AWS Secret) ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
+  ✔ [3/3] Prompt Injection (System Override)  ➔ BLOCKED [INJ-04-OVERRIDE]
+  ```
+
+### Step 5: Clean Reversion & Unprotect
+
+To restore all original IDE configurations from backups at any time:
+
+```bash
+agentcontrol unprotect
+```
+
+- **Expected Result:** Backups are restored; configurations return to their pre-Vexa state.
+
+---
+
+## What Changes on Your Machine
+
+Before writing any configuration, here is the complete footprint of Vexa Agent Control:
+
+| Component | Path (macOS / Linux) | Path (Windows) |
+|---|---|---|
+| **Binary Executable** | `~/.local/bin/agentcontrol` | `%USERPROFILE%\.local\bin\agentcontrol.exe` |
+| **State & Audit Logs** | `~/.agentcontrol/audit.jsonl` | `%USERPROFILE%\.agentcontrol\audit.jsonl` |
+| **Local Database** | `~/.agentcontrol/events.db` | `%USERPROFILE%\.agentcontrol\events.db` |
+| **Local Policy** | `./agentcontrol-policy.yaml` | `.\agentcontrol-policy.yaml` |
+| **Backups Created** | `<config_dir>/<file>.bak.<timestamp>` | `<config_dir>\<file>.bak.<timestamp>` |
+| **Local TCP Port** | `127.0.0.1:8080` (customizable with `--listen`) | `127.0.0.1:8080` (customizable with `--listen`) |
+
+---
+
+## Modes Explained
+
+- **Observation / Shadow Mode (`--shadow`):** Logs all tool calls and evaluated policy decisions without blocking any execution. Ideal for testing and policy baseline generation (`agentcontrol generate-policy`).
+- **Enforcement Mode (`--enforce` / default in `protect`):** Actively denies tool executions that violate DLP, schema validation, or prompt injection rules.
+- **Custom Agent Proxy Mode:** Routes custom Python/Node.js agents via HTTP proxy variables:
+  ```bash
+  export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
+  export HTTP_PROXY=http://127.0.0.1:8080
+  ```
+
+---
+
+## Small Team Path
+
+Deploy a shared Control Hub for small teams using Docker Compose:
 
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
-cargo build --release
-# Compiled binaries located at: ./target/release/agentcontrol (and alias ./target/release/agentcontrol)
+docker compose up -d
 ```
 
----
-
-## Why Vexa Agent Control
-
-Autonomous AI agents possess powerful capabilities—executing terminal commands, reading files, and invoking external APIs over Model Context Protocol (MCP). Without runtime guardrails, agents are vulnerable to prompt injection, credential leaks, recursive loops, and unauthorized data access. Vexa Agent Control enforces deterministic security boundaries around AI agent execution.
-
-**Default-Deny Zero Trust Security.** Every tool invocation and LLM egress request is blocked by default unless explicitly granted by policy rules, eliminating implicit authorization.
-
-**Real-Time Dual-Pass DLP & Threat Interception.** Performs pre-execution scanning of tool parameters and post-execution scanning of outputs to redact or block AWS keys, SSH credentials, PII, and custom secrets before they escape your security boundary.
-
-**OIDC Identity Binding & Task Sharding.** Dynamically resolves user identity from JWT claims (Okta, Keycloak, Entra ID) and scopes policies in real-time to multi-tenant project and task identifiers.
-
-**Human-in-the-Loop Interception.** Intercepts high-risk actions with real-time interactive browser modals or async Slack/Teams webhooks featuring cryptographic HMAC approval callbacks.
-
-**Continuous Compliance & Tamper-Evident Auditing.** Cryptographically chains all system events into an immutable HMAC audit trail while supporting client-side zero-knowledge AES-256-GCM encryption for SIEM export (Splunk, Datadog, OpenSearch).
+- **Features:** Centralized policy management (SSE sync), shared audit logs, spend caps, and OTET device onboarding.
+- Read the full [Small Team Hub Guide](docs/guides/small-team-hub.md).
 
 ---
 
-## Capabilities by Operating Profile
+## Troubleshooting & Removal
 
-Vexa Agent Control scales seamlessly across three operational deployment profiles:
+### Top 3 First-Run Checks
 
-| Capability | What it gives you | Workstation Sidecar | Team Control Hub | Enterprise Fleet |
-|---|---|:---:|:---:|:---:|
-| **Default-Deny Policy Engine** | Block unauthorized tool calls and LLM egress unless permitted by policy rules | ✓ | ✓ | ✓ |
-| **Policy Marketplace (One-Click Templates)** | Pre-built security postures (Safe Cursor, Production Data, HIPAA, Enterprise) to eliminate blank YAML friction | ✓ | ✓ | ✓ |
-| **15 Out-of-the-Box Safe Rules** | Pre-configured detection for sensitive paths, exfiltration, persistence, and destructive commands | ✓ | ✓ | ✓ |
-| **9 Prompt Injection Scanners** | Active defense against jailbreaks, instruction overrides, memory poisoning, and tool poisoning | ✓ | ✓ | ✓ |
-| **Dual-Pass DLP Scanning** | Inline regex scanning and redaction for API tokens, private keys, PII, and secrets | ✓ | ✓ | ✓ |
-| **Passive Shadow AI Discovery** | Observe traffic without blocking and generate pre-enforcement Risk Delta reports | ✓ | ✓ | ✓ |
-| **MCP Security Scoring Engine** | Evaluate local MCP server manifests and assign a 0–100 Vexa Security Score | ✓ | ✓ | ✓ |
-| **IDE Auto-Wrapping & Proxy Lock Engine** | Transparently configure and lock completions and tool calls for Cursor, VS Code, Claude Desktop, JetBrains, and Zed | ✓ | ✓ | ✓ |
-| **Hardware PKI Device Enrollment** | Bind workstations to Control Hub using Ed25519 keys in OS Keychain / DPAPI (`agentcontrol enroll`) | ✓ | ✓ | ✓ |
-| **Persistent OS Sentry Daemon** | Always-on background daemon (`systemd`, `launchd`, Windows `SCM`) with <500ms self-healing and auto-lock | ✓ | ✓ | ✓ |
-| **Zero Master Key Workstation Brokerage** | Centralized master provider keys in Hub custody; developers use local session tokens | — | ✓ | ✓ |
-| **Fleet Device Compliance & Tamper Audit Log** | Real-time 60s heartbeats, per-IDE configuration states, and immutable tamper log in Web Console | — | ✓ | ✓ |
-| **OIDC Identity Binding** | Authenticate agent sessions and map JWT group claims (Okta, Keycloak, Entra ID) to policies | — | ✓ | ✓ |
-| **Project & Task Policy Sharding** | Dynamically resolve sub-millisecond policy scopes via `agent_project_id` and `agent_task_id` | — | ✓ | ✓ |
-| **Centralized Vault & API Keys** | Securely inject LLM provider keys at proxy boundary; agents never touch raw secrets | — | ✓ | ✓ |
-| **Async HITL Webhook Queue** | Dispatch dangerous action approvals to Slack, Teams, or Webhooks with HMAC callbacks | — | ✓ | ✓ |
-| **Authoritative Spend Ledger & Hard Budget Enforcement** | PostgreSQL-backed spend governance with preflight bounded reservations, integer microcents ceiling math ($1 = 100,000,000 µ¢), and fail-closed budget caps | — | ✓ | ✓ |
-| **Loop Detection & Countermeasures** | Intercept repetitive failure loops with `PivotError`, `Block`, or `PauseInteractive` actions | — | ✓ | ✓ |
-| **Hardened Container Runtime (HAR)** | Pre-built <100MB Distroless/Alpine OCI sidecar image for Kubernetes pods | — | — | ✓ |
-| **Hardened Egress Tunneling** | High-performance WebSocket proxy bridging cloud agents to local MCP servers (<5ms latency) | — | — | ✓ |
-| **Real-Time Threat Intel Feed** | Subscribe to live AI malware signature streams via SSE without dropping connections | — | — | ✓ |
-| **Zero-Knowledge CMK Encryption** | Client-side AES-256-GCM encryption of audit streams using Customer-Managed Keys prior to SIEM export | — | — | ✓ |
-| **Pure-Rust TLS Termination** | Native HTTPS listening powered by `rustls`, eliminating C-library attack surfaces | — | — | ✓ |
+1. **Port 8080 in use:** Launch on an alternative port:
+   ```bash
+   agentcontrol protect --listen 127.0.0.1:9090
+   ```
+2. **IDE tool calls not intercepted:** Restart your IDE after running `agentcontrol protect` so it reloads its configuration.
+3. **Backup restoration warning:** Run `agentcontrol unprotect --force` to inspect or force rollback.
 
-### Workstation & Local Sidecar Profile
+### Automated Clean Uninstall
 
-Provides individual developers with instant, zero-configuration security guardrails and complete traffic visibility on local workstations.
+To remove the binary, service daemons, and purge state files:
 
-- **Safe Mode & Default-Deny Guardrails** — Enforces zero-trust boundaries over MCP tool calls with 15 built-in safe mode rules.
-- **Hardware PKI Device Enrollment** — Keypair generation (`agentcontrol enroll`) bound to macOS Keychain Services, Windows DPAPI, or Linux Secret Service API.
-- **Persistent OS Sentry Daemon** — Install as an always-on background service (`agentcontrol service install`) with read-only file locks (`chmod 0444`, `chflags uchg`, Windows ACL Write Deny) and <300ms auto-rewrapping self-healing.
-- **Prompt Injection & Response Poisoning Protection** — Intercepts incoming tool responses for jailbreaks, instruction manipulation, and memory poisoning.
-- **Dual-Pass DLP Redaction** — Scans and redacts sensitive data (AWS keys, SSH private keys, PII) in real-time.
-- **Passive Shadow AI Discovery Mode** — Run `agentcontrol dev` or `agentcontrol start --shadow-mode` to observe agent behavior and generate a **Risk Delta Report** (`agentcontrol report --risk`).
-- **MCP Security Scoring Engine** — Run `agentcontrol scan` to audit local MCP servers, assigning a Vexa Security Score (0–100) and enforcing CI/CD quality gates.
-- **Local Developer Web Console** — Embedded dashboard at `http://127.0.0.1:8080` for live traffic monitoring, risk analysis, and interactive approvals.
-- **IDE Wrapping Engine** — Auto-patches Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE configuration files (`agentcontrol wrap`, `agentcontrol watch`).
-- **ADR AI Detection & Response Benchmark** — Execute the 303-task security benchmark across 17 attack classes (`agentcontrol bench --full`) to score security posture.
-
-### Team & Staging Control Hub Profile
-
-Extends governance across engineering teams and staging environments with centralized policy coordination, identity binding, and budget controls.
-
-- **Policy Marketplace ("No More Blank YAML")** — A visual One-Click Template library in the Web Console (`/policy/marketplace`) providing instant security postures:
-  - **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration chains.
-  - **Production Data Egress Control**: Locks outbound requests to internal company domain wildcards, enables cycle detection firewalls, and enforces MCP schema-drift blocking.
-  - **HIPAA & Healthcare Compliance**: Auto-redacts PHI, SSNs, Medical Record Numbers (MRN), and PII across LLM requests and agent responses.
-  - **Custom Team Presets**: Save, version, and persist custom security templates directly to PostgreSQL.
-- **[Central Device Governance Portal](docs/team_hub_guide.md#6-central-device-governance--fleet-health)** — Web Console view (`/admin/devices`) for OTET enrollment token generation, 60s heartbeat monitoring (`COMPLIANT`, `UNREACHABLE`, `NON_COMPLIANT`), and single-device instant revocation.
-- **Centralized Policy Push (SSE)** — Broadcast versioned security policies from the Control Hub to distributed gateway instances in real-time via Server-Sent Events.
-- **OIDC Identity Binding** — Map corporate identity provider JWT group claims (Keycloak, Okta, Entra ID, Auth0, Ping) directly to dynamic policy rulesets.
-- **Multi-Tenant Policy Sharding** — Resolves and scopes policies dynamically based on `agent_project_id` and `agent_task_id` request context headers.
-- **Vault Integration & API Key Custody** — Holds LLM provider credentials securely within the proxy, eliminating API key distribution to developer workstations or agent code.
-- **Asynchronous HITL Approval Queue** — Routes high-risk tool execution prompts to Slack, Microsoft Teams, or Webhooks with HMAC signature verification.
-- **Authoritative PostgreSQL Spend Ledger** — Centralized hard budget enforcement with pre-dispatch bounded reservations, integer microcents ceiling math ($1 = 100,000,000 µ¢), model price book catalog, and operator increase approval workflows (`/spend/status`, `/spend/limits`, `/spend/requests`).
-- **Loop Detection & Pivot Error Countermeasures** — Detects stuck agents trapped in repetitive failure patterns and triggers auto-corrective actions (`PivotError`).
-- **Multi-Backend SIEM Export** — Stream structured JSON audit events to Splunk HEC, Datadog Logs, or OpenSearch with zero-blocking local fallbacks.
-
-### Enterprise Fleet Production Profile
-
-Delivers high-availability security governance, cryptographic privacy, and zero-trust protection for enterprise cloud workloads and multi-tenant agent fleets.
-
-- **Hardened Agent Container Runtime (HAR)** — Light-footprint OCI container image (<100MB) designed as an entrypoint sidecar proxy for Kubernetes container deployments.
-- **Hardened Egress WebSocket Tunneling** — Secure WebSocket proxy connecting remote cloud-hosted agents to local on-premise MCP servers with <5ms frame latency.
-- **Real-Time Threat Intelligence Feed** — Dynamically ingests Vexa AI Malware signature feeds via SSE, updating DLP patterns in-flight without connection loss.
-- **Zero-Knowledge Customer-Managed Key (CMK) Encryption** — Client-side AES-256-GCM encryption of audit logs using Customer-Managed Keys prior to SIEM egress.
-- **Pure-Rust TLS Termination** — Memory-safe HTTPS listener powered by `rustls`, eliminating C-library vulnerabilities and OpenSSL dependencies.
-- **Fleet-Wide Telemetry & Monitoring** — Monitor gateway fleet health, pod status, policy sync state, and socket performance natively in Kubernetes.
-
----
-
-## How it works
-
-<p align="center">
-  <img src="docs/system_architecture_diagram.png" alt="Vexa Agent Control System Architecture Diagram" width="750">
-</p>
-
-```
-  [ Operating Surfaces & IDEs ] ──► (Claude Desktop / Cursor / VS Code / Antigravity / CLI)
-             │
-             ▼
- ┌───────────────────────────┐
- │ 1. Session & Identity     │ ◄── OIDC JWT Claims & Multi-Tenant Project / Task Policy Sharding
- └─────────────┬─────────────┘
-               ▼
- ┌───────────────────────────┐
- │ 2. MCP Scoring & Schema   │ ◄── Vexa Security Score (0-100) & Parameter JSON Schema Validation
- └─────────────┬─────────────┘
-               ▼
- ┌───────────────────────────┐
- │ 3. Safe Mode & Injection  │ ◄── 15 Out-of-the-Box Safe Mode Rules & 9 Prompt Injection Detectors
- └─────────────┬─────────────┘
-               ▼
- ┌───────────────────────────┐
- │ 4. Dual-Pass DLP Engine   │ ◄── Inline PII & Secret Redaction / Dynamic Threat Intel Feed
- └─────────────┬─────────────┘
-               ▼
- ┌───────────────────────────┐
- │ 5. Spend & Loop Control   │ ◄── Repeat Failure Loop Intercept (PivotError) & Token Budget Ledger
- └─────────────┬─────────────┘
-               ▼
- ┌───────────────────────────┐
- │ 6. HITL & Action Ladder   │ ◄── Default-Deny Evaluation & HMAC Webhook / Browser Escalation
- └─────────────┬─────────────┘
-               │
-    [ Upstream MCP / LLM ]  ───►  Control Hub Telemetry & Zero-Knowledge Encrypted SIEM Export
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
 ```
 
-### 6-Pass Security & Policy Engine Pipeline
-
-Every agent tool call and LLM egress payload traversing Vexa Agent Control passes sequentially through a 6-pass deterministic pipeline before reaching upstream services:
-
-1. **Session & Identity Binding** — Validates OIDC JWT claims and dynamically resolves multi-tenant project (`agent_project_id`) and task (`agent_task_id`) policy shards.
-2. **MCP Scoring & Schema Validation** — Evaluates tool parameter schemas and verifies the target MCP server's Vexa Security Score (0–100).
-3. **Safe Mode & Injection Defense** — Applies 15 out-of-the-box safe mode rules and scans tool calls/responses for 9 prompt injection attack categories.
-4. **Dual-Pass DLP Engine** — Executes pre-execution and post-execution regex scanning, redacting sensitive credentials, private keys, and PII against dynamic threat intelligence feeds.
-5. **Spend Control & Loop Prevention** — Enforces session token budgets and interrupts repetitive agent failure loops via `PivotError` responses.
-6. **HITL Intercept & Action Ladder** — Evaluates final default-deny authorization rules, triggering interactive browser modals or HMAC-signed webhook approvals for high-risk actions.
-
-### Supported Operating Surfaces & IDE Integrations
-
-| Surface / IDE | Integration Mode | Features |
-|---|---|---|
-| **Claude Desktop** | `agentcontrol wrap claude` / `agentcontrol protect` | Automated config patching, stdio tool proxying, response secret scanning |
-| **Cursor** | `agentcontrol wrap cursor` / `agentcontrol protect` | Native MCP configuration interception, shadow discovery, risk reporting |
-| **VS Code** | `agentcontrol wrap vscode` / `agentcontrol protect` | Extension MCP proxying, token spend governance, DLP redaction |
-| **JetBrains** | `agentcontrol wrap jetbrains` / `agentcontrol protect` | JetBrains AI assistant tool protection, default-deny policy enforcement |
-| **Zed Editor** | `agentcontrol wrap zed` / `agentcontrol protect` | Transparent stdio proxying, prompt injection protection |
-| **Cline Extension** | `agentcontrol wrap cline` / `agentcontrol protect` | Autonomous tool-call governance, loop detection, and spend caps |
-| **OpenCode** | `agentcontrol wrap opencode` / `agentcontrol protect` | MCP configuration wrapping, DLP scanning, audit log chaining |
-| **Antigravity IDE** | `agentcontrol wrap antigravity` / `agentcontrol protect` | Native AI IDE wrapping, interactive HITL approvals, safe mode |
-| **ChatGPT Codex** | `agentcontrol wrap codex` / `agentcontrol protect` | OpenAI compatible endpoint interception, credential scoping |
-| **All Installed IDEs** | `agentcontrol protect` / `agentcontrol wrap --all` | Single-command automated discovery and atomic wrapping of all 9 IDEs |
-| **OS Background Sentry** | `agentcontrol service install` | Always-on background daemon (`systemd`, `launchd`, Windows `SCM`) with <300ms self-healing |
-| **PKI Enrollment** | `agentcontrol enroll` | Hardware Ed25519 identity generation in OS Keychain / DPAPI |
-| **Container Workloads** | HAR Sidecar Container | Entrypoint container proxying, OIDC binding, spend management |
-| **CLI & Custom Agents** | `agentcontrol dev --stdio -- <cmd>` | Native HTTP/HTTPS proxying, stdio stream wrapper, audit logging |
-| **Web Dashboard** | Native Browser | Live traffic inventory, HITL approval modals, ADR benchmark runner |
-
----
-
-## Security and control
-
-Vexa Agent Control enforces security controls at the network and runtime boundaries rather than relying on prompt-based instructions.
-
-- **Default-Deny Runtime Boundary** — Tool calls and egress requests are rejected by default unless granted by explicit YAML policy statements.
-- **Interactive Human-in-the-Loop (HITL)** — High-impact actions prompt for manual approval via embedded web UI modals or HMAC-signed Slack/Teams webhook callbacks.
-- **Tamper-Evident Cryptographic Audit Logging** — Log records are linked in a cryptographic HMAC-SHA256 hash chain, verifiable via `agentcontrol verify-log`.
-- **Zero-Knowledge CMK SIEM Export** — Audit data is encrypted with client-side AES-256-GCM using Customer-Managed Keys prior to external SIEM transmission.
-- **Memory-Safe Pure-Rust Architecture** — Built with Rust and `rustls` to eliminate memory corruption bugs, buffer overflows, and C-library vulnerabilities.
-- **Real-Time Threat Intelligence Integration** — Subscribes to live Vexa threat feeds via SSE, updating DLP pattern signatures on-the-fly without downtime.
-
----
-
-## OWASP Agentic Top 10 (ASI 2026) Compliance
-
-Vexa Agent Control provides explicit out-of-process security controls designed specifically for the **OWASP Top 10 for Agentic Applications (ASI 2026)** threat matrix. Rather than relying on soft system prompts or probabilistic LLM guardrails, Agent Control intercepts, audits, and enforces deterministic runtime boundaries on all tool calls and egress traffic.
-
-### OWASP ASI 2026 Coverage Matrix
-
-| Risk ID | Vulnerability Title | Status | Primary Enforcement Mechanism | Code / Doc Reference |
-|---|---|:---:|---|---|
-| **ASI01** | **Agent Goal Hijack** | ✅ **Full** | 6-Pass normalizer, 9 prompt injection scanners & response sanitization | [`src/policy/injection.rs`](src/policy/injection.rs) |
-| **ASI02** | **Tool Misuse and Exploitation** | ✅ **Full** | Default-deny engine, compiled JSON schema bounds & path traversal rejection | [`src/policy/engine.rs`](src/policy/engine.rs) |
-| **ASI03** | **Identity and Privilege Abuse** | ✅ **Full** | OIDC JWT validation, group claim policy mapping & credential scope binding | [`src/policy/identity.rs`](src/policy/identity.rs) |
-| **ASI04** | **Agentic Supply Chain Vulnerabilities** | ✅ **Full** | Manifest Vexa Security Score (0–100) & cross-session schema-drift detection | [`src/policy/mcp_score.rs`](src/policy/mcp_score.rs) |
-| **ASI05** | **Unexpected Code Execution (RCE)** | ✅ **Full** | Safe mode command blocking (`rm -rf`, `curl\|bash`) & self-healing file locks | [`src/policy/safe_mode.rs`](src/policy/safe_mode.rs) |
-| **ASI06** | **Memory and Context Poisoning** | ⚠️ **Partial** | Response poisoning interceptors & HMAC-chained tamper-evident audit logs | [`src/audit/logger.rs`](src/audit/logger.rs) |
-| **ASI07** | **Insecure Inter-Agent Communication** | ❌ **Scoped Gap** | Org-local OIDC identity boundary (requires upstream cross-tenant IdP federation) | [`docs/LIMITATIONS.md`](PRD/LIMITATIONS.md) |
-| **ASI08** | **Cascading Agent Failures** | ✅ **Full** | Cycle & loop detector (`PivotError`), rate limits & session spend caps | [`src/proxy/handler.rs`](src/proxy/handler.rs) |
-| **ASI09** | **Human-Agent Trust Exploitation** | ✅ **Full** | Real-time browser approval modals & HMAC-signed Slack/Teams webhook escalation | [`src/policy/hitl.rs`](src/policy/hitl.rs) |
-| **ASI10** | **Rogue Agents & Unauthorized Egress** | ✅ **Full** | Background Sentry daemon (<300ms self-healing), PKI enrollment & egress tunnel | [`src/service/`](src/service) |
-
-**Official Scorecard:** **8/10 Full Coverage, 1/10 Partial, 1/10 Scoped Gap.**
-
-> 📄 **Detailed Documentation & Automated Verification**: Read the complete [OWASP Agentic Top 10 Specification](docs/owasp_agentic_top10.md) for detailed technical analysis, evidence mappings, and automated CLI verification commands (`agentcontrol report --compliance`).
-
----
-
-## Deployment options
-
-Vexa Agent Control adapts to your existing deployment infrastructure:
-
-| Deployment Profile | Orchestration & Deployment | Infrastructure & State Storage | Monthly Cost |
-|---|---|---|:---:|
-| **Workstation Local Sidecar** | Standalone Binary (`agentcontrol protect` / `agentcontrol dev`), IDE Wrapper (`agentcontrol wrap`), or Sentry Daemon (`agentcontrol service`) | Local workstation, embedded SQLite database, local disk audit logs | **$0.00** |
-| **Team Staging Control Hub** | Docker Compose (`docker compose up -d`) | Shared team host / VM, PostgreSQL database, central Go REST API | Self-hosted |
-| **Enterprise Fleet Production** | Kubernetes Helm Release (`helm install agentcontrol ./chart`) | High-availability Kubernetes cluster, HA PostgreSQL database, external SIEM export | Production Fleet |
-| **Hardened Agent Runtime (HAR)** | Distroless/Alpine OCI Image (`Dockerfile.har`) | Kubernetes pod sidecar, production agent containers (<100MB memory footprint) | Integrated |
-
----
-
-## Management consoles
-
-Vexa Agent Control provides dedicated management interfaces tailored to each operational profile:
-
-| Console Profile | Access Endpoint | Core Capabilities & Telemetry |
-|---|---|---|
-| **Local Developer Console** | `http://127.0.0.1:8080` (`agentcontrol protect` / `agentcontrol dev`) | Real-time traffic monitor, shadow mode Risk Delta reporting, Vexa Security Score view, HITL browser modal, ADR benchmark runner |
-| **Team Control Hub Console** | `http://localhost:8081` (Docker Compose) | Centralized policy editor, Central Device Governance portal (`/admin/devices`), SSE hot-reload controller, async HITL queue, team spend analytics |
-| **Enterprise Control Hub Console** | Kubernetes Ingress / TLS Endpoint | HAR container pod telemetry, threat intelligence feed monitor, zero-knowledge CMK SIEM status, fleet security compliance overview |
-
----
-
-## Configuration
-
-### Policy YAML Schema (v2 Schema)
-
-Agent Control policies operate on a **default-deny** model (`agentcontrol-policy.yaml`):
-
-```yaml
-version: 2
-default_action: deny
-
-identity:
-  provider: "oidc"
-  issuer: "https://auth.corp.com/oauth2/default"
-  audience: "agentcontrol-gateway-prod"
-  group_claim_key: "groups"
-
-policy_bindings:
-  - group: "secops-team"
-    policy: "admin-unrestricted"
-  - group: "dev-team"
-    policy: "developer-standard"
-
-tools:
-  - name: "read_file"
-    action: allow
-    credential_scope: ["file:read"]
-    parameters:
-      - name: "path"
-        type: string
-        required: true
-        max_length: 512
-        validators:
-          - path_traversal
-          - no_sensitive_paths
-        regex: "^/home/[a-z]+/projects/.*"
-        deny_patterns: ["\\.ssh", "\\.env", "\\.aws"]
-
-dlp:
-  scannable_tools: ["read_file", "execute_command"]
-  safe_tools: ["list_directory"]
-  patterns:
-    - name: "aws_access_key"
-      regex: "AKIA[0-9A-Z]{16}"
-      action: block
-    - name: "credit_card"
-      regex: "\\b\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
-      action: redact
-
-spend:
-  max_tokens_per_session: 100000
-  max_concurrent_sessions: 10
-
-loop_detection:
-  threshold: 3
-  action: PivotError
-
-audit:
-  log_file: "/var/log/agentcontrol/audit.jsonl"
-  siem_export:
-    type: "splunk_hec"
-    endpoint: "https://splunk.corp.com:8088/services/collector/event"
-    token: "${SPLUNK_HEC_TOKEN}"
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
 ```
 
-### Environment Variables
-
-| Variable | Description | Default |
-|---|---|---|
-| `HTTP_PROXY` / `HTTPS_PROXY` | Standard HTTP proxy routing URLs for outbound agent traffic | — |
-| `AGENTWALL_TOKEN` | One-Time Enrollment Token (OTET) for automated workstation onboarding | — |
-| `AGENTWALL_HEARTBEAT_INTERVAL` | Background Sentry daemon health ping interval in seconds | `60` |
-| `AGENTWALL_LISTEN` | Gateway listen socket address | `127.0.0.1:8080` |
-| `AGENTWALL_POLICY_PATH` | Path to YAML policy configuration file | — |
-| `DASHBOARD_API_URL` | Control Hub API endpoint URL for centralized management | — |
-| `POLICY_READ_SECRET` | Shared authentication secret for real-time policy hot-reloading | — |
-| `GATEWAY_SECRET` | Shared secret for publishing gateway telemetry events | — |
-| `AGENTWALL_LOG_PATH` | Path to durable JSONL audit log file (overrides `--log-path`) | `~/.agentcontrol/audit.jsonl` |
-| `AGENTWALL_OIDC_ISSUER` | OIDC issuer URL for identity binding and group claim mapping | — |
-| `AGENTWALL_SIEM_BACKEND` | SIEM backend target (`splunk`, `datadog`, `opensearch`, `local`) | `local` |
-| `AGENTWALL_SIEM_ENDPOINT` | External SIEM log ingestion endpoint URL | — |
-| `AGENTWALL_SIEM_TOKEN` | Authentication token for external SIEM API | — |
-| `AGENTWALL_SHADOW_MODE` | Passive observation mode — log events without blocking calls | `false` |
-| `AGENTWALL_DRY_RUN` | Log policy violations without denying tool executions | `false` |
-| `AGENTWALL_TLS_CERT` | Path to TLS certificate PEM file (`rustls`) | — |
-| `AGENTWALL_TLS_KEY` | Path to TLS private key PEM file (`rustls`) | — |
-| `AGENTWALL_HITL_SECRET` | Cryptographic HMAC secret for HITL approval callbacks | — |
-| `PROVIDER_KEY_ENCRYPTION_SECRET` | AES-256-GCM 32-byte master key for provider API key storage | — |
-| `AGENTWALL_HUB_LICENSE_KEY` | Ed25519-signed enterprise license JWT for Control Hub | — |
-| `HUB_SIEM_BACKEND` | Centralized SIEM forwarder target (`splunk_hec`, `datadog_logs`, `opensearch`) | — |
-| `HUB_SIEM_ENDPOINT` | Centralized SIEM ingestion URL | — |
-| `HUB_SIEM_TOKEN` | Authentication token for centralized SIEM API | — |
+Read the full [Removal & Recovery Guide](docs/reference/removal-and-recovery.md).
 
 ---
 
-## Local REST & SSE API Endpoints
+## Advanced & Enterprise
 
-The local gateway exposes a versioned REST and Server-Sent Events API at `http://127.0.0.1:8080/api/v1/`:
+For production deployments, security teams, and platform engineering:
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/status` | Gateway health, version, posture mode, and active policy name |
-| `GET` | `/api/v1/telemetry/stream` | SSE stream of real-time tool call events (replaces `/api/events/stream`) |
-| `POST` | `/api/v1/hitl/respond` | Submit HITL approval or denial for a pending call (`{"request_id": "…", "decision": "approve" \| "deny"}`) |
+- [Enterprise Architecture & HAR Container](docs/advanced/enterprise.md)
+- [Kubernetes Helm Deployment](docs/advanced/kubernetes.md)
+- [OIDC Identity Binding (Okta, Entra ID, Auth0)](docs/advanced/oidc.md)
+- [SIEM Log Forwarding (Splunk, Datadog, OpenSearch)](docs/advanced/siem.md)
+- [OWASP Agentic Top 10 (ASI 2026) Mapping](docs/owasp_agentic_top10.md)
 
-> [!NOTE]
-> Legacy endpoints `/gateway/status` and `/api/events/stream` are preserved as aliases for backwards compatibility.
+---
+
+## Documentation Index
+
+Explore the complete [Documentation Hub](docs/README.md):
+
+- **Install:** [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md)
+- **Guides:** [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md)
+- **Integrations:** [Matrix](docs/integrations/README.md) · [Claude Desktop](docs/integrations/claude-desktop.md) · [Cursor](docs/integrations/cursor.md) · [Codex](docs/integrations/codex.md) · [Antigravity](docs/integrations/antigravity.md)
+- **Reference:** [CLI Commands](docs/reference/cli.md) · [Configuration & Env Vars](docs/reference/configuration.md) · [Paths & State](docs/reference/paths-and-state.md) · [Troubleshooting](docs/reference/troubleshooting.md) · [Removal & Recovery](docs/reference/removal-and-recovery.md) · [Legacy Alias Migration](docs/reference/legacy-migration.md) · [Release Notes Template](docs/reference/release-notes-template.md)
 
 ---
 
 ## License
 
-Copyright © [NoviqTech](https://vexasec.io). Licensed under the [Apache License 2.0](LICENSE).
+Vexa Agent Control is licensed under the [Apache 2.0 License](LICENSE).

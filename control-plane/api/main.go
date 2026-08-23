@@ -187,6 +187,7 @@ func main() {
 
 	// 5. Authoritative Central Spend Ledger API v2
 	r.Route("/api/v2/spend", func(r chi.Router) {
+		r.Use(middleware.SessionAuthOptional())
 		r.Post("/authorize", spendV2H.Authorize)
 		r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
 		r.Post("/reservations/{reservation_id}/release", spendV2H.Release)

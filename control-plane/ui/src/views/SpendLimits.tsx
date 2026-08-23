@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react'
 import { api, type SpendPolicyV2 } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 
 function microcentsToUSD(microcents: number): string {
   return (microcents / 100_000_000).toFixed(2)
 }
 
-function formatScopeLabel(scopeType: string, scopeId: string): string {
-  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global') {
+function formatScopeLabel(scopeType: string, scopeId: string, tenantId?: string): string {
+  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global' || (tenantId && scopeId === tenantId)) {
     return 'Global Fleet'
   }
   return scopeId
 }
 
 export default function SpendLimits() {
+  const { user } = useAuth()
   const [policies, setPolicies] = useState<SpendPolicyV2[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -43,7 +45,7 @@ export default function SpendLimits() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const scopeId = scope === 'organization' ? '00000000-0000-0000-0000-000000000001' : (targetId || 'default')
+    const scopeId = scope === 'organization' ? (user?.tenant_id || 'global') : (targetId || 'default')
     if (!limit) return
     
     setSubmitting(true)
@@ -153,7 +155,7 @@ export default function SpendLimits() {
                 {policies.map((p, idx) => (
                   <tr key={idx}>
                     <td><span className="badge badge-info">{p.scope_type}</span></td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{formatScopeLabel(p.scope_type, p.scope_id)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)' }}>{formatScopeLabel(p.scope_type, p.scope_id, user?.tenant_id)}</td>
                     <td>{p.period_type}</td>
                     <td>
                       <span className={`badge ${p.action === 'hard_deny' ? 'badge-danger' : 'badge-warning'}`}>

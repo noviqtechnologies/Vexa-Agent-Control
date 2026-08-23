@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { api, type BudgetWindowV2, type SpendEventV2, type SpendSnapshot } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 
 function microcentsToUSD(microcents: number): number {
   return microcents / 100_000_000
 }
 
-function formatScopeLabel(scopeType: string, scopeId: string): string {
-  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global') {
+function formatScopeLabel(scopeType: string, scopeId: string, tenantId?: string): string {
+  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global' || (tenantId && scopeId === tenantId)) {
     return 'Organization (Global Fleet)'
   }
   if (scopeType === 'project') {
@@ -25,6 +26,7 @@ interface SpenderItem {
 }
 
 export default function SpendVisualization() {
+  const { user } = useAuth()
   const [windows, setWindows] = useState<BudgetWindowV2[]>([])
   const [events, setEvents] = useState<SpendEventV2[]>([])
   const [legacySnapshots, setLegacySnapshots] = useState<SpendSnapshot[]>([])
@@ -64,7 +66,7 @@ export default function SpendVisualization() {
 
   // 1. From PostgreSQL Budget Windows
   windows.forEach(w => {
-    const displayLabel = formatScopeLabel(w.scope_type, w.scope_id)
+    const displayLabel = formatScopeLabel(w.scope_type, w.scope_id, user?.tenant_id)
     const settled = microcentsToUSD(w.settled_microcents)
     const reserved = microcentsToUSD(w.reserved_microcents)
     const limit = microcentsToUSD(w.limit_microcents)

@@ -40,7 +40,13 @@ type Config struct {
 
 func Load() (*Config, error) {
 	port := 8400
-	if v := os.Getenv("DASHBOARD_PORT"); v != "" {
+	if v := os.Getenv("PORT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PORT: %w", err)
+		}
+		port = p
+	} else if v := os.Getenv("DASHBOARD_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid DASHBOARD_PORT: %w", err)

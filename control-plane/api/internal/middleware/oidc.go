@@ -93,6 +93,33 @@ func DashboardAuth() func(http.Handler) http.Handler {
 	}
 }
 
+// SessionAuthOptional extracts and validates the session cookie if present,
+// populating UserClaims in context without failing requests if no session is provided.
+func SessionAuthOptional() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie("agentcontrol_session")
+			if err != nil {
+				cookie, err = r.Cookie("agentwall_session")
+			}
+			if err == nil && cookie != nil && cookie.Value != "" {
+				if sess, err := session.Validate(cookie.Value); err == nil && sess != nil {
+					claims := UserClaims{
+						TenantID:       sess.TenantID,
+						UserID:         sess.UserID,
+						IsAdmin:        sess.IsAdmin,
+						IsSaaSOperator: sess.IsSaaSOperator,
+					}
+					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // DeviceValidator is an interface for validating enrolled device IDs/tokens.
 type DeviceValidator interface {
 	ValidateDeviceToken(ctx context.Context, token string) bool

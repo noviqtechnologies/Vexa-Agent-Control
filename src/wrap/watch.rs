@@ -522,12 +522,15 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
         Err(WrapError::AlreadyWrapped) => {
             // Ensure file is locked even if already wrapped
             let _ = super::file_lock::lock_config_file(config_path);
+            super::status::gather_and_send_mcp_servers_snapshot();
         }
         Err(WrapError::NoMcpServers) => {
-            // No mcpServers in config, nothing to wrap
+            // No mcpServers in config (or removed) — sync updated inventory to Hub
+            super::status::gather_and_send_mcp_servers_snapshot();
         }
         Err(e) => {
             eprintln!("{} [watch] Error wrapping {}: {}", "✖".red(), at.name, e);
+            super::status::gather_and_send_mcp_servers_snapshot();
         }
     }
 }

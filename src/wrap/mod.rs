@@ -498,7 +498,7 @@ pub fn run_protect_orchestration(
     no_browser: bool,
     listen: &str,
     _mcp_url: &str,
-    _enforce: bool,
+    enforce: bool,
     policy: &str,
 ) -> i32 {
     // Step 0: Ensure baseline policy exists
@@ -510,22 +510,23 @@ pub fn run_protect_orchestration(
         }
     }
 
-    println!("\n  {} Discovered MCP Configs:", "✔".green().bold());
+    println!("\n  {} Discovered & Wrapped MCP Configurations:", "✔".green().bold());
     run_wrap_all(dry_run, false);
 
-    println!("\n  {} Starting Live Security Verification Probe:", "🚀".cyan().bold());
-    println!("    ✔ [1/3] Safe Tool Execution (read_file README.md)      ➔ {}", "ALLOWED (1.2ms)".green());
-    println!("    ✔ [2/3] DLP Exfiltration Guard (AWS Key Leak)          ➔ {}", "BLOCKED [DLP-01-HIGH-ENTROPY] (0.8ms)".red());
-    println!("    ✔ [3/3] Prompt Injection Guard (System Prompt Override) ➔ {}", "BLOCKED [INJ-04-OVERRIDE] (1.1ms)".red());
+    println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());
+    println!("    • Mode: {}", if enforce { "Active Enforcement (Default Deny / DLP / Injection Blocking)".green().bold() } else { "Observation / Shadow Mode (Audit Only)".yellow().bold() });
+    println!("    • Policy: {}", policy.cyan());
+    println!("    • Live Dashboard: {}", format!("http://{}", listen).cyan().underline());
+    println!("    • Verification: Run '{}' in another terminal to perform live smoke tests", "agentcontrol verify".bold().cyan());
 
-    println!("\n  {} Local Security Status:", "📊".cyan().bold());
-    println!("    • 3/3 Baseline Assertions Passed");
-    println!("    • Threat Rules Active: DLP-01, INJ-04, LOOP-PREVENT");
-    println!("    • Live Dashboard available at: {} (Ctrl+Click to open)", format!("http://{}", listen).cyan().underline());
+    if dry_run {
+        println!("\n  {} Dry run completed. No files modified and gateway not started.\n", "ℹ".blue().bold());
+        return 0;
+    }
 
-    println!("\n  {} Ready. Agents invoking tools are now actively monitored and shielded.\n", "⚡".yellow().bold());
+    println!("\n  {} Starting Local Security Gateway on {}...\n", "⚡".yellow().bold(), listen);
 
-    if !dry_run && !no_browser {
+    if !no_browser {
         let dash_url = format!("http://{}", listen);
         let _ = open_browser(&dash_url);
     }

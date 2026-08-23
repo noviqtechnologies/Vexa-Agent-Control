@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { api, type BudgetWindowV2, type SpendEventV2 } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 
 function microcentsToUSD(microcents: number): string {
   return (microcents / 100_000_000).toFixed(4)
 }
 
-function formatScopeLabel(scopeType: string, scopeId: string): string {
-  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global') {
+function formatScopeLabel(scopeType: string, scopeId: string, tenantId?: string): string {
+  if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global' || (tenantId && scopeId === tenantId)) {
     return 'Organization (Global Fleet)'
   }
   if (scopeType === 'project') {
@@ -16,6 +17,7 @@ function formatScopeLabel(scopeType: string, scopeId: string): string {
 }
 
 export default function SpendStatus() {
+  const { user } = useAuth()
   const [windows, setWindows] = useState<BudgetWindowV2[]>([])
   const [events, setEvents] = useState<SpendEventV2[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,7 +103,7 @@ export default function SpendStatus() {
                   <div key={idx} style={{ padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
-                        <strong style={{ fontSize: 14 }}>{formatScopeLabel(w.scope_type, w.scope_id)}</strong>
+                        <strong style={{ fontSize: 14 }}>{formatScopeLabel(w.scope_type, w.scope_id, user?.tenant_id)}</strong>
                         <span style={{ fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>
                           Resets: {new Date(w.window_end).toLocaleDateString()}
                         </span>

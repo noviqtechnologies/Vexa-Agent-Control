@@ -927,7 +927,38 @@ func (s *Store) PublishPolicy(ctx context.Context, orgID, policyID, publishedBy 
 	return &pv, nil
 }
 
+// EnsureDefaultPolicyForOrg ensures an organization has at least a default monthly policy ($100/mo) seeded and published.
+func (s *Store) EnsureDefaultPolicyForOrg(ctx context.Context, orgID string) error {
+	if s.pool == nil || orgID == "" {
+		return nil
+	}
+	var count int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spend_policies WHERE organization_id = $1`, orgID).Scan(&count)
+	if err != nil || count > 0 {
+		return err
+	}
+
+	p := SpendPolicy{
+		OrganizationID:  orgID,
+		ScopeType:       ScopeOrganization,
+		ScopeID:         orgID,
+		Currency:        "USD",
+		PeriodType:      PeriodMonthly,
+		LimitMicrocents: 10000000000, // $100.00
+		Action:          ActionHardDeny,
+		Status:          "DRAFT",
+	}
+	if err := s.CreatePolicy(ctx, &p); err != nil {
+		return err
+	}
+	_, err = s.PublishPolicy(ctx, orgID, p.PolicyID, "system")
+	return err
+}
+
 func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, error) {
+	if orgID != "" {
+		_ = s.EnsureDefaultPolicyForOrg(ctx, orgID)
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT policy_id, organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action, effective_from, status, created_at, updated_at
 		FROM spend_policies
@@ -950,6 +981,9 @@ func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, 
 }
 
 func (s *Store) ListEffectiveBudgetWindows(ctx context.Context, orgID string) ([]BudgetWindow, error) {
+	if orgID != "" {
+		_ = s.EnsureDefaultPolicyForOrg(ctx, orgID)
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT window_id, organization_id, policy_version_id, scope_type, scope_id,
 		       window_start, window_end, limit_microcents, reserved_microcents, settled_microcents, version

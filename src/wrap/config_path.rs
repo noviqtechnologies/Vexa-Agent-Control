@@ -78,15 +78,31 @@ pub fn claude_config_path() -> Result<PathBuf, WrapError> {
                 let homes = get_windows_user_homes();
                 for home in &homes {
                     let standard = home.join(r"AppData\Roaming\Claude\claude_desktop_config.json");
+                    let store = home.join(r"AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json");
+                    if standard.exists() && store.exists() {
+                        let m_std = std::fs::metadata(&standard).and_then(|m| m.modified()).ok();
+                        let m_store = std::fs::metadata(&store).and_then(|m| m.modified()).ok();
+                        if let (Some(t_std), Some(t_store)) = (m_std, m_store) {
+                            if t_store >= t_std {
+                                return Ok(store);
+                            } else {
+                                return Ok(standard);
+                            }
+                        }
+                        return Ok(store);
+                    }
                     if standard.exists() {
                         return Ok(standard);
                     }
-                    let store = home.join(r"AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json");
                     if store.exists() {
                         return Ok(store);
                     }
                 }
                 if let Some(first) = homes.first() {
+                    let store = first.join(r"AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json");
+                    if store.exists() {
+                        return Ok(store);
+                    }
                     return Ok(first.join(r"AppData\Roaming\Claude\claude_desktop_config.json"));
                 }
             }

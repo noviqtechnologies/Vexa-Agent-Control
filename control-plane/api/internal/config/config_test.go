@@ -15,7 +15,7 @@ func setEnv(t *testing.T, env map[string]string) {
 func clearDashboardEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		"DATABASE_URL", "DASHBOARD_PORT", "GATEWAY_SECRET",
+		"DATABASE_URL", "PORT", "DASHBOARD_PORT", "GATEWAY_SECRET",
 		"OIDC_ISSUER", "OIDC_CLIENT_ID", "DEV_MODE", "ALLOW_DEV_MODE",
 		"POLICY_READ_SECRET", "GATEWAY_URL", "PROVIDER_KEY_ENCRYPTION_SECRET", "AGENTCONTROL_HUB_LICENSE_KEY",
 	} {

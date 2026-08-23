@@ -99,6 +99,29 @@ func (s *Store) CreateOrganization(ctx context.Context, org *model.Organization)
 		return "", fmt.Errorf("create organization: %w", err)
 	}
 
+	// Seed default authoritative spend policy ($100/mo) for the new tenant
+	var policyID string
+	seedErr := s.pool.QueryRow(ctx, `
+		INSERT INTO spend_policies (
+			organization_id, scope_type, scope_id, currency, period_type,
+			limit_microcents, action, effective_from, status
+		) VALUES (
+			$1, 'organization', $1, 'USD', 'monthly',
+			10000000000, 'hard_deny', now(), 'PUBLISHED'
+		) ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO UPDATE SET updated_at = now()
+		RETURNING policy_id
+	`, org.ID).Scan(&policyID)
+	if seedErr == nil && policyID != "" {
+		_, _ = s.pool.Exec(ctx, `
+			INSERT INTO spend_policy_versions (
+				policy_id, version, snapshot_json, published_by, published_at
+			) VALUES (
+				$1, 1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
+				'system', now()
+			) ON CONFLICT (policy_id, version) DO NOTHING
+		`, policyID)
+	}
+
 	return rawBootstrapToken, nil
 }
 
