@@ -49,7 +49,7 @@ if (!$Version) {
         $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
         $Version = $ReleaseJson[0].tag_name
     } catch {
-        $Version = "v1.0.60"
+        $Version = "v1.0.61"
     }
 }
 

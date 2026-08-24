@@ -296,6 +296,15 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	certChainPEM, serialNumber, caResource, err := h.CASClient.SignCertificateRequest(r.Context(), csrBytes, 90*24*time.Hour)
 	if err != nil {
 		log.Printf("CompleteEnrollment CA signing error: %v", err)
+		if errors.Is(err, crypto.ErrEmptyCSR) ||
+			errors.Is(err, crypto.ErrInvalidPEMBlock) ||
+			errors.Is(err, crypto.ErrParseCSR) ||
+			errors.Is(err, crypto.ErrCSRSignature) ||
+			errors.Is(err, crypto.ErrInvalidKeyAlg) ||
+			errors.Is(err, crypto.ErrInvalidCurve) {
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"invalid_csr","message":"Invalid client certificate signing request: %s"}}`, err.Error()), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, fmt.Sprintf(`{"error":{"code":"ca_unavailable","message":"Certificate authority failed to sign device CSR: %s"}}`, err.Error()), http.StatusServiceUnavailable)
 		return
 	}

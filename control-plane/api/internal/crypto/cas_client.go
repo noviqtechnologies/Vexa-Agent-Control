@@ -79,33 +79,42 @@ func (s *SoftwareCASIssuer) CheckHealth(ctx context.Context) error {
 	return nil
 }
 
+var (
+	ErrEmptyCSR        = errors.New("empty CSR payload")
+	ErrInvalidPEMBlock = errors.New("invalid PEM block type for CSR: expected CERTIFICATE REQUEST")
+	ErrParseCSR        = errors.New("failed to parse CSR ASN.1 DER structure")
+	ErrCSRSignature    = errors.New("invalid CSR signature")
+	ErrInvalidKeyAlg   = errors.New("unsupported CSR public key algorithm: expected ECDSA P-256")
+	ErrInvalidCurve    = errors.New("unsupported elliptic curve: expected P-256")
+)
+
 // SignCertificateRequest issues a short-lived client certificate from the provided validated CSR.
 func (s *SoftwareCASIssuer) SignCertificateRequest(ctx context.Context, csrPEM []byte, lifetime time.Duration) ([]byte, string, string, error) {
 	if len(csrPEM) == 0 {
-		return nil, "", "", fmt.Errorf("empty CSR payload")
+		return nil, "", "", ErrEmptyCSR
 	}
 
 	block, _ := pem.Decode(csrPEM)
 	if block == nil || (block.Type != "CERTIFICATE REQUEST" && block.Type != "NEW CERTIFICATE REQUEST") {
-		return nil, "", "", fmt.Errorf("invalid PEM block type for CSR: %v", block)
+		return nil, "", "", fmt.Errorf("%w: invalid or missing PEM block", ErrInvalidPEMBlock)
 	}
 
 	csr, err := x509.ParseCertificateRequest(block.Bytes)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("parse CSR: %w", err)
+		return nil, "", "", fmt.Errorf("%w: %v", ErrParseCSR, err)
 	}
 
 	if err := csr.CheckSignature(); err != nil {
-		return nil, "", "", fmt.Errorf("invalid CSR signature: %w", err)
+		return nil, "", "", fmt.Errorf("%w: %v", ErrCSRSignature, err)
 	}
 
 	// Verify device public key algorithm
 	clientPubKey, ok := csr.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return nil, "", "", fmt.Errorf("unsupported CSR public key algorithm: expected ECDSA P-256")
+		return nil, "", "", ErrInvalidKeyAlg
 	}
 	if clientPubKey.Curve != elliptic.P256() {
-		return nil, "", "", fmt.Errorf("unsupported elliptic curve: expected P-256")
+		return nil, "", "", ErrInvalidCurve
 	}
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
