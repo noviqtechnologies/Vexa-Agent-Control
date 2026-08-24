@@ -86,6 +86,7 @@ dashmap = "5"
 
 # Signing (FR-204)
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+rcgen = "0.13"
 
 # UUID
 uuid = { version = "1", features = ["v4"] }
