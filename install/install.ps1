@@ -28,7 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    $FallbackVersion = "v1.0.56"
+    $FallbackVersion = "v1.0.59"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
@@ -36,7 +36,8 @@ param(
             $ReleaseJson = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
                 -Headers @{ "User-Agent" = "AgentControl-Installer" }
             $Version = $ReleaseJson.tag_name
-        } catch {
+        }
+        catch {
             Write-Host "[!] Notice: GitHub API resolution failed (rate-limited or offline)." -ForegroundColor $ColorYellow
             Write-Host "    Falling back to default release: $FallbackVersion" -ForegroundColor $ColorYellow
             $Version = $FallbackVersion
@@ -71,22 +72,25 @@ param(
     if (Test-Path $FinalBinaryPath) {
         try {
             $InstalledVersion = (& $FinalBinaryPath --version 2>$null) -replace '[^0-9.]', '' | Select-Object -First 1
-        } catch { $InstalledVersion = $null }
+        }
+        catch { $InstalledVersion = $null }
     }
 
     $RawVer = $Version.TrimStart("v")
     if ($InstalledVersion -and $InstalledVersion -eq $RawVer) {
         Write-Host "`n[+] Vexa Agent Control v$RawVer is already up to date. Nothing to do." -ForegroundColor $ColorGreen
         return
-    } elseif ($InstalledVersion) {
+    }
+    elseif ($InstalledVersion) {
         Write-Host "Upgrading $InstalledVersion -> $RawVer..." -ForegroundColor $ColorCyan
-    } else {
+    }
+    else {
         Write-Host "Fresh install of Vexa Agent Control $Version..." -ForegroundColor $ColorCyan
     }
 
     $AssetName = "agentcontrol-$Version-windows-$ArchTarget.zip"
-    $BaseUrl   = "https://github.com/$Repo/releases/download/$Version"
-    $AssetUrl  = "$BaseUrl/$AssetName"
+    $BaseUrl = "https://github.com/$Repo/releases/download/$Version"
+    $AssetUrl = "$BaseUrl/$AssetName"
     $ChecksumsUrl = "$BaseUrl/checksums.txt"
 
     # 3. Create Temp Dir
@@ -104,7 +108,8 @@ param(
         try {
             Invoke-WebRequest -Uri $AssetUrl -OutFile $ZipPath -UseBasicParsing
             break
-        } catch {
+        }
+        catch {
             if ($i -eq $MaxRetries) {
                 Write-Host "Download failed after $MaxRetries attempts: $_" -ForegroundColor $ColorRed
                 throw "Failed to download $AssetUrl"
@@ -118,7 +123,8 @@ param(
     Write-Host "Verifying SHA-256 cryptographic checksum..." -ForegroundColor $ColorCyan
     try {
         Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath -UseBasicParsing
-    } catch {
+    }
+    catch {
         Write-Host "[!] FATAL: Checksum manifest not published for release $Version." -ForegroundColor $ColorRed
         Write-Host "    Installation halted in accordance with strict security posture." -ForegroundColor $ColorRed
         throw "Checksum manifest missing."
@@ -131,7 +137,7 @@ param(
     }
 
     $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
-    $ActualHash   = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
+    $ActualHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
 
     if ($ExpectedHash -ne $ActualHash) {
         Write-Host "[!] FATAL: Cryptographic Checksum Mismatch!" -ForegroundColor $ColorRed
@@ -147,7 +153,7 @@ param(
     Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
 
     $ExtractedBinary = Get-ChildItem -Path $ExtractDir -Recurse -Filter "agentcontrol*" |
-        Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+    Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
 
     if (-not $ExtractedBinary) {
         Write-Host "Could not locate agentcontrol binary inside extracted archive." -ForegroundColor $ColorRed
