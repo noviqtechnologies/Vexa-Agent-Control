@@ -131,15 +131,22 @@ impl DashboardClient {
                 }
                 Ok(res) => {
                     let status = res.status().as_u16();
+                    let level = if status == 401 || status == 403 {
+                        crate::logging::Level::Debug
+                    } else {
+                        crate::logging::Level::Warn
+                    };
                     crate::logging::log_event(
-                        crate::logging::Level::Warn,
+                        level,
                         "mcp_server_snapshot_rejected",
                         serde_json::json!({"status": status, "agent_id": &agent_id}),
                     );
-                    crate::service::eventlog::log_warn(
-                        1005,
-                        &format!("MCP server snapshot rejected by Hub with HTTP status: {}", status),
-                    );
+                    if status != 401 && status != 403 {
+                        crate::service::eventlog::log_warn(
+                            1005,
+                            &format!("MCP server snapshot rejected by Hub with HTTP status: {}", status),
+                        );
+                    }
                 }
                 Err(e) => {
                     let err_str = e.to_string();

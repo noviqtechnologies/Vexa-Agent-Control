@@ -1350,6 +1350,34 @@ async fn handle_request(
                     "findings": req_dlp.iter().map(|f| format!("{}: {}", f.category.as_str(), f.preview)).collect::<Vec<_>>()
                 });
                 dlp_findings_json = Some(findings_json.to_string());
+                let f = &req_dlp[0];
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &session.session_id,
+                        "dlp_warning",
+                        &tool_name,
+                        None,
+                        Some(format!("pattern={} category={} preview={}", f.pattern_name, f.category.as_str(), f.preview)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Warn,
+                    "dlp_warning",
+                    serde_json::json!({
+                        "tool": &tool_name,
+                        "session": &session.session_id,
+                        "pattern": &f.pattern_name,
+                        "category": f.category.as_str(),
+                        "preview": &f.preview
+                    }),
+                );
             }
         }
 

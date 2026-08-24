@@ -466,6 +466,13 @@ func (s *Store) CompleteEnrollmentTransaction(
 		return "", "", ErrTxExpiredV2
 	}
 
+	// 1b. Validate challenge belongs to transaction and is not expired
+	var chalCount int
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM enrollment_challenges WHERE id = $1 AND transaction_id = $2 AND tenant_id = $3 AND expires_at > now();`, challengeID, txID, tenantID).Scan(&chalCount)
+	if err != nil || chalCount == 0 {
+		return "", "", ErrChallengeNotFoundV2
+	}
+
 	// 2. Safe defaults for NOT NULL columns on devices table
 	finalDispName := stableDevID
 	if dispName != nil && *dispName != "" {

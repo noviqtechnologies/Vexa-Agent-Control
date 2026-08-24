@@ -20,8 +20,10 @@ elif [[ "$ARCH" == "arm64" ]]; then
   ARCH="aarch64"
 fi
 
+VERSION="${AGENTCONTROL_VERSION:-}"
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"
 HUB_URL="${AGENTCONTROL_HUB_URL:-${AGENTWALL_HUB_URL:-${DASHBOARD_API_URL:-https://console.vexasec.io}}}"
+INSTALL_SERVICE=false
 if [[ "$HUB_URL" == "http://localhost:8400" ]]; then
   HUB_URL="https://console.vexasec.io"
 fi
@@ -37,10 +39,20 @@ while [[ $# -gt 0 ]]; do
       HUB_URL="$2"
       shift 2
       ;;
+    -v|--version)
+      VERSION="$2"
+      shift 2
+      ;;
+    --install-service)
+      INSTALL_SERVICE=true
+      shift
+      ;;
     -h|--help)
-      echo "Usage: team_otet.sh -t <token> [-u <hub-url>]"
-      echo "  -t, --token    Enrollment token for enterprise onboarding"
-      echo "  -u, --hub-url  Control Hub / Dashboard URL (e.g. https://console.vexasec.io)"
+      echo "Usage: team_otet.sh -t <token> [-u <hub-url>] [-v <version>] [--install-service]"
+      echo "  -t, --token            Enrollment token for enterprise onboarding"
+      echo "  -u, --hub-url          Control Hub / Dashboard URL (default: https://console.vexasec.io)"
+      echo "  -v, --version          Pin specific release version (default: latest)"
+      echo "  --install-service      Install persistent system service daemon (requires sudo/root)"
       exit 0
       ;;
     *)
@@ -60,14 +72,17 @@ fi
 
 LOCALBIN="${HOME}/.local/bin"
 REPO="noviqtechnologies/Vexa-Agent-Control"
-echo "[*] Fetching latest release version..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
-  | grep '"tag_name"' \
-  | head -1 \
-  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="v1.0.59"
+  echo "[*] Fetching latest release version..."
+  VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
+    | grep '"tag_name"' \
+    | head -1 \
+    | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
+
+  if [[ -z "$VERSION" ]]; then
+    VERSION="v1.0.60"
+  fi
 fi
 
 # Ensure version tag has 'v' prefix
@@ -75,7 +90,7 @@ if [[ "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi
 
-echo "[*] Version: $VERSION | OS: $OS | Hub: $HUB_URL"
+echo "[*] Version: $VERSION | OS: $OS | Arch: $ARCH | Hub: $HUB_URL"
 
 ASSET_NAME="agentcontrol-${VERSION}-${OS}-${ARCH}.zip"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
@@ -120,7 +135,8 @@ if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
     exit 1
   fi
 else
-  echo "[!] Warning: checksums.txt not available for this release; proceeding with HTTPS transport validation."
+  echo "[!] FATAL: Could not download checksums.txt from $CHECKSUMS_URL. Aborting installation for security."
+  exit 1
 fi
 
 mkdir -p "$LOCALBIN"
@@ -142,11 +158,15 @@ if ! "${LOCALBIN}/agentcontrol" enroll --token "$TOKEN" --hub-url "$HUB_URL"; th
   exit 1
 fi
 
-echo "[*] Step 2/3: Installing Persistent OS Sentry Daemon..."
-if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
-  sudo "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Could not install machine-level system service without root."
+if [[ "$INSTALL_SERVICE" == "true" ]]; then
+  echo "[*] Step 2/3: Installing Persistent OS Sentry Daemon..."
+  if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
+    sudo "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Could not install machine-level system service without root."
+  else
+    "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Sentry service installation requires appropriate permissions."
+  fi
 else
-  "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Sentry service installation requires appropriate permissions."
+  echo "[*] Step 2/3: Skipping system daemon installation (pass --install-service to enable)."
 fi
 
 echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
@@ -154,6 +174,8 @@ echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
 
 echo ""
 echo "[+] Automated Enterprise Provisioning Completed!"
+echo "  • Version: $VERSION"
+echo "  • SHA-256: $ACTUAL_HASH"
 echo "Get started by running:"
 echo "  agentcontrol protect"
 echo ""

@@ -42,4 +42,44 @@ func TestCanonicalTranscript_FormattingAndVerification(t *testing.T) {
 	if handler.VerifySignatureHelper(pub, tamperedTranscript, sig) {
 		t.Fatal("Tampered transcript signature unexpectedly verified")
 	}
+
+	// Tampered signature must fail
+	tamperedSig := make([]byte, len(sig))
+	copy(tamperedSig, sig)
+	tamperedSig[0] ^= 0xFF
+	if handler.VerifySignatureHelper(pub, transcript, tamperedSig) {
+		t.Fatal("Tampered signature unexpectedly verified")
+	}
+
+	// Invalid pubkey length must fail
+	if handler.VerifySignatureHelper([]byte("short"), transcript, sig) {
+		t.Fatal("Invalid pubkey length unexpectedly succeeded")
+	}
+
+	// Invalid signature length must fail
+	if handler.VerifySignatureHelper(pub, transcript, []byte("short")) {
+		t.Fatal("Invalid signature length unexpectedly succeeded")
+	}
+}
+
+func TestCanonicalTranscript_HashComputation(t *testing.T) {
+	txID := "tx-123"
+	chID := "ch-456"
+	audience := "enroll.vexasec.io"
+	tenantID := "tenant-789"
+	edFP := "fingerprint123"
+	csrSHA := "csrsha256"
+	schemaVer := "2.0"
+
+	transcript := handler.FormatCanonicalTranscript(txID, chID, audience, tenantID, edFP, csrSHA, schemaVer)
+	expectedTranscript := "tx-123|ch-456|enroll.vexasec.io|tenant-789|fingerprint123|csrsha256|2.0"
+	if transcript != expectedTranscript {
+		t.Fatalf("unexpected transcript format: got %s, want %s", transcript, expectedTranscript)
+	}
+
+	sum := sha256.Sum256([]byte(transcript))
+	expectedHash := hex.EncodeToString(sum[:])
+	if len(expectedHash) != 64 {
+		t.Fatalf("expected 64-char sha256 hex, got %s", expectedHash)
+	}
 }

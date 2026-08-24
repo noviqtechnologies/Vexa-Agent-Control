@@ -276,7 +276,7 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	// 3. Verify Transcript Hash
 	sum := sha256.Sum256([]byte(canonical))
 	expectedHashHex := hex.EncodeToString(sum[:])
-	if req.SignedPayloadSHA256 != "" && req.SignedPayloadSHA256 != expectedHashHex {
+	if req.SignedPayloadSHA256 == "" || req.SignedPayloadSHA256 != expectedHashHex {
 		http.Error(w, `{"error":{"code":"transcript_hash_mismatch","message":"Signed payload hash does not match canonical transcript"}}`, http.StatusBadRequest)
 		return
 	}
@@ -290,12 +290,13 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	// 5. Sign the actual device CSR via CAS Issuer
 	csrBytes := []byte(rec.MTLSCSRPEM)
 	if len(csrBytes) == 0 {
-		csrBytes = []byte("CERTIFICATE REQUEST")
+		http.Error(w, `{"error":{"code":"invalid_csr","message":"No valid CSR recorded for transaction"}}`, http.StatusBadRequest)
+		return
 	}
 	certChainPEM, serialNumber, caResource, err := h.CASClient.SignCertificateRequest(r.Context(), csrBytes, 90*24*time.Hour)
 	if err != nil {
 		log.Printf("CompleteEnrollment CA signing error: %v", err)
-		http.Error(w, `{"error":{"code":"ca_unavailable","message":"Certificate authority failed to sign device CSR"}}`, http.StatusServiceUnavailable)
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"ca_unavailable","message":"Certificate authority failed to sign device CSR: %s"}}`, err.Error()), http.StatusServiceUnavailable)
 		return
 	}
 
@@ -313,7 +314,16 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	)
 	if err != nil {
 		log.Printf("CompleteEnrollment store transaction error: %v", err)
-		http.Error(w, `{"error":{"code":"internal_error","message":"Failed to finalize device enrollment"}}`, http.StatusInternalServerError)
+		switch {
+		case errors.Is(err, store.ErrTxNotFoundV2):
+			http.Error(w, `{"error":{"code":"transaction_not_found","message":"Enrollment transaction does not exist"}}`, http.StatusNotFound)
+		case errors.Is(err, store.ErrTxExpiredV2):
+			http.Error(w, `{"error":{"code":"transaction_expired","message":"Enrollment transaction has expired"}}`, http.StatusGone)
+		case errors.Is(err, store.ErrChallengeNotFoundV2), errors.Is(err, store.ErrChallengeExpiredV2):
+			http.Error(w, `{"error":{"code":"challenge_invalid","message":"Enrollment challenge is invalid or expired"}}`, http.StatusBadRequest)
+		default:
+			http.Error(w, `{"error":{"code":"internal_error","message":"Failed to finalize device enrollment in database"}}`, http.StatusInternalServerError)
+		}
 		return
 	}
 

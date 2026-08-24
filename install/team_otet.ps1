@@ -1,4 +1,11 @@
 # PowerShell Installer for Vexa Agent Control Team OTET Enterprise Provisioning
+param(
+    [string]$Token,
+    [string]$HubUrl,
+    [string]$Version,
+    [switch]$InstallService
+)
+
 $ErrorActionPreference = "Stop"
 
 $ColorGreen = "Green"
@@ -8,12 +15,12 @@ $ColorRed = "Red"
 
 Write-Host "[*] Vexa Agent Control Team OTET Enterprise Provisioning Installer" -ForegroundColor $ColorCyan
 
-$Token = $env:AGENTCONTROL_TOKEN
+if (!$Token) { $Token = $env:AGENTCONTROL_TOKEN }
 if (!$Token) { $Token = $env:AGENTCONTROL_ENROLLMENT_TOKEN }
 if (!$Token) { $Token = $env:AGENTWALL_TOKEN }
 if (!$Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
 
-$HubUrl = $env:AGENTCONTROL_HUB_URL
+if (!$HubUrl) { $HubUrl = $env:AGENTCONTROL_HUB_URL }
 if (!$HubUrl) { $HubUrl = $env:AGENTWALL_HUB_URL }
 if (!$HubUrl -and $env:DASHBOARD_API_URL -and $env:DASHBOARD_API_URL -ne "http://localhost:8400") {
     $HubUrl = $env:DASHBOARD_API_URL
@@ -25,7 +32,7 @@ $env:DASHBOARD_API_URL = $HubUrl
 
 if (!$Token) {
     Write-Host "[!] Error: Enterprise enrollment token required." -ForegroundColor $ColorRed
-    Write-Host "    Set `$env:AGENTCONTROL_TOKEN = '<TOKEN>' before running this script." -ForegroundColor $ColorYellow
+    Write-Host "    Pass -Token '<TOKEN>' or set `$env:AGENTCONTROL_TOKEN = '<TOKEN>' before running." -ForegroundColor $ColorYellow
     exit 1
 }
 
@@ -35,17 +42,22 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
 }
 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
-$ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
 
-try {
-    $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
-    $Version = $ReleaseJson[0].tag_name
-} catch {
-    Write-Host "[!] Failed to fetch version info: $_" -ForegroundColor $ColorRed
-    exit 1
+if (!$Version) {
+    $ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
+    try {
+        $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
+        $Version = $ReleaseJson[0].tag_name
+    } catch {
+        $Version = "v1.0.60"
+    }
 }
 
-Write-Host "[*] Version: $Version | Hub: $HubUrl" -ForegroundColor $ColorGreen
+if (!$Version.StartsWith("v")) {
+    $Version = "v$Version"
+}
+
+Write-Host "[*] Version: $Version | Arch: $ArchStr | Hub: $HubUrl" -ForegroundColor $ColorGreen
 
 $LocalBinDir = "$env:USERPROFILE\.local\bin"
 if (!(Test-Path $LocalBinDir)) { New-Item -ItemType Directory -Path $LocalBinDir -Force | Out-Null }
@@ -80,11 +92,13 @@ try {
         }
         Write-Host "[✓] SHA-256 Checksum verified successfully ($ActualHash)." -ForegroundColor $ColorGreen
     } else {
-        Write-Host "[!] Warning: Release asset $AssetName not listed in checksums.txt." -ForegroundColor $ColorYellow
+        Write-Host "[!] FATAL: Release asset $AssetName not listed in checksums.txt. Aborting." -ForegroundColor $ColorRed
+        exit 1
     }
     Remove-Item $TempChecksums -Force -ErrorAction SilentlyContinue
 } catch {
-    Write-Host "[!] Note: checksums.txt unavailable; verified over TLS." -ForegroundColor $ColorYellow
+    Write-Host "[!] FATAL: Could not retrieve checksums.txt from $ChecksumsUrl. Aborting for security." -ForegroundColor $ColorRed
+    exit 1
 }
 
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
@@ -110,32 +124,38 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
-try {
-    # Sync user credentials to SYSTEM service profile if elevated
-    $SystemAgentControl = "C:\Windows\System32\config\systemprofile\.agentcontrol"
-    if (!(Test-Path $SystemAgentControl)) {
-        New-Item -ItemType Directory -Path $SystemAgentControl -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    if (Test-Path "$env:USERPROFILE\.agentcontrol") {
-        Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
-    if ($env:GATEWAY_SECRET -and $env:GATEWAY_SECRET -ne "local-dev-shared-secret-change-me") {
-        [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")
-    } else {
-        [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $null, "Machine")
-    }
+if ($InstallService) {
+    Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
+    try {
+        # Sync user credentials to SYSTEM service profile if elevated
+        $SystemAgentControl = "C:\Windows\System32\config\systemprofile\.agentcontrol"
+        if (!(Test-Path $SystemAgentControl)) {
+            New-Item -ItemType Directory -Path $SystemAgentControl -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        if (Test-Path "$env:USERPROFILE\.agentcontrol") {
+            Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
+        if ($env:GATEWAY_SECRET -and $env:GATEWAY_SECRET -ne "local-dev-shared-secret-change-me") {
+            [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")
+        } else {
+            [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $null, "Machine")
+        }
 
-    & $FinalBinaryPath service install --hub-url $HubUrl
-} catch {
-    Write-Host "[!] Note: Sentry service installation requires Administrator privileges." -ForegroundColor $ColorYellow
+        & $FinalBinaryPath service install --hub-url $HubUrl
+    } catch {
+        Write-Host "[!] Note: Sentry service installation requires Administrator privileges." -ForegroundColor $ColorYellow
+    }
+} else {
+    Write-Host "[*] Step 2/3: Skipping system daemon installation (pass -InstallService to enable)." -ForegroundColor $ColorCyan
 }
 
 Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan
 & $FinalBinaryPath wrap --all
 
 Write-Host "`n[+] Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
+Write-Host "  • Version: $Version" -ForegroundColor $ColorGreen
+Write-Host "  • SHA-256: $ActualHash" -ForegroundColor $ColorGreen
 Write-Host "Get started by running:" -ForegroundColor $ColorGreen
 Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
 Write-Host ""
