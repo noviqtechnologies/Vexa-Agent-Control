@@ -138,6 +138,10 @@ func (h *EnrollmentV2Handler) StartEnrollment(w http.ResponseWriter, r *http.Req
 
 	if err != nil {
 		log.Printf("StartEnrollment consume error: %v", err)
+		if errors.Is(err, store.ErrDeviceAlreadyEnrolledV2) {
+			http.Error(w, `{"error":{"code":"device_already_enrolled","message":"Device is already enrolled with this identity key"}}`, http.StatusConflict)
+			return
+		}
 		http.Error(w, `{"error":{"code":"enrollment_token_invalid","message":"Token invalid or expired"}}`, http.StatusUnauthorized)
 		return
 	}
@@ -322,16 +326,16 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 		renewAfter,
 	)
 	if err != nil {
-		log.Printf("CompleteEnrollment store transaction error: %v", err)
+		log.Printf("CompleteEnrollment store transaction error [req_id=%s]: %v", reqID, err)
 		switch {
 		case errors.Is(err, store.ErrTxNotFoundV2):
-			http.Error(w, `{"error":{"code":"transaction_not_found","message":"Enrollment transaction does not exist"}}`, http.StatusNotFound)
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"transaction_not_found","message":"Enrollment transaction does not exist","request_id":%q}}`, reqID), http.StatusNotFound)
 		case errors.Is(err, store.ErrTxExpiredV2):
-			http.Error(w, `{"error":{"code":"transaction_expired","message":"Enrollment transaction has expired"}}`, http.StatusGone)
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"transaction_expired","message":"Enrollment transaction has expired","request_id":%q}}`, reqID), http.StatusGone)
 		case errors.Is(err, store.ErrChallengeNotFoundV2), errors.Is(err, store.ErrChallengeExpiredV2):
-			http.Error(w, `{"error":{"code":"challenge_invalid","message":"Enrollment challenge is invalid or expired"}}`, http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"challenge_invalid","message":"Enrollment challenge is invalid or expired","request_id":%q}}`, reqID), http.StatusBadRequest)
 		default:
-			http.Error(w, `{"error":{"code":"internal_error","message":"Failed to finalize device enrollment in database"}}`, http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":"Failed to finalize device enrollment in database","request_id":%q}}`, reqID), http.StatusInternalServerError)
 		}
 		return
 	}

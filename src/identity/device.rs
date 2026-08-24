@@ -432,9 +432,16 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
 
     let clean_hub = hub_url.trim_end_matches('/');
     let start_endpoint = format!("{}/api/v2/enrollment/start", clean_hub);
+    let start_req_id = uuid::Uuid::new_v4().to_string();
     println!("  Step 1/2: Submitting enrollment start challenge request...");
     
-    let start_res = match client.post(&start_endpoint).json(&start_payload).send().await {
+    let start_res = match client
+        .post(&start_endpoint)
+        .header("X-Request-ID", &start_req_id)
+        .json(&start_payload)
+        .send()
+        .await
+    {
         Ok(res) => res,
         Err(e) => {
             let mut err_msg = format!("{}", e);
@@ -443,15 +450,21 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
                 err_msg.push_str(&format!(" -> {}", s));
                 source = std::error::Error::source(s);
             }
-            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), start_endpoint, err_msg);
+            eprintln!("{} Cannot connect to Hub at {} [Request-ID: {}]: {}", "✖".red(), start_endpoint, start_req_id, err_msg);
             return 1;
         }
     };
 
     if !start_res.status().is_success() {
         let status = start_res.status();
+        let resp_req_id = start_res
+            .headers()
+            .get("X-Request-ID")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .unwrap_or(start_req_id);
         let body = start_res.text().await.unwrap_or_default();
-        eprintln!("{} Enrollment start failed (HTTP {}): {}", "✖".red(), status, body);
+        eprintln!("{} Enrollment start failed (HTTP {}) [Request-ID: {}]: {}", "✖".red(), status, resp_req_id, body);
         return 1;
     }
 
@@ -492,7 +505,14 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     };
 
     let complete_endpoint = format!("{}/api/v2/enrollment/complete", clean_hub);
-    let complete_res = match client.post(&complete_endpoint).json(&complete_payload).send().await {
+    let complete_req_id = uuid::Uuid::new_v4().to_string();
+    let complete_res = match client
+        .post(&complete_endpoint)
+        .header("X-Request-ID", &complete_req_id)
+        .json(&complete_payload)
+        .send()
+        .await
+    {
         Ok(res) => res,
         Err(e) => {
             let mut err_msg = format!("{}", e);
@@ -501,15 +521,21 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
                 err_msg.push_str(&format!(" -> {}", s));
                 source = std::error::Error::source(s);
             }
-            eprintln!("{} Cannot connect to Hub at {}: {}", "✖".red(), complete_endpoint, err_msg);
+            eprintln!("{} Cannot connect to Hub at {} [Request-ID: {}]: {}", "✖".red(), complete_endpoint, complete_req_id, err_msg);
             return 1;
         }
     };
 
     if !complete_res.status().is_success() {
         let status = complete_res.status();
+        let resp_req_id = complete_res
+            .headers()
+            .get("X-Request-ID")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .unwrap_or(complete_req_id);
         let body = complete_res.text().await.unwrap_or_default();
-        eprintln!("{} Enrollment completion failed (HTTP {}): {}", "✖".red(), status, body);
+        eprintln!("{} Enrollment completion failed (HTTP {}) [Request-ID: {}]: {}", "✖".red(), status, resp_req_id, body);
         return 1;
     }
 

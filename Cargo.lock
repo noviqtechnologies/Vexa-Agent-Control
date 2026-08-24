@@ -39,7 +39,7 @@ dependencies = [
 
 [[package]]
 name = "agentcontrol"
-version = "1.0.61"
+version = "1.0.62"
 dependencies = [
  "aes-gcm",
  "assert_cmd",

@@ -14,13 +14,14 @@ import (
 )
 
 var (
-	ErrTokenInvalidV2      = errors.New("enrollment token is invalid, expired, or consumed")
-	ErrTokenConsumedV2     = errors.New("enrollment token has already been consumed")
-	ErrTxExpiredV2         = errors.New("enrollment transaction has expired")
-	ErrTxNotFoundV2        = errors.New("enrollment transaction not found")
-	ErrChallengeNotFoundV2 = errors.New("enrollment challenge not found or does not belong to transaction")
-	ErrChallengeExpiredV2  = errors.New("enrollment challenge has expired")
-	ErrDeviceConflictV2    = errors.New("device creation conflict")
+	ErrTokenInvalidV2        = errors.New("enrollment token is invalid, expired, or consumed")
+	ErrTokenConsumedV2       = errors.New("enrollment token has already been consumed")
+	ErrTxExpiredV2           = errors.New("enrollment transaction has expired")
+	ErrTxNotFoundV2          = errors.New("enrollment transaction not found")
+	ErrChallengeNotFoundV2   = errors.New("enrollment challenge not found or does not belong to transaction")
+	ErrChallengeExpiredV2    = errors.New("enrollment challenge has expired")
+	ErrDeviceConflictV2      = errors.New("device creation conflict")
+	ErrDeviceAlreadyEnrolledV2 = errors.New("device is already enrolled with this identity key")
 )
 
 type EnrollmentTxRecord struct {
@@ -52,7 +53,99 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		return nil
 	}
 	q := `
+		-- 0. Required extensions
+		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+		CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+		-- 0b. Required ENUM types
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'device_state') THEN
+				CREATE TYPE device_state AS ENUM ('PENDING', 'COMPLIANT', 'NON_COMPLIANT', 'REVOKED');
+			ELSE
+				BEGIN
+					ALTER TYPE device_state ADD VALUE IF NOT EXISTS 'PENDING';
+				EXCEPTION
+					WHEN duplicate_object THEN NULL;
+				END;
+			END IF;
+		END $$;
+
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'credential_status') THEN
+				CREATE TYPE credential_status AS ENUM ('ACTIVE', 'EXPIRED', 'REVOKED', 'SUSPENDED');
+			END IF;
+		END $$;
+
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'actor_type') THEN
+				CREATE TYPE actor_type AS ENUM ('USER', 'SYSTEM', 'DEVICE', 'INTEGRATION', 'POLICY');
+			END IF;
+		END $$;
+
+		-- 0c. Tenants table
+		CREATE TABLE IF NOT EXISTS tenants (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			slug TEXT UNIQUE NOT NULL,
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		-- 0d. Devices table
+		CREATE TABLE IF NOT EXISTS devices (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			stable_device_id TEXT NOT NULL DEFAULT '',
+			display_name TEXT NOT NULL DEFAULT '',
+			owner_subject TEXT,
+			os_family TEXT NOT NULL DEFAULT 'linux',
+			architecture TEXT NOT NULL DEFAULT 'x86_64',
+			os_version_summary TEXT,
+			daemon_version TEXT DEFAULT '2.1.0',
+			public_key TEXT,
+			state device_state NOT NULL DEFAULT 'PENDING',
+			state_reason_code TEXT,
+			state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			revoked_at TIMESTAMPTZ,
+			revoked_by_subject TEXT,
+			revocation_reason TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, stable_device_id)
+		);
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS stable_device_id TEXT DEFAULT '';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS display_name TEXT DEFAULT '';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS owner_subject TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_family TEXT DEFAULT 'linux';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS architecture TEXT DEFAULT 'x86_64';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_version_summary TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS public_key TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state device_state DEFAULT 'PENDING';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_reason_code TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ DEFAULT now();
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS first_enrolled_at TIMESTAMPTZ DEFAULT now();
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ DEFAULT now();
+
 		-- 1. Enrollment tokens extension columns
+		CREATE TABLE IF NOT EXISTS enrollment_tokens (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			token_hash BYTEA NOT NULL,
+			token_hint TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			max_uses INT NOT NULL DEFAULT 1,
+			current_uses INT NOT NULL DEFAULT 0,
+			expected_device_label TEXT,
+			target_owner_subject TEXT,
+			reason TEXT,
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_by_subject TEXT NOT NULL,
+			consumed_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
 		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS expected_device_label TEXT;
 		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS target_owner_subject TEXT;
 		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
@@ -102,7 +195,7 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 			sha256_fingerprint TEXT,
 			csr_sha256 TEXT,
 			public_key_fingerprint TEXT,
-			certificate_pem TEXT,
+			certificate_pem TEXT NOT NULL DEFAULT '',
 			status credential_status NOT NULL DEFAULT 'ACTIVE',
 			not_before TIMESTAMPTZ NOT NULL,
 			not_after TIMESTAMPTZ NOT NULL,
@@ -117,23 +210,72 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS sha256_fingerprint TEXT;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS csr_sha256 TEXT;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS public_key_fingerprint TEXT;
-		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS certificate_pem TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS certificate_pem TEXT DEFAULT '';
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS renew_after TIMESTAMPTZ;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
 
 		-- 5. Device enrollment keys
+		CREATE TABLE IF NOT EXISTS device_enrollment_keys (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+			public_key_pem TEXT NOT NULL DEFAULT '',
+			public_key BYTEA,
+			fingerprint TEXT NOT NULL,
+			algorithm TEXT NOT NULL DEFAULT 'ED25519',
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, fingerprint)
+		);
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS public_key BYTEA;
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS public_key_pem TEXT DEFAULT '';
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS fingerprint TEXT;
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS algorithm TEXT DEFAULT 'ED25519';
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
 
 		-- 6. Device provider capabilities
+		CREATE TABLE IF NOT EXISTS device_provider_capabilities (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+			provider TEXT NOT NULL,
+			project_ref TEXT,
+			model_family TEXT,
+			action TEXT,
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			enabled BOOLEAN NOT NULL DEFAULT true,
+			rate_limit_rpm INT NOT NULL DEFAULT 60,
+			issued_by_subject TEXT,
+			expires_at TIMESTAMPTZ,
+			reason TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, device_id, provider)
+		);
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS project_ref TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS model_family TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS action TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS rate_limit_rpm INT DEFAULT 60;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS issued_by_subject TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS reason TEXT;
 
 		-- 7. Device state history
+		CREATE TABLE IF NOT EXISTS device_state_history (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+			prior_state device_state,
+			from_state device_state,
+			new_state device_state NOT NULL DEFAULT 'PENDING',
+			to_state device_state,
+			reason_code TEXT,
+			correlation_id UUID,
+			actor_type actor_type NOT NULL DEFAULT 'USER',
+			actor_subject TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
 		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS prior_state device_state;
 		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS from_state device_state;
 		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS new_state device_state;
@@ -143,6 +285,21 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS actor_subject TEXT;
 
 		-- 8. Audit events
+		CREATE TABLE IF NOT EXISTS audit_events (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			correlation_id UUID,
+			request_id UUID,
+			actor_type TEXT,
+			actor_ref TEXT,
+			resource_type TEXT,
+			resource_id TEXT,
+			action TEXT,
+			outcome TEXT,
+			reason_code TEXT,
+			metadata JSONB,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
 		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS correlation_id UUID;
 		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS request_id UUID;
 		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_type TEXT;
@@ -277,10 +434,19 @@ func (s *Store) AtomicallyConsumeOTET(
 		)
 		ON CONFLICT (tenant_id, stable_device_id, enrollment_key_fingerprint) DO UPDATE SET
 			enrollment_token_id = EXCLUDED.enrollment_token_id,
+			display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), enrollment_transactions.display_name),
+			owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), enrollment_transactions.owner_subject),
+			enrollment_ed25519_public_key = EXCLUDED.enrollment_ed25519_public_key,
+			mtls_csr_sha256 = EXCLUDED.mtls_csr_sha256,
+			mtls_csr_pem = EXCLUDED.mtls_csr_pem,
+			os_family = EXCLUDED.os_family,
+			os_version_summary = COALESCE(NULLIF(EXCLUDED.os_version_summary, ''), enrollment_transactions.os_version_summary),
+			architecture = EXCLUDED.architecture,
 			status = 'CHALLENGE_ISSUED',
 			expires_at = EXCLUDED.expires_at,
 			completed_at = NULL,
 			failure_code = NULL
+		WHERE enrollment_transactions.status != 'COMPLETED'
 		RETURNING id;
 	`
 	err = tx.QueryRow(ctx, insertTxQuery,
@@ -290,6 +456,9 @@ func (s *Store) AtomicallyConsumeOTET(
 		expiryTime,
 	).Scan(&txID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", "", ErrDeviceAlreadyEnrolledV2
+		}
 		return "", "", "", fmt.Errorf("insert enrollment transaction: %w", err)
 	}
 
