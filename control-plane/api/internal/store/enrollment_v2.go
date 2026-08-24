@@ -232,6 +232,7 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS fingerprint TEXT;
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS algorithm TEXT DEFAULT 'ED25519';
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
+		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_enrollment_keys_tenant_fingerprint ON device_enrollment_keys (tenant_id, fingerprint);
 
 		-- 6. Device provider capabilities
 		CREATE TABLE IF NOT EXISTS device_provider_capabilities (
@@ -260,6 +261,8 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS issued_by_subject TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS reason TEXT;
+		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_provider_capabilities_tenant_device_provider ON device_provider_capabilities (tenant_id, device_id, provider);
+		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_certificates_serial_number ON device_certificates (serial_number);
 
 		-- 7. Device state history
 		CREATE TABLE IF NOT EXISTS device_state_history (
