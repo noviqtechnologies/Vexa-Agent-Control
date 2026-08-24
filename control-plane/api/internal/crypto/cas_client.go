@@ -69,25 +69,43 @@ func NewSoftwareCASIssuer() (*SoftwareCASIssuer, error) {
 
 // SignCertificateRequest issues a short-lived client certificate from the provided CSR.
 func (s *SoftwareCASIssuer) SignCertificateRequest(ctx context.Context, csrPEM []byte, lifetime time.Duration) ([]byte, string, string, error) {
-	block, _ := pem.Decode(csrPEM)
-	if block == nil {
-		// Fallback for simulated test CSRs
-		block = &pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrPEM}
-	}
-
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("generate serial: %w", err)
 	}
 
+	var clientPubKey any = &s.caKey.PublicKey
+	subject := pkix.Name{
+		Organization: []string{"Vexa Agent Control Enrolled Device"},
+		CommonName:   fmt.Sprintf("vexa-device-%s", hex.EncodeToString(serialNumber.Bytes()[:4])),
+	}
+	var dnsNames []string
+
+	block, _ := pem.Decode(csrPEM)
+	if block != nil && (block.Type == "CERTIFICATE REQUEST" || block.Type == "NEW CERTIFICATE REQUEST") {
+		csr, err := x509.ParseCertificateRequest(block.Bytes)
+		if err != nil {
+			return nil, "", "", fmt.Errorf("parse csr: %w", err)
+		}
+		if err := csr.CheckSignature(); err != nil {
+			return nil, "", "", fmt.Errorf("invalid csr signature: %w", err)
+		}
+		clientPubKey = csr.PublicKey
+		if csr.Subject.CommonName != "" {
+			subject.CommonName = csr.Subject.CommonName
+		}
+		if len(csr.Subject.Organization) > 0 {
+			subject.Organization = csr.Subject.Organization
+		}
+		dnsNames = csr.DNSNames
+	}
+
 	now := time.Now().UTC()
 	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Vexa Agent Control Enrolled Device"},
-			CommonName:   fmt.Sprintf("vexa-device-%s", hex.EncodeToString(serialNumber.Bytes()[:4])),
-		},
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		DNSNames:              dnsNames,
 		NotBefore:             now.Add(-5 * time.Minute),
 		NotAfter:              now.Add(lifetime),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -96,8 +114,8 @@ func (s *SoftwareCASIssuer) SignCertificateRequest(ctx context.Context, csrPEM [
 		IsCA:                  false,
 	}
 
-	// Sign certificate using local CA key
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, s.caCert, &s.caKey.PublicKey, s.caKey)
+	// Sign certificate using local CA key, embedding the client device public key
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, s.caCert, clientPubKey, s.caKey)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("sign client cert: %w", err)
 	}

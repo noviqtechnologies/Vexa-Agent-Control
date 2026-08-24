@@ -14,12 +14,37 @@ import (
 )
 
 var (
-	ErrTokenInvalidV2  = errors.New("enrollment token is invalid, expired, or consumed")
-	ErrTokenConsumedV2 = errors.New("enrollment token has already been consumed")
-	ErrTxExpiredV2     = errors.New("enrollment transaction has expired")
-	ErrTxNotFoundV2    = errors.New("enrollment transaction not found")
-	ErrDeviceConflictV2= errors.New("device creation conflict")
+	ErrTokenInvalidV2      = errors.New("enrollment token is invalid, expired, or consumed")
+	ErrTokenConsumedV2     = errors.New("enrollment token has already been consumed")
+	ErrTxExpiredV2         = errors.New("enrollment transaction has expired")
+	ErrTxNotFoundV2        = errors.New("enrollment transaction not found")
+	ErrChallengeNotFoundV2 = errors.New("enrollment challenge not found or does not belong to transaction")
+	ErrChallengeExpiredV2  = errors.New("enrollment challenge has expired")
+	ErrDeviceConflictV2    = errors.New("device creation conflict")
 )
+
+type EnrollmentTxRecord struct {
+	TransactionID        string
+	ChallengeID          string
+	TenantID             string
+	StableDeviceID       string
+	DisplayName          string
+	OwnerSubject         string
+	Ed25519PublicKey     []byte
+	Ed25519Fingerprint   string
+	MTLSCSRSHA256        string
+	MTLSCSRPEM           string
+	OSFamily             string
+	OSVersionSummary     string
+	Architecture         string
+	Status               string
+	ExpiresAt            time.Time
+	ChallengeExpiresAt   time.Time
+	IsCompleted          bool
+	ExistingDeviceID     string
+	ExistingCertSerial   string
+	ExistingCertPEMChain string
+}
 
 // EnsureEnrollmentV2Schema guarantees schema consistency for enrollment, device state, outbox, and audit tables.
 func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
@@ -296,6 +321,94 @@ func (s *Store) AtomicallyConsumeOTET(
 	return txID, challengeID, tenID, nil
 }
 
+// GetEnrollmentTransactionForValidation retrieves and locks the transaction and challenge for proof verification.
+func (s *Store) GetEnrollmentTransactionForValidation(ctx context.Context, txID, challengeID string) (*EnrollmentTxRecord, error) {
+	if s.pool == nil {
+		return nil, errors.New("database pool is not initialized")
+	}
+
+	var rec EnrollmentTxRecord
+	rec.TransactionID = txID
+	rec.ChallengeID = challengeID
+
+	var dispName, ownerSub, osVer *string
+	var edPubBytes []byte
+
+	txQuery := `
+		SELECT 
+			t.tenant_id, t.stable_device_id, t.display_name, t.owner_subject,
+			t.enrollment_ed25519_public_key, t.enrollment_key_fingerprint,
+			t.mtls_csr_sha256, t.mtls_csr_pem, t.os_family, t.os_version_summary, t.architecture,
+			t.status, t.expires_at
+		FROM enrollment_transactions t
+		WHERE t.id = $1;
+	`
+	err := s.pool.QueryRow(ctx, txQuery, txID).Scan(
+		&rec.TenantID, &rec.StableDeviceID, &dispName, &ownerSub,
+		&edPubBytes, &rec.Ed25519Fingerprint,
+		&rec.MTLSCSRSHA256, &rec.MTLSCSRPEM, &rec.OSFamily, &osVer, &rec.Architecture,
+		&rec.Status, &rec.ExpiresAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTxNotFoundV2
+		}
+		return nil, fmt.Errorf("query transaction: %w", err)
+	}
+
+	if dispName != nil {
+		rec.DisplayName = *dispName
+	}
+	if ownerSub != nil {
+		rec.OwnerSubject = *ownerSub
+	}
+	if osVer != nil {
+		rec.OSVersionSummary = *osVer
+	}
+	rec.Ed25519PublicKey = edPubBytes
+
+	// If transaction is already completed (idempotency check)
+	if rec.Status == "COMPLETED" {
+		rec.IsCompleted = true
+		// Fetch existing device & active cert for idempotent response
+		var devID string
+		var certSerial, certPEM string
+		_ = s.pool.QueryRow(ctx, `SELECT id FROM devices WHERE tenant_id = $1 AND stable_device_id = $2;`, rec.TenantID, rec.StableDeviceID).Scan(&devID)
+		_ = s.pool.QueryRow(ctx, `SELECT serial_number, certificate_pem FROM device_certificates WHERE tenant_id = $1 AND device_id = $2 AND status = 'ACTIVE' ORDER BY issued_at DESC LIMIT 1;`, rec.TenantID, devID).Scan(&certSerial, &certPEM)
+		rec.ExistingDeviceID = devID
+		rec.ExistingCertSerial = certSerial
+		rec.ExistingCertPEMChain = certPEM
+		return &rec, nil
+	}
+
+	if time.Now().UTC().After(rec.ExpiresAt) {
+		return nil, ErrTxExpiredV2
+	}
+
+	// Validate challenge belongs to transaction and is not expired
+	var chalTenantID string
+	var chalExpiresAt time.Time
+	chalQuery := `
+		SELECT tenant_id, expires_at
+		FROM enrollment_challenges
+		WHERE id = $1 AND transaction_id = $2;
+	`
+	err = s.pool.QueryRow(ctx, chalQuery, challengeID, txID).Scan(&chalTenantID, &chalExpiresAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrChallengeNotFoundV2
+		}
+		return nil, fmt.Errorf("query challenge: %w", err)
+	}
+
+	if time.Now().UTC().After(chalExpiresAt) {
+		return nil, ErrChallengeExpiredV2
+	}
+	rec.ChallengeExpiresAt = chalExpiresAt
+
+	return &rec, nil
+}
+
 // CompleteEnrollmentTransaction finalizes enrollment by persisting the device, public key, and issued certificate.
 func (s *Store) CompleteEnrollmentTransaction(
 	ctx context.Context,
@@ -314,20 +427,24 @@ func (s *Store) CompleteEnrollmentTransaction(
 	var tenantID, stableDevID, osFam, arch, ed25519FP, csrSHA256 string
 	var dispName, ownerSub, osVer *string
 	var edPubBytes []byte
+	var txStatus string
+	var txExpiresAt time.Time
 
 	txQuery := `
 		SELECT 
 			tenant_id, stable_device_id, display_name, owner_subject,
 			enrollment_ed25519_public_key, enrollment_key_fingerprint,
-			mtls_csr_sha256, os_family, os_version_summary, architecture
+			mtls_csr_sha256, os_family, os_version_summary, architecture,
+			status, expires_at
 		FROM enrollment_transactions
-		WHERE id = $1 AND status = 'CHALLENGE_ISSUED'
+		WHERE id = $1
 		FOR UPDATE;
 	`
 	err = tx.QueryRow(ctx, txQuery, txID).Scan(
 		&tenantID, &stableDevID, &dispName, &ownerSub,
 		&edPubBytes, &ed25519FP,
 		&csrSHA256, &osFam, &osVer, &arch,
+		&txStatus, &txExpiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -336,7 +453,34 @@ func (s *Store) CompleteEnrollmentTransaction(
 		return "", "", fmt.Errorf("query transaction: %w", err)
 	}
 
-	// 2. Insert or update device record
+	if txStatus == "COMPLETED" {
+		// Already completed - return device ID
+		var devID, devState string
+		err = tx.QueryRow(ctx, `SELECT id, state FROM devices WHERE tenant_id = $1 AND stable_device_id = $2;`, tenantID, stableDevID).Scan(&devID, &devState)
+		if err == nil {
+			return devID, devState, nil
+		}
+	}
+
+	if time.Now().UTC().After(txExpiresAt) {
+		return "", "", ErrTxExpiredV2
+	}
+
+	// 2. Safe defaults for NOT NULL columns on devices table
+	finalDispName := stableDevID
+	if dispName != nil && *dispName != "" {
+		finalDispName = *dispName
+	}
+	finalOSFam := "linux"
+	if osFam != "" {
+		finalOSFam = osFam
+	}
+	finalArch := "x86_64"
+	if arch != "" {
+		finalArch = arch
+	}
+
+	// 3. Insert or update device record
 	devQuery := `
 		INSERT INTO devices (
 			tenant_id, stable_device_id, display_name, owner_subject,
@@ -353,26 +497,26 @@ func (s *Store) CompleteEnrollmentTransaction(
 		RETURNING id, state;
 	`
 	err = tx.QueryRow(ctx, devQuery,
-		tenantID, stableDevID, dispName, ownerSub,
-		osFam, osVer, arch,
+		tenantID, stableDevID, finalDispName, ownerSub,
+		finalOSFam, osVer, finalArch,
 	).Scan(&deviceID, &state)
 	if err != nil {
 		return "", "", fmt.Errorf("insert device: %w", err)
 	}
 
-	// 3. Insert enrollment key record
+	// 4. Insert enrollment key record
 	keyPem := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n", base64.StdEncoding.EncodeToString(edPubBytes))
 	keyQuery := `
 		INSERT INTO device_enrollment_keys (
 			tenant_id, device_id, algorithm, public_key, public_key_pem, fingerprint, status
-		) VALUES ($1, $2, 'Ed25519', $3, $4, $5, 'ACTIVE')
+		) VALUES ($1, $2, 'ED25519', $3, $4, $5, 'ACTIVE')
 		ON CONFLICT (tenant_id, fingerprint) DO NOTHING;
 	`
 	if _, err = tx.Exec(ctx, keyQuery, tenantID, deviceID, edPubBytes, keyPem, ed25519FP); err != nil {
 		return "", "", fmt.Errorf("insert enrollment key: %w", err)
 	}
 
-	// 4. Insert certificate record
+	// 5. Insert certificate record
 	certHash := sha256.Sum256(certChainPEM)
 	sha256FP := hex.EncodeToString(certHash[:])
 	certFP := "sha256:" + sha256FP
@@ -395,7 +539,7 @@ func (s *Store) CompleteEnrollmentTransaction(
 		return "", "", fmt.Errorf("insert cert: %w", err)
 	}
 
-	// 5. Grant default provider capability
+	// 6. Grant default provider capability
 	capQuery := `
 		INSERT INTO device_provider_capabilities (
 			tenant_id, device_id, provider, project_ref, model_family, action, status, issued_by_subject, expires_at, reason
@@ -408,11 +552,22 @@ func (s *Store) CompleteEnrollmentTransaction(
 		return "", "", fmt.Errorf("insert capability: %w", err)
 	}
 
-	// 6. Mark transaction completed
+	// 7. Delete consumed challenge
+	_, _ = tx.Exec(ctx, `DELETE FROM enrollment_challenges WHERE id = $1;`, challengeID)
+
+	// 8. Mark transaction completed
 	updateTx := `UPDATE enrollment_transactions SET status = 'COMPLETED', completed_at = now() WHERE id = $1;`
 	if _, err = tx.Exec(ctx, updateTx, txID); err != nil {
 		return "", "", fmt.Errorf("update tx status: %w", err)
 	}
+
+	// 9. Emit outbox event
+	outboxQuery := `
+		INSERT INTO outbox_events (
+			tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
+		) VALUES ($1, 'enrollment_transaction', $2, 'enrollment.completed', '2.0', '{}'::jsonb);
+	`
+	_, _ = tx.Exec(ctx, outboxQuery, tenantID, txID)
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", fmt.Errorf("commit complete tx: %w", err)

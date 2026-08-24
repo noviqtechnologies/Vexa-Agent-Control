@@ -493,9 +493,26 @@ pub async fn evaluate_jsonrpc(
     let dlp_findings = state.dlp_scanner.scan_content(&params_str);
     if !dlp_findings.is_empty() {
         if state.shadow_mode.load(Ordering::Relaxed) {
+            let f = &dlp_findings[0];
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "dlp_warning",
+                    tool_name,
+                    None,
+                    Some(format!("pattern={} category={} preview={}", f.pattern_name, f.category.as_str(), f.preview)),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
             logging::log_event(
                 Level::Warn,
-                "dlp_finding",
+                "dlp_warning",
                 json!({
                     "tool": tool_name,
                     "session": &session.session_id,

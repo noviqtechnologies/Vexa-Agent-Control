@@ -403,21 +403,14 @@ pub fn gather_servers_for_snapshot(
 }
 
 pub fn gather_and_send_mcp_servers_snapshot() {
+    // Only attempt remote sync if an enrolled device token or explicit AGENT_ID is present
+    let token_opt = std::env::var("AGENT_ID").ok().or_else(crate::identity::device::load_device_token);
+    if token_opt.is_none() {
+        return;
+    }
+
     if let Some(client) = crate::control_plane_client::client::DashboardClient::from_env() {
-        let device_identity = crate::identity::device::DeviceIdentity::load_or_create().ok();
-        let agent_id = std::env::var("AGENT_ID")
-            .ok()
-            .or_else(|| crate::identity::device::load_device_token())
-            .or_else(|| device_identity.as_ref().map(|id| id.device_id.clone()))
-            .unwrap_or_else(|| {
-                let user = std::env::var("USER")
-                    .or_else(|_| std::env::var("USERNAME"))
-                    .unwrap_or_else(|_| "user".to_string());
-                let hostname = std::env::var("HOSTNAME")
-                    .or_else(|_| std::env::var("COMPUTERNAME"))
-                    .unwrap_or_else(|_| "host".to_string());
-                format!("agent-{}-{}", user, hostname).to_lowercase()
-            });
+        let agent_id = token_opt.unwrap();
         let snapshot = gather_servers_for_snapshot(agent_id);
         client.send_mcp_server_snapshot(snapshot);
     }

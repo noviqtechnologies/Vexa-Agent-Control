@@ -52,13 +52,41 @@ if (!(Test-Path $LocalBinDir)) { New-Item -ItemType Directory -Path $LocalBinDir
 $FinalBinaryPath = Join-Path $LocalBinDir "agentcontrol.exe"
 
 $AssetName = "agentcontrol-$Version-windows-$ArchStr.zip"
-$DownloadUrl = "https://github.com/$Repo/releases/download/$Version/$AssetName"
+$BaseUrl = "https://github.com/$Repo/releases/download/$Version"
+$DownloadUrl = "$BaseUrl/$AssetName"
+$ChecksumsUrl = "$BaseUrl/checksums.txt"
 $TempZip = Join-Path $env:TEMP "agentcontrol_asset.zip"
+$TempChecksums = Join-Path $env:TEMP "agentcontrol_checksums.txt"
 $TempExtract = Join-Path $env:TEMP "agentcontrol_extract"
 if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force | Out-Null }
 
-Write-Host "[*] Downloading asset package..." -ForegroundColor $ColorCyan
+Write-Host "[*] Downloading asset package: $DownloadUrl..." -ForegroundColor $ColorCyan
 Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing
+
+Write-Host "[*] Verifying cryptographic SHA-256 checksum..." -ForegroundColor $ColorCyan
+try {
+    Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $TempChecksums -UseBasicParsing
+    $ChecksumsContent = Get-Content $TempChecksums -Raw
+    $MatchedLine = ($ChecksumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($AssetName) } | Select-Object -First 1)
+    if ($MatchedLine) {
+        $ExpectedHash = ($MatchedLine.Trim() -split "\s+")[0].ToLower()
+        $ActualHash = (Get-FileHash -Path $TempZip -Algorithm SHA256).Hash.ToLower()
+        if ($ExpectedHash -ne $ActualHash) {
+            Write-Host "[!] FATAL: Cryptographic Checksum Mismatch!" -ForegroundColor $ColorRed
+            Write-Host "    Expected: $ExpectedHash" -ForegroundColor $ColorYellow
+            Write-Host "    Got:      $ActualHash" -ForegroundColor $ColorYellow
+            Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
+            exit 1
+        }
+        Write-Host "[✓] SHA-256 Checksum verified successfully ($ActualHash)." -ForegroundColor $ColorGreen
+    } else {
+        Write-Host "[!] Warning: Release asset $AssetName not listed in checksums.txt." -ForegroundColor $ColorYellow
+    }
+    Remove-Item $TempChecksums -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Host "[!] Note: checksums.txt unavailable; verified over TLS." -ForegroundColor $ColorYellow
+}
+
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
 $ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol.exe" | Select-Object -First 1

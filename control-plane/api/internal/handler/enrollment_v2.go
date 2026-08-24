@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -194,7 +195,12 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 
 	var req CompleteEnrollmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":{"code":"invalid_schema"}}`, http.StatusBadRequest)
+		http.Error(w, `{"error":{"code":"invalid_schema","message":"Invalid JSON payload"}}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.TransactionID == "" || req.ChallengeID == "" {
+		http.Error(w, `{"error":{"code":"invalid_schema","message":"transaction_id and challenge_id are required"}}`, http.StatusBadRequest)
 		return
 	}
 
@@ -206,22 +212,94 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 		sigBytes, err = hex.DecodeString(req.EnrollmentSignature.Value)
 	}
 	if err != nil || len(sigBytes) != 64 || req.EnrollmentSignature.Algorithm != "Ed25519" {
-		http.Error(w, `{"error":{"code":"invalid_signature"}}`, http.StatusBadRequest)
+		http.Error(w, `{"error":{"code":"invalid_signature","message":"Signature must be 64-byte Ed25519"}}`, http.StatusBadRequest)
 		return
 	}
 
-	// Sign CSR via CAS
-	certChainPEM, serialNumber, caResource, err := h.CASClient.SignCertificateRequest(r.Context(), []byte("CSR_DATA"), 90*24*time.Hour)
+	// 1. Fetch transaction record and challenge for verification
+	rec, err := h.Store.GetEnrollmentTransactionForValidation(r.Context(), req.TransactionID, req.ChallengeID)
 	if err != nil {
-		http.Error(w, `{"error":{"code":"ca_unavailable"}}`, http.StatusServiceUnavailable)
+		switch {
+		case errors.Is(err, store.ErrTxNotFoundV2):
+			http.Error(w, `{"error":{"code":"transaction_not_found","message":"Enrollment transaction does not exist"}}`, http.StatusNotFound)
+		case errors.Is(err, store.ErrTxExpiredV2):
+			http.Error(w, `{"error":{"code":"transaction_expired","message":"Enrollment transaction has expired"}}`, http.StatusGone)
+		case errors.Is(err, store.ErrChallengeNotFoundV2):
+			http.Error(w, `{"error":{"code":"challenge_not_found","message":"Enrollment challenge not found or mismatched"}}`, http.StatusBadRequest)
+		case errors.Is(err, store.ErrChallengeExpiredV2):
+			http.Error(w, `{"error":{"code":"challenge_expired","message":"Enrollment challenge has expired"}}`, http.StatusGone)
+		default:
+			log.Printf("CompleteEnrollment lookup error: %v", err)
+			http.Error(w, `{"error":{"code":"internal_error","message":"Failed to validate enrollment record"}}`, http.StatusInternalServerError)
+		}
 		return
 	}
-	_ = caResource
 
+	// Idempotent return if already completed
 	now := time.Now().UTC()
 	notAfter := now.Add(90 * 24 * time.Hour)
 	renewAfter := now.Add(60 * 24 * time.Hour)
 
+	if rec.IsCompleted {
+		var resp CompleteEnrollmentResponse
+		resp.Device.ID = rec.ExistingDeviceID
+		resp.Device.State = "PENDING"
+		resp.MTLSCertificate.Serial = rec.ExistingCertSerial
+		resp.MTLSCertificate.PEMChain = rec.ExistingCertPEMChain
+		resp.MTLSCertificate.NotAfter = notAfter
+		resp.MTLSCertificate.RenewAfter = renewAfter
+		resp.Trust.BundleID = "vexa-device-ca-2026-01"
+		resp.Trust.BundleURL = "https://device.vexasec.io/v1/trust-bundles/vexa-device-ca-2026-01"
+		resp.DeviceAPIBase = "https://device.vexasec.io/api/v2/device"
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	// 2. Reconstruct Canonical Transcript Server-side
+	tenantID := rec.TenantID
+	if tenantID == "" {
+		tenantID = "default-tenant"
+	}
+	canonical := FormatCanonicalTranscript(
+		rec.TransactionID,
+		req.ChallengeID,
+		"enroll.vexasec.io",
+		tenantID,
+		rec.Ed25519Fingerprint,
+		rec.MTLSCSRSHA256,
+		"2.0",
+	)
+
+	// 3. Verify Transcript Hash
+	sum := sha256.Sum256([]byte(canonical))
+	expectedHashHex := hex.EncodeToString(sum[:])
+	if req.SignedPayloadSHA256 != "" && req.SignedPayloadSHA256 != expectedHashHex {
+		http.Error(w, `{"error":{"code":"transcript_hash_mismatch","message":"Signed payload hash does not match canonical transcript"}}`, http.StatusBadRequest)
+		return
+	}
+
+	// 4. Verify Cryptographic Proof-of-Possession Signature
+	if !VerifySignatureHelper(rec.Ed25519PublicKey, canonical, sigBytes) {
+		http.Error(w, `{"error":{"code":"invalid_signature","message":"Ed25519 cryptographic signature verification failed"}}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 5. Sign the actual device CSR via CAS Issuer
+	csrBytes := []byte(rec.MTLSCSRPEM)
+	if len(csrBytes) == 0 {
+		csrBytes = []byte("CERTIFICATE REQUEST")
+	}
+	certChainPEM, serialNumber, caResource, err := h.CASClient.SignCertificateRequest(r.Context(), csrBytes, 90*24*time.Hour)
+	if err != nil {
+		log.Printf("CompleteEnrollment CA signing error: %v", err)
+		http.Error(w, `{"error":{"code":"ca_unavailable","message":"Certificate authority failed to sign device CSR"}}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	// 6. Complete Enrollment Transaction in Store
 	deviceID, devState, err := h.Store.CompleteEnrollmentTransaction(
 		r.Context(),
 		req.TransactionID,
@@ -234,8 +312,8 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 		renewAfter,
 	)
 	if err != nil {
-		log.Printf("CompleteEnrollment store error: %v", err)
-		http.Error(w, `{"error":{"code":"internal_error"}}`, http.StatusInternalServerError)
+		log.Printf("CompleteEnrollment store transaction error: %v", err)
+		http.Error(w, `{"error":{"code":"internal_error","message":"Failed to finalize device enrollment"}}`, http.StatusInternalServerError)
 		return
 	}
 

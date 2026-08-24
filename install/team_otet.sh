@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo "[*] Vexa Agent Control Team OTET Enterprise Provisioning Installer"
 
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: team_otet.sh -t <token> [-u <hub-url>]"
       echo "  -t, --token    Enrollment token for enterprise onboarding"
-      echo "  -u, --hub-url  Control Hub / Dashboard URL (e.g. http://host:8400)"
+      echo "  -u, --hub-url  Control Hub / Dashboard URL (e.g. https://console.vexasec.io)"
       exit 0
       ;;
     *)
@@ -58,35 +58,79 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-INSTALL_DIR="${HOME}/.local/bin"
+LOCALBIN="${HOME}/.local/bin"
 REPO="noviqtechnologies/Vexa-Agent-Control"
 echo "[*] Fetching latest release version..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" \
+VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
   | grep '"tag_name"' \
   | head -1 \
-  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
 if [[ -z "$VERSION" ]]; then
-  echo "[!] Failed to determine latest release version."
-  exit 1
+  VERSION="v1.0.59"
+fi
+
+# Ensure version tag has 'v' prefix
+if [[ "$VERSION" != v* ]]; then
+  VERSION="v${VERSION}"
 fi
 
 echo "[*] Version: $VERSION | OS: $OS | Hub: $HUB_URL"
 
-LOCALBIN="$HOME/.local/bin"
 ASSET_NAME="agentcontrol-${VERSION}-${OS}-${ARCH}.zip"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 ASSET_URL="${BASE_URL}/${ASSET_NAME}"
+CHECKSUMS_URL="${BASE_URL}/checksums.txt"
 
 TEMPDIR=$(mktemp -d)
 trap 'rm -rf "$TEMPDIR"' EXIT
 
-echo "[*] Downloading asset package..."
-curl -sSL "$ASSET_URL" -o "${TEMPDIR}/asset.zip"
+echo "[*] Downloading asset package: $ASSET_URL..."
+if ! curl -fsSL "$ASSET_URL" -o "${TEMPDIR}/asset.zip"; then
+  echo "[!] Error: Failed to download release asset from $ASSET_URL"
+  exit 1
+fi
+
+echo "[*] Verifying cryptographic SHA-256 checksum..."
+if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
+  EXPECTED_HASH=$(grep "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk '{print $1}' || true)
+  if [[ -n "$EXPECTED_HASH" ]]; then
+    ACTUAL_HASH=""
+    if command -v sha256sum &>/dev/null; then
+      ACTUAL_HASH=$(sha256sum "${TEMPDIR}/asset.zip" | awk '{print $1}')
+    elif command -v shasum &>/dev/null; then
+      ACTUAL_HASH=$(shasum -a 256 "${TEMPDIR}/asset.zip" | awk '{print $1}')
+    fi
+
+    if [[ -z "$ACTUAL_HASH" ]]; then
+      echo "[!] FATAL: Cannot verify checksum — no sha256sum or shasum found on PATH. Aborting."
+      exit 1
+    fi
+
+    if [[ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
+      echo "[!] FATAL: Cryptographic Checksum Mismatch!"
+      echo "    Expected: $EXPECTED_HASH"
+      echo "    Got:      $ACTUAL_HASH"
+      echo "    The release artifact may be corrupted or tampered with. Aborting installation."
+      exit 1
+    fi
+    echo "[✓] SHA-256 Checksum verified successfully ($ACTUAL_HASH)."
+  else
+    echo "[!] FATAL: Asset $ASSET_NAME not found in checksums.txt. Cannot verify integrity. Aborting."
+    exit 1
+  fi
+else
+  echo "[!] Warning: checksums.txt not available for this release; proceeding with HTTPS transport validation."
+fi
 
 mkdir -p "$LOCALBIN"
 unzip -q -o "${TEMPDIR}/asset.zip" -d "$TEMPDIR"
 BINARY_PATH=$(find "$TEMPDIR" -type f \( -name "agentcontrol" -o -name "agentcontrol.exe" \) | head -1 || true)
+
+if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
+  echo "[!] Error: Failed to locate agentcontrol binary inside the extracted archive."
+  exit 1
+fi
 
 mv "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
 chmod +x "${LOCALBIN}/agentcontrol"
