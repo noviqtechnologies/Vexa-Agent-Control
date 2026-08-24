@@ -7,15 +7,17 @@ use std::io::Write;
 /// Log levels matching PRD spec
 #[derive(Debug, Clone, Copy)]
 pub enum Level {
+    Debug,
     Info,
     Warn,
     Error,
 }
 
 impl Level {
-    /// Returns the static string representation (`"info"`, `"warn"`, `"error"`) of the log level.
+    /// Returns the static string representation (`"debug"`, `"info"`, `"warn"`, `"error"`) of the log level.
     pub fn as_str(&self) -> &'static str {
         match self {
+            Level::Debug => "debug",
             Level::Info => "info",
             Level::Warn => "warn",
             Level::Error => "error",
