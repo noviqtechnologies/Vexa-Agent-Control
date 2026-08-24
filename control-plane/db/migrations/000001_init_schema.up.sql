@@ -618,7 +618,6 @@ CREATE TABLE IF NOT EXISTS spend_snapshots (
 
 CREATE TABLE IF NOT EXISTS spend_increase_requests (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    request_id        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     agent_id          TEXT NOT NULL DEFAULT '',
     current_cap       BIGINT NOT NULL DEFAULT 0,

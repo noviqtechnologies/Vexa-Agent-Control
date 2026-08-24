@@ -214,27 +214,32 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS renew_after TIMESTAMPTZ;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
 
-		-- 5. Device enrollment keys
+		-- 5. Device enrollment keys (no inline UNIQUE — use named index only)
 		CREATE TABLE IF NOT EXISTS device_enrollment_keys (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
 			public_key_pem TEXT NOT NULL DEFAULT '',
 			public_key BYTEA,
-			fingerprint TEXT NOT NULL,
+			fingerprint TEXT NOT NULL DEFAULT '',
 			algorithm TEXT NOT NULL DEFAULT 'ED25519',
 			status TEXT NOT NULL DEFAULT 'ACTIVE',
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (tenant_id, fingerprint)
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS public_key BYTEA;
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS public_key_pem TEXT DEFAULT '';
-		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS fingerprint TEXT;
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS fingerprint TEXT DEFAULT '';
 		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS algorithm TEXT DEFAULT 'ED25519';
-		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
+		-- Drop all legacy check and inline unique constraints before dedup
+		ALTER TABLE device_enrollment_keys DROP CONSTRAINT IF EXISTS device_enrollment_keys_algorithm_check;
+		ALTER TABLE device_enrollment_keys DROP CONSTRAINT IF EXISTS device_enrollment_keys_status_check;
+		ALTER TABLE device_enrollment_keys DROP CONSTRAINT IF EXISTS device_enrollment_keys_tenant_id_fingerprint_key;
+		-- Deduplicate rows before creating the named unique index
+		DELETE FROM device_enrollment_keys a USING device_enrollment_keys b
+		WHERE a.ctid < b.ctid AND a.tenant_id = b.tenant_id AND a.fingerprint = b.fingerprint;
 		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_enrollment_keys_tenant_fingerprint ON device_enrollment_keys (tenant_id, fingerprint);
 
-		-- 6. Device provider capabilities
+		-- 6. Device provider capabilities (no inline UNIQUE — use named index only)
 		CREATE TABLE IF NOT EXISTS device_provider_capabilities (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -249,8 +254,7 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 			issued_by_subject TEXT,
 			expires_at TIMESTAMPTZ,
 			reason TEXT,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (tenant_id, device_id, provider)
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS project_ref TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS model_family TEXT;
@@ -261,7 +265,19 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS issued_by_subject TEXT;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS reason TEXT;
+		-- Drop inline unique constraint before dedup
+		ALTER TABLE device_provider_capabilities DROP CONSTRAINT IF EXISTS device_provider_capabilities_tenant_id_device_id_provider_key;
+		-- Deduplicate rows before creating the named unique index
+		DELETE FROM device_provider_capabilities a USING device_provider_capabilities b
+		WHERE a.ctid < b.ctid AND a.tenant_id = b.tenant_id AND a.device_id = b.device_id AND a.provider = b.provider;
 		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_provider_capabilities_tenant_device_provider ON device_provider_capabilities (tenant_id, device_id, provider);
+
+		-- Drop inline unique constraints on device_certificates before dedup
+		ALTER TABLE device_certificates DROP CONSTRAINT IF EXISTS device_certificates_serial_number_key;
+		ALTER TABLE device_certificates DROP CONSTRAINT IF EXISTS device_certificates_tenant_id_serial_number_key;
+		-- Deduplicate rows before creating the named unique index
+		DELETE FROM device_certificates a USING device_certificates b
+		WHERE a.ctid < b.ctid AND a.serial_number = b.serial_number;
 		CREATE UNIQUE INDEX IF NOT EXISTS uq_device_certificates_serial_number ON device_certificates (serial_number);
 
 		-- 7. Device state history
@@ -449,7 +465,6 @@ func (s *Store) AtomicallyConsumeOTET(
 			expires_at = EXCLUDED.expires_at,
 			completed_at = NULL,
 			failure_code = NULL
-		WHERE enrollment_transactions.status != 'COMPLETED'
 		RETURNING id;
 	`
 	err = tx.QueryRow(ctx, insertTxQuery,
@@ -459,9 +474,6 @@ func (s *Store) AtomicallyConsumeOTET(
 		expiryTime,
 	).Scan(&txID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", "", "", ErrDeviceAlreadyEnrolledV2
-		}
 		return "", "", "", fmt.Errorf("insert enrollment transaction: %w", err)
 	}
 
@@ -671,7 +683,12 @@ func (s *Store) CompleteEnrollmentTransaction(
 			os_family = EXCLUDED.os_family,
 			os_version_summary = EXCLUDED.os_version_summary,
 			architecture = EXCLUDED.architecture,
-			state = CASE WHEN devices.state = 'REVOKED' THEN 'REVOKED'::device_state ELSE 'PENDING'::device_state END,
+			state = 'PENDING'::device_state,
+			state_reason_code = 'REENROLLED_VIA_OTET',
+			revoked_at = NULL,
+			revoked_by_subject = NULL,
+			revocation_reason = NULL,
+			state_changed_at = now(),
 			updated_at = now()
 		RETURNING id, state;
 	`
@@ -689,7 +706,11 @@ func (s *Store) CompleteEnrollmentTransaction(
 		INSERT INTO device_enrollment_keys (
 			tenant_id, device_id, algorithm, public_key, public_key_pem, fingerprint, status
 		) VALUES ($1, $2, 'ED25519', $3, $4, $5, 'ACTIVE')
-		ON CONFLICT (tenant_id, fingerprint) DO NOTHING;
+		ON CONFLICT (tenant_id, fingerprint) DO UPDATE SET
+			device_id = EXCLUDED.device_id,
+			public_key = EXCLUDED.public_key,
+			public_key_pem = EXCLUDED.public_key_pem,
+			status = 'ACTIVE';
 	`
 	if _, err = tx.Exec(ctx, keyQuery, tenantID, deviceID, edPubBytes, keyPem, ed25519FP); err != nil {
 		return "", "", fmt.Errorf("insert enrollment key: %w", err)
