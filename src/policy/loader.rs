@@ -504,9 +504,9 @@ fn compile_policy_yaml(
         None
     };
 
-    let (scannable_tools, safe_tools) = if let Some(scanning) = policy_file.response_scanning {
+    let (scannable_tools, safe_tools, fail_closed) = if let Some(ref scanning) = policy_file.response_scanning {
         (
-            scanning.scannable_tools.unwrap_or_else(|| {
+            scanning.scannable_tools.clone().unwrap_or_else(|| {
                 vec![
                     "read_file".to_string(),
                     "exec_command".to_string(),
@@ -524,7 +524,7 @@ fn compile_policy_yaml(
                     "secret".to_string(),
                 ]
             }),
-            scanning.safe_tools.unwrap_or_else(|| {
+            scanning.safe_tools.clone().unwrap_or_else(|| {
                 vec![
                     "tools/list".to_string(),
                     "get_schema".to_string(),
@@ -532,6 +532,7 @@ fn compile_policy_yaml(
                     "ping".to_string(),
                 ]
             }),
+            scanning.fail_closed.unwrap_or(false),
         )
     } else {
         (
@@ -557,6 +558,7 @@ fn compile_policy_yaml(
                 "get_metadata".to_string(),
                 "ping".to_string(),
             ],
+            false,
         )
     };
 
@@ -624,6 +626,7 @@ fn compile_policy_yaml(
             llm: policy_file.llm,
             sequence_rules: compiled_sequence_rules,
             schema_drift: policy_file.schema_drift,
+            fail_closed,
         },
         raw_hash,
         warnings,

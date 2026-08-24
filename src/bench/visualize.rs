@@ -67,13 +67,13 @@ impl Visualizer {
 
         let mut baseline_rows = String::new();
         for b in baselines {
-            let is_agentwall = b.system_name.contains("AgentWall");
-            let row_style = if is_agentwall {
+            let is_primary = b.system_name.contains("Active Rules") || b.system_name.contains("Vexa");
+            let row_style = if is_primary {
                 "background: rgba(83, 155, 245, 0.12); font-weight: bold;"
             } else {
                 ""
             };
-            let bar_color = if is_agentwall { "#539bf5" } else { "#484f58" };
+            let bar_color = if is_primary { "#539bf5" } else { "#484f58" };
             baseline_rows.push_str(&format!(
                 r#"<tr style="{}">
                     <td><strong style="color: {};">{}</strong></td>
@@ -87,7 +87,7 @@ impl Visualizer {
                 </tr>
 "#,
                 row_style,
-                if is_agentwall { "#539bf5" } else { "#f0f6fc" },
+                if is_primary { "#539bf5" } else { "#f0f6fc" },
                 b.system_name,
                 b.score,
                 bar_color,

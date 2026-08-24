@@ -1705,27 +1705,71 @@ async fn scan_and_process_response(
             *injection_findings_json = Some(findings_json.to_string());
         }
         Ok(crate::policy::injection::ScanResult::ScannerError { error }) => {
-            let _ = state
-                .audit_logger
-                .write_entry(
-                    session_id,
+            let fail_closed = session
+                .policy
+                .as_ref()
+                .map(|p| p.fail_closed)
+                .unwrap_or(false);
+
+            if fail_closed && enforce_mode {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "INJECTION_SCANNER_FAILURE_BLOCKED",
+                        tool_name,
+                        None,
+                        Some(format!("Scanner error: {} — fail-closed applied", error)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Error,
+                    "INJECTION_SCANNER_FAILURE_BLOCKED",
+                    serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+                );
+
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                return serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32002,
+                        "message": format!("Response blocked: injection scanner error in fail-closed mode: {}", error),
+                        "data": { "session_id": session_id }
+                    }
+                });
+            } else {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "INJECTION_SCANNER_FAILURE",
+                        tool_name,
+                        None,
+                        Some(format!("Scanner error: {} — fail-open applied", error)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Error,
                     "INJECTION_SCANNER_FAILURE",
-                    tool_name,
-                    None,
-                    Some(format!("Scanner error: {} — fail-open applied", error)),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                    None,
-                )
-                .await;
-            logging::log_event(
-                logging::Level::Error,
-                "INJECTION_SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
-            );
+                    serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+                );
+            }
         }
         Ok(crate::policy::injection::ScanResult::Clean) => {}
         Err(_) => {
@@ -2063,29 +2107,71 @@ async fn scan_and_process_response(
         }
 
         ScanResult::ScannerError { error } => {
-            // Fail-open + loud audit log
-            let _ = state
-                .audit_logger
-                .write_entry(
-                    session_id,
+            let fail_closed = session
+                .policy
+                .as_ref()
+                .map(|p| p.fail_closed)
+                .unwrap_or(false);
+
+            if fail_closed && enforce_mode {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "SCANNER_FAILURE_BLOCKED",
+                        tool_name,
+                        None,
+                        Some(format!("Scanner error: {} — fail-closed applied", error)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Error,
+                    "SCANNER_FAILURE_BLOCKED",
+                    serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+                );
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32002,
+                        "message": format!("Response blocked: scanner error in fail-closed mode: {}", error),
+                        "data": { "session_id": session_id }
+                    }
+                })
+            } else {
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        session_id,
+                        "SCANNER_FAILURE",
+                        tool_name,
+                        None,
+                        Some(format!("Scanner error: {} — fail-open applied", error)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+                logging::log_event(
+                    logging::Level::Error,
                     "SCANNER_FAILURE",
-                    tool_name,
-                    None,
-                    Some(format!("Scanner error: {} — fail-open applied", error)),
-                    None,
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    None,
-                    session.request_ip.clone(),
-                    None,
-                )
-                .await;
-            logging::log_event(
-                logging::Level::Error,
-                "SCANNER_FAILURE",
-                serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
-            );
-            response.clone()
+                    serde_json::json!({"tool": tool_name, "session": session_id, "error": &error}),
+                );
+                response.clone()
+            }
         }
     }
 }

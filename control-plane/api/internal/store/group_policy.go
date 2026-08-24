@@ -21,6 +21,33 @@ type GroupPolicyVersion struct {
 	Active    bool            `json:"active"`
 }
 
+// EnsureGroupPoliciesSchema guarantees schema consistency for the group_policy_versions table.
+func (s *Store) EnsureGroupPoliciesSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		CREATE TABLE IF NOT EXISTS group_policy_versions (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			group_id TEXT NOT NULL,
+			version INT NOT NULL,
+			claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+			tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+			created_by TEXT NOT NULL DEFAULT 'system',
+			active BOOLEAN NOT NULL DEFAULT true,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, group_id, version)
+		);
+
+		ALTER TABLE group_policy_versions ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT 'system';
+		ALTER TABLE group_policy_versions ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+		CREATE INDEX IF NOT EXISTS idx_group_policies_tenant ON group_policy_versions(tenant_id, group_id);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 // GetActiveGroupPolicy gets the active policy for a group within a tenant.
 func (s *Store) GetActiveGroupPolicy(ctx context.Context, tenantID, groupID string) (*GroupPolicyVersion, error) {
 	if tenantID == "" {

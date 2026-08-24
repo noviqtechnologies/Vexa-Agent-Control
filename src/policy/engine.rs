@@ -26,7 +26,29 @@ pub struct CompiledPolicy {
     pub sequence_rules: Vec<CompiledSequenceRule>,
     /// FR-601: MCP schema-drift detection configuration
     pub schema_drift: Option<super::schema::SchemaDriftConfig>,
+    /// Whether scanner errors should fail-closed (block) or fail-open (allow).
+    pub fail_closed: bool,
 }
+
+impl Default for CompiledPolicy {
+    fn default() -> Self {
+        Self {
+            tools: Vec::new(),
+            group_policies: Vec::new(),
+            max_calls_per_second: 0,
+            identity_validator: None,
+            scannable_tools: Vec::new(),
+            safe_tools: Vec::new(),
+            firewall: None,
+            spend_caps: None,
+            llm: None,
+            sequence_rules: Vec::new(),
+            schema_drift: None,
+            fail_closed: false,
+        }
+    }
+}
+
 
 impl std::fmt::Debug for CompiledPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

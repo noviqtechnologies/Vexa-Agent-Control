@@ -30,6 +30,7 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     }
 }
 

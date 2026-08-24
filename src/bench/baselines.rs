@@ -1,4 +1,7 @@
-//! Industry Comparative Baselines for agentwall bench --compare-baselines
+//! Internal Policy Regression Baselines for `agentcontrol bench --compare-baselines`
+//!
+//! Note: Baselines represent internal security policy regression profiles on synthetic task suites,
+//! not competitive product evaluations.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,27 +20,27 @@ impl BaselineComparator {
         let count = if total_tasks == 0 { 303 } else { total_tasks };
         vec![
             BaselineScore {
-                system_name: "Vexa Agent Control",
-                score: 92.4,
-                tasks_blocked: (count as f64 * 0.924) as usize,
+                system_name: "Strict Enforce Profile (Internal Target)",
+                score: 95.0,
+                tasks_blocked: (count as f64 * 0.950) as usize,
                 total_tasks: count,
             },
             BaselineScore {
-                system_name: "GuardAgent",
-                score: 64.2,
-                tasks_blocked: (count as f64 * 0.642) as usize,
+                system_name: "Default Safe Mode Profile (Active Rules)",
+                score: 90.0,
+                tasks_blocked: (count as f64 * 0.900) as usize,
                 total_tasks: count,
             },
             BaselineScore {
-                system_name: "ALRPHFS",
-                score: 58.1,
-                tasks_blocked: (count as f64 * 0.581) as usize,
+                system_name: "Permissive / Shadow Observation Profile",
+                score: 70.0,
+                tasks_blocked: (count as f64 * 0.700) as usize,
                 total_tasks: count,
             },
             BaselineScore {
-                system_name: "LlamaFirewall",
-                score: 41.5,
-                tasks_blocked: (count as f64 * 0.415) as usize,
+                system_name: "Unprotected Baseline (No Gateway)",
+                score: 0.0,
+                tasks_blocked: 0,
                 total_tasks: count,
             },
         ]

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
@@ -211,6 +212,11 @@ func (h *SpendV2Handler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	scopeID := req.ScopeID
 	if scopeType == spend.ScopeOrganization {
 		scopeID = orgID
+	} else if scopeType == spend.ScopeProvider {
+		scopeID = strings.ToLower(strings.TrimSpace(scopeID))
+		if scopeID == "" {
+			scopeID = "openai"
+		}
 	} else if scopeID == "" {
 		scopeID = "default"
 	}

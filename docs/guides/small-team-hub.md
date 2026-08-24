@@ -28,30 +28,42 @@ This guide covers deploying a shared Vexa Control Hub for engineering teams and 
    cd Vexa-Agent-Control
    ```
 
-2. Review `docker-compose.yml` environment settings:
+2. Review `docker-compose.team.yml` environment settings:
    ```yaml
    services:
-     control-hub:
-       image: noviqtechnologies/agentcontrol-hub:latest
+     postgres:
+       image: postgres:16-alpine
        ports:
-         - "3000:3000"
+         - "5432:5432"
+
+     control-plane-api:
+       build:
+         context: ./control-plane/api
+       ports:
          - "8081:8081"
-       environment:
-         - AGENTCONTROL_HUB_MODE=team
-         - AGENTCONTROL_DB_PATH=/data/hub.db
-       volumes:
-         - hub-data:/data
+
+     control-plane-ui:
+       build:
+         context: ./control-plane/ui
+       ports:
+         - "3000:80"
+
+     agentcontrol-gw:
+       build:
+         context: .
+       ports:
+         - "8080:8080"
    ```
 
-3. Start the services:
+3. Start the team services:
    ```bash
-   docker compose up -d
+   docker compose -f docker-compose.team.yml up -d
    ```
 
 4. Verify health:
    ```bash
-   docker compose ps
-   curl -s http://localhost:8081/health
+   docker compose -f docker-compose.team.yml ps
+   curl -s http://localhost:8081/healthz
    ```
 
 ---
@@ -79,12 +91,12 @@ When you update `agentcontrol-policy.yaml` on the Hub:
 
 ## Maintenance & Backups
 
-- **Data Persistence:** Hub database and state are persisted in the `hub-data` Docker volume.
+- **Data Persistence:** Hub PostgreSQL database is persisted in the `vexa-postgres-data` Docker volume.
 - **Backup Command:**
   ```bash
-  docker compose exec control-hub sqlite3 /data/hub.db ".backup '/data/backup-$(date +%F).db'"
+  docker compose -f docker-compose.team.yml exec postgres pg_dump -U vexa vexa_control_plane > "backup-$(date +%F).sql"
   ```
 - **Stop Hub:**
   ```bash
-  docker compose down
+  docker compose -f docker-compose.team.yml down
   ```

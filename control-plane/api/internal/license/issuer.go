@@ -60,9 +60,25 @@ func (i *Issuer) PublicKey() ed25519.PublicKey {
 func TierToFeatures(tier string) []string {
 	switch tier {
 	case "enterprise":
-		return []string{"spend_v2", "sse_push", "vault_custody", "device_governance", "siem_export", "hitl", "group_policies"}
+		return []string{
+			"spend_caps", "spend_v2",
+			"sse_push",
+			"vault_custody",
+			"device_governance",
+			"siem_export", "siem_aggregation",
+			"hitl",
+			"group_policies",
+			"airgap_oidc",
+			"compliance_reports",
+		}
 	case "team":
-		return []string{"spend_v2", "sse_push", "vault_custody", "group_policies"}
+		return []string{
+			"spend_caps", "spend_v2",
+			"sse_push",
+			"vault_custody",
+			"group_policies",
+			"siem_export", "siem_aggregation",
+		}
 	case "community":
 		fallthrough
 	default:

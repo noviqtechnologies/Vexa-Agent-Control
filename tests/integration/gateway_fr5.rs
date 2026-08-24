@@ -32,6 +32,7 @@ fn make_deny_policy() -> CompiledPolicy {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     }
 }
 
@@ -91,6 +92,7 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let iterations = 1000;
@@ -244,6 +246,7 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let result = policy.evaluate("any_tool", &serde_json::json!({}), None, &[]);

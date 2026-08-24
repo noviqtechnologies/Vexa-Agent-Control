@@ -7,6 +7,45 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
+// EnsureAuthProvidersSchema guarantees schema consistency for the auth_providers table and its indexes.
+func (s *Store) EnsureAuthProvidersSchema(ctx context.Context) error {
+	q := `
+		DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'auth_providers' AND column_name = 'client_secret_enc'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'auth_providers' AND column_name = 'client_secret'
+			) THEN
+				ALTER TABLE auth_providers RENAME COLUMN client_secret_enc TO client_secret;
+			END IF;
+		END $$;
+
+		ALTER TABLE auth_providers ADD COLUMN IF NOT EXISTS client_secret TEXT;
+		ALTER TABLE auth_providers ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;
+		ALTER TABLE auth_providers ADD COLUMN IF NOT EXISTS email_domains TEXT[] NOT NULL DEFAULT '{}';
+
+		DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'auth_providers' AND column_name = 'type' AND data_type = 'USER-DEFINED'
+			) THEN
+				DROP INDEX IF EXISTS idx_auth_providers_local_unique;
+				DROP INDEX IF EXISTS idx_auth_providers_tenant;
+				ALTER TABLE auth_providers ALTER COLUMN type TYPE TEXT USING type::TEXT;
+			END IF;
+		END $$;
+
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_providers_local_unique ON auth_providers (tenant_id, type) WHERE type = 'local';
+		CREATE INDEX IF NOT EXISTS idx_auth_providers_tenant ON auth_providers(tenant_id, type);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 func (s *Store) ListAuthProviders(ctx context.Context, tenantID string) ([]model.AuthProvider, error) {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"

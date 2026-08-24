@@ -334,6 +334,9 @@ pub struct ResponseScanningConfig {
     pub scannable_tools: Option<Vec<String>>,
     /// Tools whose output is guaranteed safe and should never be scanned.
     pub safe_tools: Option<Vec<String>>,
+    /// Whether scanner errors should fail-closed (block the response). Default: false (fail-open with warning/audit log).
+    #[serde(default)]
+    pub fail_closed: Option<bool>,
 }
 
 /// Session-level configuration.

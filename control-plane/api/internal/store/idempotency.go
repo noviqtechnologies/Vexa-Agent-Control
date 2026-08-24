@@ -26,6 +26,31 @@ type IdempotencyRecord struct {
 	ExpiresAt          time.Time
 }
 
+// EnsureIdempotencySchema guarantees schema consistency for the idempotency_records table.
+func (s *Store) EnsureIdempotencySchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		CREATE TABLE IF NOT EXISTS idempotency_records (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			principal_ref TEXT NOT NULL,
+			route TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			canonical_body_sha256 TEXT NOT NULL,
+			response_status INT NOT NULL,
+			response_reference TEXT,
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, principal_ref, route, idempotency_key)
+		);
+		CREATE INDEX IF NOT EXISTS idx_idempotency_records_exp ON idempotency_records(expires_at);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 // CheckOrSaveIdempotency checks if a mutation has already executed. If so, returns cached response.
 func (s *Store) CheckOrSaveIdempotency(
 	ctx context.Context,

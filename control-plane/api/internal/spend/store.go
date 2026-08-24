@@ -284,7 +284,7 @@ func (s *Store) Authorize(ctx context.Context, orgID string, req *AuthorizeReque
 
 	now := time.Now().UTC()
 
-	// 5. Query effective published policies (Org level & Project level)
+	// 5. Query effective published policies (Org level, Project level, and Provider level)
 	rows, err := tx.Query(ctx, `
 		SELECT p.policy_id, p.scope_type, p.scope_id, p.period_type, p.limit_microcents, p.action,
 		       pv.policy_version_id, pv.version
@@ -292,10 +292,14 @@ func (s *Store) Authorize(ctx context.Context, orgID string, req *AuthorizeReque
 		JOIN spend_policy_versions pv ON p.policy_id = pv.policy_id
 		WHERE p.organization_id = $1 
 		  AND p.status = 'PUBLISHED'
-		  AND (p.scope_type = 'organization' OR (p.scope_type = 'project' AND p.scope_id = $2))
-		  AND (p.effective_to IS NULL OR p.effective_to > $3)
+		  AND (
+		    p.scope_type = 'organization' 
+		    OR (p.scope_type = 'project' AND p.scope_id = $2)
+		    OR (p.scope_type = 'provider' AND LOWER(p.scope_id) = LOWER($3))
+		  )
+		  AND (p.effective_to IS NULL OR p.effective_to > $4)
 		ORDER BY pv.policy_version_id ASC
-	`, orgID, req.ProjectID, now)
+	`, orgID, req.ProjectID, req.Provider, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query policies: %w", err)
 	}

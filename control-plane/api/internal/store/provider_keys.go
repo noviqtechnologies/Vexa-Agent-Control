@@ -14,6 +14,54 @@ type ProviderKey struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// EnsureProviderKeysSchema guarantees schema consistency for the provider_keys table.
+func (s *Store) EnsureProviderKeysSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		CREATE TABLE IF NOT EXISTS provider_keys (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			provider TEXT NOT NULL,
+			api_key_masked TEXT NOT NULL DEFAULT '',
+			api_key_encrypted TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, provider)
+		);
+
+		DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'provider_keys' AND column_name = 'key_preview'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'provider_keys' AND column_name = 'api_key_masked'
+			) THEN
+				ALTER TABLE provider_keys RENAME COLUMN key_preview TO api_key_masked;
+			END IF;
+
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'provider_keys' AND column_name = 'encrypted_key'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'provider_keys' AND column_name = 'api_key_encrypted'
+			) THEN
+				ALTER TABLE provider_keys RENAME COLUMN encrypted_key TO api_key_encrypted;
+			END IF;
+		END $$;
+
+		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS api_key_masked TEXT NOT NULL DEFAULT '';
+		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS api_key_encrypted TEXT NOT NULL DEFAULT '';
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_keys_provider ON provider_keys(tenant_id, provider);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 func (s *Store) InsertProviderKey(ctx context.Context, tenantID string, k *ProviderKey) error {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"

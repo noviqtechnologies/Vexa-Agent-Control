@@ -1,0 +1,112 @@
+# ─── Vexa Agent Control — Small Team Hub Stack (Team / SMB Edition) ───────────
+#
+# Services:
+#   postgres           — Persistent relational database for tenant policies, fleet audit, and spend ledger
+#   control-plane-api  — Central Go REST API & SSE Policy synchronization server (port 8081)
+#   control-plane-ui   — React web console for fleet governance & security policy management (port 3000)
+#   agentcontrol-gw    — Vexa local/edge policy gateway (port 8080)
+#
+# Quick Start:
+#   docker compose -f docker-compose.team.yml up -d
+#   # Access Console: http://localhost:3000
+#   # API Health:    http://localhost:8081/healthz
+
+name: vexa-team-hub
+
+services:
+  # ── PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vexa-team-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vexa
+      POSTGRES_PASSWORD: vexa_secure_password
+      POSTGRES_DB: vexa_control_plane
+    volumes:
+      - vexa-postgres-data:/var/lib/postgresql/data
+      - ./control-plane/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vexa -d vexa_control_plane"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vexa-team-net
+
+  # ── Control Plane API ─────────────────────────────────────────────────────
+  control-plane-api:
+    build:
+      context: ./control-plane/api
+      dockerfile: Dockerfile
+    container_name: vexa-team-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DATABASE_URL: postgres://vexa:vexa_secure_password@postgres:5432/vexa_control_plane?sslmode=disable
+      DEV_MODE: "false"
+      GATEWAY_SECRET: vexa_team_gateway_secret_key_12345
+      POLICY_READ_SECRET: vexa_team_policy_read_secret_12345
+      PROVIDER_KEY_ENCRYPTION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      AGENTCONTROL_SESSION_SECRET: vexa_team_session_signing_secret_67890
+      SAAS_OPERATOR_EMAIL: admin@vexa.local
+      SAAS_OPERATOR_PASSWORD: VexaAdminPassword2026!
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - vexa-team-net
+
+  # ── Control Plane Web UI Console ──────────────────────────────────────────
+  control-plane-ui:
+    build:
+      context: ./control-plane/ui
+      dockerfile: Dockerfile
+    container_name: vexa-team-ui
+    restart: unless-stopped
+    depends_on:
+      - control-plane-api
+    environment:
+      AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
+    ports:
+      - "3000:80"
+    networks:
+      - vexa-team-net
+
+  # ── Vexa Agent Control Gateway ────────────────────────────────────────────
+  agentcontrol-gw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vexa-team-gateway
+    restart: unless-stopped
+    depends_on:
+      - control-plane-api
+    environment:
+      AGENTCONTROL_LISTEN: 0.0.0.0:8080
+      AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
+      AGENTCONTROL_DRY_RUN: "false"
+      AGENTCONTROL_HUB_URL: http://control-plane-api:8081
+    ports:
+      - "8080:8080"
+    networks:
+      - vexa-team-net
+
+volumes:
+  vexa-postgres-data:
+    driver: local
+
+networks:
+  vexa-team-net:
+    driver: bridge

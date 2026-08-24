@@ -1,13 +1,13 @@
-"""Basic usage example for AgentWall Python client SDK."""
+"""Basic usage example for Vexa Agent Control Python client SDK."""
 
 import os
-from agentwall import AgentWallClient, AgentWallDenied, AgentWallApprovalPending
+from agentcontrol import AgentControlClient, AgentControlDenied, AgentControlApprovalPending
 
 def main():
-    # Initialize client (connects to local agentwall proxy at 127.0.0.1:8080)
-    client = AgentWallClient()
+    # Initialize client (connects to local agentcontrol proxy at 127.0.0.1:8080)
+    client = AgentControlClient()
 
-    print("Checking AgentWall gateway status...")
+    print("Checking Vexa Agent Control gateway status...")
     try:
         status = client.status
         print(f"Gateway is ready: {status.ready} on {status.listen_address}")
@@ -26,17 +26,17 @@ def main():
     try:
         content = read_config_file("/workspace/app/config.json")
         print(f"Result: {content}\n")
-    except AgentWallDenied as e:
+    except AgentControlDenied as e:
         print(f"Denied: {e.reason}\n")
 
     print("--- Test 2: Denied Tool Call (Access to Sensitive Key) ---")
     try:
         content = read_config_file("/home/user/.ssh/id_rsa")
         print(f"Result: {content}\n")
-    except AgentWallDenied as e:
+    except AgentControlDenied as e:
         print(f"Successfully caught policy violation: {e.reason}")
         print(f"Violated rule: {e.rule_name}\n")
-    except AgentWallApprovalPending as e:
+    except AgentControlApprovalPending as e:
         print(f"Requires human approval: {e.approval_url}\n")
 
 if __name__ == "__main__":

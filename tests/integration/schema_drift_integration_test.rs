@@ -48,6 +48,7 @@ fn create_test_state_with_drift(
             spend_caps: None,
             llm: None,
             schema_drift: drift_config,
+            fail_closed: false,
         })),
         audit_logger,
         session_id: "drift-integration-session".to_string(),

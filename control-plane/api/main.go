@@ -49,11 +49,35 @@ func main() {
 	if err := db.EnsureUsersSchema(ctx); err != nil {
 		log.Printf("[users] schema verification warning: %v", err)
 	}
+	if err := db.EnsureAuthProvidersSchema(ctx); err != nil {
+		log.Printf("[auth_providers] schema verification warning: %v", err)
+	}
+	if err := db.EnsureCoreSchema(ctx); err != nil {
+		log.Printf("[core] schema verification warning: %v", err)
+	}
 	if err := db.EnsurePoliciesSchema(ctx); err != nil {
 		log.Printf("[policies] schema verification warning: %v", err)
 	}
+	if err := db.EnsureGroupPoliciesSchema(ctx); err != nil {
+		log.Printf("[group_policies] schema verification warning: %v", err)
+	}
+	if err := db.EnsureTemplatesTable(ctx); err != nil {
+		log.Printf("[templates] schema verification warning: %v", err)
+	}
+	if err := db.EnsureProviderKeysSchema(ctx); err != nil {
+		log.Printf("[provider_keys] schema verification warning: %v", err)
+	}
 	if err := db.EnsureDevicesSchema(ctx); err != nil {
 		log.Printf("[devices] schema verification warning: %v", err)
+	}
+	if err := db.EnsureEnrollmentV2Schema(ctx); err != nil {
+		log.Printf("[enrollment_v2] schema verification warning: %v", err)
+	}
+	if err := db.EnsureIdempotencySchema(ctx); err != nil {
+		log.Printf("[idempotency] schema verification warning: %v", err)
+	}
+	if err := db.EnsureSpendV1Schema(ctx); err != nil {
+		log.Printf("[spend_v1] schema verification warning: %v", err)
 	}
 
 	// Initialize Spend v2 Store and Sweeper
@@ -182,12 +206,14 @@ func main() {
 	// 4. Provider LLM Broker (Edge mTLS Header Validation & Capability Gates)
 	r.Route("/api/v2/broker", func(r chi.Router) {
 		r.Use(middleware.StrictDeviceMTLS(db, ""))
+		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 	})
 
 	// 5. Authoritative Central Spend Ledger API v2
 	r.Route("/api/v2/spend", func(r chi.Router) {
 		r.Use(middleware.SessionAuthOptional())
+		r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 		r.Post("/authorize", spendV2H.Authorize)
 		r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
 		r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
@@ -329,6 +355,7 @@ func main() {
 
 		// Group Policy Management
 		r.Route("/group-policies", func(r chi.Router) {
+			r.Use(middleware.RequireTenantFeature(db, "group_policies"))
 			r.Get("/", groupPolicyH.ListGroupPolicies)
 			r.Get("/{groupID}", groupPolicyH.GetGroupPolicy)
 			r.With(middleware.RequireAdmin()).Post("/", groupPolicyH.PublishGroupPolicy)
@@ -339,6 +366,7 @@ func main() {
 
 		// Spend Caps (Admin + Gateway API)
 		r.Route("/spend", func(r chi.Router) {
+			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 			r.Get("/budgets", spendH.ListBudgets)
 			r.With(middleware.RequireAdmin()).Post("/budgets", spendH.CreateBudget)
 			r.Get("/snapshots", spendH.ListSnapshots)

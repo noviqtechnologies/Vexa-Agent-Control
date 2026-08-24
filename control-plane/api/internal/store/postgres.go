@@ -53,6 +53,102 @@ func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
+// EnsureCoreSchema guarantees schema consistency for agents, telemetry, alerts, credentials, and MCP servers.
+func (s *Store) EnsureCoreSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		-- agents
+		CREATE TABLE IF NOT EXISTS agents (
+			agent_id TEXT PRIMARY KEY,
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			display_name TEXT,
+			status agent_status NOT NULL DEFAULT 'active',
+			policy_version TEXT,
+			first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_agents_tenant ON agents (tenant_id, last_seen_at DESC);
+
+		-- telemetry_events
+		CREATE TABLE IF NOT EXISTS telemetry_events (
+			event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			timestamp_ms BIGINT NOT NULL,
+			session_id TEXT NOT NULL,
+			agent_id TEXT NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+			tool_name TEXT NOT NULL,
+			decision event_decision NOT NULL,
+			dlp_findings JSONB NOT NULL DEFAULT '[]',
+			injection_findings JSONB NOT NULL DEFAULT '[]',
+			semantic_findings JSONB NOT NULL DEFAULT '[]',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_events_tenant ON telemetry_events (tenant_id, timestamp_ms DESC);
+
+		-- alerts
+		CREATE TABLE IF NOT EXISTS alerts (
+			alert_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			severity alert_severity NOT NULL,
+			event_id UUID NOT NULL REFERENCES telemetry_events(event_id) ON DELETE CASCADE,
+			pattern_name TEXT,
+			description TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_alerts_tenant ON alerts (tenant_id, created_at DESC);
+
+		-- identity_credentials
+		CREATE TABLE IF NOT EXISTS identity_credentials (
+			credential_id TEXT PRIMARY KEY,
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			agent_id TEXT NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+			scope TEXT NOT NULL DEFAULT '',
+			ttl_seconds INT NOT NULL DEFAULT 3600,
+			created_at_ms BIGINT NOT NULL DEFAULT 0,
+			expires_at_ms BIGINT NOT NULL DEFAULT 0,
+			last_rotated_at_ms BIGINT NOT NULL DEFAULT 0,
+			rotation_history JSONB NOT NULL DEFAULT '[]',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT '';
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS ttl_seconds INT NOT NULL DEFAULT 3600;
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS created_at_ms BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS expires_at_ms BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS last_rotated_at_ms BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE identity_credentials ADD COLUMN IF NOT EXISTS rotation_history JSONB NOT NULL DEFAULT '[]';
+
+		-- mcp_servers
+		CREATE TABLE IF NOT EXISTS mcp_servers (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			agent_id TEXT NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+			ide_target TEXT NOT NULL DEFAULT 'cursor',
+			server_name TEXT NOT NULL,
+			wrapped BOOLEAN NOT NULL DEFAULT false,
+			path_verified BOOLEAN NOT NULL DEFAULT false,
+			command TEXT,
+			tools_count INT NOT NULL DEFAULT 0,
+			tools_list JSONB NOT NULL DEFAULT '[]',
+			last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS ide_target TEXT NOT NULL DEFAULT 'cursor';
+		ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS wrapped BOOLEAN NOT NULL DEFAULT false;
+		ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS path_verified BOOLEAN NOT NULL DEFAULT false;
+		ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_servers_agent_ide_server ON mcp_servers (agent_id, ide_target, server_name);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 // UpsertAgent ensures the agent exists within a tenant, updating last_seen_at on conflict.
 func (s *Store) UpsertAgent(ctx context.Context, tenantID, agentID string) error {
 	if tenantID == "" {

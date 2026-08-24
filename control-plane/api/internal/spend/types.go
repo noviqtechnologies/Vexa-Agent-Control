@@ -24,6 +24,7 @@ const (
 
 	ScopeOrganization = "organization"
 	ScopeProject      = "project"
+	ScopeProvider     = "provider"
 
 	PeriodDaily   = "daily"
 	PeriodMonthly = "monthly"

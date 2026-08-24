@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,6 +20,128 @@ var (
 	ErrTxNotFoundV2    = errors.New("enrollment transaction not found")
 	ErrDeviceConflictV2= errors.New("device creation conflict")
 )
+
+// EnsureEnrollmentV2Schema guarantees schema consistency for enrollment, device state, outbox, and audit tables.
+func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		-- 1. Enrollment tokens extension columns
+		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS expected_device_label TEXT;
+		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS target_owner_subject TEXT;
+		ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
+
+		-- 2. Enrollment transactions
+		CREATE TABLE IF NOT EXISTS enrollment_transactions (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			enrollment_token_id UUID REFERENCES enrollment_tokens(id) ON DELETE SET NULL,
+			stable_device_id TEXT NOT NULL,
+			display_name TEXT,
+			owner_subject TEXT,
+			enrollment_ed25519_public_key BYTEA,
+			enrollment_key_fingerprint TEXT,
+			mtls_csr_sha256 TEXT,
+			mtls_csr_pem TEXT,
+			os_family TEXT,
+			os_version_summary TEXT,
+			architecture TEXT,
+			status TEXT NOT NULL DEFAULT 'CHALLENGE_ISSUED',
+			expires_at TIMESTAMPTZ NOT NULL,
+			completed_at TIMESTAMPTZ,
+			failure_code TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (tenant_id, stable_device_id, enrollment_key_fingerprint)
+		);
+
+		-- 3. Enrollment challenges
+		CREATE TABLE IF NOT EXISTS enrollment_challenges (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			transaction_id UUID NOT NULL REFERENCES enrollment_transactions(id) ON DELETE CASCADE,
+			challenge_hash BYTEA NOT NULL,
+			transcript_sha256 TEXT NOT NULL DEFAULT '',
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		-- 4. Device certificates
+		CREATE TABLE IF NOT EXISTS device_certificates (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+			ca_resource_name TEXT,
+			serial_number TEXT NOT NULL,
+			certificate_fingerprint TEXT,
+			sha256_fingerprint TEXT,
+			csr_sha256 TEXT,
+			public_key_fingerprint TEXT,
+			certificate_pem TEXT,
+			status credential_status NOT NULL DEFAULT 'ACTIVE',
+			not_before TIMESTAMPTZ NOT NULL,
+			not_after TIMESTAMPTZ NOT NULL,
+			renew_after TIMESTAMPTZ,
+			revoked_at TIMESTAMPTZ,
+			revocation_reason TEXT,
+			issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (serial_number)
+		);
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS ca_resource_name TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS certificate_fingerprint TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS sha256_fingerprint TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS csr_sha256 TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS public_key_fingerprint TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS certificate_pem TEXT;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS renew_after TIMESTAMPTZ;
+		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
+
+		-- 5. Device enrollment keys
+		ALTER TABLE device_enrollment_keys ADD COLUMN IF NOT EXISTS public_key BYTEA;
+
+		-- 6. Device provider capabilities
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS project_ref TEXT;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS model_family TEXT;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS action TEXT;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS issued_by_subject TEXT;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+		ALTER TABLE device_provider_capabilities ADD COLUMN IF NOT EXISTS reason TEXT;
+
+		-- 7. Device state history
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS prior_state device_state;
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS from_state device_state;
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS new_state device_state;
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS to_state device_state;
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS correlation_id UUID;
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS actor_type actor_type NOT NULL DEFAULT 'USER';
+		ALTER TABLE device_state_history ADD COLUMN IF NOT EXISTS actor_subject TEXT;
+
+		-- 8. Audit events
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS correlation_id UUID;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS request_id UUID;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_type TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_ref TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS resource_type TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS resource_id TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS outcome TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS reason_code TEXT;
+
+		-- 9. Outbox events
+		CREATE TABLE IF NOT EXISTS outbox_events (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			aggregate_type TEXT NOT NULL,
+			aggregate_id TEXT NOT NULL,
+			event_type TEXT NOT NULL,
+			payload_version TEXT NOT NULL DEFAULT '2.0',
+			redacted_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
 
 // CreateEnrollmentTokenV2 inserts a new OTET for a tenant.
 func (s *Store) CreateEnrollmentTokenV2(ctx context.Context, tenantID, rawToken, hint, deviceLabel, ownerSubject, reason, createdBy string, expiresInMinutes int) (*model.EnrollmentTokenRecord, error) {
@@ -238,29 +361,34 @@ func (s *Store) CompleteEnrollmentTransaction(
 	}
 
 	// 3. Insert enrollment key record
+	keyPem := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n", base64.StdEncoding.EncodeToString(edPubBytes))
 	keyQuery := `
 		INSERT INTO device_enrollment_keys (
-			tenant_id, device_id, algorithm, public_key, fingerprint, status
-		) VALUES ($1, $2, 'Ed25519', $3, $4, 'ACTIVE')
+			tenant_id, device_id, algorithm, public_key, public_key_pem, fingerprint, status
+		) VALUES ($1, $2, 'Ed25519', $3, $4, $5, 'ACTIVE')
 		ON CONFLICT (tenant_id, fingerprint) DO NOTHING;
 	`
-	_, _ = tx.Exec(ctx, keyQuery, tenantID, deviceID, edPubBytes, ed25519FP)
+	if _, err = tx.Exec(ctx, keyQuery, tenantID, deviceID, edPubBytes, keyPem, ed25519FP); err != nil {
+		return "", "", fmt.Errorf("insert enrollment key: %w", err)
+	}
 
 	// 4. Insert certificate record
-	certFP := "sha256:" + hex.EncodeToString(sha256.New().Sum(certChainPEM))
+	certHash := sha256.Sum256(certChainPEM)
+	sha256FP := hex.EncodeToString(certHash[:])
+	certFP := "sha256:" + sha256FP
 	certQuery := `
 		INSERT INTO device_certificates (
-			tenant_id, device_id, ca_resource_name, serial_number, certificate_fingerprint,
+			tenant_id, device_id, ca_resource_name, serial_number, certificate_fingerprint, sha256_fingerprint, certificate_pem,
 			csr_sha256, public_key_fingerprint, status, issued_at, not_before, not_after, renew_after
 		) VALUES (
-			$1, $2, $3, $4, $5,
-			$6, $7, 'ACTIVE', now(), $8, $9, $10
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, 'ACTIVE', now(), $10, $11, $12
 		)
-		ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
-			status = 'ACTIVE', not_after = $9, renew_after = $10;
+		ON CONFLICT (serial_number) DO UPDATE SET
+			status = 'ACTIVE', not_after = $11, renew_after = $12;
 	`
 	_, err = tx.Exec(ctx, certQuery,
-		tenantID, deviceID, caResource, serialNumber, certFP,
+		tenantID, deviceID, caResource, serialNumber, certFP, sha256FP, string(certChainPEM),
 		csrSHA256, ed25519FP, notBefore, notAfter, renewAfter,
 	)
 	if err != nil {
@@ -273,13 +401,18 @@ func (s *Store) CompleteEnrollmentTransaction(
 			tenant_id, device_id, provider, project_ref, model_family, action, status, issued_by_subject, expires_at, reason
 		) VALUES (
 			$1, $2, 'openai', 'proj_alpha', 'gpt-4.1-mini', 'INVOKE', 'ACTIVE', 'system', now() + interval '90 days', 'Initial capability'
-		);
+		)
+		ON CONFLICT (tenant_id, device_id, provider) DO NOTHING;
 	`
-	_, _ = tx.Exec(ctx, capQuery, tenantID, deviceID)
+	if _, err = tx.Exec(ctx, capQuery, tenantID, deviceID); err != nil {
+		return "", "", fmt.Errorf("insert capability: %w", err)
+	}
 
 	// 6. Mark transaction completed
 	updateTx := `UPDATE enrollment_transactions SET status = 'COMPLETED', completed_at = now() WHERE id = $1;`
-	_, _ = tx.Exec(ctx, updateTx, txID)
+	if _, err = tx.Exec(ctx, updateTx, txID); err != nil {
+		return "", "", fmt.Errorf("update tx status: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", fmt.Errorf("commit complete tx: %w", err)

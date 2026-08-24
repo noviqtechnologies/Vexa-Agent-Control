@@ -34,8 +34,8 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 
 		-- Auto-repair legacy trial rows where trial_ends_at was left NULL
 		UPDATE tenants
-		SET trial_ends_at = created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval,
-		    license_expires_at = COALESCE(license_expires_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval)
+		SET trial_ends_at = created_at + (COALESCE(NULLIF(trial_days, 0), 30) * interval '1 day'),
+		    license_expires_at = COALESCE(license_expires_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) * interval '1 day'))
 		WHERE is_trial = true AND trial_ends_at IS NULL;
 	`
 	_, err := s.pool.Exec(ctx, q)
@@ -330,8 +330,8 @@ func (s *Store) GetOrganizationStats(ctx context.Context) (*model.PlatformStats,
 	q := `
 		SELECT
 			(SELECT COUNT(*) FROM tenants),
-			(SELECT COUNT(*) FROM tenants WHERE is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval) > now()),
-			(SELECT COUNT(*) FROM tenants WHERE (is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) || ' days')::interval) BETWEEN now() AND now() + INTERVAL '7 days') OR (is_trial = false AND license_expires_at BETWEEN now() AND now() + INTERVAL '7 days')),
+			(SELECT COUNT(*) FROM tenants WHERE is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) * interval '1 day')) > now()),
+			(SELECT COUNT(*) FROM tenants WHERE (is_trial = true AND COALESCE(trial_ends_at, created_at + (COALESCE(NULLIF(trial_days, 0), 30) * interval '1 day')) BETWEEN now() AND now() + INTERVAL '7 days') OR (is_trial = false AND license_expires_at BETWEEN now() AND now() + INTERVAL '7 days')),
 			(SELECT COALESCE(SUM(max_seats), 0) FROM tenants)
 	`
 	var stats model.PlatformStats

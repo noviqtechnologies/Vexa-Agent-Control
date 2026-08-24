@@ -108,6 +108,7 @@ async fn test_us100_loop_prevention_pivot_error() {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -181,6 +182,7 @@ async fn test_us100_loop_prevention_different_params_not_blocked() {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -246,6 +248,7 @@ async fn test_us101_spend_cap_enforcement_licensed_vs_unlicensed() {
         spend_caps: Some(spend_caps_cfg),
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -310,6 +313,7 @@ async fn test_us103_credential_scope_strict_mode() {
         spend_caps: None,
         llm: None,
         schema_drift: None,
+        fail_closed: false,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));

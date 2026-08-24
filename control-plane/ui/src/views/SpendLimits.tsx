@@ -10,6 +10,9 @@ function formatScopeLabel(scopeType: string, scopeId: string, tenantId?: string)
   if (scopeType === 'organization' || scopeId === '00000000-0000-0000-0000-000000000001' || scopeId === 'global' || (tenantId && scopeId === tenantId)) {
     return 'Global Fleet'
   }
+  if (scopeType === 'provider') {
+    return `Provider: ${scopeId.toUpperCase()}`
+  }
   return scopeId
 }
 
@@ -21,6 +24,7 @@ export default function SpendLimits() {
   // Form State
   const [scope, setScope] = useState('organization')
   const [targetId, setTargetId] = useState('')
+  const [providerChoice, setProviderChoice] = useState('openai')
   const [period, setPeriod] = useState('monthly')
   const [limit, setLimit] = useState('100.00')
   const [action, setAction] = useState('hard_deny')
@@ -45,7 +49,15 @@ export default function SpendLimits() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const scopeId = scope === 'organization' ? (user?.tenant_id || 'global') : (targetId || 'default')
+    let scopeId = 'global'
+    if (scope === 'organization') {
+      scopeId = user?.tenant_id || 'global'
+    } else if (scope === 'provider') {
+      scopeId = providerChoice.toLowerCase()
+    } else {
+      scopeId = targetId || 'default'
+    }
+
     if (!limit) return
     
     setSubmitting(true)
@@ -58,7 +70,7 @@ export default function SpendLimits() {
         limit_usd: parseFloat(limit),
         action: action
       })
-      setMessage({ type: 'success', text: 'Authoritative policy version published successfully' })
+      setMessage({ type: 'success', text: `Authoritative ${scope.toUpperCase()} spend policy published successfully` })
       setTargetId('')
       setLimit('100.00')
       fetchData()
@@ -86,11 +98,12 @@ export default function SpendLimits() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ flex: 1, minWidth: 150 }}>
             <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>SCOPE</label>
             <select value={scope} onChange={e => setScope(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
-              <option value="organization" style={{ background: '#12121a', color: '#e8e8ed' }}>Organization</option>
+              <option value="organization" style={{ background: '#12121a', color: '#e8e8ed' }}>Organization (Global)</option>
               <option value="project" style={{ background: '#12121a', color: '#e8e8ed' }}>Project / Workload</option>
+              <option value="provider" style={{ background: '#12121a', color: '#e8e8ed' }}>LLM Provider</option>
             </select>
           </div>
           
@@ -98,6 +111,21 @@ export default function SpendLimits() {
             <div style={{ flex: 2, minWidth: 180 }}>
               <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>PROJECT / SCOPE ID</label>
               <input type="text" value={targetId} onChange={e => setTargetId(e.target.value)} placeholder="e.g. customer-support" required style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }} />
+            </div>
+          )}
+
+          {scope === 'provider' && (
+            <div style={{ flex: 2, minWidth: 180 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>LLM PROVIDER</label>
+              <select value={providerChoice} onChange={e => setProviderChoice(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
+                <option value="openai" style={{ background: '#12121a', color: '#e8e8ed' }}>OpenAI</option>
+                <option value="anthropic" style={{ background: '#12121a', color: '#e8e8ed' }}>Anthropic</option>
+                <option value="google" style={{ background: '#12121a', color: '#e8e8ed' }}>Google Gemini</option>
+                <option value="xai" style={{ background: '#12121a', color: '#e8e8ed' }}>xAI (Grok)</option>
+                <option value="groq" style={{ background: '#12121a', color: '#e8e8ed' }}>Groq</option>
+                <option value="together" style={{ background: '#12121a', color: '#e8e8ed' }}>Together AI</option>
+                <option value="mistral" style={{ background: '#12121a', color: '#e8e8ed' }}>Mistral AI</option>
+              </select>
             </div>
           )}
 

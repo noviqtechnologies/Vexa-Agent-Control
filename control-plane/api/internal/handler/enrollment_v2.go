@@ -234,6 +234,7 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 		renewAfter,
 	)
 	if err != nil {
+		log.Printf("CompleteEnrollment store error: %v", err)
 		http.Error(w, `{"error":{"code":"internal_error"}}`, http.StatusInternalServerError)
 		return
 	}

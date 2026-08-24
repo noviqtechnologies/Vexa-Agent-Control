@@ -105,6 +105,7 @@ mod tests {
             llm: None,
             sequence_rules: vec![],
             schema_drift: None,
+            fail_closed: false,
         }
     }
 

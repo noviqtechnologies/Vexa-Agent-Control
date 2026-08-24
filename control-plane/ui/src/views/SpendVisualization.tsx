@@ -13,6 +13,9 @@ function formatScopeLabel(scopeType: string, scopeId: string, tenantId?: string)
   if (scopeType === 'project') {
     return `Project: ${scopeId}`
   }
+  if (scopeType === 'provider') {
+    return `Provider: ${scopeId.toUpperCase()}`
+  }
   return `${scopeType}: ${scopeId}`
 }
 

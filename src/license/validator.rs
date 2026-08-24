@@ -1,5 +1,6 @@
 //! Decodes, verifies Ed25519 signatures, and validates feature license claims for AgentWall Enterprise.
 
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -57,8 +58,20 @@ pub struct LicenseValidator {
 }
 
 impl LicenseValidator {
-    /// Constructs a `LicenseValidator` using embedded Ed25519 public key bytes.
+    /// Constructs a `LicenseValidator` using embedded Ed25519 public key bytes or AGENTCONTROL_LICENSE_PUB_KEY env.
     pub fn new() -> Result<Self, String> {
+        if let Ok(pub_key_str) = std::env::var("AGENTCONTROL_LICENSE_PUB_KEY") {
+            if !pub_key_str.trim().is_empty() {
+                // If hex encoded:
+                if let Ok(bytes) = hex::decode(pub_key_str.trim()) {
+                    return Ok(Self::from_public_key_bytes(&bytes));
+                }
+                // If base64 encoded:
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(pub_key_str.trim()) {
+                    return Ok(Self::from_public_key_bytes(&bytes));
+                }
+            }
+        }
         let public_key_bytes = include_bytes!("../../keys/vexa_license.pub");
         let decoding_key = DecodingKey::from_ed_der(public_key_bytes);
         Ok(Self { decoding_key })
@@ -102,9 +115,23 @@ impl LicenseValidator {
         Ok(license)
     }
 
-    /// Checks if the given feature string is enabled in the decoded license.
+    /// Checks if the given feature string is enabled in the decoded license,
+    /// supporting canonical feature names and legacy aliases.
     pub fn has_feature(&self, license: &License, feature: &str) -> bool {
-        license.features.contains(&feature.to_string())
+        for f in &license.features {
+            if f == "*" || f == "all" || f == feature {
+                return true;
+            }
+            // Alias spend_caps and spend_v2
+            if (feature == "spend_caps" || feature == "spend_v2") && (f == "spend_caps" || f == "spend_v2") {
+                return true;
+            }
+            // Alias siem_aggregation and siem_export
+            if (feature == "siem_aggregation" || feature == "siem_export") && (f == "siem_aggregation" || f == "siem_export") {
+                return true;
+            }
+        }
+        false
     }
 }
 

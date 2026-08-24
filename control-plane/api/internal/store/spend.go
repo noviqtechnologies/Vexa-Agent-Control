@@ -35,6 +35,72 @@ type IncreaseRequest struct {
 	NewCap      *int64     `json:"new_cap"`
 }
 
+// EnsureSpendV1Schema guarantees schema consistency for legacy spend v1 tables.
+func (s *Store) EnsureSpendV1Schema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
+	q := `
+		CREATE TABLE IF NOT EXISTS spend_budgets (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			scope_type TEXT NOT NULL,
+			scope_key TEXT NOT NULL,
+			cap_cents BIGINT NOT NULL DEFAULT 10000,
+			period TEXT NOT NULL DEFAULT 'monthly',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (scope_type, scope_key)
+		);
+		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS scope_type TEXT NOT NULL DEFAULT 'organization';
+		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS scope_key TEXT NOT NULL DEFAULT 'global';
+		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS cap_cents BIGINT NOT NULL DEFAULT 10000;
+		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS period TEXT NOT NULL DEFAULT 'monthly';
+
+		CREATE TABLE IF NOT EXISTS spend_snapshots (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			agent_id TEXT NOT NULL,
+			period_start TIMESTAMPTZ NOT NULL,
+			spent_cents BIGINT NOT NULL DEFAULT 0,
+			cap_cents BIGINT,
+			is_estimated BOOLEAN NOT NULL DEFAULT false,
+			pricing_table_version TEXT NOT NULL DEFAULT '',
+			synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (agent_id, period_start)
+		);
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS period_start TIMESTAMPTZ NOT NULL DEFAULT now();
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS spent_cents BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS cap_cents BIGINT;
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS is_estimated BOOLEAN NOT NULL DEFAULT false;
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS pricing_table_version TEXT NOT NULL DEFAULT '';
+		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+		CREATE TABLE IF NOT EXISTS spend_increase_requests (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			request_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			agent_id TEXT NOT NULL,
+			current_cap BIGINT NOT NULL DEFAULT 0,
+			reason TEXT,
+			status TEXT NOT NULL DEFAULT 'PENDING',
+			submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			resolved_at TIMESTAMPTZ,
+			resolved_by TEXT,
+			new_cap BIGINT
+		);
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS request_id UUID DEFAULT uuid_generate_v4();
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS agent_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS current_cap BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS resolved_by TEXT;
+		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS new_cap BIGINT;
+	`
+	_, err := s.pool.Exec(ctx, q)
+	return err
+}
+
 func (s *Store) UpsertSpendBudget(ctx context.Context, tenantID string, b *SpendBudget) error {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
