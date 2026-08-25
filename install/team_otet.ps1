@@ -3,10 +3,18 @@ param(
     [string]$Token,
     [string]$HubUrl,
     [string]$Version,
-    [switch]$InstallService
+    [switch]$InstallService,
+    [switch]$NoService
 )
 
 $ErrorActionPreference = "Stop"
+
+$IsAdmin = $false
+try {
+    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $Principal = [Security.Principal.WindowsPrincipal]$Identity
+    $IsAdmin = $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch {}
 
 $ColorGreen = "Green"
 $ColorYellow = "Yellow"
@@ -127,7 +135,9 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-if ($InstallService) {
+$ShouldInstallService = (-not $NoService) -and ($InstallService -or $IsAdmin)
+
+if ($ShouldInstallService) {
     Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
     try {
         # Sync user credentials to SYSTEM service profile if elevated
@@ -147,10 +157,10 @@ if ($InstallService) {
 
         & $FinalBinaryPath service install --hub-url $HubUrl
     } catch {
-        Write-Host "[!] Note: Sentry service installation requires Administrator privileges." -ForegroundColor $ColorYellow
+        Write-Host "[!] Note: Sentry service installation failed: $_" -ForegroundColor $ColorYellow
     }
 } else {
-    Write-Host "[*] Step 2/3: Skipping system daemon installation (pass -InstallService to enable)." -ForegroundColor $ColorCyan
+    Write-Host "[*] Step 2/3: Skipping system daemon installation (run in Administrator console or pass -InstallService to enable)." -ForegroundColor $ColorCyan
 }
 
 Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan

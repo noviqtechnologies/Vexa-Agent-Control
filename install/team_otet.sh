@@ -23,7 +23,7 @@ fi
 VERSION="${AGENTCONTROL_VERSION:-}"
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"
 HUB_URL="${AGENTCONTROL_HUB_URL:-${AGENTWALL_HUB_URL:-${DASHBOARD_API_URL:-https://console.vexasec.io}}}"
-INSTALL_SERVICE=false
+INSTALL_SERVICE=""
 if [[ "$HUB_URL" == "http://localhost:8400" ]]; then
   HUB_URL="https://console.vexasec.io"
 fi
@@ -44,7 +44,11 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --install-service)
-      INSTALL_SERVICE=true
+      INSTALL_SERVICE="true"
+      shift
+      ;;
+    --no-service)
+      INSTALL_SERVICE="false"
       shift
       ;;
     -h|--help)
@@ -158,7 +162,12 @@ if ! "${LOCALBIN}/agentcontrol" enroll --token "$TOKEN" --hub-url "$HUB_URL"; th
   exit 1
 fi
 
-if [[ "$INSTALL_SERVICE" == "true" ]]; then
+SHOULD_INSTALL_SERVICE="false"
+if [[ "$INSTALL_SERVICE" == "true" ]] || [[ "$INSTALL_SERVICE" != "false" && "$(id -u)" -eq 0 ]]; then
+  SHOULD_INSTALL_SERVICE="true"
+fi
+
+if [[ "$SHOULD_INSTALL_SERVICE" == "true" ]]; then
   echo "[*] Step 2/3: Installing Persistent OS Sentry Daemon..."
   if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
     sudo "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Could not install machine-level system service without root."
@@ -166,7 +175,7 @@ if [[ "$INSTALL_SERVICE" == "true" ]]; then
     "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Sentry service installation requires appropriate permissions."
   fi
 else
-  echo "[*] Step 2/3: Skipping system daemon installation (pass --install-service to enable)."
+  echo "[*] Step 2/3: Skipping system daemon installation (run as root or pass --install-service to enable)."
 fi
 
 echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
