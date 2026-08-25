@@ -20,14 +20,14 @@ elif [[ "$ARCH" == "arm64" ]]; then
   ARCH="aarch64"
 fi
 
+PROD_HUB_URL="https://console.vexasec.io"
+STAGE_HUB_URL="https://console-stage.vexasec.io"
+
 VERSION="${AGENTCONTROL_VERSION:-}"
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"
-HUB_URL="${AGENTCONTROL_HUB_URL:-${AGENTWALL_HUB_URL:-${DASHBOARD_API_URL:-https://console.vexasec.io}}}"
+TARGET_ENV="${AGENTCONTROL_ENV:-${AGENTCONTROL_ENVIRONMENT:-${AGENTWALL_ENV:-}}}"
+HUB_URL="${AGENTCONTROL_HUB_URL:-${AGENTWALL_HUB_URL:-${DASHBOARD_API_URL:-}}}"
 INSTALL_SERVICE=""
-if [[ "$HUB_URL" == "http://localhost:8400" ]]; then
-  HUB_URL="https://console.vexasec.io"
-fi
-export DASHBOARD_API_URL="$HUB_URL"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +38,18 @@ while [[ $# -gt 0 ]]; do
     -u|--hub-url|-d|--dashboard-url)
       HUB_URL="$2"
       shift 2
+      ;;
+    -e|--env|--environment)
+      TARGET_ENV="$2"
+      shift 2
+      ;;
+    --staging|--stage)
+      TARGET_ENV="staging"
+      shift
+      ;;
+    --prod|--production)
+      TARGET_ENV="production"
+      shift
       ;;
     -v|--version)
       VERSION="$2"
@@ -52,11 +64,15 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      echo "Usage: team_otet.sh -t <token> [-u <hub-url>] [-v <version>] [--install-service]"
+      echo "Usage: team_otet.sh -t <token> [-u <hub-url>] [-e <staging|production>] [--staging] [--prod] [-v <version>] [--install-service] [--no-service]"
       echo "  -t, --token            Enrollment token for enterprise onboarding"
-      echo "  -u, --hub-url          Control Hub / Dashboard URL (default: https://console.vexasec.io)"
+      echo "  -u, --hub-url          Control Hub / Dashboard URL (or 'staging' / 'production')"
+      echo "  -e, --env              Target environment: 'staging' (https://console-stage.vexasec.io) or 'production' (https://console.vexasec.io)"
+      echo "      --staging          Shorthand to use staging Control Hub (https://console-stage.vexasec.io)"
+      echo "      --prod             Shorthand to use production Control Hub (https://console.vexasec.io)"
       echo "  -v, --version          Pin specific release version (default: latest)"
-      echo "  --install-service      Install persistent system service daemon (requires sudo/root)"
+      echo "      --install-service  Force install persistent system service daemon"
+      echo "      --no-service       Skip system service daemon installation"
       exit 0
       ;;
     *)
@@ -68,9 +84,37 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+TARGET_ENV_LOWER=$(echo "${TARGET_ENV:-}" | tr '[:upper:]' '[:lower:]')
+if [[ "$TARGET_ENV_LOWER" == "staging" || "$TARGET_ENV_LOWER" == "stage" ]]; then
+  HUB_URL="$STAGE_HUB_URL"
+elif [[ "$TARGET_ENV_LOWER" == "production" || "$TARGET_ENV_LOWER" == "prod" ]]; then
+  HUB_URL="$PROD_HUB_URL"
+fi
+
+if [[ -n "$HUB_URL" ]]; then
+  HUB_URL_LOWER=$(echo "$HUB_URL" | tr '[:upper:]' '[:lower:]')
+  case "$HUB_URL_LOWER" in
+    staging|stage|"https://console-stage.vexasec.io"|"https://console-stage.vexasec.io/")
+      HUB_URL="$STAGE_HUB_URL"
+      ;;
+    production|prod|default|"https://console.vexasec.io"|"https://console.vexasec.io/")
+      HUB_URL="$PROD_HUB_URL"
+      ;;
+  esac
+fi
+
+if [[ -z "$HUB_URL" || "$HUB_URL" == "http://localhost:8400" ]]; then
+  HUB_URL="$PROD_HUB_URL"
+fi
+
+HUB_URL="${HUB_URL%/}"
+export DASHBOARD_API_URL="$HUB_URL"
+export AGENTCONTROL_HUB_URL="$HUB_URL"
+
 if [[ -z "$TOKEN" ]]; then
   echo "[!] Error: Enterprise enrollment token required."
-  echo "    Usage: ./install/team_otet.sh -t <TOKEN> [-u <HUB_URL>]"
+  echo "    Usage: ./install/team_otet.sh -t <TOKEN> [-u <HUB_URL>] [--staging | --prod]"
+  echo "    Hub Endpoints: Production (--prod / https://console.vexasec.io) | Staging (--staging / https://console-stage.vexasec.io)"
   exit 1
 fi
 

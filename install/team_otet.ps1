@@ -2,7 +2,13 @@
 param(
     [string]$Token,
     [string]$HubUrl,
+    [string]$Env,
+    [string]$Environment,
     [string]$Version,
+    [switch]$Staging,
+    [switch]$Stage,
+    [switch]$Production,
+    [switch]$Prod,
     [switch]$InstallService,
     [switch]$NoService
 )
@@ -28,19 +34,47 @@ if (!$Token) { $Token = $env:AGENTCONTROL_ENROLLMENT_TOKEN }
 if (!$Token) { $Token = $env:AGENTWALL_TOKEN }
 if (!$Token) { $Token = $env:AGENTWALL_ENROLLMENT_TOKEN }
 
+$ProdHubUrl = "https://console.vexasec.io"
+$StageHubUrl = "https://console-stage.vexasec.io"
+
+if (!$Env) { $Env = $Environment }
+if (!$Env) { $Env = $env:AGENTCONTROL_ENV }
+if (!$Env) { $Env = $env:AGENTCONTROL_ENVIRONMENT }
+if (!$Env) { $Env = $env:AGENTWALL_ENV }
+
+if ($Staging -or $Stage -or ($Env -and $Env.ToLower() -in @("staging", "stage"))) {
+    $HubUrl = $StageHubUrl
+} elseif ($Production -or $Prod -or ($Env -and $Env.ToLower() -in @("production", "prod"))) {
+    $HubUrl = $ProdHubUrl
+}
+
 if (!$HubUrl) { $HubUrl = $env:AGENTCONTROL_HUB_URL }
 if (!$HubUrl) { $HubUrl = $env:AGENTWALL_HUB_URL }
 if (!$HubUrl -and $env:DASHBOARD_API_URL -and $env:DASHBOARD_API_URL -ne "http://localhost:8400") {
     $HubUrl = $env:DASHBOARD_API_URL
 }
-if (!$HubUrl -or $HubUrl -eq "http://localhost:8400") {
-    $HubUrl = "https://console.vexasec.io"
+
+if ($HubUrl) {
+    $HubTrimmed = $HubUrl.Trim().ToLower()
+    if ($HubTrimmed -in @("staging", "stage", "https://console-stage.vexasec.io", "https://console-stage.vexasec.io/")) {
+        $HubUrl = $StageHubUrl
+    } elseif ($HubTrimmed -in @("production", "prod", "default", "https://console.vexasec.io", "https://console.vexasec.io/")) {
+        $HubUrl = $ProdHubUrl
+    }
 }
+
+if (!$HubUrl -or $HubUrl -eq "http://localhost:8400") {
+    $HubUrl = $ProdHubUrl
+}
+
+$HubUrl = $HubUrl.TrimEnd('/')
 $env:DASHBOARD_API_URL = $HubUrl
+$env:AGENTCONTROL_HUB_URL = $HubUrl
 
 if (!$Token) {
     Write-Host "[!] Error: Enterprise enrollment token required." -ForegroundColor $ColorRed
     Write-Host "    Pass -Token '<TOKEN>' or set `$env:AGENTCONTROL_TOKEN = '<TOKEN>' before running." -ForegroundColor $ColorYellow
+    Write-Host "    Hub Endpoints: Production (-Prod / https://console.vexasec.io) | Staging (-Staging / https://console-stage.vexasec.io)" -ForegroundColor $ColorYellow
     exit 1
 }
 
@@ -125,7 +159,15 @@ if ($RunningService) {
 Get-Process agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
-Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
+try {
+    Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
+} catch {
+    # If binary is locked by active session, rotate to .old and place fresh binary
+    $OldBackup = "$FinalBinaryPath.old"
+    Remove-Item $OldBackup -Force -ErrorAction SilentlyContinue
+    Move-Item -Path $FinalBinaryPath -Destination $OldBackup -Force -ErrorAction SilentlyContinue
+    Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
+}
 Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
 
 Write-Host "[*] Step 1/3: PKI Device Enrollment..." -ForegroundColor $ColorCyan
