@@ -93,7 +93,7 @@ try {
             Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
             exit 1
         }
-        Write-Host "[✓] SHA-256 Checksum verified successfully ($ActualHash)." -ForegroundColor $ColorGreen
+        Write-Host "[+] SHA-256 Checksum verified successfully ($ActualHash)." -ForegroundColor $ColorGreen
     } else {
         Write-Host "[!] FATAL: Release asset $AssetName not listed in checksums.txt. Aborting." -ForegroundColor $ColorRed
         exit 1
@@ -157,8 +157,9 @@ Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor 
 & $FinalBinaryPath wrap --all
 
 Write-Host "`n[+] Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
-Write-Host "  • Version: $Version" -ForegroundColor $ColorGreen
-Write-Host "  • SHA-256: $ActualHash" -ForegroundColor $ColorGreen
+Write-Host "  - Version: $Version" -ForegroundColor $ColorGreen
+Write-Host "  - SHA-256: $ActualHash" -ForegroundColor $ColorGreen
 Write-Host "Get started by running:" -ForegroundColor $ColorGreen
 Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
 Write-Host ""
+
