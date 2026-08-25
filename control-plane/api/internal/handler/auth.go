@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -81,11 +82,21 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// 2. Check Global Bootstrap Token, Secret Manager Session Secret, or SAAS_OPERATOR_PASSWORD
 	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
 	sessionSecret := os.Getenv("AGENTCONTROL_SESSION_SECRET")
+	if sessionSecret == "" {
+		sessionSecret = os.Getenv("AGENTWALL_SESSION_SECRET")
+	}
 	isDevMode := os.Getenv("DEV_MODE") == "true"
 	
-	isSecretMatch := (BootstrapToken != "" && req.Password == BootstrapToken) ||
-		(saasOpPassword != "" && req.Password == saasOpPassword) ||
-		(sessionSecret != "" && req.Password == sessionSecret)
+	isSecretMatch := false
+	if BootstrapToken != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(BootstrapToken)) == 1 {
+		isSecretMatch = true
+	}
+	if saasOpPassword != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(saasOpPassword)) == 1 {
+		isSecretMatch = true
+	}
+	if sessionSecret != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(sessionSecret)) == 1 {
+		isSecretMatch = true
+	}
 
 	isPlatformEmail := req.Email == "admin" || req.Email == "operator" || req.Email == "admin@example.com" || (saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail))
 
@@ -140,9 +151,6 @@ func isRequestSecure(r *http.Request) bool {
 		return true
 	}
 	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		return true
-	}
-	if strings.HasPrefix(r.Header.Get("Origin"), "https://") || strings.HasPrefix(r.Header.Get("Referer"), "https://") {
 		return true
 	}
 	return false
@@ -466,7 +474,8 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	
 	domainAllowed := false
 	for _, d := range provider.EmailDomains {
-		if d == "*" || strings.HasSuffix(email, "@"+d) || strings.HasSuffix(email, d) {
+		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(d)), "@")
+		if domain == "*" || strings.HasSuffix(strings.ToLower(email), "@"+domain) {
 			domainAllowed = true
 			break
 		}

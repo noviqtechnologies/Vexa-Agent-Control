@@ -26,6 +26,9 @@ func NewIssuer(privKey ed25519.PrivateKey) *Issuer {
 func NewIssuerFromEnv() (*Issuer, error) {
 	keyHex := os.Getenv("AGENTCONTROL_LICENSE_SIGNING_KEY")
 	if keyHex == "" {
+		keyHex = os.Getenv("AGENTWALL_LICENSE_SIGNING_KEY")
+	}
+	if keyHex == "" {
 		// If no key is configured in env, check if dev mode or generate an ephemeral fallback key
 		if os.Getenv("DEV_MODE") == "true" {
 			// Deterministic 32-byte seed for dev mode

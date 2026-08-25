@@ -10,8 +10,20 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func isSerializationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "40001" || pgErr.Code == "40P01"
+	}
+	return false
+}
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -219,6 +231,25 @@ func GetWindowBoundsUTC(periodType string, t time.Time) (time.Time, time.Time) {
 // ── 1. AUTHORIZE ─────────────────────────────────────────────────────────────
 
 func (s *Store) Authorize(ctx context.Context, orgID string, req *AuthorizeRequest) (*AuthorizeResponse, error) {
+	const maxRetries = 5
+	var backoff = 10 * time.Millisecond
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err := s.authorizeTx(ctx, orgID, req)
+		if err != nil && isSerializationError(err) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+				continue
+			}
+		}
+		return resp, err
+	}
+	return nil, errors.New("spend authorization failed: maximum serialization retries exceeded")
+}
+
+func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeRequest) (*AuthorizeResponse, error) {
 	if s.pool == nil {
 		return nil, errors.New("database pool uninitialized")
 	}
@@ -494,9 +525,26 @@ func (s *Store) Authorize(ctx context.Context, orgID string, req *AuthorizeReque
 	return allowResp, nil
 }
 
-// ── 2. SETTLE ────────────────────────────────────────────────────────────────
-
 func (s *Store) Settle(ctx context.Context, orgID, reservationID string, req *SettleRequest) (*SettleResponse, error) {
+	const maxRetries = 5
+	var backoff = 10 * time.Millisecond
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err := s.settleTx(ctx, orgID, reservationID, req)
+		if err != nil && isSerializationError(err) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+				continue
+			}
+		}
+		return resp, err
+	}
+	return nil, errors.New("spend settlement failed: maximum serialization retries exceeded")
+}
+
+func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *SettleRequest) (*SettleResponse, error) {
 	if s.pool == nil {
 		return nil, errors.New("database pool uninitialized")
 	}
@@ -668,6 +716,25 @@ func (s *Store) Settle(ctx context.Context, orgID, reservationID string, req *Se
 // ── 3. RELEASE ───────────────────────────────────────────────────────────────
 
 func (s *Store) Release(ctx context.Context, orgID, reservationID string, req *ReleaseRequest) (*ReleaseResponse, error) {
+	const maxRetries = 5
+	var backoff = 10 * time.Millisecond
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err := s.releaseTx(ctx, orgID, reservationID, req)
+		if err != nil && isSerializationError(err) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+				continue
+			}
+		}
+		return resp, err
+	}
+	return nil, errors.New("spend release failed: maximum serialization retries exceeded")
+}
+
+func (s *Store) releaseTx(ctx context.Context, orgID, reservationID string, req *ReleaseRequest) (*ReleaseResponse, error) {
 	if s.pool == nil {
 		return nil, errors.New("database pool uninitialized")
 	}

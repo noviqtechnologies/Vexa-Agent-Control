@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -24,6 +25,8 @@ func init() {
 	}
 
 	if envSecret := os.Getenv("AGENTCONTROL_SESSION_SECRET"); envSecret != "" {
+		Secret = []byte(envSecret)
+	} else if envSecret := os.Getenv("AGENTWALL_SESSION_SECRET"); envSecret != "" {
 		Secret = []byte(envSecret)
 	} else {
 		Secret = make([]byte, 32)
@@ -51,7 +54,7 @@ func Validate(cookieValue string) (*SessionInfo, error) {
 		mac.Write([]byte(payload))
 		expectedSignature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 
-		if signature != expectedSignature {
+		if subtle.ConstantTimeCompare([]byte(signature), []byte(expectedSignature)) != 1 {
 			return nil, fmt.Errorf("invalid signature")
 		}
 
@@ -77,7 +80,7 @@ func Validate(cookieValue string) (*SessionInfo, error) {
 		mac.Write([]byte(payload))
 		expectedSignature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 
-		if signature != expectedSignature {
+		if subtle.ConstantTimeCompare([]byte(signature), []byte(expectedSignature)) != 1 {
 			return nil, fmt.Errorf("invalid signature")
 		}
 

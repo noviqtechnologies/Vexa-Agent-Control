@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_tenant ON alerts (tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts (severity);
+CREATE INDEX IF NOT EXISTS idx_alerts_event_id ON alerts (event_id);
 
 CREATE TABLE IF NOT EXISTS identity_credentials (
     credential_id      TEXT PRIMARY KEY,
@@ -438,6 +439,8 @@ CREATE TABLE IF NOT EXISTS enrollment_challenges (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS idx_challenges_tx_id ON enrollment_challenges(transaction_id);
+
 CREATE TABLE IF NOT EXISTS device_enrollment_keys (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -472,6 +475,8 @@ CREATE TABLE IF NOT EXISTS device_certificates (
     UNIQUE (serial_number),
     UNIQUE (tenant_id, serial_number)
 );
+
+CREATE INDEX IF NOT EXISTS idx_device_certs_device ON device_certificates(tenant_id, device_id);
 
 CREATE TABLE IF NOT EXISTS policy_versions (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -730,6 +735,8 @@ CREATE TABLE IF NOT EXISTS spend_reservations (
     CONSTRAINT uq_spend_reservation_req UNIQUE (organization_id, request_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_spend_reservations_sweeper ON spend_reservations(organization_id, state, expires_at) WHERE state = 'AUTHORIZED';
+
 CREATE TABLE IF NOT EXISTS spend_events (
     event_id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -746,6 +753,7 @@ CREATE TABLE IF NOT EXISTS spend_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spend_events_org_time ON spend_events(organization_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_spend_events_reservation ON spend_events(reservation_id);
 
 CREATE TABLE IF NOT EXISTS spend_idempotency (
     organization_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -796,6 +804,38 @@ BEGIN
     FOREACH t IN ARRAY tenant_tables LOOP
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = t AND table_type = 'BASE TABLE') THEN
             EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+            EXECUTE format('DROP POLICY IF EXISTS tenant_isolation_policy ON %I;', t);
+            IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = t AND column_name = 'tenant_id') THEN
+                EXECUTE format('
+                    CREATE POLICY tenant_isolation_policy ON %I
+                    FOR ALL
+                    USING (
+                        tenant_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
+                        OR current_setting(''app.is_saas_operator'', true) = ''true''
+                        OR current_user = ''postgres''
+                    )
+                    WITH CHECK (
+                        tenant_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
+                        OR current_setting(''app.is_saas_operator'', true) = ''true''
+                        OR current_user = ''postgres''
+                    );
+                ', t);
+            ELSIF EXISTS (SELECT FROM information_schema.columns WHERE table_name = t AND column_name = 'organization_id') THEN
+                EXECUTE format('
+                    CREATE POLICY tenant_isolation_policy ON %I
+                    FOR ALL
+                    USING (
+                        organization_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
+                        OR current_setting(''app.is_saas_operator'', true) = ''true''
+                        OR current_user = ''postgres''
+                    )
+                    WITH CHECK (
+                        organization_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
+                        OR current_setting(''app.is_saas_operator'', true) = ''true''
+                        OR current_user = ''postgres''
+                    );
+                ', t);
+            END IF;
         END IF;
     END LOOP;
 END $$;

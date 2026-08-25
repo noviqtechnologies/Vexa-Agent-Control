@@ -85,10 +85,12 @@ impl SpendLedger {
 
         let db_path = new_dir.join("events.db");
 
-        let start = Instant::now();
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB for spend");
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+            .expect("Failed to set WAL mode / busy timeout for spend ledger");
 
         // Write latency measurement
+        let start = Instant::now();
         conn.execute(
             "CREATE TABLE IF NOT EXISTS spend_latency_test (id INTEGER)",
             [],
@@ -168,6 +170,7 @@ impl SpendLedger {
         if let Some(client) = dashboard_client {
             let conn2 =
                 Connection::open(&db_path).expect("Failed to open SQLite DB for spend sync");
+            let _ = conn2.execute_batch("PRAGMA busy_timeout=5000;");
             std::thread::spawn(move || {
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(60));

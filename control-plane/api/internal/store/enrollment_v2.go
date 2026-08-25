@@ -496,7 +496,9 @@ func (s *Store) AtomicallyConsumeOTET(
 			tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
 		) VALUES ($1, 'enrollment_transaction', $2, 'enrollment.started', '2.0', '{}'::jsonb);
 	`
-	_, _ = tx.Exec(ctx, outboxQuery, tenID, txID)
+	if _, err := tx.Exec(ctx, outboxQuery, tenID, txID); err != nil {
+		return "", "", "", fmt.Errorf("emit outbox event: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", "", fmt.Errorf("commit enrollment start: %w", err)
@@ -767,7 +769,9 @@ func (s *Store) CompleteEnrollmentTransaction(
 			tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
 		) VALUES ($1, 'enrollment_transaction', $2, 'enrollment.completed', '2.0', '{}'::jsonb);
 	`
-	_, _ = tx.Exec(ctx, outboxQuery, tenantID, txID)
+	if _, err := tx.Exec(ctx, outboxQuery, tenantID, txID); err != nil {
+		return "", "", fmt.Errorf("emit outbox event: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", fmt.Errorf("commit complete tx: %w", err)

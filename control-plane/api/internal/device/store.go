@@ -417,7 +417,12 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 				WHEN d.last_heartbeat_at < NOW() - INTERVAL '3 minutes' THEN 'OFFLINE'
 				ELSE 'COMPLIANT'
 			END AS overall_compliance,
-			COALESCE(c.tamper_event_count_24h, 0) AS tamper_count_24h
+			COALESCE(c.tamper_event_count_24h, 0) AS tamper_count_24h,
+			COALESCE((
+				SELECT array_agg(DISTINCT s.ide_name ORDER BY s.ide_name ASC)
+				FROM device_ide_status s
+				WHERE s.device_id = d.id AND s.is_installed = true
+			), '{}'::text[]) AS active_ides
 		FROM devices d
 		LEFT JOIN device_compliance_reports c ON c.device_id = d.id
 		WHERE ($1 = '' OR d.tenant_id::text = $1)
@@ -440,8 +445,12 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 		if err := rows.Scan(
 			&item.DeviceID, &item.Hostname, &item.UserIdentifier, &item.OS, &item.OSVersion,
 			&item.EnrollmentStatus, &lastHeartbeat, &item.OverallCompliance, &item.TamperCount24h,
+			&item.ActiveIDEs,
 		); err != nil {
 			return nil, err
+		}
+		if item.ActiveIDEs == nil {
+			item.ActiveIDEs = []string{}
 		}
 		item.LastHeartbeatAt = lastHeartbeat
 
@@ -457,23 +466,6 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, filter string, li
 			nonCompliantCount++
 		default:
 			offlineCount++
-		}
-
-		// Retrieve active IDE list for this device directly by device_id
-		item.ActiveIDEs = []string{}
-		ideRows, ideErr := s.pool.Query(ctx, `
-			SELECT DISTINCT ide_name FROM device_ide_status 
-			WHERE device_id::text = $1 AND is_installed = true
-			ORDER BY ide_name ASC
-		`, item.DeviceID)
-		if ideErr == nil {
-			for ideRows.Next() {
-				var name string
-				if err := ideRows.Scan(&name); err == nil {
-					item.ActiveIDEs = append(item.ActiveIDEs, name)
-				}
-			}
-			ideRows.Close()
 		}
 
 		summaries = append(summaries, item)

@@ -17,7 +17,19 @@ type Store struct {
 }
 
 func New(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse postgres config: %w", err)
+	}
+
+	// Resilient connection pool parameters
+	cfg.MaxConns = 30
+	cfg.MinConns = 5
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.HealthCheckPeriod = 30 * time.Second
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("connect to postgres: %w", err)
 	}
@@ -297,32 +309,40 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
+	if limit <= 0 {
+		limit = 50
+	}
 	rows, err := s.pool.Query(ctx, `
+		WITH paged_agents AS (
+			SELECT agent_id, display_name, status, policy_version, last_seen_at
+			FROM agents
+			WHERE tenant_id = $1
+			ORDER BY last_seen_at DESC
+			LIMIT $2 OFFSET $3
+		)
 		SELECT
-			a.agent_id,
-			a.display_name,
-			a.status::text AS status,
-			a.policy_version,
-			a.last_seen_at,
+			pa.agent_id,
+			pa.display_name,
+			pa.status::text AS status,
+			pa.policy_version,
+			pa.last_seen_at,
 			COALESCE(e.cnt, 0) AS event_count,
 			COALESCE(al.cnt, 0) AS alert_count
-		FROM agents a
+		FROM paged_agents pa
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
-			WHERE tenant_id = $1
+			WHERE tenant_id = $1 AND agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY agent_id
-		) e ON e.agent_id = a.agent_id
+		) e ON e.agent_id = pa.agent_id
 		LEFT JOIN (
 			SELECT te.agent_id, COUNT(*) AS cnt
 			FROM alerts al
 			JOIN telemetry_events te ON te.event_id = al.event_id
-			WHERE al.tenant_id = $1
+			WHERE al.tenant_id = $1 AND te.agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY te.agent_id
-		) al ON al.agent_id = a.agent_id
-		WHERE a.tenant_id = $1
-		ORDER BY a.last_seen_at DESC
-		LIMIT $2 OFFSET $3
+		) al ON al.agent_id = pa.agent_id
+		ORDER BY pa.last_seen_at DESC
 	`, tenantID, limit, offset)
 	if err != nil {
 		return nil, err

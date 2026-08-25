@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
@@ -244,6 +245,13 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	notAfter := now.Add(90 * 24 * time.Hour)
 	renewAfter := now.Add(60 * 24 * time.Hour)
 
+	deviceBase := "https://device.vexasec.io/api/v2/device"
+	trustURL := "https://device.vexasec.io/v1/trust-bundles/vexa-device-ca-2026-01"
+	if r.Host != "" && strings.Contains(r.Host, "stage") {
+		deviceBase = "https://device-stage.vexasec.io/api/v2/device"
+		trustURL = "https://device-stage.vexasec.io/v1/trust-bundles/vexa-device-ca-2026-01"
+	}
+
 	if rec.IsCompleted {
 		var resp CompleteEnrollmentResponse
 		resp.Device.ID = rec.ExistingDeviceID
@@ -253,8 +261,8 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 		resp.MTLSCertificate.NotAfter = notAfter
 		resp.MTLSCertificate.RenewAfter = renewAfter
 		resp.Trust.BundleID = "vexa-device-ca-2026-01"
-		resp.Trust.BundleURL = "https://device.vexasec.io/v1/trust-bundles/vexa-device-ca-2026-01"
-		resp.DeviceAPIBase = "https://device.vexasec.io/api/v2/device"
+		resp.Trust.BundleURL = trustURL
+		resp.DeviceAPIBase = deviceBase
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -267,22 +275,42 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	if tenantID == "" {
 		tenantID = "default-tenant"
 	}
+	audience := "enroll.vexasec.io"
+	if r.Host != "" && strings.Contains(r.Host, "stage") {
+		audience = r.Host
+	}
 	canonical := FormatCanonicalTranscript(
 		rec.TransactionID,
 		req.ChallengeID,
-		"enroll.vexasec.io",
+		audience,
 		tenantID,
 		rec.Ed25519Fingerprint,
 		rec.MTLSCSRSHA256,
 		"2.0",
 	)
 
-	// 3. Verify Transcript Hash
+	// 3. Verify Transcript Hash (with fallback to default audience if client signed with standard domain)
 	sum := sha256.Sum256([]byte(canonical))
 	expectedHashHex := hex.EncodeToString(sum[:])
 	if req.SignedPayloadSHA256 == "" || req.SignedPayloadSHA256 != expectedHashHex {
-		http.Error(w, `{"error":{"code":"transcript_hash_mismatch","message":"Signed payload hash does not match canonical transcript"}}`, http.StatusBadRequest)
-		return
+		// Fallback check with default audience "enroll.vexasec.io"
+		canonicalDefault := FormatCanonicalTranscript(
+			rec.TransactionID,
+			req.ChallengeID,
+			"enroll.vexasec.io",
+			tenantID,
+			rec.Ed25519Fingerprint,
+			rec.MTLSCSRSHA256,
+			"2.0",
+		)
+		sumDefault := sha256.Sum256([]byte(canonicalDefault))
+		expectedDefaultHex := hex.EncodeToString(sumDefault[:])
+		if req.SignedPayloadSHA256 == expectedDefaultHex {
+			canonical = canonicalDefault
+		} else {
+			http.Error(w, `{"error":{"code":"transcript_hash_mismatch","message":"Signed payload hash does not match canonical transcript"}}`, http.StatusBadRequest)
+			return
+		}
 	}
 
 	// 4. Verify Cryptographic Proof-of-Possession Signature
@@ -348,8 +376,8 @@ func (h *EnrollmentV2Handler) CompleteEnrollment(w http.ResponseWriter, r *http.
 	resp.MTLSCertificate.NotAfter = notAfter
 	resp.MTLSCertificate.RenewAfter = renewAfter
 	resp.Trust.BundleID = "vexa-device-ca-2026-01"
-	resp.Trust.BundleURL = "https://device.vexasec.io/v1/trust-bundles/vexa-device-ca-2026-01"
-	resp.DeviceAPIBase = "https://device.vexasec.io/api/v2/device"
+	resp.Trust.BundleURL = trustURL
+	resp.DeviceAPIBase = deviceBase
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
