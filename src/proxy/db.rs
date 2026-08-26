@@ -66,9 +66,9 @@ pub enum DbCmd {
 /// The manager is cheap to clone (Arc) and provides async helpers.
 #[derive(Clone)]
 pub struct DbManager {
-    cmd_tx: mpsc::UnboundedSender<DbCmd>,
-    // Keep a handle for potential graceful shutdown (not used currently)
+    cmd_tx: mpsc::Sender<DbCmd>,
     _shutdown: Arc<()>,
+    pub dropped_events: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl DbManager {
@@ -153,8 +153,9 @@ impl DbManager {
             [],
         );
 
-        // Channel for commands
-        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<DbCmd>();
+        // Bounded channel for commands to prevent memory exhaustion under high load
+        let (cmd_tx, mut cmd_rx) = mpsc::channel::<DbCmd>(10000);
+        let dropped_events = Arc::new(std::sync::atomic::AtomicU64::new(0));
         // Use Arc to keep connection alive across thread boundaries safely
         let _shutdown = Arc::new(());
         // Spawn background thread
@@ -330,15 +331,23 @@ impl DbManager {
                         }
                     }
                     DbCmd::Prune => {
-                        // Prune if file size > 500 MiB
+                        // 1. Time-based pruning: delete events older than 30 days
+                        let thirty_days_ago_ns = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as i64 - (30 * 86400 * 1_000_000_000);
+                        conn.execute(
+                            "DELETE FROM egress_events WHERE timestamp_ns < ?",
+                            params![thirty_days_ago_ns],
+                        ).ok();
+
+                        // 2. Size-based pruning if file size > 500 MiB
                         if let Ok(metadata) = fs::metadata(&db_path) {
                             if metadata.len() > 500 * 1024 * 1024 {
-                                // Delete oldest 1000 rows
                                 conn.execute(
-                                        "DELETE FROM egress_events WHERE id IN (SELECT id FROM egress_events ORDER BY id ASC LIMIT 1000)",
-                                        [],
-                                    )
-                                    .ok();
+                                    "DELETE FROM egress_events WHERE id IN (SELECT id FROM egress_events ORDER BY id ASC LIMIT 1000)",
+                                    [],
+                                ).ok();
                             }
                         }
                     }
@@ -346,14 +355,27 @@ impl DbManager {
             }
         });
 
-        Self { cmd_tx, _shutdown }
+        Self { cmd_tx, _shutdown, dropped_events }
     }
 
-    /// Async insert of an event.
+    /// Async insert of an event with priority handling for security decisions.
     pub async fn insert(&self, event: EgressEvent) -> Result<(), String> {
-        self.cmd_tx
-            .send(DbCmd::Insert(event))
-            .map_err(|e| format!("Failed to send insert cmd: {}", e))
+        let is_security_decision = event.verdict.as_deref().map(|v| v.starts_with("BLOCK") || v.starts_with("DENY")).unwrap_or(false);
+        if is_security_decision {
+            self.cmd_tx
+                .send(DbCmd::Insert(event))
+                .await
+                .map_err(|e| format!("Failed to send insert cmd: {}", e))
+        } else {
+            match self.cmd_tx.try_send(DbCmd::Insert(event)) {
+                Ok(_) => Ok(()),
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    self.dropped_events.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    Ok(())
+                }
+                Err(e) => Err(format!("Failed to send insert cmd: {}", e)),
+            }
+        }
     }
 
     /// Async fetch of recent events in reverse-chronological order (newest first), limited to `limit`.
@@ -364,6 +386,7 @@ impl DbManager {
                 limit,
                 responder: tx,
             })
+            .await
             .map_err(|e| format!("Failed to send fetch cmd: {}", e))?;
         rx.await
             .map_err(|e| format!("Fetch response error: {}", e))?
@@ -378,6 +401,7 @@ impl DbManager {
                 limit,
                 responder: tx,
             })
+            .await
             .map_err(|e| format!("Failed to send fetch-all cmd: {}", e))?;
         rx.await
             .map_err(|e| format!("FetchAll response error: {}", e))?
@@ -388,6 +412,7 @@ impl DbManager {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
             .send(DbCmd::GetStats { responder: tx })
+            .await
             .map_err(|e| format!("Failed to send stats cmd: {}", e))?;
         rx.await
             .map_err(|e| format!("Stats response error: {}", e))?
@@ -395,7 +420,7 @@ impl DbManager {
 
     /// Async update of anomaly score.
     pub fn update_anomaly_score(&self, session_id: String, timestamp_ns: i64, score: f64) {
-        let _ = self.cmd_tx.send(DbCmd::UpdateAnomalyScore {
+        let _ = self.cmd_tx.try_send(DbCmd::UpdateAnomalyScore {
             session_id,
             timestamp_ns,
             score,
@@ -404,7 +429,7 @@ impl DbManager {
 
     /// Trigger pruning (optional public helper).
     pub fn prune(&self) {
-        let _ = self.cmd_tx.send(DbCmd::Prune);
+        let _ = self.cmd_tx.try_send(DbCmd::Prune);
     }
 }
 

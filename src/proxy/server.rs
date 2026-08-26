@@ -41,38 +41,47 @@ pub async fn run_server(
     mut shutdown_rx: watch::Receiver<bool>,
     tls_acceptor: Option<super::tls::TlsAcceptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Enable SO_REUSEADDR to handle TIME_WAIT on Windows (FR-101)
-    let domain = if listen_addr.is_ipv4() {
-        Domain::IPV4
-    } else {
-        Domain::IPV6
+    let listener = match TcpListener::bind(listen_addr).await {
+        Ok(l) => l,
+        Err(_) => {
+            let domain = if listen_addr.is_ipv4() {
+                Domain::IPV4
+            } else {
+                Domain::IPV6
+            };
+            let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
+            #[cfg(not(windows))]
+            socket.set_reuse_address(true)?;
+            socket.bind(&listen_addr.into())?;
+            socket.listen(128)?;
+            let std_listener: std::net::TcpListener = socket.into();
+            std_listener.set_nonblocking(true)?;
+            TcpListener::from_std(std_listener)?
+        }
     };
-    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
 
-    socket.set_reuse_address(true)?;
-    // On Unix we'd use set_reuse_port(true) too, but on Windows reuse_address is enough
-
-    socket.bind(&listen_addr.into())?;
-    socket.listen(128)?;
-
-    let std_listener: std::net::TcpListener = socket.into();
-    std_listener.set_nonblocking(true)?;
-    let listener = TcpListener::from_std(std_listener)?;
-
-    // FR-5 AC-5.5: Track all active connection tasks so we can abort them
-    // on shutdown (fail-closed). JoinSet::abort_all() cancels every tracked
-    // task, and the reaping branch below prevents unbounded memory growth.
+    // Track active connection tasks and bound max concurrency with a semaphore
     let mut connection_tasks = tokio::task::JoinSet::new();
+    let conn_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(1024));
 
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
                 let (stream, addr) = accept_result?;
+                let permit = match conn_semaphore.clone().try_acquire_owned() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        // Max concurrency ceiling reached; drop connection immediately to protect memory
+                        drop(stream);
+                        continue;
+                    }
+                };
                 let client_ip = addr.ip().to_string();
                 let state = state.clone();
                 let tls = tls_acceptor.clone();
 
                 connection_tasks.spawn(async move {
+                    let _permit = permit;
                     // FR-5 §5.5.6: TLS handshake (if configured).
                     // Done inside the spawned task so a slow handshake
                     // doesn't block the accept loop from taking new connections.
@@ -101,6 +110,16 @@ pub async fn run_server(
                         let client_ip = client_ip.clone();
                         async move {
                             if (req.uri().path() == "/api/events/stream" || req.uri().path() == "/api/v1/telemetry/stream") && req.method() == hyper::Method::GET {
+                                let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
+                                if !is_authorized_management(&client_ip, auth_hdr) {
+                                    use http_body_util::BodyExt;
+                                    let err_body = http_body_util::Full::new(Bytes::from(r#"{"error":"admin_authorization_required"}"#)).map_err(|e| match e {}).boxed();
+                                    return Ok::<_, hyper::Error>(Response::builder()
+                                        .status(StatusCode::UNAUTHORIZED)
+                                        .header("Content-Type", "application/json")
+                                        .body(err_body)
+                                        .unwrap());
+                                }
                                 let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(100);
                                 let mut bcast_rx = state.event_tx.subscribe();
                                 tokio::spawn(async move {
@@ -143,10 +162,8 @@ pub async fn run_server(
                     break;
                 }
             }
-            // FR-5 AC-5.5: Reap completed connection tasks to prevent memory leak.
-            // If a task panicked, the panic hook (installed in main.rs) already
-            // triggered shutdown via the watch channel — this just logs it.
-            Some(result) = connection_tasks.join_next() => {
+            // Reap completed connection tasks to prevent memory leak
+            Some(result) = connection_tasks.join_next(), if !connection_tasks.is_empty() => {
                 if let Err(e) = result {
                     if e.is_panic() {
                         crate::logging::log_event(
@@ -502,6 +519,31 @@ pub(crate) async fn resolve_session(
     }
 }
 
+fn is_loopback(ip: &str) -> bool {
+    ip == "127.0.0.1" || ip == "::1" || ip == "localhost" || ip.starts_with("127.")
+}
+
+fn is_authorized_management(client_ip: &str, auth_header: Option<&str>) -> bool {
+    if is_loopback(client_ip) {
+        return true;
+    }
+    if let Some(auth) = auth_header {
+        if let Some(token) = auth.strip_prefix("Bearer ") {
+            if let Ok(admin_tok) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
+                if !admin_tok.is_empty() && token == admin_tok {
+                    return true;
+                }
+            }
+            if let Ok(gw_sec) = std::env::var("GATEWAY_SECRET") {
+                if !gw_sec.is_empty() && token == gw_sec {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Handle a single HTTP request
 async fn handle_request(
     req: Request<Incoming>,
@@ -510,6 +552,28 @@ async fn handle_request(
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
+
+    // Gate all management/admin routes from unauthenticated network access
+    let is_management_route = path == "/"
+        || path.starts_with("/api/stats")
+        || path.starts_with("/api/events")
+        || path.starts_with("/api/integrations")
+        || path.starts_with("/api/benchmark")
+        || path.starts_with("/api/generate-policy")
+        || path.starts_with("/api/policy/")
+        || path.starts_with("/api/v1/hitl/")
+        || path == "/api/mode";
+
+    if is_management_route {
+        let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
+        if !is_authorized_management(client_ip, auth_hdr) {
+            let err = serde_json::json!({
+                "error": "admin_authorization_required",
+                "message": "Management endpoints are restricted to loopback interface or require Bearer AGENTCONTROL_ADMIN_TOKEN"
+            });
+            return Ok(json_response(StatusCode::UNAUTHORIZED, &err));
+        }
+    }
 
     // LLM API Proxying route (e.g. /v1/chat/completions), excluding /v1/mcp
     if path.starts_with("/v1/") && path != "/v1/mcp" {

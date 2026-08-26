@@ -12,7 +12,7 @@ import (
 
 func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Policy, error) {
 	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+		return nil, fmt.Errorf("tenant_id is required")
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, version, content, is_active, created_at, updated_at
@@ -34,15 +34,12 @@ func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Pol
 		}
 		policies = append(policies, &p)
 	}
-	if len(policies) == 0 && tenantID != "00000000-0000-0000-0000-000000000001" {
-		return s.ListPolicies(ctx, "00000000-0000-0000-0000-000000000001")
-	}
 	return policies, nil
 }
 
 func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
 	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+		return nil, fmt.Errorf("tenant_id is required")
 	}
 	var p model.Policy
 	err := s.pool.QueryRow(ctx, `
@@ -53,9 +50,6 @@ func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model
 		&p.ID, &p.Version, &p.Content, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
-		if tenantID != "00000000-0000-0000-0000-000000000001" {
-			return s.GetRawActivePolicy(ctx, "00000000-0000-0000-0000-000000000001")
-		}
 		return nil, nil
 	}
 	if err != nil {

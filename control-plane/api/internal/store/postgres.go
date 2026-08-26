@@ -245,25 +245,24 @@ func (s *Store) AgentExists(ctx context.Context, tenantID, agentID string) (bool
 	return exists, err
 }
 
-// ResolveTenantIDForAgent checks if an agent or device belongs to a non-default tenant.
+// ResolveTenantIDForAgent checks if an agent or device belongs to a known tenant using exact immutable identifiers.
+// Returns empty string if the identifier is unknown (requiring re-enrollment).
 func (s *Store) ResolveTenantIDForAgent(ctx context.Context, agentID string) string {
 	if agentID == "" {
-		return "00000000-0000-0000-0000-000000000001"
+		return ""
 	}
 	var tenantID string
-	// 1. Check devices table
+	// 1. Check devices table strictly by exact immutable identifier (stable_device_id or UUID id)
 	err := s.pool.QueryRow(ctx, `
 		SELECT tenant_id::text FROM devices 
 		WHERE stable_device_id = $1 
 		   OR id::text = $1 
-		   OR LOWER(display_name) = LOWER($1)
-		   OR $1 ILIKE '%' || LOWER(display_name) || '%'
 		LIMIT 1
 	`, agentID).Scan(&tenantID)
 	if err == nil && tenantID != "" {
 		return tenantID
 	}
-	// 2. Check agents table
+	// 2. Check agents table strictly by exact registered agent_id
 	err = s.pool.QueryRow(ctx, `
 		SELECT tenant_id::text FROM agents 
 		WHERE agent_id = $1 
@@ -272,7 +271,7 @@ func (s *Store) ResolveTenantIDForAgent(ctx context.Context, agentID string) str
 	if err == nil && tenantID != "" {
 		return tenantID
 	}
-	return "00000000-0000-0000-0000-000000000001"
+	return ""
 }
 
 // InsertEvent persists a redacted event scoped to a tenant. Caller must UpsertAgent first.

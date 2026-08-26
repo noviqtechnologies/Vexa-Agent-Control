@@ -827,6 +827,63 @@ pub struct StartArgs {
     /// Run in centralized mode: binds to 0.0.0.0 by default, enables Hub credential management.
     #[arg(long, env = "AGENTCONTROL_CENTRALIZED", default_value_t = false)]
     pub centralized: bool,
+
+    /// Deployment profile (local-shadow, local-enforce, team-enforce, dedicated-enforce)
+    #[arg(long, env = "AGENTCONTROL_PROFILE")]
+    pub profile: Option<String>,
+
+    /// Private management/admin listener interface (default: 127.0.0.1:8082)
+    #[arg(long, env = "AGENTCONTROL_ADMIN_LISTEN")]
+    pub admin_listen: Option<String>,
+
+    /// Shared secret token required for admin management endpoints if exposed over network
+    #[arg(long, env = "AGENTCONTROL_ADMIN_TOKEN")]
+    pub admin_token: Option<String>,
+
+    /// Maximum incoming JSON-RPC frame size for stdio codec (default: 16MB)
+    #[arg(long, default_value_t = 16777216)]
+    pub max_frame_size: usize,
+
+    /// Maximum concurrent connections accepted by the proxy listener
+    #[arg(long, default_value_t = 1024)]
+    pub max_concurrency: usize,
+
+    /// Connection idle timeout in seconds
+    #[arg(long, default_value_t = 30)]
+    pub connection_timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum DeploymentProfile {
+    LocalShadow,
+    LocalEnforce,
+    TeamEnforce,
+    DedicatedEnforce,
+}
+
+impl DeploymentProfile {
+    pub fn parse(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "local-enforce" | "local_enforce" | "enforce" => Self::LocalEnforce,
+            "team-enforce" | "team_enforce" | "team" => Self::TeamEnforce,
+            "dedicated-enforce" | "dedicated_enforce" | "dedicated" | "enterprise" => {
+                Self::DedicatedEnforce
+            }
+            _ => Self::LocalShadow,
+        }
+    }
+
+    pub fn is_enforce(&self) -> bool {
+        !matches!(self, Self::LocalShadow)
+    }
+
+    pub fn default_scan_responses(&self) -> bool {
+        matches!(self, Self::TeamEnforce | Self::DedicatedEnforce)
+    }
+
+    pub fn default_fail_closed(&self) -> bool {
+        matches!(self, Self::TeamEnforce | Self::DedicatedEnforce)
+    }
 }
 
 impl StartArgs {
@@ -859,6 +916,12 @@ impl StartArgs {
             tls_cert: None,
             tls_key: None,
             centralized: true,
+            profile: Some("team-enforce".to_string()),
+            admin_listen: None,
+            admin_token: None,
+            max_frame_size: 16777216,
+            max_concurrency: 1024,
+            connection_timeout_secs: 30,
         }
     }
 }

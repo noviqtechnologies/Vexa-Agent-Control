@@ -43,7 +43,11 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 			ctx := context.WithValue(r.Context(), RequestIDKey, reqID)
 
 			// 1. Ingress spoofing verification
-			if trustedVPCHeaderSecret != "" {
+			if r.TLS == nil {
+				if trustedVPCHeaderSecret == "" {
+					writeJSONError(w, http.StatusUnauthorized, "invalid_ingress_boundary", "Ingress authentication secret not configured on HTTP boundary", reqID, false, "CONFIGURE_INGRESS_SECRET")
+					return
+				}
 				vpcToken := r.Header.Get("X-VPC-Ingress-Auth")
 				if subtle.ConstantTimeCompare([]byte(vpcToken), []byte(trustedVPCHeaderSecret)) != 1 {
 					writeJSONError(w, http.StatusUnauthorized, "invalid_ingress_boundary", "Direct or untrusted ingress rejected", reqID, false, "USE_TRUSTED_LB")
@@ -106,13 +110,22 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 				return
 			}
 
+			reqPrincipal := &RequestPrincipal{
+				TenantID:     principal.TenantID,
+				DeviceID:     principal.DeviceID,
+				AuthnType:    AuthnTypeMTLS,
+				Capabilities: principal.Capabilities,
+			}
+
 			// 4. Authoritative State Gates
 			// Gate 1: REVOKED devices denied everywhere except status endpoint
 			if principal.DeviceState == model.DeviceStateRevoked {
 				if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/api/v2/device/status") {
 					principal.Capabilities = []string{"device.status.read"}
 					principal.RequestID = reqID
+					reqPrincipal.Capabilities = principal.Capabilities
 					ctx = context.WithValue(ctx, DevicePrincipalKey, principal)
+					ctx = context.WithValue(ctx, RequestPrincipalKey, reqPrincipal)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -129,6 +142,7 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 
 			principal.RequestID = reqID
 			ctx = context.WithValue(ctx, DevicePrincipalKey, principal)
+			ctx = context.WithValue(ctx, RequestPrincipalKey, reqPrincipal)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

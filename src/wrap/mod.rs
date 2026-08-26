@@ -500,12 +500,57 @@ pub fn run_protect_orchestration(
     enforce: bool,
     policy: &str,
 ) -> i32 {
-    // Step 0: Ensure baseline policy exists
+    // Step 0: Ensure baseline policy exists and is valid BEFORE mutating client configurations
     let policy_path = std::path::Path::new(policy);
     if !policy_path.exists() {
         if !dry_run {
-            let default_policy = crate::generate_policy::generate_default_baseline_policy();
-            let _ = std::fs::write(policy_path, default_policy);
+            let default_policy_str = crate::generate_policy::generate_default_baseline_policy();
+            
+            // Validate that generated policy compiles
+            if let crate::policy::loader::PolicyLoadResult::Fatal { error } =
+                crate::policy::loader::load_policy_from_str(&default_policy_str, None)
+            {
+                eprintln!("\n  {} Failed to compile baseline policy: {}", "✘".red().bold(), error);
+                return 1;
+            }
+
+            // Ensure parent directory exists
+            if let Some(parent) = policy_path.parent() {
+                if !parent.as_os_str().is_empty() && !parent.exists() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        eprintln!("\n  {} Failed to create policy directory {:?}: {}", "✘".red().bold(), parent, e);
+                        return 1;
+                    }
+                }
+            }
+
+            // Atomic write: write to temp file then rename
+            let tmp_path = policy_path.with_extension("tmp");
+            if let Err(e) = std::fs::write(&tmp_path, default_policy_str.as_bytes()) {
+                eprintln!("\n  {} Failed to write baseline policy to {:?}: {}", "✘".red().bold(), policy_path, e);
+                return 1;
+            }
+            if let Err(e) = std::fs::rename(&tmp_path, policy_path) {
+                eprintln!("\n  {} Failed to atomically commit policy to {:?}: {}", "✘".red().bold(), policy_path, e);
+                let _ = std::fs::remove_file(&tmp_path);
+                return 1;
+            }
+        }
+    } else {
+        // If policy exists, verify it can be read and parsed
+        match std::fs::read_to_string(policy_path) {
+            Ok(content) => {
+                if let crate::policy::loader::PolicyLoadResult::Fatal { error } =
+                    crate::policy::loader::load_policy_from_str(&content, None)
+                {
+                    eprintln!("\n  {} Existing policy at {:?} is invalid: {}", "✘".red().bold(), policy_path, error);
+                    return 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("\n  {} Failed to read existing policy at {:?}: {}", "✘".red().bold(), policy_path, e);
+                return 1;
+            }
         }
     }
 

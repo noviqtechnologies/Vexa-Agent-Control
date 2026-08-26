@@ -60,6 +60,10 @@ type Config struct {
 	// LicenseKey is the Ed25519-signed JWT license key for Agent Control Hub.
 	LicenseKey string
 
+	// LegacySingleTenantMode enables single-tenant legacy compatibility with GATEWAY_SECRET.
+	LegacySingleTenantMode bool
+	LegacyTenantID         string
+
 	// DevMode disables auth requirements. Requires BOTH DEV_MODE=true AND
 	// ALLOW_DEV_MODE=true to activate — prevents accidental copy-paste of
 	// dev config into production Helm values.
@@ -113,6 +117,11 @@ func Load() (*Config, error) {
 	}
 	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
 	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
+	legacySingleTenant := os.Getenv("LEGACY_SINGLE_TENANT_MODE") == "true"
+	legacyTenantID := os.Getenv("LEGACY_TENANT_ID")
+	if legacySingleTenant && legacyTenantID == "" {
+		legacyTenantID = "00000000-0000-0000-0000-000000000001"
+	}
 
 	encryptionHex := os.Getenv("PROVIDER_KEY_ENCRYPTION_SECRET")
 	var encryptionSecret []byte
@@ -153,6 +162,14 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("SAAS_OPERATOR_PASSWORD must not use a known default password in production")
 		}
 
+		if ingressAuthSecret == "" && os.Getenv("DIRECT_TLS_ENABLED") != "true" {
+			return nil, fmt.Errorf("INGRESS_AUTH_SECRET is required in production when running behind an HTTP ingress boundary (set DIRECT_TLS_ENABLED=true or provide a secure secret)")
+		}
+
+		if ingressAuthSecret != "" && (isPlaceholder(ingressAuthSecret) || len(ingressAuthSecret) < 16) {
+			return nil, fmt.Errorf("INGRESS_AUTH_SECRET must not use a known placeholder and must be at least 16 characters in production")
+		}
+
 		if strings.Contains(dbURL, "vexa_secure_password") {
 			return nil, fmt.Errorf("DATABASE_URL contains known default password 'vexa_secure_password'; please configure a secure database password")
 		}
@@ -170,6 +187,8 @@ func Load() (*Config, error) {
 		SaaSOperatorEmail:           saasOpEmail,
 		SaaSOperatorPassword:        saasOpPassword,
 		LicenseKey:                  licenseKey,
+		LegacySingleTenantMode:      legacySingleTenant,
+		LegacyTenantID:              legacyTenantID,
 		DevMode:                     devMode,
 	}, nil
 }

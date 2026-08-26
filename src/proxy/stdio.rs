@@ -318,15 +318,15 @@ pub async fn run_stdio_bridge(
     let child_stdout = child.stdout.take().expect("Failed to open stdout");
 
     // We use FramedRead/Write to parse JSON objects from the streams
-    let mut upstream_reader = FramedRead::new(child_stdout, JsonRpcCodec);
-    let mut upstream_writer = FramedWrite::new(child_stdin, JsonRpcCodec);
+    let mut upstream_reader = FramedRead::new(child_stdout, JsonRpcCodec::new());
+    let mut upstream_writer = FramedWrite::new(child_stdin, JsonRpcCodec::new());
 
     // Also wrap our own stdin/stdout to communicate with the local agent
     let agent_stdin = tokio::io::stdin();
     let agent_stdout = tokio::io::stdout();
 
-    let mut agent_reader = FramedRead::new(agent_stdin, JsonRpcCodec);
-    let mut agent_writer = FramedWrite::new(agent_stdout, JsonRpcCodec);
+    let mut agent_reader = FramedRead::new(agent_stdin, JsonRpcCodec::new());
+    let mut agent_writer = FramedWrite::new(agent_stdout, JsonRpcCodec::new());
 
     // Create a local isolated SessionContext representing the active session (FR-101)
     let local_policy = match state.policy.read() {
@@ -1180,8 +1180,8 @@ pub async fn run_stdio_to_http_bridge(
     let agent_stdin = tokio::io::stdin();
     let agent_stdout = tokio::io::stdout();
 
-    let mut agent_reader = FramedRead::new(agent_stdin, JsonRpcCodec);
-    let mut agent_writer = FramedWrite::new(agent_stdout, JsonRpcCodec);
+    let mut agent_reader = FramedRead::new(agent_stdin, JsonRpcCodec::new());
+    let mut agent_writer = FramedWrite::new(agent_stdout, JsonRpcCodec::new());
 
     let local_policy = match state.policy.read() {
         Ok(guard) => guard.clone(),

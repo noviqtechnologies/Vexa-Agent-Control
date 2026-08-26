@@ -32,7 +32,12 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 			if strings.HasPrefix(auth, "Bearer ") {
 				token := strings.TrimPrefix(auth, "Bearer ")
 				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-					next.ServeHTTP(w, r)
+					principal := &RequestPrincipal{
+						TenantID:  DefaultTenantID,
+						AuthnType: AuthnTypeLegacySecret,
+					}
+					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 			}
@@ -51,7 +56,15 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 						IsAdmin:        sess.IsAdmin,
 						IsSaaSOperator: sess.IsSaaSOperator,
 					}
+					principal := &RequestPrincipal{
+						TenantID:       sess.TenantID,
+						SubjectID:      sess.UserID,
+						AuthnType:      AuthnTypeSession,
+						IsAdmin:        sess.IsAdmin,
+						IsSaaSOperator: sess.IsSaaSOperator,
+					}
 					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
+					ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -87,7 +100,15 @@ func DashboardAuth() func(http.Handler) http.Handler {
 				IsAdmin:        sess.IsAdmin,
 				IsSaaSOperator: sess.IsSaaSOperator,
 			}
+			principal := &RequestPrincipal{
+				TenantID:       sess.TenantID,
+				SubjectID:      sess.UserID,
+				AuthnType:      AuthnTypeSession,
+				IsAdmin:        sess.IsAdmin,
+				IsSaaSOperator: sess.IsSaaSOperator,
+			}
 			ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
+			ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -110,7 +131,15 @@ func SessionAuthOptional() func(http.Handler) http.Handler {
 						IsAdmin:        sess.IsAdmin,
 						IsSaaSOperator: sess.IsSaaSOperator,
 					}
+					principal := &RequestPrincipal{
+						TenantID:       sess.TenantID,
+						SubjectID:      sess.UserID,
+						AuthnType:      AuthnTypeSession,
+						IsAdmin:        sess.IsAdmin,
+						IsSaaSOperator: sess.IsSaaSOperator,
+					}
 					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
+					ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -144,18 +173,35 @@ func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler)
 			token := strings.TrimPrefix(auth, "Bearer ")
 
 			if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-				next.ServeHTTP(w, r)
+				principal := &RequestPrincipal{
+					TenantID:  DefaultTenantID,
+					AuthnType: AuthnTypeLegacySecret,
+				}
+				ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
 			if v != nil {
 				if principal, ok := v.ResolveDevicePrincipal(r.Context(), token); ok && principal != nil {
+					reqPrincipal := &RequestPrincipal{
+						TenantID:     principal.TenantID,
+						DeviceID:     principal.DeviceID,
+						AuthnType:    AuthnTypeDeviceToken,
+						Capabilities: principal.Capabilities,
+					}
 					ctx := context.WithValue(r.Context(), DevicePrincipalKey, principal)
+					ctx = context.WithValue(ctx, RequestPrincipalKey, reqPrincipal)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 				if v.ValidateDeviceToken(r.Context(), token) {
-					next.ServeHTTP(w, r)
+					principal := &RequestPrincipal{
+						TenantID:  DefaultTenantID,
+						AuthnType: AuthnTypeDeviceToken,
+					}
+					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 			}

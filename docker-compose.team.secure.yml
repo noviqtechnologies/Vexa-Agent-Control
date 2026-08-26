@@ -1,0 +1,115 @@
+# ─── Vexa Agent Control — Secure Production Small Team Hub Stack ──────────────
+#
+# Production Features:
+#   - Automatic TLS certificate management via Caddy on port 443 with HTTP->HTTPS redirect
+#   - Secure UI session cookies over HTTPS
+#   - VPC Ingress Auth Secret injection on internal API reverse proxy
+#   - Internal services (postgres, control-plane-api, control-plane-ui) isolated from host network
+#   - Dedicated gateway enforcement profile with loopback management protection
+#
+# Usage:
+#   1. cp .env.team.example .env (fill in secrets and HUB_DOMAIN)
+#   2. docker compose -f docker-compose.team.secure.yml up -d
+#   # Access Web Console: https://hub.yourcompany.com
+#   # Enrolled Hub API:    https://hub.yourcompany.com/api/...
+
+name: vexa-team-hub-secure
+
+services:
+  # ── Caddy Reverse Proxy & TLS Termination ─────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: vexa-team-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      HUB_DOMAIN: ${HUB_DOMAIN:-localhost}
+      INGRESS_AUTH_SECRET: ${INGRESS_AUTH_SECRET:?INGRESS_AUTH_SECRET is required in .env}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - control-plane-ui
+      - control-plane-api
+    networks:
+      - vexa-team-net
+
+  # ── PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vexa-team-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vexa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-vexa_control_plane}
+    volumes:
+      - vexa-postgres-data:/var/lib/postgresql/data
+      - ./control-plane/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vexa} -d ${POSTGRES_DB:-vexa_control_plane}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vexa-team-net
+
+  # ── Control Plane API ─────────────────────────────────────────────────────
+  control-plane-api:
+    build:
+      context: ./control-plane/api
+      dockerfile: Dockerfile
+    container_name: vexa-team-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DATABASE_URL: postgres://${POSTGRES_USER:-vexa}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vexa_control_plane}?sslmode=disable
+      DEV_MODE: "${DEV_MODE:-false}"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?GATEWAY_SECRET is required in .env}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:?POLICY_READ_SECRET is required in .env}
+      PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:?PROVIDER_KEY_ENCRYPTION_SECRET is required in .env}"
+      AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:?AGENTCONTROL_SESSION_SECRET is required in .env}
+      SAAS_OPERATOR_EMAIL: ${SAAS_OPERATOR_EMAIL:-admin@vexa.local}
+      SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:?SAAS_OPERATOR_PASSWORD is required in .env}
+      INGRESS_AUTH_SECRET: ${INGRESS_AUTH_SECRET:?INGRESS_AUTH_SECRET is required in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - vexa-team-net
+
+  # ── Control Plane Web UI Console ──────────────────────────────────────────
+  control-plane-ui:
+    build:
+      context: ./control-plane/ui
+      dockerfile: Dockerfile
+    container_name: vexa-team-ui
+    restart: unless-stopped
+    depends_on:
+      - control-plane-api
+    environment:
+      AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
+    networks:
+      - vexa-team-net
+
+volumes:
+  vexa-postgres-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+
+networks:
+  vexa-team-net:
+    driver: bridge

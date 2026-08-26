@@ -122,6 +122,22 @@ func (s *Store) CreateOrganization(ctx context.Context, org *model.Organization)
 		`, policyID)
 	}
 
+	// Seed default baseline security policy (v1.0.0) with full isolation for the new tenant
+	baselinePolicyYAML := `# Vexa Agent Control Default Baseline Policy
+version: "1.0.0"
+default_action: "allow"
+fail_closed: true
+rules:
+  - name: "block_sensitive_files"
+    action: "deny"
+    description: "Prevent access to sensitive system paths"
+`
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO policies (tenant_id, version, content, is_active, created_at, updated_at)
+		VALUES ($1, '1.0.0', $2, true, now(), now())
+		ON CONFLICT (tenant_id, version) DO NOTHING
+	`, org.ID, baselinePolicyYAML)
+
 	return rawBootstrapToken, nil
 }
 

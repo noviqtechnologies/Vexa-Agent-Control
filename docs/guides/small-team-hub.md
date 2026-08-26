@@ -16,7 +16,8 @@ This guide covers deploying a shared Vexa Control Hub for engineering teams and 
 ## Prerequisites
 
 - Docker 24.0+ and Docker Compose v2+
-- Ports `3000` (Hub Web UI), `8080` (Gateway), and `8081` (Control Plane API) available
+- Domain name pointed to your host (e.g. `hub.yourcompany.com`)
+- Ports `80` and `443` available for HTTPS reverse proxy with automatic TLS
 
 ---
 
@@ -34,6 +35,8 @@ This guide covers deploying a shared Vexa Control Hub for engineering teams and 
    ```
 
 3. Generate secure secrets and populate `.env`:
+   - `HUB_DOMAIN`: `hub.yourcompany.com` (or your reachable domain / host)
+   - `INGRESS_AUTH_SECRET`: `openssl rand -hex 24` (Mandatory secret for VPC reverse proxy header verification)
    - `POSTGRES_PASSWORD`: `openssl rand -hex 24`
    - `GATEWAY_SECRET`: `openssl rand -hex 24`
    - `POLICY_READ_SECRET`: `openssl rand -hex 24`
@@ -41,29 +44,29 @@ This guide covers deploying a shared Vexa Control Hub for engineering teams and 
    - `AGENTCONTROL_SESSION_SECRET`: `openssl rand -hex 32`
    - `SAAS_OPERATOR_PASSWORD`: Strong password for the platform admin
 
-4. Start the team services:
+4. Start the secure team services with automatic TLS termination:
    ```bash
-   docker compose -f docker-compose.team.yml up -d
+   docker compose -f docker-compose.team.secure.yml up -d
    ```
 
 5. Verify health:
    ```bash
-   docker compose -f docker-compose.team.yml ps
-   curl -s http://localhost:8081/healthz
+   docker compose -f docker-compose.team.secure.yml ps
+   curl -s https://hub.yourcompany.com/healthz
    ```
 
 ---
 
 ## Step 2: Onboarding Developer Workstations
 
-To connect a developer workstation to the shared team hub:
+To connect a developer workstation to the shared team hub securely:
 
-1. Generate a One-Time Enrollment Token (OTET) in the Hub UI at `http://localhost:3000` (or via API).
+1. Generate a One-Time Enrollment Token (OTET) in the Hub UI at `https://<HUB_HOST>` (or via API).
 2. On the developer's workstation, run:
    ```bash
-   agentcontrol enroll --token <OTET_TOKEN> --hub-url http://<HUB_HOST>:8081
+   agentcontrol enroll --token <OTET_TOKEN> --hub-url https://<HUB_HOST>
    ```
-3. Once enrolled, the workstation automatically pulls organization policies and streams telemetry to the team hub.
+3. Once enrolled, the workstation automatically pulls organization policies and streams telemetry to the team hub over encrypted mTLS / TLS.
 
 ---
 
@@ -80,9 +83,9 @@ When you update `agentcontrol-policy.yaml` on the Hub:
 - **Data Persistence:** Hub PostgreSQL database is persisted in the `vexa-postgres-data` Docker volume.
 - **Backup Command:**
   ```bash
-  docker compose -f docker-compose.team.yml exec postgres pg_dump -U vexa vexa_control_plane > "backup-$(date +%F).sql"
+  docker compose -f docker-compose.team.secure.yml exec postgres pg_dump -U vexa vexa_control_plane > "backup-$(date +%F).sql"
   ```
 - **Stop Hub:**
   ```bash
-  docker compose -f docker-compose.team.yml down
+  docker compose -f docker-compose.team.secure.yml down
   ```

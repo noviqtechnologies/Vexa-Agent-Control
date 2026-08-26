@@ -1,7 +1,7 @@
 # Vexa Agent Control
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.65-green.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.66-green.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
 [![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)

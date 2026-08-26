@@ -41,8 +41,8 @@ func (h *IngestHandler) PostEvent(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
-	if tenantID == middleware.DefaultTenantID {
-		tenantID = h.store.ResolveTenantIDForAgent(ctx, event.AgentID)
+	if resolved := h.store.ResolveTenantIDForAgent(ctx, event.AgentID); resolved != "" {
+		tenantID = resolved
 	}
 
 	// Seat enforcement check: reject new agent registrations if seat cap reached
@@ -95,8 +95,8 @@ func (h *IngestHandler) PostAlert(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
-	if tenantID == middleware.DefaultTenantID {
-		tenantID = h.store.ResolveTenantIDForAgent(ctx, alert.Event.AgentID)
+	if resolved := h.store.ResolveTenantIDForAgent(ctx, alert.Event.AgentID); resolved != "" {
+		tenantID = resolved
 	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, alert.Event.AgentID); err != nil {
@@ -138,8 +138,8 @@ func (h *IngestHandler) PostCredential(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
-	if tenantID == middleware.DefaultTenantID {
-		tenantID = h.store.ResolveTenantIDForAgent(ctx, cred.AgentID)
+	if resolved := h.store.ResolveTenantIDForAgent(ctx, cred.AgentID); resolved != "" {
+		tenantID = resolved
 	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, cred.AgentID); err != nil {
@@ -174,8 +174,8 @@ func (h *IngestHandler) PostMcpServers(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
-	if tenantID == middleware.DefaultTenantID {
-		tenantID = h.store.ResolveTenantIDForAgent(ctx, snap.AgentID)
+	if resolved := h.store.ResolveTenantIDForAgent(ctx, snap.AgentID); resolved != "" {
+		tenantID = resolved
 	}
 
 	if err := h.store.UpsertAgent(ctx, tenantID, snap.AgentID); err != nil {

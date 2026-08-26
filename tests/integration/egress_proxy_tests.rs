@@ -70,7 +70,7 @@ fn proxied_client(port: u16) -> Client {
 
 #[tokio::test]
 async fn test_egress_proxy_health_endpoint() {
-    let port = 8089;
+    let port = 18089;
     let mut child = start_proxy(port).await;
 
     let client = Client::new();
@@ -91,7 +91,7 @@ async fn test_egress_proxy_health_endpoint() {
 
 #[tokio::test]
 async fn test_egress_events_api_returns_new_schema() {
-    let port = 8090;
+    let port = 18090;
     let mut child = start_proxy(port).await;
 
     let client = Client::new();
@@ -157,7 +157,7 @@ async fn test_egress_events_api_returns_new_schema() {
 
 #[tokio::test]
 async fn test_http_absolute_uri_proxying() {
-    let port = 8091;
+    let port = 18091;
     let mut child = start_proxy(port).await;
     let mock_port = start_dummy_http_server();
     let client = proxied_client(port);
@@ -178,7 +178,7 @@ async fn test_http_absolute_uri_proxying() {
 
 #[tokio::test]
 async fn test_https_connect_tunnel() {
-    let port = 8092;
+    let port = 18092;
     let mut child = start_proxy(port).await;
     let mock_port = start_dummy_http_server();
 
@@ -212,7 +212,7 @@ async fn test_https_connect_tunnel() {
 
 #[tokio::test]
 async fn test_stats_endpoint_present() {
-    let port = 8093;
+    let port = 18093;
     let mut child = start_proxy(port).await;
 
     let client = Client::new();

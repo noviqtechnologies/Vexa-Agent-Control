@@ -22,14 +22,20 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-/// Locate the agentcontrol binary. Prefers release build, falls back to debug.
+/// Locate the agentcontrol binary for the active test build.
 fn find_agentcontrol_binary() -> Option<PathBuf> {
+    if let Ok(bin) = std::env::var("CARGO_BIN_EXE_agentcontrol") {
+        let p = PathBuf::from(bin);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let candidates = [
-        manifest_dir.join("target/release/agentcontrol"),
-        manifest_dir.join("target/release/agentcontrol.exe"),
-        manifest_dir.join("target/debug/agentcontrol"),
         manifest_dir.join("target/debug/agentcontrol.exe"),
+        manifest_dir.join("target/debug/agentcontrol"),
+        manifest_dir.join("target/release/agentcontrol.exe"),
+        manifest_dir.join("target/release/agentcontrol"),
     ];
     for path in &candidates {
         if path.is_file() {
@@ -112,6 +118,7 @@ fn test_stdio_proxy_process_integration() {
 
     // Spawn: agentcontrol stdio-proxy -- python3 <echo_upstream.py>
     let mut proxy = Command::new(&binary)
+        .current_dir(dir.path())
         .args(["stdio-proxy", "--", "python3"])
         .arg(&upstream_script)
         .env("UPSTREAM_HIT_LOG", &hit_log)

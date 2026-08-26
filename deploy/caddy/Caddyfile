@@ -1,0 +1,32 @@
+{
+    admin off
+}
+
+{$HUB_DOMAIN:localhost} {
+    encode gzip zstd
+
+    # Route API and device requests directly to Control Plane API with Ingress Secret injection
+    handle /api/* {
+        reverse_proxy control-plane-api:8081 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-VPC-Ingress-Auth {$INGRESS_AUTH_SECRET}
+        }
+    }
+
+    handle /healthz {
+        reverse_proxy control-plane-api:8081
+    }
+
+    # Route all UI and frontend routes to Web Console
+    handle {
+        reverse_proxy control-plane-ui:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}

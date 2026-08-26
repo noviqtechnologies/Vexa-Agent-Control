@@ -1138,8 +1138,8 @@ pub async fn evaluate_jsonrpc(
         },
         (None, None) => {
             if !state.policy_loaded.load(Ordering::Relaxed) {
-                if !state.shadow_mode.load(Ordering::Relaxed) && !state.dry_run {
-                    // Active Enforcement Mode requires a valid policy file (Fail Closed)
+                if state.centralized_mode && !state.shadow_mode.load(Ordering::Relaxed) && !state.dry_run {
+                    // Centralized Gateway Active Enforcement Mode requires a valid policy file (Fail Closed)
                     EvalResult::Deny {
                         reason_code: "no_valid_policy_loaded".to_string(),
                         param_name: None,
@@ -1150,7 +1150,7 @@ pub async fn evaluate_jsonrpc(
                         matched_group_id: None,
                     }
                 } else {
-                    // Out-Of-The-Box Local / Shadow Mode: No policy loaded, Safe Mode is clean.
+                    // Out-Of-The-Box Local Safe Mode / Shadow Mode: No custom policy loaded, Safe Mode is clean.
                     EvalResult::Allow {
                         matched_group_id: None,
                     }

@@ -5,7 +5,30 @@ use serde_json::Value;
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct JsonRpcCodec;
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+
+#[derive(Debug, Clone)]
+pub struct JsonRpcCodec {
+    max_frame_size: usize,
+}
+
+impl Default for JsonRpcCodec {
+    fn default() -> Self {
+        Self {
+            max_frame_size: DEFAULT_MAX_FRAME_SIZE,
+        }
+    }
+}
+
+impl JsonRpcCodec {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_max_frame_size(max_frame_size: usize) -> Self {
+        Self { max_frame_size }
+    }
+}
 
 impl Decoder for JsonRpcCodec {
     type Item = Value;
@@ -14,6 +37,17 @@ impl Decoder for JsonRpcCodec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.is_empty() {
             return Ok(None);
+        }
+
+        if src.len() > self.max_frame_size {
+            src.clear();
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "JSON-RPC frame exceeded maximum size of {} bytes",
+                    self.max_frame_size
+                ),
+            ));
         }
 
         // Try to parse a JSON object from the buffer using StreamDeserializer
@@ -74,7 +108,7 @@ mod tests {
 
     #[test]
     fn test_json_rpc_codec_single_message() {
-        let mut codec = JsonRpcCodec;
+        let mut codec = JsonRpcCodec::new();
         let mut buf = BytesMut::from(r#"{"jsonrpc": "2.0", "method": "test", "id": 1}"#.as_bytes());
 
         let result = codec.decode(&mut buf).unwrap();
@@ -88,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_json_rpc_codec_multiple_messages_no_newline() {
-        let mut codec = JsonRpcCodec;
+        let mut codec = JsonRpcCodec::new();
         let mut buf = BytesMut::from(r#"{"id":1}{"id":2}"#.as_bytes());
 
         let msg1 = codec.decode(&mut buf).unwrap();
@@ -102,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_json_rpc_codec_partial_message() {
-        let mut codec = JsonRpcCodec;
+        let mut codec = JsonRpcCodec::new();
         let mut buf = BytesMut::from(r#"{"id":"#.as_bytes());
 
         let result = codec.decode(&mut buf).unwrap();
@@ -112,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_json_rpc_codec_non_utf8_recovery() {
-        let mut codec = JsonRpcCodec;
+        let mut codec = JsonRpcCodec::new();
         // Some binary non-UTF8 garbage (0xFF 0xFE), then a newline, then a valid JSON message
         let mut data = Vec::new();
         data.extend_from_slice(&[0xFF, 0xFE, 0x00, 0x01, b'\n']);
@@ -120,10 +154,19 @@ mod tests {
 
         let mut buf = BytesMut::from(&data[..]);
 
-        // The first decode call might return None or advance past the newline
-        // If it advances past the newline and parses the next one recursively, it might return Some immediately.
         let result = codec.decode(&mut buf).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap(), json!({"id": 3}));
+    }
+
+    #[test]
+    fn test_json_rpc_codec_max_frame_size_enforced() {
+        let mut codec = JsonRpcCodec::with_max_frame_size(64);
+        let oversized = vec![b'a'; 128];
+        let mut buf = BytesMut::from(&oversized[..]);
+
+        let result = codec.decode(&mut buf);
+        assert!(result.is_err());
+        assert!(buf.is_empty());
     }
 }

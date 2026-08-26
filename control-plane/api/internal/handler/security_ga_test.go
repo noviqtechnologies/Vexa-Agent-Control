@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -118,5 +119,67 @@ func TestSecurityGA_DirectMTLSHeaderSpoofingDenied(t *testing.T) {
 	}
 	if nextCalled {
 		t.Fatalf("handler should not have been called on ingress spoofing attempt")
+	}
+}
+
+func TestSecurityGA_MissingIngressSecretFailsStartupInProduction(t *testing.T) {
+	// Running in production without INGRESS_AUTH_SECRET and without DIRECT_TLS_ENABLED must fail
+	t.Setenv("DEV_MODE", "false")
+	t.Setenv("ALLOW_DEV_MODE", "false")
+	t.Setenv("DATABASE_URL", "postgres://localhost:5432/test")
+	t.Setenv("GATEWAY_SECRET", "prod_gateway_secret_very_secure_67890")
+	t.Setenv("PROVIDER_KEY_ENCRYPTION_SECRET", "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90")
+	t.Setenv("INGRESS_AUTH_SECRET", "")
+	t.Setenv("VPC_INGRESS_AUTH_SECRET", "")
+	t.Setenv("DIRECT_TLS_ENABLED", "false")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatalf("expected config.Load() to fail when INGRESS_AUTH_SECRET is omitted in production")
+	}
+}
+
+func TestSecurityGA_MissingIngressSecretOnBoundaryRejected(t *testing.T) {
+	// Middleware configured with empty ingress secret behind HTTP proxy must reject
+	mtlsMiddleware := middleware.StrictDeviceMTLS(nil, "")
+
+	handler := mtlsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/device/bootstrap", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized when ingress auth secret is empty on HTTP boundary, got %d", w.Code)
+	}
+}
+
+func TestSecurityGA_RequestPrincipalResolvedProperly(t *testing.T) {
+	// Verify RequestPrincipal is properly extracted from context
+	principal := &middleware.RequestPrincipal{
+		TenantID:       "tenant-12345",
+		SubjectID:      "user-abc",
+		AuthnType:      middleware.AuthnTypeSession,
+		IsAdmin:        true,
+		IsSaaSOperator: false,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
+	ctx := context.WithValue(req.Context(), middleware.RequestPrincipalKey, principal)
+	req = req.WithContext(ctx)
+
+	resolvedTenant, err := middleware.ResolveAuthenticatedTenantScope(req)
+	if err != nil {
+		t.Fatalf("unexpected error resolving tenant: %v", err)
+	}
+	if resolvedTenant != "tenant-12345" {
+		t.Fatalf("expected tenant-12345, got %s", resolvedTenant)
+	}
+
+	p := middleware.RequestPrincipalFromContext(req.Context())
+	if p == nil || p.TenantID != "tenant-12345" || !p.IsAdmin {
+		t.Fatalf("failed to retrieve complete RequestPrincipal from context")
 	}
 }

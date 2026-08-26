@@ -11,7 +11,7 @@ impl Drop for ChildGuard {
 
 #[tokio::test]
 async fn test_dashboard_api_endpoints() {
-    let listen_addr = "127.0.0.1:8085";
+    let listen_addr = "127.0.0.1:18085";
 
     // Spawn proxy server in shadow mode for testing
     let bin = env!("CARGO_BIN_EXE_agentcontrol");

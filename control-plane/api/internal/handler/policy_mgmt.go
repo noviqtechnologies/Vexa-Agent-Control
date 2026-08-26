@@ -52,7 +52,8 @@ func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 	}
 	if policy == nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{}`))
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"no_active_policy"}`))
 		return
 	}
 
