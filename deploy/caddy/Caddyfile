@@ -5,7 +5,13 @@
 {$HUB_DOMAIN:localhost} {
     encode gzip zstd
 
-    # Route API and device requests directly to Control Plane API with Ingress Secret injection
+    tls {
+        client_auth {
+            mode request
+        }
+    }
+
+    # Route API and device requests directly to Control Plane API with Ingress Secret and Client Cert headers
     handle /api/* {
         reverse_proxy control-plane-api:8081 {
             header_up Host {host}
@@ -13,6 +19,9 @@
             header_up X-Forwarded-For {remote_host}
             header_up X-Forwarded-Proto {scheme}
             header_up X-VPC-Ingress-Auth {$INGRESS_AUTH_SECRET}
+            header_up X-Client-Cert-Present {http.request.tls.client.san.dns_names}
+            header_up X-Client-Cert-Serial {http.request.tls.client.serial_number}
+            header_up X-Client-Cert-SHA256 {http.request.tls.client.fingerprint_sha256}
         }
     }
 

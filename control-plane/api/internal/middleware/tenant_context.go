@@ -78,10 +78,10 @@ func RequireTenantPrincipal(ctx context.Context) (*RequestPrincipal, error) {
 }
 
 // TenantIDFromContext extracts the tenant UUID from the RequestPrincipal, UserClaims, or DevicePrincipal in context.
-// Returns DefaultTenantID only if no tenant claim is found.
+// Returns empty string if no authenticated tenant claim is found.
 func TenantIDFromContext(ctx context.Context) string {
 	if ctx == nil {
-		return DefaultTenantID
+		return ""
 	}
 	if p := RequestPrincipalFromContext(ctx); p != nil && p.TenantID != "" {
 		return p.TenantID
@@ -92,7 +92,7 @@ func TenantIDFromContext(ctx context.Context) string {
 	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.TenantID != "" {
 		return dev.TenantID
 	}
-	return DefaultTenantID
+	return ""
 }
 
 // ResolveAuthenticatedTenantScope resolves the authoritative tenant ID from verified credentials only.
@@ -143,14 +143,14 @@ func ResolveAuthenticatedTenantScope(r *http.Request) (string, error) {
 	return "", ErrUnauthenticatedTenantScope
 }
 
-// ResolveTenantScope safely resolves the tenant ID, returning DefaultTenantID if unauthenticated,
+// ResolveTenantScope safely resolves the tenant ID, returning empty string if unauthenticated,
 // without allowing unauthenticated requests to inject arbitrary tenant scopes via headers.
 func ResolveTenantScope(r *http.Request) string {
 	tid, err := ResolveAuthenticatedTenantScope(r)
 	if err == nil && tid != "" {
 		return tid
 	}
-	return DefaultTenantID
+	return ""
 }
 
 // IsSaaSOperatorFromContext returns true if the authenticated user is a SaaS operator.

@@ -667,6 +667,11 @@ async fn run_stdio_proxy(
             .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-shadow".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     });
 
     let mut parts: Vec<String> = args.iter().map(|a| proxy::stdio::expand_arg(a)).collect();
@@ -700,65 +705,56 @@ async fn run_stdio_proxy(
 }
 
 async fn dispatch_start(args: cli::StartArgs) -> i32 {
-    run_start(
-        args.policy,
-        args.listen,
-        args.log_path,
-        args.mcp_url,
-        args.agent_pid,
-        args.agent_pid_file,
-        args.kill_mode,
-        args.dry_run,
-        args.rate_limit,
-        args.log_max_bytes,
-        args.oidc_issuer,
-        args.report_path,
-        args.scan_responses,
-        args.block_on_secrets,
-        args.max_scan_bytes,
-        args.siem_backend,
-        args.siem_endpoint,
-        args.siem_token,
-        args.siem_timeout_secs,
-        args.include_params,
-        args.shadow_mode,
-        args.strict_credential_scope,
-        args.tls_cert,
-        args.tls_key,
-        args.centralized,
-    )
-    .await
+    run_start(args).await
 }
 
-#[allow(deprecated, clippy::too_many_arguments)]
-async fn run_start(
-    policy_path: Option<String>,
-    listen: String,
-    log_path: String,
-    mcp_url: String,
-    agent_pid: Option<u32>,
-    agent_pid_file: Option<String>,
-    kill_mode_str: String,
-    dry_run: bool,
-    rate_limit: Option<u32>,
-    log_max_bytes: u64,
-    oidc_issuer: Option<String>,
-    _report_path: Option<String>,
-    scan_responses: bool,
-    block_on_secrets: bool,
-    max_scan_bytes: usize,
-    siem_backend: String,
-    siem_endpoint: String,
-    siem_token: String,
-    siem_timeout_secs: u64,
-    include_params: bool,
-    shadow_mode: bool,
-    strict_credential_scope: bool,
-    tls_cert: Option<String>,
-    tls_key: Option<String>,
-    centralized: bool,
-) -> i32 {
+#[allow(deprecated)]
+async fn run_start(args: cli::StartArgs) -> i32 {
     println!("{} Loading configuration...", "ℹ".blue());
+
+    let profile = args
+        .profile
+        .as_deref()
+        .map(cli::DeploymentProfile::parse)
+        .unwrap_or(if args.shadow_mode {
+            cli::DeploymentProfile::LocalShadow
+        } else if args.centralized {
+            cli::DeploymentProfile::TeamEnforce
+        } else {
+            cli::DeploymentProfile::LocalEnforce
+        });
+
+    let scan_responses = args.scan_responses || profile.default_scan_responses();
+    let block_on_secrets = args.block_on_secrets || profile.default_fail_closed();
+    let shadow_mode = args.shadow_mode || matches!(profile, cli::DeploymentProfile::LocalShadow);
+    let dry_run = args.dry_run;
+    let effective_profile_name = match profile {
+        cli::DeploymentProfile::LocalShadow => "local-shadow".to_string(),
+        cli::DeploymentProfile::LocalEnforce => "local-enforce".to_string(),
+        cli::DeploymentProfile::TeamEnforce => "team-enforce".to_string(),
+        cli::DeploymentProfile::DedicatedEnforce => "dedicated-enforce".to_string(),
+    };
+
+    let policy_path = args.policy;
+    let listen = args.listen;
+    let log_path = args.log_path;
+    let mcp_url = args.mcp_url;
+    let agent_pid = args.agent_pid;
+    let agent_pid_file = args.agent_pid_file;
+    let kill_mode_str = args.kill_mode;
+    let rate_limit = args.rate_limit;
+    let log_max_bytes = args.log_max_bytes;
+    let oidc_issuer = args.oidc_issuer;
+    let max_scan_bytes = args.max_scan_bytes;
+    let siem_backend = args.siem_backend;
+    let siem_endpoint = args.siem_endpoint;
+    let siem_token = args.siem_token;
+    let siem_timeout_secs = args.siem_timeout_secs;
+    let include_params = args.include_params;
+    let strict_credential_scope = args.strict_credential_scope;
+    let tls_cert = args.tls_cert;
+    let tls_key = args.tls_key;
+    let centralized = args.centralized;
 
     // Parse kill mode
     let kill_mode = match KillMode::from_str(&kill_mode_str) {
@@ -1141,6 +1137,15 @@ async fn run_start(
         }),
     );
 
+    let connect_timeout = std::time::Duration::from_secs(10);
+    let request_timeout = std::time::Duration::from_secs(args.connection_timeout_secs.max(5));
+    let http_client = reqwest::Client::builder()
+        .connect_timeout(connect_timeout)
+        .timeout(request_timeout)
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .build()
+        .unwrap_or_default();
+
     let state = Arc::new(ProxyState {
         policy: std::sync::RwLock::new(compiled_policy.clone()),
         audit_logger: audit_logger.clone(),
@@ -1152,7 +1157,7 @@ async fn run_start(
         shadow_mode: std::sync::atomic::AtomicBool::new(shadow_mode),
         policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
         rate_limiter: proxy::handler::RateLimiter::new(rate_limit_val),
-        http_client: reqwest::Client::new(),
+        http_client,
         safe_mode_scanner,
         ready: true,
         db_manager,
@@ -1223,6 +1228,11 @@ async fn run_start(
             }
             map
         },
+        effective_profile: effective_profile_name,
+        max_concurrency: args.max_concurrency,
+        connection_timeout_secs: args.connection_timeout_secs,
+        max_frame_size: args.max_frame_size,
+        admin_token: args.admin_token.clone().or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
     });
 
     if state.dashboard_client.is_some() {
@@ -1920,6 +1930,11 @@ async fn run_wrap(
             .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-enforce".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     });
 
     // Parse the command string
@@ -2155,6 +2170,11 @@ async fn run_dev(
             .filter(|s| !s.is_empty()),
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: if enforce { "local-enforce".to_string() } else { "local-shadow".to_string() },
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     });
 
     if stdio {

@@ -83,13 +83,13 @@ func TestSecurityGA_UnauthenticatedTenantHeaderSpoofingRejected(t *testing.T) {
 		t.Fatalf("expected error from ResolveAuthenticatedTenantScope for unauthenticated request with headers")
 	}
 
-	// ResolveTenantScope fallback should return DefaultTenantID, never the attacker header
+	// ResolveTenantScope should return empty string for unauthenticated request, never the attacker header or default tenant
 	resolved := middleware.ResolveTenantScope(req)
 	if resolved == "attacker-injected-tenant-uuid" {
 		t.Fatalf("CRITICAL: unauthenticated request was able to inject tenant ID via header!")
 	}
-	if resolved != middleware.DefaultTenantID {
-		t.Fatalf("expected DefaultTenantID, got %s", resolved)
+	if resolved != "" {
+		t.Fatalf("expected empty tenant for unauthenticated request, got %s", resolved)
 	}
 }
 

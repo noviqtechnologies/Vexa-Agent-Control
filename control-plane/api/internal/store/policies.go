@@ -60,7 +60,7 @@ func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model
 
 func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
 	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+		return nil, fmt.Errorf("tenant_id is required")
 	}
 	p, err := s.GetRawActivePolicy(ctx, tenantID)
 	if err != nil {
@@ -143,7 +143,7 @@ func (s *Store) EnsurePoliciesSchema(ctx context.Context) error {
 
 func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy) error {
 	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+		return fmt.Errorf("tenant_id is required")
 	}
 	// If this one is active, deactivate all others within tenant first in a transaction
 	return s.InTx(ctx, func(tx pgx.Tx) error {

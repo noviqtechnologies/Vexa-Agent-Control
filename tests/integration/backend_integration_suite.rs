@@ -83,6 +83,11 @@ fn create_test_proxy_state(policy: Option<CompiledPolicy>) -> (Arc<ProxyState>, 
         pricing_table: None,
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-enforce".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     });
 
     (state, dir)

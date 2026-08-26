@@ -1,19 +1,23 @@
-# ─── Vexa Agent Control — Small Team Hub Stack (Team / SMB Edition) ───────────
+# ─── Vexa Agent Control — Local Demonstration Profile ─────────────────────────
+#
+# WARNING: This profile is for LOCAL DEMO / EVALUATION ONLY.
+# For production or any network-reachable deployment, use docker-compose.team.secure.yml
+# which provisions Caddy reverse proxy with TLS certificate termination and VPC ingress auth.
 #
 # Services:
 #   postgres           — Persistent relational database (isolated to internal bridge network)
-#   control-plane-api  — Central Go REST API & Policy Hub (port 8081 internal)
-#   control-plane-ui   — React web console & reverse proxy (port 3000)
-#   agentcontrol-gw    — Vexa policy enforcement gateway (port 8080)
+#   control-plane-api  — Central Go REST API & Policy Hub (port 8081 loopback)
+#   control-plane-ui   — React web console & reverse proxy (port 3000 loopback)
+#   agentcontrol-gw    — Vexa policy enforcement gateway (port 8080 loopback)
 #
-# Production Quick Start:
+# Local Quick Start:
 #   1. cp .env.team.example .env
-#   2. Edit .env with your cryptographically generated secrets
+#   2. Edit .env with your secrets
 #   3. docker compose -f docker-compose.team.yml up -d
-#   # Access Web Console: http://localhost:3000
-#   # Gateway Endpoint:   http://localhost:8080
+#   # Access Web Console: http://127.0.0.1:3000
+#   # Gateway Endpoint:   http://127.0.0.1:8080
 
-name: vexa-team-hub
+name: vexa-team-hub-local-demo
 
 services:
   # ── PostgreSQL Database ───────────────────────────────────────────────────
@@ -58,6 +62,7 @@ services:
       SAAS_OPERATOR_EMAIL: ${SAAS_OPERATOR_EMAIL:-admin@vexa.local}
       SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:?SAAS_OPERATOR_PASSWORD is required in .env}
       INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"
+      LEGACY_SINGLE_TENANT_MODE: "${LEGACY_SINGLE_TENANT_MODE:-true}"
     ports:
       - "127.0.0.1:8081:8081"
     healthcheck:
@@ -81,7 +86,7 @@ services:
     environment:
       AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     networks:
       - vexa-team-net
 
@@ -95,7 +100,7 @@ services:
     depends_on:
       - control-plane-api
     environment:
-      AGENTCONTROL_LISTEN: 0.0.0.0:8080
+      AGENTCONTROL_LISTEN: 127.0.0.1:8080
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
       AGENTCONTROL_DRY_RUN: "false"
       AGENTCONTROL_HUB_URL: http://control-plane-api:8081
@@ -103,7 +108,7 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET}
       POLICY_READ_SECRET: ${POLICY_READ_SECRET}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     networks:
       - vexa-team-net
 

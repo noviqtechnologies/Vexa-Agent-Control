@@ -14,4 +14,5 @@ mod unit {
     mod sprint5_safety_test;
     mod us003_us005_tests;
     mod validator_tests;
+    mod v1067_security_remediation_test;
 }

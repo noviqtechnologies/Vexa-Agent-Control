@@ -22,9 +22,20 @@ type UserClaims struct {
 	IsSaaSOperator bool   `json:"is_saas_operator"`
 }
 
+// LegacyAuthConfig configures single-tenant legacy secret compatibility.
+type LegacyAuthConfig struct {
+	LegacySingleTenantMode bool
+	LegacyTenantID         string
+}
+
 // PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
-// or the operator agentcontrol_session cookie. Fails closed if secret is empty.
-func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
+// (when LegacySingleTenantMode is active) or the operator agentcontrol_session cookie.
+// Fails closed if secret is empty or if unauthenticated in multi-tenant mode.
+func PolicyReadAuth(secret string, legacyAuth ...LegacyAuthConfig) func(http.Handler) http.Handler {
+	var cfg LegacyAuthConfig
+	if len(legacyAuth) > 0 {
+		cfg = legacyAuth[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check Bearer token (gateway read secret)
@@ -32,12 +43,17 @@ func PolicyReadAuth(secret string) func(http.Handler) http.Handler {
 			if strings.HasPrefix(auth, "Bearer ") {
 				token := strings.TrimPrefix(auth, "Bearer ")
 				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-					principal := &RequestPrincipal{
-						TenantID:  DefaultTenantID,
-						AuthnType: AuthnTypeLegacySecret,
+					if cfg.LegacySingleTenantMode && cfg.LegacyTenantID != "" {
+						principal := &RequestPrincipal{
+							TenantID:  cfg.LegacyTenantID,
+							AuthnType: AuthnTypeLegacySecret,
+						}
+						ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
 					}
-					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
-					next.ServeHTTP(w, r.WithContext(ctx))
+					// In multi-tenant mode, shared secret without bound tenancy is rejected
+					http.Error(w, `{"error":"unauthorized_multi_tenant_secret_disabled"}`, http.StatusUnauthorized)
 					return
 				}
 			}
@@ -156,12 +172,12 @@ type DeviceValidator interface {
 }
 
 // GatewayAuth validates either:
-// 1. The shared HMAC secret the gateway uses (GATEWAY_SECRET)
-// 2. An enrolled device token or device ID in the database
-func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler) http.Handler {
-	var v DeviceValidator
-	if len(validator) > 0 {
-		v = validator[0]
+// 1. An enrolled device token or device ID in the database (resolving authoritative device principal & tenant)
+// 2. The shared HMAC secret (GATEWAY_SECRET) ONLY when LegacySingleTenantMode is active with a configured LegacyTenantID
+func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyAuthConfig) func(http.Handler) http.Handler {
+	var cfg LegacyAuthConfig
+	if len(legacyAuth) > 0 {
+		cfg = legacyAuth[0]
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -172,18 +188,9 @@ func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler)
 			}
 			token := strings.TrimPrefix(auth, "Bearer ")
 
-			if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-				principal := &RequestPrincipal{
-					TenantID:  DefaultTenantID,
-					AuthnType: AuthnTypeLegacySecret,
-				}
-				ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
-
-			if v != nil {
-				if principal, ok := v.ResolveDevicePrincipal(r.Context(), token); ok && principal != nil {
+			// 1. Check enrolled device identity
+			if validator != nil {
+				if principal, ok := validator.ResolveDevicePrincipal(r.Context(), token); ok && principal != nil {
 					reqPrincipal := &RequestPrincipal{
 						TenantID:     principal.TenantID,
 						DeviceID:     principal.DeviceID,
@@ -195,10 +202,14 @@ func GatewayAuth(secret string, validator ...DeviceValidator) func(http.Handler)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
-				if v.ValidateDeviceToken(r.Context(), token) {
+			}
+
+			// 2. Check legacy shared secret ONLY if legacy single tenant mode is explicitly enabled
+			if cfg.LegacySingleTenantMode && cfg.LegacyTenantID != "" {
+				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
 					principal := &RequestPrincipal{
-						TenantID:  DefaultTenantID,
-						AuthnType: AuthnTypeDeviceToken,
+						TenantID:  cfg.LegacyTenantID,
+						AuthnType: AuthnTypeLegacySecret,
 					}
 					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
 					next.ServeHTTP(w, r.WithContext(ctx))

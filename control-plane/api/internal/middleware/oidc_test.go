@@ -59,7 +59,7 @@ func TestSessionAuthOptional(t *testing.T) {
 		t.Errorf("expected resolved tenant %s, got %s", testOrgID, extractedTenant)
 	}
 
-	// 2. Without session cookie -> should not fail, should resolve to default tenant
+	// 2. Without session cookie -> should resolve to empty string
 	req2 := httptest.NewRequest("GET", "/api/v2/spend/policies", nil)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
@@ -67,7 +67,7 @@ func TestSessionAuthOptional(t *testing.T) {
 	if rec2.Code != http.StatusOK {
 		t.Errorf("expected 200 OK, got %d", rec2.Code)
 	}
-	if extractedTenant != DefaultTenantID {
-		t.Errorf("expected resolved tenant %s, got %s", DefaultTenantID, extractedTenant)
+	if extractedTenant != "" {
+		t.Errorf("expected empty resolved tenant, got %s", extractedTenant)
 	}
 }

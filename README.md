@@ -1,7 +1,7 @@
 # Vexa Agent Control
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.66-green.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.67-green.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
 [![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)
@@ -214,9 +214,9 @@ cd Vexa-Agent-Control
 # 1. Create your production environment file from the secure template
 cp .env.team.example .env
 
-# 2. Fill in random secrets (e.g., using: openssl rand -hex 32)
-# 3. Start the Team Hub stack
-docker compose -f docker-compose.team.yml up -d
+# 2. Fill in random secrets and your domain (e.g., using: openssl rand -hex 32)
+# 3. Start the secure Team Hub stack
+docker compose -f docker-compose.team.secure.yml up -d
 ```
 
 - **Features:** Centralized policy management (SSE sync), shared audit logs, spend caps, provider key custody, and OTET device onboarding.

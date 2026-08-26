@@ -94,7 +94,7 @@ if (!$Version) {
         $Version = "v1.0.65"
     }
     if (-not $Version) {
-        $Version = "v1.0.66"
+        $Version = "v1.0.67"
     }
 }
 

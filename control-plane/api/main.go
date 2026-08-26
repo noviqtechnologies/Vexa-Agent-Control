@@ -233,9 +233,14 @@ func main() {
 	r.Route("/api/v2/spend", func(r chi.Router) {
 		r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 		
+		legacyAuthCfg := middleware.LegacyAuthConfig{
+			LegacySingleTenantMode: cfg.LegacySingleTenantMode,
+			LegacyTenantID:         cfg.LegacyTenantID,
+		}
+
 		// Workload / Gateway spend reservation lifecycle routes
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db))
+			r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
 			r.Post("/authorize", spendV2H.Authorize)
 			r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
 			r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
@@ -255,27 +260,32 @@ func main() {
 		})
 	})
 
+	legacyAuthCfg := middleware.LegacyAuthConfig{
+		LegacySingleTenantMode: cfg.LegacySingleTenantMode,
+		LegacyTenantID:         cfg.LegacyTenantID,
+	}
+
 	// 6. Device Governance & Sentry Compliance API
 	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
-	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db)).Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
 
 	// Public PKI Enrollment route (Unauthenticated)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
 
 	// Gateway API Spec endpoints (Gateway / Read Secret Auth)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/bootstrap", hubSpecH.GetBootstrap)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/events", hubSpecH.GetEventsStream)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/{id}", hubSpecH.GetPolicyByID)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/credentials/{provider}", hubSpecH.GetProviderCredential)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Post("/api/v1/credentials/rotate", hubSpecH.RotateCredential)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policies/active", policyMgmtH.GetActive)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/active", policyMgmtH.GetActive)
-	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
-	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/bootstrap", hubSpecH.GetBootstrap)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/events", hubSpecH.GetEventsStream)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policies/{id}", hubSpecH.GetPolicyByID)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/credentials/{provider}", hubSpecH.GetProviderCredential)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Post("/api/v1/credentials/rotate", hubSpecH.RotateCredential)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policies/active", policyMgmtH.GetActive)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/active", policyMgmtH.GetActive)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
-	// Ingest endpoints — gateway auth (shared secret / enrolled device ID), NOT OIDC.
+	// Ingest endpoints — gateway auth (enrolled device ID or legacy single tenant mode), NOT OIDC.
 	r.Route("/api/v1/ingest", func(r chi.Router) {
-		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db))
+		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
 		r.Post("/events", ingestH.PostEvent)
 		r.Post("/alerts", ingestH.PostAlert)
 		r.Post("/credentials", ingestH.PostCredential)

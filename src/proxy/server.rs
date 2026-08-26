@@ -62,7 +62,7 @@ pub async fn run_server(
 
     // Track active connection tasks and bound max concurrency with a semaphore
     let mut connection_tasks = tokio::task::JoinSet::new();
-    let conn_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(1024));
+    let conn_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(state.max_concurrency));
 
     loop {
         tokio::select! {
@@ -111,7 +111,7 @@ pub async fn run_server(
                         async move {
                             if (req.uri().path() == "/api/events/stream" || req.uri().path() == "/api/v1/telemetry/stream") && req.method() == hyper::Method::GET {
                                 let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
-                                if !is_authorized_management(&client_ip, auth_hdr) {
+                                if !is_authorized_management(&client_ip, auth_hdr, state.admin_token.as_deref()) {
                                     use http_body_util::BodyExt;
                                     let err_body = http_body_util::Full::new(Bytes::from(r#"{"error":"admin_authorization_required"}"#)).map_err(|e| match e {}).boxed();
                                     return Ok::<_, hyper::Error>(Response::builder()
@@ -523,19 +523,19 @@ fn is_loopback(ip: &str) -> bool {
     ip == "127.0.0.1" || ip == "::1" || ip == "localhost" || ip.starts_with("127.")
 }
 
-fn is_authorized_management(client_ip: &str, auth_header: Option<&str>) -> bool {
+fn is_authorized_management(client_ip: &str, auth_header: Option<&str>, admin_token: Option<&str>) -> bool {
     if is_loopback(client_ip) {
         return true;
     }
     if let Some(auth) = auth_header {
         if let Some(token) = auth.strip_prefix("Bearer ") {
-            if let Ok(admin_tok) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
-                if !admin_tok.is_empty() && token == admin_tok {
+            if let Some(expected) = admin_token {
+                if !expected.is_empty() && token == expected {
                     return true;
                 }
             }
-            if let Ok(gw_sec) = std::env::var("GATEWAY_SECRET") {
-                if !gw_sec.is_empty() && token == gw_sec {
+            if let Ok(admin_tok) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
+                if !admin_tok.is_empty() && token == admin_tok {
                     return true;
                 }
             }
@@ -553,20 +553,24 @@ async fn handle_request(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    // Gate all management/admin routes from unauthenticated network access
+    // Gate all management/admin routes from unauthenticated network access (P1-1, P1-2)
     let is_management_route = path == "/"
         || path.starts_with("/api/stats")
         || path.starts_with("/api/events")
         || path.starts_with("/api/integrations")
         || path.starts_with("/api/benchmark")
         || path.starts_with("/api/generate-policy")
-        || path.starts_with("/api/policy/")
+        || path.starts_with("/api/policy")
+        || path.starts_with("/api/v1/policy")
         || path.starts_with("/api/v1/hitl/")
-        || path == "/api/mode";
+        || path == "/api/mode"
+        || path == "/metrics"
+        || path == "/gateway/status"
+        || path == "/api/v1/status";
 
     if is_management_route {
         let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
-        if !is_authorized_management(client_ip, auth_hdr) {
+        if !is_authorized_management(client_ip, auth_hdr, state.admin_token.as_deref()) {
             let err = serde_json::json!({
                 "error": "admin_authorization_required",
                 "message": "Management endpoints are restricted to loopback interface or require Bearer AGENTCONTROL_ADMIN_TOKEN"
@@ -748,6 +752,10 @@ async fn handle_request(
                     "status": "active",
                     "version": env!("CARGO_PKG_VERSION"),
                     "mode": mode,
+                    "effective_profile": &state.effective_profile,
+                    "max_concurrency": state.max_concurrency,
+                    "max_frame_size": state.max_frame_size,
+                    "connection_timeout_secs": state.connection_timeout_secs,
                     "policy_loaded": policy_loaded,
                     "policy_path": state.policy_path,
                     "uptime_secs": uptime_secs,

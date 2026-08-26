@@ -117,6 +117,11 @@ fn test_tool_history_memory_bounding() {
         pricing_table: None,
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-enforce".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -238,6 +243,11 @@ fn test_cycle_detection_blocking() {
         pricing_table: None,
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-enforce".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     };
 
     let req = json!({
@@ -386,6 +396,11 @@ fn test_pause_interactive_fallback_in_non_tty() {
         pricing_table: None,
         centralized_mode: false,
         provider_keys: dashmap::DashMap::new(),
+        effective_profile: "local-enforce".to_string(),
+        max_concurrency: 1024,
+        connection_timeout_secs: 30,
+        max_frame_size: 16777216,
+        admin_token: None,
     };
 
     let req = json!({

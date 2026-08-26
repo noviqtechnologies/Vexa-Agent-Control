@@ -70,9 +70,8 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 				h := sha256.Sum256(peerCert.Raw)
 				certFingerprint = "sha256:" + hex.EncodeToString(h[:])
 			} else {
-				// 2. Parse GCP ALB / Ingress mTLS Headers
-				certPresent := r.Header.Get("X-Client-Cert-Present")
-				if certPresent != "true" && certPresent != "1" {
+				certPresent := strings.TrimSpace(r.Header.Get("X-Client-Cert-Present"))
+				if certPresent == "" || certPresent == "false" || certPresent == "0" {
 					writeJSONError(w, http.StatusUnauthorized, "device_auth_required", "Mutual TLS client certificate missing or invalid", reqID, false, "PROVISION_MTLS_CERT")
 					return
 				}

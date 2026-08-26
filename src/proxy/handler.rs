@@ -153,6 +153,17 @@ pub struct ProxyState {
     pub centralized_mode: bool,
     /// FR-1 centralized mode: Provider API keys distributed from Hub, securely held in memory.
     pub provider_keys: dashmap::DashMap<String, String>,
+
+    /// Deployment profile name (e.g. "team-enforce", "local-shadow", "local-enforce", "dedicated-enforce")
+    pub effective_profile: String,
+    /// Maximum concurrent connections accepted by the proxy listener
+    pub max_concurrency: usize,
+    /// Connection idle / request timeout in seconds
+    pub connection_timeout_secs: u64,
+    /// Maximum incoming JSON-RPC frame size in bytes
+    pub max_frame_size: usize,
+    /// Shared secret token required for admin management endpoints
+    pub admin_token: Option<String>,
 }
 
 pub struct RateLimiter {
