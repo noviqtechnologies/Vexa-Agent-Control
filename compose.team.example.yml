@@ -1,22 +1,13 @@
-# ─── Vexa Agent Control — Small Team Hub Stack (Team / SMB Edition) ───────────
+# ─── Vexa Agent Control — Small Team Hub Example Deployment Template ─────────
 #
-# Services:
-#   postgres           — Persistent relational database (isolated to internal bridge network)
-#   control-plane-api  — Central Go REST API & Policy Hub (port 8081 internal)
-#   control-plane-ui   — React web console & reverse proxy (port 3000)
-#   agentcontrol-gw    — Vexa policy enforcement gateway (port 8080)
-#
-# Production Quick Start:
+# Production Usage:
 #   1. cp .env.team.example .env
-#   2. Edit .env with your cryptographically generated secrets
-#   3. docker compose -f docker-compose.team.yml up -d
-#   # Access Web Console: http://localhost:3000
-#   # Gateway Endpoint:   http://localhost:8080
+#   2. Populate .env with cryptographically random secrets
+#   3. docker compose -f compose.team.example.yml up -d
 
 name: vexa-team-hub
 
 services:
-  # ── PostgreSQL Database ───────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: vexa-team-postgres
@@ -37,7 +28,6 @@ services:
     networks:
       - vexa-team-net
 
-  # ── Control Plane API ─────────────────────────────────────────────────────
   control-plane-api:
     build:
       context: ./control-plane/api
@@ -69,7 +59,6 @@ services:
     networks:
       - vexa-team-net
 
-  # ── Control Plane Web UI Console ──────────────────────────────────────────
   control-plane-ui:
     build:
       context: ./control-plane/ui
@@ -85,7 +74,6 @@ services:
     networks:
       - vexa-team-net
 
-  # ── Vexa Agent Control Gateway ────────────────────────────────────────────
   agentcontrol-gw:
     build:
       context: .
@@ -114,4 +102,3 @@ volumes:
 networks:
   vexa-team-net:
     driver: bridge
-

@@ -28,7 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    $FallbackVersion = "v1.0.64"
+    $FallbackVersion = "v1.0.65"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan

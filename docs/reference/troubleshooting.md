@@ -49,7 +49,7 @@ xattr -d com.apple.quarantine ~/.local/bin/agentcontrol
 Installation fails on Windows on ARM with asset missing.
 
 **Resolution:**
-For release v1.0.42 and earlier, native ARM64 Windows assets were not published. Ensure you are targeting `v1.0.56+` or build from source using `cargo build --release`.
+For release v1.0.42 and earlier, native ARM64 Windows assets were not published. Ensure you are targeting `v1.0.65+` or build from source using `cargo build --release`.
 
 ---
 

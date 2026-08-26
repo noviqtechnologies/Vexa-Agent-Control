@@ -1138,12 +1138,25 @@ pub async fn evaluate_jsonrpc(
         },
         (None, None) => {
             if !state.policy_loaded.load(Ordering::Relaxed) {
-                // Out-Of-The-Box Safe Mode: No policy loaded, Safe Mode is clean.
-                EvalResult::Allow {
-                    matched_group_id: None,
+                if !state.shadow_mode.load(Ordering::Relaxed) && !state.dry_run {
+                    // Active Enforcement Mode requires a valid policy file (Fail Closed)
+                    EvalResult::Deny {
+                        reason_code: "no_valid_policy_loaded".to_string(),
+                        param_name: None,
+                        param_value: None,
+                        pattern: None,
+                        json_pointer: None,
+                        validator_name: None,
+                        matched_group_id: None,
+                    }
+                } else {
+                    // Out-Of-The-Box Local / Shadow Mode: No policy loaded, Safe Mode is clean.
+                    EvalResult::Allow {
+                        matched_group_id: None,
+                    }
                 }
             } else {
-                // Policy was loaded but is missing/degraded
+                // Policy was loaded but is missing/degraded or no rule matched
                 EvalResult::Deny {
                     reason_code: "no_valid_policy_loaded".to_string(),
                     param_name: None,

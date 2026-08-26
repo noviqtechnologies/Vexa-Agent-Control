@@ -75,8 +75,8 @@ impl DbManager {
     /// Initialise the manager, opening/creating the DB file under $HOME/.agentcontrol/events.db.
     /// Spawns a background thread that processes commands.
     pub fn init() -> Self {
-        // Resolve path
-        let home_dir = dirs::home_dir().expect("Failed to get home directory");
+        // Resolve path with fallback
+        let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
         let old_dir = PathBuf::from(&home_dir).join(".agentwall");
 
@@ -93,14 +93,19 @@ impl DbManager {
         }
 
         let db_path = new_dir.join("events.db");
-        // Open connection (will create file if missing)
-        let conn = Connection::open(&db_path).expect("Failed to open SQLite DB");
+        // Open connection with in-memory fallback on filesystem failure
+        let conn = Connection::open(&db_path).unwrap_or_else(|e| {
+            eprintln!("[db] warning: failed to open persistent SQLite at {:?}: {}. Falling back to in-memory DB.", db_path, e);
+            Connection::open_in_memory().expect("failed to open fallback in-memory SQLite DB")
+        });
+
         // Enable WAL mode so concurrent stdio-proxy processes can write without SQLITE_BUSY errors.
-        // WAL allows one writer + many readers simultaneously across processes (P0 fix).
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
-            .expect("Failed to set WAL mode / busy timeout");
+        if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;") {
+            eprintln!("[db] warning: failed to set WAL mode: {}", e);
+        }
+
         // Ensure schema exists
-        conn.execute(
+        if let Err(e) = conn.execute(
             "CREATE TABLE IF NOT EXISTS egress_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp_ns INTEGER NOT NULL,
@@ -126,34 +131,31 @@ impl DbManager {
                 policy_rule TEXT
             )",
             [],
-        )
-        .expect("Failed to create egress_events table");
+        ) {
+            eprintln!("[db] warning: failed to initialize egress_events table: {}", e);
+        }
 
         // Schema v2.0 migrations
-        conn.execute(
+        let _ = conn.execute(
             "ALTER TABLE egress_events ADD COLUMN semantic_anomaly_score REAL",
             [],
-        )
-        .ok();
-        conn.execute(
+        );
+        let _ = conn.execute(
             "ALTER TABLE egress_events ADD COLUMN identity_context TEXT",
             [],
-        )
-        .ok();
-        conn.execute(
+        );
+        let _ = conn.execute(
             "ALTER TABLE egress_events ADD COLUMN source TEXT",
             [],
-        )
-        .ok();
-        conn.execute(
+        );
+        let _ = conn.execute(
             "ALTER TABLE egress_events ADD COLUMN policy_rule TEXT",
             [],
-        )
-        .ok();
+        );
 
         // Channel for commands
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<DbCmd>();
-        // Use Arc to keep connection alive across thread boundaries safely (rusqlite is not Send, so we keep it in the thread)
+        // Use Arc to keep connection alive across thread boundaries safely
         let _shutdown = Arc::new(());
         // Spawn background thread
         std::thread::spawn(move || {
@@ -192,88 +194,110 @@ impl DbManager {
                             event.source,
                             event.policy_rule
                         ];
-                        if let Some(ref mut tx) = tx {
-                            tx.execute(sql, params_arr).ok();
+                        let res = if let Some(ref mut tx) = tx {
+                            tx.execute(sql, params_arr)
                         } else {
-                            conn.execute(sql, params_arr).ok();
+                            conn.execute(sql, params_arr)
+                        };
+                        if let Err(e) = res {
+                            eprintln!("[db] failed to insert egress event: {}", e);
                         }
                     }
                     DbCmd::Fetch { limit, responder } => {
-                        let mut stmt = conn.prepare(
-                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id DESC LIMIT ?",
-                            )
-                            .expect("Failed to prepare fetch stmt");
-                        let rows = stmt
-                            .query_map(params![limit as i64], |row| {
-                                Ok(EgressEvent {
-                                    timestamp_ns: row.get(0)?,
-                                    session_id: row.get(1)?,
-                                    transport: row.get(2)?,
-                                    method: row.get(3)?,
-                                    target_host: row.get(4)?,
-                                    target_port: row.get(5)?,
-                                    url_path: row.get(6)?,
-                                    request_headers: row.get(7)?,
-                                    request_body: row.get(8)?,
-                                    request_body_hash: row.get(9)?,
-                                    response_status: row.get(10)?,
-                                    response_body: row.get(11)?,
-                                    response_body_hash: row.get(12)?,
-                                    dlp_findings: row.get(13)?,
-                                    injection_findings: row.get(14)?,
-                                    latency_ms: row.get(15)?,
-                                    verdict: row.get(16)?,
-                                    semantic_anomaly_score: row.get(17).unwrap_or(None),
-                                    identity_context: row.get(18).unwrap_or(None),
-                                    source: row.get(19).unwrap_or(None),
-                                    policy_rule: row.get(20).unwrap_or(None),
-                                })
-                            })
-                            .expect("Failed to query events");
-                        let mut events = Vec::new();
-                        for e in rows.flatten() {
-                            events.push(e);
+                        let stmt_res = conn.prepare(
+                            "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id DESC LIMIT ?",
+                        );
+                        match stmt_res {
+                            Ok(mut stmt) => {
+                                match stmt.query_map(params![limit as i64], |row| {
+                                    Ok(EgressEvent {
+                                        timestamp_ns: row.get(0)?,
+                                        session_id: row.get(1)?,
+                                        transport: row.get(2)?,
+                                        method: row.get(3)?,
+                                        target_host: row.get(4)?,
+                                        target_port: row.get(5)?,
+                                        url_path: row.get(6)?,
+                                        request_headers: row.get(7)?,
+                                        request_body: row.get(8)?,
+                                        request_body_hash: row.get(9)?,
+                                        response_status: row.get(10)?,
+                                        response_body: row.get(11)?,
+                                        response_body_hash: row.get(12)?,
+                                        dlp_findings: row.get(13)?,
+                                        injection_findings: row.get(14)?,
+                                        latency_ms: row.get(15)?,
+                                        verdict: row.get(16)?,
+                                        semantic_anomaly_score: row.get(17).unwrap_or(None),
+                                        identity_context: row.get(18).unwrap_or(None),
+                                        source: row.get(19).unwrap_or(None),
+                                        policy_rule: row.get(20).unwrap_or(None),
+                                    })
+                                }) {
+                                    Ok(rows) => {
+                                        let mut events = Vec::new();
+                                        for e in rows.flatten() {
+                                            events.push(e);
+                                        }
+                                        let _ = responder.send(Ok(events));
+                                    }
+                                    Err(e) => {
+                                        let _ = responder.send(Err(format!("Query execution failed: {}", e)));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = responder.send(Err(format!("Statement preparation failed: {}", e)));
+                            }
                         }
-                        let _ = responder.send(Ok(events));
                     }
                     DbCmd::FetchAll { limit, responder } => {
-                        // Oldest-first ordering for policy generation corpus (FR-4)
-                        let mut stmt = conn.prepare(
-                                "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id ASC LIMIT ?",
-                            )
-                            .expect("Failed to prepare fetch-all stmt");
-                        let rows = stmt
-                            .query_map(params![limit as i64], |row| {
-                                Ok(EgressEvent {
-                                    timestamp_ns: row.get(0)?,
-                                    session_id: row.get(1)?,
-                                    transport: row.get(2)?,
-                                    method: row.get(3)?,
-                                    target_host: row.get(4)?,
-                                    target_port: row.get(5)?,
-                                    url_path: row.get(6)?,
-                                    request_headers: row.get(7)?,
-                                    request_body: row.get(8)?,
-                                    request_body_hash: row.get(9)?,
-                                    response_status: row.get(10)?,
-                                    response_body: row.get(11)?,
-                                    response_body_hash: row.get(12)?,
-                                    dlp_findings: row.get(13)?,
-                                    injection_findings: row.get(14)?,
-                                    latency_ms: row.get(15)?,
-                                    verdict: row.get(16)?,
-                                    semantic_anomaly_score: row.get(17).unwrap_or(None),
-                                    identity_context: row.get(18).unwrap_or(None),
-                                    source: row.get(19).unwrap_or(None),
-                                    policy_rule: row.get(20).unwrap_or(None),
-                                })
-                            })
-                            .expect("Failed to query all events");
-                        let mut events = Vec::new();
-                        for e in rows.flatten() {
-                            events.push(e);
+                        let stmt_res = conn.prepare(
+                            "SELECT timestamp_ns, session_id, transport, method, target_host, target_port, url_path, request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash, dlp_findings, injection_findings, latency_ms, verdict, semantic_anomaly_score, identity_context, source, policy_rule FROM egress_events ORDER BY id ASC LIMIT ?",
+                        );
+                        match stmt_res {
+                            Ok(mut stmt) => {
+                                match stmt.query_map(params![limit as i64], |row| {
+                                    Ok(EgressEvent {
+                                        timestamp_ns: row.get(0)?,
+                                        session_id: row.get(1)?,
+                                        transport: row.get(2)?,
+                                        method: row.get(3)?,
+                                        target_host: row.get(4)?,
+                                        target_port: row.get(5)?,
+                                        url_path: row.get(6)?,
+                                        request_headers: row.get(7)?,
+                                        request_body: row.get(8)?,
+                                        request_body_hash: row.get(9)?,
+                                        response_status: row.get(10)?,
+                                        response_body: row.get(11)?,
+                                        response_body_hash: row.get(12)?,
+                                        dlp_findings: row.get(13)?,
+                                        injection_findings: row.get(14)?,
+                                        latency_ms: row.get(15)?,
+                                        verdict: row.get(16)?,
+                                        semantic_anomaly_score: row.get(17).unwrap_or(None),
+                                        identity_context: row.get(18).unwrap_or(None),
+                                        source: row.get(19).unwrap_or(None),
+                                        policy_rule: row.get(20).unwrap_or(None),
+                                    })
+                                }) {
+                                    Ok(rows) => {
+                                        let mut events = Vec::new();
+                                        for e in rows.flatten() {
+                                            events.push(e);
+                                        }
+                                        let _ = responder.send(Ok(events));
+                                    }
+                                    Err(e) => {
+                                        let _ = responder.send(Err(format!("Query execution failed: {}", e)));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = responder.send(Err(format!("Statement preparation failed: {}", e)));
+                            }
                         }
-                        let _ = responder.send(Ok(events));
                     }
                     DbCmd::GetStats { responder } => {
                         let total_events: i64 = conn

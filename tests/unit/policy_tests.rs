@@ -535,3 +535,39 @@ fn test_params_must_be_object_or_null() {
         _ => panic!("Expected param_type_mismatch for array-as-params"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Security GA: Strict Parameter Checking (Undeclared top-level parameter denied)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_undeclared_top_level_parameter_denied() {
+    let p = policy(vec![allow_tool(
+        "read_file",
+        vec![string_param("path", true)],
+    )]);
+
+    // Call with undeclared extra parameter "extra_param"
+    let bad_payload = json!({
+        "path": "/workspace/main.rs",
+        "extra_param": "malicious_injected_field"
+    });
+
+    match p.evaluate_test("read_file", &bad_payload) {
+        EvalResult::Deny { reason_code, param_name, .. } => {
+            assert_eq!(reason_code, "param_unknown");
+            assert_eq!(param_name, Some("extra_param".to_string()));
+        }
+        _ => panic!("Expected param_unknown denial for undeclared parameter"),
+    }
+
+    // Valid payload with only declared parameter -> Allow
+    let valid_payload = json!({
+        "path": "/workspace/main.rs"
+    });
+    assert!(matches!(
+        p.evaluate_test("read_file", &valid_payload),
+        EvalResult::Allow { .. }
+    ));
+}
+

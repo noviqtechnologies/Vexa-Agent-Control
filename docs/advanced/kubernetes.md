@@ -49,7 +49,7 @@ spec:
 
         # Vexa Agent Control Security Sidecar
         - name: security-sidecar
-          image: noviqtechnologies/agentcontrol:1.0.56
+          image: noviqtechnologies/agentcontrol:1.0.65
           args: ["start", "--policy", "/etc/agentcontrol/policy.yaml"]
           volumeMounts:
             - name: policy-vol

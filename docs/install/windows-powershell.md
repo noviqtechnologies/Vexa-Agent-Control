@@ -16,8 +16,8 @@ This is the primary and recommended installation path for Windows 10 and Windows
 
 | Windows Architecture | Release Asset | Status | Notes |
 |---|---|---|---|
-| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.56-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
-| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.56-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
+| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.65-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
+| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.65-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
 
 ---
 

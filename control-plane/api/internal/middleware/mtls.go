@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -55,22 +57,32 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 				return
 			}
 
-			// 2. Parse GCP ALB mTLS Headers
-			certPresent := r.Header.Get("X-Client-Cert-Present")
-			if certPresent != "true" && certPresent != "1" {
-				writeJSONError(w, http.StatusUnauthorized, "device_auth_required", "Mutual TLS client certificate missing or invalid", reqID, false, "PROVISION_MTLS_CERT")
-				return
-			}
+			var certSerial, certFingerprint string
 
-			certSerial := strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
-			certFingerprint := strings.TrimSpace(r.Header.Get("X-Client-Cert-SHA256"))
-			if certSerial == "" || certFingerprint == "" {
-				writeJSONError(w, http.StatusUnauthorized, "invalid_device_credential", "Client certificate metadata incomplete", reqID, false, "RENEGOTIATE_MTLS")
-				return
-			}
+			// Direct TLS client certificate extraction
+			if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+				peerCert := r.TLS.PeerCertificates[0]
+				certSerial = peerCert.SerialNumber.String()
+				h := sha256.Sum256(peerCert.Raw)
+				certFingerprint = "sha256:" + hex.EncodeToString(h[:])
+			} else {
+				// 2. Parse GCP ALB / Ingress mTLS Headers
+				certPresent := r.Header.Get("X-Client-Cert-Present")
+				if certPresent != "true" && certPresent != "1" {
+					writeJSONError(w, http.StatusUnauthorized, "device_auth_required", "Mutual TLS client certificate missing or invalid", reqID, false, "PROVISION_MTLS_CERT")
+					return
+				}
 
-			if !strings.HasPrefix(certFingerprint, "sha256:") {
-				certFingerprint = "sha256:" + certFingerprint
+				certSerial = strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
+				certFingerprint = strings.TrimSpace(r.Header.Get("X-Client-Cert-SHA256"))
+				if certSerial == "" || certFingerprint == "" {
+					writeJSONError(w, http.StatusUnauthorized, "invalid_device_credential", "Client certificate metadata incomplete", reqID, false, "RENEGOTIATE_MTLS")
+					return
+				}
+
+				if !strings.HasPrefix(certFingerprint, "sha256:") {
+					certFingerprint = "sha256:" + certFingerprint
+				}
 			}
 
 			// 3. Database lookup for device principal & state

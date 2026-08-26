@@ -65,6 +65,44 @@ func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
+// SetTenantContext sets the PostgreSQL session variables for Row Level Security (RLS) within a transaction.
+func (s *Store) SetTenantContext(ctx context.Context, tx pgx.Tx, tenantID string, isSaaSOperator bool) error {
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+	operatorStr := "false"
+	if isSaaSOperator {
+		operatorStr = "true"
+	}
+	_, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true), set_config('app.is_saas_operator', $2, true)", tenantID, operatorStr)
+	if err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+	return nil
+}
+
+// WithTenantTx executes a callback within a transaction initialized with the appropriate tenant RLS context.
+func (s *Store) WithTenantTx(ctx context.Context, tenantID string, isSaaSOperator bool, fn func(tx pgx.Tx) error) error {
+	if s.pool == nil {
+		return fmt.Errorf("database pool is not initialized")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.SetTenantContext(ctx, tx, tenantID, isSaaSOperator); err != nil {
+		return err
+	}
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // EnsureCoreSchema guarantees schema consistency for agents, telemetry, alerts, credentials, and MCP servers.
 func (s *Store) EnsureCoreSchema(ctx context.Context) error {
 	if s.pool == nil {

@@ -12,30 +12,21 @@ func (s *Store) GetUserByEmail(ctx context.Context, tenantID, authProviderID, em
 	var u model.User
 	var err error
 
-	if tenantID != "" {
-		err = s.pool.QueryRow(ctx, `
-			SELECT id, tenant_id, COALESCE(auth_provider_id::text, ''), email, COALESCE(password_hash, ''), is_admin, is_saas_operator, created_at, updated_at
-			FROM users
-			WHERE (auth_provider_id::text = $1 OR $1 = '')
-			  AND LOWER(email) = LOWER($2)
-			  AND tenant_id = $3
-			ORDER BY created_at DESC
-			LIMIT 1
-		`, authProviderID, email, tenantID).Scan(
-			&u.ID, &u.TenantID, &u.AuthProviderID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.IsSaaSOperator, &u.CreatedAt, &u.UpdatedAt,
-		)
-	} else {
-		err = s.pool.QueryRow(ctx, `
-			SELECT id, tenant_id, COALESCE(auth_provider_id::text, ''), email, COALESCE(password_hash, ''), is_admin, is_saas_operator, created_at, updated_at
-			FROM users
-			WHERE (auth_provider_id::text = $1 OR $1 = '')
-			  AND LOWER(email) = LOWER($2)
-			ORDER BY created_at DESC
-			LIMIT 1
-		`, authProviderID, email).Scan(
-			&u.ID, &u.TenantID, &u.AuthProviderID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.IsSaaSOperator, &u.CreatedAt, &u.UpdatedAt,
-		)
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
+
+	err = s.pool.QueryRow(ctx, `
+		SELECT id, tenant_id, COALESCE(auth_provider_id::text, ''), email, COALESCE(password_hash, ''), is_admin, is_saas_operator, created_at, updated_at
+		FROM users
+		WHERE (auth_provider_id::text = $1 OR $1 = '')
+		  AND LOWER(email) = LOWER($2)
+		  AND tenant_id = $3
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, authProviderID, email, tenantID).Scan(
+		&u.ID, &u.TenantID, &u.AuthProviderID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.IsSaaSOperator, &u.CreatedAt, &u.UpdatedAt,
+	)
 
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -44,20 +35,8 @@ func (s *Store) GetUserByEmail(ctx context.Context, tenantID, authProviderID, em
 }
 
 func (s *Store) GetUserByEmailOnly(ctx context.Context, email string) (*model.User, error) {
-	var u model.User
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, COALESCE(auth_provider_id::text, ''), email, COALESCE(password_hash, ''), is_admin, is_saas_operator, created_at, updated_at
-		FROM users
-		WHERE LOWER(email) = LOWER($1)
-		ORDER BY (password_hash IS NOT NULL AND password_hash != '') DESC, created_at DESC
-		LIMIT 1
-	`, email).Scan(
-		&u.ID, &u.TenantID, &u.AuthProviderID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.IsSaaSOperator, &u.CreatedAt, &u.UpdatedAt,
-	)
-	if err == pgx.ErrNoRows {
-		return nil, nil
-	}
-	return &u, err
+	// Restrict un-scoped single lookup strictly to default/local tenant to prevent cross-tenant collision
+	return s.GetUserByEmail(ctx, "00000000-0000-0000-0000-000000000001", "", email)
 }
 
 func (s *Store) GetUserByID(ctx context.Context, id string) (*model.User, error) {

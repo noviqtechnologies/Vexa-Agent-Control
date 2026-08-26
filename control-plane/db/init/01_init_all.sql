@@ -804,6 +804,7 @@ BEGIN
     FOREACH t IN ARRAY tenant_tables LOOP
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = t AND table_type = 'BASE TABLE') THEN
             EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+            EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
             EXECUTE format('DROP POLICY IF EXISTS tenant_isolation_policy ON %I;', t);
             IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = t AND column_name = 'tenant_id') THEN
                 EXECUTE format('
@@ -812,12 +813,10 @@ BEGIN
                     USING (
                         tenant_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
                         OR current_setting(''app.is_saas_operator'', true) = ''true''
-                        OR current_user = ''postgres''
                     )
                     WITH CHECK (
                         tenant_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
                         OR current_setting(''app.is_saas_operator'', true) = ''true''
-                        OR current_user = ''postgres''
                     );
                 ', t);
             ELSIF EXISTS (SELECT FROM information_schema.columns WHERE table_name = t AND column_name = 'organization_id') THEN
@@ -827,12 +826,10 @@ BEGIN
                     USING (
                         organization_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
                         OR current_setting(''app.is_saas_operator'', true) = ''true''
-                        OR current_user = ''postgres''
                     )
                     WITH CHECK (
                         organization_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid
                         OR current_setting(''app.is_saas_operator'', true) = ''true''
-                        OR current_user = ''postgres''
                     );
                 ', t);
             END IF;

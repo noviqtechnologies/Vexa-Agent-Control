@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
-	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
@@ -30,15 +29,9 @@ func (m *mockProviderClient) ForwardLLMRequest(ctx context.Context, provider, mo
 	}, nil
 }
 
-func TestBrokerV2Handler_DecryptionAndDispatch(t *testing.T) {
+func TestBrokerV2Handler_FailClosedOnMissingCredential(t *testing.T) {
 	masterKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	masterKey, _ := hex.DecodeString(masterKeyHex)
-
-	rawSecret := "sk-real-upstream-secret-key"
-	encryptedKey, err := crypto.Encrypt(masterKey, rawSecret)
-	if err != nil {
-		t.Fatalf("failed to encrypt key: %v", err)
-	}
 
 	mockClient := &mockProviderClient{}
 	h := &BrokerV2Handler{
@@ -69,16 +62,18 @@ func TestBrokerV2Handler_DecryptionAndDispatch(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.HandleLLMRequest(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	// In fail-closed production design, unconfigured key must return 503 provider_credential_unavailable
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	// Verify the mock response fallback or decrypted key was passed
-	if mockClient.lastAPIKey == "" {
-		t.Fatalf("expected non-empty API key passed to provider client")
+	var errResp map[string]map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
 	}
-
-	_ = encryptedKey
+	if errResp["error"]["code"] != "provider_credential_unavailable" {
+		t.Fatalf("expected error code 'provider_credential_unavailable', got %v", errResp["error"]["code"])
+	}
 }
 
 func TestBrokerV2Handler_NonCompliantDeviceDenied(t *testing.T) {

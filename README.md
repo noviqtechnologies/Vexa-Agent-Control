@@ -1,7 +1,7 @@
 # Vexa Agent Control
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.56-green.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.65-green.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
 [![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)
@@ -205,15 +205,21 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 
 ## Small Team Path
 
-Deploy a shared Control Hub for small teams using Docker Compose:
+Deploy a production-ready shared Control Hub for small teams using Docker Compose:
 
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
-docker compose up -d
+
+# 1. Create your production environment file from the secure template
+cp .env.team.example .env
+
+# 2. Fill in random secrets (e.g., using: openssl rand -hex 32)
+# 3. Start the Team Hub stack
+docker compose -f docker-compose.team.yml up -d
 ```
 
-- **Features:** Centralized policy management (SSE sync), shared audit logs, spend caps, and OTET device onboarding.
+- **Features:** Centralized policy management (SSE sync), shared audit logs, spend caps, provider key custody, and OTET device onboarding.
 - Read the full [Small Team Hub Guide](docs/guides/small-team-hub.md).
 
 ---

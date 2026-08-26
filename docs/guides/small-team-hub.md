@@ -28,39 +28,25 @@ This guide covers deploying a shared Vexa Control Hub for engineering teams and 
    cd Vexa-Agent-Control
    ```
 
-2. Review `docker-compose.team.yml` environment settings:
-   ```yaml
-   services:
-     postgres:
-       image: postgres:16-alpine
-       ports:
-         - "5432:5432"
-
-     control-plane-api:
-       build:
-         context: ./control-plane/api
-       ports:
-         - "8081:8081"
-
-     control-plane-ui:
-       build:
-         context: ./control-plane/ui
-       ports:
-         - "3000:80"
-
-     agentcontrol-gw:
-       build:
-         context: .
-       ports:
-         - "8080:8080"
+2. Initialize your production environment configuration:
+   ```bash
+   cp .env.team.example .env
    ```
 
-3. Start the team services:
+3. Generate secure secrets and populate `.env`:
+   - `POSTGRES_PASSWORD`: `openssl rand -hex 24`
+   - `GATEWAY_SECRET`: `openssl rand -hex 24`
+   - `POLICY_READ_SECRET`: `openssl rand -hex 24`
+   - `PROVIDER_KEY_ENCRYPTION_SECRET`: `openssl rand -hex 32` (Must be 64-hex chars)
+   - `AGENTCONTROL_SESSION_SECRET`: `openssl rand -hex 32`
+   - `SAAS_OPERATOR_PASSWORD`: Strong password for the platform admin
+
+4. Start the team services:
    ```bash
    docker compose -f docker-compose.team.yml up -d
    ```
 
-4. Verify health:
+5. Verify health:
    ```bash
    docker compose -f docker-compose.team.yml ps
    curl -s http://localhost:8081/healthz

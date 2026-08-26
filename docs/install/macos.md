@@ -16,8 +16,8 @@ This guide covers installing Vexa Agent Control on macOS for both Apple Silicon 
 
 | Apple Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.56-macos-aarch64.zip` | **Yes (Verified)** |
-| **Intel Core (x86_64)** | `agentcontrol-v1.0.56-macos-x86_64.zip` | **Yes (Verified)** |
+| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.65-macos-aarch64.zip` | **Yes (Verified)** |
+| **Intel Core (x86_64)** | `agentcontrol-v1.0.65-macos-x86_64.zip` | **Yes (Verified)** |
 
 ---
 

@@ -26,10 +26,10 @@ func clearDashboardEnv(t *testing.T) {
 func productionEnv() map[string]string {
 	return map[string]string{
 		"DATABASE_URL":                   "postgres://localhost:5432/test",
-		"GATEWAY_SECRET":                 "s3cret",
+		"GATEWAY_SECRET":                 "prod_gateway_secret_very_secure_67890",
 		"OIDC_ISSUER":                    "https://accounts.example.com",
 		"OIDC_CLIENT_ID":                "dashboard-client",
-		"PROVIDER_KEY_ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"PROVIDER_KEY_ENCRYPTION_SECRET": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
 	}
 }
 
@@ -47,15 +47,27 @@ func TestLoad_Production_AllRequired(t *testing.T) {
 	if cfg.DevMode {
 		t.Error("DevMode should be false in production")
 	}
-	if cfg.GatewaySecret != "s3cret" {
-		t.Errorf("GatewaySecret = %q, want %q", cfg.GatewaySecret, "s3cret")
+	if cfg.GatewaySecret != "prod_gateway_secret_very_secure_67890" {
+		t.Errorf("GatewaySecret = %q, want %q", cfg.GatewaySecret, "prod_gateway_secret_very_secure_67890")
+	}
+}
+
+func TestLoad_RejectsKnownPlaceholdersInProduction(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["PROVIDER_KEY_ENCRYPTION_SECRET"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	setEnv(t, env)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when placeholder master key is used in production mode")
 	}
 }
 
 func TestLoad_MissingDatabaseURL(t *testing.T) {
 	clearDashboardEnv(t)
 	setEnv(t, map[string]string{
-		"GATEWAY_SECRET": "s3cret",
+		"GATEWAY_SECRET": "prod_gateway_secret_very_secure_67890",
 		"OIDC_ISSUER":    "https://accounts.example.com",
 		"OIDC_CLIENT_ID": "dashboard-client",
 	})
@@ -84,16 +96,16 @@ func TestLoad_MissingOIDC_NonDevMode(t *testing.T) {
 	clearDashboardEnv(t)
 	setEnv(t, map[string]string{
 		"DATABASE_URL":                   "postgres://localhost:5432/test",
-		"GATEWAY_SECRET":                 "s3cret",
-		"PROVIDER_KEY_ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"GATEWAY_SECRET":                 "prod_gateway_secret_very_secure_67890",
+		"PROVIDER_KEY_ENCRYPTION_SECRET": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
 	})
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error when OIDC env vars omitted: %v", err)
 	}
-	if cfg.GatewaySecret != "s3cret" {
-		t.Errorf("GatewaySecret = %q, want %q", cfg.GatewaySecret, "s3cret")
+	if cfg.GatewaySecret != "prod_gateway_secret_very_secure_67890" {
+		t.Errorf("GatewaySecret = %q, want %q", cfg.GatewaySecret, "prod_gateway_secret_very_secure_67890")
 	}
 }
 

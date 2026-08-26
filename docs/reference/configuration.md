@@ -36,7 +36,7 @@ All environment variables follow the canonical `AGENTCONTROL_*` prefix:
 version: "2.0"
 mode: "enforce" # "enforce" or "shadow"
 
-default_verdict: "deny" # Default-deny security posture
+default_action: "deny" # Default-deny security posture
 
 # Global DLP Secret Detectors
 dlp:

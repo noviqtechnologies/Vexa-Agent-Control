@@ -20,8 +20,8 @@ To install prerequisites on common distributions:
 
 | Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.56-linux-x86_64.zip` | **Yes (Verified)** |
-| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.56-linux-aarch64.zip` | **Yes (Verified)** |
+| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.65-linux-x86_64.zip` | **Yes (Verified)** |
+| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.65-linux-aarch64.zip` | **Yes (Verified)** |
 
 ---
 

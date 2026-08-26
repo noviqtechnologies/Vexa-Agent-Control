@@ -137,7 +137,7 @@ func main() {
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 	rotationH := handler.NewRotationHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 
-	authH := handler.NewAuthHandler(db)
+	authH := handler.NewAuthHandler(db, cfg)
 	authProviderH := handler.NewAuthProviderHandler(db)
 	userH := handler.NewUserHandler(db)
 	policyMgmtH := handler.NewPolicyMgmtHandler(db, sseBroker)
@@ -163,10 +163,10 @@ func main() {
 		log.Fatalf("failed to initialize CAS issuer: %v", err)
 	}
 	enrollmentV2H := handler.NewEnrollmentV2Handler(db, softwareCAS)
+	adminV2H := handler.NewAdminV2Handler(db)
 	deviceV2H := handler.NewDeviceV2Handler(db)
 	genericProviderClient := broker.NewGenericProviderClient()
 	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret)
-	adminV2H := handler.NewAdminV2Handler(db)
 
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
@@ -197,7 +197,7 @@ func main() {
 
 	// 3. Strict Device Control API (Edge mTLS Header Validation)
 	r.Route("/api/v2/device", func(r chi.Router) {
-		r.Use(middleware.StrictDeviceMTLS(db, ""))
+		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
 		r.Get("/bootstrap", deviceV2H.GetBootstrap)
 		r.Post("/heartbeats", deviceV2H.SubmitHeartbeat)
 		r.Get("/status", deviceV2H.GetDeviceStatus)
@@ -205,7 +205,7 @@ func main() {
 
 	// 4. Provider LLM Broker (Edge mTLS Header Validation & Capability Gates)
 	r.Route("/api/v2/broker", func(r chi.Router) {
-		r.Use(middleware.StrictDeviceMTLS(db, ""))
+		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
 		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 	})

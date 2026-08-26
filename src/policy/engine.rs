@@ -298,6 +298,23 @@ impl CompiledPolicy {
             };
         }
 
+        // Strict parameter enforcement: Reject undeclared top-level parameters if policy defines parameter rules
+        if !tool.parameters.is_empty() {
+            for key in params_obj.keys() {
+                if !tool.parameters.iter().any(|p| &p.name == key) {
+                    return EvalResult::Deny {
+                        reason_code: "param_unknown".to_string(),
+                        param_name: Some(key.clone()),
+                        param_value: params_obj.get(key).map(|v| v.to_string()),
+                        pattern: None,
+                        json_pointer: None,
+                        validator_name: None,
+                        matched_group_id: matched_group_id.clone(),
+                    };
+                }
+            }
+        }
+
         for param_rule in &tool.parameters {
             let value = params_obj.get(&param_rule.name);
 

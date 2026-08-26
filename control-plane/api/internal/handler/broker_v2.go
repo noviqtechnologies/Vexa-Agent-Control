@@ -72,7 +72,20 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	if apiKey == "" {
-		apiKey = "MOCK"
+		reqID := principal.RequestID
+		if reqID == "" {
+			reqID = req.RequestID
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"code":       "provider_credential_unavailable",
+				"message":    "Provider API credential is not configured or cannot be decrypted for this tenant",
+				"request_id": reqID,
+			},
+		})
+		return
 	}
 
 	// Forward request through provider adapter

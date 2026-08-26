@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
@@ -27,15 +28,17 @@ var (
 
 type AuthHandler struct {
 	store *store.Store
+	cfg   *config.Config
 }
 
-func NewAuthHandler(s *store.Store) *AuthHandler {
-	return &AuthHandler{store: s}
+func NewAuthHandler(s *store.Store, cfg *config.Config) *AuthHandler {
+	return &AuthHandler{store: s, cfg: cfg}
 }
 
 type LoginReq struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	TenantID string `json:"tenant_id,omitempty"`
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -45,62 +48,64 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
+	var saasOpEmail, saasOpPassword string
+	var isDevMode bool
+	if h.cfg != nil {
+		saasOpEmail = h.cfg.SaaSOperatorEmail
+		saasOpPassword = h.cfg.SaaSOperatorPassword
+		isDevMode = h.cfg.DevMode
+	} else {
+		saasOpEmail = os.Getenv("SAAS_OPERATOR_EMAIL")
+		saasOpPassword = os.Getenv("SAAS_OPERATOR_PASSWORD")
+		isDevMode = os.Getenv("DEV_MODE") == "true" && os.Getenv("ALLOW_DEV_MODE") == "true"
+	}
+
 	isSaaSOperator := false
 	if saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail) {
 		isSaaSOperator = true
 	}
 
-	// 1. Check Per-Tenant Bootstrap Token
-	org, err := h.store.ResolveBootstrapToken(r.Context(), req.Password)
-	if err == nil && org != nil {
-		_ = h.store.ConsumeBootstrapToken(r.Context(), org.ID)
-		userID := req.Email
-		if userID == "" {
-			userID = "admin"
+	// 1. Check Per-Tenant Bootstrap Token (One-time, hashed in DB)
+	if h.store != nil {
+		org, err := h.store.ResolveBootstrapToken(r.Context(), req.Password)
+		if err == nil && org != nil {
+			_ = h.store.ConsumeBootstrapToken(r.Context(), org.ID)
+			userID := req.Email
+			if userID == "" {
+				userID = "admin"
+			}
+			// Upsert local user profile for this tenant
+			_ = h.store.UpsertUser(r.Context(), &model.User{
+				TenantID: org.ID,
+				Email:    userID,
+				IsAdmin:  true,
+			})
+
+			h.setSessionCookie(w, r, org.ID, userID, true, isSaaSOperator)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":               "ok",
+				"user_id":              userID,
+				"tenant_id":            org.ID,
+				"organization_name":    org.Name,
+				"is_admin":             true,
+				"is_saas_operator":     isSaaSOperator,
+				"needs_password_setup": true,
+			})
+			return
 		}
-		// Upsert local user profile for this tenant
-		_ = h.store.UpsertUser(r.Context(), &model.User{
-			TenantID: org.ID,
-			Email:    userID,
-			IsAdmin:  true,
-		})
-
-		h.setSessionCookie(w, r, org.ID, userID, true, isSaaSOperator)
-		json.NewEncoder(w).Encode(map[string]any{
-			"status":               "ok",
-			"user_id":              userID,
-			"tenant_id":            org.ID,
-			"organization_name":    org.Name,
-			"is_admin":             true,
-			"is_saas_operator":     isSaaSOperator,
-			"needs_password_setup": true,
-		})
-		return
 	}
 
-	// 2. Check Global Bootstrap Token, Secret Manager Session Secret, or SAAS_OPERATOR_PASSWORD
-	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
-	sessionSecret := os.Getenv("AGENTCONTROL_SESSION_SECRET")
-	if sessionSecret == "" {
-		sessionSecret = os.Getenv("AGENTWALL_SESSION_SECRET")
-	}
-	isDevMode := os.Getenv("DEV_MODE") == "true"
-	
+	// 2. Check SaaS Platform Operator Credentials or One-Time Bootstrap
 	isSecretMatch := false
-	if BootstrapToken != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(BootstrapToken)) == 1 {
-		isSecretMatch = true
-	}
 	if saasOpPassword != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(saasOpPassword)) == 1 {
 		isSecretMatch = true
-	}
-	if sessionSecret != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(sessionSecret)) == 1 {
+	} else if BootstrapToken != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(BootstrapToken)) == 1 {
 		isSecretMatch = true
 	}
 
-	isPlatformEmail := req.Email == "admin" || req.Email == "operator" || req.Email == "admin@example.com" || (saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail))
+	isPlatformEmail := (saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail)) || req.Email == "admin" || req.Email == "operator"
 
-	if (isSecretMatch || isDevMode) && isPlatformEmail {
+	if isSecretMatch && isPlatformEmail {
 		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, true)
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
@@ -114,29 +119,47 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Check Local User Password Login (Multi-Tenant)
-	u, err := h.store.GetUserByEmailOnly(r.Context(), req.Email)
-	if err == nil && u != nil && u.PasswordHash != "" {
-		ok, err := VerifyPassword(req.Password, u.PasswordHash)
-		if err == nil && ok {
-			tenantID := u.TenantID
-			if tenantID == "" {
-				tenantID = middleware.DefaultTenantID
-			}
-			if u.IsSaaSOperator || isSaaSOperator {
-				isSaaSOperator = true
-			}
+	// 3. Local Development Mode bypass (strictly requires both DEV_MODE=true and ALLOW_DEV_MODE=true)
+	if isDevMode && isPlatformEmail {
+		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, true)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":               "ok",
+			"user_id":              req.Email,
+			"tenant_id":            middleware.DefaultTenantID,
+			"organization_name":    "Platform Management",
+			"is_admin":             true,
+			"is_saas_operator":     true,
+			"needs_password_setup": false,
+		})
+		return
+	}
 
-			h.setSessionCookie(w, r, tenantID, u.Email, u.IsAdmin, isSaaSOperator)
-			json.NewEncoder(w).Encode(map[string]any{
-				"status":               "ok",
-				"user_id":              u.Email,
-				"tenant_id":            tenantID,
-				"is_admin":             u.IsAdmin,
-				"is_saas_operator":     isSaaSOperator,
-				"needs_password_setup": false,
-			})
-			return
+	// 4. Check Local User Password Login (Tenant Scoped)
+	if h.store != nil {
+		tenantID := req.TenantID
+		if tenantID == "" {
+			tenantID = middleware.DefaultTenantID
+		}
+
+		u, err := h.store.GetUserByEmail(r.Context(), tenantID, "", req.Email)
+		if err == nil && u != nil && u.PasswordHash != "" {
+			ok, err := VerifyPassword(req.Password, u.PasswordHash)
+			if err == nil && ok {
+				if u.IsSaaSOperator || isSaaSOperator {
+					isSaaSOperator = true
+				}
+
+				h.setSessionCookie(w, r, tenantID, u.Email, u.IsAdmin, isSaaSOperator)
+				json.NewEncoder(w).Encode(map[string]any{
+					"status":               "ok",
+					"user_id":              u.Email,
+					"tenant_id":            tenantID,
+					"is_admin":             u.IsAdmin,
+					"is_saas_operator":     isSaaSOperator,
+					"needs_password_setup": false,
+				})
+				return
+			}
 		}
 	}
 
@@ -310,25 +333,30 @@ func GenerateBootstrapToken() string {
 }
 
 func (h *AuthHandler) CheckBootstrap() {
-	if opPass := os.Getenv("SAAS_OPERATOR_PASSWORD"); opPass != "" {
+	var opPass string
+	var isDevMode bool
+	if h.cfg != nil {
+		opPass = h.cfg.SaaSOperatorPassword
+		isDevMode = h.cfg.DevMode
+	} else {
+		opPass = os.Getenv("SAAS_OPERATOR_PASSWORD")
+		isDevMode = os.Getenv("DEV_MODE") == "true" && os.Getenv("ALLOW_DEV_MODE") == "true"
+	}
+
+	if opPass != "" {
 		BootstrapToken = opPass
-		log.Printf("INFO: SaaS Platform Operator password loaded from SAAS_OPERATOR_PASSWORD.")
+		log.Printf("INFO: SaaS Platform Operator credential configured.")
 		return
 	}
 
-	if sessSec := os.Getenv("AGENTCONTROL_SESSION_SECRET"); sessSec != "" {
-		BootstrapToken = sessSec
-		log.Printf("INFO: SaaS Platform Super-Admin Master Secret loaded from Secret Manager.")
-		return
-	}
-
-	// Always ensure a BootstrapToken exists for platform super-admin access
-	if BootstrapToken == "" {
-		BootstrapToken = GenerateBootstrapToken()
-		log.Printf("=========================================================")
-		log.Printf("INFO: SaaS Platform Super-Admin Bootstrap Secret: %s", BootstrapToken)
-		log.Printf("INFO: Use Email/Username 'admin' and this secret to log in.")
-		log.Printf("=========================================================")
+	// In local dev mode only, provide an ephemeral in-memory bootstrap token if none configured
+	if isDevMode {
+		if BootstrapToken == "" {
+			BootstrapToken = GenerateBootstrapToken()
+			log.Printf("INFO: Local development mode active (DEV_MODE=true, ALLOW_DEV_MODE=true).")
+		}
+	} else {
+		log.Printf("INFO: Running in production mode. Dedicated SaaS Operator credentials required.")
 	}
 }
 
