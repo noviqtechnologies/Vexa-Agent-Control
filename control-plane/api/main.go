@@ -37,6 +37,35 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// 1. Initialize router and start listening immediately so Cloud Run startup probes pass (/healthz)
+	r := chi.NewRouter()
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Recoverer)
+	r.Use(middleware.LegacyQuarantineGate())
+
+	// Health check — no auth, responds immediately
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	addr := fmt.Sprintf(":%d", cfg.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 0, // SSE streams need unbounded writes
+		IdleTimeout:  120 * time.Second,
+	}
+
+	go func() {
+		log.Printf("dashboard-api listening on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server: %v", err)
+		}
+	}()
+
+	// 2. Connect to database
 	db, err := store.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("database: %v", err)
@@ -168,16 +197,6 @@ func main() {
 	genericProviderClient := broker.NewGenericProviderClient()
 	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret)
 
-	r := chi.NewRouter()
-	r.Use(chimw.RealIP)
-	r.Use(chimw.Recoverer)
-	r.Use(middleware.LegacyQuarantineGate())
-
-	// Health check — no auth.
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	})
 
 	// === Target Contract v4.0 API Routes ===
 	// 1. Enrollment Handlers (Unauthenticated - OTET & Key Proof)
@@ -393,21 +412,6 @@ func main() {
 		r.With(middleware.RequireAdmin()).Post("/admin/enrollment-tokens", enrollmentH.PostCreateToken)
 	})
 
-	addr := fmt.Sprintf(":%d", cfg.Port)
-	srv := &http.Server{
-		Addr:         addr,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 0, // SSE streams need unbounded writes
-		IdleTimeout:  120 * time.Second,
-	}
-
-	go func() {
-		log.Printf("dashboard-api listening on %s", addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server: %v", err)
-		}
-	}()
 
 	<-ctx.Done()
 	log.Println("shutting down...")
