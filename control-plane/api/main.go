@@ -165,7 +165,7 @@ func main() {
 	enrollmentV2H := handler.NewEnrollmentV2Handler(db, softwareCAS)
 	deviceV2H := handler.NewDeviceV2Handler(db)
 	genericProviderClient := broker.NewGenericProviderClient()
-	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient)
+	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret)
 	adminV2H := handler.NewAdminV2Handler(db)
 
 	r := chi.NewRouter()
@@ -212,24 +212,33 @@ func main() {
 
 	// 5. Authoritative Central Spend Ledger API v2
 	r.Route("/api/v2/spend", func(r chi.Router) {
-		r.Use(middleware.SessionAuthOptional())
 		r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
-		r.Post("/authorize", spendV2H.Authorize)
-		r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
-		r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
-		r.Get("/effective", spendV2H.GetEffective)
-		r.Get("/events", spendV2H.ListEvents)
-		r.Get("/policies", spendV2H.ListPolicies)
-		r.Post("/policies", spendV2H.CreatePolicy)
-		r.Post("/policies/{id}/publish", spendV2H.PublishPolicy)
-		r.Get("/increase-requests", spendV2H.ListIncreaseRequests)
-		r.Post("/increase-requests", spendV2H.CreateIncreaseRequest)
-		r.Post("/increase-requests/{id}/decide", spendV2H.DecideIncreaseRequest)
+		
+		// Workload / Gateway spend reservation lifecycle routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db))
+			r.Post("/authorize", spendV2H.Authorize)
+			r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
+			r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
+		})
+
+		// Operator / Dashboard spend policy management & reporting routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.DashboardAuth())
+			r.Get("/effective", spendV2H.GetEffective)
+			r.Get("/events", spendV2H.ListEvents)
+			r.Get("/policies", spendV2H.ListPolicies)
+			r.Post("/policies", spendV2H.CreatePolicy)
+			r.Post("/policies/{id}/publish", spendV2H.PublishPolicy)
+			r.Get("/increase-requests", spendV2H.ListIncreaseRequests)
+			r.Post("/increase-requests", spendV2H.CreateIncreaseRequest)
+			r.Post("/increase-requests/{id}/decide", spendV2H.DecideIncreaseRequest)
+		})
 	})
 
-	// 6. Device Governance & Sentry Compliance API (Public Ingest/Enrollment)
+	// 6. Device Governance & Sentry Compliance API
 	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
-	r.Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db)).Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
 
 	// Public PKI Enrollment route (Unauthenticated)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)

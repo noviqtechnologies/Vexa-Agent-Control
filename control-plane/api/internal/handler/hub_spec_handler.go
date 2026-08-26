@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
@@ -347,6 +348,23 @@ func (h *HubSpecHandler) RotateCredential(w http.ResponseWriter, r *http.Request
 	if req.Provider == "" {
 		http.Error(w, `{"error":"provider required"}`, http.StatusBadRequest)
 		return
+	}
+
+	tenantID := middleware.TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	if req.NewKey != "" && h.store != nil && len(h.masterKey) > 0 {
+		enc, err := crypto.Encrypt(h.masterKey, req.NewKey)
+		if err == nil {
+			masked := crypto.MaskAPIKey(req.NewKey)
+			_ = h.store.InsertProviderKey(r.Context(), tenantID, &store.ProviderKey{
+				Provider:        req.Provider,
+				APIKeyEncrypted: enc,
+				APIKeyMasked:    masked,
+			})
+		}
 	}
 
 	rotVer := 2

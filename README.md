@@ -34,13 +34,16 @@
 
 Vexa Agent Control acts as a local security sidecar and transparent proxy for AI agent tool calls:
 
+- **Centralized LLM Key Custody & Brokered Egress:** Stores provider API keys encrypted in the Hub using AES-256-GCM and decrypts in-memory inside the broker, ensuring developer endpoints never hold raw master credentials.
+- **Fail-Closed Spend Governance:** Enforces integer microcent preflight reservations with row-level database locking and accurate SSE streaming token settlement.
+- **Enrolled-Device Sentry & Attestation:** Provides continuous filesystem posture monitoring, auto-healing, and authentic Ed25519 cryptographic policy verification.
+- **Identity Provider Integration (Local, Google, Azure Entra ID):** Authenticates operators via Local Admin or SSO, validates agent JWTs via dynamic JWKS discovery, and attributes spend and audit events to verified identities.
 - **DLP & Secret Leak Prevention:** Detects AWS keys, OpenAI keys, SSH private keys, GitHub tokens, and high-entropy credentials before they leave your workstation.
 - **Prompt Injection & Loop Guards:** Evaluates tool arguments against deterministic rules and structural recursion limits.
-- **Config Backup & Transparent Wrapping:** Wraps local Model Context Protocol (MCP) server invocations with an inspectable stdio proxy, creating timestamped backups before touching any file.
-- **Tamper-Evident Audit Logging:** Emits durable, JSONL event records to `~/.agentcontrol/audit.jsonl` with optional HMAC signing.
+- **Tamper-Evident Audit Logging:** Emits durable, JSONL event records to `~/.agentcontrol/audit.jsonl` with HMAC signing.
 
 > [!IMPORTANT]
-> **Protection Boundary:** Vexa Agent Control only inspects traffic routed through wrapped MCP configurations or explicit HTTP proxy environment variables (`AGENTCONTROL_PROXY_URL` / `HTTP_PROXY`). It does not intercept raw network sockets or unwrapped processes.
+> **Protection Boundary:** Vexa Agent Control inspects traffic routed through wrapped MCP configurations, explicit HTTP proxy environment variables (`AGENTCONTROL_PROXY_URL` / `HTTP_PROXY`), and strict mTLS brokered routes. In Team Enforce Mode, spend governance and broker eligibility fail closed.
 
 ---
 

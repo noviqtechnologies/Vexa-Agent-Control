@@ -104,3 +104,13 @@ func IsEncrypted(value string) bool {
 	// AES-GCM: 12-byte nonce + at least 1 byte ciphertext + 16-byte tag = 29 bytes minimum
 	return len(data) >= 29
 }
+
+// MaskAPIKey masks an API key for safe UI display (e.g. sk-a...1234).
+func MaskAPIKey(apiKey string) string {
+	if len(apiKey) > 8 {
+		return apiKey[:4] + "..." + apiKey[len(apiKey)-4:]
+	} else if len(apiKey) > 4 {
+		return apiKey[:3] + "..."
+	}
+	return "sk-..."
+}

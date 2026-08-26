@@ -20,16 +20,16 @@ services:
     container_name: vexa-team-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: vexa
-      POSTGRES_PASSWORD: vexa_secure_password
-      POSTGRES_DB: vexa_control_plane
+      POSTGRES_USER: ${POSTGRES_USER:-vexa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vexa_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-vexa_control_plane}
     volumes:
       - vexa-postgres-data:/var/lib/postgresql/data
       - ./control-plane/db/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vexa -d vexa_control_plane"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vexa} -d ${POSTGRES_DB:-vexa_control_plane}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -49,14 +49,14 @@ services:
         condition: service_healthy
     environment:
       PORT: 8081
-      DATABASE_URL: postgres://vexa:vexa_secure_password@postgres:5432/vexa_control_plane?sslmode=disable
-      DEV_MODE: "false"
-      GATEWAY_SECRET: vexa_team_gateway_secret_key_12345
-      POLICY_READ_SECRET: vexa_team_policy_read_secret_12345
-      PROVIDER_KEY_ENCRYPTION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-      AGENTCONTROL_SESSION_SECRET: vexa_team_session_signing_secret_67890
-      SAAS_OPERATOR_EMAIL: admin@vexa.local
-      SAAS_OPERATOR_PASSWORD: VexaAdminPassword2026!
+      DATABASE_URL: postgres://${POSTGRES_USER:-vexa}:${POSTGRES_PASSWORD:-vexa_secure_password}@postgres:5432/${POSTGRES_DB:-vexa_control_plane}?sslmode=disable
+      DEV_MODE: "${DEV_MODE:-false}"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-vexa_team_gateway_secret_key_12345}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret-change-me}
+      PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:-vexa_team_session_signing_secret_67890}
+      SAAS_OPERATOR_EMAIL: ${SAAS_OPERATOR_EMAIL:-admin@vexa.local}
+      SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:-VexaAdminPassword2026!}
     ports:
       - "8081:8081"
     healthcheck:
@@ -98,6 +98,9 @@ services:
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
       AGENTCONTROL_DRY_RUN: "false"
       AGENTCONTROL_HUB_URL: http://control-plane-api:8081
+      DASHBOARD_API_URL: http://control-plane-api:8081
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-vexa_team_gateway_secret_key_12345}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret-change-me}
     ports:
       - "8080:8080"
     networks:

@@ -51,17 +51,17 @@ cd C:\AgentWall\agentwall
 ### 1.2 Confirm Control Plane Is Accessible
 
 ```powershell
-# Health check
-Invoke-RestMethod -Uri "https://console.vexasec.io/health" -Method Get
+# Health check (unauthenticated)
+Invoke-RestMethod -Uri "https://console.vexasec.io/healthz" -Method Get
 
-# Verify V2 spend endpoints are alive
-Invoke-RestMethod -Uri "https://console.vexasec.io/api/v2/spend/effective" -Method Get
-Invoke-RestMethod -Uri "https://console.vexasec.io/api/v2/spend/policies" -Method Get
+# Verify V2 spend endpoints with Gateway or Session Authorization
+$headers = @{ "Authorization" = "Bearer $env:GATEWAY_SECRET" }
+Invoke-RestMethod -Uri "https://console.vexasec.io/api/v2/spend/effective" -Headers $headers -Method Get
 ```
 
 > [!NOTE]
-> The Control Hub is cloud-hosted at `https://console.vexasec.io/`. No local Docker setup needed for the Control Plane.
-> Ensure your gateway is configured to sync with this URL.
+> The Control Hub is cloud-hosted at `https://console.vexasec.io/` (or `http://localhost:8081` in local team compose).
+> Spend endpoints require authentication: gateway routes (`/authorize`, `/settle`, `/release`) require `Authorization: Bearer <GATEWAY_SECRET>`, while policy administration routes require Web Console Session authentication.
 
 ### 1.3 Confirm the Gateway Is Running
 

@@ -57,12 +57,7 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Mask the key for display (e.g., sk-...abcd)
-	masked := req.APIKey
-	if len(req.APIKey) > 8 {
-		masked = req.APIKey[:4] + "..." + req.APIKey[len(req.APIKey)-4:]
-	} else if len(req.APIKey) > 4 {
-		masked = req.APIKey[:3] + "..."
-	}
+	masked := crypto.MaskAPIKey(req.APIKey)
 
 	// Encrypt the raw API key using AES-256-GCM before persisting to database
 	encryptedKey, err := crypto.Encrypt(h.masterKey, req.APIKey)

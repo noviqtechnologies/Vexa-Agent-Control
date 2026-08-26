@@ -27,12 +27,28 @@ pub struct BrokerClient {
 
 impl BrokerClient {
     pub fn new(base_url: Option<String>) -> Self {
+        let mut builder = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60));
+
+        // Attempt to load enrolled mTLS identity if available in home or config dir
+        if let Some(home_dir) = dirs::home_dir().map(|h| h.join(".agentcontrol")).or_else(|| dirs::home_dir().map(|h| h.join(".agentwall"))) {
+            let cert_path = home_dir.join("device_cert.pem");
+            let key_path = home_dir.join("device_key.pem");
+            if cert_path.exists() && key_path.exists() {
+                if let (Ok(cert_bytes), Ok(key_bytes)) = (std::fs::read(&cert_path), std::fs::read(&key_path)) {
+                    let mut combined = cert_bytes;
+                    combined.extend_from_slice(b"\n");
+                    combined.extend_from_slice(&key_bytes);
+                    if let Ok(identity) = reqwest::Identity::from_pem(&combined) {
+                        builder = builder.identity(identity);
+                    }
+                }
+            }
+        }
+
         Self {
             base_url: base_url.unwrap_or_else(|| "https://device.vexasec.io".to_string()),
-            http_client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .unwrap_or_default(),
+            http_client: builder.build().unwrap_or_default(),
         }
     }
 

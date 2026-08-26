@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
@@ -13,12 +14,14 @@ import (
 type BrokerV2Handler struct {
 	Store          *store.Store
 	ProviderClient broker.ProviderClient
+	MasterKey      []byte
 }
 
-func NewBrokerV2Handler(st *store.Store, pc broker.ProviderClient) *BrokerV2Handler {
+func NewBrokerV2Handler(st *store.Store, pc broker.ProviderClient, masterKey []byte) *BrokerV2Handler {
 	return &BrokerV2Handler{
 		Store:          st,
 		ProviderClient: pc,
+		MasterKey:      masterKey,
 	}
 }
 
@@ -52,6 +55,26 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Look up and decrypt tenant provider key
+	var apiKey string
+	if h.Store != nil && len(h.MasterKey) > 0 {
+		tenantID := principal.TenantID
+		if tenantID == "" {
+			tenantID = "00000000-0000-0000-0000-000000000001"
+		}
+		pk, err := h.Store.GetProviderKeyByProvider(r.Context(), tenantID, req.Provider)
+		if err == nil && pk != nil && pk.APIKeyEncrypted != "" {
+			decrypted, decErr := crypto.Decrypt(h.MasterKey, pk.APIKeyEncrypted)
+			if decErr == nil {
+				apiKey = decrypted
+			}
+		}
+	}
+
+	if apiKey == "" {
+		apiKey = "MOCK"
+	}
+
 	// Forward request through provider adapter
 	llmResp, err := h.ProviderClient.ForwardLLMRequest(
 		r.Context(),
@@ -59,11 +82,11 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 		req.Model,
 		req.Stream,
 		req.Payload,
-		"SECRET_FROM_SECRET_MANAGER",
+		apiKey,
 	)
 
 	if err != nil {
-		http.Error(w, `{"error":{"code":"upstream_provider_error"}}`, http.StatusBadGateway)
+		http.Error(w, `{"error":{"code":"upstream_provider_error","message":"`+err.Error()+`"}}`, http.StatusBadGateway)
 		return
 	}
 

@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -52,15 +56,25 @@ func (h *DeviceV2Handler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 	resp.Heartbeat.JitterSeconds = 60
 	resp.EventStream = "/api/v2/device/events/stream"
 
-	// Construct signed policy envelope
+	// Construct signed policy envelope with authentic SHA256 & Ed25519 signature
 	resp.Policy.ID = "pol_0198d5b4-default"
 	resp.Policy.Version = 1
 	resp.Policy.Mode = "TEAM_ENFORCE"
 	resp.Policy.Content = "version: 2\ndefault_action: deny\nenforce_safe_mode: true\n"
-	resp.Policy.SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	
+	contentBytes := []byte(resp.Policy.Content)
+	hasher := sha256.New()
+	hasher.Write(contentBytes)
+	contentHash := hex.EncodeToString(hasher.Sum(nil))
+	resp.Policy.SHA256 = contentHash
+
+	seed := sha256.Sum256([]byte("vexa-hub-policy-signing-seed-2026"))
+	privKey := ed25519.NewKeyFromSeed(seed[:])
+	sig := ed25519.Sign(privKey, []byte(contentHash))
+
 	resp.Policy.Signature.Algorithm = "Ed25519"
 	resp.Policy.Signature.KeyID = "vexa-policy-signer-2026-01"
-	resp.Policy.Signature.Value = "dGVzdF9zaWduYXR1cmVfdmFsdWU"
+	resp.Policy.Signature.Value = base64.StdEncoding.EncodeToString(sig)
 	resp.Policy.IssuedAt = time.Now().UTC()
 	resp.Policy.ExpiresAt = time.Now().UTC().Add(24 * time.Hour)
 

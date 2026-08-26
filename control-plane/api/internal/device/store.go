@@ -288,6 +288,11 @@ func (s *Store) RecordTelemetry(ctx context.Context, orgID string, req *Telemetr
 		LIMIT 1
 	`, req.DeviceID).Scan(&canonicalDeviceID, &registeredOrgID, &devState, &devHostname)
 
+	targetState := "COMPLIANT"
+	if req.OverallCompliance == "NON_COMPLIANT" || len(req.TamperEvents) > 0 {
+		targetState = "NON_COMPLIANT"
+	}
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Auto-provision workstation in devices table if new
@@ -298,10 +303,10 @@ func (s *Store) RecordTelemetry(ctx context.Context, orgID string, req *Telemetr
 			err = tx.QueryRow(ctx, `
 				INSERT INTO devices (
 					tenant_id, stable_device_id, display_name, os_family, architecture, state, last_heartbeat_at, created_at, updated_at
-				) VALUES ($1, $2, $2, 'windows', 'x86_64', 'COMPLIANT', now(), now(), now())
-				ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET last_heartbeat_at = now(), updated_at = now()
+				) VALUES ($1, $2, $2, 'windows', 'x86_64', $3, now(), now(), now())
+				ON CONFLICT (tenant_id, stable_device_id) DO UPDATE SET last_heartbeat_at = now(), state = $3, updated_at = now()
 				RETURNING id::text, tenant_id::text, state::text, stable_device_id
-			`, registeredOrgID, req.DeviceID).Scan(&canonicalDeviceID, &registeredOrgID, &devState, &devHostname)
+			`, registeredOrgID, req.DeviceID, targetState).Scan(&canonicalDeviceID, &registeredOrgID, &devState, &devHostname)
 			if err != nil {
 				return nil, fmt.Errorf("device provision failed: %w", err)
 			}
@@ -316,12 +321,12 @@ func (s *Store) RecordTelemetry(ctx context.Context, orgID string, req *Telemetr
 
 	now := time.Now().UTC()
 
-	// 2. Update device heartbeat and compliance state in-place
+	// 2. Update device heartbeat and compliance state in-place based on authoritative report
 	_, err = tx.Exec(ctx, `
 		UPDATE devices 
-		SET last_heartbeat_at = $1, state = 'COMPLIANT', updated_at = $1 
-		WHERE id::text = $2 AND state != 'REVOKED'
-	`, now, canonicalDeviceID)
+		SET last_heartbeat_at = $1, state = $2, updated_at = $1 
+		WHERE id::text = $3 AND state != 'REVOKED'
+	`, now, targetState, canonicalDeviceID)
 	if err != nil {
 		return nil, err
 	}

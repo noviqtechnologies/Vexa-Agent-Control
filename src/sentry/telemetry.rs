@@ -67,10 +67,16 @@ impl TelemetryClient {
         };
 
         let endpoint = format!("{}/api/v1/devices/{}/telemetry", self.hub_url, self.device_id);
+        let gateway_secret = std::env::var("GATEWAY_SECRET").ok();
 
-        let resp = self
-            .client
-            .post(&endpoint)
+        let mut req_builder = self.client.post(&endpoint);
+        if let Some(ref sec) = gateway_secret {
+            req_builder = req_builder.header("Authorization", format!("Bearer {}", sec));
+        } else {
+            req_builder = req_builder.header("Authorization", format!("Bearer {}", self.device_id));
+        }
+
+        let resp = req_builder
             .json(&req_body)
             .send()
             .await

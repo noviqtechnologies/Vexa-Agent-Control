@@ -233,72 +233,119 @@ pub async fn handle_request(
     let hub_url = std::env::var("DASHBOARD_API_URL").ok();
     let mut active_reservation_id: Option<String> = None;
     let req_uuid = uuid::Uuid::new_v4().to_string();
+    let gateway_secret = std::env::var("GATEWAY_SECRET").ok();
 
-    if let Some(ref hub_base) = hub_url {
-        let input_est = estimate_input_tokens(&body);
-        let max_output = body
-            .get("max_tokens")
-            .or_else(|| body.get("max_completion_tokens"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(2048);
+    let is_streaming = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+    let input_est = estimate_input_tokens(&body);
 
-        let body_str = serde_json::to_string(&body).unwrap_or_default();
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(body_str.as_bytes());
-        let req_hash = hex::encode(hasher.finalize());
-
-        let auth_req = crate::spend::types::SpendV2AuthorizeReq {
-            gateway_id: Some(session.session_id.clone()),
-            request_id: req_uuid.clone(),
-            idempotency_key: format!("auth-{}", req_uuid),
-            project_id: session
-                .identity_sub
-                .clone()
-                .unwrap_or_else(|| "default".to_string()),
-            provider: provider_name.clone(),
-            model: model.clone(),
-            input_token_estimate: input_est,
-            max_output_tokens: max_output,
-            request_hash: req_hash,
-        };
-
-        let auth_url = format!("{}/api/v2/spend/authorize", hub_base.trim_end_matches('/'));
-        if let Ok(resp) = state.http_client.post(&auth_url).json(&auth_req).send().await {
-            if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                let deny_body: serde_json::Value = resp.json().await.unwrap_or_default();
-                let _ = state
-                    .audit_logger
-                    .write_entry(
-                        &session.session_id,
-                        "llm_spend_deny",
-                        &format!("{}:{}", provider_name, model),
-                        Some(json!({"provider": provider_name, "model": model, "deny_details": deny_body})),
-                        Some("Preflight spend budget exceeded or denied before dispatch".to_string()),
-                        Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                        session.identity_sub.clone(),
-                        session.identity_email.clone(),
-                        Some("sha256:active".to_string()),
-                        session.request_ip.clone(),
-                        None,
-                    )
-                    .await;
-
+    if state.centralized_mode || hub_url.is_some() {
+        if hub_url.is_none() {
+            if state.centralized_mode {
                 return Ok(crate::proxy::server::json_response(
-                    StatusCode::TOO_MANY_REQUESTS,
+                    StatusCode::SERVICE_UNAVAILABLE,
                     &serde_json::json!({
                         "error": {
-                            "code": deny_body.get("reason_code").and_then(|v| v.as_str()).unwrap_or("spend_budget_exhausted"),
-                            "message": "LLM spend budget exceeded or preflight authorization denied",
-                            "scope": deny_body.get("disclosure_safe_scope"),
-                            "reset_at": deny_body.get("reset_at")
+                            "code": "spend_governance_unreachable",
+                            "message": "Centralized enforce mode requires DASHBOARD_API_URL for spend preflight governance"
                         }
                     }),
                 ));
-            } else if resp.status().is_success() {
-                if let Ok(allow_resp) =
-                    resp.json::<crate::spend::types::SpendV2AuthorizeResp>().await
-                {
-                    active_reservation_id = allow_resp.reservation_id;
+            }
+        } else if let Some(ref hub_base) = hub_url {
+            let max_output = body
+                .get("max_tokens")
+                .or_else(|| body.get("max_completion_tokens"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(2048);
+
+            let body_str = serde_json::to_string(&body).unwrap_or_default();
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(body_str.as_bytes());
+            let req_hash = hex::encode(hasher.finalize());
+
+            let auth_req = crate::spend::types::SpendV2AuthorizeReq {
+                gateway_id: Some(session.session_id.clone()),
+                request_id: req_uuid.clone(),
+                idempotency_key: format!("auth-{}", req_uuid),
+                project_id: session
+                    .identity_sub
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string()),
+                provider: provider_name.clone(),
+                model: model.clone(),
+                input_token_estimate: input_est,
+                max_output_tokens: max_output,
+                request_hash: req_hash,
+            };
+
+            let auth_url = format!("{}/api/v2/spend/authorize", hub_base.trim_end_matches('/'));
+            let mut req_builder = state.http_client.post(&auth_url);
+            if let Some(ref sec) = gateway_secret {
+                req_builder = req_builder.header("Authorization", format!("Bearer {}", sec));
+            }
+
+            match req_builder.json(&auth_req).send().await {
+                Ok(resp) => {
+                    if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        let deny_body: serde_json::Value = resp.json().await.unwrap_or_default();
+                        let _ = state
+                            .audit_logger
+                            .write_entry(
+                                &session.session_id,
+                                "llm_spend_deny",
+                                &format!("{}:{}", provider_name, model),
+                                Some(json!({"provider": provider_name, "model": model, "deny_details": deny_body})),
+                                Some("Preflight spend budget exceeded or denied before dispatch".to_string()),
+                                Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                                session.identity_sub.clone(),
+                                session.identity_email.clone(),
+                                Some("sha256:active".to_string()),
+                                session.request_ip.clone(),
+                                None,
+                            )
+                            .await;
+
+                        return Ok(crate::proxy::server::json_response(
+                            StatusCode::TOO_MANY_REQUESTS,
+                            &serde_json::json!({
+                                "error": {
+                                    "code": deny_body.get("reason_code").and_then(|v| v.as_str()).unwrap_or("spend_budget_exhausted"),
+                                    "message": "LLM spend budget exceeded or preflight authorization denied",
+                                    "scope": deny_body.get("disclosure_safe_scope"),
+                                    "reset_at": deny_body.get("reset_at")
+                                }
+                            }),
+                        ));
+                    } else if resp.status().is_success() {
+                        if let Ok(allow_resp) =
+                            resp.json::<crate::spend::types::SpendV2AuthorizeResp>().await
+                        {
+                            active_reservation_id = allow_resp.reservation_id;
+                        }
+                    } else if state.centralized_mode {
+                        return Ok(crate::proxy::server::json_response(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            &serde_json::json!({
+                                "error": {
+                                    "code": "spend_governance_denied",
+                                    "message": format!("Spend authorization preflight returned non-success status: {}", resp.status())
+                                }
+                            }),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    if state.centralized_mode {
+                        return Ok(crate::proxy::server::json_response(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            &serde_json::json!({
+                                "error": {
+                                    "code": "spend_governance_unreachable",
+                                    "message": format!("Spend authorization preflight failed: {}", e)
+                                }
+                            }),
+                        ));
+                    }
                 }
             }
         }
@@ -368,6 +415,7 @@ pub async fn handle_request(
             let mut completion_tokens_val = 0i64;
             let mut cached_tokens_val = 0i64;
 
+            // Attempt direct JSON parse for non-streaming responses
             if let Ok(resp_json) = serde_json::from_slice::<Value>(&resp_bytes) {
                 if let Some(usage) = resp_json.get("usage") {
                     prompt_tokens_val = usage
@@ -389,6 +437,50 @@ pub async fn handle_request(
                         session
                             .tokens_used
                             .fetch_add(tt, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            } else if is_streaming {
+                // Streaming SSE stream framing parser
+                if let Ok(text) = std::str::from_utf8(&resp_bytes) {
+                    let mut accumulated_chars = 0usize;
+                    for line in text.lines() {
+                        let trimmed = line.trim();
+                        if let Some(data_str) = trimmed.strip_prefix("data: ") {
+                            if data_str == "[DONE]" {
+                                continue;
+                            }
+                            if let Ok(chunk_json) = serde_json::from_str::<Value>(data_str) {
+                                if let Some(usage) = chunk_json.get("usage") {
+                                    if let Some(pt) = usage.get("prompt_tokens").or_else(|| usage.get("input_tokens")).and_then(|v| v.as_i64()) {
+                                        prompt_tokens_val = pt;
+                                    }
+                                    if let Some(ct) = usage.get("completion_tokens").or_else(|| usage.get("output_tokens")).and_then(|v| v.as_i64()) {
+                                        completion_tokens_val = ct;
+                                    }
+                                    if let Some(tt) = usage.get("total_tokens").and_then(|v| v.as_u64()) {
+                                        total_tokens = Some(tt);
+                                    }
+                                }
+                                if let Some(choices) = chunk_json.get("choices").and_then(|v| v.as_array()) {
+                                    for choice in choices {
+                                        if let Some(delta) = choice.get("delta") {
+                                            if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                                                accumulated_chars += content.len();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if prompt_tokens_val == 0 {
+                        prompt_tokens_val = input_est;
+                    }
+                    if completion_tokens_val == 0 && accumulated_chars > 0 {
+                        completion_tokens_val = (accumulated_chars as i64 / 4) + 1;
+                    }
+                    if total_tokens.is_none() && (prompt_tokens_val > 0 || completion_tokens_val > 0) {
+                        total_tokens = Some((prompt_tokens_val + completion_tokens_val) as u64);
                     }
                 }
             }
@@ -413,12 +505,11 @@ pub async fn handle_request(
                             hub_base.trim_end_matches('/'),
                             res_id
                         );
-                        let _ = state
-                            .http_client
-                            .post(&settle_url)
-                            .json(&settle_req)
-                            .send()
-                            .await;
+                        let mut settle_builder = state.http_client.post(&settle_url);
+                        if let Some(ref sec) = gateway_secret {
+                            settle_builder = settle_builder.header("Authorization", format!("Bearer {}", sec));
+                        }
+                        let _ = settle_builder.json(&settle_req).send().await;
                     } else {
                         let release_req = crate::spend::types::SpendV2ReleaseReq {
                             request_id: req_uuid.clone(),
@@ -431,12 +522,11 @@ pub async fn handle_request(
                             hub_base.trim_end_matches('/'),
                             res_id
                         );
-                        let _ = state
-                            .http_client
-                            .post(&release_url)
-                            .json(&release_req)
-                            .send()
-                            .await;
+                        let mut release_builder = state.http_client.post(&release_url);
+                        if let Some(ref sec) = gateway_secret {
+                            release_builder = release_builder.header("Authorization", format!("Bearer {}", sec));
+                        }
+                        let _ = release_builder.json(&release_req).send().await;
                     }
                 }
             }
