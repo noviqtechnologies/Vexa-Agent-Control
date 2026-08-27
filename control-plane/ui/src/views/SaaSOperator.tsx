@@ -30,6 +30,7 @@ interface CreateOrgResponse {
     id: string
     name: string
     slug: string
+    contact_email?: string
     license_tier: string
     max_seats: number
     gateway_secret?: string
@@ -96,6 +97,26 @@ export default function SaaSOperator() {
     setFormSlug(derivedSlug)
   }
 
+  async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+    try {
+      const text = await res.text()
+      if (!text) return `${fallback} (HTTP ${res.status})`
+      if (text.startsWith('{')) {
+        const parsed = JSON.parse(text)
+        return parsed.error || parsed.message || fallback
+      }
+      if (text.toLowerCase().includes('<!doctype') || text.startsWith('<')) {
+        if (res.status === 403) {
+          return 'Access Denied (HTTP 403 Forbidden): Request was blocked by security policy or requires SaaS Operator privileges.'
+        }
+        return `${fallback} (HTTP ${res.status}: ${res.statusText || 'Error'})`
+      }
+      return text
+    } catch {
+      return `${fallback} (${res.status})`
+    }
+  }
+
   async function handleCreateOrg(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
@@ -122,8 +143,8 @@ export default function SaaSOperator() {
       })
 
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to create organization')
+        const errorText = await extractErrorMessage(res, 'Failed to create organization')
+        throw new Error(errorText)
       }
 
       const data: CreateOrgResponse = await res.json()
@@ -273,6 +294,17 @@ export default function SaaSOperator() {
                 </button>
               </div>
             </div>
+            {createdSuccess.organization.contact_email && (
+              <div>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Admin Contact Email:</span>
+                <div className="saas-secret-box">
+                  <span className="saas-secret-val">{createdSuccess.organization.contact_email}</span>
+                  <button className="saas-copy-btn" onClick={() => copyText(createdSuccess.organization.contact_email!, 'email')}>
+                    {copiedKey === 'email' ? 'Copied!' : 'Copy Email'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <p style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
             ⚠️ Provide this token to the customer administrator to complete their initial BYOK credential setup.
@@ -392,7 +424,14 @@ export default function SaaSOperator() {
                 <tr key={org.id}>
                   <td>
                     <span className="saas-org-name">{org.name}</span>
-                    <span className="saas-org-slug">slug: {org.slug}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span className="saas-org-slug">slug: {org.slug}</span>
+                      {org.contact_email && (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          • {org.contact_email}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <span className={`saas-badge ${org.is_trial ? 'trial' : org.license_tier === 'community' ? 'community' : 'paid'}`}>

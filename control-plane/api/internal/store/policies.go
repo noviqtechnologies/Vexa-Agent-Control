@@ -125,12 +125,22 @@ func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Po
 	return p, nil
 }
 
-// EnsurePoliciesSchema ensures policies table has tenant_id and tenant-scoped unique active index.
+// EnsurePoliciesSchema ensures policies table exists and has tenant_id with tenant-scoped unique active index.
 func (s *Store) EnsurePoliciesSchema(ctx context.Context) error {
 	if s.pool == nil {
 		return nil
 	}
 	q := `
+		CREATE TABLE IF NOT EXISTS policies (
+			id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id  UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE,
+			version    TEXT NOT NULL,
+			content    TEXT NOT NULL,
+			is_active  BOOLEAN NOT NULL DEFAULT false,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
 		ALTER TABLE policies ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE;
 		ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key;
 		DROP INDEX IF EXISTS idx_policies_active_unique;

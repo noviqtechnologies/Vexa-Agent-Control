@@ -10,6 +10,20 @@ import (
 // EnsureAuthProvidersSchema guarantees schema consistency for the auth_providers table and its indexes.
 func (s *Store) EnsureAuthProvidersSchema(ctx context.Context) error {
 	q := `
+		CREATE TABLE IF NOT EXISTS auth_providers (
+			id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			name          TEXT NOT NULL,
+			type          TEXT NOT NULL,
+			issuer_url    TEXT,
+			client_id     TEXT,
+			client_secret TEXT,
+			enabled       BOOLEAN NOT NULL DEFAULT true,
+			email_domains TEXT[] NOT NULL DEFAULT '{}',
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
 		DO $$
 		BEGIN
 			IF EXISTS (

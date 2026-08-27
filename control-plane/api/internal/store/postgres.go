@@ -109,6 +109,26 @@ func (s *Store) EnsureCoreSchema(ctx context.Context) error {
 		return nil
 	}
 	q := `
+		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_status') THEN
+				CREATE TYPE agent_status AS ENUM ('active', 'degraded', 'offline');
+			END IF;
+		END $$;
+
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_decision') THEN
+				CREATE TYPE event_decision AS ENUM ('allowed', 'denied', 'warned');
+			END IF;
+		END $$;
+
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'alert_severity') THEN
+				CREATE TYPE alert_severity AS ENUM ('critical', 'high', 'medium', 'low', 'info');
+			END IF;
+		END $$;
+
 		-- agents
 		CREATE TABLE IF NOT EXISTS agents (
 			agent_id TEXT PRIMARY KEY,

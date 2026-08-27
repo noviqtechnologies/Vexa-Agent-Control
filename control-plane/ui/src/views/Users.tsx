@@ -60,13 +60,18 @@ export default function Users() {
         fetch('/api/v1/users'),
         fetch('/api/v1/auth_providers'),
       ])
-      if (usersRes.ok) setUsers(await usersRes.json())
+      if (usersRes.ok) {
+        setUsers(await usersRes.json())
+      } else {
+        const txt = await usersRes.text()
+        if (txt) setError(txt)
+      }
       if (providersRes.ok) {
         const p = await providersRes.json()
         setProviders(Array.isArray(p) ? p : [])
       }
-    } catch {
-      // silently fail
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load users')
     } finally {
       setLoading(false)
     }

@@ -71,13 +71,15 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 				certFingerprint = "sha256:" + hex.EncodeToString(h[:])
 			} else {
 				certPresent := strings.TrimSpace(r.Header.Get("X-Client-Cert-Present"))
-				if certPresent == "" || certPresent == "false" || certPresent == "0" {
+				certSerial = strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
+				certFingerprint = strings.TrimSpace(r.Header.Get("X-Client-Cert-SHA256"))
+
+				// Validate certificate presence from headers
+				if (certSerial == "" || certFingerprint == "") && (certPresent == "" || certPresent == "false" || certPresent == "0") {
 					writeJSONError(w, http.StatusUnauthorized, "device_auth_required", "Mutual TLS client certificate missing or invalid", reqID, false, "PROVISION_MTLS_CERT")
 					return
 				}
 
-				certSerial = strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
-				certFingerprint = strings.TrimSpace(r.Header.Get("X-Client-Cert-SHA256"))
 				if certSerial == "" || certFingerprint == "" {
 					writeJSONError(w, http.StatusUnauthorized, "invalid_device_credential", "Client certificate metadata incomplete", reqID, false, "RENEGOTIATE_MTLS")
 					return

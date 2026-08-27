@@ -38,6 +38,7 @@ pub struct KeyPairBundle {
     pub ed25519_public_bytes: [u8; 32],
     pub ed25519_fingerprint: String,
     pub p256_raw_key_bytes: Vec<u8>,
+    pub p256_key_pem: String,
     pub csr_pem: String,
     pub csr_sha256: String,
 }
@@ -69,6 +70,7 @@ impl IdentityKeyManager {
         let key_pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)
             .map_err(|e| KeyError::Crypto(format!("Failed to generate P-256 keypair: {}", e)))?;
         let p256_raw = key_pair.serialize_der();
+        let p256_key_pem = key_pair.serialize_pem();
 
         // 3. Construct standard PKCS#10 Certificate Signing Request (CSR)
         let mut params = rcgen::CertificateParams::default();
@@ -88,6 +90,7 @@ impl IdentityKeyManager {
             ed25519_public_bytes: ed_pub_bytes,
             ed25519_fingerprint: ed_fp,
             p256_raw_key_bytes: p256_raw,
+            p256_key_pem,
             csr_pem,
             csr_sha256,
         })
@@ -99,9 +102,11 @@ impl IdentityKeyManager {
 
         let ed_path = self.state_dir.join("identity_ed25519.key");
         let p256_path = self.state_dir.join("mtls_p256.key");
+        let p256_pem_path = self.state_dir.join("device_key.pem");
 
         Self::write_protected_file(&ed_path, bundle.ed25519_signing_key.as_bytes())?;
         Self::write_protected_file(&p256_path, &bundle.p256_raw_key_bytes)?;
+        Self::write_protected_file(&p256_pem_path, bundle.p256_key_pem.as_bytes())?;
 
         Ok(())
     }

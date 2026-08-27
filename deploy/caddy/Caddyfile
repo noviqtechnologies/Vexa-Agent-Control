@@ -19,9 +19,9 @@
             header_up X-Forwarded-For {remote_host}
             header_up X-Forwarded-Proto {scheme}
             header_up X-VPC-Ingress-Auth {$INGRESS_AUTH_SECRET}
-            header_up X-Client-Cert-Present {http.request.tls.client.san.dns_names}
-            header_up X-Client-Cert-Serial {http.request.tls.client.serial_number}
-            header_up X-Client-Cert-SHA256 {http.request.tls.client.fingerprint_sha256}
+            header_up X-Client-Cert-Present {http.request.tls.client.serial}
+            header_up X-Client-Cert-Serial {http.request.tls.client.serial}
+            header_up X-Client-Cert-SHA256 {http.request.tls.client.fingerprint}
         }
     }
 

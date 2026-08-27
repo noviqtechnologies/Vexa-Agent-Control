@@ -80,3 +80,28 @@ func TestOAuthDomainValidation_BoundaryEnforcement(t *testing.T) {
 		t.Error("attacker@notcompany.com should be rejected")
 	}
 }
+
+func TestAuthHandler_PasswordVerificationFlow(t *testing.T) {
+	password := "Admin@123"
+	hash, err := hashPassword(password)
+	if err != nil {
+		t.Fatalf("hashPassword failed: %v", err)
+	}
+
+	ok, err := VerifyPassword(password, hash)
+	if err != nil {
+		t.Fatalf("VerifyPassword error: %v", err)
+	}
+	if !ok {
+		t.Errorf("expected VerifyPassword to return true for matching password")
+	}
+
+	wrongOk, err := VerifyPassword("WrongPassword", hash)
+	if err != nil {
+		t.Fatalf("VerifyPassword error on wrong password: %v", err)
+	}
+	if wrongOk {
+		t.Errorf("expected VerifyPassword to return false for wrong password")
+	}
+}
+

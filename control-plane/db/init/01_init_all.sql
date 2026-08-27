@@ -901,4 +901,22 @@ VALUES
     ('pb_default_2026_01', 'google', 'gemini-1.5-flash', 35000000, 105000000, 8750000)
 ON CONFLICT (price_book_version_id, provider, model_selector) DO NOTHING;
 
+-- Seed Default Authoritative Spend Policy ($100.00/mo)
+INSERT INTO spend_policies (
+    policy_id, organization_id, scope_type, scope_id, currency, period_type,
+    limit_microcents, action, effective_from, status
+) VALUES (
+    '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000001',
+    'organization', '00000000-0000-0000-0000-000000000001', 'USD', 'monthly',
+    10000000000, 'hard_deny', now(), 'PUBLISHED'
+) ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO NOTHING;
+
+INSERT INTO spend_policy_versions (
+    policy_version_id, policy_id, version, snapshot_json, published_by, published_at
+) VALUES (
+    '00000000-0000-0000-0000-000000000020', '00000000-0000-0000-0000-000000000010',
+    1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
+    'system', now()
+) ON CONFLICT (policy_id, version) DO NOTHING;
+
 COMMIT;

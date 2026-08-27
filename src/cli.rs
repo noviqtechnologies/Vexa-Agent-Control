@@ -884,6 +884,15 @@ impl DeploymentProfile {
     pub fn default_fail_closed(&self) -> bool {
         matches!(self, Self::TeamEnforce | Self::DedicatedEnforce)
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::LocalShadow => "local-shadow",
+            Self::LocalEnforce => "local-enforce",
+            Self::TeamEnforce => "team-enforce",
+            Self::DedicatedEnforce => "dedicated-enforce",
+        }
+    }
 }
 
 impl StartArgs {

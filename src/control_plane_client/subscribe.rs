@@ -21,25 +21,65 @@ pub async fn start_policy_subscriber(
     secret: String,
     state: Arc<crate::proxy::handler::ProxyState>,
 ) {
-    let url = format!(
-        "{}/api/v1/policy/subscribe",
-        dashboard_url.trim_end_matches('/')
-    );
-
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .build()
-        .expect("Failed to build HTTP client for SSE");
+    let clean_base = dashboard_url.trim_end_matches('/');
+    let client = crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(30));
 
     loop {
-        let resp_res = client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", secret))
-            .send()
-            .await;
+        let device_token_opt = crate::identity::device::load_device_token()
+            .or_else(|| std::env::var("AGENT_ID").ok());
+
+        // Determine effective endpoint and auth token
+        let (url, auth_bearer) = if !secret.is_empty() {
+            (format!("{}/api/v1/policy/subscribe", clean_base), Some(secret.clone()))
+        } else if let Some(tok) = device_token_opt {
+            (format!("{}/api/v2/device/policy/subscribe", clean_base), Some(tok))
+        } else {
+            // Attempt mTLS device endpoint
+            (format!("{}/api/v2/device/policy/subscribe", clean_base), None)
+        };
+
+        let mut req = client.get(&url);
+        if let Some(ref bearer) = auth_bearer {
+            req = req.header("Authorization", format!("Bearer {}", bearer));
+        }
+
+        let resp_res = req.send().await;
 
         match resp_res {
             Ok(resp) => {
+                let status = resp.status();
+                if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                    let err_body = resp.text().await.unwrap_or_default();
+                    logging::log_event(
+                        Level::Error,
+                        "tenant_auth_failed",
+                        serde_json::json!({
+                            "url": &url,
+                            "status": status.as_u16(),
+                            "reason": "sse_subscription_unauthorized",
+                            "body": err_body,
+                        }),
+                    );
+                    // Do NOT treat unauthorized stream as started. Back off before retry.
+                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    continue;
+                }
+
+                if !status.is_success() {
+                    let err_body = resp.text().await.unwrap_or_default();
+                    logging::log_event(
+                        Level::Warn,
+                        "sse_connection_error",
+                        serde_json::json!({
+                            "url": &url,
+                            "status": status.as_u16(),
+                            "body": err_body,
+                        }),
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
+                }
+
                 logging::log_event(
                     Level::Info,
                     "sse_subscriber_started",

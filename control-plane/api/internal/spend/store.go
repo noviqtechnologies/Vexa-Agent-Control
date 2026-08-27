@@ -204,7 +204,28 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 		) ON CONFLICT (policy_id, version) DO NOTHING;
 	`
 	_, err := s.pool.Exec(ctx, schemaSQL)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Backfill default authoritative spend policy ($100/mo) for any existing tenants
+	rows, err := s.pool.Query(ctx, `SELECT id FROM tenants WHERE id IS NOT NULL`)
+	if err == nil {
+		defer rows.Close()
+		var tenantIDs []string
+		for rows.Next() {
+			var tid string
+			if scanErr := rows.Scan(&tid); scanErr == nil && tid != "" {
+				tenantIDs = append(tenantIDs, tid)
+			}
+		}
+		rows.Close()
+		for _, tid := range tenantIDs {
+			_ = s.EnsureDefaultPolicyForOrg(ctx, tid)
+		}
+	}
+
+	return nil
 }
 
 // ComputePayloadHash returns sha256 hex string of any payload for idempotency checking
@@ -1009,21 +1030,40 @@ func (s *Store) EnsureDefaultPolicyForOrg(ctx context.Context, orgID string) err
 		return err
 	}
 
-	p := SpendPolicy{
-		OrganizationID:  orgID,
-		ScopeType:       ScopeOrganization,
-		ScopeID:         orgID,
-		Currency:        "USD",
-		PeriodType:      PeriodMonthly,
-		LimitMicrocents: 10000000000, // $100.00
-		Action:          ActionHardDeny,
-		Status:          "DRAFT",
-	}
-	if err := s.CreatePolicy(ctx, &p); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
 		return err
 	}
-	_, err = s.PublishPolicy(ctx, orgID, p.PolicyID, "system")
-	return err
+	defer tx.Rollback(ctx)
+
+	var policyID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO spend_policies (
+			organization_id, scope_type, scope_id, currency, period_type,
+			limit_microcents, action, effective_from, status
+		) VALUES (
+			$1, 'organization', $1, 'USD', 'monthly',
+			10000000000, 'hard_deny', now(), 'PUBLISHED'
+		) ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO UPDATE SET updated_at = now()
+		RETURNING policy_id
+	`, orgID).Scan(&policyID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO spend_policy_versions (
+			policy_id, version, snapshot_json, published_by, published_at
+		) VALUES (
+			$1, 1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
+			'system', now()
+		) ON CONFLICT (policy_id, version) DO NOTHING
+	`, policyID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, error) {

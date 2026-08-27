@@ -74,11 +74,29 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			if userID == "" {
 				userID = "admin"
 			}
+			// Ensure Local Auth Provider exists for this tenant
+			localProvider, _ := h.store.GetAuthProviderByType(r.Context(), org.ID, "local")
+			var authProviderID string
+			if localProvider != nil {
+				authProviderID = localProvider.ID
+			} else {
+				newLocal := &model.AuthProvider{
+					Type:         "local",
+					Name:         "Local Authentication",
+					Enabled:      false,
+					EmailDomains: []string{"*"},
+				}
+				if err := h.store.UpsertAuthProvider(r.Context(), org.ID, newLocal); err == nil {
+					authProviderID = newLocal.ID
+				}
+			}
+
 			// Upsert local user profile for this tenant
 			_ = h.store.UpsertUser(r.Context(), &model.User{
-				TenantID: org.ID,
-				Email:    userID,
-				IsAdmin:  true,
+				TenantID:       org.ID,
+				AuthProviderID: authProviderID,
+				Email:          userID,
+				IsAdmin:        true,
 			})
 
 			h.setSessionCookie(w, r, org.ID, userID, true, isSaaSOperator)
@@ -134,31 +152,51 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Check Local User Password Login (Tenant Scoped)
+	// 4. Check Local User Password Login (Tenant-Scoped or Cross-Tenant lookup by Email)
 	if h.store != nil {
-		tenantID := req.TenantID
-		if tenantID == "" {
-			tenantID = middleware.DefaultTenantID
+		var candidateUsers []model.User
+		if req.TenantID != "" {
+			u, err := h.store.GetUserByEmail(r.Context(), req.TenantID, "", req.Email)
+			if err == nil && u != nil {
+				candidateUsers = append(candidateUsers, *u)
+			}
+		} else {
+			candidates, err := h.store.FindUsersByEmail(r.Context(), req.Email)
+			if err == nil {
+				candidateUsers = candidates
+			}
 		}
 
-		u, err := h.store.GetUserByEmail(r.Context(), tenantID, "", req.Email)
-		if err == nil && u != nil && u.PasswordHash != "" {
-			ok, err := VerifyPassword(req.Password, u.PasswordHash)
-			if err == nil && ok {
-				if u.IsSaaSOperator || isSaaSOperator {
-					isSaaSOperator = true
-				}
+		for _, u := range candidateUsers {
+			if u.PasswordHash != "" {
+				ok, err := VerifyPassword(req.Password, u.PasswordHash)
+				if err == nil && ok {
+					if u.IsSaaSOperator || isSaaSOperator {
+						isSaaSOperator = true
+					}
 
-				h.setSessionCookie(w, r, tenantID, u.Email, u.IsAdmin, isSaaSOperator)
-				json.NewEncoder(w).Encode(map[string]any{
-					"status":               "ok",
-					"user_id":              u.Email,
-					"tenant_id":            tenantID,
-					"is_admin":             u.IsAdmin,
-					"is_saas_operator":     isSaaSOperator,
-					"needs_password_setup": false,
-				})
-				return
+					orgName := "Platform Management"
+					if u.TenantID != "" && u.TenantID != middleware.DefaultTenantID {
+						org, err := h.store.GetOrganization(r.Context(), u.TenantID)
+						if err == nil && org != nil {
+							orgName = org.Name
+						} else {
+							orgName = "Organization Workspace"
+						}
+					}
+
+					h.setSessionCookie(w, r, u.TenantID, u.Email, u.IsAdmin, isSaaSOperator)
+					json.NewEncoder(w).Encode(map[string]any{
+						"status":               "ok",
+						"user_id":              u.Email,
+						"tenant_id":            u.TenantID,
+						"organization_name":    orgName,
+						"is_admin":             u.IsAdmin,
+						"is_saas_operator":     isSaaSOperator,
+						"needs_password_setup": false,
+					})
+					return
+				}
 			}
 		}
 	}
@@ -537,7 +575,7 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
 	isSaaSOperator := user.IsSaaSOperator || (saasOpEmail != "" && strings.EqualFold(email, saasOpEmail))
 
-	h.setSessionCookie(w, r, tenantID, user.ID, user.IsAdmin, isSaaSOperator)
+	h.setSessionCookie(w, r, tenantID, user.Email, user.IsAdmin, isSaaSOperator)
 	
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",

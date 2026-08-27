@@ -118,9 +118,13 @@ func Load() (*Config, error) {
 	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
 	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
 	legacySingleTenant := os.Getenv("LEGACY_SINGLE_TENANT_MODE") == "true"
-	legacyTenantID := os.Getenv("LEGACY_TENANT_ID")
+	legacyTenantID := strings.TrimSpace(os.Getenv("LEGACY_TENANT_ID"))
 	if legacySingleTenant && legacyTenantID == "" {
-		legacyTenantID = "00000000-0000-0000-0000-000000000001"
+		if devMode {
+			legacyTenantID = "00000000-0000-0000-0000-000000000001"
+		} else {
+			return nil, fmt.Errorf("LEGACY_TENANT_ID is required when LEGACY_SINGLE_TENANT_MODE=true in production")
+		}
 	}
 
 	encryptionHex := os.Getenv("PROVIDER_KEY_ENCRYPTION_SECRET")
@@ -163,7 +167,12 @@ func Load() (*Config, error) {
 		}
 
 		if ingressAuthSecret == "" && os.Getenv("DIRECT_TLS_ENABLED") != "true" {
-			return nil, fmt.Errorf("INGRESS_AUTH_SECRET is required in production when running behind an HTTP ingress boundary (set DIRECT_TLS_ENABLED=true or provide a secure secret)")
+			// Fallback to gatewaySecret if present so standalone operator API starts without requiring separate ingress secret
+			if gatewaySecret != "" {
+				ingressAuthSecret = gatewaySecret
+			} else {
+				return nil, fmt.Errorf("INGRESS_AUTH_SECRET is required in production when running behind an HTTP ingress boundary (set DIRECT_TLS_ENABLED=true or provide a secure secret)")
+			}
 		}
 
 		if ingressAuthSecret != "" && (isPlaceholder(ingressAuthSecret) || len(ingressAuthSecret) < 16) {

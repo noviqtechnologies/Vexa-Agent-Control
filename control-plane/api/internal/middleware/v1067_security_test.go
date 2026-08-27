@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -109,5 +110,46 @@ func TestV1067_GatewayAuthMultiTenantRejection(t *testing.T) {
 	}
 	if boundTenant != legacyTenantID {
 		t.Fatalf("expected principal tenant %s, got %s", legacyTenantID, boundTenant)
+	}
+}
+
+func TestV1067_RequireTenantPrincipalMiddleware(t *testing.T) {
+	mw := RequireTenantPrincipalMiddleware()
+	var executed bool
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		executed = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Case 1: No tenant in context -> 401 Unauthorized
+	req1 := httptest.NewRequest("GET", "/api/v1/policies", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+
+	if rec1.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized when tenant principal is missing, got %d", rec1.Code)
+	}
+	if executed {
+		t.Fatalf("handler should not have executed without tenant principal")
+	}
+
+	// Case 2: Tenant principal in context -> 200 OK
+	req2 := httptest.NewRequest("GET", "/api/v1/policies", nil)
+	principal := &RequestPrincipal{
+		TenantID:  "tenant-uuid-1234",
+		AuthnType: AuthnTypeMTLS,
+	}
+	ctx := req2.Context()
+	ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
+	req2 = req2.WithContext(ctx)
+
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when tenant principal is present, got %d", rec2.Code)
+	}
+	if !executed {
+		t.Fatalf("handler should have executed with valid tenant principal")
 	}
 }

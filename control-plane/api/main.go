@@ -60,6 +60,9 @@ func main() {
 
 	go func() {
 		log.Printf("dashboard-api listening on %s", addr)
+		if cfg.LegacySingleTenantMode {
+			log.Printf("WARNING: Legacy single-tenant compatibility mode is ACTIVE for tenant '%s'. Shared secrets (GATEWAY_SECRET / POLICY_READ_SECRET) are bound exclusively to this tenant.", cfg.LegacyTenantID)
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
@@ -75,11 +78,11 @@ func main() {
 	if err := db.EnsureOrganizationsSchema(ctx); err != nil {
 		log.Printf("[organizations] schema verification warning: %v", err)
 	}
-	if err := db.EnsureUsersSchema(ctx); err != nil {
-		log.Printf("[users] schema verification warning: %v", err)
-	}
 	if err := db.EnsureAuthProvidersSchema(ctx); err != nil {
 		log.Printf("[auth_providers] schema verification warning: %v", err)
+	}
+	if err := db.EnsureUsersSchema(ctx); err != nil {
+		log.Printf("[users] schema verification warning: %v", err)
 	}
 	if err := db.EnsureCoreSchema(ctx); err != nil {
 		log.Printf("[core] schema verification warning: %v", err)
@@ -220,6 +223,8 @@ func main() {
 		r.Get("/bootstrap", deviceV2H.GetBootstrap)
 		r.Post("/heartbeats", deviceV2H.SubmitHeartbeat)
 		r.Get("/status", deviceV2H.GetDeviceStatus)
+		r.Get("/policy/active", policyMgmtH.GetActive)
+		r.Get("/policy/subscribe", policyMgmtH.Subscribe)
 	})
 
 	// 4. Provider LLM Broker (Edge mTLS Header Validation & Capability Gates)

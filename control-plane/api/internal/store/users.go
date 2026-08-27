@@ -39,6 +39,32 @@ func (s *Store) GetUserByEmailOnly(ctx context.Context, email string) (*model.Us
 	return s.GetUserByEmail(ctx, "00000000-0000-0000-0000-000000000001", "", email)
 }
 
+// FindUsersByEmail returns all user records matching the given email across all tenants.
+func (s *Store) FindUsersByEmail(ctx context.Context, email string) ([]model.User, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tenant_id, COALESCE(auth_provider_id::text, ''), email, COALESCE(password_hash, ''), is_admin, is_saas_operator, created_at, updated_at
+		FROM users
+		WHERE LOWER(email) = LOWER($1)
+		ORDER BY updated_at DESC
+	`, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]model.User, 0)
+	for rows.Next() {
+		var u model.User
+		if err := rows.Scan(
+			&u.ID, &u.TenantID, &u.AuthProviderID, &u.Email, &u.PasswordHash, &u.IsAdmin, &u.IsSaaSOperator, &u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
 func (s *Store) GetUserByID(ctx context.Context, id string) (*model.User, error) {
 	var u model.User
 	err := s.pool.QueryRow(ctx, `
@@ -57,6 +83,18 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*model.User, error)
 // EnsureUsersSchema guarantees schema consistency for the users table and its indexes.
 func (s *Store) EnsureUsersSchema(ctx context.Context) error {
 	q := `
+		CREATE TABLE IF NOT EXISTS users (
+			id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			tenant_id        UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE,
+			auth_provider_id UUID REFERENCES auth_providers(id) ON DELETE SET NULL,
+			email            TEXT NOT NULL,
+			password_hash    TEXT,
+			is_admin         BOOLEAN NOT NULL DEFAULT false,
+			is_saas_operator BOOLEAN NOT NULL DEFAULT false,
+			created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE;
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS is_saas_operator BOOLEAN NOT NULL DEFAULT false;
 		ALTER TABLE users ALTER COLUMN auth_provider_id DROP NOT NULL;

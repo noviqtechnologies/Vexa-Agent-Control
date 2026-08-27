@@ -16,6 +16,14 @@ import (
 // EnsureOrganizationsSchema guarantees schema consistency for the tenants table.
 func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 	q := `
+		CREATE TABLE IF NOT EXISTS tenants (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			slug TEXT UNIQUE NOT NULL,
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contact_email TEXT NOT NULL DEFAULT '';
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS license_tier TEXT NOT NULL DEFAULT 'community';
@@ -137,6 +145,24 @@ rules:
 		VALUES ($1, '1.0.0', $2, true, now(), now())
 		ON CONFLICT (tenant_id, version) DO NOTHING
 	`, org.ID, baselinePolicyYAML)
+
+	// Seed default Local Auth Provider (initially disabled to enforce initial setup) and initial tenant admin user
+	var localProviderID string
+	_ = s.pool.QueryRow(ctx, `
+		INSERT INTO auth_providers (tenant_id, name, type, enabled, email_domains, created_at, updated_at)
+		VALUES ($1, 'Local Authentication', 'local', false, '{"*"}', now(), now())
+		ON CONFLICT (tenant_id, type) DO UPDATE SET updated_at = now()
+		RETURNING id
+	`, org.ID).Scan(&localProviderID)
+
+	if org.ContactEmail != "" {
+		_ = s.UpsertUser(ctx, &model.User{
+			TenantID:       org.ID,
+			AuthProviderID: localProviderID,
+			Email:          org.ContactEmail,
+			IsAdmin:        true,
+		})
+	}
 
 	return rawBootstrapToken, nil
 }

@@ -423,7 +423,24 @@ pub(crate) async fn resolve_session(
             }
         }
     } else {
-        // OIDC is NOT configured. Fall back to local session tracking!
+        // OIDC is NOT configured.
+        // If listener is non-loopback, unauthenticated requests are strictly rejected.
+        if !state.listen_is_loopback && auth_header.is_none() {
+            crate::logging::log_event(
+                crate::logging::Level::Warn,
+                "auth_failed",
+                serde_json::json!({
+                    "reason": "non_loopback_requires_auth",
+                    "remote_addr": client_ip,
+                }),
+            );
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Authentication is required when gateway is exposed on external network interfaces".to_string(),
+            ));
+        }
+
+        // Fall back to local session tracking for loopback or authorized requests!
         // We use X-Session-ID header or Client IP as session key.
         let session_key = auth_header.unwrap_or(client_ip).to_string();
 

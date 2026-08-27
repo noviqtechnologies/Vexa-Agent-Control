@@ -558,6 +558,14 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         eprintln!("{} Failed to write certificate chain: {}", "✖".red(), e);
     }
 
+    #[cfg(windows)]
+    {
+        let prog_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
+        let _ = fs::create_dir_all(&prog_data);
+        let _ = fs::write(prog_data.join("device_cert.pem"), &complete_data.mtls_certificate.pem_chain);
+        let _ = fs::write(prog_data.join("device_key.pem"), &bundle.p256_key_pem);
+    }
+
     let _ = save_device_token(&complete_data.device.id);
 
     println!();

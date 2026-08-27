@@ -20,8 +20,23 @@ func NewPolicyMgmtHandler(s *store.Store, b *sse.Broker) *PolicyMgmtHandler {
 	return &PolicyMgmtHandler{store: s, broker: b}
 }
 
+func writeUnauthorizedTenantError(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"code":    "unauthorized_tenant_required",
+			"message": "Authenticated tenant principal is required for this operation",
+		},
+	})
+}
+
 func (h *PolicyMgmtHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		writeUnauthorizedTenantError(w)
+		return
+	}
 	policies, err := h.store.ListPolicies(r.Context(), tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -37,6 +52,10 @@ func (h *PolicyMgmtHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		writeUnauthorizedTenantError(w)
+		return
+	}
 	var policy *model.Policy
 	var err error
 	
@@ -63,6 +82,10 @@ func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 
 func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		writeUnauthorizedTenantError(w)
+		return
+	}
 	var p model.Policy
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -100,6 +123,12 @@ func formatSSE(event, data string) []byte {
 }
 
 func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
+	if tenantID == "" {
+		writeUnauthorizedTenantError(w)
+		return
+	}
+
 	if h.broker == nil {
 		http.Error(w, "SSE broker not configured", http.StatusInternalServerError)
 		return
@@ -115,7 +144,6 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	tenantID := middleware.ResolveTenantScope(r)
 	clientChan, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
 	// Send initial active policy if available

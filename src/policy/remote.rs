@@ -21,13 +21,49 @@ use crate::logging::{self, Level};
 use crate::policy::loader::{load_policy_from_str, PolicyLoadResult};
 use serde::Deserialize;
 
-/// JSON shape returned by GET /api/v1/policy/active
+/// JSON shape returned by GET /api/v1/policy/active or /api/v2/device/policy/active
 #[derive(Deserialize, Debug)]
 pub struct RemotePolicy {
     /// Semantic version string set by the admin (e.g. "v1.0.0")
     pub version: Option<String>,
     /// Raw YAML policy content stored in PostgreSQL
     pub content: Option<String>,
+}
+
+/// Helper to construct a Reqwest client with mTLS device identity if available.
+pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(timeout);
+
+    // Look for device cert and key in ~/.agentcontrol, ~/.agentwall, or Windows ProgramData
+    let mut candidate_dirs = Vec::new();
+    if let Some(home_dir) = dirs::home_dir() {
+        candidate_dirs.push(home_dir.join(".agentcontrol"));
+        candidate_dirs.push(home_dir.join(".agentwall"));
+    }
+    #[cfg(windows)]
+    {
+        candidate_dirs.push(std::path::PathBuf::from(r"C:\ProgramData\AgentControl"));
+    }
+
+    for dir in candidate_dirs {
+        let cert_path = dir.join("device_cert.pem");
+        let key_path = dir.join("device_key.pem");
+        if cert_path.exists() && key_path.exists() {
+            if let (Ok(cert_bytes), Ok(key_bytes)) = (std::fs::read(&cert_path), std::fs::read(&key_path)) {
+                let mut combined = cert_bytes;
+                combined.extend_from_slice(b"\n");
+                combined.extend_from_slice(&key_bytes);
+                if let Ok(identity) = reqwest::Identity::from_pem(&combined) {
+                    builder = builder.identity(identity);
+                    break;
+                }
+            }
+        }
+    }
+
+    builder.build().unwrap_or_default()
 }
 
 /// Fetch the active policy YAML from the dashboard API.
@@ -39,22 +75,58 @@ pub async fn fetch_policy_yaml(
     dashboard_url: &str,
     policy_read_secret: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let url = format!(
-        "{}/api/v1/policy/active",
-        dashboard_url.trim_end_matches('/')
-    );
+    let clean_base = dashboard_url.trim_end_matches('/');
+    let client = build_device_http_client(std::time::Duration::from_secs(10));
 
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+    // 1. Try device-authenticated endpoint (/api/v2/device/policy/active)
+    let device_token_opt = crate::identity::device::load_device_token()
+        .or_else(|| std::env::var("AGENT_ID").ok());
 
+    let v2_url = format!("{}/api/v2/device/policy/active", clean_base);
+    let mut req_v2 = client.get(&v2_url);
+    if let Some(ref tok) = device_token_opt {
+        req_v2 = req_v2.header("Authorization", format!("Bearer {}", tok));
+    }
+
+    if let Ok(resp_v2) = req_v2.send().await {
+        let status = resp_v2.status();
+        if status.is_success() {
+            let remote: RemotePolicy = resp_v2
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse policy JSON from dashboard API: {}", e))?;
+            return match remote.content {
+                Some(yaml) if !yaml.trim().is_empty() => Ok(Some(yaml)),
+                _ => Ok(None),
+            };
+        } else if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
+            return Ok(None);
+        } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            // Log typed auth failure if device credentials were tried
+            if device_token_opt.is_some() {
+                let body = resp_v2.text().await.unwrap_or_default();
+                logging::log_event(
+                    Level::Error,
+                    "tenant_auth_failed",
+                    serde_json::json!({
+                        "url": &v2_url,
+                        "status": status.as_u16(),
+                        "reason": "device_policy_fetch_unauthorized",
+                        "body": &body,
+                    }),
+                );
+            }
+        }
+    }
+
+    // 2. Fall back to /api/v1/policy/active (legacy secret or general endpoint)
+    let url = format!("{}/api/v1/policy/active", clean_base);
     let mut req = client.get(&url);
 
-    // Authenticate with the shared policy-read secret
     if let Some(secret) = policy_read_secret {
         req = req.header("Authorization", format!("Bearer {}", secret));
+    } else if let Some(ref tok) = device_token_opt {
+        req = req.header("Authorization", format!("Bearer {}", tok));
     }
 
     let resp = req
@@ -67,6 +139,24 @@ pub async fn fetch_policy_yaml(
     if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
         // Dashboard returned 404/204 — no policy saved yet, not an error
         return Ok(None);
+    }
+
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        let body = resp.text().await.unwrap_or_default();
+        logging::log_event(
+            Level::Error,
+            "tenant_auth_failed",
+            serde_json::json!({
+                "url": &url,
+                "status": status.as_u16(),
+                "reason": "policy_fetch_unauthorized",
+                "body": &body,
+            }),
+        );
+        return Err(format!(
+            "tenant_auth_failed: Dashboard API returned HTTP {} for {}: {}",
+            status, url, body
+        ));
     }
 
     if !status.is_success() {

@@ -78,7 +78,7 @@ func (s *Store) EnsureSpendV1Schema(ctx context.Context) error {
 
 		CREATE TABLE IF NOT EXISTS spend_increase_requests (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			request_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			request_id UUID DEFAULT uuid_generate_v4(),
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 			agent_id TEXT NOT NULL,
 			current_cap BIGINT NOT NULL DEFAULT 0,

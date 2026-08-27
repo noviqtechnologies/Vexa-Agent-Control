@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -75,6 +76,27 @@ func RequireTenantPrincipal(ctx context.Context) (*RequestPrincipal, error) {
 		return nil, ErrUnauthenticatedTenantScope
 	}
 	return p, nil
+}
+
+// RequireTenantPrincipalMiddleware enforces that an authenticated tenant principal is present on routes.
+func RequireTenantPrincipalMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p, err := RequireTenantPrincipal(r.Context())
+			if err != nil || p == nil || p.TenantID == "" {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    "unauthorized_tenant_required",
+						"message": "Authenticated tenant principal is required for this operation",
+					},
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // TenantIDFromContext extracts the tenant UUID from the RequestPrincipal, UserClaims, or DevicePrincipal in context.

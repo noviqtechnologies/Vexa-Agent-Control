@@ -535,6 +535,141 @@ fn resolve_audit_log_path() -> std::path::PathBuf {
     agent_dir.join("audit.jsonl")
 }
 
+#[allow(clippy::too_many_arguments)]
+fn build_proxy_state(
+    compiled_policy: Option<crate::policy::engine::CompiledPolicy>,
+    audit_logger: Arc<AuditLogger>,
+    session_id: String,
+    kill_mode: KillMode,
+    agent_pid: Option<u32>,
+    upstream_url: String,
+    dry_run: bool,
+    shadow_mode: bool,
+    policy_loaded: bool,
+    rate_limit_val: u32,
+    safe_mode_scanner: Arc<SafeModeScanner>,
+    response_scanner: Arc<policy::response_scanner::ResponseScanner>,
+    response_scan_config: policy::response_scanner::ResponseScanConfig,
+    credential_scope_validator: Arc<policy::credential_scope::CredentialScopeValidator>,
+    policy_path: Option<String>,
+    spend_ledger: Option<Arc<agentcontrol::spend::ledger::SpendLedger>>,
+    dashboard_client: Option<Arc<agentcontrol::control_plane_client::client::DashboardClient>>,
+    listen_is_loopback: bool,
+    centralized_mode: bool,
+    effective_profile: String,
+    max_concurrency: usize,
+    connection_timeout_secs: u64,
+    max_frame_size: usize,
+    admin_token: Option<String>,
+) -> Arc<ProxyState> {
+    let connect_timeout = std::time::Duration::from_secs(10);
+    let request_timeout = std::time::Duration::from_secs(connection_timeout_secs.max(5));
+    let http_client = reqwest::Client::builder()
+        .connect_timeout(connect_timeout)
+        .timeout(request_timeout)
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .build()
+        .unwrap_or_default();
+
+    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
+
+    let pricing_table = if spend_ledger.is_some() {
+        Some(Arc::new(
+            agentcontrol::spend::PricingTable::load(None).unwrap_or_else(|_| {
+                agentcontrol::spend::PricingTable {
+                    version: "1".to_string(),
+                    models: std::collections::HashMap::new(),
+                    fallback: agentcontrol::spend::ModelPrice {
+                        input_per_1m_cents: 0,
+                        output_per_1m_cents: 0,
+                    },
+                }
+            }),
+        ))
+    } else {
+        None
+    };
+
+    let provider_keys = {
+        let map = dashmap::DashMap::new();
+        if let Ok(k) = std::env::var("OPENAI_API_KEY") {
+            if !k.is_empty() {
+                map.insert("openai".to_string(), k);
+            }
+        }
+        if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
+            if !k.is_empty() {
+                map.insert("anthropic".to_string(), k);
+            }
+        }
+        map
+    };
+
+    Arc::new(ProxyState {
+        policy: std::sync::RwLock::new(compiled_policy.clone()),
+        audit_logger,
+        session_id,
+        kill_mode,
+        agent_pid,
+        upstream_url,
+        dry_run,
+        shadow_mode: std::sync::atomic::AtomicBool::new(shadow_mode),
+        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
+        rate_limiter: proxy::handler::RateLimiter::new(rate_limit_val),
+        http_client,
+        safe_mode_scanner,
+        ready: true,
+        db_manager,
+        response_scanner,
+        response_scan_config: std::sync::RwLock::new(response_scan_config),
+        dlp_scanner: std::sync::Arc::new(
+            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+        ),
+        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
+            agentcontrol::policy::semantic::SemanticConfig::default(),
+        )),
+        injection_scanner: std::sync::Arc::new(
+            agentcontrol::policy::injection::InjectionScanner::new()
+                .expect("Failed to compile Injection regexes"),
+        ),
+        schema_drift_detector: std::sync::Arc::new(
+            agentcontrol::policy::schema_drift::SchemaDriftDetector::new(
+                compiled_policy
+                    .as_ref()
+                    .and_then(|p| p.schema_drift.as_ref())
+                    .and_then(|sd| sd.baseline_path.as_ref().map(std::path::PathBuf::from)),
+            ),
+        ),
+        tool_history: std::sync::Mutex::new(Vec::new()),
+        sessions: dashmap::DashMap::new(),
+        metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_allow_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_deny_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_rate_limited_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        event_tx: tokio::sync::broadcast::channel(1024).0,
+        credential_scope_validator,
+        policy_path,
+        gateway_start_time: std::time::Instant::now(),
+        spend_ledger,
+        pricing_table,
+        dashboard_client,
+        listen_is_loopback,
+        policy_read_secret: std::env::var("POLICY_READ_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty()),
+        centralized_mode,
+        provider_keys,
+        effective_profile,
+        max_concurrency,
+        connection_timeout_secs,
+        max_frame_size,
+        admin_token,
+    })
+}
+
 #[allow(deprecated)]
 async fn run_stdio_proxy(
     args: Vec<String>,
@@ -610,69 +745,32 @@ async fn run_stdio_proxy(
         ],
     };
 
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(None), // Safe Mode only for Claude wrap
+    let state = build_proxy_state(
+        None,
         audit_logger,
         session_id,
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: std::sync::atomic::AtomicBool::new(false),
-        rate_limiter: proxy::handler::RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
+        KillMode::Connection,
+        None,
+        "".to_string(),
+        false,
+        false,
+        false,
+        0,
         safe_mode_scanner,
-        ready: true,
-        db_manager,
         response_scanner,
-        response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(
-            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-        ),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: std::sync::Arc::new(
-            agentcontrol::policy::injection::InjectionScanner::new()
-                .expect("Failed to compile Injection regexes"),
-        ),
-        schema_drift_detector: std::sync::Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
-        credential_scope_validator: Arc::new(
-            policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        policy_path: None,
-        gateway_start_time: std::time::Instant::now(),
-        spend_ledger: None,
-        pricing_table: None,
-        dashboard_client: agentcontrol::control_plane_client::client::DashboardClient::from_env()
-            .map(Arc::new),
-        listen_is_loopback: true,
-        policy_read_secret: std::env::var("POLICY_READ_SECRET")
-            .ok()
-            .filter(|s| !s.is_empty()),
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-shadow".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    });
+        response_scan_config,
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        None,
+        None,
+        agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
+        true,
+        false,
+        "local-shadow".to_string(),
+        1024,
+        30,
+        16777216,
+        None,
+    );
 
     let mut parts: Vec<String> = args.iter().map(|a| proxy::stdio::expand_arg(a)).collect();
     let program = parts.remove(0);
@@ -1015,6 +1113,23 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         }
     };
 
+    let has_identity_auth = compiled_policy
+        .as_ref()
+        .map(|p| p.identity_validator.is_some())
+        .unwrap_or(false)
+        || centralized
+        || args.admin_token.is_some()
+        || std::env::var("AGENTCONTROL_ADMIN_TOKEN").is_ok();
+
+    if !listen_addr.ip().is_loopback() && !has_identity_auth {
+        eprintln!(
+            "{} Security error: Non-loopback listener address ({}) requires OIDC authentication or a verified identity provider. Binding to external interfaces without authentication is prohibited.",
+            "✖".red().bold(),
+            listen_addr
+        );
+        return 1;
+    }
+
     // Generate session secret (persisted at ~/.agentcontrol/audit.key per ADR-007)
     let session_secret = resolve_hmac_key();
     let session_id = uuid::Uuid::new_v4().to_string();
@@ -1121,8 +1236,6 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         safe_tools: sf_tools,
     };
 
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
     let credential_scope_validator = Arc::new(
         policy::credential_scope::CredentialScopeValidator::new(strict_credential_scope),
     );
@@ -1137,103 +1250,32 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         }),
     );
 
-    let connect_timeout = std::time::Duration::from_secs(10);
-    let request_timeout = std::time::Duration::from_secs(args.connection_timeout_secs.max(5));
-    let http_client = reqwest::Client::builder()
-        .connect_timeout(connect_timeout)
-        .timeout(request_timeout)
-        .pool_idle_timeout(std::time::Duration::from_secs(90))
-        .build()
-        .unwrap_or_default();
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(compiled_policy.clone()),
-        audit_logger: audit_logger.clone(),
-        session_id: session_id.clone(),
-        kill_mode: kill_mode.clone(),
-        agent_pid: resolved_pid,
-        upstream_url: mcp_url,
+    let state = build_proxy_state(
+        compiled_policy.clone(),
+        audit_logger.clone(),
+        session_id.clone(),
+        kill_mode.clone(),
+        resolved_pid,
+        mcp_url,
         dry_run,
-        shadow_mode: std::sync::atomic::AtomicBool::new(shadow_mode),
-        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
-        rate_limiter: proxy::handler::RateLimiter::new(rate_limit_val),
-        http_client,
+        shadow_mode,
+        policy_loaded,
+        rate_limit_val,
         safe_mode_scanner,
-        ready: true,
-        db_manager,
         response_scanner,
-        response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(
-            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-        ),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: std::sync::Arc::new(
-            agentcontrol::policy::injection::InjectionScanner::new()
-                .expect("Failed to compile Injection regexes"),
-        ),
-        schema_drift_detector: std::sync::Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::new(
-                compiled_policy
-                    .as_ref()
-                    .and_then(|p| p.schema_drift.as_ref())
-                    .and_then(|sd| sd.baseline_path.as_ref().map(std::path::PathBuf::from)),
-            ),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0,
-        // FR-5 v2.0: Credential scope validator
+        response_scan_config,
         credential_scope_validator,
-        policy_path: policy_path.clone(),
-        gateway_start_time: std::time::Instant::now(),
-        spend_ledger: spend_ledger.clone(),
-        pricing_table: if spend_ledger.is_some() {
-            Some(Arc::new(
-                agentcontrol::spend::PricingTable::load(None).unwrap_or_else(|_| {
-                    agentcontrol::spend::PricingTable {
-                        version: "1".to_string(),
-                        models: std::collections::HashMap::new(),
-                        fallback: agentcontrol::spend::ModelPrice {
-                            input_per_1m_cents: 0,
-                            output_per_1m_cents: 0,
-                        },
-                    }
-                }),
-            ))
-        } else {
-            None
-        },
-        dashboard_client: dashboard_client.clone(),
-        listen_is_loopback: listen_addr.ip().is_loopback(),
-        policy_read_secret: std::env::var("POLICY_READ_SECRET")
-            .ok()
-            .filter(|s| !s.is_empty()),
-        centralized_mode: centralized,
-        provider_keys: {
-            let map = dashmap::DashMap::new();
-            if let Ok(k) = std::env::var("OPENAI_API_KEY") {
-                if !k.is_empty() { map.insert("openai".to_string(), k); }
-            }
-            if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
-                if !k.is_empty() { map.insert("anthropic".to_string(), k); }
-            }
-            map
-        },
-        effective_profile: effective_profile_name,
-        max_concurrency: args.max_concurrency,
-        connection_timeout_secs: args.connection_timeout_secs,
-        max_frame_size: args.max_frame_size,
-        admin_token: args.admin_token.clone().or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
-    });
+        policy_path.clone(),
+        spend_ledger.clone(),
+        dashboard_client.clone(),
+        listen_addr.ip().is_loopback(),
+        centralized,
+        effective_profile_name,
+        args.max_concurrency,
+        args.connection_timeout_secs,
+        args.max_frame_size,
+        args.admin_token.clone().or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
+    );
 
     if state.dashboard_client.is_some() {
         let msg = if std::env::var("DASHBOARD_API_URL").is_ok() {
@@ -1863,79 +1905,37 @@ async fn run_wrap(
         safe_tools: sf_tools,
     };
 
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(compiled_policy.clone()),
+    let state = build_proxy_state(
+        compiled_policy.clone(),
         audit_logger,
         session_id,
-        kill_mode: match kill_mode.as_str() {
+        match kill_mode.as_str() {
             "connection" => KillMode::Connection,
             "process" => KillMode::Process,
             "both" => KillMode::Both,
             _ => KillMode::Process,
         },
-        agent_pid: None,
-        upstream_url: "".to_string(), // Not used in stdio proxy
+        None,
+        "".to_string(),
         dry_run,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
-        rate_limiter: proxy::handler::RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
+        false,
+        policy_loaded,
+        0,
         safe_mode_scanner,
-        ready: true,
-        db_manager,
         response_scanner,
-        response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(
-            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-        ),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: std::sync::Arc::new(
-            agentcontrol::policy::injection::InjectionScanner::new()
-                .expect("Failed to compile Injection regexes"),
-        ),
-        schema_drift_detector: std::sync::Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::new(
-                compiled_policy
-                    .as_ref()
-                    .and_then(|p| p.schema_drift.as_ref())
-                    .and_then(|sd| sd.baseline_path.as_ref().map(std::path::PathBuf::from)),
-            ),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0, // Fix 6: enlarged buffer to reduce event drops
-        credential_scope_validator: Arc::new(
-            policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        policy_path: None,
-        gateway_start_time: std::time::Instant::now(),
-        spend_ledger: None,
-        pricing_table: None,
-        dashboard_client: agentcontrol::control_plane_client::client::DashboardClient::from_env()
-            .map(Arc::new),
-        listen_is_loopback: true,
-        policy_read_secret: std::env::var("POLICY_READ_SECRET")
-            .ok()
-            .filter(|s| !s.is_empty()),
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    });
+        response_scan_config,
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        None,
+        None,
+        agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
+        true,
+        false,
+        "local-enforce".to_string(),
+        1024,
+        30,
+        16777216,
+        None,
+    );
 
     // Parse the command string
     let parts = match shlex::split(&cmd_str) {
@@ -2109,73 +2109,39 @@ async fn run_dev(
         ],
     };
 
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(compiled_policy),
+    let state = build_proxy_state(
+        compiled_policy,
         audit_logger,
         session_id,
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: mcp_url,
-        dry_run: false,
-        // When enforce is true, shadow_mode is false → injection/DLP scanners block.
-        shadow_mode: std::sync::atomic::AtomicBool::new(!enforce),
-        policy_loaded: std::sync::atomic::AtomicBool::new(policy_loaded),
-        rate_limiter: proxy::handler::RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
+        KillMode::Connection,
+        None,
+        mcp_url,
+        false,
+        !enforce,
+        policy_loaded,
+        0,
         safe_mode_scanner,
-        ready: true,
-        db_manager,
         response_scanner,
-        response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(
-            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-        ),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: std::sync::Arc::new(
-            agentcontrol::policy::injection::InjectionScanner::new()
-                .expect("Failed to compile Injection regexes"),
-        ),
-        schema_drift_detector: std::sync::Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(1024).0,
-        credential_scope_validator: Arc::new(
-            policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        policy_path: policy_path_str,
-        gateway_start_time: std::time::Instant::now(),
-        spend_ledger: None,
-        pricing_table: None,
-        dashboard_client: agentcontrol::control_plane_client::client::DashboardClient::from_env()
-            .map(Arc::new),
-        listen_is_loopback: listen
+        response_scan_config,
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        policy_path_str,
+        None,
+        agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
+        listen
             .parse::<SocketAddr>()
             .map(|a| a.ip().is_loopback())
             .unwrap_or(true),
-        policy_read_secret: std::env::var("POLICY_READ_SECRET")
-            .ok()
-            .filter(|s| !s.is_empty()),
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: if enforce { "local-enforce".to_string() } else { "local-shadow".to_string() },
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    });
+        false,
+        if enforce {
+            "local-enforce".to_string()
+        } else {
+            "local-shadow".to_string()
+        },
+        1024,
+        30,
+        16777216,
+        None,
+    );
 
     if stdio {
         if !args.is_empty() {

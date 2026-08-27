@@ -201,7 +201,19 @@ export default function AuthProviders() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const text = await res.text()
+        let errMsg = text || `Request failed (${res.status})`
+        try {
+          const errData = JSON.parse(text)
+          if (errData && typeof errData === 'object' && errData.error) {
+            errMsg = errData.error
+          }
+        } catch {
+          // not JSON, keep text
+        }
+        throw new Error(errMsg)
+      }
       setSuccessMsg(`${editingProvider.name} configured successfully.`)
       await fetchProviders()
       if (checkSession) {
@@ -209,7 +221,11 @@ export default function AuthProviders() {
       }
       setTimeout(closeModal, 1200)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      if (err instanceof TypeError && err.message.toLowerCase().includes('failed to fetch')) {
+        setError('Network error: Unable to reach the Control Hub API service. Please verify your connection or session.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Save failed')
+      }
     } finally {
       setSaving(false)
     }
