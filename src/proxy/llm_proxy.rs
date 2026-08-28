@@ -26,12 +26,245 @@ fn estimate_input_tokens(body: &Value) -> i64 {
     }
 }
 
+pub(crate) fn infer_provider_from_model(model: &str) -> String {
+    let lower = model.to_lowercase();
+    if lower.starts_with("gpt-")
+        || lower.starts_with("o1")
+        || lower.starts_with("o3")
+        || lower.starts_with("text-")
+        || lower.starts_with("chatgpt")
+        || lower.contains("openai")
+    {
+        "openai".to_string()
+    } else if lower.starts_with("claude-") || lower.contains("anthropic") {
+        "anthropic".to_string()
+    } else if lower.starts_with("mistral")
+        || lower.starts_with("codestral")
+        || lower.starts_with("mixtral")
+    {
+        "mistral".to_string()
+    } else if lower.starts_with("llama") || lower.starts_with("groq") || lower.starts_with("gemma") {
+        if std::env::var("GROQ_API_KEY").is_ok() {
+            "groq".to_string()
+        } else {
+            "openai".to_string()
+        }
+    } else if lower.starts_with("together") {
+        "together".to_string()
+    } else if std::env::var("ANTHROPIC_API_KEY").is_ok() && std::env::var("OPENAI_API_KEY").is_err() {
+        "anthropic".to_string()
+    } else if std::env::var("GROQ_API_KEY").is_ok() && std::env::var("OPENAI_API_KEY").is_err() {
+        "groq".to_string()
+    } else {
+        std::env::var("DEFAULT_LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string())
+    }
+}
+
+/// Robust Server-Sent Events (SSE) stream sanitizer and normalizer.
+/// Strips broker-internal fields (like `obfuscation`), standardizes CRLF/LF line endings,
+/// preserves event framing, keep-alives, and `data: [DONE]`, ensuring strict compliance
+/// with OpenAI / Anthropic / Cline SDK parsers.
+pub(crate) fn clean_sse_stream(raw_bytes: &[u8]) -> Vec<u8> {
+    let text = match std::str::from_utf8(raw_bytes) {
+        Ok(t) => t,
+        Err(_) => return raw_bytes.to_vec(),
+    };
+
+    // Normalize CRLF to LF
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let mut out = String::with_capacity(normalized.len() + 64);
+
+    for block in normalized.split("\n\n") {
+        let trimmed_block = block.trim();
+        if trimmed_block.is_empty() {
+            continue;
+        }
+
+        let mut block_lines = Vec::new();
+        for line in trimmed_block.lines() {
+            let line_trimmed = line.trim();
+            if line_trimmed.is_empty() {
+                continue;
+            }
+
+            if let Some(data_str) = line_trimmed.strip_prefix("data: ") {
+                let data_trimmed = data_str.trim();
+                if data_trimmed == "[DONE]" {
+                    block_lines.push("data: [DONE]".to_string());
+                } else if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(data_trimmed) {
+                    if let Some(obj) = val.as_object_mut() {
+                        obj.remove("obfuscation");
+                    }
+                    if let Ok(serialized) = serde_json::to_string(&val) {
+                        block_lines.push(format!("data: {}", serialized));
+                    } else {
+                        block_lines.push(format!("data: {}", data_trimmed));
+                    }
+                } else {
+                    block_lines.push(line_trimmed.to_string());
+                }
+            } else if line_trimmed == "data:[DONE]" {
+                block_lines.push("data: [DONE]".to_string());
+            } else {
+                block_lines.push(line_trimmed.to_string());
+            }
+        }
+
+        if !block_lines.is_empty() {
+            out.push_str(&block_lines.join("\n"));
+            out.push_str("\n\n");
+        }
+    }
+
+    if out.is_empty() {
+        raw_bytes.to_vec()
+    } else {
+        out.into_bytes()
+    }
+}
+
+/// Helper to construct a standardized error response adhering to OpenAI error format with clear origin tagging
+/// ("agentcontrol" vs "upstream_provider") and optional SSE streaming error framing so IDE streaming clients
+/// (Roo Code, Cursor, Cline) display the diagnostic error directly in chat instead of failing with "Model Response Incomplete".
+pub(crate) fn make_error_response(
+    status: StatusCode,
+    origin: &'static str, // "agentcontrol" or "upstream_provider"
+    error_code: &str,
+    message: &str,
+    details: Option<serde_json::Value>,
+    is_streaming: bool,
+    req_id: &str,
+) -> Response<Full<Bytes>> {
+    let mut err_obj = serde_json::json!({
+        "origin": origin,
+        "type": if origin == "agentcontrol" { "agentcontrol_error" } else { "upstream_provider_error" },
+        "code": error_code,
+        "message": format!("[{}] {}", if origin == "agentcontrol" { "AgentControl Gateway" } else { "Upstream Provider" }, message),
+    });
+
+    if let Some(d) = details {
+        err_obj["details"] = d;
+    }
+
+    let json_body = serde_json::json!({ "error": err_obj });
+    let json_bytes = serde_json::to_vec(&json_body).unwrap_or_default();
+
+    if is_streaming {
+        // Build SSE stream chunk containing the diagnostic error so streaming IDE clients (Roo Code, Cursor)
+        // render the diagnostic message directly in the chat UI
+        let sse_content = format!("\n⚠️ **[{}]**: {}\n", if origin == "agentcontrol" { "AgentControl Gateway" } else { "Upstream Provider Error" }, message);
+        let sse_chunk = serde_json::json!({
+            "id": format!("err-{}", req_id),
+            "object": "chat.completion.chunk",
+            "created": chrono::Utc::now().timestamp(),
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "content": sse_content
+                },
+                "finish_reason": "error"
+            }],
+            "error": err_obj
+        });
+
+        let sse_payload = format!("data: {}\n\ndata: [DONE]\n\n", serde_json::to_string(&sse_chunk).unwrap_or_default());
+
+        Response::builder()
+            .status(StatusCode::OK) // 200 OK so SSE stream parser in IDE consumes it
+            .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+            .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
+            .header(hyper::header::CONNECTION, "keep-alive")
+            .header("X-Accel-Buffering", "no")
+            .header("X-AgentControl-Origin", origin)
+            .header("X-AgentControl-Verdict", if origin == "agentcontrol" { "blocked" } else { "upstream_error" })
+            .header("X-AgentControl-Request-ID", req_id)
+            .body(Full::new(Bytes::from(sse_payload)))
+            .unwrap()
+    } else {
+        Response::builder()
+            .status(status)
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .header("X-AgentControl-Origin", origin)
+            .header("X-AgentControl-Verdict", if origin == "agentcontrol" { "blocked" } else { "upstream_error" })
+            .header("X-AgentControl-Request-ID", req_id)
+            .body(Full::new(Bytes::from(json_bytes)))
+            .unwrap()
+    }
+}
+
 pub async fn handle_request(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
     client_ip: &str,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let start_time = std::time::Instant::now();
+
+    // Handle GET /v1/models and GET /models connectivity check for Cline / OpenAI clients
+    if req.method() == hyper::Method::GET {
+        let path = req.uri().path();
+        if path == "/v1/models"
+            || path == "/models"
+            || path.starts_with("/v1/models/")
+            || path.starts_with("/models/")
+        {
+            let global_policy = state.policy.read().ok().and_then(|g| g.clone());
+            let mut model_entries = Vec::new();
+
+            if let Some(policy) = global_policy.as_ref() {
+                if let Some(llm_config) = &policy.llm {
+                    if let Some(providers) = &llm_config.providers {
+                        for provider in providers {
+                            if let Some(models) = &provider.models {
+                                for m in models {
+                                    if m != "*" && !m.ends_with('*') {
+                                        model_entries.push(serde_json::json!({
+                                            "id": m,
+                                            "object": "model",
+                                            "created": 1700000000,
+                                            "owned_by": provider.name
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if model_entries.is_empty() {
+                let default_models = [
+                    ("gpt-4o", "openai"),
+                    ("gpt-4o-mini", "openai"),
+                    ("gpt-4-turbo", "openai"),
+                    ("claude-3-5-sonnet-20241022", "anthropic"),
+                    ("claude-3-5-haiku-20241022", "anthropic"),
+                    ("claude-3-opus-20240229", "anthropic"),
+                    ("mistral-large-latest", "mistral"),
+                    ("llama-3.3-70b-versatile", "groq"),
+                    ("deepseek-chat", "deepseek"),
+                ];
+                for (m, p) in &default_models {
+                    model_entries.push(serde_json::json!({
+                        "id": m,
+                        "object": "model",
+                        "created": 1700000000,
+                        "owned_by": p
+                    }));
+                }
+            }
+
+            let resp = serde_json::json!({
+                "object": "list",
+                "data": model_entries
+            });
+            return Ok(crate::proxy::server::json_response(StatusCode::OK, &resp));
+        }
+
+        return Ok(crate::proxy::server::json_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            &serde_json::json!({"error": "Method Not Allowed"}),
+        ));
+    }
 
     // Extract authorization header & credential header from incoming agent request
     let auth_header = req
@@ -99,18 +332,27 @@ pub async fn handle_request(
         }
     };
 
+    let is_streaming = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+    let req_uuid = uuid::Uuid::new_v4().to_string();
+
     let model = match body.get("model").and_then(|v| v.as_str()) {
         Some(m) => m.to_string(),
         None => {
-            return Ok(crate::proxy::server::json_response(
+            return Ok(make_error_response(
                 StatusCode::BAD_REQUEST,
-                &serde_json::json!({"error": "Missing 'model' field"}),
-            ))
+                "agentcontrol",
+                "missing_model_field",
+                "Missing 'model' field in request body",
+                None,
+                is_streaming,
+                &req_uuid,
+            ));
         }
     };
 
-    // Evaluate LLM policy
-    let (provider_rule, provider_name) = match session.policy.as_ref() {
+    // Evaluate LLM policy — resolve from session scope, active global state, or JIT disk policy
+    let global_policy = state.policy.read().ok().and_then(|g| g.clone());
+    let (provider_rule, provider_name) = match session.policy.as_ref().or(global_policy.as_ref()) {
         Some(policy) => {
             if let Some(llm_config) = &policy.llm {
                 if let Some(providers) = &llm_config.providers {
@@ -160,17 +402,97 @@ pub async fn handle_request(
                     ));
                 }
             } else {
-                return Ok(crate::proxy::server::json_response(
-                    StatusCode::FORBIDDEN,
-                    &serde_json::json!({"error": "LLM policy not configured"}),
-                ));
+                (
+                    crate::policy::schema::LlmProviderRule {
+                        name: "default".to_string(),
+                        action: "allow".to_string(),
+                        models: None,
+                        max_tokens_per_request: None,
+                        dlp_tier: None,
+                    },
+                    "default".to_string(),
+                )
             }
         }
         None => {
-            return Ok(crate::proxy::server::json_response(
-                StatusCode::FORBIDDEN,
-                &serde_json::json!({"error": "No active policy"}),
-            ))
+            // Check if local policy file exists on disk and load it JIT
+            let mut loaded_policy = None;
+            let candidate_paths = [
+                std::path::PathBuf::from("agentcontrol-policy.yaml"),
+                dirs::home_dir().map(|h| h.join("agentcontrol-policy.yaml")).unwrap_or_default(),
+                dirs::home_dir().map(|h| h.join(".agentcontrol/agentcontrol-policy.yaml")).unwrap_or_default(),
+                std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol\agentcontrol-policy.yaml"),
+                std::path::PathBuf::from(r"C:\Program Files\AgentControl\agentcontrol-policy.yaml"),
+            ];
+
+            for p in &candidate_paths {
+                if p.exists() {
+                    if let crate::policy::loader::PolicyLoadResult::Loaded { policy, .. } = crate::policy::loader::load_policy(p, None) {
+                        if let Ok(mut w) = state.policy.write() {
+                            *w = Some(policy.clone());
+                            state.policy_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                        }
+                        loaded_policy = Some(policy);
+                        break;
+                    }
+                }
+            }
+
+            if let Some(policy) = loaded_policy {
+                if let Some(llm_config) = &policy.llm {
+                    if let Some(providers) = &llm_config.providers {
+                        let mut matched = None;
+                        for provider in providers {
+                            if let Some(models) = &provider.models {
+                                if models.iter().any(|m| {
+                                    m == "*" || m == &model || (m.ends_with('*') && model.starts_with(m.trim_end_matches('*')))
+                                }) {
+                                    matched = Some((provider.clone(), provider.name.clone()));
+                                    break;
+                                }
+                            } else {
+                                matched = Some((provider.clone(), provider.name.clone()));
+                                break;
+                            }
+                        }
+                        match matched {
+                            Some(m) => m,
+                            None => {
+                                return Ok(crate::proxy::server::json_response(
+                                    StatusCode::FORBIDDEN,
+                                    &serde_json::json!({"error": format!("Model '{}' is not allowed by policy", model)}),
+                                ));
+                            }
+                        }
+                    } else {
+                        return Ok(crate::proxy::server::json_response(
+                            StatusCode::FORBIDDEN,
+                            &serde_json::json!({"error": "LLM providers not configured"}),
+                        ));
+                    }
+                } else {
+                    (
+                        crate::policy::schema::LlmProviderRule {
+                            name: "default".to_string(),
+                            action: "allow".to_string(),
+                            models: None,
+                            max_tokens_per_request: None,
+                            dlp_tier: None,
+                        },
+                        "default".to_string(),
+                    )
+                }
+            } else {
+                return Ok(make_error_response(
+                    StatusCode::FORBIDDEN,
+                    "agentcontrol",
+                    "no_active_policy",
+                    "No active policy configured on the gateway",
+                    None,
+                    is_streaming,
+                    &req_uuid,
+                ));
+            }
         }
     };
 
@@ -191,13 +513,117 @@ pub async fn handle_request(
                 None,
             )
             .await;
-        return Ok(crate::proxy::server::json_response(
+        return Ok(make_error_response(
             StatusCode::FORBIDDEN,
-            &serde_json::json!({"error": format!("Model '{}' is denied by policy", model)}),
+            "agentcontrol",
+            "policy_denied",
+            &format!("Model '{}' is denied by policy rule", model),
+            None,
+            is_streaming,
+            &req_uuid,
         ));
     }
 
-    // Centrally-managed provider key injection (FR-005 / US-007)
+    let provider_name = if provider_name == "default" {
+        infer_provider_from_model(&model)
+    } else {
+        provider_name
+    };
+
+    let llm_mode = std::env::var("AGENTCONTROL_LLM_MODE")
+        .unwrap_or_else(|_| if state.centralized_mode { "central_enforce".to_string() } else { "local_compat".to_string() });
+
+    let input_est = estimate_input_tokens(&body);
+
+    // ── 1. Centralized Modes (Zero Local Key Custody) ──────────────────────────
+    if llm_mode == "central_enforce" || llm_mode == "central_shadow" {
+        let hub_url = std::env::var("DASHBOARD_API_URL").ok();
+        let broker = crate::proxy::broker_client::BrokerClient::new(hub_url);
+
+        let max_output = body
+            .get("max_tokens")
+            .or_else(|| body.get("max_completion_tokens"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(2048);
+
+        let broker_req = crate::proxy::broker_client::BrokerLLMRequest {
+            schema_version: "3.0".to_string(),
+            request_id: req_uuid.clone(),
+            provider: provider_name.clone(),
+            project_ref: session.identity_sub.clone().unwrap_or_else(|| "default".to_string()),
+            model: model.clone(),
+            protocol: if provider_name == "anthropic" {
+                "anthropic_messages".to_string()
+            } else {
+                "openai_chat_completions".to_string()
+            },
+            stream: is_streaming,
+            llm_mode: Some(llm_mode.clone()),
+            input_token_estimate: Some(input_est),
+            max_output_tokens: Some(max_output),
+            payload: body.clone(),
+        };
+
+        if is_streaming {
+            match broker.invoke_brokered_stream(&broker_req).await {
+                Ok(upstream_resp) => {
+                    let status = StatusCode::from_u16(upstream_resp.status().as_u16()).unwrap_or(StatusCode::OK);
+                    let raw_bytes = upstream_resp.bytes().await.unwrap_or_default();
+
+                    if !status.is_success() {
+                        let mut resp_builder = Response::builder().status(status);
+                        resp_builder = resp_builder.header(hyper::header::CONTENT_TYPE, "application/json");
+                        return Ok(resp_builder.body(Full::new(raw_bytes)).unwrap());
+                    }
+
+                    let cleaned = clean_sse_stream(&raw_bytes);
+                    let resp_bytes = bytes::Bytes::from(cleaned);
+
+                    let resp_builder = Response::builder()
+                        .status(status)
+                        .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                        .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
+                        .header(hyper::header::CONNECTION, "keep-alive")
+                        .header("X-Accel-Buffering", "no");
+
+                    return Ok(resp_builder.body(Full::new(resp_bytes)).unwrap());
+                }
+                Err(e) => {
+                    return Ok(make_error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "agentcontrol",
+                        "broker_stream_failed",
+                        &format!("Central broker streaming failed (fail-closed): {}", e),
+                        None,
+                        is_streaming,
+                        &req_uuid,
+                    ));
+                }
+            }
+        } else {
+            match broker.invoke_brokered_llm(&broker_req).await {
+                Ok(brokered_resp) => {
+                    let resp_bytes = serde_json::to_vec(&brokered_resp.response).unwrap_or_default();
+                    let mut builder = Response::builder().status(StatusCode::OK);
+                    builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
+                    return Ok(builder.body(Full::new(Bytes::from(resp_bytes))).unwrap());
+                }
+                Err(e) => {
+                    return Ok(make_error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "agentcontrol",
+                        "broker_request_failed",
+                        &format!("Central broker request failed (fail-closed): {}", e),
+                        None,
+                        is_streaming,
+                        &req_uuid,
+                    ));
+                }
+            }
+        }
+    }
+
+    // ── 2. Local Compat Mode (Local env keys / request headers) ────────────────
     let api_key = match state
         .provider_keys
         .get(&provider_name)
@@ -222,33 +648,39 @@ pub async fn handle_request(
         }) {
         Some(k) => k,
         None => {
-            return Ok(crate::proxy::server::json_response(
+            let msg = format!(
+                "API key for provider '{}' is not configured on the gateway (set {}_API_KEY environment variable or configure in Dashboard)",
+                provider_name,
+                provider_name.to_uppercase()
+            );
+            return Ok(make_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                &serde_json::json!({"error": format!("API key for provider '{}' is not configured on the gateway (set OPENAI_API_KEY or configure in Dashboard)", provider_name)}),
+                "agentcontrol",
+                "missing_provider_api_key",
+                &msg,
+                None,
+                is_streaming,
+                &req_uuid,
             ));
         }
     };
 
-    // ── Preflight Spend Authorization (SMB Spend v2 Central Ledger) ──────────
+    // ── Preflight Spend Authorization (Optional in local_compat) ──────────────
     let hub_url = std::env::var("DASHBOARD_API_URL").ok();
     let mut active_reservation_id: Option<String> = None;
-    let req_uuid = uuid::Uuid::new_v4().to_string();
     let gateway_secret = std::env::var("GATEWAY_SECRET").ok();
-
-    let is_streaming = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
-    let input_est = estimate_input_tokens(&body);
 
     if state.centralized_mode || hub_url.is_some() {
         if hub_url.is_none() {
             if state.centralized_mode {
-                return Ok(crate::proxy::server::json_response(
+                return Ok(make_error_response(
                     StatusCode::SERVICE_UNAVAILABLE,
-                    &serde_json::json!({
-                        "error": {
-                            "code": "spend_governance_unreachable",
-                            "message": "Centralized enforce mode requires DASHBOARD_API_URL for spend preflight governance"
-                        }
-                    }),
+                    "agentcontrol",
+                    "spend_governance_unreachable",
+                    "Centralized enforce mode requires DASHBOARD_API_URL for spend preflight governance",
+                    None,
+                    is_streaming,
+                    &req_uuid,
                 ));
             }
         } else if let Some(ref hub_base) = hub_url {
@@ -305,16 +737,21 @@ pub async fn handle_request(
                             )
                             .await;
 
-                        return Ok(crate::proxy::server::json_response(
+                        let reason_code = deny_body
+                            .get("reason_code")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("spend_budget_exhausted")
+                            .to_string();
+                        let msg = format!("LLM spend budget exceeded: {}", reason_code);
+
+                        return Ok(make_error_response(
                             StatusCode::TOO_MANY_REQUESTS,
-                            &serde_json::json!({
-                                "error": {
-                                    "code": deny_body.get("reason_code").and_then(|v| v.as_str()).unwrap_or("spend_budget_exhausted"),
-                                    "message": "LLM spend budget exceeded or preflight authorization denied",
-                                    "scope": deny_body.get("disclosure_safe_scope"),
-                                    "reset_at": deny_body.get("reset_at")
-                                }
-                            }),
+                            "agentcontrol",
+                            &reason_code,
+                            &msg,
+                            Some(deny_body),
+                            is_streaming,
+                            &req_uuid,
                         ));
                     } else if resp.status().is_success() {
                         if let Ok(allow_resp) =
@@ -323,27 +760,29 @@ pub async fn handle_request(
                             active_reservation_id = allow_resp.reservation_id;
                         }
                     } else if state.centralized_mode {
-                        return Ok(crate::proxy::server::json_response(
+                        let msg = format!("Spend authorization preflight returned non-success status: {}", resp.status());
+                        return Ok(make_error_response(
                             StatusCode::SERVICE_UNAVAILABLE,
-                            &serde_json::json!({
-                                "error": {
-                                    "code": "spend_governance_denied",
-                                    "message": format!("Spend authorization preflight returned non-success status: {}", resp.status())
-                                }
-                            }),
+                            "agentcontrol",
+                            "spend_governance_denied",
+                            &msg,
+                            None,
+                            is_streaming,
+                            &req_uuid,
                         ));
                     }
                 }
                 Err(e) => {
                     if state.centralized_mode {
-                        return Ok(crate::proxy::server::json_response(
+                        let msg = format!("Spend authorization preflight failed: {}", e);
+                        return Ok(make_error_response(
                             StatusCode::SERVICE_UNAVAILABLE,
-                            &serde_json::json!({
-                                "error": {
-                                    "code": "spend_governance_unreachable",
-                                    "message": format!("Spend authorization preflight failed: {}", e)
-                                }
-                            }),
+                            "agentcontrol",
+                            "spend_governance_unreachable",
+                            &msg,
+                            None,
+                            is_streaming,
+                            &req_uuid,
                         ));
                     }
                 }
@@ -366,28 +805,30 @@ pub async fn handle_request(
 
     // Build upstream request — client authorization headers stripped automatically
     let req_builder = if provider_name == "anthropic" {
+        let base_url = std::env::var("ANTHROPIC_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
         state
             .http_client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(format!("{}/v1/messages", base_url.trim_end_matches('/')))
             .header("x-api-key", &api_key)
             .header("anthropic-version", "2023-06-01")
             .header(hyper::header::CONTENT_TYPE, "application/json")
     } else {
         let base_url = match provider_name.as_str() {
-            "openai" => "https://api.openai.com",
-            "groq" => "https://api.groq.com/openai",
-            "together" => "https://api.together.xyz",
-            "mistral" => "https://api.mistral.ai",
-            _ => {
-                return Ok(crate::proxy::server::json_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &serde_json::json!({"error": format!("Unknown provider: {}", provider_name)}),
-                ))
-            }
+            "openai" => std::env::var("OPENAI_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com".to_string()),
+            "groq" => std::env::var("GROQ_BASE_URL")
+                .unwrap_or_else(|_| "https://api.groq.com/openai".to_string()),
+            "together" => std::env::var("TOGETHER_BASE_URL")
+                .unwrap_or_else(|_| "https://api.together.xyz".to_string()),
+            "mistral" => std::env::var("MISTRAL_BASE_URL")
+                .unwrap_or_else(|_| "https://api.mistral.ai".to_string()),
+            _ => std::env::var("OPENAI_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com".to_string()),
         };
         state
             .http_client
-            .post(format!("{}/v1/chat/completions", base_url))
+            .post(format!("{}/v1/chat/completions", base_url.trim_end_matches('/')))
             .header(hyper::header::AUTHORIZATION, format!("Bearer {}", api_key))
             .header(hyper::header::CONTENT_TYPE, "application/json")
     };
@@ -414,6 +855,9 @@ pub async fn handle_request(
             let mut prompt_tokens_val = 0i64;
             let mut completion_tokens_val = 0i64;
             let mut cached_tokens_val = 0i64;
+
+            let mut is_estimated = false;
+            let mut usage_source = "provider_reported".to_string();
 
             // Attempt direct JSON parse for non-streaming responses
             if let Ok(resp_json) = serde_json::from_slice::<Value>(&resp_bytes) {
@@ -443,6 +887,7 @@ pub async fn handle_request(
                 // Streaming SSE stream framing parser
                 if let Ok(text) = std::str::from_utf8(&resp_bytes) {
                     let mut accumulated_chars = 0usize;
+                    let mut found_provider_usage = false;
                     for line in text.lines() {
                         let trimmed = line.trim();
                         if let Some(data_str) = trimmed.strip_prefix("data: ") {
@@ -451,6 +896,7 @@ pub async fn handle_request(
                             }
                             if let Ok(chunk_json) = serde_json::from_str::<Value>(data_str) {
                                 if let Some(usage) = chunk_json.get("usage") {
+                                    found_provider_usage = true;
                                     if let Some(pt) = usage.get("prompt_tokens").or_else(|| usage.get("input_tokens")).and_then(|v| v.as_i64()) {
                                         prompt_tokens_val = pt;
                                     }
@@ -473,11 +919,15 @@ pub async fn handle_request(
                             }
                         }
                     }
-                    if prompt_tokens_val == 0 {
-                        prompt_tokens_val = input_est;
-                    }
-                    if completion_tokens_val == 0 && accumulated_chars > 0 {
-                        completion_tokens_val = (accumulated_chars as i64 / 4) + 1;
+                    if !found_provider_usage {
+                        is_estimated = true;
+                        usage_source = "character_estimate".to_string();
+                        if prompt_tokens_val == 0 {
+                            prompt_tokens_val = input_est;
+                        }
+                        if completion_tokens_val == 0 && accumulated_chars > 0 {
+                            completion_tokens_val = (accumulated_chars as i64 / 4) + 1;
+                        }
                     }
                     if total_tokens.is_none() && (prompt_tokens_val > 0 || completion_tokens_val > 0) {
                         total_tokens = Some((prompt_tokens_val + completion_tokens_val) as u64);
@@ -496,7 +946,8 @@ pub async fn handle_request(
                             input_tokens: prompt_tokens_val,
                             output_tokens: completion_tokens_val,
                             cached_input_tokens: cached_tokens_val,
-                            is_estimated: false,
+                            is_estimated,
+                            usage_source: Some(usage_source),
                             status: status.as_u16() as i32,
                             request_hash: req_uuid.clone(),
                         };
@@ -590,9 +1041,56 @@ pub async fn handle_request(
             });
 
             let mut builder = Response::builder().status(status);
-            builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
+            if !status.is_success() {
+                // Upstream provider returned HTTP error (401 Unauthorized, 429 Rate Limit, 500, etc.)
+                let upstream_err_json = serde_json::from_slice::<Value>(&resp_bytes).ok();
+                let err_msg = upstream_err_json
+                    .as_ref()
+                    .and_then(|j| j.get("error"))
+                    .and_then(|e| e.get("message").or_else(|| e.get("error")))
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        let s = std::str::from_utf8(&resp_bytes).unwrap_or("");
+                        if s.is_empty() {
+                            format!("HTTP {} {}", status.as_u16(), status.canonical_reason().unwrap_or("Error"))
+                        } else {
+                            s.to_string()
+                        }
+                    });
 
-            Ok(builder.body(Full::new(resp_bytes)).unwrap())
+                let formatted_msg = format!("Upstream {} returned HTTP {}: {}", provider_name.to_uppercase(), status.as_u16(), err_msg);
+
+                return Ok(make_error_response(
+                    status,
+                    "upstream_provider",
+                    &format!("upstream_http_{}", status.as_u16()),
+                    &formatted_msg,
+                    upstream_err_json,
+                    is_streaming,
+                    &req_uuid,
+                ));
+            }
+
+            if is_streaming {
+                let cleaned = clean_sse_stream(&resp_bytes);
+                builder = builder
+                    .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                    .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
+                    .header(hyper::header::CONNECTION, "keep-alive")
+                    .header("X-Accel-Buffering", "no")
+                    .header("X-AgentControl-Origin", "upstream_provider")
+                    .header("X-AgentControl-Verdict", "allowed")
+                    .header("X-AgentControl-Request-ID", &req_uuid);
+                Ok(builder.body(Full::new(Bytes::from(cleaned))).unwrap())
+            } else {
+                builder = builder
+                    .header(hyper::header::CONTENT_TYPE, "application/json")
+                    .header("X-AgentControl-Origin", "upstream_provider")
+                    .header("X-AgentControl-Verdict", "allowed")
+                    .header("X-AgentControl-Request-ID", &req_uuid);
+                Ok(builder.body(Full::new(resp_bytes)).unwrap())
+            }
         }
         Err(e) => {
             if let Some(ref hub_base) = hub_url {
@@ -608,19 +1106,105 @@ pub async fn handle_request(
                         hub_base.trim_end_matches('/'),
                         res_id
                     );
-                    let _ = state
-                        .http_client
-                        .post(&release_url)
-                        .json(&release_req)
-                        .send()
-                        .await;
+                    let mut release_builder = state.http_client.post(&release_url);
+                    if let Some(ref sec) = gateway_secret {
+                        release_builder = release_builder.header("Authorization", format!("Bearer {}", sec));
+                    }
+                    let _ = release_builder.json(&release_req).send().await;
                 }
             }
 
-            Ok(crate::proxy::server::json_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &serde_json::json!({"error": format!("Upstream request failed: {}", e)}),
+            let msg = format!("Failed to connect to upstream LLM provider '{}': {}", provider_name, e);
+            Ok(make_error_response(
+                StatusCode::BAD_GATEWAY,
+                "agentcontrol",
+                "upstream_connection_failed",
+                &msg,
+                None,
+                is_streaming,
+                &req_uuid,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_sse_stream_standard() {
+        let raw = b"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n";
+        let cleaned = clean_sse_stream(raw);
+        let s = String::from_utf8(cleaned).unwrap();
+        assert!(s.contains("data: "));
+        assert!(s.contains("Hello"));
+        assert!(s.ends_with("data: [DONE]\n\n"));
+    }
+
+    #[test]
+    fn test_clean_sse_stream_crlf_and_obfuscation() {
+        let raw = b"data: {\"id\":\"chatcmpl-2\",\"obfuscation\":\"internal\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"World\"}}]}\r\n\r\ndata: [DONE]\r\n\r\n";
+        let cleaned = clean_sse_stream(raw);
+        let s = String::from_utf8(cleaned).unwrap();
+        assert!(!s.contains("obfuscation"));
+        assert!(s.contains("World"));
+        assert!(s.ends_with("data: [DONE]\n\n"));
+        // Ensure no stray carriage returns exist
+        assert!(!s.contains('\r'));
+    }
+
+    #[test]
+    fn test_infer_provider_from_model() {
+        assert_eq!(infer_provider_from_model("gpt-4o"), "openai");
+        assert_eq!(infer_provider_from_model("gpt-4o-mini"), "openai");
+        assert_eq!(infer_provider_from_model("o1-preview"), "openai");
+        assert_eq!(infer_provider_from_model("claude-3-5-sonnet-20241022"), "anthropic");
+        assert_eq!(infer_provider_from_model("mistral-large-latest"), "mistral");
+    }
+
+    #[test]
+    fn test_estimate_input_tokens() {
+        let body = serde_json::json!({
+            "messages": [
+                {"role": "user", "content": "hello world"}
+            ]
+        });
+        let est = estimate_input_tokens(&body);
+        assert!(est >= 10);
+    }
+
+    #[test]
+    fn test_make_error_response_json() {
+        let resp = make_error_response(
+            StatusCode::BAD_REQUEST,
+            "agentcontrol",
+            "policy_denied",
+            "Test policy violation",
+            None,
+            false,
+            "req-123",
+        );
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(resp.headers().get("X-AgentControl-Origin").unwrap(), "agentcontrol");
+        assert_eq!(resp.headers().get("X-AgentControl-Verdict").unwrap(), "blocked");
+        assert_eq!(resp.headers().get("X-AgentControl-Request-ID").unwrap(), "req-123");
+    }
+
+    #[test]
+    fn test_make_error_response_sse_streaming() {
+        let resp = make_error_response(
+            StatusCode::UNAUTHORIZED,
+            "upstream_provider",
+            "upstream_http_401",
+            "Invalid API Key",
+            None,
+            true,
+            "req-456",
+        );
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.headers().get("X-AgentControl-Origin").unwrap(), "upstream_provider");
+        assert_eq!(resp.headers().get("X-AgentControl-Verdict").unwrap(), "upstream_error");
+        assert_eq!(resp.headers().get("Content-Type").unwrap(), "text/event-stream; charset=utf-8");
     }
 }

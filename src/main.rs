@@ -1286,13 +1286,17 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         println!("{} {} {}", "📊".green(), "FR-23 Dashboard:".bold(), msg);
     }
 
-    // Background policy push subscriber — only active when DASHBOARD_API_URL is set.
+    // Background policy push subscriber — active when DASHBOARD_API_URL is set.
     // Listens for Server-Sent Events (SSE) from the Hub to instantly hot-swap
-    // the policy and credentials in memory.
-    if policy_path.is_none() {
-        if let Some(api_url) = dashboard_api_url {
+    // the policy in memory. Runs regardless of whether --policy was provided so
+    // that live updates from the Policy Editor are seamlessly applied (last-write-wins).
+    {
+        let sse_api_url = std::env::var("DASHBOARD_API_URL")
+            .ok()
+            .filter(|s| !s.is_empty());
+        if let Some(api_url) = sse_api_url {
             let sub_state = state.clone();
-            let sub_secret = policy_read_secret_env.unwrap_or_default();
+            let sub_secret = std::env::var("POLICY_READ_SECRET").unwrap_or_default();
             tokio::spawn(async move {
                 println!(
                     "{} Connected to Hub for real-time policy push (SSE)",
@@ -1304,6 +1308,16 @@ async fn run_start(args: cli::StartArgs) -> i32 {
                 .await;
             });
         }
+    }
+
+    // Background file-system watcher — active when --policy <file> is provided.
+    // Monitors the policy YAML file for on-disk changes and hot-reloads the in-memory
+    // policy without any restart (last-write-wins alongside the SSE subscriber above).
+    if let Some(ref watch_path) = policy_path {
+        agentcontrol::policy::policy_file_watcher::start_policy_file_watcher(
+            watch_path.clone(),
+            state.clone(),
+        );
     }
 
     // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)

@@ -242,6 +242,71 @@ fn extract_decision_evidence(
     )
 }
 
+/// Helper to resolve the most specific agent identifier available:
+/// 1. Explicit JWT / SSO subject (identity_sub)
+/// 2. Explicit AGENT_ID environment variable
+/// 3. Sentry Device Enrollment token / ID (if present)
+/// 4. Auto-detected IDE / agent + user + host (e.g. "cursor@wasim-thinkpad", "claude-desktop@macbook")
+/// 5. Fallback: "agent-<user>@<host>" or "workstation-agent"
+fn resolve_workstation_agent_id(session: &crate::proxy::session::SessionContext) -> String {
+    if let Some(sub) = session.identity_sub.as_deref() {
+        if !sub.trim().is_empty() {
+            return sub.to_string();
+        }
+    }
+
+    if let Ok(env_id) = std::env::var("AGENT_ID") {
+        if !env_id.trim().is_empty() {
+            return env_id;
+        }
+    }
+
+    if let Some(dev_token) = crate::identity::device::load_device_token() {
+        if !dev_token.trim().is_empty() {
+            return dev_token;
+        }
+    }
+
+    // Auto-detect IDE or Agent environment
+    let ide_tag = if std::env::var("CURSOR_TRACE_ID").is_ok()
+        || std::env::var("CURSOR_VERSION").is_ok()
+        || std::env::var("CURSOR_SHARED_DATA_DIR").is_ok()
+    {
+        Some("cursor")
+    } else if std::env::var("CLAUDE_DESKTOP").is_ok() || std::env::var("CLAUDE_CODE").is_ok() {
+        Some("claude-desktop")
+    } else if std::env::var("VSCODE_PID").is_ok()
+        || std::env::var("VSCODE_INJECTION").is_ok()
+        || std::env::var("VSCODE_GIT_IPC_HANDLE").is_ok()
+    {
+        Some("vscode")
+    } else if std::env::var("WINDSURF_VERSION").is_ok() {
+        Some("windsurf")
+    } else if std::env::var("ANTIGRAVITY_IDE").is_ok() {
+        Some("antigravity")
+    } else if std::env::var("ROO_CODE_VERSION").is_ok() || std::env::var("ROO_VERSION").is_ok() {
+        Some("roo-code")
+    } else if std::env::var("CLINE_VERSION").is_ok() {
+        Some("cline")
+    } else {
+        None
+    };
+
+    let user_opt = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).ok();
+    let host_opt = std::env::var("HOSTNAME").or_else(|_| std::env::var("COMPUTERNAME")).ok();
+
+    match (ide_tag, user_opt, host_opt) {
+        (Some(ide), Some(user), Some(host)) => format!("{}@{}-{}", ide, user, host),
+        (Some(ide), _, Some(host)) => format!("{}@{}", ide, host),
+        (Some(ide), Some(user), _) => format!("{}-{}", ide, user),
+        (Some(ide), None, None) => format!("{}-agent", ide),
+        (None, Some(user), Some(host)) => format!("agent-{}@{}", user, host),
+        (None, Some(user), None) => format!("agent-{}", user),
+        (None, None, Some(host)) => format!("workstation-{}", host),
+        (None, None, None) => "workstation-agent".to_string(),
+    }
+}
+
 /// Helper to asynchronously transmit redacted telemetry to SaaS Central Hub if configured
 fn send_dashboard_event(
     state: &ProxyState,
@@ -250,15 +315,7 @@ fn send_dashboard_event(
     decision: control_plane_proto::redact::RawDecision,
 ) {
     if let Some(ref dc) = state.dashboard_client {
-        let agent_id_str = if let Some(sub) = session.identity_sub.as_deref() {
-            if !sub.is_empty() {
-                sub.to_string()
-            } else {
-                std::env::var("AGENT_ID").unwrap_or_else(|_| "workstation-agent".to_string())
-            }
-        } else {
-            std::env::var("AGENT_ID").unwrap_or_else(|_| "workstation-agent".to_string())
-        };
+        let agent_id_str = resolve_workstation_agent_id(session);
 
         let tool_on_allowlist = {
             let guard = state.policy.read().unwrap_or_else(|e| e.into_inner());

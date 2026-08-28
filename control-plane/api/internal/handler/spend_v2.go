@@ -174,12 +174,12 @@ func (h *SpendV2Handler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 // POST /api/v2/spend/policies
 func (h *SpendV2Handler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ScopeType       string  `json:"scope_type"`
-		ScopeID         string  `json:"scope_id"`
-		PeriodType      string  `json:"period_type"`
-		LimitMicrocents *int64  `json:"limit_microcents"`
-		LimitUSD        *float64 `json:"limit_usd"`
-		Action          string  `json:"action"`
+		ScopeType       string      `json:"scope_type"`
+		ScopeID         string      `json:"scope_id"`
+		PeriodType      string      `json:"period_type"`
+		LimitMicrocents *int64      `json:"limit_microcents"`
+		LimitUSD        interface{} `json:"limit_usd"`
+		Action          string      `json:"action"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
@@ -191,7 +191,22 @@ func (h *SpendV2Handler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	if req.LimitMicrocents != nil {
 		limit = spend.MoneyMicrocents(*req.LimitMicrocents)
 	} else if req.LimitUSD != nil {
-		limit = spend.DollarsToMicrocents(*req.LimitUSD)
+		switch v := req.LimitUSD.(type) {
+		case string:
+			parsed, err := spend.ParseDecimalToMicrocents(v)
+			if err != nil {
+				http.Error(w, `{"error":"invalid limit_usd format: `+err.Error()+`"}`, http.StatusBadRequest)
+				return
+			}
+			limit = parsed
+		case float64:
+			limit = spend.DollarsToMicrocents(v)
+		case int64:
+			limit = spend.MoneyMicrocents(v * 100_000_000)
+		default:
+			http.Error(w, `{"error":"invalid limit_usd format"}`, http.StatusBadRequest)
+			return
+		}
 	} else {
 		http.Error(w, `{"error":"limit_microcents or limit_usd required"}`, http.StatusBadRequest)
 		return
@@ -289,11 +304,11 @@ func (h *SpendV2Handler) ListIncreaseRequests(w http.ResponseWriter, r *http.Req
 // POST /api/v2/spend/increase-requests
 func (h *SpendV2Handler) CreateIncreaseRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ProjectID                string  `json:"project_id"`
-		RequestedLimitMicrocents *int64  `json:"requested_limit_microcents"`
-		RequestedLimitUSD        *float64 `json:"requested_limit_usd"`
-		CurrentLimitMicrocents   int64   `json:"current_limit_microcents"`
-		Reason                   string  `json:"reason"`
+		ProjectID                string      `json:"project_id"`
+		RequestedLimitMicrocents *int64      `json:"requested_limit_microcents"`
+		RequestedLimitUSD        interface{} `json:"requested_limit_usd"`
+		CurrentLimitMicrocents   int64       `json:"current_limit_microcents"`
+		Reason                   string      `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
@@ -305,7 +320,22 @@ func (h *SpendV2Handler) CreateIncreaseRequest(w http.ResponseWriter, r *http.Re
 	if req.RequestedLimitMicrocents != nil {
 		requestedLimit = spend.MoneyMicrocents(*req.RequestedLimitMicrocents)
 	} else if req.RequestedLimitUSD != nil {
-		requestedLimit = spend.DollarsToMicrocents(*req.RequestedLimitUSD)
+		switch v := req.RequestedLimitUSD.(type) {
+		case string:
+			parsed, err := spend.ParseDecimalToMicrocents(v)
+			if err != nil {
+				http.Error(w, `{"error":"invalid requested_limit_usd format: `+err.Error()+`"}`, http.StatusBadRequest)
+				return
+			}
+			requestedLimit = parsed
+		case float64:
+			requestedLimit = spend.DollarsToMicrocents(v)
+		case int64:
+			requestedLimit = spend.MoneyMicrocents(v * 100_000_000)
+		default:
+			http.Error(w, `{"error":"invalid requested_limit_usd format"}`, http.StatusBadRequest)
+			return
+		}
 	} else {
 		http.Error(w, `{"error":"requested limit required"}`, http.StatusBadRequest)
 		return

@@ -7,8 +7,8 @@ This guide details configuring Vexa Agent Control to intercept and secure tool c
 ## Configuration Location
 
 Codex stores agent tool configurations in:
-- **macOS / Linux:** `~/.codex/config.json`
-- **Windows:** `%USERPROFILE%\.codex\config.json`
+- **macOS / Linux:** `~/.codex/config.toml`
+- **Windows:** `%USERPROFILE%\.codex\config.toml`
 
 ---
 

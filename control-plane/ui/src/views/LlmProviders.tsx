@@ -157,13 +157,11 @@ export default function LlmProviders() {
               className="form-input"
               style={{ width: '100%', padding: '10px' }}
             >
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="google">Google Gemini</option>
-              <option value="xai">xAI (Grok)</option>
-              <option value="groq">Groq</option>
-              <option value="together">Together AI</option>
-              <option value="mistral">Mistral AI</option>
+              <option value="openai">OpenAI (Central Enforce & Local)</option>
+              <option value="anthropic">Anthropic (Local Compat)</option>
+              <option value="groq">Groq (Local Compat)</option>
+              <option value="together">Together AI (Local Compat)</option>
+              <option value="mistral">Mistral AI (Local Compat)</option>
             </select>
           </div>
           <div style={{ flex: 2, minWidth: 200 }}>

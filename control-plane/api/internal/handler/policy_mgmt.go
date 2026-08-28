@@ -86,23 +86,43 @@ func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorizedTenantError(w)
 		return
 	}
-	var p model.Policy
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	var req struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Version     string `json:"version"`
+		Content     string `json:"content"`
+		YamlContent string `json:"yaml_content"`
+		IsActive    bool   `json:"is_active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	
-	if p.Version == "" || p.Content == "" {
-		http.Error(w, "version and content are required", http.StatusBadRequest)
+
+	content := req.Content
+	if content == "" && req.YamlContent != "" {
+		content = req.YamlContent
+	}
+	if content == "" {
+		http.Error(w, "content or yaml_content is required", http.StatusBadRequest)
 		return
 	}
-	
-	p.IsActive = true
+
+	version := req.Version
+	if version == "" {
+		version = "v1.0.0"
+	}
+
+	p := model.Policy{
+		Version:  version,
+		Content:  content,
+		IsActive: true,
+	}
 	if err := h.store.SavePolicy(r.Context(), tenantID, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)
 

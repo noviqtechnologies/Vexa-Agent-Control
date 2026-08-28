@@ -557,13 +557,18 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     if let Err(e) = fs::write(&cert_path, &complete_data.mtls_certificate.pem_chain) {
         eprintln!("{} Failed to write certificate chain: {}", "✖".red(), e);
     }
+    // Always write the PEM key beside the cert in the user home dir
+    let home_key_path = home_dir.join("device_key.pem");
+    if let Err(e) = fs::write(&home_key_path, bundle.p256_key_pem.as_bytes()) {
+        eprintln!("{} Failed to write device key PEM: {}", "✖".red(), e);
+    }
 
     #[cfg(windows)]
     {
         let prog_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
         let _ = fs::create_dir_all(&prog_data);
         let _ = fs::write(prog_data.join("device_cert.pem"), &complete_data.mtls_certificate.pem_chain);
-        let _ = fs::write(prog_data.join("device_key.pem"), &bundle.p256_key_pem);
+        let _ = fs::write(prog_data.join("device_key.pem"), bundle.p256_key_pem.as_bytes());
     }
 
     let _ = save_device_token(&complete_data.device.id);

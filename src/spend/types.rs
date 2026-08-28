@@ -102,6 +102,8 @@ pub struct SpendV2SettleReq {
     pub output_tokens: i64,
     pub cached_input_tokens: i64,
     pub is_estimated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_source: Option<String>,
     pub status: i32,
     pub request_hash: String,
 }

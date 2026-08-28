@@ -198,7 +198,7 @@ func main() {
 	adminV2H := handler.NewAdminV2Handler(db)
 	deviceV2H := handler.NewDeviceV2Handler(db)
 	genericProviderClient := broker.NewGenericProviderClient()
-	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret)
+	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret, spendStore)
 
 
 	// === Target Contract v4.0 API Routes ===
@@ -227,25 +227,39 @@ func main() {
 		r.Get("/policy/subscribe", policyMgmtH.Subscribe)
 	})
 
-	// 4. Provider LLM Broker (Edge mTLS Header Validation & Capability Gates)
+	// 4. Provider LLM Broker v2 (Deprecated) & v3 (Authoritative Stream & Preflight)
 	r.Route("/api/v2/broker", func(r chi.Router) {
 		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
 		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 	})
 
+	r.Route("/api/v3/broker", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
+		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
+		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
+	})
+
+	// 4b. Gateway-Secret authenticated broker (allows local gateways without ALB mTLS)
+	legacyAuthCfg := middleware.LegacyAuthConfig{
+		LegacySingleTenantMode: cfg.LegacySingleTenantMode,
+		LegacyTenantID:         cfg.LegacyTenantID,
+	}
+	r.Route("/api/v3/gateway-broker", func(r chi.Router) {
+		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
+		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
+		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
+	})
+
 	// 5. Authoritative Central Spend Ledger API v2
 	r.Route("/api/v2/spend", func(r chi.Router) {
-		r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
-		
-		legacyAuthCfg := middleware.LegacyAuthConfig{
-			LegacySingleTenantMode: cfg.LegacySingleTenantMode,
-			LegacyTenantID:         cfg.LegacyTenantID,
-		}
 
 		// Workload / Gateway spend reservation lifecycle routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
+			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 			r.Post("/authorize", spendV2H.Authorize)
 			r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
 			r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
@@ -254,6 +268,7 @@ func main() {
 		// Operator / Dashboard spend policy management & reporting routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.DashboardAuth())
+			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 			r.Get("/effective", spendV2H.GetEffective)
 			r.Get("/events", spendV2H.ListEvents)
 			r.Get("/policies", spendV2H.ListPolicies)
@@ -264,11 +279,6 @@ func main() {
 			r.Post("/increase-requests/{id}/decide", spendV2H.DecideIncreaseRequest)
 		})
 	})
-
-	legacyAuthCfg := middleware.LegacyAuthConfig{
-		LegacySingleTenantMode: cfg.LegacySingleTenantMode,
-		LegacyTenantID:         cfg.LegacyTenantID,
-	}
 
 	// 6. Device Governance & Sentry Compliance API
 	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
@@ -379,7 +389,7 @@ func main() {
 		r.Get("/policies/active", policyMgmtH.GetActive)
 		r.Get("/policy/active", policyMgmtH.GetActive)
 		r.Get("/policies/{id}", hubSpecH.GetPolicyByID)
-		r.With(middleware.RequireAdmin()).Post("/policies", hubSpecH.CreatePolicy)
+		r.With(middleware.RequireAdmin()).Post("/policies", policyMgmtH.Save)
 		r.Get("/policies/templates", templateH.ListTemplates)
 		r.Get("/policies/templates/{id}", templateH.GetTemplate)
 		r.With(middleware.RequireAdmin()).Post("/policies/templates", templateH.CreateCustomTemplate)

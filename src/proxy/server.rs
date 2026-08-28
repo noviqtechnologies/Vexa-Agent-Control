@@ -424,8 +424,16 @@ pub(crate) async fn resolve_session(
         }
     } else {
         // OIDC is NOT configured.
-        // If listener is non-loopback, unauthenticated requests are strictly rejected.
-        if !state.listen_is_loopback && auth_header.is_none() {
+        // If listener is non-loopback and request is not from loopback, unauthenticated requests are strictly rejected.
+        let is_loopback_client = client_ip == "127.0.0.1"
+            || client_ip == "::1"
+            || client_ip == "localhost"
+            || client_ip
+                .parse::<std::net::IpAddr>()
+                .map(|ip| ip.is_loopback())
+                .unwrap_or(false);
+
+        if !state.listen_is_loopback && !is_loopback_client && auth_header.is_none() {
             crate::logging::log_event(
                 crate::logging::Level::Warn,
                 "auth_failed",
@@ -444,7 +452,7 @@ pub(crate) async fn resolve_session(
         // We use X-Session-ID header or Client IP as session key.
         let session_key = auth_header.unwrap_or(client_ip).to_string();
 
-        if state.centralized_mode && session_key == client_ip {
+        if state.centralized_mode && session_key == client_ip && !is_loopback_client {
             crate::logging::log_event(
                 crate::logging::Level::Warn,
                 "auth_failed",
@@ -596,8 +604,13 @@ async fn handle_request(
         }
     }
 
-    // LLM API Proxying route (e.g. /v1/chat/completions), excluding /v1/mcp
-    if path.starts_with("/v1/") && path != "/v1/mcp" {
+    // LLM API Proxying route (e.g. /v1/chat/completions, /chat/completions, /v1/models, /models), excluding /v1/mcp
+    let is_llm_route = (path.starts_with("/v1/") && path != "/v1/mcp")
+        || path == "/chat/completions"
+        || path.starts_with("/chat/")
+        || path == "/models"
+        || path.starts_with("/models/");
+    if is_llm_route {
         return crate::proxy::llm_proxy::handle_request(req, state, client_ip).await;
     }
 

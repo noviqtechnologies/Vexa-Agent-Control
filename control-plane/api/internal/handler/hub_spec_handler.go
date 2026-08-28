@@ -284,18 +284,9 @@ func (h *HubSpecHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 
-	// Broadcast ID-only notification via SSE (ADR-006)
+	// Broadcast policy YAML update via SSE to tenant devices
 	if h.broker != nil {
-		eventData, _ := json.Marshal(map[string]interface{}{
-			"policy_id": p.ID,
-			"name":      req.Name,
-			"version":   vNum,
-		})
-		msg := map[string]string{
-			"event": "policy_update",
-			"data":  string(eventData),
-		}
-		h.broker.Publish(msg)
+		h.broker.PublishTenant(tenantID, formatSSE("policy_update", p.Content))
 	}
 }
 

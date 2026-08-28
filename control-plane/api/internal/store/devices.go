@@ -300,14 +300,23 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 		return nil, false
 	}
 	var principal model.DevicePrincipal
+	var stateStr string
 	err := s.pool.QueryRow(ctx, `
-		SELECT id::text, tenant_id::text
+		SELECT id::text, tenant_id::text, state::text
 		FROM devices
 		WHERE (id::text = $1 OR stable_device_id = $1 OR LOWER(display_name) = LOWER($1) OR $1 ILIKE '%-' || display_name || '-%')
 		  AND state != 'REVOKED'
 		LIMIT 1
-	`, token).Scan(&principal.DeviceID, &principal.TenantID)
+	`, token).Scan(&principal.DeviceID, &principal.TenantID, &stateStr)
 	if err == nil && principal.TenantID != "" {
+		principal.CredentialStatus = model.CredentialStatusActive
+		if stateStr == "REVOKED" {
+			principal.DeviceState = model.DeviceStateRevoked
+		} else if stateStr == "NON_COMPLIANT" {
+			principal.DeviceState = model.DeviceStateNonCompliant
+		} else {
+			principal.DeviceState = model.DeviceStateCompliant
+		}
 		return &principal, true
 	}
 

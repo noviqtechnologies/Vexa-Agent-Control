@@ -18,18 +18,43 @@ type mockProviderClient struct {
 	lastAPIKey string
 }
 
-func (m *mockProviderClient) ForwardLLMRequest(ctx context.Context, provider, model string, stream bool, payload json.RawMessage, apiKey string) (*broker.LLMResponse, error) {
+func (m *mockProviderClient) ForwardLLMRequest(ctx context.Context, provider, model string, stream bool, payload json.RawMessage, apiKey string) (*broker.LLMResponse, *broker.UsageReport, error) {
 	m.lastAPIKey = apiKey
+	usage := &broker.UsageReport{
+		InputTokens:       10,
+		OutputTokens:      10,
+		CachedInputTokens: 0,
+		IsEstimated:       false,
+		UsageSource:       "provider_reported",
+		StatusCode:        200,
+	}
 	return &broker.LLMResponse{
 		Usage: map[string]interface{}{
 			"prompt_tokens": 10,
 			"total_tokens":  20,
 		},
 		Response: json.RawMessage(`{"id":"chatcmpl-test","choices":[{"message":{"content":"ok"}}]}`),
+	}, usage, nil
+}
+
+func (m *mockProviderClient) ForwardLLMRequestStream(ctx context.Context, provider, model string, payload json.RawMessage, apiKey string, onChunk func(chunk []byte) error) (*broker.UsageReport, error) {
+	m.lastAPIKey = apiKey
+	_ = onChunk([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n"))
+	_ = onChunk([]byte("data: [DONE]\n\n"))
+	return &broker.UsageReport{
+		InputTokens:       10,
+		OutputTokens:      10,
+		CachedInputTokens: 0,
+		IsEstimated:       false,
+		UsageSource:       "provider_reported",
+		StatusCode:        200,
 	}, nil
 }
 
 func TestBrokerV2Handler_FailClosedOnMissingCredential(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
 	masterKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	masterKey, _ := hex.DecodeString(masterKeyHex)
 

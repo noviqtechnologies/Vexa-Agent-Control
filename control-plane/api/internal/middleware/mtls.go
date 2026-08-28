@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
@@ -43,7 +44,7 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 			ctx := context.WithValue(r.Context(), RequestIDKey, reqID)
 
 			// 1. Ingress spoofing verification
-			if r.TLS == nil {
+			if r.TLS == nil && os.Getenv("DIRECT_TLS_ENABLED") != "true" && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 				if trustedVPCHeaderSecret == "" {
 					writeJSONError(w, http.StatusUnauthorized, "invalid_ingress_boundary", "Ingress authentication secret not configured on HTTP boundary", reqID, false, "CONFIGURE_INGRESS_SECRET")
 					return

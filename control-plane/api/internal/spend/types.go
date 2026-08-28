@@ -1,6 +1,10 @@
 package spend
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,6 +16,41 @@ type MoneyMicrocents int64
 // Convert USD dollars (float) to MoneyMicrocents safely
 func DollarsToMicrocents(dollars float64) MoneyMicrocents {
 	return MoneyMicrocents(dollars * 100_000_000.0)
+}
+
+// ParseDecimalToMicrocents parses an exact decimal string (e.g. "100.50") into integer microcents without float drift
+func ParseDecimalToMicrocents(s string) (MoneyMicrocents, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, errors.New("empty amount string")
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) > 2 {
+		return 0, errors.New("invalid decimal amount format")
+	}
+	whole, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid integer part: %w", err)
+	}
+	if whole < 0 {
+		return 0, errors.New("amount cannot be negative")
+	}
+
+	var microcents int64 = whole * 100_000_000
+	if len(parts) == 2 {
+		fracStr := parts[1]
+		if len(fracStr) > 8 {
+			fracStr = fracStr[:8] // truncate beyond 8 decimal places
+		} else {
+			fracStr = fracStr + strings.Repeat("0", 8-len(fracStr))
+		}
+		frac, err := strconv.ParseInt(fracStr, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid fractional part: %w", err)
+		}
+		microcents += frac
+	}
+	return MoneyMicrocents(microcents), nil
 }
 
 // Convert MoneyMicrocents to USD dollars (float) for display purposes only
@@ -57,6 +96,12 @@ const (
 	ErrCodeReservationNotFound  = "reservation_not_found"
 	ErrCodeReservationTerminal  = "reservation_terminal"
 	ErrCodeScopeUnauthorized    = "scope_unauthorized"
+
+	// Token usage provenance sources
+	UsageSourceProviderReported   = "provider_reported"
+	UsageSourceProviderReconciled = "provider_reconciled"
+	UsageSourceVexaTokenizer      = "vexa_tokenizer_estimate"
+	UsageSourceCharacterEstimate  = "character_estimate"
 )
 
 // SpendPolicy represents a tenant-scoped budget rule.
@@ -179,6 +224,7 @@ type SettleRequest struct {
 	OutputTokens      int64  `json:"output_tokens"`
 	CachedInputTokens int64  `json:"cached_input_tokens"`
 	IsEstimated       bool   `json:"is_estimated"`
+	UsageSource       string `json:"usage_source,omitempty"`
 	Status            int    `json:"status"`
 	RequestHash       string `json:"request_hash"`
 }

@@ -16,9 +16,14 @@ import (
 	"fmt"
 )
 
-// Encrypt encrypts plaintext using AES-256-GCM with a random nonce.
+// Encrypt encrypts plaintext using AES-256-GCM with a random nonce (nil AAD for backward compatibility).
 // Returns base64(nonce || ciphertext || tag).
 func Encrypt(masterKey []byte, plaintext string) (string, error) {
+	return EncryptWithAAD(masterKey, plaintext, nil)
+}
+
+// EncryptWithAAD encrypts plaintext using AES-256-GCM bound to authenticated additional data (AAD).
+func EncryptWithAAD(masterKey []byte, plaintext string, aad []byte) (string, error) {
 	if len(masterKey) != 32 {
 		return "", fmt.Errorf("master key must be 32 bytes, got %d", len(masterKey))
 	}
@@ -40,12 +45,17 @@ func Encrypt(masterKey []byte, plaintext string) (string, error) {
 	}
 
 	// Seal appends ciphertext+tag to the nonce prefix so the output is: nonce || ciphertext || tag
-	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), aad)
 	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
-// Decrypt decrypts base64(nonce || ciphertext || tag) using AES-256-GCM.
+// Decrypt decrypts base64(nonce || ciphertext || tag) using AES-256-GCM with nil AAD.
 func Decrypt(masterKey []byte, encoded string) (string, error) {
+	return DecryptWithAAD(masterKey, encoded, nil)
+}
+
+// DecryptWithAAD decrypts base64(nonce || ciphertext || tag) using AES-256-GCM bound to AAD.
+func DecryptWithAAD(masterKey []byte, encoded string, aad []byte) (string, error) {
 	if len(masterKey) != 32 {
 		return "", fmt.Errorf("master key must be 32 bytes, got %d", len(masterKey))
 	}
@@ -70,7 +80,7 @@ func Decrypt(masterKey []byte, encoded string) (string, error) {
 		return "", fmt.Errorf("ciphertext too short: %d bytes, need at least %d for nonce", len(data), nonceSize)
 	}
 
-	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], nil)
+	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], aad)
 	if err != nil {
 		return "", fmt.Errorf("gcm decrypt: %w", err)
 	}

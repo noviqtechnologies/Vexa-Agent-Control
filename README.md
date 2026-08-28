@@ -1,7 +1,7 @@
 # Vexa Agent Control
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.68-green.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.69-green.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
 [![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)
@@ -77,8 +77,8 @@ Trust has levels. Vexa classifies integrations based on end-to-end automated tes
 | Level | Client / IDE | Configuration Path Checked | Automatic Wrap Support |
 |---|---|---|---|
 | **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported |
-| **Verified** | **Cursor** | `~/.cursor/mcp.json` | Tested & fully supported |
-| **Verified** | **Codex** | `~/.codex/config.json` | Tested & fully supported |
+| **Verified** | **Cursor** | `~/.cursor/mcp.json` | Tested & fully supported (MCP wrap) |
+| **Verified** | **Codex** | `~/.codex/config.toml` | Tested & fully supported |
 | **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported |
 | **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
 | **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080` | Manual proxy routing |
@@ -120,7 +120,7 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.56`.
+- **Expected Result:** Prints `agentcontrol 1.0.69`.
 - **If it fails:** Verify curl / PowerShell connectivity; check [Platform Install Guides](docs/install/).
 
 ### Step 2: Inspect Discovered Clients (Safe Dry-Run)
@@ -193,6 +193,7 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 
 ## Modes Explained
 
+### Security Enforcement Modes
 - **Observation / Shadow Mode (`--shadow`):** Logs all tool calls and evaluated policy decisions without blocking any execution. Ideal for testing and policy baseline generation (`agentcontrol generate-policy`).
 - **Enforcement Mode (`--enforce` / default in `protect`):** Actively denies tool executions that violate DLP, schema validation, or prompt injection rules.
 - **Custom Agent Proxy Mode:** Routes custom Python/Node.js agents via HTTP proxy variables:
@@ -200,6 +201,11 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
   export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
   export HTTP_PROXY=http://127.0.0.1:8080
   ```
+
+### LLM Key & Spend Governance Modes (`llm_mode`)
+- **`local_compat` (Default):** Standalone local developer compatibility. Dispatches upstream LLM traffic directly using workstation environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`) or client request headers.
+- **`central_shadow`:** Enterprise observation mode. Upstream requests are routed through the Control Plane with centralized key custody. Evaluates price books and logs would-deny events without blocking execution.
+- **`central_enforce`:** Authoritative enterprise governance. Zero provider keys on workstations. Enforces preflight row-locked budget reservations, pinned active price books, and fail-closed budget caps before dispatch.
 
 ---
 

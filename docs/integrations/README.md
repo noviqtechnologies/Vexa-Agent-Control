@@ -20,7 +20,7 @@ This document provides the authoritative integration matrix for all supported AI
 |---|---|---|---|---|---|
 | **Claude Desktop** | Desktop App | **Verified** | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
 | **Cursor** | IDE | **Verified** | `~/.cursor/mcp.json` | `~/.cursor/mcp.json` | `%USERPROFILE%\.cursor\mcp.json` |
-| **Codex** | CLI / Agent | **Verified** | `~/.codex/config.json` | `~/.codex/config.json` | `%USERPROFILE%\.codex\config.json` |
+| **Codex** | CLI / Agent | **Verified** | `~/.codex/config.toml` | `~/.codex/config.toml` | `%USERPROFILE%\.codex\config.toml` |
 | **Antigravity** | IDE | **Verified** | `~/.gemini/antigravity/mcp_config.json` | `~/.gemini/antigravity/mcp_config.json` | `%USERPROFILE%\.gemini\antigravity\mcp_config.json` |
 | **VS Code** | IDE | *Experimental* | `~/Library/Application Support/Code/User/settings.json` | `~/.config/Code/User/settings.json` | `%APPDATA%\Code\User\settings.json` |
 | **JetBrains** | IDE | *Experimental* | `~/Library/Application Support/JetBrains/*/mcp.json` | `~/.config/JetBrains/*/mcp.json` | `%APPDATA%\JetBrains\*\mcp.json` |

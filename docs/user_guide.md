@@ -480,22 +480,45 @@ Normalized text is evaluated against 9 active injection scanners blocking:
 
 ---
 
-## 9. Authoritative LLM Spend Governance
+## 9. Authoritative LLM Spend & Key Governance
 
-Agent Control includes an authoritative PostgreSQL-backed spend management engine that prevents budget runaways and token exhaustion.
+Agent Control provides an authoritative, distributed spend management and key custody engine that prevents budget runaways, eliminates local credential leakage, and guarantees fail-closed budget enforcement.
 
 ```
-Agent Request ──► [ Preflight Reservation ] ──► (Sufficient Budget?)
-                         │                             │
-                   [ microcents ]                YES ──┴──► Forward to Provider
-                   ceiling math                        │
-                                                 NO  ─────► HTTP 429 Hard Deny
+Agent Request (Loopback) ──► [ Local Edge Gateway ] ──► [ Central Broker /api/v3/broker ]
+                                                              │
+                                                        [ Spend Preflight ] ──► (Sufficient Budget?)
+                                                              │                       │
+                                                        [ Active Price Book ]   YES ──┴──► Just-in-Time Key Decrypt
+                                                        Integer Microcents                    │
+                                                                                      ▼
+                                                                                Allowlisted Provider (OpenAI / Anthropic / Groq)
+                                                                                      │
+                                                                                True 4-Tier Streaming SSE Relay
+                                                                                      │
+                                                                                Central Durable Outbox Settle / Release
 ```
 
-### Preflight Budget Invariants
-- **Integer Microcents Math:** All token calculations use integer microcents ($1.00 = 100,000,000 µ¢) to eliminate floating-point rounding errors.
-- **Pre-Dispatch Bounded Reservations:** Before forwarding a prompt to an LLM provider, Agent Control calculates maximum potential cost based on model pricing rules and reserves the amount.
-- **Fail-Closed Hard Deny:** If `active_reservations + settled_spend > limit`, the gateway rejects the request with HTTP 429 (`spend_budget_exhausted`). No upstream provider tokens are consumed.
+### LLM Governance Modes (`llm_mode`)
+
+| Mode | Key Custody Location | Preflight Accounting Semantics | Failure Mode |
+|---|---|---|---|
+| **`local_compat` (Default)** | Workstation environment variables (`OPENAI_API_KEY`, etc.) | Local advisory tracking; direct upstream dispatch | Fails locally |
+| **`central_shadow`** | Central Control Plane Key Vault (AES-256-GCM Envelope) | Evaluates active price book; logs `would_deny` audit events; permits egress | Fail-closed (`503`); zero local fallback |
+| **`central_enforce`** | Central Control Plane Key Vault (AES-256-GCM Envelope) | Strict serializable row-locked budget reservation; denies on exhaustion | Fail-closed (`429` / `503`); zero local fallback |
+
+### Preflight Budget Invariants & Zero-Trust Key Custody
+- **Integer Microcents Math:** All token calculations use integer microcents ($1.00 = 100,000,000 µ¢) to eliminate IEEE-754 floating-point rounding errors.
+- **Pinned Active Price Book:** Every reservation queries the active versioned price book, pins the version ID, and fails closed with `price_unknown` on unpriced models in enforce mode.
+- **Pre-Dispatch Bounded Reservations:** Before forwarding prompts to an LLM provider, Agent Control calculates maximum potential cost based on model pricing rules and reserves the amount.
+- **Fail-Closed Hard Deny:** If `active_reservations + settled_spend > limit`, the gateway rejects the request with HTTP 429 (`spend_budget_exhausted`). Zero upstream provider packets are transmitted.
+- **Centralized Envelope Key Custody:** Provider credentials exist exclusively in the Control Plane database encrypted with AES-256-GCM and Authenticated Additional Data (AAD = `tenant_id | provider | key_alias | version`). Workstations never store or load long-lived provider secrets.
+- **True 4-Tier SSE Streaming:** Responses are streamed chunk-by-chunk with immediate flushing (`Provider → Central Broker → Local Edge → Client`), maintaining low first-token latency and capturing terminal `stream_options.include_usage`.
+- **Central Durable Outbox:** Authoritative settlement and release operations are recorded in the Control Plane database outbox with idempotency keys (`settle-{req_uuid}`), ensuring exact-once accounting even during network partitions or process restarts.
+
+### Provider Key Lifecycle Management
+- **Staged Key Rotation:** Add new key versions (`ACTIVE`) while gracefully retiring older versions (`RETIRING`) with overlap windows.
+- **Sanitized Validation:** `POST /api/v1/providers/keys/{id}/validate` verifies upstream credential validity with zero error leakage.
 
 ### Requesting a Budget Increase
 1. Navigate to the **Spend Status** view in the Web Console (`/spend/status`).

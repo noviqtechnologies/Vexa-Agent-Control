@@ -13,6 +13,9 @@ pub mod mcp_score;
 /// Remote policy loader: fetches active policy from the dashboard API (PostgreSQL)
 /// and provides a background polling task for automatic hot-reload.
 pub mod remote;
+/// File-system watcher that hot-reloads the `--policy` YAML file when it changes
+/// on disk, without requiring a daemon restart.
+pub mod policy_file_watcher;
 pub mod response_scanner;
 pub mod safe_mode;
 pub mod schema;

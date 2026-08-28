@@ -167,12 +167,7 @@ func Load() (*Config, error) {
 		}
 
 		if ingressAuthSecret == "" && os.Getenv("DIRECT_TLS_ENABLED") != "true" {
-			// Fallback to gatewaySecret if present so standalone operator API starts without requiring separate ingress secret
-			if gatewaySecret != "" {
-				ingressAuthSecret = gatewaySecret
-			} else {
-				return nil, fmt.Errorf("INGRESS_AUTH_SECRET is required in production when running behind an HTTP ingress boundary (set DIRECT_TLS_ENABLED=true or provide a secure secret)")
-			}
+			return nil, fmt.Errorf("INGRESS_AUTH_SECRET is required in production when running behind an HTTP ingress boundary (set DIRECT_TLS_ENABLED=true or provide a secure secret)")
 		}
 
 		if ingressAuthSecret != "" && (isPlaceholder(ingressAuthSecret) || len(ingressAuthSecret) < 16) {

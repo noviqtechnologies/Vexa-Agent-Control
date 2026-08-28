@@ -208,23 +208,6 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 		return err
 	}
 
-	// Backfill default authoritative spend policy ($100/mo) for any existing tenants
-	rows, err := s.pool.Query(ctx, `SELECT id FROM tenants WHERE id IS NOT NULL`)
-	if err == nil {
-		defer rows.Close()
-		var tenantIDs []string
-		for rows.Next() {
-			var tid string
-			if scanErr := rows.Scan(&tid); scanErr == nil && tid != "" {
-				tenantIDs = append(tenantIDs, tid)
-			}
-		}
-		rows.Close()
-		for _, tid := range tenantIDs {
-			_ = s.EnsureDefaultPolicyForOrg(ctx, tid)
-		}
-	}
-
 	return nil
 }
 
@@ -303,14 +286,16 @@ func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeReq
 		}
 	}
 
-	// 2. Resolve Price Book item
-	priceItem, err := s.GetPriceBookItem(ctx, "price-book-v1", req.Provider, req.Model)
+	// 2. Resolve Active Price Book item
+	activePriceBookID := s.GetActivePriceBookVersionID(ctx)
+	priceItem, err := s.GetPriceBookItem(ctx, activePriceBookID, req.Provider, req.Model)
 	if err != nil || priceItem == nil {
 		denyResp := &AuthorizeResponse{
 			Decision:            "deny",
 			ReasonCode:          ErrCodePriceUnknown,
 			CorrelationID:       req.RequestID,
 			DisclosureSafeScope: "price_book",
+			PriceBookVersion:    activePriceBookID,
 		}
 		return denyResp, nil
 	}
@@ -500,7 +485,7 @@ func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeReq
 		) VALUES ($1, $2, $3, $4, 'AUTHORIZED', $5, 0, 'USD', $6, $7, $8, $9, $10, $11, $12, now())
 		RETURNING reservation_id
 	`, orgID, req.RequestID, req.GatewayID, req.ProjectID, reserveMicrocents, expiresAt,
-		policySnapshotBytes, "price-book-v1", req.Provider, req.Model, req.InputTokenEstimate, req.MaxOutputTokens).
+		policySnapshotBytes, activePriceBookID, req.Provider, req.Model, req.InputTokenEstimate, req.MaxOutputTokens).
 		Scan(&reservationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert spend reservation: %w", err)
@@ -525,7 +510,7 @@ func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeReq
 		ReservedMicrocents:   reserveMicrocents,
 		Currency:             CurrencyUSD,
 		PolicyVersions:       policyVersionsPinned,
-		PriceBookVersion:     "price-book-v1",
+		PriceBookVersion:     activePriceBookID,
 		CorrelationID:        req.RequestID,
 	}
 
@@ -682,11 +667,20 @@ func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *
 	}
 
 	// 6. Write Append-Only Event
+	usageSource := req.UsageSource
+	if usageSource == "" {
+		if req.IsEstimated {
+			usageSource = UsageSourceCharacterEstimate
+		} else {
+			usageSource = UsageSourceProviderReported
+		}
+	}
 	usageMap := map[string]interface{}{
 		"input_tokens":        req.InputTokens,
 		"output_tokens":       req.OutputTokens,
 		"cached_input_tokens": req.CachedInputTokens,
 		"is_estimated":        req.IsEstimated,
+		"usage_source":        usageSource,
 		"provider_status":     req.Status,
 	}
 	usageBytes, _ := json.Marshal(usageMap)
@@ -913,38 +907,47 @@ func (s *Store) SweepExpiredReservations(ctx context.Context) (int, error) {
 
 // ── 5. PRICE BOOK & QUERIES ──────────────────────────────────────────────────
 
+// GetActivePriceBookVersionID returns the most recently published active price book version ID.
+func (s *Store) GetActivePriceBookVersionID(ctx context.Context) string {
+	if s.pool == nil {
+		return "price-book-v1"
+	}
+	var versionID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT price_book_version_id FROM price_book_versions
+		ORDER BY published_at DESC LIMIT 1
+	`).Scan(&versionID)
+	if err != nil || versionID == "" {
+		return "price-book-v1"
+	}
+	return versionID
+}
+
+// GetPriceBookItem queries the exact or wildcard model rate in the specified price book.
+// Returns pgx.ErrNoRows if no pricing rule matches. Never returns synthetic fallback rates.
 func (s *Store) GetPriceBookItem(ctx context.Context, versionID, provider, model string) (*PriceBookItem, error) {
 	if s.pool == nil {
-		return &PriceBookItem{
-			PriceBookVersionID:             versionID,
-			Provider:                       provider,
-			ModelSelector:                  model,
-			InputRateMicrocentsPerMillion:  250_000_000,
-			OutputRateMicrocentsPerMillion: 1_000_000_000,
-		}, nil
+		return nil, errors.New("database pool uninitialized")
 	}
 	var item PriceBookItem
 	err := s.pool.QueryRow(ctx, `
 		SELECT item_id, price_book_version_id, provider, model_selector,
 		       input_rate_microcents_per_million, output_rate_microcents_per_million, cached_input_rate_microcents_per_million
 		FROM price_book_items
-		WHERE price_book_version_id = $1 AND provider = $2 AND model_selector = $3
+		WHERE price_book_version_id = $1 AND LOWER(provider) = LOWER($2) AND (
+			model_selector = $3 
+			OR model_selector = '*' 
+			OR ($3 LIKE REPLACE(model_selector, '*', '%'))
+		)
+		ORDER BY 
+			CASE WHEN model_selector = $3 THEN 1 WHEN model_selector != '*' THEN 2 ELSE 3 END
+		LIMIT 1
 	`, versionID, provider, model).Scan(
 		&item.ItemID, &item.PriceBookVersionID, &item.Provider, &item.ModelSelector,
 		&item.InputRateMicrocentsPerMillion, &item.OutputRateMicrocentsPerMillion,
 		&item.CachedInputRateMicrocentsPerMillion,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Fallback: match wildcard or default
-			return &PriceBookItem{
-				PriceBookVersionID:             versionID,
-				Provider:                       provider,
-				ModelSelector:                  model,
-				InputRateMicrocentsPerMillion:  250_000_000,
-				OutputRateMicrocentsPerMillion: 1_000_000_000,
-			}, nil
-		}
 		return nil, err
 	}
 	return &item, nil
@@ -1067,9 +1070,6 @@ func (s *Store) EnsureDefaultPolicyForOrg(ctx context.Context, orgID string) err
 }
 
 func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, error) {
-	if orgID != "" {
-		_ = s.EnsureDefaultPolicyForOrg(ctx, orgID)
-	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT policy_id, organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action, effective_from, status, created_at, updated_at
 		FROM spend_policies
@@ -1092,9 +1092,6 @@ func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, 
 }
 
 func (s *Store) ListEffectiveBudgetWindows(ctx context.Context, orgID string) ([]BudgetWindow, error) {
-	if orgID != "" {
-		_ = s.EnsureDefaultPolicyForOrg(ctx, orgID)
-	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT window_id, organization_id, policy_version_id, scope_type, scope_id,
 		       window_start, window_end, limit_microcents, reserved_microcents, settled_microcents, version
