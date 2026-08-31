@@ -22,8 +22,8 @@ import (
 var errStore = errors.New("store failure")
 
 type mockStore struct {
-	getFleetStatsFunc     func(ctx context.Context, tenantID string) (*store.FleetStats, error)
-	listAgentsFunc        func(ctx context.Context, tenantID string, limit, offset int) ([]store.AgentSummary, error)
+	getFleetStatsFunc     func(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error)
+	listAgentsFunc        func(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error)
 	getDecisionHeatmapFn  func(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
 	listRecentEventsFunc  func(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
 	listCredentialsFunc   func(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error)
@@ -31,7 +31,7 @@ type mockStore struct {
 	insertEventFunc       func(ctx context.Context, tenantID string, e *model.RedactedEvent) error
 	insertAlertFunc       func(ctx context.Context, tenantID string, a *model.RedactedAlert) error
 	upsertCredentialFunc  func(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
-	listRecentAlertsFunc    func(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error)
+	listRecentAlertsFunc  func(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)
 	getThreatSummaryFunc    func(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
 	getThreatTimelineFunc   func(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error)
 	getTopThreatPatternsFunc func(ctx context.Context, tenantID string, hours int, limit int) ([]store.ThreatPattern, error)
@@ -40,15 +40,15 @@ type mockStore struct {
 	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
 }
 
-func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string) (*store.FleetStats, error) {
+func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error) {
 	if m.getFleetStatsFunc != nil {
-		return m.getFleetStatsFunc(ctx, tenantID)
+		return m.getFleetStatsFunc(ctx, tenantID, hours)
 	}
 	return &store.FleetStats{}, nil
 }
-func (m *mockStore) ListAgents(ctx context.Context, tenantID string, limit, offset int) ([]store.AgentSummary, error) {
+func (m *mockStore) ListAgents(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error) {
 	if m.listAgentsFunc != nil {
-		return m.listAgentsFunc(ctx, tenantID, limit, offset)
+		return m.listAgentsFunc(ctx, tenantID, limit, offset, hours)
 	}
 	return nil, nil
 }
@@ -109,9 +109,9 @@ func (m *mockStore) UpsertCredential(ctx context.Context, tenantID string, c *mo
 	}
 	return nil
 }
-func (m *mockStore) ListRecentAlerts(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error) {
+func (m *mockStore) ListRecentAlerts(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error) {
 	if m.listRecentAlertsFunc != nil {
-		return m.listRecentAlertsFunc(ctx, tenantID, limit)
+		return m.listRecentAlertsFunc(ctx, tenantID, limit, hours)
 	}
 	return nil, nil
 }
@@ -268,19 +268,24 @@ func validCredentialJSON() string {
 // ── Fleet handler tests ─────────────────────────────────────────────────────
 
 func TestFleetHandler_GetOverview_Success(t *testing.T) {
+	var capturedHours int
 	ms := &mockStore{
-		getFleetStatsFunc: func(_ context.Context, _ string) (*store.FleetStats, error) {
+		getFleetStatsFunc: func(_ context.Context, _ string, hours int) (*store.FleetStats, error) {
+			capturedHours = hours
 			return &store.FleetStats{TotalAgents: 5, ActiveAgents: 3, TotalEvents: 100}, nil
 		},
 	}
 	h := NewFleetHandler(ms)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/overview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/overview?hours=48", nil)
 	rr := httptest.NewRecorder()
 	h.GetOverview(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if capturedHours != 48 {
+		t.Errorf("hours = %d, want 48", capturedHours)
 	}
 
 	var stats store.FleetStats
@@ -294,7 +299,7 @@ func TestFleetHandler_GetOverview_Success(t *testing.T) {
 
 func TestFleetHandler_GetOverview_StoreError(t *testing.T) {
 	ms := &mockStore{
-		getFleetStatsFunc: func(_ context.Context, _ string) (*store.FleetStats, error) {
+		getFleetStatsFunc: func(_ context.Context, _ string, _ int) (*store.FleetStats, error) {
 			return nil, errStore
 		},
 	}
@@ -328,17 +333,18 @@ func TestFleetHandler_ListAgents_EmptyResult(t *testing.T) {
 }
 
 func TestFleetHandler_ListAgents_Pagination(t *testing.T) {
-	var capturedLimit, capturedOffset int
+	var capturedLimit, capturedOffset, capturedHours int
 	ms := &mockStore{
-		listAgentsFunc: func(_ context.Context, _ string, limit, offset int) ([]store.AgentSummary, error) {
+		listAgentsFunc: func(_ context.Context, _ string, limit, offset int, hours int) ([]store.AgentSummary, error) {
 			capturedLimit = limit
 			capturedOffset = offset
+			capturedHours = hours
 			return nil, nil
 		},
 	}
 	h := NewFleetHandler(ms)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/agents?limit=10&offset=20", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/agents?limit=10&offset=20&hours=72", nil)
 	rr := httptest.NewRecorder()
 	h.ListAgents(rr, req)
 
@@ -347,6 +353,9 @@ func TestFleetHandler_ListAgents_Pagination(t *testing.T) {
 	}
 	if capturedOffset != 20 {
 		t.Errorf("offset = %d, want 20", capturedOffset)
+	}
+	if capturedHours != 72 {
+		t.Errorf("hours = %d, want 72", capturedHours)
 	}
 }
 
@@ -636,8 +645,10 @@ func TestIngestHandler_PostCredential_MissingRequiredFields(t *testing.T) {
 // ── Alert handler tests ─────────────────────────────────────────────────────
 
 func TestAlertHandler_ListRecent_Success(t *testing.T) {
+	var capturedHours int
 	ms := &mockStore{
-		listRecentAlertsFunc: func(_ context.Context, _ string, limit int) ([]model.RedactedAlert, error) {
+		listRecentAlertsFunc: func(_ context.Context, _ string, limit int, hours int) ([]model.RedactedAlert, error) {
+			capturedHours = hours
 			return []model.RedactedAlert{
 				{AlertID: "alert-1", Severity: "critical"},
 			}, nil
@@ -645,12 +656,15 @@ func TestAlertHandler_ListRecent_Success(t *testing.T) {
 	}
 	h := NewAlertHandler(ms, sse.NewBroker())
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/recent?limit=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/recent?limit=10&hours=48", nil)
 	rr := httptest.NewRecorder()
 	h.ListRecent(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if capturedHours != 48 {
+		t.Errorf("hours = %d, want 48", capturedHours)
 	}
 
 	var alerts []model.RedactedAlert
@@ -664,7 +678,7 @@ func TestAlertHandler_ListRecent_Success(t *testing.T) {
 
 func TestAlertHandler_ListRecent_StoreError(t *testing.T) {
 	ms := &mockStore{
-		listRecentAlertsFunc: func(_ context.Context, _ string, _ int) ([]model.RedactedAlert, error) {
+		listRecentAlertsFunc: func(_ context.Context, _ string, _ int, _ int) ([]model.RedactedAlert, error) {
 			return nil, errStore
 		},
 	}

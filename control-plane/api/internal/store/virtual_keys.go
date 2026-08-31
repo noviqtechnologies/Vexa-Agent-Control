@@ -101,6 +101,8 @@ type VirtualKey struct {
 	AllowedRoutes           StringSlice       `json:"allowed_routes" db:"allowed_routes"`
 	Status                  string            `json:"status" db:"status"` // "active", "rotating", "revoked"
 	Tags                    map[string]string `json:"tags,omitempty" db:"tags"`
+	OwnerType               string            `json:"owner_type" db:"owner_type"`       // "user", "service_account", "agent"
+	BudgetPeriod            string            `json:"budget_period" db:"budget_period"` // "monthly", "weekly", "daily"
 }
 
 // EnsureVirtualKeysSchema idempotently creates the virtual_keys table in PostgreSQL.
@@ -128,8 +130,12 @@ func (s *Store) EnsureVirtualKeysSchema(ctx context.Context) error {
 		allowed_routes TEXT[] DEFAULT '{}',
 		status TEXT NOT NULL DEFAULT 'active',
 		tags JSONB DEFAULT '{}',
+		owner_type TEXT NOT NULL DEFAULT 'user',
+		budget_period TEXT NOT NULL DEFAULT 'monthly',
 		CONSTRAINT unique_key_hash_per_tenant UNIQUE(tenant_id, key_hash)
 	);
+	ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS owner_type TEXT NOT NULL DEFAULT 'user';
+	ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS budget_period TEXT NOT NULL DEFAULT 'monthly';
 	CREATE INDEX IF NOT EXISTS idx_virtual_keys_tenant ON virtual_keys(tenant_id);
 	CREATE INDEX IF NOT EXISTS idx_virtual_keys_hash ON virtual_keys(key_hash);
 	CREATE INDEX IF NOT EXISTS idx_virtual_keys_prev_hash ON virtual_keys(previous_key_hash);
@@ -149,6 +155,7 @@ func scanVirtualKey(row pgx.Row) (*VirtualKey, error) {
 		&allowedIPs, &k.MaxRPM, &k.MaxTPM, &k.MaxConcurrentRequests,
 		&k.MonthlyBudgetMicrocents, &k.SpentMicrocents,
 		&allowedModels, &allowedRoutes, &k.Status, &tagsJSON,
+		&k.OwnerType, &k.BudgetPeriod,
 	)
 	if err != nil {
 		return nil, err
@@ -157,6 +164,12 @@ func scanVirtualKey(row pgx.Row) (*VirtualKey, error) {
 	k.AllowedIPs = allowedIPs
 	k.AllowedModels = allowedModels
 	k.AllowedRoutes = allowedRoutes
+	if k.OwnerType == "" {
+		k.OwnerType = "user"
+	}
+	if k.BudgetPeriod == "" {
+		k.BudgetPeriod = "monthly"
+	}
 	if len(tagsJSON) > 0 {
 		_ = json.Unmarshal(tagsJSON, &k.Tags)
 	}
@@ -166,7 +179,7 @@ func scanVirtualKey(row pgx.Row) (*VirtualKey, error) {
 const virtualKeySelectColumns = `id, tenant_id, key_hash, key_prefix, previous_key_hash, previous_key_expires_at,
 	name, team_id, created_by, created_at, expires_at, allowed_ips, max_rpm, max_tpm,
 	max_concurrent_requests, monthly_budget_microcents, spent_microcents, allowed_models,
-	allowed_routes, status, tags`
+	allowed_routes, status, tags, owner_type, budget_period`
 
 func (s *Store) CreateVirtualKey(ctx context.Context, tenantID string, k *VirtualKey) error {
 	if k.ID == "" {
@@ -177,6 +190,12 @@ func (s *Store) CreateVirtualKey(ctx context.Context, tenantID string, k *Virtua
 	if k.Status == "" {
 		k.Status = "active"
 	}
+	if k.OwnerType == "" {
+		k.OwnerType = "user"
+	}
+	if k.BudgetPeriod == "" {
+		k.BudgetPeriod = "monthly"
+	}
 
 	tagsJSON, _ := json.Marshal(k.Tags)
 
@@ -185,16 +204,16 @@ func (s *Store) CreateVirtualKey(ctx context.Context, tenantID string, k *Virtua
 		id, tenant_id, key_hash, key_prefix, previous_key_hash, previous_key_expires_at,
 		name, team_id, created_by, created_at, expires_at, allowed_ips, max_rpm, max_tpm,
 		max_concurrent_requests, monthly_budget_microcents, spent_microcents, allowed_models,
-		allowed_routes, status, tags
+		allowed_routes, status, tags, owner_type, budget_period
 	) VALUES (
-		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
 	)`
 
 	_, err := s.pool.Exec(ctx, query,
 		k.ID, k.TenantID, k.KeyHash, k.KeyPrefix, k.PreviousKeyHash, k.PreviousKeyExpiresAt,
 		k.Name, k.TeamID, k.CreatedBy, k.CreatedAt, k.ExpiresAt, k.AllowedIPs,
 		k.MaxRPM, k.MaxTPM, k.MaxConcurrentRequests, k.MonthlyBudgetMicrocents, k.SpentMicrocents,
-		k.AllowedModels, k.AllowedRoutes, k.Status, tagsJSON,
+		k.AllowedModels, k.AllowedRoutes, k.Status, tagsJSON, k.OwnerType, k.BudgetPeriod,
 	)
 	return err
 }
@@ -222,6 +241,7 @@ func (s *Store) ListVirtualKeys(ctx context.Context, tenantID string) ([]Virtual
 			&allowedIPs, &k.MaxRPM, &k.MaxTPM, &k.MaxConcurrentRequests,
 			&k.MonthlyBudgetMicrocents, &k.SpentMicrocents,
 			&allowedModels, &allowedRoutes, &k.Status, &tagsJSON,
+			&k.OwnerType, &k.BudgetPeriod,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan virtual key: %w", err)

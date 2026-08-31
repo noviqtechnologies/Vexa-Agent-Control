@@ -34,7 +34,8 @@
 
 Vexa Agent Control acts as a local security sidecar and transparent proxy for AI agent tool calls:
 
-- **Centralized LLM Key Custody & Brokered Egress:** Stores provider API keys encrypted in the Hub using AES-256-GCM and decrypts in-memory inside the broker, ensuring developer endpoints never hold raw master credentials.
+- **Run Explorer & Forensic Dossiers:** Traces every LLM request through identity, policy snapshots, spend authorization, and upstream dispatch with forensic drawers and cryptographic correlation.
+- **Effective Policy Explorer:** Resolves deterministic multi-layer policy hierarchies (Organization, Group, Spend, Virtual-Key, Device) with point-in-time historical audit support.
 - **Fail-Closed Spend Governance:** Enforces integer microcent preflight reservations with row-level database locking and accurate SSE streaming token settlement.
 - **Enrolled-Device Sentry & Attestation:** Provides continuous filesystem posture monitoring, auto-healing, and authentic Ed25519 cryptographic policy verification.
 - **Identity Provider Integration (Local, Google, Azure Entra ID):** Authenticates operators via Local Admin or SSO, validates agent JWTs via dynamic JWKS discovery, and attributes spend and audit events to verified identities.
@@ -276,7 +277,7 @@ For production deployments, security teams, and platform engineering:
 Explore the complete [Documentation Hub](docs/README.md):
 
 - **Install:** [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md)
-- **Guides:** [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md)
+- **Guides:** [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md) · [Run Explorer](docs/guides/run-explorer.md) · [Effective Policy Explorer](docs/guides/effective-policy.md)
 - **Integrations:** [Matrix](docs/integrations/README.md) · [Claude Desktop](docs/integrations/claude-desktop.md) · [Cursor](docs/integrations/cursor.md) · [Codex](docs/integrations/codex.md) · [Antigravity](docs/integrations/antigravity.md)
 - **Reference:** [CLI Commands](docs/reference/cli.md) · [Configuration & Env Vars](docs/reference/configuration.md) · [Paths & State](docs/reference/paths-and-state.md) · [Troubleshooting](docs/reference/troubleshooting.md) · [Removal & Recovery](docs/reference/removal-and-recovery.md) · [Legacy Alias Migration](docs/reference/legacy-migration.md) · [Release Notes Template](docs/reference/release-notes-template.md)
 

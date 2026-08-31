@@ -667,17 +667,59 @@ agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format j
 
 ---
 
-## 13. Specialist Documentation Links
+---
 
-For deep architectural specifications, protocol designs, and framework-specific guides, consult our specialist documentation:
+## 14. Run Explorer & Forensic Dossiers
 
-- 📖 **[Workstation Sidecar User Guide](workstation_guide.md)** — Step-by-step developer tutorial for local execution.
-- 🏢 **[Team Control Hub Guide](team_hub_guide.md)** — Self-hosted Docker Compose control plane, PostgreSQL spend ledger, and fleet governance.
-- ☸️ **[Enterprise Fleet Guide](enterprise_guide.md)** — Kubernetes Helm release, HAR container sidecars, and pure-Rust TLS.
-- 📜 **[Common Reference Guide](common_guide.md)** — Schema v2 specification, all 21 DLP patterns, and environment variables.
-- 🛡️ **[OWASP Agentic Top 10 (ASI 2026)](owasp_agentic_top10.md)** — Architectural security mapping, evidence, and mitigations.
-- 🔑 **[OIDC Identity Binding Guide](oidc_identity_binding.md)** — Step-by-step setup for Okta, Keycloak, Entra ID, Auth0, and PingIdentity.
-- 📊 **[ADR Security Benchmark Guide](adr_benchmark.md)** — 303 benchmark scenarios and comparative evaluation methodology.
-- 🏗️ **[System Architecture Specification](agentcontrol_architecture.md)** — 6-pass security pipeline and internal component mechanics.
-- 🚀 **[Deployment & Installation Guide](deployment.md)** — Multi-platform installation reference across Linux, macOS, and Windows.
-- ⚡ **[Quickstart Guide](quickstart.md)** — 5-minute hands-on walkthrough.
+The **Run Explorer** (`/runs`) provides end-to-end auditability and forensic inspection for all LLM broker transactions across the fleet.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           RUN EXPLORER TELEMETRY                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 1. Run Search & Filters: Filter by 1H/24H/7D/30D, Provider, State, Model.  │
+│ 2. Run Dossier Drawer: 5 comprehensive inspection tabs:                     │
+│    • Economics: Preflight Reserved ($), Settled ($), and Released ($).      │
+│    • Identity: Workstation Device ID, Hostname, and Compliance Posture.     │
+│    • Policy Snapshot: Exact JSONB rules and Price Book version evaluated.   │
+│    • Ledger Events: Immutable append-only audit events for the run.         │
+│    • Dispatch: Upstream endpoint, model selector, and roundtrip latency.    │
+│ 3. Deep-Link Navigation: Direct jump to Effective Policy Explorer.          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Inspecting Runs via API
+```bash
+# List recent runs
+curl -H "Authorization: Bearer <TOKEN>" "http://localhost:8400/api/v1/runs?hours=24&limit=50"
+
+# Fetch single forensic dossier
+curl -H "Authorization: Bearer <TOKEN>" "http://localhost:8400/api/v1/runs/res-01917f8a-..."
+```
+
+---
+
+## 15. Effective Policy Explorer (5-Level Hierarchical Resolution)
+
+The **Effective Policy Explorer** (`/policy/effective-explorer`) determines exact governing bounds across the 5-layer hierarchy:
+
+1. **Level 1: Organization** — Base tenant rules and default enforcement modes.
+2. **Level 2: Group** — Scoped group overrides.
+3. **Level 3: Spend** — Budget limits, period types, and hard-deny actions.
+4. **Level 4: Virtual Key** — Scoped API key route and model restrictions.
+5. **Level 5: Device Governance** — Hardware compliance and sentry posture.
+
+### Point-in-Time Historical Resolution
+Operators can specify an `at` ISO-8601 UTC timestamp to evaluate the exact policy version active during any historical incident.
+
+---
+
+## 16. Spend Analytics & Ledger Observatory
+
+The **Spend Observatory** (`/spend/visualization`) replaces client-side approximations with PostgreSQL server-side aggregation (`GET /api/v2/spend/analytics`):
+
+- **Zero Client Approximation:** Aggregated in PostgreSQL with `date_trunc('hour', created_at)`.
+- **Hourly Spend Velocity:** Real-time visual trend lines for settled spend and active reservations.
+- **Dimensional Breakdown:** Instant grouping by `provider`, `device`, `model`, or `project`.
+- **Data Freshness & Provenance:** Explicit timestamps and confidence tiers on all telemetry widgets.
+

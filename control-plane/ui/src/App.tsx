@@ -20,8 +20,9 @@ import VirtualKeys from './views/VirtualKeys'
 import GroupPolicyEditor from './views/GroupPolicyEditor'
 import SpendLimits from './views/SpendLimits'
 import IncreaseRequests from './views/IncreaseRequests'
-import SpendStatus from './views/SpendStatus'
 import SpendVisualization from './views/SpendVisualization'
+import RunExplorer from './views/RunExplorer'
+import EffectivePolicyExplorer from './views/EffectivePolicyExplorer'
 import Devices from './views/Devices'
 import TamperLog from './views/TamperLog'
 import SaaSOperator from './views/SaaSOperator'
@@ -115,8 +116,21 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
     children: [
       { label: 'Spend Limits', to: '/spend/limits' },
       { label: 'Increase Requests', to: '/spend/requests' },
-      { label: 'Spend Status', to: '/spend/status' },
-      { label: 'Usage Analytics', to: '/spend/visualization' },
+    ],
+  },
+  {
+    id: 'observability',
+    label: 'Observability & Runs',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    ),
+    children: [
+      { label: 'Run Explorer', to: '/runs' },
+      { label: 'Spend Analytics', to: '/spend/visualization' },
+      { label: 'Audit Logs', to: '/audit' },
     ],
   },
   {
@@ -129,10 +143,10 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
     ),
     children: [
       { label: 'Policy Editor', to: '/policy/edit' },
+      { label: 'Effective Policy Explorer', to: '/policy/effective-explorer' },
       { label: 'Policy Marketplace', to: '/policy/marketplace' },
       { label: 'Group Policies', to: '/policy/group' },
       { label: 'Threat Intelligence', to: '/threats' },
-      { label: 'Audit Logs', to: '/audit' },
       { label: 'Safe Mode', to: '/policy/safe-mode' },
       { label: 'Agent Identity', to: '/identity' },
     ],
@@ -489,8 +503,10 @@ export default function App() {
                       <Route path="/policy/group" element={<GroupPolicyEditor />} />
                       <Route path="/spend/limits" element={<SpendLimits />} />
                       <Route path="/spend/requests" element={<IncreaseRequests />} />
-                      <Route path="/spend/status" element={<SpendStatus />} />
+                      <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
                       <Route path="/spend/visualization" element={<SpendVisualization />} />
+                      <Route path="/runs" element={<RunExplorer />} />
+                      <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />
                       <Route path="/policy/safe-mode" element={<SafeMode />} />
                       <Route path="/threats" element={<ThreatIntelligence />} />
                       <Route path="/audit" element={<AuditLogs />} />

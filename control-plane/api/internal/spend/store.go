@@ -202,6 +202,17 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
 			'system', now()
 		) ON CONFLICT (policy_id, version) DO NOTHING;
+
+		CREATE INDEX IF NOT EXISTS idx_spend_res_org_created 
+			ON spend_reservations(organization_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_spend_res_org_device 
+			ON spend_reservations(organization_id, gateway_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_spend_res_org_provider 
+			ON spend_reservations(organization_id, provider, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_spend_res_org_state 
+			ON spend_reservations(organization_id, state, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_spend_events_reservation 
+			ON spend_events(reservation_id, occurred_at);
 	`
 	_, err := s.pool.Exec(ctx, schemaSQL)
 	if err != nil {
@@ -1256,4 +1267,301 @@ func (s *Store) ListIncreaseRequests(ctx context.Context, orgID string) ([]Incre
 		}
 	}
 	return res, rows.Err()
+}
+
+// ── 5. SPEND ANALYTICS & RUN EXPLORER ─────────────────────────────────────────
+
+// GetSpendAnalytics returns server-aggregated ledger totals, hourly time-series, and top spenders.
+func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, groupBy string) (*SpendAnalytics, error) {
+	if s.pool == nil {
+		return &SpendAnalytics{
+			Summary:     SpendAnalyticsSummary{},
+			TimeSeries:  []SpendTimeSeriesPoint{},
+			TopEntities: []SpendTopEntity{},
+		}, nil
+	}
+
+	if hours <= 0 || hours > 720 {
+		hours = 24
+	}
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+
+	var a SpendAnalytics
+	a.TimeSeries = []SpendTimeSeriesPoint{}
+	a.TopEntities = []SpendTopEntity{}
+
+	// 1. High-level Summary
+	err := s.pool.QueryRow(ctx, `
+		SELECT 
+			COALESCE(SUM(reserved_microcents), 0),
+			COALESCE(SUM(settled_microcents), 0),
+			COALESCE(SUM(CASE WHEN state = 'RELEASED' THEN reserved_microcents - settled_microcents ELSE 0 END), 0),
+			COUNT(*),
+			COUNT(*) FILTER (WHERE state = 'DENIED')
+		FROM spend_reservations
+		WHERE organization_id = $1 AND created_at >= $2
+	`, orgID, since).Scan(
+		&a.Summary.TotalReservedMoney,
+		&a.Summary.TotalSettledMoney,
+		&a.Summary.TotalReleasedMoney,
+		&a.Summary.RequestCount,
+		&a.Summary.DeniedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("spend analytics summary: %w", err)
+	}
+
+	// 2. Hourly Time Series
+	tsRows, err := s.pool.Query(ctx, `
+		SELECT 
+			to_char(date_trunc('hour', created_at), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as hr,
+			COALESCE(SUM(reserved_microcents), 0),
+			COALESCE(SUM(settled_microcents), 0),
+			COALESCE(SUM(CASE WHEN state = 'RELEASED' THEN reserved_microcents - settled_microcents ELSE 0 END), 0),
+			COUNT(*)
+		FROM spend_reservations
+		WHERE organization_id = $1 AND created_at >= $2
+		GROUP BY date_trunc('hour', created_at)
+		ORDER BY date_trunc('hour', created_at) ASC
+	`, orgID, since)
+	if err == nil {
+		defer tsRows.Close()
+		for tsRows.Next() {
+			var pt SpendTimeSeriesPoint
+			if err := tsRows.Scan(&pt.Hour, &pt.ReservedMicrocents, &pt.SettledMicrocents, &pt.ReleasedMicrocents, &pt.RequestCount); err == nil {
+				a.TimeSeries = append(a.TimeSeries, pt)
+			}
+		}
+	}
+
+	// 3. Top Entities by Dimension
+	validGroupBy := map[string]string{
+		"device":   "gateway_id",
+		"provider": "provider",
+		"model":    "model",
+		"project":  "project_id",
+	}
+	col, ok := validGroupBy[groupBy]
+	if !ok {
+		col = "provider"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT 
+			COALESCE(%s, 'unknown'),
+			COALESCE(SUM(settled_microcents), 0),
+			COUNT(*)
+		FROM spend_reservations
+		WHERE organization_id = $1 AND created_at >= $2
+		GROUP BY %s
+		ORDER BY SUM(settled_microcents) DESC, COUNT(*) DESC
+		LIMIT 20
+	`, col, col)
+
+	topRows, err := s.pool.Query(ctx, query, orgID, since)
+	if err == nil {
+		defer topRows.Close()
+		for topRows.Next() {
+			var ent SpendTopEntity
+			if err := topRows.Scan(&ent.EntityID, &ent.SettledMicrocents, &ent.RequestCount); err == nil {
+				ent.EntityName = ent.EntityID
+				a.TopEntities = append(a.TopEntities, ent)
+			}
+		}
+	}
+
+	return &a, nil
+}
+
+// ListRuns returns filtered broker LLM runs for the Run Explorer.
+func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSummary, error) {
+	if s.pool == nil {
+		return []RunSummary{}, nil
+	}
+
+	if q.Limit <= 0 || q.Limit > 500 {
+		q.Limit = 50
+	}
+	if q.Since.IsZero() {
+		q.Since = time.Now().UTC().Add(-24 * time.Hour)
+	}
+
+	sql := `
+		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
+		       reserved_microcents, settled_microcents, created_at, settled_at,
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
+		FROM spend_reservations
+		WHERE organization_id = $1 AND created_at >= $2`
+
+	args := []interface{}{orgID, q.Since}
+	argIdx := 3
+
+	if q.DeviceID != "" {
+		sql += fmt.Sprintf(" AND gateway_id = $%d", argIdx)
+		args = append(args, q.DeviceID)
+		argIdx++
+	}
+	if q.Provider != "" {
+		sql += fmt.Sprintf(" AND LOWER(provider) = LOWER($%d)", argIdx)
+		args = append(args, q.Provider)
+		argIdx++
+	}
+	if q.Model != "" {
+		sql += fmt.Sprintf(" AND LOWER(model) LIKE LOWER($%d)", argIdx)
+		args = append(args, "%"+q.Model+"%")
+		argIdx++
+	}
+	if q.State != "" {
+		sql += fmt.Sprintf(" AND UPPER(state) = UPPER($%d)", argIdx)
+		args = append(args, q.State)
+		argIdx++
+	}
+
+	sql += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argIdx)
+	args = append(args, q.Limit)
+
+	rows, err := s.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list runs query: %w", err)
+	}
+	defer rows.Close()
+
+	runs := make([]RunSummary, 0)
+	for rows.Next() {
+		var r RunSummary
+		var settledAt *time.Time
+		if err := rows.Scan(
+			&r.RunID, &r.RequestID, &r.DeviceID, &r.ProjectID, &r.Provider, &r.Model, &r.State,
+			&r.ReservedMicrocents, &r.SettledMicrocents, &r.StartedAt, &settledAt, &r.DurationMs,
+		); err != nil {
+			continue
+		}
+		r.SettledAt = settledAt
+		runs = append(runs, r)
+	}
+	return runs, rows.Err()
+}
+
+// GetRunDossier retrieves complete identity, policy, economic, and immutable event details for a run.
+func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDossier, error) {
+	if s.pool == nil {
+		return nil, errors.New("database not available")
+	}
+
+	var d RunDossier
+	var policyRaw []byte
+	var settledAt, releasedAt *time.Time
+	var releaseReason *string
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
+		       reserved_microcents, settled_microcents, policy_snapshot::text, price_book_version_id,
+		       created_at, settled_at, released_at, release_reason,
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
+		FROM spend_reservations
+		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
+	`, runID, orgID).Scan(
+		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
+		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,
+		&d.StartedAt, &settledAt, &releasedAt, &releaseReason, &d.DurationMs,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	d.PolicySnapshot = string(policyRaw)
+	d.SettledAt = settledAt
+	d.ReleasedAt = releasedAt
+	d.ReleaseReason = releaseReason
+
+	if d.State == StateSettled || d.State == StateReleased {
+		d.ReleasedMicrocents = d.ReservedMicrocents - d.SettledMicrocents
+		if d.ReleasedMicrocents < 0 {
+			d.ReleasedMicrocents = 0
+		}
+	}
+
+	// Fetch Immutable Events
+	d.Events = []SpendEvent{}
+	evRows, err := s.pool.Query(ctx, `
+		SELECT event_id::text, organization_id::text, COALESCE(reservation_id::text, ''), request_id,
+		       event_type, amount_microcents, currency, usage_json::text, provider_request_id,
+		       actor, reason_code, occurred_at
+		FROM spend_events
+		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
+		ORDER BY occurred_at ASC
+	`, d.RunID, orgID)
+	if err == nil {
+		defer evRows.Close()
+		for evRows.Next() {
+			var e SpendEvent
+			var resID string
+			var usageStr string
+			if err := evRows.Scan(
+				&e.EventID, &e.OrganizationID, &resID, &e.RequestID,
+				&e.EventType, &e.AmountMicrocents, &e.Currency, &usageStr, &e.ProviderRequestID,
+				&e.Actor, &e.ReasonCode, &e.OccurredAt,
+			); err == nil {
+				e.ReservationID = resID
+				e.UsageJSON = usageStr
+				d.Events = append(d.Events, e)
+			}
+		}
+	}
+
+	return &d, nil
+}
+
+// ResolveEffectivePolicies resolves active published spend policies at a given timestamp.
+func (s *Store) ResolveEffectivePolicies(ctx context.Context, orgID, projectID, provider string, at time.Time) ([]SpendPolicy, error) {
+	if s.pool == nil {
+		return []SpendPolicy{}, nil
+	}
+
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT p.policy_id::text, p.organization_id::text, p.scope_type, p.scope_id, p.currency,
+		       p.period_type, p.limit_microcents, p.action, p.effective_from, p.effective_to, p.status,
+		       p.created_at, p.updated_at
+		FROM spend_policies p
+		WHERE p.organization_id = $1
+		  AND p.status = 'PUBLISHED'
+		  AND p.effective_from <= $2
+		  AND (p.effective_to IS NULL OR p.effective_to > $2)
+		  AND (
+		    p.scope_type = 'organization'
+		    OR (p.scope_type = 'project' AND p.scope_id = $3)
+		    OR (p.scope_type = 'provider' AND LOWER(p.scope_id) = LOWER($4))
+		  )
+		ORDER BY 
+		    CASE p.scope_type 
+		        WHEN 'organization' THEN 1 
+		        WHEN 'project' THEN 2 
+		        WHEN 'provider' THEN 3 
+		    END,
+		    p.created_at DESC
+	`, orgID, at, projectID, provider)
+	if err != nil {
+		return nil, fmt.Errorf("resolve effective policies: %w", err)
+	}
+	defer rows.Close()
+
+	policies := make([]SpendPolicy, 0)
+	for rows.Next() {
+		var p SpendPolicy
+		var effTo *time.Time
+		if err := rows.Scan(
+			&p.PolicyID, &p.OrganizationID, &p.ScopeType, &p.ScopeID, &p.Currency,
+			&p.PeriodType, &p.LimitMicrocents, &p.Action, &p.EffectiveFrom, &effTo, &p.Status,
+			&p.CreatedAt, &p.UpdatedAt,
+		); err != nil {
+			continue
+		}
+		p.EffectiveTo = effTo
+		policies = append(policies, p)
+	}
+	return policies, rows.Err()
 }

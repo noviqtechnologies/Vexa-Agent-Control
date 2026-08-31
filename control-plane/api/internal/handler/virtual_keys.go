@@ -39,6 +39,8 @@ type CreateVirtualKeyRequest struct {
 	AllowedModels           []string          `json:"allowed_models,omitempty"`
 	AllowedRoutes           []string          `json:"allowed_routes,omitempty"`
 	Tags                    map[string]string `json:"tags,omitempty"`
+	OwnerType               string            `json:"owner_type,omitempty"`
+	BudgetPeriod            string            `json:"budget_period,omitempty"`
 }
 
 type CreateVirtualKeyResponse struct {
@@ -86,6 +88,15 @@ func (h *VirtualKeyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerType := req.OwnerType
+	if ownerType == "" {
+		ownerType = "user"
+	}
+	budgetPeriod := req.BudgetPeriod
+	if budgetPeriod == "" {
+		budgetPeriod = "monthly"
+	}
+
 	vk := store.VirtualKey{
 		ID:                      fmt.Sprintf("vk-%d", time.Now().UnixNano()),
 		TenantID:                tenantID,
@@ -106,6 +117,8 @@ func (h *VirtualKeyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		AllowedRoutes:           req.AllowedRoutes,
 		Status:                  "active",
 		Tags:                    req.Tags,
+		OwnerType:               ownerType,
+		BudgetPeriod:            budgetPeriod,
 	}
 
 	if err := h.store.CreateVirtualKey(r.Context(), tenantID, &vk); err != nil {

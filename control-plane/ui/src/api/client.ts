@@ -193,6 +193,110 @@ export interface IncreaseRequestV2 {
   decided_at?: string
 }
 
+export interface SpendAnalytics {
+  summary: {
+    total_reserved_microcents: number
+    total_settled_microcents: number
+    total_released_microcents: number
+    request_count: number
+    denied_count: number
+  }
+  time_series: Array<{
+    hour: string
+    reserved_microcents: number
+    settled_microcents: number
+    released_microcents: number
+    request_count: number
+  }>
+  top_entities: Array<{
+    entity_id: string
+    entity_name?: string
+    settled_microcents: number
+    request_count: number
+  }>
+}
+
+export interface RunSummary {
+  run_id: string
+  request_id: string
+  device_id: string
+  project_id: string
+  provider: string
+  model: string
+  state: string
+  reserved_microcents: number
+  settled_microcents: number
+  started_at: string
+  settled_at?: string
+  duration_ms: number
+}
+
+export interface RunDossier {
+  run_id: string
+  request_id: string
+  identity: {
+    device_id: string
+    device_hostname?: string
+    device_compliance?: string
+    project_id: string
+  }
+  policy: {
+    snapshot: any
+    price_book_version_id: string
+  }
+  dispatch: {
+    provider: string
+    model: string
+  }
+  economics: {
+    reserved_microcents: number
+    settled_microcents: number
+    released_microcents: number
+    currency: string
+    events: SpendEventV2[]
+  }
+  outcome: {
+    state: string
+    started_at: string
+    settled_at?: string
+    released_at?: string
+    release_reason?: string
+    duration_ms?: number
+  }
+  provenance: {
+    data_freshness: string
+    evidence_source: string
+    confidence: string
+  }
+}
+
+export interface EffectivePolicyResponse {
+  queried_at: string
+  query_params: Record<string, string>
+  provenance_ladder: Array<{
+    level: string
+    source: string
+    policy?: any
+    policies?: any[]
+    scope?: any
+    state?: any
+    confidence: string
+  }>
+  effective: {
+    spend_limit_microcents: number
+    action: string
+    allowed_models: string[]
+    allowed_routes: string[]
+    policy_version_ids: string[]
+  }
+  confidence: string
+  provenance?: {
+    data_freshness: string
+    evidence_source: string
+    confidence: string
+  }
+}
+
 export interface VirtualKey {
   id: string
   tenant_id: string
@@ -213,6 +317,8 @@ export interface VirtualKey {
   allowed_routes: string[]
   status: 'active' | 'rotating' | 'revoked'
   tags?: Record<string, string>
+  owner_type?: 'user' | 'service_account' | 'agent' | string
+  budget_period?: 'monthly' | 'weekly' | 'daily' | string
 }
 
 export interface CreateVirtualKeyRequest {
@@ -227,6 +333,8 @@ export interface CreateVirtualKeyRequest {
   allowed_models?: string[]
   allowed_routes?: string[]
   tags?: Record<string, string>
+  owner_type?: string
+  budget_period?: string
 }
 
 export interface CreateVirtualKeyResponse {
@@ -349,15 +457,49 @@ export const api = {
   getGroupPolicy: (groupId: string) => get<GroupPolicy>(`/group-policies/${groupId}`),
   publishGroupPolicy: (data: any) => postJSON('/group-policies', data),
 
-  getFleetOverview: () => get<FleetStats>('/fleet/overview'),
-  listAgents: (limit = 50, offset = 0) =>
-    get<AgentSummary[]>(`/fleet/agents?limit=${limit}&offset=${offset}`),
+  // Spend V2 Analytics
+  getSpendAnalytics: async (hours = 24, groupBy = 'provider') => {
+    const res = await fetch(`/api/v2/spend/analytics?hours=${hours}&group_by=${groupBy}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; analytics: SpendAnalytics; generated_at: string }>
+  },
+
+  // Run Explorer
+  listRuns: async (params?: { limit?: number; hours?: number; device_id?: string; provider?: string; model?: string; state?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.hours) qs.set('hours', String(params.hours))
+    if (params?.device_id) qs.set('device_id', params.device_id)
+    if (params?.provider) qs.set('provider', params.provider)
+    if (params?.model) qs.set('model', params.model)
+    if (params?.state) qs.set('state', params.state)
+    const res = await fetch(`/api/v1/runs?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; runs: RunSummary[]; data_freshness: string; confidence: string }>
+  },
+  getRunDossier: async (runId: string) => {
+    const res = await fetch(`/api/v1/runs/${runId}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<RunDossier>
+  },
+
+  // Effective Policy Explorer
+  getEffectivePolicy: async (params: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const res = await fetch(`/api/v1/policy/effective-explorer?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<EffectivePolicyResponse>
+  },
+
+  getFleetOverview: (hours = 24) => get<FleetStats>(`/fleet/overview?hours=${hours}`),
+  listAgents: (limit = 50, offset = 0, hours = 24) =>
+    get<AgentSummary[]>(`/fleet/agents?limit=${limit}&offset=${offset}&hours=${hours}`),
   getHeatmap: (hours = 24) =>
     get<DecisionBreakdown[]>(`/fleet/heatmap?hours=${hours}`),
   listEvents: (limit = 100) =>
     get<RedactedEvent[]>(`/fleet/events?limit=${limit}`),
-  listRecentAlerts: (limit = 50) =>
-    get<RedactedAlert[]>(`/alerts/recent?limit=${limit}`),
+  listRecentAlerts: (limit = 50, hours = 24) =>
+    get<RedactedAlert[]>(`/alerts/recent?limit=${limit}&hours=${hours}`),
   listCredentials: (agentId?: string) =>
     get<CredentialMeta[]>(
       `/identity/credentials${agentId ? `?agent_id=${agentId}` : ''}`

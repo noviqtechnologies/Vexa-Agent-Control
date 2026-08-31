@@ -21,7 +21,16 @@ describe('api.getFleetOverview', () => {
 
     const result = await api.getFleetOverview()
     expect(result).toEqual(stats)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', { headers: {} })
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview?hours=24', { headers: {} })
+  })
+
+  it('fetches fleet stats with custom hours', async () => {
+    const stats = { total_agents: 5, active_agents: 3 }
+    global.fetch = mockFetch(stats)
+
+    const result = await api.getFleetOverview(48)
+    expect(result).toEqual(stats)
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview?hours=48', { headers: {} })
   })
 
   it('throws on non-ok response', async () => {
@@ -36,14 +45,14 @@ describe('api.listAgents', () => {
     global.fetch = mockFetch([])
 
     await api.listAgents()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=50&offset=0', { headers: {} })
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=50&offset=0&hours=24', { headers: {} })
   })
 
   it('passes custom pagination', async () => {
     global.fetch = mockFetch([])
 
     await api.listAgents(10, 20)
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=10&offset=20', { headers: {} })
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/agents?limit=10&offset=20&hours=24', { headers: {} })
   })
 })
 
@@ -109,7 +118,7 @@ describe('auth token injection', () => {
     global.fetch = mockFetch({ total_agents: 1 })
 
     await api.getFleetOverview()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview?hours=24', {
       headers: { Authorization: 'Bearer test-jwt-token' },
     })
   })
@@ -120,7 +129,7 @@ describe('auth token injection', () => {
     global.fetch = mockFetch({})
 
     await api.getFleetOverview()
-    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/fleet/overview?hours=24', {
       headers: {},
     })
   })

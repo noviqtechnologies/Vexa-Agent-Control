@@ -21,7 +21,8 @@ func NewFleetHandler(s DataStore) *FleetHandler {
 // GetOverview returns fleet-wide stats for the dashboard header.
 func (h *FleetHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
-	stats, err := h.store.GetFleetStats(r.Context(), tenantID)
+	hours := queryInt(r, "hours", 24)
+	stats, err := h.store.GetFleetStats(r.Context(), tenantID, hours)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -34,8 +35,9 @@ func (h *FleetHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
 	limit := queryInt(r, "limit", 50)
 	offset := queryInt(r, "offset", 0)
+	hours := queryInt(r, "hours", 24)
 
-	agents, err := h.store.ListAgents(r.Context(), tenantID, limit, offset)
+	agents, err := h.store.ListAgents(r.Context(), tenantID, limit, offset, hours)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

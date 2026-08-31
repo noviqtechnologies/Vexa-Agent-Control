@@ -29,6 +29,8 @@ export default function VirtualKeys() {
   const [creating, setCreating] = useState(false)
   const [formName, setFormName] = useState('')
   const [formTeamId, setFormTeamId] = useState('')
+  const [formOwnerType, setFormOwnerType] = useState<'user' | 'service_account' | 'agent'>('user')
+  const [formBudgetPeriod, setFormBudgetPeriod] = useState<'monthly' | 'weekly' | 'daily'>('monthly')
   const [formExpiryDays, setFormExpiryDays] = useState('90')
   const [formBudgetUSD, setFormBudgetUSD] = useState('50.00')
   const [formMaxRPM, setFormMaxRPM] = useState('60')
@@ -108,6 +110,8 @@ export default function VirtualKeys() {
       const req: CreateVirtualKeyRequest = {
         name: formName.trim(),
         team_id: formTeamId.trim(),
+        owner_type: formOwnerType,
+        budget_period: formBudgetPeriod,
         expires_at: expiresAt,
         monthly_budget_microcents: usdToMicrocents(parseFloat(formBudgetUSD) || 0),
         max_rpm: parseInt(formMaxRPM) || 0,
@@ -123,6 +127,8 @@ export default function VirtualKeys() {
       // Reset form
       setFormName('')
       setFormTeamId('')
+      setFormOwnerType('user')
+      setFormBudgetPeriod('monthly')
       setFormBudgetUSD('50.00')
 
       // Open Secret Reveal Modal
@@ -436,7 +442,12 @@ async function main() {
                   <tr key={key.id}>
                     <td>
                       <div className="vk-key-name-col">
-                        <span className="vk-key-name">{key.name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="vk-key-name">{key.name}</span>
+                          <span className={`badge ${key.owner_type === 'agent' ? 'badge-warning' : key.owner_type === 'service_account' ? 'badge-info' : 'badge-neutral'}`} style={{ fontSize: 10, padding: '2px 6px' }}>
+                            {key.owner_type === 'agent' ? '🤖 AGENT' : key.owner_type === 'service_account' ? '⚙️ SVC' : '🧑 USER'}
+                          </span>
+                        </div>
                         <div className="vk-key-prefix-badge">
                           <code>{key.key_prefix}</code>
                           <button
@@ -469,7 +480,7 @@ async function main() {
                       <div className="vk-spend-meter-wrapper">
                         <div className="vk-spend-labels">
                           <span className="vk-spend-spent">${spentUSD.toFixed(2)}</span>
-                          <span>${budgetUSD.toFixed(2)} / mo</span>
+                          <span>${budgetUSD.toFixed(2)} / {key.budget_period === 'daily' ? 'day' : key.budget_period === 'weekly' ? 'wk' : 'mo'}</span>
                         </div>
                         <div className="vk-progress-track">
                           <div
@@ -570,6 +581,43 @@ async function main() {
             <form onSubmit={handleCreateSubmit}>
               <div className="vk-modal-body">
                 <div className="vk-form-grid">
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Key Ownership Persona</label>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="ownerType"
+                          value="user"
+                          checked={formOwnerType === 'user'}
+                          onChange={() => setFormOwnerType('user')}
+                        />
+                        <span>🧑 User / Developer</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="ownerType"
+                          value="service_account"
+                          checked={formOwnerType === 'service_account'}
+                          onChange={() => setFormOwnerType('service_account')}
+                        />
+                        <span>⚙️ Service Account (CI/CD)</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="ownerType"
+                          value="agent"
+                          checked={formOwnerType === 'agent'}
+                          onChange={() => setFormOwnerType('agent')}
+                        />
+                        <span>🤖 Autonomous AI Agent</span>
+                      </label>
+                    </div>
+                    <span className="vk-form-help">Declares the principal entity for risk profiling & audit attribution</span>
+                  </div>
+
                   <div className="vk-form-group">
                     <label className="vk-form-label">Key Name *</label>
                     <input
@@ -596,16 +644,30 @@ async function main() {
                   </div>
 
                   <div className="vk-form-group">
-                    <label className="vk-form-label">Monthly Spend Budget ($ USD)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="vk-form-input"
-                      placeholder="50.00"
-                      value={formBudgetUSD}
-                      onChange={(e) => setFormBudgetUSD(e.target.value)}
-                    />
+                    <label className="vk-form-label">Spend Budget ($ USD)</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="vk-form-input"
+                        placeholder="50.00"
+                        value={formBudgetUSD}
+                        onChange={(e) => setFormBudgetUSD(e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <select
+                        className="vk-form-select"
+                        value={formBudgetPeriod}
+                        onChange={(e) => setFormBudgetPeriod(e.target.value as any)}
+                        style={{ width: 115 }}
+                        aria-label="Budget Cadence"
+                      >
+                        <option value="daily">/ Daily</option>
+                        <option value="weekly">/ Weekly</option>
+                        <option value="monthly">/ Monthly</option>
+                      </select>
+                    </div>
                     <span className="vk-form-help">Hard limit enforced prior to upstream dispatch</span>
                   </div>
 

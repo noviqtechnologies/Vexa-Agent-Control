@@ -45,11 +45,13 @@ export default function FleetOverview() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const hoursMap: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168, '30d': 720 }
+    const hours = hoursMap[timeRange] || 24
     Promise.all([
-      api.getFleetOverview(),
-      api.listAgents(),
-      api.getHeatmap(),
-      api.listRecentAlerts(),
+      api.getFleetOverview(hours),
+      api.listAgents(50, 0, hours),
+      api.getHeatmap(hours),
+      api.listRecentAlerts(50, hours),
       (api.getLicenseStatus ? api.getLicenseStatus().catch(() => null) : Promise.resolve(null)),
     ]).then(([s, a, h, al, lic]) => {
       const rawAgents = a || []

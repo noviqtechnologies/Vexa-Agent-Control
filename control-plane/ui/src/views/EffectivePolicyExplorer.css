@@ -1,0 +1,105 @@
+.effective-policy-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.query-builder-card {
+  background: var(--card-bg, #0c1017);
+  border: 1px solid var(--border, rgba(48, 54, 61, 0.75));
+  border-radius: var(--radius, 10px);
+  padding: 24px;
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.query-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.query-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #768390);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.query-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border, rgba(48, 54, 61, 0.75));
+  color: var(--text-bright, #f0f6fc);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.query-input:focus {
+  border-color: var(--accent, #539bf5);
+}
+
+.provenance-ladder-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ladder-tier-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border, rgba(48, 54, 61, 0.75));
+  border-radius: var(--radius-sm, 6px);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transition: border-color 0.15s ease;
+}
+
+.ladder-tier-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.conf-observed {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.conf-not-configured {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.conf-unknown {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.effective-summary-card {
+  background: linear-gradient(180deg, rgba(83, 155, 245, 0.05) 0%, rgba(0, 0, 0, 0) 100%);
+  border: 1px solid rgba(83, 155, 245, 0.3);
+  border-radius: var(--radius, 10px);
+  padding: 24px;
+}

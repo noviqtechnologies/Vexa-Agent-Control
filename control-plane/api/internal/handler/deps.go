@@ -13,8 +13,8 @@ import (
 // DataStore abstracts the persistence layer so handlers can be unit-tested
 // without a live database.
 type DataStore interface {
-	GetFleetStats(ctx context.Context, tenantID string) (*store.FleetStats, error)
-	ListAgents(ctx context.Context, tenantID string, limit, offset int) ([]store.AgentSummary, error)
+	GetFleetStats(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error)
+	ListAgents(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error)
 	GetDecisionHeatmap(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
 	ListRecentEvents(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
 
@@ -28,7 +28,7 @@ type DataStore interface {
 	InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error
 	UpsertCredential(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
 
-	ListRecentAlerts(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error)
+	ListRecentAlerts(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)
 
 	GetThreatSummary(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
 	GetThreatTimeline(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error)

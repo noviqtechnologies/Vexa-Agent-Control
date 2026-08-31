@@ -402,7 +402,7 @@ func (h *HubSpecHandler) ListGateways(w http.ResponseWriter, r *http.Request) {
 	gatewaysList := []map[string]interface{}{}
 
 	if h.store != nil {
-		agents, err := h.store.ListAgents(r.Context(), tenantID, 50, 0)
+		agents, err := h.store.ListAgents(r.Context(), tenantID, 50, 0, 24)
 		if err == nil {
 			for _, a := range agents {
 				gatewaysList = append(gatewaysList, map[string]interface{}{

@@ -181,4 +181,30 @@ describe('FleetOverview', () => {
     expect(screen.getByText('No events in the last 24 hours')).toBeInTheDocument()
     expect(screen.getByText('No alerts')).toBeInTheDocument()
   })
+
+  it('updates data queries when clicking time range toggles', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+
+    expect(api.getFleetOverview).toHaveBeenCalledWith(24)
+
+    // Click 1H toggle
+    const oneHourBtn = screen.getByText('1H')
+    oneHourBtn.click()
+
+    await waitFor(() => {
+      expect(api.getFleetOverview).toHaveBeenCalledWith(1)
+      expect(api.listAgents).toHaveBeenCalledWith(50, 0, 1)
+      expect(api.getHeatmap).toHaveBeenCalledWith(1)
+      expect(api.listRecentAlerts).toHaveBeenCalledWith(50, 1)
+    })
+  })
 })

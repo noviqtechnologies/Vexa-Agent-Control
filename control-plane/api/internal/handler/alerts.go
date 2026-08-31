@@ -54,8 +54,9 @@ func (h *AlertHandler) Stream(w http.ResponseWriter, r *http.Request) {
 func (h *AlertHandler) ListRecent(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
 	limit := queryInt(r, "limit", 50)
+	hours := queryInt(r, "hours", 24)
 
-	alerts, err := h.store.ListRecentAlerts(r.Context(), tenantID, limit)
+	alerts, err := h.store.ListRecentAlerts(r.Context(), tenantID, limit, hours)
 	if err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

@@ -269,3 +269,73 @@ type IncreaseRequestV2 struct {
 	CreatedAt                time.Time       `json:"created_at"`
 	DecidedAt                *time.Time      `json:"decided_at,omitempty"`
 }
+
+// SpendAnalyticsSummary aggregates high-level ledger totals.
+type SpendAnalyticsSummary struct {
+	TotalReservedMoney MoneyMicrocents `json:"total_reserved_microcents"`
+	TotalSettledMoney  MoneyMicrocents `json:"total_settled_microcents"`
+	TotalReleasedMoney MoneyMicrocents `json:"total_released_microcents"`
+	RequestCount       int64           `json:"request_count"`
+	DeniedCount        int64           `json:"denied_count"`
+}
+
+// SpendTimeSeriesPoint represents hourly aggregated spend metrics.
+type SpendTimeSeriesPoint struct {
+	Hour               string          `json:"hour"`
+	ReservedMicrocents MoneyMicrocents `json:"reserved_microcents"`
+	SettledMicrocents  MoneyMicrocents `json:"settled_microcents"`
+	ReleasedMicrocents MoneyMicrocents `json:"released_microcents"`
+	RequestCount       int64           `json:"request_count"`
+}
+
+// SpendTopEntity aggregates spend by dimensions (device, provider, model, project).
+type SpendTopEntity struct {
+	EntityID          string          `json:"entity_id"`
+	EntityName        string          `json:"entity_name,omitempty"`
+	SettledMicrocents MoneyMicrocents `json:"settled_microcents"`
+	RequestCount      int64           `json:"request_count"`
+}
+
+// SpendAnalytics encapsulates complete server-aggregated spend analytics.
+type SpendAnalytics struct {
+	Summary     SpendAnalyticsSummary  `json:"summary"`
+	TimeSeries  []SpendTimeSeriesPoint `json:"time_series"`
+	TopEntities []SpendTopEntity       `json:"top_entities"`
+}
+
+// RunQuery defines filtering criteria for broker LLM runs.
+type RunQuery struct {
+	Limit    int
+	Since    time.Time
+	DeviceID string
+	Provider string
+	Model    string
+	State    string
+}
+
+// RunSummary represents a concise view of an LLM reservation run.
+type RunSummary struct {
+	RunID              string          `json:"run_id"`
+	RequestID          string          `json:"request_id"`
+	DeviceID           string          `json:"device_id"`
+	ProjectID          string          `json:"project_id"`
+	Provider           string          `json:"provider"`
+	Model              string          `json:"model"`
+	State              string          `json:"state"`
+	ReservedMicrocents MoneyMicrocents `json:"reserved_microcents"`
+	SettledMicrocents  MoneyMicrocents `json:"settled_microcents"`
+	StartedAt          time.Time       `json:"started_at"`
+	SettledAt          *time.Time      `json:"settled_at,omitempty"`
+	DurationMs         int64           `json:"duration_ms"`
+}
+
+// RunDossier contains complete forensic identity, policy, economic, and event details.
+type RunDossier struct {
+	RunSummary
+	ReleasedMicrocents MoneyMicrocents `json:"released_microcents"`
+	ReleaseReason      *string         `json:"release_reason,omitempty"`
+	ReleasedAt         *time.Time      `json:"released_at,omitempty"`
+	PolicySnapshot     string          `json:"policy_snapshot"`
+	PriceBookVersionID string          `json:"price_book_version_id"`
+	Events             []SpendEvent    `json:"events"`
+}

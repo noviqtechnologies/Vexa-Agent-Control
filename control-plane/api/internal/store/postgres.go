@@ -362,12 +362,15 @@ type AgentSummary struct {
 	AlertCount    int64     `json:"alert_count"`
 }
 
-func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset int) ([]AgentSummary, error) {
+func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset int, hours int) ([]AgentSummary, error) {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 	if limit <= 0 {
 		limit = 50
+	}
+	if hours <= 0 {
+		hours = 24
 	}
 	rows, err := s.pool.Query(ctx, `
 		WITH paged_agents AS (
@@ -389,18 +392,22 @@ func (s *Store) ListAgents(ctx context.Context, tenantID string, limit, offset i
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
-			WHERE tenant_id = $1 AND agent_id IN (SELECT agent_id FROM paged_agents)
+			WHERE tenant_id = $1 
+			  AND created_at >= NOW() - ($4 || ' hours')::interval
+			  AND agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY agent_id
 		) e ON e.agent_id = pa.agent_id
 		LEFT JOIN (
 			SELECT te.agent_id, COUNT(*) AS cnt
 			FROM alerts al
 			JOIN telemetry_events te ON te.event_id = al.event_id
-			WHERE al.tenant_id = $1 AND te.agent_id IN (SELECT agent_id FROM paged_agents)
+			WHERE al.tenant_id = $1 
+			  AND al.created_at >= NOW() - ($4 || ' hours')::interval
+			  AND te.agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY te.agent_id
 		) al ON al.agent_id = pa.agent_id
 		ORDER BY pa.last_seen_at DESC
-	`, tenantID, limit, offset)
+	`, tenantID, limit, offset, hours)
 	if err != nil {
 		return nil, err
 	}
@@ -427,27 +434,33 @@ type FleetStats struct {
 	CriticalAlerts int64 `json:"critical_alerts"`
 }
 
-func (s *Store) GetFleetStats(ctx context.Context, tenantID string) (*FleetStats, error) {
+func (s *Store) GetFleetStats(ctx context.Context, tenantID string, hours int) (*FleetStats, error) {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	if hours <= 0 {
+		hours = 24
 	}
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM agents WHERE tenant_id = $1 AND status != 'revoked'),
 			(SELECT COUNT(*) FROM agents WHERE tenant_id = $1 AND status = 'active' AND last_seen_at >= NOW() - INTERVAL '3 minutes'),
-			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1),
-			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied'),
-			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1),
-			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1 AND severity = 'critical')
-	`, tenantID).Scan(&stats.TotalAgents, &stats.ActiveAgents, &stats.TotalEvents,
+			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND created_at >= NOW() - ($2 || ' hours')::interval),
+			(SELECT COUNT(*) FROM telemetry_events WHERE tenant_id = $1 AND decision = 'denied' AND created_at >= NOW() - ($2 || ' hours')::interval),
+			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1 AND created_at >= NOW() - ($2 || ' hours')::interval),
+			(SELECT COUNT(*) FROM alerts WHERE tenant_id = $1 AND severity = 'critical' AND created_at >= NOW() - ($2 || ' hours')::interval)
+	`, tenantID, hours).Scan(&stats.TotalAgents, &stats.ActiveAgents, &stats.TotalEvents,
 		&stats.DeniedEvents, &stats.TotalAlerts, &stats.CriticalAlerts)
 	return &stats, err
 }
 
-func (s *Store) ListRecentAlerts(ctx context.Context, tenantID string, limit int) ([]model.RedactedAlert, error) {
+func (s *Store) ListRecentAlerts(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error) {
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	if hours <= 0 {
+		hours = 24
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT
@@ -457,10 +470,10 @@ func (s *Store) ListRecentAlerts(ctx context.Context, tenantID string, limit int
 			e.dlp_findings, e.injection_findings, e.semantic_findings
 		FROM alerts a
 		JOIN telemetry_events e ON e.event_id = a.event_id
-		WHERE a.tenant_id = $1
+		WHERE a.tenant_id = $1 AND a.created_at >= NOW() - ($3 || ' hours')::interval
 		ORDER BY a.created_at DESC
 		LIMIT $2
-	`, tenantID, limit)
+	`, tenantID, limit, hours)
 	if err != nil {
 		return nil, err
 	}

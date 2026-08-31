@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
@@ -115,6 +116,29 @@ func (h *SpendV2Handler) Release(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
+}
+
+// GET /api/v2/spend/analytics
+func (h *SpendV2Handler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := resolveContextOrgAndActor(r)
+	hours := queryInt(r, "hours", 24)
+	groupBy := r.URL.Query().Get("group_by")
+	if groupBy == "" {
+		groupBy = "provider"
+	}
+
+	analytics, err := h.store.GetSpendAnalytics(r.Context(), orgID, hours, groupBy)
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch spend analytics"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"organization_id": orgID,
+		"analytics":       analytics,
+		"generated_at":    time.Now().UTC(),
+	})
 }
 
 // GET /api/v2/spend/effective

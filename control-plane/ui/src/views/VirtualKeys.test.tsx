@@ -152,4 +152,67 @@ describe('VirtualKeys View', () => {
       expect(screen.getByText('sk-vex-secret-token-abcdef123456')).toBeInTheDocument()
     })
   })
+
+  it('creates virtual key with custom persona and budget cadence', async () => {
+    vi.mocked(api.createVirtualKey).mockResolvedValue({
+      virtual_key: {
+        id: 'vk-agent-1',
+        tenant_id: 'tenant-1',
+        key_prefix: 'sk-vex-agent...',
+        name: 'Devin Autonomous Agent',
+        team_id: 'ai-lab',
+        created_by: 'admin',
+        created_at: new Date().toISOString(),
+        allowed_ips: [],
+        max_rpm: 30,
+        max_tpm: 50000,
+        max_concurrent_requests: 5,
+        monthly_budget_microcents: 25_00000000,
+        spent_microcents: 0,
+        allowed_models: ['gpt-4o'],
+        allowed_routes: [],
+        status: 'active',
+        owner_type: 'agent',
+        budget_period: 'daily',
+      },
+      raw_secret: 'sk-vex-secret-agent-xyz',
+    })
+
+    render(
+      <MemoryRouter>
+        <VirtualKeys />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Cursor Team Lead')).toBeInTheDocument()
+    })
+
+    // Open modal
+    fireEvent.click(screen.getByRole('button', { name: /Issue Virtual Key/i }))
+
+    // Select Agent persona
+    fireEvent.click(screen.getByLabelText(/Autonomous AI Agent/i))
+
+    // Select Daily cadence
+    const cadenceSelect = screen.getByLabelText('Budget Cadence')
+    fireEvent.change(cadenceSelect, { target: { value: 'daily' } })
+
+    // Fill name
+    const nameInput = screen.getByPlaceholderText(/e.g. cursor-ide-team/i)
+    fireEvent.change(nameInput, { target: { value: 'Devin Autonomous Agent' } })
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: /Generate Virtual Key/i }))
+
+    await waitFor(() => {
+      expect(api.createVirtualKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Devin Autonomous Agent',
+          owner_type: 'agent',
+          budget_period: 'daily',
+        })
+      )
+    })
+  })
 })

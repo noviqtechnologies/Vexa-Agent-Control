@@ -26,7 +26,9 @@ docs/
 ├── guides/                           # Workflow guides
 │   ├── workstation.md                # Local developer workflow (Observe → Enforce → Restore)
 │   ├── custom-agent-http.md          # Proxying Python/TS agents (LangChain, LlamaIndex, CrewAI)
-│   └── small-team-hub.md             # Shared team hub with Docker Compose
+│   ├── small-team-hub.md             # Shared team hub with Docker Compose
+│   ├── run-explorer.md               # Run Explorer & forensic dossier workflows
+│   └── effective-policy.md           # 5-level deterministic effective policy resolution
 ├── integrations/                     # IDE & client integration matrices and guides
 │   ├── README.md                     # Verified vs. Experimental support matrix
 │   ├── claude-desktop.md             # Claude Desktop MCP configuration

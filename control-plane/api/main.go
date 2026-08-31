@@ -209,6 +209,8 @@ func main() {
 	invalidationBroadcaster := handler.NewInvalidationBroadcaster()
 	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
 	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
+	runH := handler.NewRunHandler(spendStore, db)
+	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db)
 	healthH := handler.NewHealthHandler(db)
 
 	// Initialize Virtual Keys schema (Pillar 1)
@@ -313,6 +315,7 @@ func main() {
 			r.Use(middleware.DashboardAuth())
 			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
 			r.Get("/effective", spendV2H.GetEffective)
+			r.Get("/analytics", spendV2H.GetAnalytics)
 			r.Get("/events", spendV2H.ListEvents)
 			r.Get("/policies", spendV2H.ListPolicies)
 			r.Post("/policies", spendV2H.CreatePolicy)
@@ -388,6 +391,13 @@ func main() {
 		r.Get("/fleet/heatmap", fleetH.GetHeatmap)
 		r.Get("/fleet/events", fleetH.ListEvents)
 		r.Get("/fleet/agents/{agentID}/events", fleetH.ListEvents)
+
+		// Run Explorer & Forensics
+		r.Get("/runs", runH.ListRuns)
+		r.Get("/runs/{run_id}", runH.GetRun)
+
+		// Effective Policy Explorer
+		r.Get("/policy/effective-explorer", effectivePolicyH.GetEffective)
 
 		// Sentry Device Governance & Tamper Log
 		r.Get("/devices", deviceH.ListDevices)
