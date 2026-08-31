@@ -1,85 +1,16 @@
-use agentcontrol::audit::logger::AuditLogger;
-use agentcontrol::kill::KillMode;
-use agentcontrol::policy::credential_scope::CredentialScopeValidator;
 use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool};
-use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentcontrol::policy::safe_mode::SafeModeScanner;
 use agentcontrol::policy::schema::{
     CycleAction, CycleDetectionConfig, FirewallConfig, SpendCapsConfig,
 };
-use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
 fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
-    let log_path = std::env::temp_dir().join(format!("vexa_test_s5_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(
-        AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
-            log_path,
-            session_id: "test-session".to_string(),
-            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-            max_bytes: 100000,
-            siem_exporter: None,
-            include_params: false,
-        })
-        .unwrap(),
-    );
-
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(policy),
-        audit_logger,
-        session_id: "test-session".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(CredentialScopeValidator::new(true)), // strict mode
-        gateway_start_time: std::time::Instant::now(),
-        policy_path: None,
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    })
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = policy;
+    state
 }
 
 #[tokio::test]
@@ -321,7 +252,8 @@ async fn test_us103_credential_scope_strict_mode() {
         fail_closed: false,
     };
 
-    let state = create_mock_proxy_state(Some(policy.clone()));
+    let state = ProxyState::mock_test_with_strict_scope(true);
+    *state.policy.write().unwrap() = Some(policy.clone());
 
     // 1. Session without scope header calling restricted tool -> DENIED with -32403
     let session_no_header = Arc::new(SessionContext::new_with_scope(

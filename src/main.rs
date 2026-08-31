@@ -397,8 +397,13 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             mcp_url,
             enforce,
             shadow,
+            spend_only,
+            min_tokens,
             policy,
         } => {
+            if spend_only {
+                agentcontrol::logging::set_spend_only(true);
+            }
             let active_enforce = enforce && !shadow;
             let code = agentcontrol::wrap::run_protect_orchestration(
                 dry_run,
@@ -422,10 +427,71 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 "http://localhost:11434".to_string(),
                 vec![],
                 Some(policy),
+                spend_only,
+                min_tokens,
             )
             .await
         }
         Commands::Unprotect { dry_run, force } => agentcontrol::wrap::run_unprotect_all(dry_run, force),
+        Commands::Ca { command } => match command {
+            cli::CaCommands::Generate { dir } => {
+                match agentcontrol::ca::CaManager::init_or_load(dir) {
+                    Ok(mgr) => {
+                        println!("✓ Root CA generated successfully at: {}", mgr.ca_dir.display());
+                        println!("  Cert: {}", mgr.ca_dir.join("agentcontrol-ca.pem").display());
+                        println!("  Key:  {}", mgr.ca_dir.join("agentcontrol-ca.key").display());
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("✖ Failed to generate Root CA: {}", e);
+                        1
+                    }
+                }
+            }
+            cli::CaCommands::Install => {
+                match agentcontrol::ca::CaManager::init_or_load(None) {
+                    Ok(mgr) => {
+                        let cert_path = mgr.ca_dir.join("agentcontrol-ca.pem");
+                        match agentcontrol::ca::install_ca_to_trust_store(&cert_path) {
+                            Ok(()) => {
+                                println!("✓ Local Root CA successfully installed in OS trust store.");
+                                0
+                            }
+                            Err(e) => {
+                                eprintln!("✖ Failed to install Root CA into OS trust store: {}", e);
+                                1
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("✖ Failed to initialize Root CA: {}", e);
+                        1
+                    }
+                }
+            }
+            cli::CaCommands::Uninstall => {
+                match agentcontrol::ca::uninstall_ca_from_trust_store() {
+                    Ok(()) => {
+                        println!("✓ Local Root CA removed from OS trust store.");
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("✖ Failed to remove Root CA from trust store: {}", e);
+                        1
+                    }
+                }
+            }
+            cli::CaCommands::Status => {
+                let installed = agentcontrol::ca::is_ca_installed();
+                let dir = agentcontrol::ca::CaManager::default_ca_dir();
+                let exists = dir.join("agentcontrol-ca.pem").exists();
+                println!("Local CA Status:");
+                println!("  Storage Directory: {}", dir.display());
+                println!("  CA Files Exist:    {}", if exists { "YES".green() } else { "NO".yellow() });
+                println!("  OS Trust Store:    {}", if installed { "INSTALLED & TRUSTED".green() } else { "NOT INSTALLED".yellow() });
+                0
+            }
+        },
         Commands::Verify { gateway, json } => agentcontrol::verify::run_verification_probe(&gateway, json).await,
         Commands::Status => agentcontrol::wrap::run_status(),
         Commands::Watch { all, target } => agentcontrol::wrap::run_watch(all, target),
@@ -443,9 +509,14 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             enforce,
             learn,
             dual_agent,
+            spend_only,
+            min_tokens,
             local_llm_url,
             args,
         } => {
+            if spend_only {
+                agentcontrol::logging::set_spend_only(true);
+            }
             run_dev(
                 listen,
                 mcp_url,
@@ -457,6 +528,8 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 local_llm_url,
                 args,
                 None,
+                spend_only,
+                min_tokens,
             )
             .await
         }
@@ -561,6 +634,8 @@ fn build_proxy_state(
     connection_timeout_secs: u64,
     max_frame_size: usize,
     admin_token: Option<String>,
+    spend_only: bool,
+    min_tokens: u64,
 ) -> Arc<ProxyState> {
     let connect_timeout = std::time::Duration::from_secs(10);
     let request_timeout = std::time::Duration::from_secs(connection_timeout_secs.max(5));
@@ -603,6 +678,20 @@ fn build_proxy_state(
             }
         }
         map
+    };
+
+    let (initial_cursor_mode, initial_allowed_models, initial_default_model, initial_model_enforcement) = {
+        let llm = compiled_policy.as_ref().and_then(|p| p.llm.as_ref());
+        let mode = llm
+            .and_then(|l| l.cursor_mode.clone())
+            .or_else(|| std::env::var("AGENTCONTROL_CURSOR_MODE").ok())
+            .unwrap_or_else(|| "passthrough".to_string());
+        let allowed = llm.and_then(|l| l.allowed_models.clone());
+        let default_m = llm.and_then(|l| l.default_model.clone());
+        let enf = llm
+            .and_then(|l| l.model_enforcement.clone())
+            .unwrap_or_else(|| "restrict".to_string());
+        (mode, allowed, default_m, enf)
     };
 
     Arc::new(ProxyState {
@@ -667,6 +756,19 @@ fn build_proxy_state(
         connection_timeout_secs,
         max_frame_size,
         admin_token,
+        ca_manager: agentcontrol::ca::CaManager::init_or_load(None).ok().map(Arc::new),
+        cursor_mode: std::sync::RwLock::new(initial_cursor_mode),
+        allowed_models: std::sync::RwLock::new(initial_allowed_models),
+        default_model: std::sync::RwLock::new(initial_default_model),
+        model_enforcement: std::sync::RwLock::new(initial_model_enforcement),
+        min_tokens,
+        spend_only,
+        prompt_cache: Arc::new(agentcontrol::proxy::prompt_cache::PromptCache::default()),
+        local_key_cache: Arc::new(agentcontrol::proxy::local_key_cache::LocalKeyCache::default()),
+        request_coalescer: Arc::new(agentcontrol::proxy::request_coalescer::RequestCoalescer::default()),
+        adaptive_timeout: Arc::new(agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager::default()),
+        embedding_batcher: Arc::new(agentcontrol::proxy::embedding_batcher::EmbeddingBatcher::default()),
+        provider_router: Arc::new(agentcontrol::proxy::provider_router::ProviderRouter::default()),
     })
 }
 
@@ -770,6 +872,8 @@ async fn run_stdio_proxy(
         30,
         16777216,
         None,
+        false,
+        0,
     );
 
     let mut parts: Vec<String> = args.iter().map(|a| proxy::stdio::expand_arg(a)).collect();
@@ -1275,6 +1379,8 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         args.connection_timeout_secs,
         args.max_frame_size,
         args.admin_token.clone().or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
+        false,
+        0,
     );
 
     if state.dashboard_client.is_some() {
@@ -1949,6 +2055,8 @@ async fn run_wrap(
         30,
         16777216,
         None,
+        false,
+        0,
     );
 
     // Parse the command string
@@ -2006,6 +2114,8 @@ async fn run_dev(
     local_llm_url: String,
     args: Vec<String>,
     policy_path_opt: Option<String>,
+    spend_only: bool,
+    min_tokens: u64,
 ) -> i32 {
     if learn {
         println!(
@@ -2155,6 +2265,8 @@ async fn run_dev(
         30,
         16777216,
         None,
+        spend_only,
+        min_tokens,
     );
 
     if stdio {

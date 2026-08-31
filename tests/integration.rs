@@ -5,16 +5,17 @@ mod integration {
     mod egress_proxy_tests;
     /// FR-5: Centralized Enforcement Gateway acceptance criteria tests
     mod gateway_fr5;
+    mod identity_integration_test;
+    mod llm_proxy_test;
+    mod mitm_interception_integration_test;
     mod multi_tenant_tests;
     mod phase_1_1_tests;
     mod promotion_tests;
     mod proxy_test;
+    mod real_client_wrapper_fixture_test;
     mod schema_drift_integration_test;
+    mod stdio_process_integration_test;
     mod stdio_tests;
     mod verify_probe_test;
-    mod real_client_wrapper_fixture_test;
-    /// P1 fix: Real process-level stdio-proxy integration test.
-    /// Spawns the compiled binary + a Python echo upstream; validates upstream
-    /// reachability and events.db persistence (P0 + P1 acceptance criteria).
-    mod stdio_process_integration_test;
+    mod wrap_integration_test;
 }

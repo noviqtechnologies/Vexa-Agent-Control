@@ -131,6 +131,75 @@ pub async fn start_policy_subscriber(
                                         );
                                     }
                                 }
+                            } else if message.event == "provider_keys_update" {
+                                logging::log_event(
+                                    Level::Info,
+                                    "sse_provider_keys_update_received",
+                                    serde_json::json!({}),
+                                );
+
+                                if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&message.data) {
+                                    if let Some(providers) = payload.get("providers").and_then(|v| v.as_object()) {
+                                        for (provider, key_val) in providers {
+                                            if let Some(key) = key_val.as_str() {
+                                                let prev_hash = state.provider_keys.get(provider).map(|k| {
+                                                    use sha2::{Digest, Sha256};
+                                                    let mut hasher = Sha256::new();
+                                                    hasher.update(k.value().as_bytes());
+                                                    format!("sha256:{}", hex::encode(hasher.finalize()))
+                                                });
+
+                                                if key.is_empty() {
+                                                    state.provider_keys.remove(provider);
+                                                } else {
+                                                    state.provider_keys.insert(provider.clone(), key.to_string());
+                                                }
+
+                                                logging::log_event(
+                                                    Level::Info,
+                                                    "provider_key_rotated",
+                                                    serde_json::json!({
+                                                        "provider": provider,
+                                                        "key_prefix": crate::policy::dlp::truncated_preview(key),
+                                                        "previous_key_hash": prev_hash,
+                                                        "rotation_source": "hub_push",
+                                                    }),
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(mode) = payload.get("cursor_mode").and_then(|v| v.as_str()) {
+                                        *state.cursor_mode.write().unwrap() = mode.to_string();
+                                    }
+                                    if let Some(models) = payload.get("allowed_models").and_then(|v| v.as_array()) {
+                                        let model_list: Vec<String> = models
+                                            .iter()
+                                            .filter_map(|m| m.as_str().map(String::from))
+                                            .collect();
+                                        *state.allowed_models.write().unwrap() = Some(model_list);
+                                    }
+                                    if let Some(dm) = payload.get("default_model").and_then(|v| v.as_str()) {
+                                        *state.default_model.write().unwrap() = Some(dm.to_string());
+                                    }
+                                    if let Some(enf) = payload.get("model_enforcement").and_then(|v| v.as_str()) {
+                                        *state.model_enforcement.write().unwrap() = enf.to_string();
+                                    }
+
+                                    let is_byok = state.cursor_mode.read().unwrap().as_str() == "byok";
+                                    if is_byok && !state.provider_keys.is_empty() {
+                                        let _ = crate::wrap::generic_ide::apply_centralized_cursor_config(true);
+                                    }
+
+                                    logging::log_event(
+                                        Level::Info,
+                                        "provider_keys_synced",
+                                        serde_json::json!({
+                                            "providers_count": state.provider_keys.len(),
+                                            "cursor_mode": state.cursor_mode.read().unwrap().clone(),
+                                        }),
+                                    );
+                                }
                             } else if message.event == "ping" {
                                 // Keep-alive, ignore
                             } else {

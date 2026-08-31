@@ -1,14 +1,9 @@
-use agentcontrol::audit::logger::AuditLogger;
-use agentcontrol::kill::KillMode;
 use agentcontrol::policy::engine::CompiledPolicy;
-use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentcontrol::policy::safe_mode::SafeModeScanner;
 use agentcontrol::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
 use agentcontrol::proxy::handler::{
-    evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter, ToolCallFingerprint,
+    evaluate_jsonrpc, ProxyAction, ProxyState, ToolCallFingerprint,
 };
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
 #[test]
@@ -42,87 +37,21 @@ fn test_canonical_json_hashing() {
 
 #[test]
 fn test_tool_history_memory_bounding() {
-    let log_path =
-        std::env::temp_dir().join(format!("vexa_test_fw_mem_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(
-        AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
-            log_path,
-            session_id: "session-fw-mem".to_string(),
-            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-            max_bytes: 100000,
-            siem_exporter: None,
-            include_params: false,
-        })
-        .unwrap(),
-    );
-
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-    let state = ProxyState {
-        policy: std::sync::RwLock::new(Some(CompiledPolicy {
-            max_calls_per_second: 0,
-            tools: vec![],
-            group_policies: vec![],
-            sequence_rules: vec![],
-            identity_validator: None,
-            scannable_tools: vec![],
-            safe_tools: vec![],
-            firewall: None, // Will fallback to default (enabled=true, max_attempts=3)
-            spend_caps: None,
-            llm: None,
-            schema_drift: None,
-            fail_closed: false,
-        })),
-        audit_logger,
-        session_id: "session-fw-mem".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(
-            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        gateway_start_time: std::time::Instant::now(),
-        policy_path: None,
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    };
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = Some(CompiledPolicy {
+        max_calls_per_second: 0,
+        tools: vec![],
+        group_policies: vec![],
+        sequence_rules: vec![],
+        identity_validator: None,
+        scannable_tools: vec![],
+        safe_tools: vec![],
+        firewall: None, // Will fallback to default (enabled=true, max_attempts=3)
+        spend_caps: None,
+        llm: None,
+        schema_drift: None,
+        fail_closed: false,
+    });
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -162,93 +91,27 @@ fn test_tool_history_memory_bounding() {
 
 #[test]
 fn test_cycle_detection_blocking() {
-    let log_path =
-        std::env::temp_dir().join(format!("vexa_test_fw_block_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(
-        AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
-            log_path,
-            session_id: "session-fw-block".to_string(),
-            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-            max_bytes: 100000,
-            siem_exporter: None,
-            include_params: false,
-        })
-        .unwrap(),
-    );
-
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-    let state = ProxyState {
-        policy: std::sync::RwLock::new(Some(CompiledPolicy {
-            max_calls_per_second: 0,
-            tools: vec![],
-            group_policies: vec![],
-            sequence_rules: vec![],
-            identity_validator: None,
-            scannable_tools: vec![],
-            safe_tools: vec![],
-            firewall: Some(FirewallConfig {
-                enabled: true,
-                cycle_detection: CycleDetectionConfig {
-                    max_attempts: 3,
-                    action: CycleAction::PivotError,
-                },
-            }),
-            spend_caps: None,
-            llm: None,
-            schema_drift: None,
-            fail_closed: false,
-        })),
-        audit_logger,
-        session_id: "session-fw-block".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(
-            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        gateway_start_time: std::time::Instant::now(),
-        policy_path: None,
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    };
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = Some(CompiledPolicy {
+        max_calls_per_second: 0,
+        tools: vec![],
+        group_policies: vec![],
+        sequence_rules: vec![],
+        identity_validator: None,
+        scannable_tools: vec![],
+        safe_tools: vec![],
+        firewall: Some(FirewallConfig {
+            enabled: true,
+            cycle_detection: CycleDetectionConfig {
+                max_attempts: 3,
+                action: CycleAction::PivotError,
+            },
+        }),
+        spend_caps: None,
+        llm: None,
+        schema_drift: None,
+        fail_closed: false,
+    });
 
     let req = json!({
         "jsonrpc": "2.0",
@@ -315,93 +178,27 @@ fn test_cycle_detection_blocking() {
 
 #[test]
 fn test_pause_interactive_fallback_in_non_tty() {
-    let log_path =
-        std::env::temp_dir().join(format!("vexa_test_fw_tty_{}.log", uuid::Uuid::new_v4()));
-    let audit_logger = Arc::new(
-        AuditLogger::new(agentcontrol::audit::logger::AuditLoggerConfig {
-            log_path,
-            session_id: "session-fw-tty".to_string(),
-            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-            max_bytes: 100000,
-            siem_exporter: None,
-            include_params: false,
-        })
-        .unwrap(),
-    );
-
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-    let state = ProxyState {
-        policy: std::sync::RwLock::new(Some(CompiledPolicy {
-            max_calls_per_second: 0,
-            tools: vec![],
-            group_policies: vec![],
-            sequence_rules: vec![],
-            identity_validator: None,
-            scannable_tools: vec![],
-            safe_tools: vec![],
-            firewall: Some(FirewallConfig {
-                enabled: true,
-                cycle_detection: CycleDetectionConfig {
-                    max_attempts: 2,
-                    action: CycleAction::PauseInteractive,
-                },
-            }),
-            spend_caps: None,
-            llm: None,
-            schema_drift: None,
-            fail_closed: false,
-        })),
-        audit_logger,
-        session_id: "session-fw-tty".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(
-            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        gateway_start_time: std::time::Instant::now(),
-        policy_path: None,
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    };
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = Some(CompiledPolicy {
+        max_calls_per_second: 0,
+        tools: vec![],
+        group_policies: vec![],
+        sequence_rules: vec![],
+        identity_validator: None,
+        scannable_tools: vec![],
+        safe_tools: vec![],
+        firewall: Some(FirewallConfig {
+            enabled: true,
+            cycle_detection: CycleDetectionConfig {
+                max_attempts: 2,
+                action: CycleAction::PauseInteractive,
+            },
+        }),
+        spend_caps: None,
+        llm: None,
+        schema_drift: None,
+        fail_closed: false,
+    });
 
     let req = json!({
         "jsonrpc": "2.0",

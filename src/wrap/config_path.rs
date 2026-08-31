@@ -31,10 +31,9 @@ pub fn get_windows_user_homes() -> Vec<PathBuf> {
                         && name != "default user"
                         && name != "all users"
                         && !name.starts_with("default.")
+                        && !homes.contains(&path)
                     {
-                        if !homes.contains(&path) {
-                            homes.push(path);
-                        }
+                        homes.push(path);
                     }
                 }
             }
@@ -174,6 +173,50 @@ pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
                 return Ok(home.join(r".cursor\mcp.json"));
             }
             Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+        }
+        other => Err(WrapError::UnsupportedOs(other.to_string())),
+    }
+}
+
+/// Returns the path to Cursor's User/settings.json across Windows, macOS, and Linux
+pub fn cursor_settings_path() -> Result<PathBuf, WrapError> {
+    match std::env::consts::OS {
+        "macos" => {
+            if let Some(home) = dirs::home_dir() {
+                let p = home.join("Library/Application Support/Cursor/User/settings.json");
+                return Ok(p);
+            }
+            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
+        }
+        "linux" => {
+            if let Some(config_dir) = dirs::config_dir() {
+                let p = config_dir.join("Cursor/User/settings.json");
+                return Ok(p);
+            }
+            if let Some(home) = dirs::home_dir() {
+                let p = home.join(".config/Cursor/User/settings.json");
+                return Ok(p);
+            }
+            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
+        }
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = get_windows_user_homes();
+                for home in &homes {
+                    let candidate = home.join(r"AppData\Roaming\Cursor\User\settings.json");
+                    if candidate.exists() {
+                        return Ok(candidate);
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Ok(first.join(r"AppData\Roaming\Cursor\User\settings.json"));
+                }
+            }
+            if let Some(data) = dirs::data_dir() {
+                return Ok(data.join(r"Cursor\User\settings.json"));
+            }
+            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }

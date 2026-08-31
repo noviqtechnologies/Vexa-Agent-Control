@@ -17,11 +17,29 @@ var builtinTemplates = []*model.PolicyTemplate{
 		Tags:        []string{"IDE", "Cursor", "Developer", "Filesystem"},
 		Icon:        "shield-check",
 		IsCustom:    false,
-		Content: `version: "2.1"
+		Content: `version: "2"
 default_action: deny
 
 session:
   max_calls_per_second: 10
+
+llm:
+  cursor_mode: byok
+  model_enforcement: restrict
+  allowed_models:
+    - "claude-3-5-sonnet*"
+    - "gpt-4o*"
+    - "gemini-1.5-pro*"
+  providers:
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude*"]
+    - name: "openai"
+      action: "allow"
+      models: ["gpt*"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini*"]
 
 sequence_rules:
   - name: block_exfiltration_after_reading_secrets
@@ -80,6 +98,398 @@ firewall:
     action: pivot_error`,
 	},
 	{
+		ID:          "cursor-byok-governance",
+		Name:        "Cursor IDE & Zero-Trust BYOK Governance",
+		Category:    "Developer Security",
+		Description: "Enforces centralized BYOK API key injection and TLS MITM interception for Cursor. Restricts developer model usage to company-approved LLMs and blocks unvetted models.",
+		Tags:        []string{"Cursor", "BYOK", "TLS Interception", "Model Governance"},
+		Icon:        "lock",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 15
+
+# Centralized BYOK and MITM Model Allowlisting
+llm:
+  cursor_mode: byok
+  model_enforcement: restrict
+  allowed_models:
+    - "claude-3-5-sonnet*"
+    - "gpt-4o*"
+    - "gemini-1.5-pro*"
+  providers:
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet*"]
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o*"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro*"]
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+      - entity: "SSN"
+        action: "deny"
+      - entity: "EMAIL_ADDRESS"
+        action: "redact"
+
+tools:
+  - name: read_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        pattern: "^(?!.*(\\.env|id_rsa|\\.aws/credentials)).*$"
+        validators:
+          - path_traversal
+  - name: write_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+      - name: content
+        type: string
+        required: true
+  - name: exec_shell
+    action: allow
+    parameters:
+      - name: command
+        type: string
+        required: true
+        pattern: "^(?!.*(sudo|rm\\s+-rf|mkfs)).*$"
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error`,
+	},
+	{
+		ID:          "multicloud-llm-gateway",
+		Name:        "Unified Multi-Cloud LLM Gateway",
+		Category:    "Enterprise Security",
+		Description: "Centralizes governance across OpenAI, Anthropic, and Google Gemini. Applies real-time DLP prompt & response redaction with rate limits.",
+		Tags:        []string{"Enterprise", "Multi-Cloud", "OpenAI", "Anthropic", "Gemini", "DLP"},
+		Icon:        "server",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 25
+
+# Multi-Cloud LLM Provider Rules
+llm:
+  centralized_keys: true
+  providers:
+    - name: "openai"
+      action: "allow"
+      models:
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3*"
+      dlp_tier: "strict"
+    - name: "anthropic"
+      action: "allow"
+      models:
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+      dlp_tier: "strict"
+    - name: "google"
+      action: "allow"
+      models:
+        - "gemini-1.5-pro*"
+        - "gemini-1.5-flash*"
+        - "gemini-2.0-flash*"
+      dlp_tier: "strict"
+
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+      - entity: "SSN"
+        action: "deny"
+      - entity: "EMAIL_ADDRESS"
+        action: "redact"
+      - entity: "PHONE_NUMBER"
+        action: "redact"
+
+response_scanning:
+  enabled: true
+  scan_level: "deep"
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error`,
+	},
+	{
+		ID:          "pci-dss-compliance",
+		Name:        "PCI-DSS & Financial Data Protection",
+		Category:    "Finance & Compliance",
+		Description: "Zero-tolerance financial security policy. Immediately blocks credit card numbers (Luhn validated), CVVs, and IBANs while restricting outbound egress to PCI boundaries.",
+		Tags:        []string{"PCI-DSS", "Finance", "Credit Card", "DLP", "Compliance"},
+		Icon:        "credit-card",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 10
+
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o*"]
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet*"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro*"]
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+      - entity: "SSN"
+        action: "deny"
+      - entity: "BANK_ACCOUNT"
+        action: "deny"
+      - entity: "EMAIL_ADDRESS"
+        action: "redact"
+
+tools:
+  - name: read_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        validators:
+          - path_traversal
+  - name: write_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+      - name: content
+        type: string
+        required: true
+  - name: http_request
+    action: allow
+    parameters:
+      - name: url
+        type: string
+        required: true
+        pattern: "^https://([a-zA-Z0-9-]+\\.)*(stripe\\.com|api\\.company\\.internal)(/.*)?$"
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 2
+    action: pivot_error`,
+	},
+	{
+		ID:          "soc2-confidentiality",
+		Name:        "SOC 2 & Codebase Confidentiality",
+		Category:    "Enterprise Security",
+		Description: "Enforces strict dotfile and credential shielding (.env, .git, .ssh, id_rsa, .pem), path traversal rejection, and non-bypassable session auditing.",
+		Tags:        []string{"SOC2", "Confidentiality", "Filesystem", "Audit"},
+		Icon:        "shield",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 20
+
+sequence_rules:
+  - name: block_exfiltration_after_reading_secrets
+    window_size: 5
+    antecedent_tools:
+      - read_file
+      - view_file
+    antecedent_param_regex: ".*(\\.env|\\.git/|\\.ssh/|id_rsa|credentials).*"
+    consequent_tools:
+      - http_post
+      - fetch_url
+      - exec_shell
+    action: block
+    message: "SOC2 Compliance Violation: Outbound transmission blocked after reading sensitive asset."
+
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o*", "gpt-4o-mini*"]
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet*"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro*", "gemini-1.5-flash*"]
+  dlp:
+    actions:
+      - entity: "CREDIT_CARD"
+        action: "deny"
+      - entity: "SSN"
+        action: "deny"
+      - entity: "EMAIL_ADDRESS"
+        action: "redact"
+
+tools:
+  - name: read_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        pattern: "^(?!.*(\\.env|\\.git|\\.ssh|id_rsa|\\.aws|\\.pem)).*$"
+        validators:
+          - path_traversal
+  - name: write_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        pattern: "^(?!.*(\\.git|\\.ssh|/etc/|/var/)).*$"
+      - name: content
+        type: string
+        required: true
+  - name: exec_shell
+    action: allow
+    parameters:
+      - name: command
+        type: string
+        required: true
+        pattern: "^(?!.*(rm\\s+-rf|mkfs|dd\\s+if|sudo|chmod\\s+-R\\s+777)).*$"
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error`,
+	},
+	{
+		ID:          "cost-governance-fallback",
+		Name:        "LLM Cost Guardrails & Model Fallback",
+		Category:    "Cost & Governance",
+		Description: "Enforces automated model fallback to route costly requests (e.g. o1/opus) to cost-effective alternatives (gpt-4o-mini, gemini-1.5-flash) with tight rate limits.",
+		Tags:        []string{"Cost", "FinOps", "Fallback", "Budget", "Rate Limiting"},
+		Icon:        "dollar-sign",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 5
+
+llm:
+  model_enforcement: fallback
+  default_model: "gpt-4o-mini"
+  allowed_models:
+    - "gpt-4o-mini"
+    - "gemini-1.5-flash"
+    - "claude-3-5-haiku"
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o-mini"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-flash"]
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-haiku"]
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 2
+    action: pivot_error`,
+	},
+	{
+		ID:          "autonomous-agent-guardrails",
+		Name:        "Autonomous Agent & MCP Guardrails",
+		Category:    "Production Governance",
+		Description: "Hardened sandbox for autonomous agent workflows (LangChain, AutoGPT, MCP). Enforces tool schema drift detection, cycle break prevention, and command safelists.",
+		Tags:        []string{"Agents", "MCP", "Schema Drift", "Cycle Detection", "Sandbox"},
+		Icon:        "bot",
+		IsCustom:    false,
+		Content: `version: "2"
+default_action: deny
+
+session:
+  max_calls_per_second: 12
+
+llm:
+  providers:
+    - name: "openai"
+      action: "allow"
+      models: ["gpt-4o*"]
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet*"]
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro*"]
+
+tools:
+  - name: read_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+        validators:
+          - path_traversal
+  - name: write_file
+    action: allow
+    parameters:
+      - name: path
+        type: string
+        required: true
+      - name: content
+        type: string
+        required: true
+  - name: list_directory
+    action: allow
+    parameters:
+      - name: directory
+        type: string
+        required: true
+  - name: exec_shell
+    action: allow
+    parameters:
+      - name: command
+        type: string
+        required: true
+        pattern: "^(?!.*(sudo|rm\\s+-rf|mkfs|dd|chmod|chown)).*$"
+
+firewall:
+  enabled: true
+  cycle_detection:
+    max_attempts: 3
+    action: pivot_error
+
+schema_drift:
+  enabled: true
+  action: block
+  baseline_path: "./schema_baselines.json"`,
+	},
+	{
 		ID:          "production-data",
 		Name:        "Production Egress & Drift Control",
 		Category:    "Production Governance",
@@ -87,7 +497,7 @@ firewall:
 		Tags:        []string{"Production", "Egress", "Firewall", "Schema Drift"},
 		Icon:        "server",
 		IsCustom:    false,
-		Content: `version: "2.2"
+		Content: `version: "2"
 default_action: deny
 
 session:
@@ -147,7 +557,7 @@ schema_drift:
 		Tags:        []string{"HIPAA", "DLP", "PHI", "Healthcare", "PII"},
 		Icon:        "heart-pulse",
 		IsCustom:    false,
-		Content: `version: "2.1"
+		Content: `version: "2"
 default_action: deny
 
 session:
@@ -162,6 +572,10 @@ llm:
     - name: "anthropic"
       action: "allow"
       models: ["claude-3-5-sonnet"]
+      dlp_tier: "strict"
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro"]
       dlp_tier: "strict"
   dlp:
     actions:
@@ -218,7 +632,7 @@ firewall:
 		Tags:        []string{"Enterprise", "Full Protection", "DLP", "Firewall"},
 		Icon:        "lock",
 		IsCustom:    false,
-		Content: `version: "2.2"
+		Content: `version: "2"
 default_action: deny
 
 session:
@@ -243,6 +657,14 @@ llm:
     - name: "openai"
       action: "allow"
       models: ["gpt-4o", "gpt-4-turbo"]
+      dlp_tier: "strict"
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet"]
+      dlp_tier: "strict"
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro", "gemini-1.5-flash"]
       dlp_tier: "strict"
   dlp:
     actions:

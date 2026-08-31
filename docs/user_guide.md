@@ -520,6 +520,45 @@ Agent Request (Loopback) ──► [ Local Edge Gateway ] ──► [ Central Br
 - **Staged Key Rotation:** Add new key versions (`ACTIVE`) while gracefully retiring older versions (`RETIRING`) with overlap windows.
 - **Sanitized Validation:** `POST /api/v1/providers/keys/{id}/validate` verifies upstream credential validity with zero error leakage.
 
+### 3-Tier Integration Architecture for IDEs & SDKs
+
+Agent Control provides a 3-tier architecture for governing LLM spend and security across all developer environments:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       3-TIER LLM SPEND & GOVERNANCE                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ TIER 1: Native BaseURL Redirection (Cleanest, Fastest, Zero Certs)         │
+│   • Targets: Cline, Roo Code, Continue.dev, OpenCode, Aider, Python/Node SDK│
+│   • Configuration: Set `baseURL: http://127.0.0.1:8080/v1`                  │
+│   • Path: Handled directly by high-performance proxy (`/v1/chat/completions`)│
+├─────────────────────────────────────────────────────────────────────────────┤
+│ TIER 2: Native MCP Stdio Proxy Wrapping (Surgical, Zero Network Overhead)  │
+│   • Targets: Claude Desktop, Zed, VS Code / Cursor MCP servers              │
+│   • Configuration: Auto-wrapped command `agentcontrol stdio-proxy -- <bin>` │
+│   • Path: Intercepts JSON-RPC tool calls on stdin/stdout                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ TIER 3: Local MITM Proxy (Locked Proprietary Client Fallback)               │
+│   • Targets: Cursor Free Tier (`api2.cursor.sh`), locked enterprise agents │
+│   • Configuration: `http.proxy: 127.0.0.1:8080` + User Trust Store Root CA │
+│   • Path: Decrypts CONNECT stream, counts prompt/completion tokens, settles │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Cursor Desktop (Free Tier & BYOK)
+When running `agentcontrol protect`, Agent Control automatically:
+1. Generates and registers an ECDSA P-256 Root CA into the OS Current User trust store (`certutil -user "Root"` / macOS `login.keychain-db`).
+2. Configures Cursor's `User/settings.json` with `"http.proxy": "http://127.0.0.1:8080"` and `"cursor.general.disableHttp2": true`.
+3. Sets `NODE_EXTRA_CA_CERTS` so Cursor's internal Node runtime trusts the gateway.
+4. Streams and records all Chat, Tab Autocomplete, and Composer token usage into the spend ledger.
+
+```bash
+# Manage Local CA for LLM Interception
+agentcontrol ca status       # Check CA generation & OS trust store status
+agentcontrol ca install      # Register Root CA in User Trust Store
+agentcontrol ca uninstall    # Cleanly remove Root CA from trust store
+```
+
 ### Requesting a Budget Increase
 1. Navigate to the **Spend Status** view in the Web Console (`/spend/status`).
 2. Review project budget limits, current window consumption, and active reservations.

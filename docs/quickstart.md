@@ -44,7 +44,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.69`.
+- **Expected Result:** Prints `agentcontrol 1.0.70`.
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.

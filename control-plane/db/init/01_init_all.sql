@@ -919,4 +919,61 @@ INSERT INTO spend_policy_versions (
     'system', now()
 ) ON CONFLICT (policy_id, version) DO NOTHING;
 
+-- ============================================================================
+-- PILLAR 1: SCOPED VIRTUAL KEYS  (000002 migration — included in init baseline)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS virtual_keys (
+    id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                 UUID        NOT NULL,
+    key_hash                  TEXT        NOT NULL,
+    key_prefix                TEXT        NOT NULL,
+    previous_key_hash         TEXT,
+    previous_key_expires_at   TIMESTAMPTZ,
+    name                      TEXT        NOT NULL,
+    team_id                   TEXT        NOT NULL DEFAULT '',
+    created_by                TEXT        NOT NULL DEFAULT '',
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at                TIMESTAMPTZ,
+    allowed_ips               TEXT[]      NOT NULL DEFAULT '{}',
+    max_rpm                   INT         NOT NULL DEFAULT 0,
+    max_tpm                   INT         NOT NULL DEFAULT 0,
+    max_concurrent_requests   INT         NOT NULL DEFAULT 0,
+    -- Spend caps in MICROCENTS ($1 = 100,000,000 µ¢; 0 = unlimited)
+    monthly_budget_microcents BIGINT      NOT NULL DEFAULT 0,
+    spent_microcents          BIGINT      NOT NULL DEFAULT 0,
+    allowed_models            TEXT[]      NOT NULL DEFAULT '{}',
+    allowed_routes            TEXT[]      NOT NULL DEFAULT '{}',
+    status                    TEXT        NOT NULL DEFAULT 'active',
+    tags                      JSONB       NOT NULL DEFAULT '{}',
+    CONSTRAINT virtual_keys_unique_hash_per_tenant  UNIQUE (tenant_id, key_hash),
+    CONSTRAINT virtual_keys_status_check            CHECK (status IN ('active', 'rotating', 'revoked')),
+    CONSTRAINT virtual_keys_spent_non_negative      CHECK (spent_microcents >= 0),
+    CONSTRAINT virtual_keys_budget_non_negative     CHECK (monthly_budget_microcents >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_virtual_keys_tenant    ON virtual_keys (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_virtual_keys_hash      ON virtual_keys (key_hash);
+CREATE INDEX IF NOT EXISTS idx_virtual_keys_prev_hash ON virtual_keys (previous_key_hash) WHERE previous_key_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_virtual_keys_active    ON virtual_keys (tenant_id, status) WHERE status != 'revoked';
+
+-- ============================================================================
+-- PILLAR 2: PROVIDER KEY VAULT  (000002 migration — included in init baseline)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS provider_keys (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID        NOT NULL,
+    provider        TEXT        NOT NULL,
+    key_alias       TEXT        NOT NULL DEFAULT '',
+    -- AES-256-GCM ciphertext (hex); AAD = "{tenant_id}|{provider}|{key_alias}|{version}"
+    key_ciphertext  TEXT        NOT NULL,
+    version         INT         NOT NULL DEFAULT 1,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT provider_keys_unique_per_tenant UNIQUE (tenant_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_keys_tenant ON provider_keys (tenant_id);
+
 COMMIT;

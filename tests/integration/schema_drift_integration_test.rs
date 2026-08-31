@@ -1,107 +1,34 @@
 //! Integration tests for FR-601: MCP Schema-Drift Detection
 
-use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentcontrol::kill::KillMode;
 use agentcontrol::policy::engine::CompiledPolicy;
-use agentcontrol::policy::safe_mode::SafeModeScanner;
 use agentcontrol::policy::schema::SchemaDriftConfig;
 use agentcontrol::policy::schema_drift::SchemaDriftDetector;
-use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
 fn create_test_state_with_drift(
     drift_config: Option<SchemaDriftConfig>,
 ) -> (Arc<ProxyState>, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let log_path = dir.path().join("audit-drift-integration.log");
-
-    let audit_logger = Arc::new(
-        AuditLogger::new(AuditLoggerConfig {
-            log_path,
-            session_id: "drift-integration-session".to_string(),
-            session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-            max_bytes: 100000,
-            siem_exporter: None,
-            include_params: true,
-        })
-        .unwrap(),
-    );
-
     let baseline_path = dir.path().join("baselines.json");
     let detector = Arc::new(SchemaDriftDetector::new(Some(baseline_path)));
 
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(Some(CompiledPolicy {
-            max_calls_per_second: 0,
-            tools: vec![],
-            group_policies: vec![],
-            sequence_rules: vec![],
-            identity_validator: None,
-            scannable_tools: vec!["tools/list".to_string()],
-            safe_tools: vec![],
-            firewall: None,
-            spend_caps: None,
-            llm: None,
-            schema_drift: drift_config,
-            fail_closed: false,
-        })),
-        audit_logger,
-        session_id: "drift-integration-session".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(
-            agentcontrol::policy::response_scanner::ResponseScanner::new().unwrap(),
-        ),
-        response_scan_config: std::sync::RwLock::new(
-            agentcontrol::policy::response_scanner::ResponseScanConfig::default(),
-        ),
-        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: detector,
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        credential_scope_validator: Arc::new(
-            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        policy_path: None,
-        gateway_start_time: std::time::Instant::now(),
-        spend_ledger: None,
-        pricing_table: None,
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
+    let state = ProxyState::mock_test_with_detector(detector);
+    *state.policy.write().unwrap() = Some(CompiledPolicy {
+        max_calls_per_second: 0,
+        tools: vec![],
+        group_policies: vec![],
+        sequence_rules: vec![],
+        identity_validator: None,
+        scannable_tools: vec!["tools/list".to_string()],
+        safe_tools: vec![],
+        firewall: None,
+        spend_caps: None,
+        llm: None,
+        schema_drift: drift_config,
+        fail_closed: false,
     });
 
     (state, dir)

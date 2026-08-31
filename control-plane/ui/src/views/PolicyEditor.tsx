@@ -8,19 +8,38 @@ const DEFAULT_POLICY_CONTENT = `version: "2"
 default_action: deny
 
 session:
-  max_calls_per_second: 10
+  max_calls_per_second: 15
 
-# LLM Governance & Prompt DLP
+# LLM Governance, Centralized BYOK & Prompt DLP
 llm:
+  cursor_mode: byok            # "byok" (centralized keys) or "passthrough" (monitor-only)
+  model_enforcement: restrict  # "restrict" (block unapproved models) or "fallback"
+  default_model: "gpt-4o"
+  allowed_models:
+    - "gpt-4o*"
+    - "claude-3-5-sonnet*"
+    - "gemini-1.5-pro*"
   providers:
     - name: "openai"
       action: "allow"
-      models: ["gpt-4o", "gpt-3.5-turbo"]
+      models: ["gpt-4o*", "gpt-4o-mini*", "o1*"]
+      dlp_tier: "strict"
+    - name: "anthropic"
+      action: "allow"
+      models: ["claude-3-5-sonnet*", "claude-3-5-haiku*"]
+      dlp_tier: "strict"
+    - name: "google"
+      action: "allow"
+      models: ["gemini-1.5-pro*", "gemini-1.5-flash*", "gemini-2.0-flash*"]
       dlp_tier: "strict"
   dlp:
     actions:
       - entity: "CREDIT_CARD"
         action: "deny"
+      - entity: "SSN"
+        action: "deny"
+      - entity: "EMAIL_ADDRESS"
+        action: "redact"
 
 tools:
   - name: "read_file"

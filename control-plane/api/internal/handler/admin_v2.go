@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -127,7 +128,11 @@ func (h *AdminV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 	err := h.Store.RevokeDeviceV2(r.Context(), tenantID, deviceID, req.Reason, actor)
 	if err != nil {
 		log.Printf("RevokeDevice error for device %s: %v", deviceID, err)
-		http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found or already revoked"}}`, http.StatusNotFound)
+		if errors.Is(err, store.ErrDeviceNotFoundV2) || errors.Is(err, store.ErrDeviceNotFound) {
+			http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found or already revoked"}}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":"%s"}}`, err.Error()), http.StatusInternalServerError)
 		return
 	}
 

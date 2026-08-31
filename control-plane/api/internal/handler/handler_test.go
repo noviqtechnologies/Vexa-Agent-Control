@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
@@ -191,6 +193,46 @@ func (m *mockStore) GetProviderKeyByProvider(ctx context.Context, tenantID, prov
 		return m.getProviderKeyByProviderFunc(ctx, tenantID, provider)
 	}
 	return nil, nil
+}
+
+// Pillar 1: Scoped Virtual Keys (stub implementations)
+func (m *mockStore) CreateVirtualKey(ctx context.Context, tenantID string, k *store.VirtualKey) error {
+	return nil
+}
+func (m *mockStore) ListVirtualKeys(ctx context.Context, tenantID string) ([]store.VirtualKey, error) {
+	return nil, nil
+}
+func (m *mockStore) GetVirtualKeyByID(ctx context.Context, tenantID, id string) (*store.VirtualKey, error) {
+	return nil, store.ErrVirtualKeyNotFound
+}
+func (m *mockStore) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*store.VirtualKey, error) {
+	return nil, store.ErrVirtualKeyNotFound
+}
+func (m *mockStore) RotateVirtualKey(ctx context.Context, tenantID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*store.VirtualKey, error) {
+	return nil, store.ErrVirtualKeyNotFound
+}
+func (m *mockStore) DeleteVirtualKey(ctx context.Context, tenantID, id string) error {
+	return nil
+}
+func (m *mockStore) IncrementVirtualKeySpend(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockStore) ResetVirtualKeySpend(ctx context.Context, tenantID, id string) error {
+	return nil
+}
+
+// Central Provider Key Vault stubs
+func (m *mockStore) InsertEncryptedProviderKey(ctx context.Context, tenantID, provider, keyAlias, plainSecret string, kmsProvider kms.KMSProvider) error {
+	return nil
+}
+func (m *mockStore) GetDecryptedProviderKey(ctx context.Context, tenantID, provider string, kmsProvider kms.KMSProvider) (string, error) {
+	return "", store.ErrProviderKeyNotFound
+}
+func (m *mockStore) ListEncryptedProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKeyMeta, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteEncryptedProviderKey(ctx context.Context, tenantID, provider string) error {
+	return nil
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

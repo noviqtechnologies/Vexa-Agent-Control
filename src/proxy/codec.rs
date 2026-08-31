@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn test_json_rpc_codec_max_frame_size_enforced() {
         let mut codec = JsonRpcCodec::with_max_frame_size(64);
-        let oversized = vec![b'a'; 128];
+        let oversized = [b'a'; 128];
         let mut buf = BytesMut::from(&oversized[..]);
 
         let result = codec.decode(&mut buf);

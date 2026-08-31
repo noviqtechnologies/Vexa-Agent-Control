@@ -93,7 +93,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./test-tools/test-policy.yaml:/app/policy.yaml:ro
+      - ./policy.example.yaml:/app/policy.yaml:ro
       - agentcontrol-logs:/var/log/agentcontrol
     environment:
       # Core gateway config

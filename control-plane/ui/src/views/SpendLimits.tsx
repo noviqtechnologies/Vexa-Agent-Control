@@ -121,10 +121,6 @@ export default function SpendLimits() {
                 <option value="openai" style={{ background: '#12121a', color: '#e8e8ed' }}>OpenAI</option>
                 <option value="anthropic" style={{ background: '#12121a', color: '#e8e8ed' }}>Anthropic</option>
                 <option value="google" style={{ background: '#12121a', color: '#e8e8ed' }}>Google Gemini</option>
-                <option value="xai" style={{ background: '#12121a', color: '#e8e8ed' }}>xAI (Grok)</option>
-                <option value="groq" style={{ background: '#12121a', color: '#e8e8ed' }}>Groq</option>
-                <option value="together" style={{ background: '#12121a', color: '#e8e8ed' }}>Together AI</option>
-                <option value="mistral" style={{ background: '#12121a', color: '#e8e8ed' }}>Mistral AI</option>
               </select>
             </div>
           )}

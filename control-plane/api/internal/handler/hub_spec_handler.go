@@ -97,6 +97,11 @@ func (h *HubSpecHandler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 			CredentialID:    "cred-anthropic-1",
 			RotationVersion: 1,
 		},
+		{
+			Provider:        "google",
+			CredentialID:    "cred-google-1",
+			RotationVersion: 1,
+		},
 	}
 
 	resp := BootstrapResponse{

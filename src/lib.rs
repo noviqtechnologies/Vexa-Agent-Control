@@ -4,6 +4,7 @@
 //! process wrapper, identity management, and audit logger for securing LLM applications and agentic workflows.
 
 pub mod audit;
+pub mod ca;
 pub mod check;
 pub mod cli;
 pub mod control_plane_client;

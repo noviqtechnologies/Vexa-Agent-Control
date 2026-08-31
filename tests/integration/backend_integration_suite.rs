@@ -8,88 +8,19 @@
 
 use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
 use agentcontrol::audit::verifier::{verify_chain_with_secret, VerifyResult};
-use agentcontrol::kill::KillMode;
-use agentcontrol::policy::credential_scope::CredentialScopeValidator;
-use agentcontrol::policy::dlp::DlpScanner;
 use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool};
-use agentcontrol::policy::injection::InjectionScanner;
-use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentcontrol::policy::safe_mode::SafeModeScanner;
-use agentcontrol::policy::semantic::{SemanticConfig, SemanticScanner};
 use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
 use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-/// Helper: Initialize a clean isolated ProxyState fixture
 fn create_test_proxy_state(policy: Option<CompiledPolicy>) -> (Arc<ProxyState>, tempfile::TempDir) {
     let dir = tempdir().unwrap();
-    let log_path = dir.path().join("integration_audit.log");
-    let config = AuditLoggerConfig {
-        log_path,
-        session_id: "backend-integration-session".to_string(),
-        session_secret: vec![0xAB; 32],
-        max_bytes: 10 * 1024 * 1024,
-        siem_exporter: None,
-        include_params: true,
-    };
-    let audit_logger = Arc::new(AuditLogger::new(config).unwrap());
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    let state = Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(policy),
-        policy_path: None,
-        gateway_start_time: std::time::Instant::now(),
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        credential_scope_validator: Arc::new(CredentialScopeValidator::new(false)),
-        audit_logger,
-        session_id: "backend-integration-session".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: Arc::new(DlpScanner::new(None).unwrap()),
-        semantic_scanner: Arc::new(SemanticScanner::new(SemanticConfig::default())),
-        injection_scanner: Arc::new(InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    });
-
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = policy;
     (state, dir)
 }
 

@@ -112,7 +112,7 @@ mod tests {
     fn test_mcp_scoring() {
         let res = McpScorer::evaluate_server(
             "filesystem_mcp",
-            &vec!["/home/user/project".to_string()],
+            &["/home/user/project".to_string()],
             false,
             3,
         );
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(res.risk_level, "LOW");
 
         let dangerous =
-            McpScorer::evaluate_server("untrusted_mcp", &vec!["/".to_string()], true, 15);
+            McpScorer::evaluate_server("untrusted_mcp", &["/".to_string()], true, 15);
         assert!(dangerous.score < 50);
         assert!(dangerous
             .vulnerability_flags

@@ -164,6 +164,321 @@ pub struct ProxyState {
     pub max_frame_size: usize,
     /// Shared secret token required for admin management endpoints
     pub admin_token: Option<String>,
+    /// Optional Local CA manager for MITM TLS interception
+    pub ca_manager: Option<Arc<crate::ca::CaManager>>,
+    /// Cursor enforcement mode: "byok" (centralized keys) or "passthrough" (monitor-only).
+    pub cursor_mode: std::sync::RwLock<String>,
+    /// Model allowlist. If Some, only these models are permitted through MITM.
+    pub allowed_models: std::sync::RwLock<Option<Vec<String>>>,
+    /// Default fallback model when model_enforcement = "fallback".
+    pub default_model: std::sync::RwLock<Option<String>>,
+    /// Model enforcement mode: "restrict" (block + error) or "fallback" (silently reroute).
+    pub model_enforcement: std::sync::RwLock<String>,
+    /// Minimum prompt token threshold to log on terminal (filters out heartbeat/ping noise)
+    pub min_tokens: u64,
+    /// Terminal spend-only logging mode
+    pub spend_only: bool,
+    /// Exact prompt cache (Pillar 1)
+    pub prompt_cache: Arc<super::prompt_cache::PromptCache>,
+    /// Sub-millisecond Virtual Key cache (Pillar 1)
+    pub local_key_cache: Arc<super::local_key_cache::LocalKeyCache>,
+    /// In-flight request coalescer (thundering herd protection)
+    pub request_coalescer: Arc<super::request_coalescer::RequestCoalescer>,
+    /// Adaptive model-aware timeouts and backpressure
+    pub adaptive_timeout: Arc<super::adaptive_timeout::AdaptiveTimeoutManager>,
+    /// 10ms sliding-window embedding batcher
+    pub embedding_batcher: Arc<super::embedding_batcher::EmbeddingBatcher>,
+    /// Latency-based provider router
+    pub provider_router: Arc<super::provider_router::ProviderRouter>,
+}
+
+impl ProxyState {
+    /// Constructs a standardized, pre-configured ProxyState for unit, integration, and E2E tests.
+    /// Eliminates brittle 40+ field struct literal definitions across test suites.
+    pub fn mock_test_default() -> Arc<Self> {
+        let temp_dir = std::env::temp_dir();
+        let log_path = temp_dir.join(format!("test_audit_{}.log", uuid::Uuid::new_v4()));
+        let audit_config = crate::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "mock-test-session".to_string(),
+            session_secret: vec![0xAB; 32],
+            max_bytes: 5 * 1024 * 1024,
+            siem_exporter: None,
+            include_params: true,
+        };
+        let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
+        let db_manager = Arc::new(DbManager::init());
+
+        Arc::new(Self {
+            policy: std::sync::RwLock::new(None),
+            audit_logger,
+            session_id: "mock-test-session".to_string(),
+            kill_mode: KillMode::Connection,
+            agent_pid: None,
+            upstream_url: "http://127.0.0.1:8080".to_string(),
+            dry_run: false,
+            shadow_mode: std::sync::atomic::AtomicBool::new(false),
+            policy_loaded: std::sync::atomic::AtomicBool::new(true),
+            rate_limiter: RateLimiter::new(0),
+            http_client: reqwest::Client::new(),
+            safe_mode_scanner: Arc::new(
+                crate::policy::safe_mode::SafeModeScanner::new()
+                    .expect("Failed to initialize SafeModeScanner"),
+            ),
+            ready: true,
+            db_manager,
+            response_scanner: Arc::new(
+                crate::policy::response_scanner::ResponseScanner::new()
+                    .expect("Failed to initialize ResponseScanner"),
+            ),
+            response_scan_config: std::sync::RwLock::new(
+                crate::policy::response_scanner::ResponseScanConfig::default(),
+            ),
+            dlp_scanner: Arc::new(
+                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+            ),
+            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
+                crate::policy::semantic::SemanticConfig::default(),
+            )),
+            injection_scanner: Arc::new(
+                crate::policy::injection::InjectionScanner::new()
+                    .expect("Failed to compile Injection regexes"),
+            ),
+            schema_drift_detector: Arc::new(
+                crate::policy::schema_drift::SchemaDriftDetector::new(None),
+            ),
+            tool_history: std::sync::Mutex::new(Vec::new()),
+            event_tx: tokio::sync::broadcast::channel(16).0,
+            spend_ledger: None,
+            pricing_table: None,
+            sessions: dashmap::DashMap::new(),
+            metrics_requests_total: Arc::new(AtomicU64::new(0)),
+            metrics_allow_total: Arc::new(AtomicU64::new(0)),
+            metrics_deny_total: Arc::new(AtomicU64::new(0)),
+            metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
+            metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
+            credential_scope_validator: Arc::new(
+                crate::policy::credential_scope::CredentialScopeValidator::new(false),
+            ),
+            policy_path: None,
+            gateway_start_time: std::time::Instant::now(),
+            dashboard_client: None,
+            listen_is_loopback: true,
+            policy_read_secret: None,
+            centralized_mode: false,
+            provider_keys: dashmap::DashMap::new(),
+            effective_profile: "test".to_string(),
+            max_concurrency: 100,
+            connection_timeout_secs: 30,
+            max_frame_size: 10 * 1024 * 1024,
+            admin_token: None,
+            ca_manager: None,
+            cursor_mode: std::sync::RwLock::new("passthrough".to_string()),
+            allowed_models: std::sync::RwLock::new(None),
+            default_model: std::sync::RwLock::new(None),
+            model_enforcement: std::sync::RwLock::new("restrict".to_string()),
+            min_tokens: 0,
+            spend_only: false,
+            prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
+            request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
+            adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
+            embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
+            provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+        })
+    }
+
+    pub fn mock_test_with_detector(
+        detector: Arc<crate::policy::schema_drift::SchemaDriftDetector>,
+    ) -> Arc<Self> {
+        let temp_dir = std::env::temp_dir();
+        let log_path = temp_dir.join(format!("test_audit_{}.log", uuid::Uuid::new_v4()));
+        let audit_config = crate::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "mock-test-session".to_string(),
+            session_secret: vec![0xAB; 32],
+            max_bytes: 5 * 1024 * 1024,
+            siem_exporter: None,
+            include_params: true,
+        };
+        let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
+        let db_manager = Arc::new(DbManager::init());
+
+        Arc::new(Self {
+            policy: std::sync::RwLock::new(None),
+            audit_logger,
+            session_id: "mock-test-session".to_string(),
+            kill_mode: KillMode::Connection,
+            agent_pid: None,
+            upstream_url: "http://127.0.0.1:8080".to_string(),
+            dry_run: false,
+            shadow_mode: std::sync::atomic::AtomicBool::new(false),
+            policy_loaded: std::sync::atomic::AtomicBool::new(true),
+            rate_limiter: RateLimiter::new(0),
+            http_client: reqwest::Client::new(),
+            safe_mode_scanner: Arc::new(
+                crate::policy::safe_mode::SafeModeScanner::new()
+                    .expect("Failed to initialize SafeModeScanner"),
+            ),
+            ready: true,
+            db_manager,
+            response_scanner: Arc::new(
+                crate::policy::response_scanner::ResponseScanner::new()
+                    .expect("Failed to initialize ResponseScanner"),
+            ),
+            response_scan_config: std::sync::RwLock::new(
+                crate::policy::response_scanner::ResponseScanConfig::default(),
+            ),
+            dlp_scanner: Arc::new(
+                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+            ),
+            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
+                crate::policy::semantic::SemanticConfig::default(),
+            )),
+            injection_scanner: Arc::new(
+                crate::policy::injection::InjectionScanner::new()
+                    .expect("Failed to compile Injection regexes"),
+            ),
+            schema_drift_detector: detector,
+            tool_history: std::sync::Mutex::new(Vec::new()),
+            event_tx: tokio::sync::broadcast::channel(16).0,
+            spend_ledger: None,
+            pricing_table: None,
+            sessions: dashmap::DashMap::new(),
+            metrics_requests_total: Arc::new(AtomicU64::new(0)),
+            metrics_allow_total: Arc::new(AtomicU64::new(0)),
+            metrics_deny_total: Arc::new(AtomicU64::new(0)),
+            metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
+            metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
+            credential_scope_validator: Arc::new(
+                crate::policy::credential_scope::CredentialScopeValidator::new(false),
+            ),
+            policy_path: None,
+            gateway_start_time: std::time::Instant::now(),
+            dashboard_client: None,
+            listen_is_loopback: true,
+            policy_read_secret: None,
+            centralized_mode: false,
+            provider_keys: dashmap::DashMap::new(),
+            effective_profile: "test".to_string(),
+            max_concurrency: 100,
+            connection_timeout_secs: 30,
+            max_frame_size: 10 * 1024 * 1024,
+            admin_token: None,
+            ca_manager: None,
+            cursor_mode: std::sync::RwLock::new("passthrough".to_string()),
+            allowed_models: std::sync::RwLock::new(None),
+            default_model: std::sync::RwLock::new(None),
+            model_enforcement: std::sync::RwLock::new("restrict".to_string()),
+            min_tokens: 0,
+            spend_only: false,
+            prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
+            request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
+            adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
+            embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
+            provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+        })
+    }
+
+    pub fn mock_test_with_strict_scope(strict: bool) -> Arc<Self> {
+        let temp_dir = std::env::temp_dir();
+        let log_path = temp_dir.join(format!("test_audit_{}.log", uuid::Uuid::new_v4()));
+        let audit_config = crate::audit::logger::AuditLoggerConfig {
+            log_path,
+            session_id: "mock-test-session".to_string(),
+            session_secret: vec![0xAB; 32],
+            max_bytes: 5 * 1024 * 1024,
+            siem_exporter: None,
+            include_params: true,
+        };
+        let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
+        let db_manager = Arc::new(DbManager::init());
+
+        Arc::new(Self {
+            policy: std::sync::RwLock::new(None),
+            audit_logger,
+            session_id: "mock-test-session".to_string(),
+            kill_mode: KillMode::Connection,
+            agent_pid: None,
+            upstream_url: "http://127.0.0.1:8080".to_string(),
+            dry_run: false,
+            shadow_mode: std::sync::atomic::AtomicBool::new(false),
+            policy_loaded: std::sync::atomic::AtomicBool::new(true),
+            rate_limiter: RateLimiter::new(0),
+            http_client: reqwest::Client::new(),
+            safe_mode_scanner: Arc::new(
+                crate::policy::safe_mode::SafeModeScanner::new()
+                    .expect("Failed to initialize SafeModeScanner"),
+            ),
+            ready: true,
+            db_manager,
+            response_scanner: Arc::new(
+                crate::policy::response_scanner::ResponseScanner::new()
+                    .expect("Failed to initialize ResponseScanner"),
+            ),
+            response_scan_config: std::sync::RwLock::new(
+                crate::policy::response_scanner::ResponseScanConfig::default(),
+            ),
+            dlp_scanner: Arc::new(
+                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+            ),
+            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
+                crate::policy::semantic::SemanticConfig::default(),
+            )),
+            injection_scanner: Arc::new(
+                crate::policy::injection::InjectionScanner::new()
+                    .expect("Failed to compile Injection regexes"),
+            ),
+            schema_drift_detector: Arc::new(
+                crate::policy::schema_drift::SchemaDriftDetector::new(None),
+            ),
+            tool_history: std::sync::Mutex::new(Vec::new()),
+            event_tx: tokio::sync::broadcast::channel(16).0,
+            spend_ledger: None,
+            pricing_table: None,
+            sessions: dashmap::DashMap::new(),
+            metrics_requests_total: Arc::new(AtomicU64::new(0)),
+            metrics_allow_total: Arc::new(AtomicU64::new(0)),
+            metrics_deny_total: Arc::new(AtomicU64::new(0)),
+            metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
+            metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
+            metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
+            credential_scope_validator: Arc::new(
+                crate::policy::credential_scope::CredentialScopeValidator::new(strict),
+            ),
+            policy_path: None,
+            gateway_start_time: std::time::Instant::now(),
+            dashboard_client: None,
+            listen_is_loopback: true,
+            policy_read_secret: None,
+            centralized_mode: false,
+            provider_keys: dashmap::DashMap::new(),
+            effective_profile: "test".to_string(),
+            max_concurrency: 100,
+            connection_timeout_secs: 30,
+            max_frame_size: 10 * 1024 * 1024,
+            admin_token: None,
+            ca_manager: None,
+            cursor_mode: std::sync::RwLock::new("passthrough".to_string()),
+            allowed_models: std::sync::RwLock::new(None),
+            default_model: std::sync::RwLock::new(None),
+            model_enforcement: std::sync::RwLock::new("restrict".to_string()),
+            min_tokens: 0,
+            spend_only: false,
+            prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
+            request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
+            adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
+            embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
+            provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+        })
+    }
 }
 
 pub struct RateLimiter {

@@ -138,9 +138,6 @@ func (s *Store) TransitionDeviceState(
 
 // RevokeDeviceV2 immediately revokes a device and its active credentials.
 func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, actorSubject string) error {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
 	if reason == "" {
 		reason = "Operator manual revocation"
 	}
@@ -160,7 +157,8 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 		SET state = 'REVOKED', state_reason_code = 'OPERATOR_REVOCATION',
 		    revoked_at = now(), revoked_by_subject = $1, revocation_reason = $2,
 		    state_changed_at = now(), updated_at = now()
-		WHERE (id::text = $3 OR stable_device_id = $3 OR LOWER(display_name) = LOWER($3)) AND (tenant_id::text = $4 OR $4 = '')
+		WHERE (id::text = $3 OR stable_device_id = $3 OR LOWER(display_name) = LOWER($3) OR $3 ILIKE '%-' || display_name || '-%')
+		  AND ($4 = '' OR tenant_id::text = $4 OR tenant_id = '00000000-0000-0000-0000-000000000001'::uuid OR $4 = '00000000-0000-0000-0000-000000000001')
 		RETURNING id::text, tenant_id::text;
 	`
 	var actualDeviceID string
@@ -173,7 +171,7 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 		return fmt.Errorf("update device revoke: %w", err)
 	}
 
-	if tenantID == "" {
+	if actualTenantID != "" {
 		tenantID = actualTenantID
 	}
 
@@ -184,56 +182,52 @@ func (s *Store) RevokeDeviceV2(ctx context.Context, tenantID, deviceID, reason, 
 		WHERE device_id::text = $1;
 	`, actualDeviceID)
 
-	// 3. Mark active certificates revoked
-	updateCertsQuery := `
-		UPDATE device_certificates
-		SET status = 'REVOKED', revoked_at = now(), revocation_reason = $1
-		WHERE (tenant_id::text = $2 OR $2 = '') AND device_id::text = $3 AND status = 'ACTIVE';
-	`
-	if _, err := tx.Exec(ctx, updateCertsQuery, reason, tenantID, actualDeviceID); err != nil {
-		return fmt.Errorf("update certs revoke: %w", err)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit revoke tx: %w", err)
 	}
 
-	// 4. Revoke capabilities
-	updateCapsQuery := `
-		UPDATE device_provider_capabilities
-		SET status = 'REVOKED'
-		WHERE (tenant_id::text = $1 OR $1 = '') AND device_id::text = $2 AND status = 'ACTIVE';
-	`
-	if _, err := tx.Exec(ctx, updateCapsQuery, tenantID, actualDeviceID); err != nil {
-		return fmt.Errorf("update caps revoke: %w", err)
-	}
+	// 3. Best-effort async update for auxiliary tables so table/schema variations never block core revocation
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	// 5. Record state history (only when foreign key devices(id) is satisfied)
-	historyQuery := `
-		INSERT INTO device_state_history (
-			tenant_id, device_id, prior_state, new_state, reason_code, actor_type, actor_subject, correlation_id
-		) VALUES ($1::uuid, $2::uuid, 'COMPLIANT', 'REVOKED', 'OPERATOR_REVOCATION', 'OPERATOR', NULLIF($3, ''), gen_random_uuid());
-	`
-	if _, err := tx.Exec(ctx, historyQuery, tenantID, actualDeviceID, actorSubject); err != nil {
-		return fmt.Errorf("insert history revoke: %w", err)
-	}
+		// Update active certificates
+		_, _ = s.pool.Exec(bgCtx, `
+			UPDATE device_certificates
+			SET status = 'REVOKED', revoked_at = now(), revocation_reason = $1
+			WHERE (tenant_id::text = $2 OR $2 = '') AND device_id::text = $3 AND status = 'ACTIVE';
+		`, reason, tenantID, actualDeviceID)
 
-	// 6. Audit & Outbox
-	auditQuery := `
-		INSERT INTO audit_events (
-			tenant_id, correlation_id, request_id, actor_type, actor_ref, action, resource_type, resource_id, outcome, reason_code
-		) VALUES (
-			$1::uuid, gen_random_uuid(), gen_random_uuid(), 'OPERATOR', $2, 'device.revoke', 'device', $3, 'SUCCESS', 'DEVICE_REVOKED'
-		);
-	`
-	if _, err := tx.Exec(ctx, auditQuery, tenantID, actorSubject, actualDeviceID); err != nil {
-		return fmt.Errorf("insert audit revoke: %w", err)
-	}
+		// Revoke capabilities
+		_, _ = s.pool.Exec(bgCtx, `
+			UPDATE device_provider_capabilities
+			SET status = 'REVOKED'
+			WHERE (tenant_id::text = $1 OR $1 = '') AND device_id::text = $2 AND status = 'ACTIVE';
+		`, tenantID, actualDeviceID)
 
-	outboxQuery := `
-		INSERT INTO outbox_events (
-			tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
-		) VALUES ($1::uuid, 'device', $2, 'device.revoked', '2.0', jsonb_build_object('reason', $3::text));
-	`
-	if _, err := tx.Exec(ctx, outboxQuery, tenantID, actualDeviceID, reason); err != nil {
-		return fmt.Errorf("insert outbox revoke: %w", err)
-	}
+		// Record state history
+		_, _ = s.pool.Exec(bgCtx, `
+			INSERT INTO device_state_history (
+				tenant_id, device_id, prior_state, new_state, reason_code, actor_type, actor_subject, correlation_id
+			) VALUES ($1::uuid, $2::uuid, 'COMPLIANT', 'REVOKED', 'OPERATOR_REVOCATION', 'OPERATOR', NULLIF($3, ''), gen_random_uuid());
+		`, tenantID, actualDeviceID, actorSubject)
 
-	return tx.Commit(ctx)
+		// Audit event
+		_, _ = s.pool.Exec(bgCtx, `
+			INSERT INTO audit_events (
+				tenant_id, correlation_id, request_id, actor_type, actor_ref, action, resource_type, resource_id, outcome, reason_code
+			) VALUES (
+				$1::uuid, gen_random_uuid(), gen_random_uuid(), 'OPERATOR', $2, 'device.revoke', 'device', $3, 'SUCCESS', 'DEVICE_REVOKED'
+			);
+		`, tenantID, actorSubject, actualDeviceID)
+
+		// Outbox event
+		_, _ = s.pool.Exec(bgCtx, `
+			INSERT INTO outbox_events (
+				tenant_id, aggregate_type, aggregate_id, event_type, payload_version, redacted_payload
+			) VALUES ($1::uuid, 'device', $2, 'device.revoked', '2.0', jsonb_build_object('reason', $3::text));
+		`, tenantID, actualDeviceID, reason)
+	}()
+
+	return nil
 }

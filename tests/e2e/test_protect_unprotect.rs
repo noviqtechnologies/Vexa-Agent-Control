@@ -274,7 +274,7 @@ mod api_mode_toggle_tests {
         for h in handles { h.join().unwrap(); }
         let final_val = shadow_mode.load(Ordering::SeqCst);
         // Just assert no UB — value must be a valid bool
-        assert!(final_val || !final_val, "AtomicBool must not be corrupted under concurrent writes");
+        assert!(matches!(final_val, true | false), "AtomicBool must not be corrupted under concurrent writes");
     }
 
     #[test]

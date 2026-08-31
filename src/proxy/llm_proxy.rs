@@ -38,23 +38,12 @@ pub(crate) fn infer_provider_from_model(model: &str) -> String {
         "openai".to_string()
     } else if lower.starts_with("claude-") || lower.contains("anthropic") {
         "anthropic".to_string()
-    } else if lower.starts_with("mistral")
-        || lower.starts_with("codestral")
-        || lower.starts_with("mixtral")
-    {
-        "mistral".to_string()
-    } else if lower.starts_with("llama") || lower.starts_with("groq") || lower.starts_with("gemma") {
-        if std::env::var("GROQ_API_KEY").is_ok() {
-            "groq".to_string()
-        } else {
-            "openai".to_string()
-        }
-    } else if lower.starts_with("together") {
-        "together".to_string()
+    } else if lower.starts_with("gemini") || lower.contains("google") {
+        "google".to_string()
     } else if std::env::var("ANTHROPIC_API_KEY").is_ok() && std::env::var("OPENAI_API_KEY").is_err() {
         "anthropic".to_string()
-    } else if std::env::var("GROQ_API_KEY").is_ok() && std::env::var("OPENAI_API_KEY").is_err() {
-        "groq".to_string()
+    } else if std::env::var("GEMINI_API_KEY").is_ok() && std::env::var("OPENAI_API_KEY").is_err() {
+        "google".to_string()
     } else {
         std::env::var("DEFAULT_LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string())
     }
@@ -239,9 +228,8 @@ pub async fn handle_request(
                     ("claude-3-5-sonnet-20241022", "anthropic"),
                     ("claude-3-5-haiku-20241022", "anthropic"),
                     ("claude-3-opus-20240229", "anthropic"),
-                    ("mistral-large-latest", "mistral"),
-                    ("llama-3.3-70b-versatile", "groq"),
-                    ("deepseek-chat", "deepseek"),
+                    ("gemini-1.5-pro", "google"),
+                    ("gemini-1.5-flash", "google"),
                 ];
                 for (m, p) in &default_models {
                     model_entries.push(serde_json::json!({
@@ -631,9 +619,7 @@ pub async fn handle_request(
         .or_else(|| match provider_name.as_str() {
             "openai" => std::env::var("OPENAI_API_KEY").ok(),
             "anthropic" => std::env::var("ANTHROPIC_API_KEY").ok(),
-            "groq" => std::env::var("GROQ_API_KEY").ok(),
-            "together" => std::env::var("TOGETHER_API_KEY").ok(),
-            "mistral" => std::env::var("MISTRAL_API_KEY").ok(),
+            "google" | "gemini" => std::env::var("GEMINI_API_KEY").ok().or_else(|| std::env::var("GOOGLE_API_KEY").ok()),
             _ => None,
         })
         .or_else(|| {
@@ -742,7 +728,19 @@ pub async fn handle_request(
                             .and_then(|v| v.as_str())
                             .unwrap_or("spend_budget_exhausted")
                             .to_string();
-                        let msg = format!("LLM spend budget exceeded: {}", reason_code);
+                        let scope = deny_body
+                            .get("disclosure_safe_scope")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("spend budget");
+                        let reset_info = deny_body
+                            .get("reset_at")
+                            .and_then(|v| v.as_str())
+                            .map(|t| format!(" (quota window resets at {})", t))
+                            .unwrap_or_default();
+                        let msg = format!(
+                            "Spend budget limit exceeded for {} tier{}. Please request a budget adjustment from your workspace administrator under LLM Providers & Spend Governance in the AgentControl Console, or switch to an alternate project/model.",
+                            scope, reset_info
+                        );
 
                         return Ok(make_error_response(
                             StatusCode::TOO_MANY_REQUESTS,
@@ -792,9 +790,8 @@ pub async fn handle_request(
 
     // ADR-010: Inject include_usage stream options for OpenAI streaming
     if provider_name == "openai"
-        || provider_name == "groq"
-        || provider_name == "together"
-        || provider_name == "mistral"
+        || provider_name == "google"
+        || provider_name == "gemini"
     {
         if let Some(obj) = body.as_object_mut() {
             if obj.get("stream").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -817,12 +814,8 @@ pub async fn handle_request(
         let base_url = match provider_name.as_str() {
             "openai" => std::env::var("OPENAI_BASE_URL")
                 .unwrap_or_else(|_| "https://api.openai.com".to_string()),
-            "groq" => std::env::var("GROQ_BASE_URL")
-                .unwrap_or_else(|_| "https://api.groq.com/openai".to_string()),
-            "together" => std::env::var("TOGETHER_BASE_URL")
-                .unwrap_or_else(|_| "https://api.together.xyz".to_string()),
-            "mistral" => std::env::var("MISTRAL_BASE_URL")
-                .unwrap_or_else(|_| "https://api.mistral.ai".to_string()),
+            "google" | "gemini" => std::env::var("GEMINI_BASE_URL")
+                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1beta/openai".to_string()),
             _ => std::env::var("OPENAI_BASE_URL")
                 .unwrap_or_else(|_| "https://api.openai.com".to_string()),
         };
@@ -1008,9 +1001,7 @@ pub async fn handle_request(
                 target_host: match provider_name.as_str() {
                     "anthropic" => "api.anthropic.com".to_string(),
                     "openai" => "api.openai.com".to_string(),
-                    "groq" => "api.groq.com".to_string(),
-                    "together" => "api.together.xyz".to_string(),
-                    "mistral" => "api.mistral.ai".to_string(),
+                    "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
                     _ => "api.openai.com".to_string(),
                 },
                 target_port: Some(443),
@@ -1160,7 +1151,7 @@ mod tests {
         assert_eq!(infer_provider_from_model("gpt-4o-mini"), "openai");
         assert_eq!(infer_provider_from_model("o1-preview"), "openai");
         assert_eq!(infer_provider_from_model("claude-3-5-sonnet-20241022"), "anthropic");
-        assert_eq!(infer_provider_from_model("mistral-large-latest"), "mistral");
+        assert_eq!(infer_provider_from_model("gemini-1.5-pro"), "google");
     }
 
     #[test]

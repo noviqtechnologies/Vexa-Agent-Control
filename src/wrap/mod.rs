@@ -557,6 +557,31 @@ pub fn run_protect_orchestration(
     println!("\n  {} Discovered & Wrapped MCP Configurations:", "✔".green().bold());
     run_wrap_all(dry_run, false);
 
+    // Initialize local Root CA for LLM interception
+    if !dry_run {
+        if let Ok(ca_mgr) = crate::ca::CaManager::init_or_load(None) {
+            let ca_cert_path = ca_mgr.ca_dir.join("agentcontrol-ca.pem");
+            if !crate::ca::is_ca_installed() {
+                let _ = crate::ca::install_ca_to_trust_store(&ca_cert_path);
+            }
+            std::env::set_var("NODE_EXTRA_CA_CERTS", &ca_cert_path);
+            #[cfg(target_os = "windows")]
+            {
+                let path_str = ca_cert_path.to_string_lossy().to_string();
+                let _ = std::process::Command::new("powershell")
+                    .args([
+                        "-NoProfile",
+                        "-Command",
+                        &format!(
+                            "[Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', '{}', 'User')",
+                            path_str
+                        ),
+                    ])
+                    .output();
+            }
+        }
+    }
+
     println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());
     println!("    • Mode: {}", if enforce { "Active Enforcement (Default Deny / DLP / Injection Blocking)".green().bold() } else { "Observation / Shadow Mode (Audit Only)".yellow().bold() });
     println!("    • Policy: {}", policy.cyan());

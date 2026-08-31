@@ -17,6 +17,7 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/handler"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
@@ -200,6 +201,21 @@ func main() {
 	genericProviderClient := broker.NewGenericProviderClient()
 	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret, spendStore)
 
+	// Initialize KMS provider and Virtual Key infrastructure (Pillar 1)
+	kmsProvider, err := kms.NewLocalMasterKeyProvider()
+	if err != nil {
+		log.Fatalf("kms: %v", err)
+	}
+	invalidationBroadcaster := handler.NewInvalidationBroadcaster()
+	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
+	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
+	healthH := handler.NewHealthHandler(db)
+
+	// Initialize Virtual Keys schema (Pillar 1)
+	if err := db.EnsureVirtualKeysSchema(ctx); err != nil {
+		log.Printf("[virtual_keys] schema initialization warning: %v", err)
+	}
+
 
 	// === Target Contract v4.0 API Routes ===
 	// 1. Enrollment Handlers (Unauthenticated - OTET & Key Proof)
@@ -240,6 +256,33 @@ func main() {
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
 	})
+
+	// Broker v3 — Virtual Key authenticated dispatch (Pillar 1)
+	r.Post("/api/v3/broker/dispatch", brokerV3H.Dispatch)
+
+	// Virtual Key management (tenant-scoped)
+	r.Route("/api/v1/virtual-keys", func(r chi.Router) {
+		r.Use(middleware.DashboardAuth())
+		r.Post("/", virtualKeyH.Create)
+		r.Get("/", virtualKeyH.List)
+		r.Delete("/{id}", virtualKeyH.Delete)
+		r.Post("/{id}/rotate", virtualKeyH.Rotate)
+		r.Post("/{id}/reset-spend", virtualKeyH.Reset)
+	})
+
+	// Internal edge proxy endpoints (no dashboard auth — gateway secret scoped)
+	r.Route("/api/v1/internal", func(r chi.Router) {
+		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, middleware.LegacyAuthConfig{
+			LegacySingleTenantMode: cfg.LegacySingleTenantMode,
+			LegacyTenantID:         cfg.LegacyTenantID,
+		}))
+		r.Get("/invalidation-stream", invalidationBroadcaster.ServeHTTP)
+		r.Get("/virtual-keys/resolve", virtualKeyH.Resolve)
+	})
+
+	// Structured health probes (separate from basic /healthz)
+	r.Get("/readyz", healthH.Readyz)
+	r.Get("/healthz", healthH.Healthz)
 
 	// 4b. Gateway-Secret authenticated broker (allows local gateways without ALB mTLS)
 	legacyAuthCfg := middleware.LegacyAuthConfig{

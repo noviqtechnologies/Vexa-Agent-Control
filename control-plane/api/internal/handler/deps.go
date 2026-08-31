@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
@@ -52,4 +54,20 @@ type DataStore interface {
 	ListProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKey, error)
 	DeleteProviderKey(ctx context.Context, tenantID, id string) error
 	GetProviderKeyByProvider(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
+
+	// Pillar 1: Scoped Virtual Keys
+	CreateVirtualKey(ctx context.Context, tenantID string, k *store.VirtualKey) error
+	ListVirtualKeys(ctx context.Context, tenantID string) ([]store.VirtualKey, error)
+	GetVirtualKeyByID(ctx context.Context, tenantID, id string) (*store.VirtualKey, error)
+	GetVirtualKeyByHash(ctx context.Context, keyHash string) (*store.VirtualKey, error)
+	RotateVirtualKey(ctx context.Context, tenantID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*store.VirtualKey, error)
+	DeleteVirtualKey(ctx context.Context, tenantID, id string) error
+	IncrementVirtualKeySpend(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error)
+	ResetVirtualKeySpend(ctx context.Context, tenantID, id string) error
+
+	// Central Provider Key Vault (AES-256-GCM envelope encryption)
+	InsertEncryptedProviderKey(ctx context.Context, tenantID, provider, keyAlias, plainSecret string, kmsProvider kms.KMSProvider) error
+	GetDecryptedProviderKey(ctx context.Context, tenantID, provider string, kmsProvider kms.KMSProvider) (string, error)
+	ListEncryptedProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKeyMeta, error)
+	DeleteEncryptedProviderKey(ctx context.Context, tenantID, provider string) error
 }

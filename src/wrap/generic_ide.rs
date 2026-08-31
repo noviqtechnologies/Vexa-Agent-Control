@@ -13,6 +13,9 @@ pub fn wrap_generic(
     config_path: PathBuf,
     dry_run: bool,
 ) -> Result<WrapResult, WrapError> {
+    if ide_name == "Cursor" {
+        let _ = wrap_cursor_settings(dry_run);
+    }
     if !config_path.exists() {
         return Err(WrapError::ConfigNotFound(config_path.display().to_string()));
     }
@@ -197,6 +200,9 @@ pub fn unwrap_generic(
     config_path: PathBuf,
     force: bool,
 ) -> Result<UnwrapResult, WrapError> {
+    if ide_name == "Cursor" {
+        let _ = unwrap_cursor_settings(force);
+    }
     if !config_path.exists() {
         return Err(WrapError::ConfigNotFound(config_path.display().to_string()));
     }
@@ -286,3 +292,133 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), WrapError> {
     fs::rename(&tmp_path, path)?;
     Ok(())
 }
+
+/// Injects proxy settings into Cursor's User/settings.json
+pub fn wrap_cursor_settings(dry_run: bool) -> Result<(), WrapError> {
+    if let Ok(settings_path) = super::config_path::cursor_settings_path() {
+        let has_centralized_openai = std::env::var("OPENAI_API_KEY").is_ok()
+            || std::env::var("AGENTCONTROL_CURSOR_MODE").ok().as_deref() == Some("byok");
+
+        if !settings_path.exists() {
+            if let Some(parent) = settings_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if !dry_run {
+                let mut initial = serde_json::json!({
+                    "http.proxy": "http://127.0.0.1:8080",
+                    "cursor.general.disableHttp2": true
+                });
+                if has_centralized_openai {
+                    initial["cursor.general.openaiApiKey"] = serde_json::json!("sk-agentcontrol-managed");
+                }
+                let _ = fs::write(
+                    &settings_path,
+                    serde_json::to_string_pretty(&initial).unwrap_or_default(),
+                );
+            }
+            return Ok(());
+        }
+
+        let raw = fs::read_to_string(&settings_path).map_err(WrapError::Io)?;
+        let mut settings: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => {
+                let stripped = super::strip_json_comments(&raw);
+                serde_json::from_str(&stripped).unwrap_or(serde_json::json!({}))
+            }
+        };
+
+        if !settings.is_object() {
+            settings = serde_json::json!({});
+        }
+
+        let current_proxy = settings.get("http.proxy").and_then(|v| v.as_str());
+        let current_h2 = settings
+            .get("cursor.general.disableHttp2")
+            .and_then(|v| v.as_bool());
+        let current_key = settings
+            .get("cursor.general.openaiApiKey")
+            .and_then(|v| v.as_str());
+
+        let already_configured = current_proxy == Some("http://127.0.0.1:8080")
+            && current_h2 == Some(true)
+            && (!has_centralized_openai || current_key == Some("sk-agentcontrol-managed"));
+
+        if already_configured {
+            return Ok(());
+        }
+
+        if dry_run {
+            return Ok(());
+        }
+
+        let _ = backup::create_backup(&settings_path);
+        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:8080");
+        settings["cursor.general.disableHttp2"] = serde_json::json!(true);
+        if has_centralized_openai {
+            settings["cursor.general.openaiApiKey"] = serde_json::json!("sk-agentcontrol-managed");
+        }
+
+        let output_str = serde_json::to_string_pretty(&settings)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        atomic_write(&settings_path, &output_str)?;
+    }
+    Ok(())
+}
+
+/// Configures Cursor settings.json for centralized BYOK mode with sentinel key.
+pub fn apply_centralized_cursor_config(has_openai_key: bool) -> Result<(), WrapError> {
+    if let Ok(settings_path) = super::config_path::cursor_settings_path() {
+        if let Some(parent) = settings_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        let mut settings: serde_json::Value = if settings_path.exists() {
+            let raw = fs::read_to_string(&settings_path).map_err(WrapError::Io)?;
+            match serde_json::from_str(&raw) {
+                Ok(v) => v,
+                Err(_) => {
+                    let stripped = super::strip_json_comments(&raw);
+                    serde_json::from_str(&stripped).unwrap_or(serde_json::json!({}))
+                }
+            }
+        } else {
+            serde_json::json!({})
+        };
+
+        if !settings.is_object() {
+            settings = serde_json::json!({});
+        }
+
+        let _ = backup::create_backup(&settings_path);
+        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:8080");
+        settings["cursor.general.disableHttp2"] = serde_json::json!(true);
+
+        if has_openai_key {
+            settings["cursor.general.openaiApiKey"] = serde_json::json!("sk-agentcontrol-managed");
+        }
+
+        let output_str = serde_json::to_string_pretty(&settings)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        atomic_write(&settings_path, &output_str)?;
+    }
+    Ok(())
+}
+
+/// Restores Cursor's User/settings.json from backup
+pub fn unwrap_cursor_settings(force: bool) -> Result<(), WrapError> {
+    if let Ok(settings_path) = super::config_path::cursor_settings_path() {
+        if settings_path.exists() {
+            let config_dir = settings_path.parent().unwrap_or(Path::new("."));
+            if let Some(backup_path) = backup::find_latest_backup(config_dir) {
+                if !force {
+                    let _ = backup::verify_backup_integrity(&backup_path);
+                }
+                let _ = fs::copy(&backup_path, &settings_path);
+                let _ = fs::remove_file(&backup_path);
+            }
+        }
+    }
+    Ok(())
+}
+

@@ -158,10 +158,8 @@ export default function LlmProviders() {
               style={{ width: '100%', padding: '10px' }}
             >
               <option value="openai">OpenAI (Central Enforce & Local)</option>
-              <option value="anthropic">Anthropic (Local Compat)</option>
-              <option value="groq">Groq (Local Compat)</option>
-              <option value="together">Together AI (Local Compat)</option>
-              <option value="mistral">Mistral AI (Local Compat)</option>
+              <option value="anthropic">Anthropic (Central Enforce & Local)</option>
+              <option value="google">Google Gemini (Central Enforce & Local)</option>
             </select>
           </div>
           <div style={{ flex: 2, minWidth: 200 }}>

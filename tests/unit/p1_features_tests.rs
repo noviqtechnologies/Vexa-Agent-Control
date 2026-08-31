@@ -26,8 +26,8 @@ fn test_rate_limiting_logic() {
 
 #[tokio::test]
 async fn test_log_rotation_and_seed() {
-    let test_dir = std::path::Path::new("tests/tmp_p1_test");
-    let _ = std::fs::create_dir_all(test_dir);
+    let test_dir = std::env::temp_dir().join(format!("tmp_p1_test_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&test_dir);
     let log_path = test_dir.join(format!("vexa_test_log_{}.log", uuid::Uuid::new_v4()));
     let session_id = "test-session".to_string();
     let secret = b"test-secret-123456789012345678901".to_vec();
@@ -85,6 +85,9 @@ async fn test_log_rotation_and_seed() {
         content.contains("log_rotation_seed"),
         "New log should contain rotation seed"
     );
+
+    // Clean up temporary test directory
+    let _ = std::fs::remove_dir_all(&test_dir);
 }
 
 #[tokio::test]

@@ -131,6 +131,11 @@ pub struct PolicyFile {
 pub struct LlmConfig {
     pub providers: Option<Vec<LlmProviderRule>>,
     pub dlp: Option<DlpConfig>,
+    pub centralized_keys: Option<bool>,
+    pub cursor_mode: Option<String>,
+    pub allowed_models: Option<Vec<String>>,
+    pub default_model: Option<String>,
+    pub model_enforcement: Option<String>,
 }
 
 /// LLM Provider access rule.

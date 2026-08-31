@@ -1,7 +1,7 @@
 # Vexa Agent Control
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.69-green.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.70-green.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square)](https://www.rust-lang.org/)
 [![OWASP ASI 2026](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-success.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Documentation Hub](https://img.shields.io/badge/Docs-Documentation%20Hub-1f6feb.svg?style=flat-square)](docs/README.md)
@@ -77,7 +77,7 @@ Trust has levels. Vexa classifies integrations based on end-to-end automated tes
 | Level | Client / IDE | Configuration Path Checked | Automatic Wrap Support |
 |---|---|---|---|
 | **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported |
-| **Verified** | **Cursor** | `~/.cursor/mcp.json` | Tested & fully supported (MCP wrap) |
+| **Verified** | **Cursor** | `~/.cursor/mcp.json` & `User/settings.json` | Tested & fully supported ([Cursor Guide](docs/guides/cursor_governance_guide.md)) |
 | **Verified** | **Codex** | `~/.codex/config.toml` | Tested & fully supported |
 | **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported |
 | **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
@@ -120,7 +120,7 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.69`.
+- **Expected Result:** Prints `agentcontrol 1.0.70`.
 - **If it fails:** Verify curl / PowerShell connectivity; check [Platform Install Guides](docs/install/).
 
 ### Step 2: Inspect Discovered Clients (Safe Dry-Run)

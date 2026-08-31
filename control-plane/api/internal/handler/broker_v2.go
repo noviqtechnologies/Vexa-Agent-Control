@@ -47,8 +47,53 @@ type BrokerRequestPayload struct {
 	Payload            json.RawMessage `json:"payload"`
 }
 
+func buildSpendDenialError(authResp *spend.AuthorizeResponse, provider, reqID string) map[string]any {
+	scopeName := strings.ToLower(authResp.DisclosureSafeScope)
+	var scopeDesc string
+	switch scopeName {
+	case "provider":
+		scopeDesc = fmt.Sprintf("LLM provider '%s'", strings.ToUpper(provider))
+	case "project":
+		scopeDesc = "project / workload"
+	case "organization":
+		scopeDesc = "organization"
+	default:
+		scopeDesc = "spend budget"
+	}
+
+	msg := fmt.Sprintf("Spend budget limit exceeded for %s.", scopeDesc)
+	if authResp.ResetAt != nil && !authResp.ResetAt.IsZero() {
+		msg += fmt.Sprintf(" Quota window resets at %s UTC.", authResp.ResetAt.UTC().Format("2006-01-02 15:04:05"))
+	}
+	remediation := "Request a budget adjustment from your workspace administrator under LLM Providers & Spend Governance in the AgentControl Console, or switch to an alternate project/model."
+
+	errObj := map[string]any{
+		"code":           authResp.ReasonCode,
+		"type":           "spend_governance_denied",
+		"origin":         "agentcontrol_broker",
+		"message":        msg,
+		"remediation":    remediation,
+		"scope":          authResp.DisclosureSafeScope,
+		"provider":       provider,
+		"correlation_id": reqID,
+	}
+	if authResp.ResetAt != nil && !authResp.ResetAt.IsZero() {
+		errObj["reset_at"] = authResp.ResetAt.UTC().Format(time.RFC3339)
+	}
+
+	return map[string]any{
+		"error": errObj,
+	}
+}
+
 // POST /api/v2/broker/llm-requests and POST /api/v3/broker/llm-requests
 func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.URL.Path, "/v2/") {
+		w.Header().Set("Deprecation", "@1741564800")
+		w.Header().Set("Sunset", "Thu, 31 Dec 2026 23:59:59 GMT")
+		w.Header().Set("Link", "</api/v3/broker/dispatch>; rel=\"successor-version\"")
+	}
+
 	principal, ok := middleware.GetDevicePrincipal(r.Context())
 	if !ok {
 		http.Error(w, `{"error":{"code":"device_auth_required"}}`, http.StatusUnauthorized)
@@ -126,13 +171,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			if llmMode == "central_enforce" && authResp.ReasonCode != spend.ErrCodePriceUnknown {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusTooManyRequests)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]any{
-						"code":           authResp.ReasonCode,
-						"message":        "LLM spend preflight authorization denied",
-						"correlation_id": reqID,
-					},
-				})
+				_ = json.NewEncoder(w).Encode(buildSpendDenialError(authResp, req.Provider, reqID))
 				return
 			}
 			// price_unknown or central_shadow: clear reservation and proceed
@@ -165,6 +204,11 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			apiKey = os.Getenv("OPENAI_API_KEY")
 		} else if strings.EqualFold(req.Provider, "anthropic") {
 			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		} else if strings.EqualFold(req.Provider, "google") || strings.EqualFold(req.Provider, "gemini") {
+			apiKey = os.Getenv("GEMINI_API_KEY")
+			if apiKey == "" {
+				apiKey = os.Getenv("GOOGLE_API_KEY")
+			}
 		}
 	}
 
@@ -322,13 +366,7 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 			if authResp.ReasonCode != spend.ErrCodePriceUnknown {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusTooManyRequests)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]any{
-						"code":           authResp.ReasonCode,
-						"message":        "LLM spend preflight authorization denied",
-						"correlation_id": reqID,
-					},
-				})
+				_ = json.NewEncoder(w).Encode(buildSpendDenialError(authResp, req.Provider, reqID))
 				return
 			}
 			// Clear authResp so downstream doesn't try to settle a non-existent reservation
@@ -359,6 +397,11 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 			apiKey = os.Getenv("OPENAI_API_KEY")
 		} else if strings.EqualFold(req.Provider, "anthropic") {
 			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		} else if strings.EqualFold(req.Provider, "google") || strings.EqualFold(req.Provider, "gemini") {
+			apiKey = os.Getenv("GEMINI_API_KEY")
+			if apiKey == "" {
+				apiKey = os.Getenv("GOOGLE_API_KEY")
+			}
 		}
 	}
 

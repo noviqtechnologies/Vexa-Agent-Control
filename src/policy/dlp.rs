@@ -500,19 +500,23 @@ fn validate_luhn(cc: &str) -> bool {
 }
 
 pub fn truncated_preview(secret: &str) -> String {
-    if secret.len() <= 8 {
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() <= 8 {
         return "****".to_string();
     }
-    let prefix_len = secret
-        .char_indices()
+    let prefix_len = chars
+        .iter()
+        .enumerate()
         .skip(2)
-        .find(|(_, c)| *c == '_' || *c == '-')
+        .find(|(_, &c)| c == '_' || c == '-')
         .map(|(i, _)| (i + 1).min(6))
         .unwrap_or(4)
-        .min(secret.len());
-    let suffix_len = 4.min(secret.len().saturating_sub(prefix_len + 4));
-    let suffix_start = secret.len() - suffix_len;
-    format!("{}****{}", &secret[..prefix_len], &secret[suffix_start..])
+        .min(chars.len());
+    let suffix_len = 4.min(chars.len().saturating_sub(prefix_len + 4));
+    let suffix_start = chars.len() - suffix_len;
+    let prefix: String = chars[..prefix_len].iter().collect();
+    let suffix: String = chars[suffix_start..].iter().collect();
+    format!("{}****{}", prefix, suffix)
 }
 
 #[cfg(test)]
@@ -526,6 +530,13 @@ mod tests {
         assert_eq!(findings.len(), 2);
         assert_eq!(findings[0].category, SecretCategory::AwsAccessKey);
         assert_eq!(findings[1].category, SecretCategory::GitHubToken);
+    }
+
+    #[test]
+    fn test_multibyte_utf8_truncated_preview() {
+        let secret = "transportMode␦windows_temp_fileǟ42";
+        let preview = truncated_preview(secret);
+        assert!(preview.contains("****"));
     }
 
     #[test]

@@ -1,83 +1,14 @@
-use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
-use agentcontrol::kill::KillMode;
 use agentcontrol::policy::engine::CompiledPolicy;
-use agentcontrol::policy::response_scanner::{ResponseScanConfig, ResponseScanner};
-use agentcontrol::policy::safe_mode::SafeModeScanner;
 use agentcontrol::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
-use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState, RateLimiter};
+use agentcontrol::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
 use agentcontrol::proxy::session::SessionContext;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
 fn create_mock_proxy_state(policy: Option<CompiledPolicy>) -> Arc<ProxyState> {
-    let log_path =
-        std::env::temp_dir().join(format!("multi_tenant_test_{}.log", uuid::Uuid::new_v4()));
-    let config = AuditLoggerConfig {
-        log_path,
-        session_id: "multi-tenant-test-session".to_string(),
-        session_secret: b"secret-12345678901234567890123456789012".to_vec(),
-        max_bytes: 100000,
-        siem_exporter: None,
-        include_params: true,
-    };
-    let audit_logger = Arc::new(AuditLogger::new(config).unwrap());
-
-    let db_manager = Arc::new(agentcontrol::proxy::db::DbManager::init());
-
-    Arc::new(ProxyState {
-        policy: std::sync::RwLock::new(policy),
-        policy_path: None,
-        gateway_start_time: std::time::Instant::now(),
-        dashboard_client: None,
-        listen_is_loopback: true,
-        policy_read_secret: None,
-        credential_scope_validator: Arc::new(
-            agentcontrol::policy::credential_scope::CredentialScopeValidator::new(false),
-        ),
-        audit_logger,
-        session_id: "multi-tenant-test-session".to_string(),
-        kill_mode: KillMode::Connection,
-        agent_pid: None,
-        upstream_url: "".to_string(),
-        dry_run: false,
-        shadow_mode: std::sync::atomic::AtomicBool::new(false),
-        policy_loaded: AtomicBool::new(true),
-        rate_limiter: RateLimiter::new(0),
-        http_client: reqwest::Client::new(),
-        safe_mode_scanner: Arc::new(SafeModeScanner::new().unwrap()),
-        ready: true,
-        db_manager,
-        response_scanner: Arc::new(ResponseScanner::new().unwrap()),
-        response_scan_config: std::sync::RwLock::new(ResponseScanConfig::default()),
-        dlp_scanner: std::sync::Arc::new(agentcontrol::policy::dlp::DlpScanner::new(None).unwrap()),
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
-        injection_scanner: Arc::new(agentcontrol::policy::injection::InjectionScanner::default()),
-        schema_drift_detector: Arc::new(
-            agentcontrol::policy::schema_drift::SchemaDriftDetector::default(),
-        ),
-        tool_history: std::sync::Mutex::new(Vec::new()),
-        sessions: dashmap::DashMap::new(),
-        metrics_requests_total: Arc::new(AtomicU64::new(0)),
-        metrics_allow_total: Arc::new(AtomicU64::new(0)),
-        metrics_deny_total: Arc::new(AtomicU64::new(0)),
-        metrics_rate_limited_total: Arc::new(AtomicU64::new(0)),
-        metrics_firewall_cycle_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_total: Arc::new(AtomicU64::new(0)),
-        metrics_siem_export_failed_total: Arc::new(AtomicU64::new(0)),
-        event_tx: tokio::sync::broadcast::channel(256).0,
-        spend_ledger: None,
-        pricing_table: None,
-        centralized_mode: false,
-        provider_keys: dashmap::DashMap::new(),
-        effective_profile: "local-enforce".to_string(),
-        max_concurrency: 1024,
-        connection_timeout_secs: 30,
-        max_frame_size: 16777216,
-        admin_token: None,
-    })
+    let state = ProxyState::mock_test_default();
+    *state.policy.write().unwrap() = policy;
+    state
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -25,6 +25,40 @@ pub async fn handle_egress(
             .unwrap_or_default();
         let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(443);
 
+        // Tier 3: If host is an allowlisted LLM domain and CA manager is present, perform MITM decryption & spend tracking
+        if let Some(ca_mgr) = &state.ca_manager {
+            if crate::ca::is_interceptable_host(&target_host, None) {
+                let mitm_engine = super::mitm::MitmEngine::new(ca_mgr.clone(), state.clone());
+                let sid = session.session_id.clone();
+                let isub = session.identity_sub.clone();
+                let igroups = session.identity_groups.clone();
+                let client_ip_str = _client_ip.to_string();
+
+                tokio::task::spawn(async move {
+                    match hyper::upgrade::on(req).await {
+                        Ok(upgraded) => {
+                            mitm_engine
+                                .handle_tunnel(
+                                    upgraded,
+                                    target_host,
+                                    target_port,
+                                    sid,
+                                    isub,
+                                    igroups,
+                                    client_ip_str,
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            eprintln!("MITM upgrade error: {}", e);
+                        }
+                    }
+                });
+
+                return Ok(Response::new(Full::new(Bytes::new())));
+            }
+        }
+
         let target_url = format!("{}:{}", target_host, target_port);
         let session_id = session.session_id.clone();
         let state_clone = state.clone();

@@ -290,10 +290,10 @@ fn check_mcp_config_wrapped(path: &Path) -> bool {
             }
         } else if let Ok(v) = serde_json::from_str::<Value>(&raw) {
             if let Some(servers) = v.get("mcpServers").and_then(|s| s.as_object()) {
-                return servers.values().any(|srv| crate::wrap::transformer::is_already_wrapped(srv));
+                return servers.values().any(crate::wrap::transformer::is_already_wrapped);
             }
             if let Some(servers) = v.get("mcp_servers").and_then(|s| s.as_object()) {
-                return servers.values().any(|srv| crate::wrap::transformer::is_already_wrapped(srv));
+                return servers.values().any(crate::wrap::transformer::is_already_wrapped);
             }
         }
     }
@@ -320,12 +320,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                 status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
-                    let key_spec = ("cursor.models.openaiBaseUrl", Some(("cursor.models.apiKey", "agentcontrol-local-key")));
-                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
-                    if updated {
-                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
-                    }
-
+                    let _ = crate::wrap::generic_ide::wrap_cursor_settings(false);
                     if let Ok(mcp_path) = crate::wrap::config_path::cursor_config_path() {
                         status.mcp_wrapped = check_mcp_config_wrapped(&mcp_path);
                     }

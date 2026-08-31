@@ -88,6 +88,14 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         dual_agent: bool,
 
+        /// Only output LLM spend and cost interception logs on the terminal
+        #[arg(long, default_value_t = false)]
+        spend_only: bool,
+
+        /// Minimum estimated prompt token threshold to display on terminal (useful to hide 15-token pings)
+        #[arg(long, default_value_t = 0)]
+        min_tokens: u64,
+
         /// Local LLM API endpoint for dual-agent threat reasoning
         #[arg(long, default_value = "http://localhost:11434")]
         local_llm_url: String,
@@ -288,6 +296,14 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         shadow: bool,
 
+        /// Only output LLM spend and cost interception logs on the terminal
+        #[arg(long, default_value_t = false)]
+        spend_only: bool,
+
+        /// Minimum estimated prompt token threshold to display on terminal (useful to hide 15-token pings)
+        #[arg(long, default_value_t = 0)]
+        min_tokens: u64,
+
         /// YAML policy file path
         #[arg(long, default_value = "agentcontrol-policy.yaml")]
         policy: String,
@@ -386,6 +402,28 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         json: bool,
     },
+
+    /// Manage local Root Certificate Authority (CA) for LLM interception and spend tracking
+    Ca {
+        #[command(subcommand)]
+        command: CaCommands,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum CaCommands {
+    /// Generate local Root CA certificate and private key
+    Generate {
+        /// Optional directory to save the CA files (default: ~/.agentcontrol/ca)
+        #[arg(long)]
+        dir: Option<std::path::PathBuf>,
+    },
+    /// Install local Root CA into the current user's OS trust store
+    Install,
+    /// Remove local Root CA from the OS trust store
+    Uninstall,
+    /// Check whether local Root CA is generated and installed in trust store
+    Status,
 }
 
 #[derive(Subcommand, Debug, Clone)]

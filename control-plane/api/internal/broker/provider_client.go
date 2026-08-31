@@ -55,12 +55,8 @@ func resolveProviderEndpoint(provider string) (string, http.Header, error) {
 	case "anthropic":
 		headers.Set("anthropic-version", "2023-06-01")
 		return "https://api.anthropic.com/v1/messages", headers, nil
-	case "groq":
-		return "https://api.groq.com/openai/v1/chat/completions", headers, nil
-	case "together":
-		return "https://api.together.xyz/v1/chat/completions", headers, nil
-	case "mistral":
-		return "https://api.mistral.ai/v1/chat/completions", headers, nil
+	case "google", "gemini":
+		return "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", headers, nil
 	default:
 		return "", nil, fmt.Errorf("unsupported provider adapter: %s", provider)
 	}
