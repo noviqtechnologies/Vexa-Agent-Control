@@ -194,6 +194,14 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       action: () => navigate('/integrations/mcp-servers'),
     },
     {
+      id: 'nav-virtual-keys',
+      title: 'Scoped Virtual Keys',
+      category: 'Integrations',
+      description: 'Issue, scope, rotate, and govern client LLM access tokens (Pillar 1)',
+      action: () => navigate('/integrations/virtual-keys'),
+      shortcut: 'G V',
+    },
+    {
       id: 'nav-llm',
       title: 'LLM Egress Gateways',
       category: 'Integrations',

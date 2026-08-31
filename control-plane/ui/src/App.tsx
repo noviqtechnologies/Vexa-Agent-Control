@@ -16,6 +16,7 @@ import Login from './views/Login'
 import RequireAdmin from './auth/RequireAdmin'
 import McpServers from './views/McpServers'
 import LlmProviders from './views/LlmProviders'
+import VirtualKeys from './views/VirtualKeys'
 import GroupPolicyEditor from './views/GroupPolicyEditor'
 import SpendLimits from './views/SpendLimits'
 import IncreaseRequests from './views/IncreaseRequests'
@@ -98,6 +99,7 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Virtual Keys', to: '/integrations/virtual-keys' },
       { label: 'LLM Providers', to: '/integrations/llm-providers' },
       { label: 'MCP Servers', to: '/integrations/mcp-servers' },
     ],
@@ -498,6 +500,11 @@ export default function App() {
                       <Route path="/devices" element={<Devices />} />
                       <Route path="/devices/tamper-log" element={<TamperLog />} />
                       <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
+                      <Route path="/integrations/virtual-keys" element={
+                        <RequireAdmin>
+                          <VirtualKeys />
+                        </RequireAdmin>
+                      } />
                       <Route path="/integrations/mcp-servers" element={
                         <RequireAdmin>
                           <McpServers />

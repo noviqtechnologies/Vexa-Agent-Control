@@ -193,7 +193,92 @@ export interface IncreaseRequestV2 {
   decided_at?: string
 }
 
+export interface VirtualKey {
+  id: string
+  tenant_id: string
+  key_prefix: string
+  previous_key_expires_at?: string
+  name: string
+  team_id: string
+  created_by: string
+  created_at: string
+  expires_at?: string
+  allowed_ips: string[]
+  max_rpm: number
+  max_tpm: number
+  max_concurrent_requests: number
+  monthly_budget_microcents: number
+  spent_microcents: number
+  allowed_models: string[]
+  allowed_routes: string[]
+  status: 'active' | 'rotating' | 'revoked'
+  tags?: Record<string, string>
+}
+
+export interface CreateVirtualKeyRequest {
+  name: string
+  team_id?: string
+  expires_at?: string
+  allowed_ips?: string[]
+  max_rpm?: number
+  max_tpm?: number
+  max_concurrent_requests?: number
+  monthly_budget_microcents?: number
+  allowed_models?: string[]
+  allowed_routes?: string[]
+  tags?: Record<string, string>
+}
+
+export interface CreateVirtualKeyResponse {
+  virtual_key: VirtualKey
+  raw_secret: string
+}
+
+export interface RotateVirtualKeyRequest {
+  grace_period_seconds?: number
+}
+
 export const api = {
+  // Virtual Keys (Pillar 1)
+  listVirtualKeys: async () => {
+    const res = await fetch('/api/v1/virtual-keys', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ virtual_keys: VirtualKey[] }>
+  },
+  createVirtualKey: async (data: CreateVirtualKeyRequest) => {
+    const res = await fetch('/api/v1/virtual-keys', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<CreateVirtualKeyResponse>
+  },
+  deleteVirtualKey: async (id: string) => {
+    const res = await fetch(`/api/v1/virtual-keys/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ status: string; id: string }>
+  },
+  rotateVirtualKey: async (id: string, gracePeriodSeconds = 3600) => {
+    const res = await fetch(`/api/v1/virtual-keys/${id}/rotate`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grace_period_seconds: gracePeriodSeconds })
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<CreateVirtualKeyResponse>
+  },
+  resetVirtualKeySpend: async (id: string) => {
+    const res = await fetch(`/api/v1/virtual-keys/${id}/reset-spend`, {
+      method: 'POST',
+      headers: authHeaders()
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ status: string; id: string }>
+  },
   // Spend V2 (Authoritative PostgreSQL Ledger)
   getEffectiveSpendV2: async () => {
     const res = await fetch('/api/v2/spend/effective', { headers: authHeaders() })
