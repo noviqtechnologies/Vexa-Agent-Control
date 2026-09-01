@@ -12,7 +12,9 @@ import AuthProviders from './views/AuthProviders'
 import Users from './views/Users'
 import SafeMode from './views/SafeMode'
 import AuditLogs from './views/AuditLogs'
+import ObservabilityLogs from './views/ObservabilityLogs'
 import Login from './views/Login'
+
 import RequireAdmin from './auth/RequireAdmin'
 import McpServers from './views/McpServers'
 import LlmProviders from './views/LlmProviders'
@@ -128,10 +130,11 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Request & Audit Logs', to: '/observability/logs' },
       { label: 'Run Explorer', to: '/runs' },
       { label: 'Spend Analytics', to: '/spend/visualization' },
-      { label: 'Audit Logs', to: '/audit' },
     ],
+
   },
   {
     id: 'policies',
@@ -506,11 +509,14 @@ export default function App() {
                       <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
                       <Route path="/spend/visualization" element={<SpendVisualization />} />
                       <Route path="/runs" element={<RunExplorer />} />
+                      <Route path="/observability/logs" element={<ObservabilityLogs />} />
+                      <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
                       <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />
                       <Route path="/policy/safe-mode" element={<SafeMode />} />
                       <Route path="/threats" element={<ThreatIntelligence />} />
-                      <Route path="/audit" element={<AuditLogs />} />
+                      <Route path="/audit" element={<ObservabilityLogs />} />
                       <Route path="/admin/auth-providers" element={<AuthProviders />} />
+
                       <Route path="/admin/users" element={<Users />} />
                       <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
                       <Route path="/devices" element={<Devices />} />

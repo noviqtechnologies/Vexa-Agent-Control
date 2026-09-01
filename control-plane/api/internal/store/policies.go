@@ -156,7 +156,7 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 		return fmt.Errorf("tenant_id is required")
 	}
 	// If this one is active, deactivate all others within tenant first in a transaction
-	return s.InTx(ctx, func(tx pgx.Tx) error {
+	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		if p.IsActive {
 			// Ensure obsolete global index is dropped and per-tenant index exists
 			_, _ = tx.Exec(ctx, "ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key")
@@ -186,4 +186,25 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 		}
 		return err
 	})
+	if err != nil {
+		return err
+	}
+
+	// Record administrative audit log
+	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
+		TenantID:       tenantID,
+		TableName:      "policies",
+		Action:         "updated",
+		ChangedBy:      "admin",
+		ActorRole:      "admin",
+		AffectedItemID: p.Version,
+		UpdatedValue: map[string]interface{}{
+			"id":        p.ID,
+			"version":   p.Version,
+			"is_active": p.IsActive,
+		},
+		Outcome: "SUCCESS",
+	})
+
+	return nil
 }

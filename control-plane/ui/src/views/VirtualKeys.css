@@ -744,3 +744,43 @@
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #f87171;
 }
+
+/* Modal-Specific Alert Banners */
+.vk-modal-alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.4;
+}
+
+.vk-modal-alert span {
+  flex: 1;
+}
+
+.vk-modal-alert.error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.vk-modal-alert.success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.vk-form-input.has-error, .vk-form-select.has-error {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.vk-field-error {
+  color: #f87171;
+  font-size: 11.5px;
+  margin-top: 2px;
+  font-weight: 500;
+}
+

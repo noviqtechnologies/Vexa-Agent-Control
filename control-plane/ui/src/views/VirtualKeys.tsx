@@ -14,6 +14,17 @@ function usdToMicrocents(usd: number): number {
   return Math.round((usd || 0) * 100_000_000)
 }
 
+export function formatErrorMessage(err: any): string {
+  if (!err) return 'An unexpected error occurred'
+  const message = typeof err === 'string' ? err : err.message || 'An unexpected error occurred'
+  const clean = message.replace(/^API \d+:\s*/i, '').trim()
+  try {
+    const parsed = JSON.parse(clean)
+    return parsed.message || parsed.error || clean
+  } catch {}
+  return clean || message
+}
+
 export default function VirtualKeys() {
   const [keys, setKeys] = useState<VirtualKey[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,6 +38,8 @@ export default function VirtualKeys() {
   // Create Modal
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [createModalError, setCreateModalError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formName, setFormName] = useState('')
   const [formTeamId, setFormTeamId] = useState('')
   const [formOwnerType, setFormOwnerType] = useState<'user' | 'service_account' | 'agent'>('user')
@@ -52,10 +65,18 @@ export default function VirtualKeys() {
   const [rotateTargetKey, setRotateTargetKey] = useState<VirtualKey | null>(null)
   const [rotateGracePeriodSec, setRotateGracePeriodSec] = useState(3600)
   const [rotating, setRotating] = useState(false)
+  const [rotateModalError, setRotateModalError] = useState<string | null>(null)
 
   // Revoke / Delete Modal
   const [deleteTargetKey, setDeleteTargetKey] = useState<VirtualKey | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null)
+
+  const openCreateModal = () => {
+    setCreateModalError(null)
+    setFieldErrors({})
+    setCreateModalOpen(true)
+  }
 
   const loadKeys = async () => {
     try {
@@ -64,7 +85,7 @@ export default function VirtualKeys() {
       const res = await api.listVirtualKeys()
       setKeys(res.virtual_keys || [])
     } catch (err: any) {
-      setError(err.message || 'Failed to load virtual keys')
+      setError(formatErrorMessage(err) || 'Failed to load virtual keys')
     } finally {
       setLoading(false)
     }
@@ -76,14 +97,37 @@ export default function VirtualKeys() {
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const errors: Record<string, string> = {}
     if (!formName.trim()) {
-      setError('Key name is required')
+      errors.name = 'Key Name is required'
+    }
+    const budgetNum = parseFloat(formBudgetUSD)
+    if (isNaN(budgetNum) || budgetNum < 0) {
+      errors.budget = 'Spend budget must be 0 or greater'
+    }
+    const rpmNum = parseInt(formMaxRPM)
+    if (isNaN(rpmNum) || rpmNum < 0) {
+      errors.rpm = 'Max RPM must be 0 or greater'
+    }
+    const tpmNum = parseInt(formMaxTPM)
+    if (isNaN(tpmNum) || tpmNum < 0) {
+      errors.tpm = 'Max TPM must be 0 or greater'
+    }
+    const concNum = parseInt(formMaxConcurrent)
+    if (isNaN(concNum) || concNum < 0) {
+      errors.concurrent = 'Max concurrent requests must be 0 or greater'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setCreateModalError(Object.values(errors)[0])
       return
     }
 
     try {
       setCreating(true)
-      setError(null)
+      setCreateModalError(null)
+      setFieldErrors({})
 
       let expiresAt: string | undefined
       if (formExpiryDays !== 'never' && parseInt(formExpiryDays) > 0) {
@@ -124,6 +168,9 @@ export default function VirtualKeys() {
 
       const res = await api.createVirtualKey(req)
       setCreateModalOpen(false)
+      setCreateModalError(null)
+      setFieldErrors({})
+
       // Reset form
       setFormName('')
       setFormTeamId('')
@@ -135,10 +182,11 @@ export default function VirtualKeys() {
       setRevealedSecret(res.raw_secret)
       setRevealedKey(res.virtual_key)
       setSecretModalOpen(true)
+      setSuccessMsg(`Virtual Key '${res.virtual_key?.name || formName.trim()}' issued successfully!`)
 
       await loadKeys()
     } catch (err: any) {
-      setError(err.message || 'Failed to create virtual key')
+      setCreateModalError(formatErrorMessage(err))
     } finally {
       setCreating(false)
     }
@@ -148,16 +196,17 @@ export default function VirtualKeys() {
     if (!rotateTargetKey) return
     try {
       setRotating(true)
-      setError(null)
+      setRotateModalError(null)
       const res = await api.rotateVirtualKey(rotateTargetKey.id, rotateGracePeriodSec)
       setRotateTargetKey(null)
+      setRotateModalError(null)
       setRevealedSecret(res.raw_secret)
       setRevealedKey(res.virtual_key)
       setSecretModalOpen(true)
       setSuccessMsg(`Virtual Key '${rotateTargetKey.name}' rotated successfully with grace period.`)
       await loadKeys()
     } catch (err: any) {
-      setError(err.message || 'Failed to rotate virtual key')
+      setRotateModalError(formatErrorMessage(err))
     } finally {
       setRotating(false)
     }
@@ -171,7 +220,7 @@ export default function VirtualKeys() {
       setSuccessMsg(`Spend reset for '${key.name}'.`)
       await loadKeys()
     } catch (err: any) {
-      setError(err.message || 'Failed to reset spend')
+      setError(formatErrorMessage(err))
     }
   }
 
@@ -179,13 +228,14 @@ export default function VirtualKeys() {
     if (!deleteTargetKey) return
     try {
       setDeleting(true)
-      setError(null)
+      setDeleteModalError(null)
       await api.deleteVirtualKey(deleteTargetKey.id)
       setDeleteTargetKey(null)
+      setDeleteModalError(null)
       setSuccessMsg(`Virtual Key '${deleteTargetKey.name}' revoked and evicted from edge caches.`)
       await loadKeys()
     } catch (err: any) {
-      setError(err.message || 'Failed to revoke virtual key')
+      setDeleteModalError(formatErrorMessage(err))
     } finally {
       setDeleting(false)
     }
@@ -295,7 +345,7 @@ async function main() {
         <div className="vk-header-actions">
           <button
             className="btn-primary-gradient"
-            onClick={() => setCreateModalOpen(true)}
+            onClick={openCreateModal}
             id="btn-issue-virtual-key"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -414,7 +464,7 @@ async function main() {
             <button
               className="btn-secondary"
               style={{ margin: '12px auto 0 auto' }}
-              onClick={() => setCreateModalOpen(true)}
+              onClick={openCreateModal}
             >
               Issue your first Virtual Key
             </button>
@@ -578,8 +628,20 @@ async function main() {
               <button className="vk-modal-close-btn" onClick={() => setCreateModalOpen(false)}>✕</button>
             </div>
 
-            <form onSubmit={handleCreateSubmit}>
+            <form onSubmit={handleCreateSubmit} noValidate>
               <div className="vk-modal-body">
+                {createModalError && (
+                  <div className="vk-modal-alert error" role="alert">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>{createModalError}</span>
+                    <button type="button" className="vk-copy-btn" onClick={() => setCreateModalError(null)}>✕</button>
+                  </div>
+                )}
+
                 <div className="vk-form-grid">
                   <div className="vk-form-group full-width">
                     <label className="vk-form-label">Key Ownership Persona</label>
@@ -622,13 +684,23 @@ async function main() {
                     <label className="vk-form-label">Key Name *</label>
                     <input
                       type="text"
-                      className="vk-form-input"
+                      className={`vk-form-input ${fieldErrors.name ? 'has-error' : ''}`}
                       placeholder="e.g. cursor-ide-team, release-agent"
                       value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
+                      onChange={(e) => {
+                        setFormName(e.target.value)
+                        if (fieldErrors.name) {
+                          setFieldErrors((prev) => ({ ...prev, name: '' }))
+                          setCreateModalError(null)
+                        }
+                      }}
                       required
                     />
-                    <span className="vk-form-help">Human-readable identifier for audit trails</span>
+                    {fieldErrors.name ? (
+                      <span className="vk-field-error">{fieldErrors.name}</span>
+                    ) : (
+                      <span className="vk-form-help">Human-readable identifier for audit trails</span>
+                    )}
                   </div>
 
                   <div className="vk-form-group">
@@ -650,10 +722,16 @@ async function main() {
                         type="number"
                         step="0.01"
                         min="0"
-                        className="vk-form-input"
+                        className={`vk-form-input ${fieldErrors.budget ? 'has-error' : ''}`}
                         placeholder="50.00"
                         value={formBudgetUSD}
-                        onChange={(e) => setFormBudgetUSD(e.target.value)}
+                        onChange={(e) => {
+                          setFormBudgetUSD(e.target.value)
+                          if (fieldErrors.budget) {
+                            setFieldErrors((prev) => ({ ...prev, budget: '' }))
+                            setCreateModalError(null)
+                          }
+                        }}
                         style={{ flex: 1 }}
                       />
                       <select
@@ -668,7 +746,11 @@ async function main() {
                         <option value="monthly">/ Monthly</option>
                       </select>
                     </div>
-                    <span className="vk-form-help">Hard limit enforced prior to upstream dispatch</span>
+                    {fieldErrors.budget ? (
+                      <span className="vk-field-error">{fieldErrors.budget}</span>
+                    ) : (
+                      <span className="vk-form-help">Hard limit enforced prior to upstream dispatch</span>
+                    )}
                   </div>
 
                   <div className="vk-form-group">
@@ -692,11 +774,18 @@ async function main() {
                     <input
                       type="number"
                       min="0"
-                      className="vk-form-input"
+                      className={`vk-form-input ${fieldErrors.rpm ? 'has-error' : ''}`}
                       placeholder="60"
                       value={formMaxRPM}
-                      onChange={(e) => setFormMaxRPM(e.target.value)}
+                      onChange={(e) => {
+                        setFormMaxRPM(e.target.value)
+                        if (fieldErrors.rpm) {
+                          setFieldErrors((prev) => ({ ...prev, rpm: '' }))
+                          setCreateModalError(null)
+                        }
+                      }}
                     />
+                    {fieldErrors.rpm && <span className="vk-field-error">{fieldErrors.rpm}</span>}
                   </div>
 
                   <div className="vk-form-group">
@@ -704,11 +793,18 @@ async function main() {
                     <input
                       type="number"
                       min="0"
-                      className="vk-form-input"
+                      className={`vk-form-input ${fieldErrors.tpm ? 'has-error' : ''}`}
                       placeholder="100000"
                       value={formMaxTPM}
-                      onChange={(e) => setFormMaxTPM(e.target.value)}
+                      onChange={(e) => {
+                        setFormMaxTPM(e.target.value)
+                        if (fieldErrors.tpm) {
+                          setFieldErrors((prev) => ({ ...prev, tpm: '' }))
+                          setCreateModalError(null)
+                        }
+                      }}
                     />
+                    {fieldErrors.tpm && <span className="vk-field-error">{fieldErrors.tpm}</span>}
                   </div>
 
                   <div className="vk-form-group full-width">
@@ -716,12 +812,22 @@ async function main() {
                     <input
                       type="number"
                       min="0"
-                      className="vk-form-input"
+                      className={`vk-form-input ${fieldErrors.concurrent ? 'has-error' : ''}`}
                       placeholder="10"
                       value={formMaxConcurrent}
-                      onChange={(e) => setFormMaxConcurrent(e.target.value)}
+                      onChange={(e) => {
+                        setFormMaxConcurrent(e.target.value)
+                        if (fieldErrors.concurrent) {
+                          setFieldErrors((prev) => ({ ...prev, concurrent: '' }))
+                          setCreateModalError(null)
+                        }
+                      }}
                     />
-                    <span className="vk-form-help">Adaptive concurrency limits per virtual key</span>
+                    {fieldErrors.concurrent ? (
+                      <span className="vk-field-error">{fieldErrors.concurrent}</span>
+                    ) : (
+                      <span className="vk-form-help">Adaptive concurrency limits per virtual key</span>
+                    )}
                   </div>
 
                   <div className="vk-form-group full-width">
@@ -765,6 +871,7 @@ async function main() {
                   type="button"
                   className="btn-secondary"
                   onClick={() => setCreateModalOpen(false)}
+                  disabled={creating}
                 >
                   Cancel
                 </button>
@@ -886,7 +993,7 @@ async function main() {
 
       {/* ROTATE KEY MODAL */}
       {rotateTargetKey && (
-        <div className="vk-modal-backdrop" onClick={() => setRotateTargetKey(null)}>
+        <div className="vk-modal-backdrop" onClick={() => !rotating && setRotateTargetKey(null)}>
           <div className="vk-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="vk-modal-header">
               <h2>
@@ -896,10 +1003,22 @@ async function main() {
                 </svg>
                 Rotate Virtual Key: {rotateTargetKey.name}
               </h2>
-              <button className="vk-modal-close-btn" onClick={() => setRotateTargetKey(null)}>✕</button>
+              <button className="vk-modal-close-btn" onClick={() => !rotating && setRotateTargetKey(null)}>✕</button>
             </div>
 
             <div className="vk-modal-body">
+              {rotateModalError && (
+                <div className="vk-modal-alert error" role="alert">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span>{rotateModalError}</span>
+                  <button type="button" className="vk-copy-btn" onClick={() => setRotateModalError(null)}>✕</button>
+                </div>
+              )}
+
               <p style={{ fontSize: '13.5px', color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>
                 Zero-downtime rotation generates a new active secret while keeping the previous secret valid for the duration of the grace period. This allows agents to seamlessly update without request drop.
               </p>
@@ -910,6 +1029,7 @@ async function main() {
                   className="vk-form-select"
                   value={rotateGracePeriodSec}
                   onChange={(e) => setRotateGracePeriodSec(parseInt(e.target.value))}
+                  disabled={rotating}
                 >
                   <option value={3600}>1 Hour (Standard)</option>
                   <option value={21600}>6 Hours</option>
@@ -921,7 +1041,7 @@ async function main() {
             </div>
 
             <div className="vk-modal-footer">
-              <button className="btn-secondary" onClick={() => setRotateTargetKey(null)}>
+              <button className="btn-secondary" onClick={() => setRotateTargetKey(null)} disabled={rotating}>
                 Cancel
               </button>
               <button
@@ -938,7 +1058,7 @@ async function main() {
 
       {/* REVOKE / DELETE MODAL */}
       {deleteTargetKey && (
-        <div className="vk-modal-backdrop" onClick={() => setDeleteTargetKey(null)}>
+        <div className="vk-modal-backdrop" onClick={() => !deleting && setDeleteTargetKey(null)}>
           <div className="vk-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="vk-modal-header">
               <h2 style={{ color: '#f87171' }}>
@@ -947,10 +1067,22 @@ async function main() {
                 </svg>
                 Revoke Virtual Key
               </h2>
-              <button className="vk-modal-close-btn" onClick={() => setDeleteTargetKey(null)}>✕</button>
+              <button className="vk-modal-close-btn" onClick={() => !deleting && setDeleteTargetKey(null)}>✕</button>
             </div>
 
             <div className="vk-modal-body">
+              {deleteModalError && (
+                <div className="vk-modal-alert error" role="alert">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span>{deleteModalError}</span>
+                  <button type="button" className="vk-copy-btn" onClick={() => setDeleteModalError(null)}>✕</button>
+                </div>
+              )}
+
               <p style={{ fontSize: '13.5px', color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>
                 Are you sure you want to revoke <strong>{deleteTargetKey.name}</strong> (<code>{deleteTargetKey.key_prefix}</code>)?
               </p>
@@ -960,7 +1092,7 @@ async function main() {
             </div>
 
             <div className="vk-modal-footer">
-              <button className="btn-secondary" onClick={() => setDeleteTargetKey(null)}>
+              <button className="btn-secondary" onClick={() => setDeleteTargetKey(null)} disabled={deleting}>
                 Cancel
               </button>
               <button

@@ -303,17 +303,25 @@ type SpendAnalytics struct {
 	TopEntities []SpendTopEntity       `json:"top_entities"`
 }
 
-// RunQuery defines filtering criteria for broker LLM runs.
+// RunQuery defines filtering criteria for broker LLM runs & request logs.
 type RunQuery struct {
-	Limit    int
-	Since    time.Time
-	DeviceID string
-	Provider string
-	Model    string
-	State    string
+	Limit          int
+	Offset         int
+	Since          time.Time
+	Until          time.Time
+	DeviceID       string
+	Provider       string
+	Model          string
+	State          string
+	RequestID      string
+	SessionID      string
+	VirtualKeyHash string
+	VirtualKeyID   string
+	User           string
+	Search         string
 }
 
-// RunSummary represents a concise view of an LLM reservation run.
+// RunSummary represents a concise view of an LLM reservation run or request log item.
 type RunSummary struct {
 	RunID              string          `json:"run_id"`
 	RequestID          string          `json:"request_id"`
@@ -327,6 +335,21 @@ type RunSummary struct {
 	StartedAt          time.Time       `json:"started_at"`
 	SettledAt          *time.Time      `json:"settled_at,omitempty"`
 	DurationMs         int64           `json:"duration_ms"`
+	TTFTMs             int64           `json:"ttft_ms"`
+	InputTokens        int64           `json:"input_tokens"`
+	OutputTokens       int64           `json:"output_tokens"`
+	CachedTokens       int64           `json:"cached_tokens"`
+	TotalTokens        int64           `json:"total_tokens"`
+	VirtualKeyID       *string         `json:"virtual_key_id,omitempty"`
+	VirtualKeyHash     *string         `json:"virtual_key_hash,omitempty"`
+	VirtualKeyPrefix   *string         `json:"virtual_key_prefix,omitempty"`
+	VirtualKeyAlias    *string         `json:"virtual_key_alias,omitempty"`
+	SessionID          *string         `json:"session_id,omitempty"`
+	InternalUserID     *string         `json:"internal_user_id,omitempty"`
+	EndUserID          *string         `json:"end_user_id,omitempty"`
+	Tags               map[string]any  `json:"tags,omitempty"`
+	RequestType        string          `json:"request_type"`
+	StatusCode         int             `json:"status_code"`
 }
 
 // RunDossier contains complete forensic identity, policy, economic, and event details.
@@ -339,3 +362,4 @@ type RunDossier struct {
 	PriceBookVersionID string          `json:"price_book_version_id"`
 	Events             []SpendEvent    `json:"events"`
 }
+

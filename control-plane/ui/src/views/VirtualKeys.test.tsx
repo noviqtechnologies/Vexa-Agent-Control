@@ -215,4 +215,61 @@ describe('VirtualKeys View', () => {
       )
     })
   })
+
+  it('displays validation error inside modal if key name is missing', async () => {
+    render(
+      <MemoryRouter>
+        <VirtualKeys />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Cursor Team Lead')).toBeInTheDocument()
+    })
+
+    // Open modal
+    fireEvent.click(screen.getByRole('button', { name: /Issue Virtual Key/i }))
+
+    // Leave name empty and submit
+    fireEvent.click(screen.getByRole('button', { name: /Generate Virtual Key/i }))
+
+    // Validation error should appear inside the modal
+    expect(screen.getAllByText(/Key Name is required/i).length).toBeGreaterThan(0)
+    expect(api.createVirtualKey).not.toHaveBeenCalled()
+  })
+
+  it('displays API error inside the modal on failure without closing modal', async () => {
+    vi.mocked(api.createVirtualKey).mockRejectedValueOnce(
+      new Error('API 500: malformed array literal: "[]" (SQLSTATE 22P02)')
+    )
+
+    render(
+      <MemoryRouter>
+        <VirtualKeys />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Cursor Team Lead')).toBeInTheDocument()
+    })
+
+    // Open modal
+    fireEvent.click(screen.getByRole('button', { name: /Issue Virtual Key/i }))
+
+    // Fill name
+    const nameInput = screen.getByPlaceholderText(/e.g. cursor-ide-team/i)
+    fireEvent.change(nameInput, { target: { value: 'Test Failure Key' } })
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: /Generate Virtual Key/i }))
+
+    // Error should be visible inside modal alert
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/malformed array literal/i)).toBeInTheDocument()
+      // Modal should still be open
+      expect(screen.getByText('Issue Scoped Virtual Key')).toBeInTheDocument()
+    })
+  })
 })
+

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -1373,7 +1374,7 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 	return &a, nil
 }
 
-// ListRuns returns filtered broker LLM runs for the Run Explorer.
+// ListRuns returns filtered broker LLM runs & request logs for Observability.
 func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSummary, error) {
 	if s.pool == nil {
 		return []RunSummary{}, nil
@@ -1389,21 +1390,40 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 	sql := `
 		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
 		       reserved_microcents, settled_microcents, created_at, settled_at,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
+		       COALESCE(ttft_ms, 0),
+		       COALESCE(input_tokens, 0),
+		       COALESCE(output_tokens, 0),
+		       COALESCE(cached_tokens, 0),
+		       virtual_key_id::text,
+		       virtual_key_hash,
+		       virtual_key_prefix,
+		       virtual_key_alias,
+		       session_id,
+		       internal_user_id,
+		       end_user_id,
+		       COALESCE(tags, '{}'::jsonb),
+		       COALESCE(request_type, 'LLM'),
+		       COALESCE(status_code, 200)
 		FROM spend_reservations
 		WHERE organization_id = $1 AND created_at >= $2`
 
 	args := []interface{}{orgID, q.Since}
 	argIdx := 3
 
+	if !q.Until.IsZero() {
+		sql += fmt.Sprintf(" AND created_at <= $%d", argIdx)
+		args = append(args, q.Until)
+		argIdx++
+	}
 	if q.DeviceID != "" {
 		sql += fmt.Sprintf(" AND gateway_id = $%d", argIdx)
 		args = append(args, q.DeviceID)
 		argIdx++
 	}
 	if q.Provider != "" {
-		sql += fmt.Sprintf(" AND LOWER(provider) = LOWER($%d)", argIdx)
-		args = append(args, q.Provider)
+		sql += fmt.Sprintf(" AND LOWER(provider) LIKE LOWER($%d)", argIdx)
+		args = append(args, "%"+q.Provider+"%")
 		argIdx++
 	}
 	if q.Model != "" {
@@ -1412,17 +1432,103 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 		argIdx++
 	}
 	if q.State != "" {
-		sql += fmt.Sprintf(" AND UPPER(state) = UPPER($%d)", argIdx)
-		args = append(args, q.State)
+		switch strings.ToUpper(q.State) {
+		case "FAILURE", "FAILED", "ERROR":
+			sql += " AND (UPPER(state) IN ('FAILED', 'ERROR', 'DENIED') OR COALESCE(status_code, 200) >= 400 OR release_reason ILIKE '%error%' OR release_reason ILIKE '%fail%')"
+		case "SUCCESS", "SETTLED":
+			sql += " AND (UPPER(state) = 'SETTLED' AND COALESCE(status_code, 200) < 400)"
+		case "DENIED", "BLOCKED":
+			sql += " AND (UPPER(state) IN ('DENIED', 'BLOCKED') OR COALESCE(status_code, 200) = 403)"
+		default:
+			sql += fmt.Sprintf(" AND UPPER(state) = UPPER($%d)", argIdx)
+			args = append(args, q.State)
+			argIdx++
+		}
+	}
+	if q.RequestID != "" {
+		sql += fmt.Sprintf(" AND (request_id ILIKE $%d OR reservation_id::text ILIKE $%d)", argIdx, argIdx)
+		args = append(args, "%"+q.RequestID+"%")
+		argIdx++
+	}
+	if q.SessionID != "" {
+		sql += fmt.Sprintf(" AND session_id ILIKE $%d", argIdx)
+		args = append(args, "%"+q.SessionID+"%")
+		argIdx++
+	}
+	if q.VirtualKeyHash != "" {
+		sql += fmt.Sprintf(" AND (virtual_key_hash ILIKE $%d OR virtual_key_prefix ILIKE $%d)", argIdx, argIdx)
+		args = append(args, "%"+q.VirtualKeyHash+"%")
+		argIdx++
+	}
+	if q.VirtualKeyID != "" {
+		sql += fmt.Sprintf(" AND virtual_key_id::text = $%d", argIdx)
+		args = append(args, q.VirtualKeyID)
+		argIdx++
+	}
+	if q.User != "" {
+		sql += fmt.Sprintf(" AND (internal_user_id ILIKE $%d OR end_user_id ILIKE $%d)", argIdx, argIdx)
+		args = append(args, "%"+q.User+"%")
+		argIdx++
+	}
+	if q.Search != "" {
+		sql += fmt.Sprintf(" AND (request_id ILIKE $%d OR session_id ILIKE $%d OR virtual_key_prefix ILIKE $%d OR virtual_key_alias ILIKE $%d OR model ILIKE $%d)", argIdx, argIdx, argIdx, argIdx, argIdx)
+		args = append(args, "%"+q.Search+"%")
 		argIdx++
 	}
 
 	sql += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argIdx)
 	args = append(args, q.Limit)
+	argIdx++
+
+	if q.Offset > 0 {
+		sql += fmt.Sprintf(" OFFSET $%d", argIdx)
+		args = append(args, q.Offset)
+	}
 
 	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list runs query: %w", err)
+		// Fallback for schemas where migration 000003 columns might not be applied yet
+		return s.listRunsLegacyFallback(ctx, orgID, q)
+	}
+	defer rows.Close()
+
+	runs := make([]RunSummary, 0)
+	for rows.Next() {
+		var r RunSummary
+		var settledAt *time.Time
+		var tagsJSON []byte
+		if err := rows.Scan(
+			&r.RunID, &r.RequestID, &r.DeviceID, &r.ProjectID, &r.Provider, &r.Model, &r.State,
+			&r.ReservedMicrocents, &r.SettledMicrocents, &r.StartedAt, &settledAt, &r.DurationMs,
+			&r.TTFTMs, &r.InputTokens, &r.OutputTokens, &r.CachedTokens,
+			&r.VirtualKeyID, &r.VirtualKeyHash, &r.VirtualKeyPrefix, &r.VirtualKeyAlias,
+			&r.SessionID, &r.InternalUserID, &r.EndUserID,
+			&tagsJSON, &r.RequestType, &r.StatusCode,
+		); err != nil {
+			continue
+		}
+		r.SettledAt = settledAt
+		r.TotalTokens = r.InputTokens + r.OutputTokens
+		if len(tagsJSON) > 0 {
+			_ = json.Unmarshal(tagsJSON, &r.Tags)
+		}
+		runs = append(runs, r)
+	}
+	return runs, rows.Err()
+}
+
+func (s *Store) listRunsLegacyFallback(ctx context.Context, orgID string, q RunQuery) ([]RunSummary, error) {
+	sql := `
+		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
+		       reserved_microcents, settled_microcents, created_at, settled_at,
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
+		FROM spend_reservations
+		WHERE organization_id = $1 AND created_at >= $2
+		ORDER BY created_at DESC LIMIT $3`
+
+	rows, err := s.pool.Query(ctx, sql, orgID, q.Since, q.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("list runs legacy query: %w", err)
 	}
 	defer rows.Close()
 
@@ -1437,10 +1543,13 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 			continue
 		}
 		r.SettledAt = settledAt
+		r.RequestType = "LLM"
+		r.StatusCode = 200
 		runs = append(runs, r)
 	}
 	return runs, rows.Err()
 }
+
 
 // GetRunDossier retrieves complete identity, policy, economic, and immutable event details for a run.
 func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDossier, error) {

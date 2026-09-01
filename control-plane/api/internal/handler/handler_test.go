@@ -214,6 +214,12 @@ func (m *mockStore) RotateVirtualKey(ctx context.Context, tenantID, id string, n
 func (m *mockStore) DeleteVirtualKey(ctx context.Context, tenantID, id string) error {
 	return nil
 }
+func (m *mockStore) DeleteVirtualKeyWithActor(ctx context.Context, tenantID, id, actorSubject, reason string) error {
+	return nil
+}
+func (m *mockStore) ListDeletedVirtualKeys(ctx context.Context, tenantID string, limit, offset int) ([]store.VirtualKey, error) {
+	return nil, nil
+}
 func (m *mockStore) IncrementVirtualKeySpend(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error) {
 	return 0, nil
 }

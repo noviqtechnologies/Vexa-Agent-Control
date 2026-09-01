@@ -210,12 +210,16 @@ func main() {
 	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
 	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
 	runH := handler.NewRunHandler(spendStore, db)
+	observabilityH := handler.NewObservabilityHandler(spendStore, db)
 	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db)
 	healthH := handler.NewHealthHandler(db)
 
-	// Initialize Virtual Keys schema (Pillar 1)
+	// Initialize Virtual Keys schema & Audit Events schema (Pillar 1 & Observability)
 	if err := db.EnsureVirtualKeysSchema(ctx); err != nil {
 		log.Printf("[virtual_keys] schema initialization warning: %v", err)
+	}
+	if err := db.EnsureAuditEventsSchema(ctx); err != nil {
+		log.Printf("[audit_events] schema initialization warning: %v", err)
 	}
 
 
@@ -267,10 +271,12 @@ func main() {
 		r.Use(middleware.DashboardAuth())
 		r.Post("/", virtualKeyH.Create)
 		r.Get("/", virtualKeyH.List)
+		r.Get("/deleted", virtualKeyH.ListDeleted)
 		r.Delete("/{id}", virtualKeyH.Delete)
 		r.Post("/{id}/rotate", virtualKeyH.Rotate)
 		r.Post("/{id}/reset-spend", virtualKeyH.Reset)
 	})
+
 
 	// Internal edge proxy endpoints (no dashboard auth — gateway secret scoped)
 	r.Route("/api/v1/internal", func(r chi.Router) {
@@ -392,12 +398,23 @@ func main() {
 		r.Get("/fleet/events", fleetH.ListEvents)
 		r.Get("/fleet/agents/{agentID}/events", fleetH.ListEvents)
 
+		// Observability Center (LiteLLM-grade Request Logs, Live Tail SSE, Audit Logs & Deleted Entities)
+		r.Route("/observability", func(r chi.Router) {
+			r.Get("/request-logs", observabilityH.ListRequestLogs)
+			r.Get("/request-logs/stream", observabilityH.StreamRequestLogs)
+			r.Get("/audit-logs", observabilityH.ListAuditLogs)
+			r.Get("/deleted-keys", observabilityH.ListDeletedKeys)
+			r.Get("/deleted-teams", observabilityH.ListDeletedTeams)
+		})
+		r.Get("/audit/logs", observabilityH.ListAuditLogs)
+
 		// Run Explorer & Forensics
 		r.Get("/runs", runH.ListRuns)
 		r.Get("/runs/{run_id}", runH.GetRun)
 
 		// Effective Policy Explorer
 		r.Get("/policy/effective-explorer", effectivePolicyH.GetEffective)
+
 
 		// Sentry Device Governance & Tamper Log
 		r.Get("/devices", deviceH.ListDevices)

@@ -97,8 +97,30 @@ func (s *Store) InsertProviderKey(ctx context.Context, tenantID string, k *Provi
 		              updated_at = now()
 		RETURNING id, created_at
 	`
-	return s.pool.QueryRow(ctx, q, tenantID, k.Provider, k.KeyAlias, k.Version, k.Status, k.APIKeyEncrypted, k.APIKeyMasked).
+	err := s.pool.QueryRow(ctx, q, tenantID, k.Provider, k.KeyAlias, k.Version, k.Status, k.APIKeyEncrypted, k.APIKeyMasked).
 		Scan(&k.ID, &k.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
+		TenantID:       tenantID,
+		TableName:      "provider_keys",
+		Action:         "created",
+		ChangedBy:      "admin",
+		ActorRole:      "admin",
+		AffectedItemID: k.Provider,
+		UpdatedValue: map[string]interface{}{
+			"id":             k.ID,
+			"provider":       k.Provider,
+			"key_alias":      k.KeyAlias,
+			"status":         k.Status,
+			"api_key_masked": k.APIKeyMasked,
+		},
+		Outcome: "SUCCESS",
+	})
+
+	return nil
 }
 
 func (s *Store) ListProviderKeys(ctx context.Context, tenantID string) ([]ProviderKey, error) {
@@ -124,14 +146,32 @@ func (s *Store) ListProviderKeys(ctx context.Context, tenantID string) ([]Provid
 }
 
 func (s *Store) DeleteProviderKey(ctx context.Context, tenantID, id string) error {
+	var err error
 	if tenantID != "" {
 		q := `DELETE FROM provider_keys WHERE id = $1 AND tenant_id = $2`
-		_, err := s.pool.Exec(ctx, q, id, tenantID)
+		_, err = s.pool.Exec(ctx, q, id, tenantID)
+	} else {
+		q := `DELETE FROM provider_keys WHERE id = $1`
+		_, err = s.pool.Exec(ctx, q, id)
+	}
+	if err != nil {
 		return err
 	}
-	q := `DELETE FROM provider_keys WHERE id = $1`
-	_, err := s.pool.Exec(ctx, q, id)
-	return err
+
+	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
+		TenantID:       tenantID,
+		TableName:      "provider_keys",
+		Action:         "deleted",
+		ChangedBy:      "admin",
+		ActorRole:      "admin",
+		AffectedItemID: id,
+		UpdatedValue: map[string]interface{}{
+			"id": id,
+		},
+		Outcome: "SUCCESS",
+	})
+
+	return nil
 }
 
 func (s *Store) GetProviderKeyByProvider(ctx context.Context, tenantID, provider string) (*ProviderKey, error) {

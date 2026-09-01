@@ -98,7 +98,6 @@ func (h *VirtualKeyHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vk := store.VirtualKey{
-		ID:                      fmt.Sprintf("vk-%d", time.Now().UnixNano()),
 		TenantID:                tenantID,
 		KeyHash:                 keyHash,
 		KeyPrefix:               keyPrefix,
@@ -153,9 +152,42 @@ func (h *VirtualKeyHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *VirtualKeyHandler) ListDeleted(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	limit := queryInt(r, "limit", 50)
+	offset := queryInt(r, "offset", 0)
+
+	keys, err := h.store.ListDeletedVirtualKeys(r.Context(), tenantID, limit, offset)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"internal","message":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	if keys == nil {
+		keys = []store.VirtualKey{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"deleted_virtual_keys": keys,
+		"total":                len(keys),
+	})
+}
+
 func (h *VirtualKeyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 	id := chi.URLParam(r, "id")
+
+	actor := r.Header.Get("X-User-Subject")
+	if actor == "" {
+		actor = r.Header.Get("X-User-Email")
+	}
+	if actor == "" {
+		actor = "admin"
+	}
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "user_revoked"
+	}
 
 	key, err := h.store.GetVirtualKeyByID(r.Context(), tenantID, id)
 	if err != nil {
@@ -167,7 +199,7 @@ func (h *VirtualKeyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteVirtualKey(r.Context(), tenantID, id); err != nil {
+	if err := h.store.DeleteVirtualKeyWithActor(r.Context(), tenantID, id, actor, reason); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"internal","message":%q}`, err.Error()), http.StatusInternalServerError)
 		return
 	}
@@ -187,6 +219,7 @@ func (h *VirtualKeyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		"id":     id,
 	})
 }
+
 
 type RotateRequest struct {
 	GracePeriodSeconds int `json:"grace_period_seconds"`

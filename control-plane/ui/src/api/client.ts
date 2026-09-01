@@ -10,10 +10,20 @@ function authHeaders(): HeadersInit {
   return _authToken ? { Authorization: `Bearer ${_authToken}` } : {}
 }
 
+export function extractErrorMessage(text: string, status?: number): string {
+  try {
+    const json = JSON.parse(text)
+    if (json.message && typeof json.message === 'string') return json.message
+    if (json.error && typeof json.error === 'string') return json.error
+  } catch {}
+  return text || (status ? `Request failed with status ${status}` : 'Unknown error')
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`)
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
   }
   return res.json()
 }
@@ -229,7 +239,55 @@ export interface RunSummary {
   started_at: string
   settled_at?: string
   duration_ms: number
+  ttft_ms?: number
+  input_tokens?: number
+  output_tokens?: number
+  cached_tokens?: number
+  total_tokens?: number
+  virtual_key_id?: string
+  virtual_key_hash?: string
+  virtual_key_prefix?: string
+  virtual_key_alias?: string
+  session_id?: string
+  internal_user_id?: string
+  end_user_id?: string
+  tags?: Record<string, any>
+  request_type?: string
+  status_code?: number
 }
+
+export interface AuditLogItem {
+  id: string
+  tenant_id: string
+  timestamp: string
+  table_name: string
+  action: string
+  changed_by: string
+  actor_role?: string
+  affected_item_id: string
+  before_value?: Record<string, any>
+  updated_value?: Record<string, any>
+  ip_address?: string
+  outcome?: string
+}
+
+export interface DeletedVirtualKey {
+  id: string
+  tenant_id: string
+  key_prefix: string
+  name: string
+  team_id: string
+  created_by: string
+  created_at: string
+  deleted_at?: string
+  deleted_by?: string
+  deleted_reason?: string
+  monthly_budget_microcents: number
+  spent_microcents: number
+  allowed_models: string[]
+  status: string
+}
+
 
 export interface RunDossier {
   run_id: string
@@ -350,7 +408,10 @@ export const api = {
   // Virtual Keys (Pillar 1)
   listVirtualKeys: async () => {
     const res = await fetch('/api/v1/virtual-keys', { headers: authHeaders() })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
     return res.json() as Promise<{ virtual_keys: VirtualKey[] }>
   },
   createVirtualKey: async (data: CreateVirtualKeyRequest) => {
@@ -359,7 +420,10 @@ export const api = {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
     return res.json() as Promise<CreateVirtualKeyResponse>
   },
   deleteVirtualKey: async (id: string) => {
@@ -367,7 +431,10 @@ export const api = {
       method: 'DELETE',
       headers: authHeaders()
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
     return res.json() as Promise<{ status: string; id: string }>
   },
   rotateVirtualKey: async (id: string, gracePeriodSeconds = 3600) => {
@@ -376,7 +443,10 @@ export const api = {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ grace_period_seconds: gracePeriodSeconds })
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
     return res.json() as Promise<CreateVirtualKeyResponse>
   },
   resetVirtualKeySpend: async (id: string) => {
@@ -384,7 +454,10 @@ export const api = {
       method: 'POST',
       headers: authHeaders()
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
     return res.json() as Promise<{ status: string; id: string }>
   },
   // Spend V2 (Authoritative PostgreSQL Ledger)
@@ -464,6 +537,74 @@ export const api = {
     return res.json() as Promise<{ organization_id: string; analytics: SpendAnalytics; generated_at: string }>
   },
 
+  // Observability & Request Logs (LiteLLM-grade)
+  listRequestLogs: async (params?: {
+    limit?: number
+    offset?: number
+    hours?: number
+    provider?: string
+    model?: string
+    status?: string
+    request_id?: string
+    session_id?: string
+    key_hash?: string
+    virtual_key_id?: string
+    user?: string
+    search?: string
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.offset) qs.set('offset', String(params.offset))
+    if (params?.hours) qs.set('hours', String(params.hours))
+    if (params?.provider) qs.set('provider', params.provider)
+    if (params?.model) qs.set('model', params.model)
+    if (params?.status) qs.set('status', params.status)
+    if (params?.request_id) qs.set('request_id', params.request_id)
+    if (params?.session_id) qs.set('session_id', params.session_id)
+    if (params?.key_hash) qs.set('key_hash', params.key_hash)
+    if (params?.virtual_key_id) qs.set('virtual_key_id', params.virtual_key_id)
+    if (params?.user) qs.set('user', params.user)
+    if (params?.search) qs.set('search', params.search)
+    const res = await fetch(`/api/v1/observability/request-logs?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; request_logs: RunSummary[]; total: number; data_freshness: string; confidence: string }>
+  },
+
+  listAuditLogs: async (params?: { limit?: number; offset?: number; object_id?: string; table_name?: string; action?: string; changed_by?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.offset) qs.set('offset', String(params.offset))
+    if (params?.object_id) qs.set('object_id', params.object_id)
+    if (params?.table_name) qs.set('table_name', params.table_name)
+    if (params?.action) qs.set('action', params.action)
+    if (params?.changed_by) qs.set('changed_by', params.changed_by)
+    const res = await fetch(`/api/v1/observability/audit-logs?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; audit_logs: AuditLogItem[]; total: number; page: number; limit: number }>
+  },
+
+  listDeletedVirtualKeys: async (params?: { limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.offset) qs.set('offset', String(params.offset))
+    const res = await fetch(`/api/v1/observability/deleted-keys?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; deleted_virtual_keys: DeletedVirtualKey[]; total: number }>
+  },
+
+  listDeletedTeams: async () => {
+    const res = await fetch('/api/v1/observability/deleted-teams', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; deleted_teams: any[]; total: number }>
+  },
+
+  deleteVirtualKeyWithReason: async (id: string, reason?: string) => {
+    const qs = reason ? `?reason=${encodeURIComponent(reason)}` : ''
+    const res = await fetch(`/api/v1/virtual-keys/${id}${qs}`, { method: 'DELETE', headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ status: string; id: string }>
+  },
+
   // Run Explorer
   listRuns: async (params?: { limit?: number; hours?: number; device_id?: string; provider?: string; model?: string; state?: string }) => {
     const qs = new URLSearchParams()
@@ -482,6 +623,7 @@ export const api = {
     if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
     return res.json() as Promise<RunDossier>
   },
+
 
   // Effective Policy Explorer
   getEffectivePolicy: async (params: Record<string, string>) => {
@@ -538,7 +680,8 @@ export const api = {
 async function post<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: 'POST', headers: authHeaders() })
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`)
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
   }
   const text = await res.text()
   return text ? JSON.parse(text) : ({} as T)
@@ -551,7 +694,8 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`)
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
   }
   const text = await res.text()
   return text ? JSON.parse(text) : ({} as T)
@@ -595,14 +739,18 @@ export interface PolicyTemplate {
   id: string
   name: string
   category: string
+  categories?: string[]
+  complexity?: 'Low Complexity' | 'Medium Complexity' | 'High Complexity' | string
   description: string
   tags: string[]
+  guardrails?: string[]
   icon: string
   content: string
   is_custom: boolean
   created_at: string
   updated_at: string
 }
+
 
 // Threat Intelligence
 export interface ThreatSummary {

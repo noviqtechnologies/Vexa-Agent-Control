@@ -120,6 +120,22 @@ func (s *Store) PublishGroupPolicy(ctx context.Context, tenantID, groupID string
 		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
+	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
+		TenantID:       tenantID,
+		TableName:      "group_policies",
+		Action:         "created",
+		ChangedBy:      createdBy,
+		ActorRole:      "admin",
+		AffectedItemID: groupID,
+		UpdatedValue: map[string]interface{}{
+			"id":       p.ID,
+			"group_id": p.GroupID,
+			"version":  p.Version,
+			"active":   p.Active,
+		},
+		Outcome: "SUCCESS",
+	})
+
 	return &p, nil
 }
 

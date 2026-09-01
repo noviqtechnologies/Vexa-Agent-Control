@@ -62,6 +62,8 @@ type DataStore interface {
 	GetVirtualKeyByHash(ctx context.Context, keyHash string) (*store.VirtualKey, error)
 	RotateVirtualKey(ctx context.Context, tenantID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*store.VirtualKey, error)
 	DeleteVirtualKey(ctx context.Context, tenantID, id string) error
+	DeleteVirtualKeyWithActor(ctx context.Context, tenantID, id, actorSubject, reason string) error
+	ListDeletedVirtualKeys(ctx context.Context, tenantID string, limit, offset int) ([]store.VirtualKey, error)
 	IncrementVirtualKeySpend(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error)
 	ResetVirtualKeySpend(ctx context.Context, tenantID, id string) error
 
