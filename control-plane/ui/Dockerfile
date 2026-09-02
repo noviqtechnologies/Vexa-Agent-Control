@@ -12,6 +12,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 # Default upstream — resolves correctly on ECS Fargate (shared network namespace).
 # Docker Compose overrides this with the service DNS name via the environment.
+ENV AGENTCONTROL_API_URL=http://127.0.0.1:8400
 ENV AGENTCONTROL_API_UPSTREAM=127.0.0.1:8400
 # Restrict envsubst to AGENTCONTROL_* variables only so nginx's own runtime
 # variables ($uri, $host, $remote_addr, etc.) are left untouched.

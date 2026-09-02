@@ -84,11 +84,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-TARGET_ENV_LOWER=$(echo "${TARGET_ENV:-}" | tr '[:upper:]' '[:lower:]')
-if [[ "$TARGET_ENV_LOWER" == "staging" || "$TARGET_ENV_LOWER" == "stage" ]]; then
-  HUB_URL="$STAGE_HUB_URL"
-elif [[ "$TARGET_ENV_LOWER" == "production" || "$TARGET_ENV_LOWER" == "prod" ]]; then
-  HUB_URL="$PROD_HUB_URL"
+if [[ -z "$HUB_URL" ]]; then
+  TARGET_ENV_LOWER=$(echo "${TARGET_ENV:-}" | tr '[:upper:]' '[:lower:]')
+  if [[ "$TARGET_ENV_LOWER" == "staging" || "$TARGET_ENV_LOWER" == "stage" ]]; then
+    HUB_URL="$STAGE_HUB_URL"
+  elif [[ "$TARGET_ENV_LOWER" == "production" || "$TARGET_ENV_LOWER" == "prod" ]]; then
+    HUB_URL="$PROD_HUB_URL"
+  fi
 fi
 
 if [[ -n "$HUB_URL" ]]; then

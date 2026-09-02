@@ -16,8 +16,8 @@ This is the primary and recommended installation path for Windows 10 and Windows
 
 | Windows Architecture | Release Asset | Status | Notes |
 |---|---|---|---|
-| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.65-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
-| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.65-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
+| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.70-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
+| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.70-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
 
 ---
 
@@ -44,6 +44,30 @@ This is the primary and recommended installation path for Windows 10 and Windows
    ```powershell
    agentcontrol.exe --version
    ```
+
+---
+
+## Alternative: Docker Deployment on Windows
+
+If you have **Docker Desktop for Windows** installed and want to run Vexa Agent Control in containers:
+
+### Standalone Gateway Container
+```powershell
+docker run -d `
+  --name agentcontrol `
+  -p 8080:8080 `
+  -v agentcontrol-logs:/var/log/agentcontrol `
+  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  start --listen 0.0.0.0:8080
+```
+
+### Full-Stack Control Hub (Compose)
+```powershell
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+docker compose -f docker-compose.team.yml up -d
+```
+Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
 
 ---
 

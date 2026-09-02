@@ -51,7 +51,16 @@ func (h *HeartbeatHandler) PostHeartbeat(w http.ResponseWriter, r *http.Request)
 
 	ctx := r.Context()
 	tenantID := middleware.ResolveTenantScope(r)
-	err := h.store.UpdateDeviceHeartbeat(ctx, tenantID, req.DeviceID, req.MCPServersTotal, req.MCPServersWrapped, req.IDEChecksums)
+	err := h.store.UpdateDeviceHeartbeat(ctx, store.DeviceHeartbeatParams{
+		OrganizationID:      tenantID,
+		DeviceID:            req.DeviceID,
+		Hostname:            req.Hostname,
+		OSArch:              req.OSArch,
+		AgentControlVersion: req.AgentControlVersion,
+		MCPServersTotal:     req.MCPServersTotal,
+		MCPServersWrapped:   req.MCPServersWrapped,
+		IDEChecksums:        req.IDEChecksums,
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrDeviceRevoked) {
 			log.Printf("heartbeat rejected for revoked device %s", req.DeviceID)

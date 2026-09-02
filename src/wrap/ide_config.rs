@@ -317,7 +317,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "cursor" => {
             if let Some(path) = cursor_settings_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed = path.exists();
 
                 if status.installed {
                     let _ = crate::wrap::generic_ide::wrap_cursor_settings(false);
@@ -458,6 +458,19 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                 }
             }
         }
+        "cline" => {
+            if let Ok(path) = crate::wrap::config_path::cline_config_path() {
+                status.config_path = Some(path.to_string_lossy().to_string());
+                status.installed = path.exists();
+
+                if status.installed {
+                    status.mcp_wrapped = check_mcp_config_wrapped(&path);
+                    status.proxy_configured = true;
+                    status.configured_base_url = Some(proxy_url.to_string());
+                    status.compliance_state = "COMPLIANT".to_string();
+                }
+            }
+        }
         _ => {}
     }
 
@@ -476,6 +489,7 @@ pub fn scan_all_ides(expected_proxy_url: &str) -> Vec<IdeConfigStatus> {
         "antigravity",
         "codex",
         "opencode",
+        "cline",
     ];
     let mut results = Vec::new();
 

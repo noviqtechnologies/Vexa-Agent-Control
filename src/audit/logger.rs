@@ -210,8 +210,9 @@ impl AuditLogger {
         // We use a dedicated OS thread via `std::thread::spawn` to avoid holding
         // a blocking-thread permit indefinitely.
         std::thread::spawn(move || {
-            // Build a minimal single-thread Tokio runtime for the async SIEM call.
-            let rt = tokio::runtime::Builder::new_current_thread()
+            // Build a multi-thread Tokio runtime for non-blocking async SIEM export.
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
                 .enable_all()
                 .build()
                 .expect("audit writer runtime");
@@ -292,11 +293,11 @@ impl AuditLogger {
                 // ── Update chain state ───────────────────────────────────────
                 prev_hmac = hmac_hex.clone();
 
-                // ── SIEM export (async, within timeout) ─────────────────────
+                // ── SIEM export (non-blocking async dispatch) ─────────────────────
                 if let Some(ref exporter) = siem_exporter {
                     let exporter_clone = exporter.clone();
                     let entry_clone = confirmed_entry.clone();
-                    rt.block_on(async move {
+                    rt.spawn(async move {
                         try_export(&exporter_clone, &entry_clone).await;
                     });
                 }

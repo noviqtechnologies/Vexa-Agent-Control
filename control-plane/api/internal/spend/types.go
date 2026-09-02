@@ -244,6 +244,7 @@ type ReleaseRequest struct {
 	IdempotencyKey string `json:"idempotency_key"`
 	Reason         string `json:"reason"`
 	RequestHash    string `json:"request_hash"`
+	StatusCode     int    `json:"status_code,omitempty"`
 }
 
 // ReleaseResponse confirms reservation release.

@@ -5,9 +5,9 @@ resource "google_compute_network" "vpc" {
   project                 = var.gcp_project_id
   name                    = "vpc-${local.name_prefix}"
   auto_create_subnetworks = false
-  description             = "Custom Virtual Private Cloud (VPC) for AgentWall private services"
+  description             = "Custom Virtual Private Cloud (VPC) for AgentControl private services"
 
-  depends_on = [google_project_service.compute]
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_compute_subnetwork" "subnet" {
@@ -32,7 +32,7 @@ resource "google_vpc_access_connector" "connector" {
   machine_type  = "e2-micro"
 
   depends_on = [
-    google_project_service.vpcaccess,
+    google_project_service.apis,
     google_compute_network.vpc
   ]
 }
@@ -42,7 +42,7 @@ resource "google_compute_firewall" "allow_internal" {
   project     = var.gcp_project_id
   name        = "fw-${local.name_prefix}-allow-internal"
   network     = google_compute_network.vpc[0].name
-  description = "Allow internal traffic within AgentWall VPC network"
+  description = "Allow internal traffic within AgentControl VPC network"
 
   allow {
     protocol = "tcp"

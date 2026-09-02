@@ -73,7 +73,11 @@ cd Vexa-Agent-Control\control-plane
 ```
 
 > [!TIP]
-> **Already inside the repository?** If you have already cloned or downloaded the source code, open your shell in the repository root folder (`agentcontrol/`) and run `cd control-plane`.
+> **One-Command Root Launch:** You can also launch the full development stack directly from the repository root:
+> ```bash
+> docker compose -f docker-compose.team.yml up -d
+> ```
+> For complete single-container and full-stack options across macOS, Linux, and Windows, see the [Docker Deployment Guide](../guides/docker-deployment.md).
 
 ---
 

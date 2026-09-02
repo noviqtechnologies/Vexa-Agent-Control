@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -667,13 +668,21 @@ func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *
 	}
 
 	// 5. Update Reservation
+	status := req.Status
+	if status == 0 {
+		status = 200
+	}
 	_, err = tx.Exec(ctx, `
 		UPDATE spend_reservations
 		SET state = 'SETTLED',
 		    settled_microcents = $1,
+		    input_tokens = $2,
+		    output_tokens = $3,
+		    cached_tokens = $4,
+		    status_code = $5,
 		    settled_at = now()
-		WHERE reservation_id = $2 AND organization_id = $3
-	`, actualCost, reservationID, orgID)
+		WHERE reservation_id = $6 AND organization_id = $7
+	`, actualCost, req.InputTokens, req.OutputTokens, req.CachedInputTokens, status, reservationID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update reservation: %w", err)
 	}
@@ -774,6 +783,24 @@ func (s *Store) releaseTx(ctx context.Context, orgID, reservationID string, req 
 		reason = "client_cancelled"
 	}
 
+	statusCode := req.StatusCode
+	if statusCode == 0 {
+		switch reason {
+		case "provider_credential_unavailable":
+			statusCode = http.StatusServiceUnavailable
+		case "upstream_provider_error", "streaming_interrupted":
+			statusCode = http.StatusBadGateway
+		case ErrCodeReservationExpired, "timeout":
+			statusCode = http.StatusRequestTimeout
+		case "spend_budget_exhausted":
+			statusCode = http.StatusTooManyRequests
+		case "client_cancelled":
+			statusCode = 499
+		default:
+			statusCode = http.StatusBadRequest
+		}
+	}
+
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin release tx: %w", err)
@@ -834,14 +861,15 @@ func (s *Store) releaseTx(ctx context.Context, orgID, reservationID string, req 
 		}
 	}
 
-	// Update reservation to RELEASED
+	// Update reservation to RELEASED with effective status_code
 	_, err = tx.Exec(ctx, `
 		UPDATE spend_reservations
 		SET state = 'RELEASED',
+		    status_code = $1,
 		    released_at = now(),
-		    release_reason = $1
-		WHERE reservation_id = $2 AND organization_id = $3
-	`, reason, reservationID, orgID)
+		    release_reason = $2
+		WHERE reservation_id = $3 AND organization_id = $4
+	`, statusCode, reason, reservationID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update reservation state: %w", err)
 	}
@@ -909,6 +937,7 @@ func (s *Store) SweepExpiredReservations(ctx context.Context) (int, error) {
 		req := &ReleaseRequest{
 			IdempotencyKey: fmt.Sprintf("sweep-%s-%d", it.resID, time.Now().Unix()),
 			Reason:         ErrCodeReservationExpired,
+			StatusCode:     http.StatusRequestTimeout,
 		}
 		if _, err := s.Release(ctx, it.orgID, it.resID, req); err == nil {
 			count++
@@ -1434,11 +1463,11 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 	if q.State != "" {
 		switch strings.ToUpper(q.State) {
 		case "FAILURE", "FAILED", "ERROR":
-			sql += " AND (UPPER(state) IN ('FAILED', 'ERROR', 'DENIED') OR COALESCE(status_code, 200) >= 400 OR release_reason ILIKE '%error%' OR release_reason ILIKE '%fail%')"
+			sql += " AND (UPPER(state) IN ('FAILED', 'ERROR', 'DENIED') OR COALESCE(status_code, 200) >= 400 OR release_reason ILIKE '%error%' OR release_reason ILIKE '%fail%' OR release_reason ILIKE '%unavailable%' OR UPPER(state) = 'RELEASED')"
 		case "SUCCESS", "SETTLED":
-			sql += " AND (UPPER(state) = 'SETTLED' AND COALESCE(status_code, 200) < 400)"
+			sql += " AND (UPPER(state) = 'SETTLED' AND COALESCE(status_code, 200) >= 200 AND COALESCE(status_code, 200) < 300)"
 		case "DENIED", "BLOCKED":
-			sql += " AND (UPPER(state) IN ('DENIED', 'BLOCKED') OR COALESCE(status_code, 200) = 403)"
+			sql += " AND (UPPER(state) IN ('DENIED', 'BLOCKED') OR COALESCE(status_code, 200) IN (403, 429))"
 		default:
 			sql += fmt.Sprintf(" AND UPPER(state) = UPPER($%d)", argIdx)
 			args = append(args, q.State)
@@ -1509,6 +1538,18 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 		}
 		r.SettledAt = settledAt
 		r.TotalTokens = r.InputTokens + r.OutputTokens
+		if r.StatusCode == 0 {
+			switch strings.ToUpper(r.State) {
+			case "SETTLED":
+				r.StatusCode = 200
+			case "RELEASED":
+				r.StatusCode = 503
+			case "DENIED", "BLOCKED":
+				r.StatusCode = 403
+			case "FAILED", "ERROR":
+				r.StatusCode = 500
+			}
+		}
 		if len(tagsJSON) > 0 {
 			_ = json.Unmarshal(tagsJSON, &r.Tags)
 		}
@@ -1561,29 +1602,69 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 	var policyRaw []byte
 	var settledAt, releasedAt *time.Time
 	var releaseReason *string
+	var rawStatusCode *int
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
 		       reserved_microcents, settled_microcents, policy_snapshot::text, price_book_version_id,
 		       created_at, settled_at, released_at, release_reason,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
+		       COALESCE(input_tokens, 0),
+		       COALESCE(output_tokens, 0),
+		       COALESCE(cached_tokens, 0),
+		       status_code
 		FROM spend_reservations
 		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
 	`, runID, orgID).Scan(
 		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
 		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,
 		&d.StartedAt, &settledAt, &releasedAt, &releaseReason, &d.DurationMs,
+		&d.InputTokens, &d.OutputTokens, &d.CachedTokens, &rawStatusCode,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	d.TotalTokens = d.InputTokens + d.OutputTokens
 
 	d.PolicySnapshot = string(policyRaw)
 	d.SettledAt = settledAt
 	d.ReleasedAt = releasedAt
 	d.ReleaseReason = releaseReason
 
-	if d.State == StateSettled || d.State == StateReleased {
+	if rawStatusCode != nil && *rawStatusCode > 0 {
+		d.StatusCode = *rawStatusCode
+	} else {
+		switch strings.ToUpper(d.State) {
+		case "SETTLED":
+			d.StatusCode = 200
+		case "RELEASED":
+			if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "provider_credential_unavailable") {
+				d.StatusCode = 503
+			} else if releaseReason != nil && (strings.Contains(strings.ToLower(*releaseReason), "timeout") || strings.Contains(strings.ToLower(*releaseReason), "expired")) {
+				d.StatusCode = 504
+			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "exhausted") {
+				d.StatusCode = 429
+			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "cancelled") {
+				d.StatusCode = 499
+			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "upstream") {
+				d.StatusCode = 502
+			} else {
+				d.StatusCode = 400
+			}
+		case "DENIED", "BLOCKED":
+			d.StatusCode = 403
+		case "FAILED", "ERROR":
+			d.StatusCode = 500
+		default:
+			d.StatusCode = 0
+		}
+	}
+
+	if strings.ToUpper(d.State) == StateReleased || strings.ToUpper(d.State) == "FAILED" || strings.ToUpper(d.State) == "ERROR" || strings.ToUpper(d.State) == "DENIED" {
+		d.ReleasedMicrocents = d.ReservedMicrocents
+		d.SettledMicrocents = 0
+	} else if strings.ToUpper(d.State) == StateSettled {
 		d.ReleasedMicrocents = d.ReservedMicrocents - d.SettledMicrocents
 		if d.ReleasedMicrocents < 0 {
 			d.ReleasedMicrocents = 0

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  listDevices, revokeDeviceV2, createEnrollmentTokenV2,
+  listDevices, revokeDeviceV2, createEnrollmentTokenV2, resolveHubUrl,
   type Device, type EnrollmentTokenV2
 } from '../api/client'
 
@@ -638,7 +638,7 @@ export default function DeviceGovernance() {
                 </div>
               </form>
             ) : (() => {
-                const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400';
+                const hubUrl = resolveHubUrl(generatedToken?.hub_url);
                 return (
                   <div>
                     <div style={{ padding: '12px 14px', backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 'var(--radius-sm, 6px)', marginBottom: '16px' }}>
@@ -705,7 +705,7 @@ export default function DeviceGovernance() {
                           className="btn btn-sm"
                           style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'cli' ? 'var(--success, #10b981)' : 'var(--bg-surface-3, #333)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                           onClick={() => {
-                            const cmd = `agentcontrol enroll --hub ${hubUrl} --token ${generatedToken.token}`
+                            const cmd = `agentcontrol enroll --hub-url ${hubUrl} --token ${generatedToken.token}`
                             navigator.clipboard.writeText(cmd)
                             setCopiedField('cli')
                             setTimeout(() => setCopiedField(null), 2000)
@@ -715,7 +715,7 @@ export default function DeviceGovernance() {
                         </button>
                       </div>
                       <pre style={{ margin: 0, fontSize: '11px', color: '#a78bfa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>
-                        agentcontrol enroll --hub {hubUrl} --token {generatedToken.token}
+                        agentcontrol enroll --hub-url {hubUrl} --token {generatedToken.token}
                       </pre>
                     </div>
 

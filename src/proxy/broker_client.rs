@@ -84,10 +84,10 @@ impl BrokerClient {
         }
 
         let resolved_url = base_url
-            .or_else(|| std::env::var("DASHBOARD_API_URL").ok())
             .or_else(|| std::env::var("AGENTCONTROL_HUB_URL").ok())
             .or_else(|| std::env::var("AGENTWALL_HUB_URL").ok())
-            .unwrap_or_else(|| "https://console-stage.vexasec.io".to_string());
+            .or_else(|| std::env::var("DASHBOARD_API_URL").ok())
+            .unwrap_or_else(|| "https://console.vexasec.io".to_string());
 
         Self {
             base_url: resolved_url,

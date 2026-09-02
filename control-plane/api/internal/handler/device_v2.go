@@ -105,14 +105,14 @@ func (h *DeviceV2Handler) SubmitHeartbeat(w http.ResponseWriter, r *http.Request
 
 	// Evaluate device state based on self-report
 	targetState := model.DeviceStateCompliant
-	if req.Coverage.WrappedTargets == 0 && req.Coverage.SupportedTargets > 0 {
+	if req.Fleet.TargetsSecured == 0 && req.Fleet.TargetsTotal > 0 {
 		targetState = model.DeviceStateNonCompliant
 	}
 
 	if principal.DeviceState != targetState {
 		if err := h.Store.TransitionDeviceState(
 			r.Context(),
-			principal.TenantID,
+			principal.OrganizationID,
 			principal.DeviceID,
 			targetState,
 			"HEARTBEAT_EVALUATION",

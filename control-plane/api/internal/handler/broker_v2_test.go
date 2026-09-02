@@ -78,7 +78,7 @@ func TestBrokerV2Handler_FailClosedOnMissingCredential(t *testing.T) {
 	// Inject compliant device principal
 	principal := &model.DevicePrincipal{
 		DeviceID:    "dev-1",
-		TenantID:    "00000000-0000-0000-0000-000000000001",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
 		DeviceState: model.DeviceStateCompliant,
 	}
 	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
@@ -120,9 +120,9 @@ func TestBrokerV2Handler_NonCompliantDeviceDenied(t *testing.T) {
 	
 	// Inject NON_COMPLIANT device principal
 	principal := &model.DevicePrincipal{
-		DeviceID:    "dev-2",
-		TenantID:    "00000000-0000-0000-0000-000000000001",
-		DeviceState: model.DeviceStateNonCompliant,
+		DeviceID:       "dev-2",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
+		DeviceState:    model.DeviceStateNonCompliant,
 	}
 	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
 	req = req.WithContext(ctx)
@@ -132,5 +132,50 @@ func TestBrokerV2Handler_NonCompliantDeviceDenied(t *testing.T) {
 
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("expected status 403 Forbidden for NON_COMPLIANT device, got %d", rr.Code)
+	}
+}
+
+func TestBrokerV2Handler_StreamFailClosedOnMissingCredential(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	mockClient := &mockProviderClient{}
+	h := &BrokerV2Handler{
+		ProviderClient: mockClient,
+	}
+
+	reqPayload := BrokerRequestPayload{
+		SchemaVersion: "3.0",
+		RequestID:     "req-stream-uuid-1",
+		Provider:      "openai",
+		Model:         "gpt-4o",
+		Stream:        true,
+		Payload:       json.RawMessage(`{"messages":[{"role":"user","content":"hello"}]}`),
+	}
+	bodyBytes, _ := json.Marshal(reqPayload)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v3/broker/llm-stream", bytes.NewReader(bodyBytes))
+
+	principal := &model.DevicePrincipal{
+		DeviceID:       "dev-1",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
+		DeviceState:    model.DeviceStateCompliant,
+	}
+	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	h.HandleLLMStream(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503 for streaming request with unconfigured key, got %d", rr.Code)
+	}
+
+	var errResp map[string]map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp["error"]["code"] != "provider_credential_unavailable" {
+		t.Fatalf("expected error code 'provider_credential_unavailable', got %v", errResp["error"]["code"])
 	}
 }

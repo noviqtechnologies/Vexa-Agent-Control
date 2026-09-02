@@ -19,7 +19,7 @@ type IngestHandler struct {
 
 func NewIngestHandler(s DataStore, b *sse.Broker, c *license.Claims) *IngestHandler {
 	if c == nil {
-		c = license.CommunityClaims()
+		c = license.DeveloperClaims()
 	}
 	return &IngestHandler{store: s, broker: b, claims: c}
 }

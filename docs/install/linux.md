@@ -20,8 +20,8 @@ To install prerequisites on common distributions:
 
 | Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.65-linux-x86_64.zip` | **Yes (Verified)** |
-| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.65-linux-aarch64.zip` | **Yes (Verified)** |
+| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.70-linux-x86_64.zip` | **Yes (Verified)** |
+| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.70-linux-aarch64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -47,6 +47,30 @@ To install prerequisites on common distributions:
    ```bash
    agentcontrol --version
    ```
+
+---
+
+## Alternative: Docker Deployment on Linux
+
+If you have Docker Engine or Docker Desktop installed on Linux:
+
+### Standalone Gateway Container
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+### Full-Stack Control Hub (Compose)
+```bash
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+docker compose -f docker-compose.team.yml up -d
+```
+Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
 
 ---
 

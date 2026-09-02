@@ -17,6 +17,7 @@ vi.mock('../api/client', () => ({
           provider: 'openai',
           model: 'gpt-4o',
           state: 'SETTLED',
+          status_code: 200,
           reserved_microcents: 200000,
           settled_microcents: 180000,
           started_at: '2026-08-31T15:02:05Z',
@@ -28,8 +29,26 @@ vi.mock('../api/client', () => ({
           virtual_key_prefix: 'vk-abc12',
           request_type: 'LLM',
         },
+        {
+          run_id: 'run-102',
+          request_id: 'b87819b3-dd85-499b-ab50-b09c02f0e57e',
+          device_id: 'dev-1',
+          project_id: 'default',
+          provider: 'openai',
+          model: 'gpt-4o',
+          state: 'RELEASED',
+          status_code: 503,
+          reserved_microcents: 32330000,
+          settled_microcents: 0,
+          started_at: '2026-09-02T10:50:27Z',
+          duration_ms: 20,
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+          request_type: 'LLM',
+        },
       ],
-      total: 1,
+      total: 2,
       data_freshness: '2026-08-31T15:02:10Z',
       confidence: 'observed',
     }),
@@ -97,10 +116,14 @@ describe('ObservabilityLogs View', () => {
     expect(screen.getByRole('button', { name: 'Deleted Keys' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deleted Teams' })).toBeInTheDocument()
 
-    // Verifies Request Logs tab table content loaded
+    // Verifies Request Logs tab table content loaded with proper Success/Failure status and costs
     await waitFor(() => {
       expect(screen.getByText('099b5405-e...')).toBeInTheDocument()
-      expect(screen.getByText('gpt-4o')).toBeInTheDocument()
+      expect(screen.getByText('b87819b3-d...')).toBeInTheDocument()
+      expect(screen.getByText('Success')).toBeInTheDocument()
+      expect(screen.getByText('Failure')).toBeInTheDocument()
+      expect(screen.getByText('$0.0018')).toBeInTheDocument()
+      expect(screen.getByText('$0.00')).toBeInTheDocument()
       expect(screen.getByText('vk-abc12')).toBeInTheDocument()
     })
   })

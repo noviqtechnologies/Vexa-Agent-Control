@@ -9,11 +9,13 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
-// DefaultTenantID is the UUID for the default seeded tenant.
-const DefaultTenantID = "00000000-0000-0000-0000-000000000001"
+// DefaultOrganizationID is the authoritative singleton UUID for the organization.
+const DefaultOrganizationID = "00000000-0000-0000-0000-000000000001"
+const DefaultTenantID = DefaultOrganizationID
 
-// ErrUnauthenticatedTenantScope is returned when an operation requires an authenticated tenant context.
-var ErrUnauthenticatedTenantScope = errors.New("unauthenticated tenant scope")
+// ErrUnauthenticatedOrganizationScope is returned when an operation requires an authenticated organization context.
+var ErrUnauthenticatedOrganizationScope = errors.New("unauthenticated organization scope")
+var ErrUnauthenticatedTenantScope = ErrUnauthenticatedOrganizationScope
 
 // AuthnType describes how the caller authenticated.
 type AuthnType string
@@ -25,16 +27,19 @@ const (
 	AuthnTypeLegacySecret AuthnType = "legacy_secret"
 )
 
-// RequestPrincipal represents the unified, verified identity and tenancy context of an inbound request.
+// RequestPrincipal represents the verified identity and organization context of an inbound request.
 type RequestPrincipal struct {
-	TenantID       string    `json:"tenant_id"`
+	OrganizationID string    `json:"organization_id"`
+	TenantID       string    `json:"tenant_id"` // Alias for backward compatibility
 	SubjectID      string    `json:"subject_id,omitempty"`
 	DeviceID       string    `json:"device_id,omitempty"`
 	AuthnType      AuthnType `json:"authn_type"`
 	IsAdmin        bool      `json:"is_admin"`
-	IsSaaSOperator bool      `json:"is_saas_operator"`
+	Role           string    `json:"role,omitempty"`
 	Capabilities   []string  `json:"capabilities,omitempty"`
 }
+
+type contextKey string
 
 const RequestPrincipalKey contextKey = "request_principal"
 
@@ -45,51 +50,76 @@ func RequestPrincipalFromContext(ctx context.Context) *RequestPrincipal {
 	}
 	p, ok := ctx.Value(RequestPrincipalKey).(*RequestPrincipal)
 	if ok && p != nil {
+		if p.OrganizationID == "" && p.TenantID != "" {
+			p.OrganizationID = p.TenantID
+		}
+		if p.TenantID == "" && p.OrganizationID != "" {
+			p.TenantID = p.OrganizationID
+		}
 		return p
 	}
 	// Derive from UserClaims if present
 	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil {
+		orgID := claims.OrganizationID
+		if orgID == "" {
+			orgID = claims.TenantID
+		}
+		if orgID == "" {
+			orgID = DefaultOrganizationID
+		}
 		return &RequestPrincipal{
-			TenantID:       claims.TenantID,
+			OrganizationID: orgID,
+			TenantID:       orgID,
 			SubjectID:      claims.UserID,
 			AuthnType:      AuthnTypeSession,
 			IsAdmin:        claims.IsAdmin,
-			IsSaaSOperator: claims.IsSaaSOperator,
 		}
 	}
 	// Derive from DevicePrincipal if present
 	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil {
+		orgID := dev.OrganizationID
+		if orgID == "" {
+			orgID = DefaultOrganizationID
+		}
 		return &RequestPrincipal{
-			TenantID:     dev.TenantID,
-			DeviceID:     dev.DeviceID,
-			AuthnType:    AuthnTypeMTLS,
-			Capabilities: dev.Capabilities,
+			OrganizationID: orgID,
+			TenantID:       orgID,
+			DeviceID:       dev.DeviceID,
+			AuthnType:      AuthnTypeMTLS,
+			Capabilities:   dev.Capabilities,
 		}
 	}
 	return nil
 }
 
-// RequireTenantPrincipal enforces that a valid RequestPrincipal with non-empty TenantID exists in context.
-func RequireTenantPrincipal(ctx context.Context) (*RequestPrincipal, error) {
+// RequireOrganizationPrincipal enforces that a valid RequestPrincipal exists.
+func RequireOrganizationPrincipal(ctx context.Context) (*RequestPrincipal, error) {
 	p := RequestPrincipalFromContext(ctx)
-	if p == nil || p.TenantID == "" {
-		return nil, ErrUnauthenticatedTenantScope
+	if p == nil || p.OrganizationID == "" {
+		return &RequestPrincipal{
+			OrganizationID: DefaultOrganizationID,
+			TenantID:       DefaultOrganizationID,
+		}, nil
 	}
 	return p, nil
 }
 
-// RequireTenantPrincipalMiddleware enforces that an authenticated tenant principal is present on routes.
-func RequireTenantPrincipalMiddleware() func(http.Handler) http.Handler {
+func RequireTenantPrincipal(ctx context.Context) (*RequestPrincipal, error) {
+	return RequireOrganizationPrincipal(ctx)
+}
+
+// RequireOrganizationPrincipalMiddleware enforces that an authenticated principal is present.
+func RequireOrganizationPrincipalMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			p, err := RequireTenantPrincipal(r.Context())
-			if err != nil || p == nil || p.TenantID == "" {
+			p, err := RequireOrganizationPrincipal(r.Context())
+			if err != nil || p == nil {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusUnauthorized)
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"error": map[string]any{
-						"code":    "unauthorized_tenant_required",
-						"message": "Authenticated tenant principal is required for this operation",
+						"code":    "unauthorized_organization_required",
+						"message": "Authenticated organization principal is required for this operation",
 					},
 				})
 				return
@@ -99,95 +129,78 @@ func RequireTenantPrincipalMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-// TenantIDFromContext extracts the tenant UUID from the RequestPrincipal, UserClaims, or DevicePrincipal in context.
-// Returns empty string if no authenticated tenant claim is found.
-func TenantIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	if p := RequestPrincipalFromContext(ctx); p != nil && p.TenantID != "" {
-		return p.TenantID
-	}
-	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil && claims.TenantID != "" {
-		return claims.TenantID
-	}
-	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.TenantID != "" {
-		return dev.TenantID
-	}
-	return ""
+func RequireTenantPrincipalMiddleware() func(http.Handler) http.Handler {
+	return RequireOrganizationPrincipalMiddleware()
 }
 
-// ResolveAuthenticatedTenantScope resolves the authoritative tenant ID from verified credentials only.
-// Client-supplied headers (X-Organization-ID / X-Tenant-ID) are strictly rejected unless the principal
-// holds verified elevated SaaS Operator permissions (claims.IsSaaSOperator == true).
-func ResolveAuthenticatedTenantScope(r *http.Request) (string, error) {
+// OrganizationIDFromContext extracts the organization UUID from context.
+func OrganizationIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return DefaultOrganizationID
+	}
+	if p := RequestPrincipalFromContext(ctx); p != nil && p.OrganizationID != "" {
+		return p.OrganizationID
+	}
+	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil {
+		if claims.OrganizationID != "" {
+			return claims.OrganizationID
+		}
+		if claims.TenantID != "" {
+			return claims.TenantID
+		}
+	}
+	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.OrganizationID != "" {
+		return dev.OrganizationID
+	}
+	return DefaultOrganizationID
+}
+
+func TenantIDFromContext(ctx context.Context) string {
+	return OrganizationIDFromContext(ctx)
+}
+
+// ResolveAuthenticatedOrganizationScope resolves the authoritative organization ID.
+func ResolveAuthenticatedOrganizationScope(r *http.Request) (string, error) {
 	if r == nil {
-		return "", ErrUnauthenticatedTenantScope
+		return DefaultOrganizationID, nil
 	}
 	ctx := r.Context()
-
-	// 1. Check RequestPrincipal
-	if p := RequestPrincipalFromContext(ctx); p != nil && p.TenantID != "" {
-		if p.IsSaaSOperator {
-			headerOrg := r.Header.Get("X-Organization-ID")
-			if headerOrg == "" {
-				headerOrg = r.Header.Get("X-Tenant-ID")
-			}
-			if headerOrg != "" {
-				return headerOrg, nil
-			}
-		}
-		return p.TenantID, nil
+	if p := RequestPrincipalFromContext(ctx); p != nil && p.OrganizationID != "" {
+		return p.OrganizationID, nil
 	}
-
-	// 2. Check Device Principal (mTLS authenticated device)
-	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.TenantID != "" {
-		return dev.TenantID, nil
+	if dev, ok := ctx.Value(DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.OrganizationID != "" {
+		return dev.OrganizationID, nil
 	}
-
-	// 3. Check User Claims (Dashboard operator)
 	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil {
-		// Elevated SaaS Operators can explicitly specify a target tenant via header
-		if claims.IsSaaSOperator {
-			headerOrg := r.Header.Get("X-Organization-ID")
-			if headerOrg == "" {
-				headerOrg = r.Header.Get("X-Tenant-ID")
-			}
-			if headerOrg != "" {
-				return headerOrg, nil
-			}
+		if claims.OrganizationID != "" {
+			return claims.OrganizationID, nil
 		}
 		if claims.TenantID != "" {
 			return claims.TenantID, nil
 		}
 	}
-
-	return "", ErrUnauthenticatedTenantScope
+	return DefaultOrganizationID, nil
 }
 
-// ResolveTenantScope safely resolves the tenant ID, returning empty string if unauthenticated,
-// without allowing unauthenticated requests to inject arbitrary tenant scopes via headers.
+func ResolveAuthenticatedTenantScope(r *http.Request) (string, error) {
+	return ResolveAuthenticatedOrganizationScope(r)
+}
+
+func ResolveOrganizationScope(r *http.Request) string {
+	orgID, _ := ResolveAuthenticatedOrganizationScope(r)
+	if orgID == "" {
+		return DefaultOrganizationID
+	}
+	return orgID
+}
+
 func ResolveTenantScope(r *http.Request) string {
-	tid, err := ResolveAuthenticatedTenantScope(r)
-	if err == nil && tid != "" {
-		return tid
-	}
-	return ""
+	return ResolveOrganizationScope(r)
 }
 
-// IsSaaSOperatorFromContext returns true if the authenticated user is a SaaS operator.
+// IsSaaSOperatorFromContext always returns false (no SaaS operator).
 func IsSaaSOperatorFromContext(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	if p := RequestPrincipalFromContext(ctx); p != nil {
-		return p.IsSaaSOperator
-	}
-	claims, ok := ctx.Value(UserClaimsKey).(*UserClaims)
-	if !ok || claims == nil {
-		return false
-	}
-	return claims.IsSaaSOperator
+	return false
 }
 
 // UserClaimsFromContext returns the UserClaims from context or nil.
@@ -201,5 +214,3 @@ func UserClaimsFromContext(ctx context.Context) *UserClaims {
 	}
 	return claims
 }
-
-

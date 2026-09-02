@@ -90,3 +90,11 @@ agentcontrol unprotect
 # Verify all configurations:
 agentcontrol status
 ```
+
+---
+
+## Next Steps
+
+- [Docker Deployment Guide](docker-deployment.md) — Run standalone container or full stack with zero host installation.
+- [Custom Agent HTTP Guide](custom-agent-http.md) — Route LangChain, CrewAI, or Python/TS agent scripts.
+- [Small Team Hub Guide](small-team-hub.md) — Deploy shared team policies and centralized audit logs via Docker Compose.

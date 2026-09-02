@@ -11,15 +11,15 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 )
 
-type contextKey string
-
 const UserClaimsKey contextKey = "user_claims"
 
 type UserClaims struct {
-	TenantID       string `json:"tenant_id"`
+	OrganizationID string `json:"organization_id"`
+	TenantID       string `json:"tenant_id"` // Alias for backward compatibility
 	UserID         string `json:"user_id"`
 	IsAdmin        bool   `json:"is_admin"`
 	IsSaaSOperator bool   `json:"is_saas_operator"`
+	Role           string `json:"role,omitempty"`
 }
 
 // LegacyAuthConfig configures single-tenant legacy secret compatibility.
@@ -28,14 +28,8 @@ type LegacyAuthConfig struct {
 	LegacyTenantID         string
 }
 
-// PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token
-// (when LegacySingleTenantMode is active) or the operator agentcontrol_session cookie.
-// Fails closed if secret is empty or if unauthenticated in multi-tenant mode.
+// PolicyReadAuth validates either the gateway PolicyReadSecret Bearer token or the operator session cookie.
 func PolicyReadAuth(secret string, legacyAuth ...LegacyAuthConfig) func(http.Handler) http.Handler {
-	var cfg LegacyAuthConfig
-	if len(legacyAuth) > 0 {
-		cfg = legacyAuth[0]
-	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check Bearer token (gateway read secret)
@@ -43,17 +37,13 @@ func PolicyReadAuth(secret string, legacyAuth ...LegacyAuthConfig) func(http.Han
 			if strings.HasPrefix(auth, "Bearer ") {
 				token := strings.TrimPrefix(auth, "Bearer ")
 				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-					if cfg.LegacySingleTenantMode && cfg.LegacyTenantID != "" {
-						principal := &RequestPrincipal{
-							TenantID:  cfg.LegacyTenantID,
-							AuthnType: AuthnTypeLegacySecret,
-						}
-						ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
-						next.ServeHTTP(w, r.WithContext(ctx))
-						return
+					principal := &RequestPrincipal{
+						OrganizationID: DefaultOrganizationID,
+						TenantID:       DefaultOrganizationID,
+						AuthnType:      AuthnTypeLegacySecret,
 					}
-					// In multi-tenant mode, shared secret without bound tenancy is rejected
-					http.Error(w, `{"error":"unauthorized_multi_tenant_secret_disabled"}`, http.StatusUnauthorized)
+					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 			}
@@ -66,18 +56,22 @@ func PolicyReadAuth(secret string, legacyAuth ...LegacyAuthConfig) func(http.Han
 			if err == nil {
 				sess, err := session.Validate(cookie.Value)
 				if err == nil {
+					orgID := sess.TenantID
+					if orgID == "" {
+						orgID = DefaultOrganizationID
+					}
 					claims := UserClaims{
-						TenantID:       sess.TenantID,
+						OrganizationID: orgID,
+						TenantID:       orgID,
 						UserID:         sess.UserID,
 						IsAdmin:        sess.IsAdmin,
-						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					principal := &RequestPrincipal{
-						TenantID:       sess.TenantID,
+						OrganizationID: orgID,
+						TenantID:       orgID,
 						SubjectID:      sess.UserID,
 						AuthnType:      AuthnTypeSession,
 						IsAdmin:        sess.IsAdmin,
-						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 					ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
@@ -110,18 +104,22 @@ func DashboardAuth() func(http.Handler) http.Handler {
 				return
 			}
 
+			orgID := sess.TenantID
+			if orgID == "" {
+				orgID = DefaultOrganizationID
+			}
 			claims := UserClaims{
-				TenantID:       sess.TenantID,
+				OrganizationID: orgID,
+				TenantID:       orgID,
 				UserID:         sess.UserID,
 				IsAdmin:        sess.IsAdmin,
-				IsSaaSOperator: sess.IsSaaSOperator,
 			}
 			principal := &RequestPrincipal{
-				TenantID:       sess.TenantID,
+				OrganizationID: orgID,
+				TenantID:       orgID,
 				SubjectID:      sess.UserID,
 				AuthnType:      AuthnTypeSession,
 				IsAdmin:        sess.IsAdmin,
-				IsSaaSOperator: sess.IsSaaSOperator,
 			}
 			ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 			ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
@@ -130,8 +128,7 @@ func DashboardAuth() func(http.Handler) http.Handler {
 	}
 }
 
-// SessionAuthOptional extracts and validates the session cookie if present,
-// populating UserClaims in context without failing requests if no session is provided.
+// SessionAuthOptional extracts and validates the session cookie if present.
 func SessionAuthOptional() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -141,18 +138,22 @@ func SessionAuthOptional() func(http.Handler) http.Handler {
 			}
 			if err == nil && cookie != nil && cookie.Value != "" {
 				if sess, err := session.Validate(cookie.Value); err == nil && sess != nil {
+					orgID := sess.TenantID
+					if orgID == "" {
+						orgID = DefaultOrganizationID
+					}
 					claims := UserClaims{
-						TenantID:       sess.TenantID,
+						OrganizationID: orgID,
+						TenantID:       orgID,
 						UserID:         sess.UserID,
 						IsAdmin:        sess.IsAdmin,
-						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					principal := &RequestPrincipal{
-						TenantID:       sess.TenantID,
+						OrganizationID: orgID,
+						TenantID:       orgID,
 						SubjectID:      sess.UserID,
 						AuthnType:      AuthnTypeSession,
 						IsAdmin:        sess.IsAdmin,
-						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					ctx := context.WithValue(r.Context(), UserClaimsKey, &claims)
 					ctx = context.WithValue(ctx, RequestPrincipalKey, principal)
@@ -171,14 +172,8 @@ type DeviceValidator interface {
 	ResolveDevicePrincipal(ctx context.Context, token string) (*model.DevicePrincipal, bool)
 }
 
-// GatewayAuth validates either:
-// 1. An enrolled device token or device ID in the database (resolving authoritative device principal & tenant)
-// 2. The shared HMAC secret (GATEWAY_SECRET) ONLY when LegacySingleTenantMode is active with a configured LegacyTenantID
+// GatewayAuth validates enrolled device tokens or shared gateway secrets.
 func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyAuthConfig) func(http.Handler) http.Handler {
-	var cfg LegacyAuthConfig
-	if len(legacyAuth) > 0 {
-		cfg = legacyAuth[0]
-	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
@@ -191,11 +186,16 @@ func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyA
 			// 1. Check enrolled device identity
 			if validator != nil {
 				if principal, ok := validator.ResolveDevicePrincipal(r.Context(), token); ok && principal != nil {
+					orgID := principal.OrganizationID
+					if orgID == "" {
+						orgID = DefaultOrganizationID
+					}
 					reqPrincipal := &RequestPrincipal{
-						TenantID:     principal.TenantID,
-						DeviceID:     principal.DeviceID,
-						AuthnType:    AuthnTypeDeviceToken,
-						Capabilities: principal.Capabilities,
+						OrganizationID: orgID,
+						TenantID:       orgID,
+						DeviceID:       principal.DeviceID,
+						AuthnType:      AuthnTypeDeviceToken,
+						Capabilities:   principal.Capabilities,
 					}
 					ctx := context.WithValue(r.Context(), DevicePrincipalKey, principal)
 					ctx = context.WithValue(ctx, RequestPrincipalKey, reqPrincipal)
@@ -204,17 +204,16 @@ func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyA
 				}
 			}
 
-			// 2. Check legacy shared secret ONLY if legacy single tenant mode is explicitly enabled
-			if cfg.LegacySingleTenantMode && cfg.LegacyTenantID != "" {
-				if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
-					principal := &RequestPrincipal{
-						TenantID:  cfg.LegacyTenantID,
-						AuthnType: AuthnTypeLegacySecret,
-					}
-					ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
+			// 2. Check gateway shared secret
+			if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+				principal := &RequestPrincipal{
+					OrganizationID: DefaultOrganizationID,
+					TenantID:       DefaultOrganizationID,
+					AuthnType:      AuthnTypeLegacySecret,
 				}
+				ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
 			}
 
 			http.Error(w, `{"error":"invalid gateway token"}`, http.StatusForbidden)
@@ -222,8 +221,7 @@ func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyA
 	}
 }
 
-// RequireAdmin enforces that the authenticated user has IsAdmin = true.
-// DashboardAuth must have run prior to this middleware.
+// RequireAdmin enforces that the authenticated user is an administrator.
 func RequireAdmin() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +231,7 @@ func RequireAdmin() func(http.Handler) http.Handler {
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return
 			}
-			if !claims.IsAdmin && !claims.IsSaaSOperator {
+			if !claims.IsAdmin {
 				log.Printf("RequireAdmin denied: user_id=%s is_admin=%v", claims.UserID, claims.IsAdmin)
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return

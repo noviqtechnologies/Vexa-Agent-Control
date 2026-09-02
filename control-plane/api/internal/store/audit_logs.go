@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-
 // AuditEvent represents an administrative / management plane mutation record.
 type AuditEvent struct {
 	ID             string                 `json:"id"`
-	TenantID       string                 `json:"tenant_id"`
+	OrganizationID string                 `json:"organization_id"`
+	TenantID       string                 `json:"tenant_id"` // Alias
 	Timestamp      time.Time              `json:"timestamp"`
 	TableName      string                 `json:"table_name"`
 	Action         string                 `json:"action"`
@@ -35,12 +35,15 @@ type AuditLogFilter struct {
 	Since     time.Time
 }
 
-// EnsureAuditEventsSchema idempotently ensures audit_events table and all columns exist.
+// EnsureAuditEventsSchema idempotently ensures audit_events table exists.
 func (s *Store) EnsureAuditEventsSchema(ctx context.Context) error {
+	if s.pool == nil {
+		return nil
+	}
 	query := `
 	CREATE TABLE IF NOT EXISTS audit_events (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		tenant_id UUID NOT NULL,
+		organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 		correlation_id UUID,
 		request_id UUID,
 		action TEXT NOT NULL,
@@ -58,33 +61,20 @@ func (s *Store) EnsureAuditEventsSchema(ctx context.Context) error {
 		ip_address TEXT DEFAULT '',
 		occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	);
-
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS correlation_id UUID;
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS request_id UUID;
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_type TEXT DEFAULT 'USER';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_ref TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_subject TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_role TEXT DEFAULT 'admin';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS resource_type TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS resource_id TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS outcome TEXT DEFAULT 'SUCCESS';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS reason_code TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS target_type TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS target_id TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS diff_json JSONB NOT NULL DEFAULT '{}';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS ip_address TEXT DEFAULT '';
-	ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-	CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_time ON audit_events (tenant_id, occurred_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_audit_events_resource ON audit_events (tenant_id, resource_type, occurred_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (tenant_id, action, occurred_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_audit_events_org_time ON audit_events (organization_id, occurred_at DESC);
 	`
 	_, err := s.pool.Exec(ctx, query)
 	return err
 }
 
 // InsertAuditEvent writes an immutable administrative audit record.
-func (s *Store) InsertAuditEvent(ctx context.Context, tenantID string, e *AuditEvent) error {
+func (s *Store) InsertAuditEvent(ctx context.Context, organizationID string, e *AuditEvent) error {
+	if s.pool == nil {
+		return nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
 	if e.Timestamp.IsZero() {
 		e.Timestamp = time.Now().UTC()
 	}
@@ -103,39 +93,42 @@ func (s *Store) InsertAuditEvent(ctx context.Context, tenantID string, e *AuditE
 
 	query := `
 	INSERT INTO audit_events (
-		tenant_id, action, actor_subject, actor_role, resource_type, resource_id,
+		organization_id, action, actor_subject, actor_role, resource_type, resource_id,
 		diff_json, ip_address, outcome, occurred_at
 	) VALUES (
 		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 	)`
 
 	_, err := s.pool.Exec(ctx, query,
-		tenantID, e.Action, e.ChangedBy, e.ActorRole, e.TableName, e.AffectedItemID,
+		organizationID, e.Action, e.ChangedBy, e.ActorRole, e.TableName, e.AffectedItemID,
 		diffBytes, e.IPAddress, e.Outcome, e.Timestamp,
 	)
 	return err
 }
 
 // ListAuditLogs returns filtered and paginated management plane audit logs.
-func (s *Store) ListAuditLogs(ctx context.Context, tenantID string, filter AuditLogFilter) ([]AuditEvent, int, error) {
+func (s *Store) ListAuditLogs(ctx context.Context, organizationID string, filter AuditLogFilter) ([]AuditEvent, int, error) {
 	if s.pool == nil {
 		return []AuditEvent{}, 0, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 
 	if filter.Limit <= 0 || filter.Limit > 500 {
 		filter.Limit = 50
 	}
 
-	countSQL := `SELECT COUNT(*) FROM audit_events WHERE tenant_id = $1`
+	countSQL := `SELECT COUNT(*) FROM audit_events WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid`
 	querySQL := `
-	SELECT id::text, tenant_id::text, action, COALESCE(actor_subject, actor_ref, 'admin'),
+	SELECT id::text, organization_id::text, action, COALESCE(actor_subject, actor_ref, 'admin'),
 	       COALESCE(actor_role, 'admin'), COALESCE(resource_type, target_type, 'unknown'),
 	       COALESCE(resource_id, target_id, ''), diff_json, COALESCE(ip_address, ''),
 	       COALESCE(outcome, 'SUCCESS'), occurred_at
 	FROM audit_events
-	WHERE tenant_id = $1`
+	WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid`
 
-	args := []interface{}{tenantID}
+	args := []interface{}{organizationID}
 	argIdx := 2
 
 	if filter.ObjectID != "" {
@@ -191,12 +184,13 @@ func (s *Store) ListAuditLogs(ctx context.Context, tenantID string, filter Audit
 		var e AuditEvent
 		var diffJSON []byte
 		if err := rows.Scan(
-			&e.ID, &e.TenantID, &e.Action, &e.ChangedBy,
+			&e.ID, &e.OrganizationID, &e.Action, &e.ChangedBy,
 			&e.ActorRole, &e.TableName, &e.AffectedItemID,
 			&diffJSON, &e.IPAddress, &e.Outcome, &e.Timestamp,
 		); err != nil {
 			continue
 		}
+		e.TenantID = e.OrganizationID
 
 		if len(diffJSON) > 0 {
 			var parsed map[string]interface{}

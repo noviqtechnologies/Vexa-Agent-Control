@@ -1,20 +1,13 @@
 package handler
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type UserHandler struct {
@@ -62,12 +55,21 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var authProvPtr *string
+	if req.AuthProviderID != "" {
+		authProvPtr = &req.AuthProviderID
+	}
+	role := "MEMBER"
+	if req.IsAdmin {
+		role = "ADMIN"
+	}
 	u := &model.User{
-		TenantID:       tenantID,
-		AuthProviderID: req.AuthProviderID,
+		OrganizationID: tenantID,
+		AuthProviderID: authProvPtr,
 		Email:          req.Email,
 		PasswordHash:   hash,
 		IsAdmin:        req.IsAdmin,
+		Role:           role,
 	}
 
 	if err := h.store.UpsertUser(r.Context(), u); err != nil {
@@ -88,8 +90,8 @@ func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.UserClaimsFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 
-	// Authorization check: users can only update their own password unless they hold admin or operator role
-	if claims != nil && claims.UserID != id && !claims.IsAdmin && !claims.IsSaaSOperator {
+	// Authorization check: users can only update their own password unless they hold admin role
+	if claims != nil && claims.UserID != id && !claims.IsAdmin {
 		http.Error(w, `{"error":"forbidden: admin privileges required to update other users' passwords"}`, http.StatusForbidden)
 		return
 	}
@@ -121,7 +123,6 @@ func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	tenantID := middleware.TenantIDFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 
 	targetUser, err := h.store.GetUserByID(r.Context(), id)
@@ -133,79 +134,15 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	if targetUser.IsAdmin || targetUser.IsSaaSOperator {
+	if targetUser.IsAdmin {
 		http.Error(w, "admin role users cannot be deleted", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.store.DeleteUser(r.Context(), tenantID, id); err != nil {
+	if err := h.store.DeleteUser(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// hashPassword hashes a plaintext password using bcrypt (cost=12, cryptographic adaptive salt).
-// This conforms to NIST Special Publication 800-63B and OWASP password storage best practices.
-func hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
-// VerifyPassword verifies a plaintext password against a stored bcrypt (or legacy sha256) hash.
-func VerifyPassword(password, encodedHash string) (bool, error) {
-	if encodedHash == "" || password == "" {
-		return false, nil
-	}
-
-	// 1. Standard Bcrypt verification ($2a$, $2b$, $2y$)
-	if strings.HasPrefix(encodedHash, "$2a$") || strings.HasPrefix(encodedHash, "$2b$") || strings.HasPrefix(encodedHash, "$2y$") {
-		err := bcrypt.CompareHashAndPassword([]byte(encodedHash), []byte(password))
-		if err != nil {
-			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
-	}
-
-	// 2. Legacy SHA256 fallback compatibility with constant-time comparison
-	parts := strings.Split(encodedHash, "$")
-	if len(parts) >= 5 && parts[1] == "sha256" {
-		var iterations int
-		_, err := fmt.Sscanf(parts[2], "i=%d", &iterations)
-		if err != nil || iterations <= 0 {
-			iterations = 10000
-		}
-
-		b64Salt := parts[3]
-		b64Hash := parts[4]
-
-		salt, err := base64.RawStdEncoding.DecodeString(b64Salt)
-		if err != nil {
-			return false, err
-		}
-
-		expectedHash, err := base64.RawStdEncoding.DecodeString(b64Hash)
-		if err != nil {
-			return false, err
-		}
-
-		hash := []byte(password)
-		for i := 0; i < iterations; i++ {
-			h := sha256.New()
-			h.Write(hash)
-			h.Write(salt)
-			hash = h.Sum(nil)
-		}
-
-		return subtle.ConstantTimeCompare(hash, expectedHash) == 1, nil
-	}
-
-	return false, fmt.Errorf("unsupported password hash format")
 }
 

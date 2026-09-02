@@ -16,8 +16,8 @@ This guide covers installing Vexa Agent Control on macOS for both Apple Silicon 
 
 | Apple Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.65-macos-aarch64.zip` | **Yes (Verified)** |
-| **Intel Core (x86_64)** | `agentcontrol-v1.0.65-macos-x86_64.zip` | **Yes (Verified)** |
+| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.70-macos-aarch64.zip` | **Yes (Verified)** |
+| **Intel Core (x86_64)** | `agentcontrol-v1.0.70-macos-x86_64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -46,6 +46,30 @@ This guide covers installing Vexa Agent Control on macOS for both Apple Silicon 
 
 ---
 
+## Alternative: Docker Deployment on macOS
+
+If you have **Docker Desktop for Mac** installed and prefer not to install binaries on your host system:
+
+### Standalone Gateway Container
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+### Full-Stack Control Hub (Compose)
+```bash
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+docker compose -f docker-compose.team.yml up -d
+```
+Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
+
+---
+
 ## Manual Installation & Checksum Verification
 
 If you prefer to inspect and verify the binary manually before running:
@@ -54,7 +78,7 @@ If you prefer to inspect and verify the binary manually before running:
    ```bash
    ARCH=$(uname -m)
    if [[ "$ARCH" == "arm64" ]]; then ARCH="aarch64"; fi
-   VERSION="v1.0.56"
+   VERSION="v1.0.70"
 
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/agentcontrol-${VERSION}-macos-${ARCH}.zip"
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/checksums.txt"

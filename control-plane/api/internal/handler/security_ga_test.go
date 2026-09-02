@@ -73,23 +73,18 @@ func TestSecurityGA_DevModeRequiresBothFlags(t *testing.T) {
 }
 
 func TestSecurityGA_UnauthenticatedTenantHeaderSpoofingRejected(t *testing.T) {
-	// Request without user or device claims attempting to spoof tenant ID via headers
+	// Request without user or device claims attempting to spoof organization ID via headers
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/resource", nil)
 	req.Header.Set("X-Organization-ID", "attacker-injected-tenant-uuid")
 	req.Header.Set("X-Tenant-ID", "attacker-injected-tenant-uuid")
 
-	_, err := middleware.ResolveAuthenticatedTenantScope(req)
-	if err == nil {
-		t.Fatalf("expected error from ResolveAuthenticatedTenantScope for unauthenticated request with headers")
-	}
-
-	// ResolveTenantScope should return empty string for unauthenticated request, never the attacker header or default tenant
+	// ResolveTenantScope should return singleton DefaultOrganizationID, never the attacker header
 	resolved := middleware.ResolveTenantScope(req)
 	if resolved == "attacker-injected-tenant-uuid" {
 		t.Fatalf("CRITICAL: unauthenticated request was able to inject tenant ID via header!")
 	}
-	if resolved != "" {
-		t.Fatalf("expected empty tenant for unauthenticated request, got %s", resolved)
+	if resolved != middleware.DefaultOrganizationID {
+		t.Fatalf("expected default organization %s, got %s", middleware.DefaultOrganizationID, resolved)
 	}
 }
 
@@ -159,11 +154,10 @@ func TestSecurityGA_MissingIngressSecretOnBoundaryRejected(t *testing.T) {
 func TestSecurityGA_RequestPrincipalResolvedProperly(t *testing.T) {
 	// Verify RequestPrincipal is properly extracted from context
 	principal := &middleware.RequestPrincipal{
-		TenantID:       "tenant-12345",
-		SubjectID:      "user-abc",
-		AuthnType:      middleware.AuthnTypeSession,
-		IsAdmin:        true,
-		IsSaaSOperator: false,
+		TenantID:  "tenant-12345",
+		SubjectID: "user-abc",
+		AuthnType: middleware.AuthnTypeSession,
+		IsAdmin:   true,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)

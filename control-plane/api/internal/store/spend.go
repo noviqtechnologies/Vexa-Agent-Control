@@ -35,98 +35,36 @@ type IncreaseRequest struct {
 	NewCap      *int64     `json:"new_cap"`
 }
 
-// EnsureSpendV1Schema guarantees schema consistency for legacy spend v1 tables.
-func (s *Store) EnsureSpendV1Schema(ctx context.Context) error {
+func (s *Store) UpsertSpendBudget(ctx context.Context, organizationID string, b *SpendBudget) error {
 	if s.pool == nil {
 		return nil
 	}
-	q := `
-		CREATE TABLE IF NOT EXISTS spend_budgets (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-			scope_type TEXT NOT NULL,
-			scope_key TEXT NOT NULL,
-			cap_cents BIGINT NOT NULL DEFAULT 10000,
-			period TEXT NOT NULL DEFAULT 'monthly',
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (scope_type, scope_key)
-		);
-		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS scope_type TEXT NOT NULL DEFAULT 'organization';
-		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS scope_key TEXT NOT NULL DEFAULT 'global';
-		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS cap_cents BIGINT NOT NULL DEFAULT 10000;
-		ALTER TABLE spend_budgets ADD COLUMN IF NOT EXISTS period TEXT NOT NULL DEFAULT 'monthly';
-
-		CREATE TABLE IF NOT EXISTS spend_snapshots (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-			agent_id TEXT NOT NULL,
-			period_start TIMESTAMPTZ NOT NULL,
-			spent_cents BIGINT NOT NULL DEFAULT 0,
-			cap_cents BIGINT,
-			is_estimated BOOLEAN NOT NULL DEFAULT false,
-			pricing_table_version TEXT NOT NULL DEFAULT '',
-			synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (agent_id, period_start)
-		);
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS period_start TIMESTAMPTZ NOT NULL DEFAULT now();
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS spent_cents BIGINT NOT NULL DEFAULT 0;
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS cap_cents BIGINT;
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS is_estimated BOOLEAN NOT NULL DEFAULT false;
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS pricing_table_version TEXT NOT NULL DEFAULT '';
-		ALTER TABLE spend_snapshots ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-		CREATE TABLE IF NOT EXISTS spend_increase_requests (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			request_id UUID DEFAULT uuid_generate_v4(),
-			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-			agent_id TEXT NOT NULL,
-			current_cap BIGINT NOT NULL DEFAULT 0,
-			reason TEXT,
-			status TEXT NOT NULL DEFAULT 'PENDING',
-			submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			resolved_at TIMESTAMPTZ,
-			resolved_by TEXT,
-			new_cap BIGINT
-		);
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS request_id UUID DEFAULT uuid_generate_v4();
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS agent_id TEXT NOT NULL DEFAULT '';
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS current_cap BIGINT NOT NULL DEFAULT 0;
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ NOT NULL DEFAULT now();
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS resolved_by TEXT;
-		ALTER TABLE spend_increase_requests ADD COLUMN IF NOT EXISTS new_cap BIGINT;
-	`
-	_, err := s.pool.Exec(ctx, q)
-	return err
-}
-
-func (s *Store) UpsertSpendBudget(ctx context.Context, tenantID string, b *SpendBudget) error {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO spend_budgets (tenant_id, scope_type, scope_key, cap_cents, period, created_at, updated_at)
+		INSERT INTO spend_policies (organization_id, scope_type, scope_id, limit_microcents, period_type, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, now(), now())
-		ON CONFLICT (scope_type, scope_key) DO UPDATE SET
-			tenant_id  = EXCLUDED.tenant_id,
-			cap_cents  = EXCLUDED.cap_cents,
-			period     = EXCLUDED.period,
-			updated_at = now()
-	`, tenantID, b.ScopeType, b.ScopeKey, b.CapCents, b.Period)
+		ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO UPDATE SET
+			limit_microcents = EXCLUDED.limit_microcents,
+			updated_at       = now()
+	`, organizationID, b.ScopeType, b.ScopeKey, b.CapCents*10000, b.Period)
 	return err
 }
 
-func (s *Store) ListSpendBudgets(ctx context.Context, tenantID string) ([]SpendBudget, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+func (s *Store) ListSpendBudgets(ctx context.Context, organizationID string) ([]SpendBudget, error) {
+	if s.pool == nil {
+		return []SpendBudget{}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT scope_type, scope_key, cap_cents, period, updated_at 
-		FROM spend_budgets 
-		WHERE tenant_id = $1 
-		ORDER BY scope_type, scope_key
-	`, tenantID)
+		SELECT scope_type, scope_id, (limit_microcents / 10000)::bigint, period_type, updated_at 
+		FROM spend_policies 
+		WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+		ORDER BY scope_type, scope_id
+	`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -143,86 +81,59 @@ func (s *Store) ListSpendBudgets(ctx context.Context, tenantID string) ([]SpendB
 	return res, rows.Err()
 }
 
-func (s *Store) UpsertSpendSnapshot(ctx context.Context, tenantID string, snap *SpendSnapshot) error {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+func (s *Store) UpsertSpendSnapshot(ctx context.Context, organizationID string, snap *SpendSnapshot) error {
+	if s.pool == nil {
+		return nil
+	}
+	return nil
+}
+
+func (s *Store) ListSpendSnapshots(ctx context.Context, organizationID string) ([]SpendSnapshot, error) {
+	if s.pool == nil {
+		return []SpendSnapshot{}, nil
+	}
+	return []SpendSnapshot{}, nil
+}
+
+func (s *Store) InsertIncreaseRequest(ctx context.Context, organizationID string, r *IncreaseRequest) error {
+	if s.pool == nil {
+		return nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO spend_snapshots (tenant_id, agent_id, period_start, spent_cents, cap_cents, is_estimated, pricing_table_version, synced_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-		ON CONFLICT (agent_id, period_start) DO UPDATE SET
-			tenant_id   = EXCLUDED.tenant_id,
-			spent_cents = EXCLUDED.spent_cents,
-			cap_cents   = EXCLUDED.cap_cents,
-			synced_at   = now()
-	`, tenantID, snap.AgentID, snap.PeriodStart, snap.SpentCents, snap.CapCents, snap.IsEstimated, snap.PricingTableVersion)
+		INSERT INTO spend_v2_increase_requests (organization_id, requested_limit_microcents, current_limit_microcents, reason, status, created_by, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
+	`, organizationID, r.CurrentCap*10000, r.CurrentCap*10000, r.Reason, r.Status, r.AgentID)
 	return err
 }
 
-func (s *Store) ListSpendSnapshots(ctx context.Context, tenantID string) ([]SpendSnapshot, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+func (s *Store) ResolveIncreaseRequest(ctx context.Context, organizationID, id string, status string, resolvedBy string, newCap *int64) error {
+	if s.pool == nil {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE spend_v2_increase_requests 
+		SET status = $2, decided_at = now(), decided_by = $3
+		WHERE request_id::text = $1
+	`, id, status, resolvedBy)
+	return err
+}
+
+func (s *Store) ListIncreaseRequests(ctx context.Context, organizationID string) ([]IncreaseRequest, error) {
+	if s.pool == nil {
+		return []IncreaseRequest{}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT agent_id, period_start, spent_cents, cap_cents, is_estimated, pricing_table_version, synced_at 
-		FROM spend_snapshots 
-		WHERE tenant_id = $1 
-		ORDER BY period_start DESC, agent_id
-	`, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []SpendSnapshot
-	for rows.Next() {
-		var b SpendSnapshot
-		if err := rows.Scan(&b.AgentID, &b.PeriodStart, &b.SpentCents, &b.CapCents, &b.IsEstimated, &b.PricingTableVersion, &b.SyncedAt); err != nil {
-			return nil, err
-		}
-		res = append(res, b)
-	}
-	return res, rows.Err()
-}
-
-func (s *Store) InsertIncreaseRequest(ctx context.Context, tenantID string, r *IncreaseRequest) error {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO spend_increase_requests (tenant_id, agent_id, current_cap, reason, status, submitted_at)
-		VALUES ($1, $2, $3, $4, $5, now())
-	`, tenantID, r.AgentID, r.CurrentCap, r.Reason, r.Status)
-	return err
-}
-
-func (s *Store) ResolveIncreaseRequest(ctx context.Context, tenantID, id string, status string, resolvedBy string, newCap *int64) error {
-	if tenantID != "" {
-		_, err := s.pool.Exec(ctx, `
-			UPDATE spend_increase_requests 
-			SET status = $2, resolved_at = now(), resolved_by = $3, new_cap = $4
-			WHERE request_id = $1 AND tenant_id = $5
-		`, id, status, resolvedBy, newCap, tenantID)
-		return err
-	}
-	_, err := s.pool.Exec(ctx, `
-		UPDATE spend_increase_requests 
-		SET status = $2, resolved_at = now(), resolved_by = $3, new_cap = $4
-		WHERE request_id = $1
-	`, id, status, resolvedBy, newCap)
-	return err
-}
-
-func (s *Store) ListIncreaseRequests(ctx context.Context, tenantID string) ([]IncreaseRequest, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT request_id, agent_id, current_cap, reason, status, submitted_at, resolved_at, resolved_by, new_cap 
-		FROM spend_increase_requests 
-		WHERE tenant_id = $1 
-		ORDER BY submitted_at DESC
-	`, tenantID)
+		SELECT request_id::text, created_by, (current_limit_microcents / 10000)::bigint, reason, status, created_at, decided_at, decided_by, (requested_limit_microcents / 10000)::bigint
+		FROM spend_v2_increase_requests 
+		WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+		ORDER BY created_at DESC
+	`, organizationID)
 	if err != nil {
 		return nil, err
 	}

@@ -152,7 +152,8 @@ describe('RunExplorer View', () => {
       expect(screen.getByText('Run Dossier')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('RESERVED')).toBeInTheDocument()
+    expect(screen.getByText('RESERVED (HOLD)')).toBeInTheDocument()
     expect(screen.getByText('SETTLED (ACTUAL)')).toBeInTheDocument()
+    expect(screen.getByText('NET BILLED SPEND')).toBeInTheDocument()
   })
 })

@@ -1,60 +1,67 @@
 # ─── GCP Project & Region Configuration ───────────────────────────────────────
 
 variable "gcp_project_id" {
-  description = "The Google Cloud Project ID where all AgentWall resources will be deployed."
+  description = "The Google Cloud Project ID where all AgentControl resources will be deployed."
   type        = string
+  default     = "vexa-prod"
+}
+
+variable "gcp_project_number" {
+  description = "Optional GCP Project Number (e.g. 569175508122)."
+  type        = number
+  default     = null
 }
 
 variable "gcp_region" {
-  description = "Google Cloud region for Cloud Run services (e.g. us-central1, europe-west1, asia-east1)."
+  description = "Google Cloud region for Cloud Run services (e.g. europe-west1, us-central1, asia-east1)."
   type        = string
-  default     = "us-central1"
+  default     = "europe-west1"
 }
 
 variable "environment" {
-  description = "Deployment environment identifier (e.g. dev, staging, prod)."
+  description = "Deployment environment identifier (e.g. stage, dev, prod)."
   type        = string
-  default     = "dev"
+  default     = "stage"
 }
 
 # ─── Container Images ─────────────────────────────────────────────────────────
 
 variable "container_image" {
-  description = "Container image for the AgentWall Gateway proxy."
+  description = "Container image for the AgentControl Gateway proxy."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol:latest"
 }
 
 variable "control_plane_ui_image" {
-  description = "Container image for the AgentWall Enterprise Control Plane Frontend UI."
+  description = "Container image for the AgentControl Enterprise Control Plane Frontend UI."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
 }
 
 variable "control_plane_api_image" {
-  description = "Container image for the AgentWall Enterprise Control Plane Dashboard API."
+  description = "Container image for the AgentControl Enterprise Control Plane Dashboard API."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
 }
 
 variable "control_plane_db_image" {
-  description = "Container image for the AgentWall PostgreSQL Database with initial migrations."
+  description = "Container image for the AgentControl PostgreSQL Database with initial migrations."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 }
 
-# ─── Sizing, Scaling & Concurrency ───────────────────────────────────────────
+# ─── Sizing, Scaling & Cost-Optimized Compute ─────────────────────────────────
 
 variable "min_instances" {
-  description = "Minimum number of Cloud Run instances (set to 0 for dev scale-to-zero / $0 idle compute, or 1 for production always-on)."
+  description = "Minimum number of Cloud Run instances (0 = scale-to-zero / $0 idle compute for stage)."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "max_instances" {
   description = "Maximum number of container instances for auto-scaling under load."
   type        = number
-  default     = 5
+  default     = 3
 }
 
 variable "gateway_cpu" {
@@ -64,9 +71,9 @@ variable "gateway_cpu" {
 }
 
 variable "gateway_memory" {
-  description = "Memory allocated to the Gateway container (e.g. '512Mi', '1Gi', '2Gi')."
+  description = "Memory allocated to the Gateway container (e.g. '256Mi', '512Mi', '1Gi')."
   type        = string
-  default     = "512Mi"
+  default     = "256Mi"
 }
 
 variable "api_cpu" {
@@ -78,7 +85,7 @@ variable "api_cpu" {
 variable "api_memory" {
   description = "Memory allocated to the Dashboard API container."
   type        = string
-  default     = "512Mi"
+  default     = "256Mi"
 }
 
 variable "ui_cpu" {
@@ -90,7 +97,7 @@ variable "ui_cpu" {
 variable "ui_memory" {
   description = "Memory allocated to the Control Plane UI container."
   type        = string
-  default     = "512Mi"
+  default     = "256Mi"
 }
 
 variable "db_cpu" {
@@ -102,7 +109,7 @@ variable "db_cpu" {
 variable "db_memory" {
   description = "Memory allocated to the PostgreSQL sidecar container."
   type        = string
-  default     = "512Mi"
+  default     = "256Mi"
 }
 
 # ─── Access & Security ────────────────────────────────────────────────────────
@@ -113,10 +120,22 @@ variable "allow_unauthenticated" {
   default     = true
 }
 
+variable "deletion_protection" {
+  description = "Whether to enable Cloud Run service deletion protection to prevent accidental teardown."
+  type        = bool
+  default     = false
+}
+
+variable "gateway_url" {
+  description = "Explicit Gateway URL for API environment configuration (if empty, dynamically resolved)."
+  type        = string
+  default     = ""
+}
+
 # ─── Networking & VPC Integration ─────────────────────────────────────────────
 
 variable "enable_vpc" {
-  description = "When true, provisions a custom VPC and Serverless VPC Access Connector for private networking. When false, runs in Google-managed serverless network for maximum cost-effectiveness."
+  description = "When true, provisions a custom VPC and Serverless VPC Access Connector. Set to false for staging to maximize cost savings ($0 networking)."
   type        = bool
   default     = false
 }
@@ -136,7 +155,7 @@ variable "connector_cidr" {
 # ─── Google Artifact Registry (GAR) ───────────────────────────────────────────
 
 variable "gar_enabled" {
-  description = "When true, provisions a dedicated Google Artifact Registry Docker repository for private container images."
+  description = "When true, provisions a dedicated Google Artifact Registry Docker repository with automated retention policies."
   type        = bool
   default     = false
 }
@@ -164,6 +183,13 @@ variable "encryption_secret" {
   sensitive   = true
 }
 
+variable "session_secret" {
+  description = "Cookie signing secret for dashboard session authentication. If left empty, an auto-generated random token is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "postgres_user" {
   description = "PostgreSQL username for the control plane database."
   type        = string
@@ -178,9 +204,9 @@ variable "postgres_password" {
 }
 
 variable "postgres_db" {
-  description = "PostgreSQL database name for AgentWall."
+  description = "PostgreSQL database name for AgentControl."
   type        = string
-  default     = "agentwall"
+  default     = "agentcontrol"
 }
 
 # ─── Custom Labels ────────────────────────────────────────────────────────────

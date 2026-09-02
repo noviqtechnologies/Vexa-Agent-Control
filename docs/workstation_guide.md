@@ -58,7 +58,15 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 
 ## 2. Installation
 
-### macOS / Linux / WSL
+> [!TIP]
+> **Prefer Running with Docker?**
+> If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker run`:
+> ```bash
+> docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+> ```
+> See the full [Docker Deployment Guide](guides/docker-deployment.md).
+
+### macOS / Linux / WSL (Native Binary)
 
 ```bash
 # Install latest release (mandatory SHA-256 verified, strict error handling)

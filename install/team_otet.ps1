@@ -42,10 +42,12 @@ if (!$Env) { $Env = $env:AGENTCONTROL_ENV }
 if (!$Env) { $Env = $env:AGENTCONTROL_ENVIRONMENT }
 if (!$Env) { $Env = $env:AGENTWALL_ENV }
 
-if ($Staging -or $Stage -or ($Env -and $Env.ToLower() -in @("staging", "stage"))) {
-    $HubUrl = $StageHubUrl
-} elseif ($Production -or $Prod -or ($Env -and $Env.ToLower() -in @("production", "prod"))) {
-    $HubUrl = $ProdHubUrl
+if (!$HubUrl) {
+    if ($Staging -or $Stage -or ($Env -and $Env.ToLower() -in @("staging", "stage"))) {
+        $HubUrl = $StageHubUrl
+    } elseif ($Production -or $Prod -or ($Env -and $Env.ToLower() -in @("production", "prod"))) {
+        $HubUrl = $ProdHubUrl
+    }
 }
 
 if (!$HubUrl) { $HubUrl = $env:AGENTCONTROL_HUB_URL }
@@ -190,6 +192,7 @@ if ($ShouldInstallService) {
         if (Test-Path "$env:USERPROFILE\.agentcontrol") {
             Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
         }
+        [Environment]::SetEnvironmentVariable("AGENTCONTROL_HUB_URL", $HubUrl, "Machine")
         [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
         if ($env:GATEWAY_SECRET -and $env:GATEWAY_SECRET -ne "local-dev-shared-secret-change-me") {
             [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")

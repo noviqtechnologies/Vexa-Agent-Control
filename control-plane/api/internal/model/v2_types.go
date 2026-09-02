@@ -37,23 +37,35 @@ const (
 	TokenStatusRevoked  TokenStatus = "REVOKED"
 )
 
-// DevicePrincipal is the authenticated identity resolved by edge mTLS + Cloud SQL.
+// StandardErrorEnvelope matches RFC-7807 problem details
+type StandardErrorEnvelope struct {
+	Error struct {
+		Code            string `json:"code"`
+		Message         string `json:"message"`
+		RequestID       string `json:"request_id,omitempty"`
+		Retryable       bool   `json:"retryable,omitempty"`
+		RemediationCode string `json:"remediation_code,omitempty"`
+	} `json:"error"`
+}
+
+// DevicePrincipal is the authenticated identity resolved by edge mTLS + PostgreSQL.
 type DevicePrincipal struct {
-	TenantID               string      `json:"tenant_id"`
-	DeviceID               string      `json:"device_id"`
-	CertificateID          string      `json:"certificate_id"`
-	CertificateSerial      string      `json:"certificate_serial"`
-	CertificateFingerprint string      `json:"certificate_fingerprint"`
+	OrganizationID         string           `json:"organization_id"`
+	DeviceID               string           `json:"device_id"`
+	CertificateID          string           `json:"certificate_id"`
+	CertificateSerial      string           `json:"certificate_serial"`
+	CertificateFingerprint string           `json:"certificate_fingerprint"`
 	CredentialStatus       CredentialStatus `json:"credential_status"`
-	DeviceState            DeviceState `json:"device_state"`
-	Capabilities           []string    `json:"capabilities"`
-	RequestID              string      `json:"request_id"`
+	DeviceState            DeviceState      `json:"device_state"`
+	Capabilities           []string         `json:"capabilities"`
+	RequestID              string           `json:"request_id"`
 }
 
 // EnrollmentTokenRecord represents persisted OTET metadata.
 type EnrollmentTokenRecord struct {
 	ID                  string      `json:"id"`
-	TenantID            string      `json:"tenant_id"`
+	OrganizationID      string      `json:"organization_id"`
+	TeamID              string      `json:"team_id"`
 	TokenHash           []byte      `json:"-"`
 	TokenHint           string      `json:"token_hint"`
 	HashAlgorithm       string      `json:"hash_algorithm"`
@@ -73,30 +85,31 @@ type EnrollmentTokenRecord struct {
 
 // EnrollmentTransactionRecord represents a 2-key enrollment handshake transaction.
 type EnrollmentTransactionRecord struct {
-	ID                        string    `json:"id"`
-	TenantID                  string    `json:"tenant_id"`
-	EnrollmentTokenID         string    `json:"enrollment_token_id"`
-	StableDeviceID            string    `json:"stable_device_id"`
-	DisplayName               string    `json:"display_name,omitempty"`
-	OwnerSubject              string    `json:"owner_subject,omitempty"`
-	EnrollmentEd25519PubKey   []byte    `json:"-"`
-	EnrollmentKeyFingerprint  string    `json:"enrollment_key_fingerprint"`
-	MTLSCSRSHA256             string    `json:"mtls_csr_sha256"`
-	MTLSCSRPEM                string    `json:"mtls_csr_pem"`
-	OSFamily                  string    `json:"os_family"`
-	OSVersionSummary          string    `json:"os_version_summary,omitempty"`
-	Architecture              string    `json:"architecture"`
-	Status                    string    `json:"status"`
-	FailureCode               string    `json:"failure_code,omitempty"`
-	ExpiresAt                 time.Time `json:"expires_at"`
+	ID                        string     `json:"id"`
+	OrganizationID            string     `json:"organization_id"`
+	EnrollmentTokenID         string     `json:"enrollment_token_id"`
+	StableDeviceID            string     `json:"stable_device_id"`
+	DisplayName               string     `json:"display_name,omitempty"`
+	OwnerSubject              string     `json:"owner_subject,omitempty"`
+	EnrollmentEd25519PubKey   []byte     `json:"-"`
+	EnrollmentKeyFingerprint  string     `json:"enrollment_key_fingerprint"`
+	MTLSCSRSHA256             string     `json:"mtls_csr_sha256"`
+	MTLSCSRPEM                string     `json:"mtls_csr_pem"`
+	OSFamily                  string     `json:"os_family"`
+	OSVersionSummary          string     `json:"os_version_summary,omitempty"`
+	Architecture              string     `json:"architecture"`
+	Status                    string     `json:"status"`
+	FailureCode               string     `json:"failure_code,omitempty"`
+	ExpiresAt                 time.Time  `json:"expires_at"`
 	CompletedAt               *time.Time `json:"completed_at,omitempty"`
-	CreatedAt                 time.Time `json:"created_at"`
+	CreatedAt                 time.Time  `json:"created_at"`
 }
 
 // DeviceRecord represents the operational projection of an enrolled device.
 type DeviceRecord struct {
 	ID                string      `json:"id"`
-	TenantID          string      `json:"tenant_id"`
+	OrganizationID    string      `json:"organization_id"`
+	TeamID            string      `json:"team_id"`
 	StableDeviceID    string      `json:"stable_device_id"`
 	DisplayName       string      `json:"display_name,omitempty"`
 	OwnerSubject      string      `json:"owner_subject,omitempty"`
@@ -148,36 +161,46 @@ type HeartbeatPayload struct {
 		ExpiresAt string `json:"expires_at"`
 	} `json:"credential"`
 	Policy struct {
-		ID      string `json:"id"`
-		Version int    `json:"version"`
-		SHA256  string `json:"sha256"`
-		State   string `json:"state"`
+		CurrentVersion int    `json:"current_version"`
+		CurrentSHA256  string `json:"current_sha256"`
+		Mode           string `json:"mode"`
 	} `json:"policy"`
-	Coverage struct {
-		SupportedTargets  int    `json:"supported_targets"`
-		WrappedTargets    int    `json:"wrapped_targets"`
-		UnverifiedTargets int    `json:"unverified_targets"`
-		WatcherState      string `json:"watcher_state"`
-	} `json:"coverage"`
+	Fleet struct {
+		TargetsTotal      int `json:"targets_total"`
+		TargetsSecured    int `json:"targets_secured"`
+		TargetsTampered   int `json:"targets_tampered"`
+		TamperEventsTotal int `json:"tamper_events_total"`
+	} `json:"fleet"`
+	Environment struct {
+		OSFamily         string `json:"os_family"`
+		OSVersionSummary string `json:"os_version_summary"`
+		Architecture     string `json:"architecture"`
+	} `json:"environment"`
+	Metrics struct {
+		UptimeSeconds   int64 `json:"uptime_seconds"`
+		ResidentMemoryB int64 `json:"resident_memory_bytes"`
+		Goroutines      int   `json:"goroutines"`
+	} `json:"metrics"`
 }
 
-// SecurityEvent represents a structured redacted security evidence item.
-type SecurityEvent struct {
-	EventID         string          `json:"event_id"`
-	EventType       string          `json:"event_type"`
-	Severity        string          `json:"severity"`
-	OccurredAt      time.Time       `json:"occurred_at"`
-	ReasonCode      string          `json:"reason_code"`
-	RedactedDetails json.RawMessage `json:"redacted_details"`
-}
-
-// StandardErrorEnvelope is the unified v2 API error structure.
-type StandardErrorEnvelope struct {
-	Error struct {
-		Code            string `json:"code"`
-		Message         string `json:"message"`
-		RequestID       string `json:"request_id"`
-		Retryable       bool   `json:"retryable"`
-		RemediationCode string `json:"remediation_code,omitempty"`
-	} `json:"error"`
+// AuditEventRecord represents structured compliance audit trails.
+type AuditEventRecord struct {
+	ID             string          `json:"id"`
+	OrganizationID string          `json:"organization_id"`
+	CorrelationID  *string         `json:"correlation_id,omitempty"`
+	RequestID      *string         `json:"request_id,omitempty"`
+	Action         string          `json:"action"`
+	ActorType      string          `json:"actor_type"`
+	ActorRef       string          `json:"actor_ref"`
+	ActorSubject   string          `json:"actor_subject"`
+	ActorRole      string          `json:"actor_role"`
+	ResourceType   string          `json:"resource_type"`
+	ResourceID     string          `json:"resource_id"`
+	Outcome        string          `json:"outcome"`
+	ReasonCode     string          `json:"reason_code"`
+	TargetType     string          `json:"target_type"`
+	TargetID       string          `json:"target_id"`
+	DiffJSON       json.RawMessage `json:"diff_json"`
+	IPAddress      string          `json:"ip_address,omitempty"`
+	OccurredAt     time.Time       `json:"occurred_at"`
 }

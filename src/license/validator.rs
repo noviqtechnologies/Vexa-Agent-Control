@@ -8,8 +8,13 @@ use serde::{Deserialize, Serialize};
 /// A decoded, validated AgentWall license JWT.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct License {
-    #[serde(rename = "sub")]
+    #[serde(rename = "sub", default)]
     pub org_id: String,
+    #[serde(default)]
+    pub tier: String,
+    #[serde(default)]
+    pub max_devices: i64,
+    #[serde(default)]
     pub features: Vec<String>,
     #[serde(rename = "iat", with = "chrono::serde::ts_seconds")]
     pub issued_at: DateTime<Utc>,
@@ -174,6 +179,8 @@ mod tests {
         let now = Utc::now();
         let claims = License {
             org_id: "test-org".to_string(),
+            tier: "enterprise".to_string(),
+            max_devices: -1,
             features: vec!["spend_caps".to_string(), "siem_aggregation".to_string()],
             issued_at: now,
             expires_at: now + chrono::Duration::days(30),
@@ -186,6 +193,7 @@ mod tests {
 
         let validated = validator.validate(&token).unwrap();
         assert_eq!(validated.org_id, "test-org");
+        assert_eq!(validated.tier, "enterprise");
         assert!(validator.has_feature(&validated, "spend_caps"));
         assert!(!validator.has_feature(&validated, "non_existent"));
     }
@@ -204,6 +212,8 @@ mod tests {
         let now = Utc::now();
         let claims = License {
             org_id: "expired-org".to_string(),
+            tier: "team".to_string(),
+            max_devices: 25,
             features: vec![],
             issued_at: now - chrono::Duration::days(60),
             expires_at: now - chrono::Duration::days(30),

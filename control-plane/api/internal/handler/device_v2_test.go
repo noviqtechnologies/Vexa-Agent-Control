@@ -20,9 +20,9 @@ func TestDeviceV2Handler_GetBootstrap_PolicySignature(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/device/bootstrap", nil)
 	principal := &model.DevicePrincipal{
-		DeviceID:    "dev-boot-1",
-		TenantID:    "00000000-0000-0000-0000-000000000001",
-		DeviceState: model.DeviceStateCompliant,
+		DeviceID:       "dev-boot-1",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
+		DeviceState:    model.DeviceStateCompliant,
 	}
 	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
 	req = req.WithContext(ctx)

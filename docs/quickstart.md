@@ -29,11 +29,11 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ---
 
-### Step 1: Install `agentcontrol` Binary
+### Step 1: Install `agentcontrol` Binary (or Use Docker)
 
-- **Goal:** Download and install the standalone release binary to `~/.local/bin`.
+- **Goal:** Download and install the standalone release binary to `~/.local/bin` (or use Docker).
 - **Run:**
-  - *macOS / Linux / WSL:*
+  - *macOS / Linux / WSL (Bash / Zsh):*
     ```bash
     curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
     export PATH="$HOME/.local/bin:$PATH"
@@ -44,8 +44,18 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
     agentcontrol.exe --version
     ```
+  - *Windows (Command Prompt - CMD):*
+    ```cmd
+    curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o "%TEMP%\install.ps1" && powershell.exe -ExecutionPolicy Bypass -File "%TEMP%\install.ps1" && del "%TEMP%\install.ps1"
+    set PATH=%USERPROFILE%\.local\bin;%PATH%
+    agentcontrol.exe --version
+    ```
+  - *Alternative (Docker - Zero Host Installation):*
+    ```bash
+    docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+    ```
 - **Expected Result:** Prints `agentcontrol 1.0.70`.
-- **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
+- **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/) or the [Docker Deployment Guide](guides/docker-deployment.md).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
 
@@ -156,6 +166,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ## Next Steps
 
+- [Docker Deployment Guide](guides/docker-deployment.md) — Deploy standalone gateway or full stack via Docker / Docker Compose.
 - [Workstation Guide](guides/workstation.md) — Learn how to generate custom policies with `agentcontrol generate-policy`.
 - [Custom Agent HTTP Guide](guides/custom-agent-http.md) — Route LangChain, LlamaIndex, or CrewAI agents.
 - [Small Team Hub Guide](guides/small-team-hub.md) — Share security policies across your team.

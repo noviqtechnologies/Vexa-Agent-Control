@@ -1,55 +1,57 @@
 # ─── Google Cloud Deployment Configuration Example ───────────────────────────
-# Copy this file to terraform.tfvars:
-#   Windows (PowerShell): Copy-Item terraform.tfvars.example terraform.tfvars
-#   Linux / macOS:        cp terraform.tfvars.example terraform.tfvars
+# Copy this file to terraform.tfvars or use terraform.stage.tfvars:
+#   Windows (PowerShell): Copy-Item terraform.stage.tfvars terraform.tfvars
+#   Linux / macOS:        cp terraform.stage.tfvars terraform.tfvars
 
-# REQUIRED: Your Google Cloud Project ID
-gcp_project_id = "your-gcp-project-id"
+# Target Google Cloud Project ID
+gcp_project_id = "vexa-prod"
 
-# GCP region (e.g. us-central1, europe-west1, asia-east1)
-gcp_region = "us-central1"
+# GCP region (e.g. europe-west1, us-central1, asia-east1)
+gcp_region = "europe-west1"
 
-# Deployment environment identifier (dev, staging, prod)
-environment = "dev"
+# Deployment environment identifier (stage, dev, prod)
+environment = "stage"
 
-# Container Images (defaults to latest official GHCR releases)
-container_image         = "ghcr.io/noviqtechnologies/agentwall:latest"
-control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
-control_plane_api_image = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
-control_plane_db_image  = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+# Container Images (defaults to latest official releases or Artifact Registry images)
+container_image         = "ghcr.io/noviqtechnologies/agentcontrol:latest"
+control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
+control_plane_api_image = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
+control_plane_db_image  = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 
-# Sizing & Scaling ($0 Idle Compute / Cost-Optimized)
-min_instances  = 1       # Set to 0 for dev scale-to-zero ($0 idle compute)
-max_instances  = 5
+# Sizing & Scaling (Cost-Optimized Scale-to-Zero: ~$0–$2/month for Stage)
+min_instances  = 0       # Set to 0 for stage/dev scale-to-zero ($0 idle compute)
+max_instances  = 3
 gateway_cpu    = "1"
 gateway_memory = "512Mi"
 api_cpu        = "1"
-api_memory     = "512Mi"
+api_memory     = "256Mi"
 ui_cpu         = "1"
-ui_memory      = "512Mi"
+ui_memory      = "256Mi"
 db_cpu         = "1"
-db_memory      = "512Mi"
+db_memory      = "256Mi"
 
-# Access Control (true = public HTTPS ingress via Cloud Run IAM)
+# Access Control & Protection
 allow_unauthenticated = true
+deletion_protection   = false
 
-# Networking: Set to true for enterprise custom VPC and Serverless Connector
+# Networking: Set to true only if custom enterprise VPC and Serverless Connector are required
 enable_vpc     = false
 # vpc_cidr       = "10.10.0.0/16"
 # connector_cidr = "10.10.8.0/28"
 
-# Private Container Registry (GAR): Set to true to provision a dedicated Artifact Registry
-gar_enabled = false
+# Private Container Registry (GAR): Automated retention policy keeps latest 2 tags
+gar_enabled = true
 
 # Secrets (Leave blank to automatically generate secure random tokens)
 # gateway_secret     = "your-custom-gateway-secret-token"
 # policy_read_secret = "your-custom-policy-read-secret"
 # encryption_secret  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# session_secret     = "your-custom-session-signing-secret"
 # postgres_password  = "your-custom-db-password"
 
 # Custom Google Cloud Labels
 labels = {
-  application = "agentwall"
-  team        = "security-engineering"
+  project     = "agentcontrol"
+  environment = "stage"
   managed_by  = "terraform"
 }

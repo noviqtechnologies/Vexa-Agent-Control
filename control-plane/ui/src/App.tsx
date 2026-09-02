@@ -27,7 +27,7 @@ import RunExplorer from './views/RunExplorer'
 import EffectivePolicyExplorer from './views/EffectivePolicyExplorer'
 import Devices from './views/Devices'
 import TamperLog from './views/TamperLog'
-import SaaSOperator from './views/SaaSOperator'
+import LicenseSettings from './views/LicenseSettings'
 import CommandPalette from './components/CommandPalette'
 import NotificationCenter from './components/NotificationCenter'
 import SetInitialPasswordModal from './components/SetInitialPasswordModal'
@@ -42,8 +42,8 @@ interface NavSection {
 
 const OPERATOR_NAV_SECTIONS: NavSection[] = [
   {
-    id: 'operator',
-    label: 'Platform Operations',
+    id: 'settings',
+    label: 'Organization Settings',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
@@ -52,7 +52,7 @@ const OPERATOR_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Tenant Management', to: '/operator' },
+      { label: 'Organization & License', to: '/settings/license' },
     ],
   },
   {
@@ -76,7 +76,7 @@ const OPERATOR_NAV_SECTIONS: NavSection[] = [
 const CUSTOMER_NAV_SECTIONS: NavSection[] = [
   {
     id: 'team',
-    label: 'Team & Fleet',
+    label: 'Team & Organization',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -86,6 +86,7 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Organization & License', to: '/settings/license' },
       { label: 'Device Governance', to: '/devices' },
       { label: 'IDE Tamper Log', to: '/devices/tamper-log' },
       { label: 'Users & Roles', to: '/admin/users' },
@@ -482,21 +483,27 @@ export default function App() {
                   <GlobalAuthBanner />
                   {user?.is_saas_operator ? (
                     <Routes>
-                      <Route path="/" element={<Navigate to="/operator" replace />} />
-                      <Route path="/operator" element={<SaaSOperator />} />
-                      <Route path="/operator/tenants" element={<SaaSOperator />} />
+                      <Route path="/" element={<Navigate to="/settings/license" replace />} />
+                      <Route path="/settings/license" element={<LicenseSettings />} />
+                      <Route path="/organization" element={<LicenseSettings />} />
+                      <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
+                      <Route path="/operator/tenants" element={<Navigate to="/settings/license" replace />} />
                       <Route path="/audit" element={<AuditLogs />} />
-                      <Route path="*" element={<Navigate to="/operator" replace />} />
+                      <Route path="*" element={<Navigate to="/settings/license" replace />} />
                     </Routes>
                   ) : isEnforced ? (
                     <Routes>
                       <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                      <Route path="/settings/license" element={<LicenseSettings />} />
                       <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
                     </Routes>
                   ) : (
                     <Routes>
                       <Route path="/" element={<Navigate to="/fleet" replace />} />
                       <Route path="/fleet" element={<FleetOverview />} />
+                      <Route path="/settings/license" element={<LicenseSettings />} />
+                      <Route path="/organization" element={<LicenseSettings />} />
+                      <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
                       <Route path="/identity" element={<IdentityGovernance />} />
                       <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
                       <Route path="/policy/insights" element={<PolicyInsights />} />

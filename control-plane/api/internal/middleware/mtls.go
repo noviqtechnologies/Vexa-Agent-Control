@@ -113,7 +113,7 @@ func StrictDeviceMTLS(st *store.Store, trustedVPCHeaderSecret string) func(http.
 			}
 
 			reqPrincipal := &RequestPrincipal{
-				TenantID:     principal.TenantID,
+				TenantID:     principal.OrganizationID,
 				DeviceID:     principal.DeviceID,
 				AuthnType:    AuthnTypeMTLS,
 				Capabilities: principal.Capabilities,

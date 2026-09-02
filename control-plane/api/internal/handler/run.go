@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -108,6 +109,11 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		parsedPolicy = map[string]interface{}{}
 	}
 
+	netBilledMicrocents := int64(0)
+	if strings.ToUpper(dossier.State) == "SETTLED" {
+		netBilledMicrocents = int64(dossier.SettledMicrocents)
+	}
+
 	resp := map[string]interface{}{
 		"run_id":     dossier.RunID,
 		"request_id": dossier.RequestID,
@@ -126,19 +132,21 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 			"model":    dossier.Model,
 		},
 		"economics": map[string]interface{}{
-			"reserved_microcents": dossier.ReservedMicrocents,
-			"settled_microcents":  dossier.SettledMicrocents,
-			"released_microcents": dossier.ReleasedMicrocents,
-			"currency":            "USD",
-			"events":              dossier.Events,
+			"reserved_microcents":   dossier.ReservedMicrocents,
+			"settled_microcents":    dossier.SettledMicrocents,
+			"released_microcents":   dossier.ReleasedMicrocents,
+			"net_billed_microcents": netBilledMicrocents,
+			"currency":              "USD",
+			"events":                dossier.Events,
 		},
 		"outcome": map[string]interface{}{
 			"state":          dossier.State,
-			"started_at":      dossier.StartedAt.Format(time.RFC3339),
-			"settled_at":      dossier.SettledAt,
-			"released_at":     dossier.ReleasedAt,
-			"release_reason":  dossier.ReleaseReason,
-			"duration_ms":     dossier.DurationMs,
+			"status_code":    dossier.StatusCode,
+			"started_at":     dossier.StartedAt.Format(time.RFC3339),
+			"settled_at":     dossier.SettledAt,
+			"released_at":    dossier.ReleasedAt,
+			"release_reason": dossier.ReleaseReason,
+			"duration_ms":    dossier.DurationMs,
 		},
 		"provenance": map[string]interface{}{
 			"data_freshness":  time.Now().UTC().Format(time.RFC3339),

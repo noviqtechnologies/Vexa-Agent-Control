@@ -39,16 +39,6 @@ func TestMultiTenant_HeaderOverrideProtection(t *testing.T) {
 	if resolvedTenant != tenantA {
 		t.Fatalf("Header override vulnerability: expected tenant %s, got %s", tenantA, resolvedTenant)
 	}
-
-	// 2. SaaS Operator token with explicit X-Organization-ID header
-	opReq := httptest.NewRequest(http.MethodGet, "/api/v1/devices", nil)
-	opReq.Header.Set("X-Organization-ID", tenantB)
-	opReq = withUserContext(opReq, "saas-op-1", tenantA, true, true)
-
-	opResolved := middleware.ResolveTenantScope(opReq)
-	if opResolved != tenantB {
-		t.Fatalf("SaaS Operator override failed: expected tenant %s, got %s", tenantB, opResolved)
-	}
 }
 
 func TestMultiTenant_SSEStreamIsolation(t *testing.T) {

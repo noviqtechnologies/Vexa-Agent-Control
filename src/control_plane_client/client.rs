@@ -28,13 +28,13 @@ impl DashboardClient {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty() && s != "local-dev-shared-secret-change-me" {
+            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
                 s
             } else {
-                "local-dev-shared-secret-change-me".to_string()
+                crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id).unwrap_or_else(|| "gw-default".to_string())
             }
         } else {
-            "local-dev-shared-secret-change-me".to_string()
+            crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id).unwrap_or_else(|| "gw-default".to_string())
         };
 
         let http = reqwest::Client::builder()

@@ -80,12 +80,12 @@ func TestValidator_ExpiredToken(t *testing.T) {
 	}
 }
 
-func TestCommunityClaims(t *testing.T) {
-	c := CommunityClaims()
-	if c.Tier != "community" {
-		t.Errorf("CommunityClaims Tier = %q, want community", c.Tier)
+func TestDeveloperClaims(t *testing.T) {
+	c := DeveloperClaims()
+	if c.Tier != "developer" {
+		t.Errorf("DeveloperClaims Tier = %q, want developer", c.Tier)
 	}
-	if c.MaxSeats != 10 {
-		t.Errorf("CommunityClaims MaxSeats = %d, want 10", c.MaxSeats)
+	if c.MaxDevices != 1 {
+		t.Errorf("DeveloperClaims MaxDevices = %d, want 1", c.MaxDevices)
 	}
 }

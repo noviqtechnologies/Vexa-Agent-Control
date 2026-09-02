@@ -1,34 +1,25 @@
 # ─── Azure Deployment Configuration Example ───────────────────────────────────
-# Copy this file to terraform.tfvars:
-#   Windows (PowerShell): Copy-Item terraform.tfvars.example terraform.tfvars
-#   Linux / macOS:        cp terraform.tfvars.example terraform.tfvars
+# Copy this file to terraform.tfvars or use terraform.stage.tfvars:
+#   Windows (PowerShell): Copy-Item terraform.stage.tfvars terraform.tfvars
+#   Linux / macOS:        cp terraform.stage.tfvars terraform.tfvars
 
-# Azure region (e.g. westeurope, eastus, centralus, southeastasia)
+# Azure region (e.g. westeurope, eastus, centralus)
 azure_region = "westeurope"
 
-# Deployment environment identifier (dev, staging, prod)
-environment = "dev"
+# Deployment environment identifier (stage, dev, prod)
+environment = "stage"
 
-# Optional custom resource group name (defaults to rg-agentwall-<environment>-<region>)
-# resource_group_name = "rg-agentwall-custom"
-
-# Container Images (defaults to latest GHCR releases)
+# Container Images (defaults to latest official GHCR releases)
 container_image         = "ghcr.io/noviqtechnologies/agentwall:latest"
 control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
 control_plane_api_image = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
 control_plane_db_image  = "ghcr.io/noviqtechnologies/agentwall-db:latest"
 
-# Networking: Set to true for enterprise VNet & Subnet isolation
-enable_vnet_integration = false
-# vnet_cidr              = "10.10.0.0/16"
-# aca_subnet_cidr        = "10.10.0.0/23"
+# Sizing & Scaling (Cost-Optimized Scale-to-Zero for Stage: ~$0–$5/month)
+min_replicas = 0 # 0 for scale-to-zero / $0 idle compute
+max_replicas = 3
 
-# Private Container Registry (ACR): Set to true to provision a dedicated ACR instance
-acr_enabled = false
-
-# Sizing & Scaling (Cost-optimized: 0.25 vCPU / 0.5 GiB per container)
-min_replicas   = 1    # Set to 0 for dev scale-to-zero ($0 idle compute)
-max_replicas   = 5
+# Compute sizing per container
 gateway_cpu    = 0.25
 gateway_memory = "0.5Gi"
 api_cpu        = 0.25
@@ -38,15 +29,24 @@ ui_memory      = "0.5Gi"
 db_cpu         = 0.25
 db_memory      = "0.5Gi"
 
+# Networking: Set to true only if custom VNet and delegated subnet are required
+enable_vnet_integration = false
+# vnet_cidr             = "10.10.0.0/16"
+# aca_subnet_cidr       = "10.10.0.0/23"
+
+# Private Container Registry (ACR): Set to true to provision a dedicated Azure Container Registry
+acr_enabled = false
+
 # Secrets (Leave blank to automatically generate secure random tokens)
 # gateway_secret     = "your-custom-gateway-secret-token"
 # policy_read_secret = "your-custom-policy-read-secret"
 # encryption_secret  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# session_secret     = "your-custom-session-signing-secret"
 # postgres_password  = "your-custom-db-password"
 
-# Custom resource tags
+# Custom Azure Resource Tags
 tags = {
+  Project     = "agentwall"
+  Environment = "stage"
   ManagedBy   = "terraform"
-  Application = "agentwall"
-  Team        = "security-engineering"
 }

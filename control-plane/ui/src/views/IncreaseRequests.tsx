@@ -10,6 +10,7 @@ export default function IncreaseRequests() {
   const [loading, setLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [licenseNotAvailable, setLicenseNotAvailable] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRequests()
@@ -17,11 +18,16 @@ export default function IncreaseRequests() {
 
   const fetchRequests = async () => {
     setLoading(true)
+    setLicenseNotAvailable(null)
     try {
       const res = await api.listIncreaseRequestsV2()
       setRequests(res.requests || [])
-    } catch (e) {
-      console.error(e)
+    } catch (e: any) {
+      if (e.status === 403 || (e.message && e.message.includes('license'))) {
+        setLicenseNotAvailable(e.message || 'Spend Limit Increase Requests require a Team or Enterprise license tier.')
+      } else {
+        console.error(e)
+      }
     } finally {
       setLoading(false)
     }
@@ -47,6 +53,18 @@ export default function IncreaseRequests() {
         <h1>Spend Limit Increase Requests</h1>
         <p>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
       </div>
+
+      {licenseNotAvailable && (
+        <div className="card" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 24 }}>🛡️</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#f59e0b' }}>Team or Enterprise Feature</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{licenseNotAvailable}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && (
         <div style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)' }}>

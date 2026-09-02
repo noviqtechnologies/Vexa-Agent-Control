@@ -48,6 +48,9 @@ pub fn install_windows_service(
 
     // ── Write non-secret Hub URL to HKLM BEFORE creating/starting the service ──
     let _ = std::process::Command::new("setx")
+        .args(&["/M", "AGENTCONTROL_HUB_URL", &clean_hub_url])
+        .output();
+    let _ = std::process::Command::new("setx")
         .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
         .output();
     if !_gateway_secret.trim().is_empty() {

@@ -1319,94 +1319,90 @@ export default function PolicyMarketplace() {
     const q = (queryToUse !== undefined ? queryToUse : aiQuery).toLowerCase().trim()
     if (!q) return
 
-    setAiAnalyzing(true)
+    const scored = (templates && templates.length > 0 ? templates : BUILTIN_TEMPLATES).map(tpl => {
+      let score = 0
+      const reasons: string[] = []
+      const tplName = (tpl.name || '').toLowerCase()
+      const tplDesc = (tpl.description || '').toLowerCase()
+      const tplContent = (tpl.content || '').toLowerCase()
+      const tplTags = (tpl.tags || []).map(t => t.toLowerCase())
+      const tplGuardrails = (tpl.guardrails || []).map(g => g.toLowerCase())
+      const tplCats = (tpl.categories || [tpl.category]).map(c => c.toLowerCase())
 
-    setTimeout(() => {
-      const scored = templates.map(tpl => {
-        let score = 0
-        const reasons: string[] = []
-        const tplName = (tpl.name || '').toLowerCase()
-        const tplDesc = (tpl.description || '').toLowerCase()
-        const tplContent = (tpl.content || '').toLowerCase()
-        const tplTags = (tpl.tags || []).map(t => t.toLowerCase())
-        const tplGuardrails = (tpl.guardrails || []).map(g => g.toLowerCase())
-        const tplCats = (tpl.categories || [tpl.category]).map(c => c.toLowerCase())
-
-        // Keyword checking
-        const words = q.split(/\s+/).filter(w => w.length > 2)
-        words.forEach(w => {
-          if (tplName.includes(w)) { score += 25; reasons.push(`Direct title match on "${w}"`) }
-          if (tplDesc.includes(w)) { score += 15; reasons.push(`Matches security intent for "${w}"`) }
-          if (tplTags.includes(w)) { score += 20; reasons.push(`Tagged with #${w}`) }
-          if (tplCats.includes(w)) { score += 20; reasons.push(`Direct category match in ${w}`) }
-          if (tplGuardrails.some(g => g.includes(w))) { score += 25; reasons.push(`Includes guardrail "${w}"`) }
-          if (tplContent.includes(w)) { score += 10 }
-        })
-
-        // Jurisdiction and domain boosts
-        if (q.includes('australia') || q.includes('tfn') || q.includes('medicare') || q.includes('apra')) {
-          if (tplCats.includes('australia')) { score += 40; reasons.push('Complies with Australian APRA CPS 234 & Privacy standards') }
-        }
-        if (q.includes('cursor') || q.includes('ide') || q.includes('developer') || q.includes('shell') || q.includes('rm -rf') || q.includes('.env')) {
-          if (tpl.id === 'safe-cursor' || tplCats.includes('developer security')) {
-            score += 50
-            reasons.push('Enforces zero-trust workstation shielding and blocks rm -rf/.env exfiltration')
-          }
-        }
-        if (q.includes('mcp') || q.includes('agent') || q.includes('drift') || q.includes('cycle') || q.includes('sandbox')) {
-          if (tpl.id === 'autonomous-agent-guardrails' || tplCats.includes('production governance')) {
-            score += 50
-            reasons.push('Enforces Model Context Protocol (MCP) tool schema drift locking & cycle break')
-          }
-        }
-        if (q.includes('pci') || q.includes('credit card') || q.includes('card') || q.includes('financial') || q.includes('bank')) {
-          if (tpl.id === 'pci-dss-compliance' || tplCats.includes('financial services')) {
-            score += 45
-            reasons.push('Luhn verification on credit cards, CVV masking & PCI egress boundaries')
-          }
-        }
-        if (q.includes('hipaa') || q.includes('medical') || q.includes('health') || q.includes('phi') || q.includes('mrn')) {
-          if (tpl.id === 'hipaa-compliance' || tplCats.includes('healthcare')) {
-            score += 50
-            reasons.push('Auto-redacts PHI, MRN medical identifiers, and SSNs')
-          }
-        }
-        if (q.includes('gdpr') || q.includes('europe') || q.includes('eu') || q.includes('nir') || q.includes('insee')) {
-          if (tpl.id === 'gdpr-eu-pii' || tplCats.includes('eu')) {
-            score += 45
-            reasons.push('GDPR Article 32 personal data masking & French NIR/INSEE protection')
-          }
-        }
-        if (q.includes('injection') || q.includes('jailbreak') || q.includes('dan') || q.includes('prompt')) {
-          if (tpl.id === 'prompt-injection-jailbreak-shield' || tpl.id === 'all-regions-nsfw-filter') {
-            score += 45
-            reasons.push('Multi-layer prompt injection heuristics & DAN jailbreak pattern defense')
-          }
-        }
-        if (q.includes('cost') || q.includes('budget') || q.includes('fallback') || q.includes('rate limit')) {
-          if (tpl.id === 'cost-governance-fallback') {
-            score += 50
-            reasons.push('Smart model fallback routing and strict token budget enforcement')
-          }
-        }
-
-        // Deduplicate reasons
-        const uniqueReasons = Array.from(new Set(reasons)).slice(0, 3)
-        if (uniqueReasons.length === 0) {
-          uniqueReasons.push('General security compatibility and policy guardrail coverage')
-        }
-
-        return {
-          template: tpl,
-          score: Math.min(99, Math.max(20, score + 15)),
-          reasons: uniqueReasons
-        }
+      // Keyword checking
+      const words = q.split(/\s+/).filter(w => w.length > 2)
+      words.forEach(w => {
+        if (tplName.includes(w)) { score += 25; reasons.push(`Direct title match on "${w}"`) }
+        if (tplDesc.includes(w)) { score += 15; reasons.push(`Matches security intent for "${w}"`) }
+        if (tplTags.includes(w)) { score += 20; reasons.push(`Tagged with #${w}`) }
+        if (tplCats.includes(w)) { score += 20; reasons.push(`Direct category match in ${w}`) }
+        if (tplGuardrails.some(g => g.includes(w))) { score += 25; reasons.push(`Includes guardrail "${w}"`) }
+        if (tplContent.includes(w)) { score += 10 }
       })
 
-      scored.sort((a, b) => b.score - a.score)
-      setAiResults(scored.slice(0, 3))
-      setAiAnalyzing(false)
-    }, 600)
+      // Jurisdiction and domain boosts
+      if (q.includes('australia') || q.includes('tfn') || q.includes('medicare') || q.includes('apra')) {
+        if (tplCats.includes('australia')) { score += 40; reasons.push('Complies with Australian APRA CPS 234 & Privacy standards') }
+      }
+      if (q.includes('cursor') || q.includes('ide') || q.includes('developer') || q.includes('shell') || q.includes('rm -rf') || q.includes('.env')) {
+        if (tpl.id === 'safe-cursor' || tplCats.includes('developer security')) {
+          score += 50
+          reasons.push('Enforces zero-trust workstation shielding and blocks rm -rf/.env exfiltration')
+        }
+      }
+      if (q.includes('mcp') || q.includes('agent') || q.includes('drift') || q.includes('cycle') || q.includes('sandbox')) {
+        if (tpl.id === 'autonomous-agent-guardrails' || tplCats.includes('production governance')) {
+          score += 50
+          reasons.push('Enforces Model Context Protocol (MCP) tool schema drift locking & cycle break')
+        }
+      }
+      if (q.includes('pci') || q.includes('credit card') || q.includes('card') || q.includes('financial') || q.includes('bank')) {
+        if (tpl.id === 'pci-dss-compliance' || tplCats.includes('financial services')) {
+          score += 45
+          reasons.push('Luhn verification on credit cards, CVV masking & PCI egress boundaries')
+        }
+      }
+      if (q.includes('hipaa') || q.includes('medical') || q.includes('health') || q.includes('phi') || q.includes('mrn')) {
+        if (tpl.id === 'hipaa-compliance' || tplCats.includes('healthcare')) {
+          score += 50
+          reasons.push('Auto-redacts PHI, MRN medical identifiers, and SSNs')
+        }
+      }
+      if (q.includes('gdpr') || q.includes('europe') || q.includes('eu') || q.includes('nir') || q.includes('insee')) {
+        if (tpl.id === 'gdpr-eu-pii' || tplCats.includes('eu')) {
+          score += 45
+          reasons.push('GDPR Article 32 personal data masking & French NIR/INSEE protection')
+        }
+      }
+      if (q.includes('injection') || q.includes('jailbreak') || q.includes('dan') || q.includes('prompt')) {
+        if (tpl.id === 'prompt-injection-jailbreak-shield' || tpl.id === 'all-regions-nsfw-filter') {
+          score += 45
+          reasons.push('Multi-layer prompt injection heuristics & DAN jailbreak pattern defense')
+        }
+      }
+      if (q.includes('cost') || q.includes('budget') || q.includes('fallback') || q.includes('rate limit')) {
+        if (tpl.id === 'cost-governance-fallback') {
+          score += 50
+          reasons.push('Smart model fallback routing and strict token budget enforcement')
+        }
+      }
+
+      // Deduplicate reasons
+      const uniqueReasons = Array.from(new Set(reasons)).slice(0, 3)
+      if (uniqueReasons.length === 0) {
+        uniqueReasons.push('General security compatibility and policy guardrail coverage')
+      }
+
+      return {
+        template: tpl,
+        score: Math.min(99, Math.max(20, score + 15)),
+        reasons: uniqueReasons
+      }
+    })
+
+    scored.sort((a, b) => b.score - a.score)
+    setAiResults(scored.slice(0, 3))
+    setAiAnalyzing(false)
   }
 
   const handleCreateCustom = async (e: React.FormEvent) => {
@@ -1816,6 +1812,7 @@ export default function PolicyMarketplace() {
                 <div className="ai-presets-row">
                   <span className="preset-label">Quick Prompts:</span>
                   <button
+                    id="preset-australia-tfn"
                     className="preset-pill"
                     onClick={() => {
                       const p = 'Australian Banking & Tax Compliance with TFN, Medicare, and APRA CPS 234'

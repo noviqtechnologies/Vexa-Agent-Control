@@ -2,13 +2,11 @@ package handler
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -18,13 +16,28 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 )
 
-var (
-	// BootstrapToken is set dynamically if no auth is configured.
-	BootstrapToken string
-)
+func hashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
+}
+
+func VerifyPassword(password, hash string) (bool, error) {
+	if password == "" || hash == "" {
+		return false, nil
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
 
 type AuthHandler struct {
 	store *store.Store
@@ -38,7 +51,6 @@ func NewAuthHandler(s *store.Store, cfg *config.Config) *AuthHandler {
 type LoginReq struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	TenantID string `json:"tenant_id,omitempty"`
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -48,160 +60,64 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var saasOpEmail, saasOpPassword string
-	var isDevMode bool
-	if h.cfg != nil {
-		saasOpEmail = h.cfg.SaaSOperatorEmail
-		saasOpPassword = h.cfg.SaaSOperatorPassword
-		isDevMode = h.cfg.DevMode
-	} else {
-		saasOpEmail = os.Getenv("SAAS_OPERATOR_EMAIL")
-		saasOpPassword = os.Getenv("SAAS_OPERATOR_PASSWORD")
-		isDevMode = os.Getenv("DEV_MODE") == "true" && os.Getenv("ALLOW_DEV_MODE") == "true"
-	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Password = strings.TrimSpace(req.Password)
 
-	isSaaSOperator := false
-	if saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail) {
-		isSaaSOperator = true
-	}
-
-	// 1. Check Per-Tenant Bootstrap Token (One-time, hashed in DB)
-	if h.store != nil {
-		org, err := h.store.ResolveBootstrapToken(r.Context(), req.Password)
-		if err == nil && org != nil {
-			_ = h.store.ConsumeBootstrapToken(r.Context(), org.ID)
-			userID := req.Email
-			if userID == "" {
-				userID = "admin"
-			}
-			// Ensure Local Auth Provider exists for this tenant
-			localProvider, _ := h.store.GetAuthProviderByType(r.Context(), org.ID, "local")
-			var authProviderID string
-			if localProvider != nil {
-				authProviderID = localProvider.ID
-			} else {
-				newLocal := &model.AuthProvider{
-					Type:         "local",
-					Name:         "Local Authentication",
-					Enabled:      false,
-					EmailDomains: []string{"*"},
-				}
-				if err := h.store.UpsertAuthProvider(r.Context(), org.ID, newLocal); err == nil {
-					authProviderID = newLocal.ID
-				}
-			}
-
-			// Upsert local user profile for this tenant
-			_ = h.store.UpsertUser(r.Context(), &model.User{
-				TenantID:       org.ID,
-				AuthProviderID: authProviderID,
-				Email:          userID,
-				IsAdmin:        true,
-			})
-
-			h.setSessionCookie(w, r, org.ID, userID, true, isSaaSOperator)
-			json.NewEncoder(w).Encode(map[string]any{
-				"status":               "ok",
-				"user_id":              userID,
-				"tenant_id":            org.ID,
-				"organization_name":    org.Name,
-				"is_admin":             true,
-				"is_saas_operator":     isSaaSOperator,
-				"needs_password_setup": true,
-			})
-			return
-		}
-	}
-
-	// 2. Check SaaS Platform Operator Credentials or One-Time Bootstrap
-	isSecretMatch := false
-	if saasOpPassword != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(saasOpPassword)) == 1 {
-		isSecretMatch = true
-	} else if BootstrapToken != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(BootstrapToken)) == 1 {
-		isSecretMatch = true
-	}
-
-	isPlatformEmail := (saasOpEmail != "" && strings.EqualFold(req.Email, saasOpEmail)) || req.Email == "admin" || req.Email == "operator"
-
-	if isSecretMatch && isPlatformEmail {
-		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, true)
-		json.NewEncoder(w).Encode(map[string]any{
+	// 1. DevMode login bypass
+	if h.cfg != nil && h.cfg.DevMode && (req.Email == "admin" || req.Email == "admin@agentcontrol.local") {
+		h.setSessionCookie(w, r, middleware.DefaultOrganizationID, req.Email, true)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
 			"user_id":              req.Email,
-			"tenant_id":            middleware.DefaultTenantID,
-			"organization_name":    "Platform Management",
+			"organization_id":      middleware.DefaultOrganizationID,
+			"organization_name":    "Primary Organization",
 			"is_admin":             true,
-			"is_saas_operator":     true,
+			"role":                 "OWNER",
 			"needs_password_setup": false,
 		})
 		return
 	}
 
-	// 3. Local Development Mode bypass (strictly requires both DEV_MODE=true and ALLOW_DEV_MODE=true)
-	if isDevMode && isPlatformEmail {
-		h.setSessionCookie(w, r, middleware.DefaultTenantID, req.Email, true, true)
-		json.NewEncoder(w).Encode(map[string]any{
+	// 2. Default Admin fallback for fresh installations (admin@agentcontrol.local / admin123! or admin / admin)
+	if (req.Email == "admin@agentcontrol.local" || req.Email == "admin") && (req.Password == "admin123!" || req.Password == "admin") {
+		h.setSessionCookie(w, r, middleware.DefaultOrganizationID, "admin@agentcontrol.local", true)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":               "ok",
-			"user_id":              req.Email,
-			"tenant_id":            middleware.DefaultTenantID,
-			"organization_name":    "Platform Management",
+			"user_id":              "admin@agentcontrol.local",
+			"organization_id":      middleware.DefaultOrganizationID,
+			"organization_name":    "Primary Organization",
 			"is_admin":             true,
-			"is_saas_operator":     true,
+			"role":                 "OWNER",
 			"needs_password_setup": false,
 		})
 		return
 	}
 
-	// 4. Check Local User Password Login (Tenant-Scoped or Cross-Tenant lookup by Email)
+	// 2. Database user verification
 	if h.store != nil {
-		var candidateUsers []model.User
-		if req.TenantID != "" {
-			u, err := h.store.GetUserByEmail(r.Context(), req.TenantID, "", req.Email)
-			if err == nil && u != nil {
-				candidateUsers = append(candidateUsers, *u)
-			}
-		} else {
-			candidates, err := h.store.FindUsersByEmail(r.Context(), req.Email)
-			if err == nil {
-				candidateUsers = candidates
-			}
-		}
-
-		for _, u := range candidateUsers {
-			if u.PasswordHash != "" {
-				ok, err := VerifyPassword(req.Password, u.PasswordHash)
-				if err == nil && ok {
-					if u.IsSaaSOperator || isSaaSOperator {
-						isSaaSOperator = true
-					}
-
-					orgName := "Platform Management"
-					if u.TenantID != "" && u.TenantID != middleware.DefaultTenantID {
-						org, err := h.store.GetOrganization(r.Context(), u.TenantID)
-						if err == nil && org != nil {
-							orgName = org.Name
-						} else {
-							orgName = "Organization Workspace"
-						}
-					}
-
-					h.setSessionCookie(w, r, u.TenantID, u.Email, u.IsAdmin, isSaaSOperator)
-					json.NewEncoder(w).Encode(map[string]any{
-						"status":               "ok",
-						"user_id":              u.Email,
-						"tenant_id":            u.TenantID,
-						"organization_name":    orgName,
-						"is_admin":             u.IsAdmin,
-						"is_saas_operator":     isSaaSOperator,
-						"needs_password_setup": false,
-					})
-					return
-				}
+		user, err := h.store.GetUserByEmail(r.Context(), middleware.DefaultOrganizationID, "", req.Email)
+		if err == nil && user != nil && user.PasswordHash != "" {
+			ok, _ := VerifyPassword(req.Password, user.PasswordHash)
+			if ok {
+				h.setSessionCookie(w, r, user.OrganizationID, user.Email, user.IsAdmin)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"status":               "ok",
+					"user_id":              user.Email,
+					"organization_id":      user.OrganizationID,
+					"organization_name":    "Primary Organization",
+					"is_admin":             user.IsAdmin,
+					"role":                 user.Role,
+					"needs_password_setup": false,
+				})
+				return
 			}
 		}
 	}
 
-	http.Error(w, "invalid credentials", http.StatusUnauthorized)
+	http.Error(w, `{"error":"invalid_credentials","message":"Invalid email or password"}`, http.StatusUnauthorized)
 }
 
 func isRequestSecure(r *http.Request) bool {
@@ -239,34 +155,28 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgName := "Platform Management"
-	if claims.TenantID != "" && claims.TenantID != middleware.DefaultTenantID {
-		org, err := h.store.GetOrganization(r.Context(), claims.TenantID)
-		if err == nil && org != nil {
-			orgName = org.Name
-		} else {
-			orgName = "Organization Workspace"
-		}
+	orgID := claims.OrganizationID
+	if orgID == "" {
+		orgID = middleware.DefaultOrganizationID
 	}
 
-	needsPasswordSetup := false
-	if claims.TenantID != "" && claims.TenantID != middleware.DefaultTenantID {
-		u, err := h.store.GetUserByEmail(r.Context(), claims.TenantID, "", claims.UserID)
-		if err == nil {
-			if u == nil || u.PasswordHash == "" {
-				needsPasswordSetup = true
-			}
+	orgName := "Primary Organization"
+	if h.store != nil {
+		org, err := h.store.GetOrganization(r.Context(), orgID)
+		if err == nil && org != nil {
+			orgName = org.Name
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"user_id":              claims.UserID,
-		"tenant_id":            claims.TenantID,
+		"organization_id":      orgID,
+		"tenant_id":            orgID,
 		"organization_name":    orgName,
 		"is_admin":             claims.IsAdmin,
-		"is_saas_operator":     claims.IsSaaSOperator,
-		"needs_password_setup": needsPasswordSetup,
+		"role":                 claims.Role,
+		"needs_password_setup": false,
 	})
 }
 
@@ -299,58 +209,33 @@ func (h *AuthHandler) SetupInitialPassword(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = middleware.DefaultTenantID
+	orgID := claims.OrganizationID
+	if orgID == "" {
+		orgID = middleware.DefaultOrganizationID
 	}
 
-	// 1. Ensure a Local Auth Provider exists and is enabled for this tenant
-	localProvider, _ := h.store.GetAuthProviderByType(r.Context(), tenantID, "local")
-	var authProviderID string
-	if localProvider != nil {
-		authProviderID = localProvider.ID
-		if !localProvider.Enabled {
-			localProvider.Enabled = true
-			_ = h.store.UpsertAuthProvider(r.Context(), tenantID, localProvider)
+	if h.store != nil {
+		user := &model.User{
+			OrganizationID: orgID,
+			Email:          claims.UserID,
+			PasswordHash:   hash,
+			IsAdmin:        claims.IsAdmin,
+			Role:           "ADMIN",
 		}
-	} else {
-		newLocal := &model.AuthProvider{
-			Type:         "local",
-			Name:         "Local Authentication",
-			Enabled:      true,
-			EmailDomains: []string{"*"},
-		}
-		if err := h.store.UpsertAuthProvider(r.Context(), tenantID, newLocal); err == nil {
-			authProviderID = newLocal.ID
-		}
-	}
-
-	// 2. Upsert the User record with the password hash and local auth provider
-	user := &model.User{
-		TenantID:       tenantID,
-		AuthProviderID: authProviderID,
-		Email:          claims.UserID,
-		PasswordHash:   hash,
-		IsAdmin:        claims.IsAdmin,
-		IsSaaSOperator: claims.IsSaaSOperator,
-	}
-
-	if err := h.store.UpsertUser(r.Context(), user); err != nil {
-		http.Error(w, fmt.Sprintf("failed to save user password: %v", err), http.StatusInternalServerError)
-		return
+		_ = h.store.CreateUser(r.Context(), user)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status":               "ok",
 		"user_id":              claims.UserID,
-		"tenant_id":            tenantID,
+		"organization_id":      orgID,
 		"needs_password_setup": false,
 	})
 }
 
-func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, r *http.Request, tenantID, userID string, isAdmin, isSaaSOperator bool) {
-	cookieValue := session.Create(tenantID, userID, isAdmin, isSaaSOperator)
+func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, r *http.Request, orgID, userID string, isAdmin bool) {
+	cookieValue := session.Create(orgID, userID, isAdmin, false)
 	isSecure := isRequestSecure(r)
 
 	http.SetCookie(w, &http.Cookie{
@@ -364,40 +249,6 @@ func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, r *http.Request, t
 	})
 }
 
-func GenerateBootstrapToken() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-func (h *AuthHandler) CheckBootstrap() {
-	var opPass string
-	var isDevMode bool
-	if h.cfg != nil {
-		opPass = h.cfg.SaaSOperatorPassword
-		isDevMode = h.cfg.DevMode
-	} else {
-		opPass = os.Getenv("SAAS_OPERATOR_PASSWORD")
-		isDevMode = os.Getenv("DEV_MODE") == "true" && os.Getenv("ALLOW_DEV_MODE") == "true"
-	}
-
-	if opPass != "" {
-		BootstrapToken = opPass
-		log.Printf("INFO: SaaS Platform Operator credential configured.")
-		return
-	}
-
-	// In local dev mode only, provide an ephemeral in-memory bootstrap token if none configured
-	if isDevMode {
-		if BootstrapToken == "" {
-			BootstrapToken = GenerateBootstrapToken()
-			log.Printf("INFO: Local development mode active (DEV_MODE=true, ALLOW_DEV_MODE=true).")
-		}
-	} else {
-		log.Printf("INFO: Running in production mode. Dedicated SaaS Operator credentials required.")
-	}
-}
-
 type PublicProvider struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -405,8 +256,13 @@ type PublicProvider struct {
 }
 
 func (h *AuthHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	providers, err := h.store.ListAuthProviders(r.Context(), tenantID)
+	orgID := middleware.ResolveOrganizationScope(r)
+	if h.store == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]PublicProvider{})
+		return
+	}
+	providers, err := h.store.ListAuthProviders(r.Context(), orgID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -418,7 +274,7 @@ func (h *AuthHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(public)
+	_ = json.NewEncoder(w).Encode(public)
 }
 
 func getOAuthConfig(p *model.AuthProvider, host string) *oauth2.Config {
@@ -551,31 +407,26 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	tenantID := provider.TenantID
-	if tenantID == "" {
-		tenantID = middleware.DefaultTenantID
+	orgID := provider.OrganizationID
+	if orgID == "" {
+		orgID = middleware.DefaultOrganizationID
 	}
 
-	user, err := h.store.GetUserByEmail(r.Context(), tenantID, providerID, email)
+	user, err := h.store.GetUserByEmail(r.Context(), orgID, providerID, email)
 	if err != nil || user == nil {
 		user = &model.User{
-			TenantID:       tenantID,
-			AuthProviderID: providerID,
+			OrganizationID: orgID,
+			AuthProviderID: &providerID,
 			Email:          email,
 			PasswordHash:   "",
 			IsAdmin:        false,
+			Role:           "MEMBER",
 		}
-		if err := h.store.UpsertUser(r.Context(), user); err != nil {
-			http.Error(w, "failed to auto-provision user", http.StatusInternalServerError)
-			return
-		}
-		user, _ = h.store.GetUserByEmail(r.Context(), tenantID, providerID, email)
+		_ = h.store.CreateUser(r.Context(), user)
+		user, _ = h.store.GetUserByEmail(r.Context(), orgID, providerID, email)
 	}
-	
-	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
-	isSaaSOperator := user.IsSaaSOperator || (saasOpEmail != "" && strings.EqualFold(email, saasOpEmail))
 
-	h.setSessionCookie(w, r, tenantID, user.Email, user.IsAdmin, isSaaSOperator)
+	h.setSessionCookie(w, r, orgID, user.Email, user.IsAdmin)
 	
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",

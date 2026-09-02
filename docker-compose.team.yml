@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vexa}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
       POSTGRES_DB: ${POSTGRES_DB:-vexa_control_plane}
     volumes:
       - vexa-postgres-data:/var/lib/postgresql/data
@@ -53,14 +53,15 @@ services:
         condition: service_healthy
     environment:
       PORT: 8081
-      DATABASE_URL: postgres://${POSTGRES_USER:-vexa}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vexa_control_plane}?sslmode=disable
-      DEV_MODE: "${DEV_MODE:-false}"
-      GATEWAY_SECRET: ${GATEWAY_SECRET:?GATEWAY_SECRET is required in .env}
-      POLICY_READ_SECRET: ${POLICY_READ_SECRET:?POLICY_READ_SECRET is required in .env}
-      PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:?PROVIDER_KEY_ENCRYPTION_SECRET is required in .env}"
-      AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:?AGENTCONTROL_SESSION_SECRET is required in .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-vexa}:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/${POSTGRES_DB:-vexa_control_plane}?sslmode=disable
+      DEV_MODE: "${DEV_MODE:-true}"
+      ALLOW_DEV_MODE: "${ALLOW_DEV_MODE:-true}"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret}
+      PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:-local-dev-session-secret-32-chars-long-123456}
       SAAS_OPERATOR_EMAIL: ${SAAS_OPERATOR_EMAIL:-admin@vexa.local}
-      SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:?SAAS_OPERATOR_PASSWORD is required in .env}
+      SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:-admin12345678}
       INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"
       LEGACY_SINGLE_TENANT_MODE: "${LEGACY_SINGLE_TENANT_MODE:-true}"
       LEGACY_TENANT_ID: "${LEGACY_TENANT_ID:-00000000-0000-0000-0000-000000000001}"
@@ -101,13 +102,13 @@ services:
     depends_on:
       - control-plane-api
     environment:
-      AGENTCONTROL_LISTEN: 127.0.0.1:8080
+      AGENTCONTROL_LISTEN: 0.0.0.0:8080
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
       AGENTCONTROL_DRY_RUN: "false"
       AGENTCONTROL_HUB_URL: http://control-plane-api:8081
       DASHBOARD_API_URL: http://control-plane-api:8081
-      GATEWAY_SECRET: ${GATEWAY_SECRET}
-      POLICY_READ_SECRET: ${POLICY_READ_SECRET}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret}
     ports:
       - "127.0.0.1:8080:8080"
     networks:

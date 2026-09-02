@@ -23,6 +23,7 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -32,19 +33,19 @@ func main() {
 	}
 
 	if cfg.DevMode {
-		log.Println("WARNING: running in DEV_MODE — all auth is disabled. DO NOT deploy to production.")
+		log.Println("WARNING: running in DEV_MODE.")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// 1. Initialize router and start listening immediately so Cloud Run startup probes pass (/healthz)
+	// 1. Initialize router and start listening immediately
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.LegacyQuarantineGate())
 
-	// Health check — no auth, responds immediately
+	// Health check — responds immediately
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
@@ -60,57 +61,40 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("dashboard-api listening on %s", addr)
-		if cfg.LegacySingleTenantMode {
-			log.Printf("WARNING: Legacy single-tenant compatibility mode is ACTIVE for tenant '%s'. Shared secrets (GATEWAY_SECRET / POLICY_READ_SECRET) are bound exclusively to this tenant.", cfg.LegacyTenantID)
-		}
+		log.Printf("dashboard-api listening on %s (Single-Tenant Open-Core Engine)", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
 	}()
 
-	// 2. Connect to database
-	db, err := store.New(ctx, cfg.DatabaseURL)
+	// 2. Connect to database with retry loop for sidecar boot
+	var pool *pgxpool.Pool
+	for attempt := 1; attempt <= 30; attempt++ {
+		pool, err = pgxpool.New(ctx, cfg.DatabaseURL)
+		if err == nil {
+			if pingErr := pool.Ping(ctx); pingErr == nil {
+				log.Printf("successfully connected to PostgreSQL on attempt %d", attempt)
+				break
+			} else {
+				err = pingErr
+				pool.Close()
+			}
+		}
+		log.Printf("waiting for database to become ready (attempt %d/30): %v", attempt, err)
+		select {
+		case <-ctx.Done():
+			log.Fatalf("context cancelled while waiting for database: %v", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
 	if err != nil {
-		log.Fatalf("database: %v", err)
+		log.Fatalf("database connection error after 30 attempts: %v", err)
 	}
-	defer db.Close()
+	defer pool.Close()
 
-	if err := db.EnsureOrganizationsSchema(ctx); err != nil {
-		log.Printf("[organizations] schema verification warning: %v", err)
-	}
-	if err := db.EnsureAuthProvidersSchema(ctx); err != nil {
-		log.Printf("[auth_providers] schema verification warning: %v", err)
-	}
-	if err := db.EnsureUsersSchema(ctx); err != nil {
-		log.Printf("[users] schema verification warning: %v", err)
-	}
-	if err := db.EnsureCoreSchema(ctx); err != nil {
-		log.Printf("[core] schema verification warning: %v", err)
-	}
-	if err := db.EnsurePoliciesSchema(ctx); err != nil {
-		log.Printf("[policies] schema verification warning: %v", err)
-	}
-	if err := db.EnsureGroupPoliciesSchema(ctx); err != nil {
-		log.Printf("[group_policies] schema verification warning: %v", err)
-	}
-	if err := db.EnsureTemplatesTable(ctx); err != nil {
-		log.Printf("[templates] schema verification warning: %v", err)
-	}
-	if err := db.EnsureProviderKeysSchema(ctx); err != nil {
-		log.Printf("[provider_keys] schema verification warning: %v", err)
-	}
-	if err := db.EnsureDevicesSchema(ctx); err != nil {
-		log.Printf("[devices] schema verification warning: %v", err)
-	}
-	if err := db.EnsureEnrollmentV2Schema(ctx); err != nil {
-		log.Printf("[enrollment_v2] schema verification warning: %v", err)
-	}
-	if err := db.EnsureIdempotencySchema(ctx); err != nil {
-		log.Printf("[idempotency] schema verification warning: %v", err)
-	}
-	if err := db.EnsureSpendV1Schema(ctx); err != nil {
-		log.Printf("[spend_v1] schema verification warning: %v", err)
+	db := store.New(pool)
+	if err := db.EnsureAllSchemas(ctx); err != nil {
+		log.Printf("schema initialization warning: %v", err)
 	}
 
 	// Initialize Spend v2 Store and Sweeper
@@ -132,14 +116,7 @@ func main() {
 
 	sseBroker := sse.NewBroker()
 
-	// Initialize Automated License Issuer (GCP Secret Manager / Env)
-	licenseIssuer, err := license.NewIssuerFromEnv()
-	if err != nil {
-		log.Printf("[license] issuer initialization warning: %v", err)
-	} else if licenseIssuer != nil {
-		log.Printf("[license] automated license issuer initialized with Ed25519 signing key")
-	}
-
+	// Load license claims (or Developer defaults)
 	var activeClaims *license.Claims
 	if cfg.LicenseKey != "" {
 		v, err := license.NewValidatorFromEnv()
@@ -147,17 +124,17 @@ func main() {
 			c, err := v.Validate(cfg.LicenseKey)
 			if err == nil {
 				activeClaims = c
-				log.Printf("license verified: org=%s tier=%s seats=%d", c.OrgID, c.Tier, c.MaxSeats)
+				log.Printf("License active: org=%s tier=%s max_devices=%d", c.OrgID, c.Tier, c.MaxDevices)
 			} else {
-				log.Printf("WARNING: license validation failed (%v), falling back to Community mode (10 seats)", err)
-				activeClaims = license.CommunityClaims()
+				log.Printf("WARNING: license validation failed (%v), running in Developer tier (1 device)", err)
+				activeClaims = license.DeveloperClaims()
 			}
 		} else {
-			activeClaims = license.CommunityClaims()
+			activeClaims = license.DeveloperClaims()
 		}
 	} else {
-		log.Println("no AGENTCONTROL_HUB_LICENSE_KEY provided, running in Community mode (10 seats)")
-		activeClaims = license.CommunityClaims()
+		log.Println("Running with default Developer license (1 device)")
+		activeClaims = license.DeveloperClaims()
 	}
 
 	licenseH := handler.NewLicenseHandler(db, activeClaims)
@@ -177,9 +154,6 @@ func main() {
 	templateH := handler.NewTemplateHandler(db)
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
-	saasOpH := handler.NewSaaSOperatorHandler(db, licenseIssuer)
-
-	authH.CheckBootstrap()
 
 	groupPolicyH := handler.NewGroupPolicyHandler(db)
 	gatewayH := handler.NewGatewayHandler()
@@ -190,7 +164,6 @@ func main() {
 	heartbeatH := handler.NewHeartbeatHandler(db)
 	deviceAdminH := handler.NewDeviceAdminHandler(db)
 
-	// Target Contract v4.0 (v2 API Handlers)
 	softwareCAS, err := crypto.NewSoftwareCASIssuer()
 	if err != nil {
 		log.Fatalf("failed to initialize CAS issuer: %v", err)
@@ -201,7 +174,7 @@ func main() {
 	genericProviderClient := broker.NewGenericProviderClient()
 	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret, spendStore)
 
-	// Initialize KMS provider and Virtual Key infrastructure (Pillar 1)
+	// KMS provider and Virtual Key infrastructure
 	kmsProvider, err := kms.NewLocalMasterKeyProvider()
 	if err != nil {
 		log.Fatalf("kms: %v", err)
@@ -214,17 +187,12 @@ func main() {
 	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db)
 	healthH := handler.NewHealthHandler(db)
 
-	// Initialize Virtual Keys schema & Audit Events schema (Pillar 1 & Observability)
-	if err := db.EnsureVirtualKeysSchema(ctx); err != nil {
-		log.Printf("[virtual_keys] schema initialization warning: %v", err)
-	}
-	if err := db.EnsureAuditEventsSchema(ctx); err != nil {
-		log.Printf("[audit_events] schema initialization warning: %v", err)
+	legacyAuthCfg := middleware.LegacyAuthConfig{
+		LegacySingleTenantMode: true,
+		LegacyTenantID:         middleware.DefaultOrganizationID,
 	}
 
-
-	// === Target Contract v4.0 API Routes ===
-	// 1. Enrollment Handlers (Unauthenticated - OTET & Key Proof)
+	// 1. Enrollment Handlers
 	r.Route("/api/v2/enrollment", func(r chi.Router) {
 		r.Post("/start", enrollmentV2H.StartEnrollment)
 		r.Post("/complete", enrollmentV2H.CompleteEnrollment)
@@ -239,7 +207,7 @@ func main() {
 		r.Post("/devices/{id}/revoke", adminV2H.RevokeDevice)
 	})
 
-	// 3. Strict Device Control API (Edge mTLS Header Validation)
+	// 3. Strict Device Control API
 	r.Route("/api/v2/device", func(r chi.Router) {
 		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
 		r.Get("/bootstrap", deviceV2H.GetBootstrap)
@@ -249,24 +217,23 @@ func main() {
 		r.Get("/policy/subscribe", policyMgmtH.Subscribe)
 	})
 
-	// 4. Provider LLM Broker v2 (Deprecated) & v3 (Authoritative Stream & Preflight)
+	// 4. Provider LLM Broker v2 & v3
 	r.Route("/api/v2/broker", func(r chi.Router) {
 		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
-		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 	})
 
 	r.Route("/api/v3/broker", func(r chi.Router) {
 		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
-		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
 	})
 
-	// Broker v3 — Virtual Key authenticated dispatch (Pillar 1)
 	r.Post("/api/v3/broker/dispatch", brokerV3H.Dispatch)
 
-	// Virtual Key management (tenant-scoped)
+	// Virtual Key management
 	r.Route("/api/v1/virtual-keys", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
 		r.Post("/", virtualKeyH.Create)
@@ -277,49 +244,36 @@ func main() {
 		r.Post("/{id}/reset-spend", virtualKeyH.Reset)
 	})
 
-
-	// Internal edge proxy endpoints (no dashboard auth — gateway secret scoped)
+	// Internal edge proxy endpoints
 	r.Route("/api/v1/internal", func(r chi.Router) {
-		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, middleware.LegacyAuthConfig{
-			LegacySingleTenantMode: cfg.LegacySingleTenantMode,
-			LegacyTenantID:         cfg.LegacyTenantID,
-		}))
+		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
 		r.Get("/invalidation-stream", invalidationBroadcaster.ServeHTTP)
 		r.Get("/virtual-keys/resolve", virtualKeyH.Resolve)
 	})
 
-	// Structured health probes (separate from basic /healthz)
 	r.Get("/readyz", healthH.Readyz)
 	r.Get("/healthz", healthH.Healthz)
 
-	// 4b. Gateway-Secret authenticated broker (allows local gateways without ALB mTLS)
-	legacyAuthCfg := middleware.LegacyAuthConfig{
-		LegacySingleTenantMode: cfg.LegacySingleTenantMode,
-		LegacyTenantID:         cfg.LegacyTenantID,
-	}
 	r.Route("/api/v3/gateway-broker", func(r chi.Router) {
 		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
-		r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
 	})
 
 	// 5. Authoritative Central Spend Ledger API v2
 	r.Route("/api/v2/spend", func(r chi.Router) {
-
-		// Workload / Gateway spend reservation lifecycle routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
-			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
+			r.Use(middleware.RequireOrganizationFeature(db, "spend_caps"))
 			r.Post("/authorize", spendV2H.Authorize)
 			r.Post("/reservations/{reservation_id}/settle", spendV2H.Settle)
 			r.Post("/reservations/{reservation_id}/release", spendV2H.Release)
 		})
 
-		// Operator / Dashboard spend policy management & reporting routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.DashboardAuth())
-			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
+			r.Use(middleware.RequireOrganizationFeature(db, "spend_caps"))
 			r.Get("/effective", spendV2H.GetEffective)
 			r.Get("/analytics", spendV2H.GetAnalytics)
 			r.Get("/events", spendV2H.ListEvents)
@@ -332,14 +286,12 @@ func main() {
 		})
 	})
 
-	// 6. Device Governance & Sentry Compliance API
+	// 6. Device Governance
 	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
-
-	// Public PKI Enrollment route (Unauthenticated)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
 
-	// Gateway API Spec endpoints (Gateway / Read Secret Auth)
+	// Gateway API Spec endpoints
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/bootstrap", hubSpecH.GetBootstrap)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/events", hubSpecH.GetEventsStream)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policies/{id}", hubSpecH.GetPolicyByID)
@@ -350,7 +302,7 @@ func main() {
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 
-	// Ingest endpoints — gateway auth (enrolled device ID or legacy single tenant mode), NOT OIDC.
+	// Ingest endpoints
 	r.Route("/api/v1/ingest", func(r chi.Router) {
 		r.Use(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg))
 		r.Post("/events", ingestH.PostEvent)
@@ -373,24 +325,16 @@ func main() {
 		r.With(middleware.DashboardAuth()).Post("/setup-initial-password", authH.SetupInitialPassword)
 	})
 
-	// Dashboard API — session cookie auth for human operators & admins.
+	// Dashboard API
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
 
-		// SaaS Operator Admin Routes (Platform Super-Admin only)
-		r.Route("/operator", func(r chi.Router) {
-			r.Use(middleware.RequireSaaSOperator())
-			r.Post("/organizations", saasOpH.CreateOrganization)
-			r.Get("/organizations", saasOpH.ListOrganizations)
-			r.Get("/organizations/{id}", saasOpH.GetOrganization)
-			r.Put("/organizations/{id}", saasOpH.UpdateOrganization)
-			r.Post("/organizations/{id}/status", saasOpH.UpdateStatus)
-			r.Post("/organizations/{id}/renew-license", saasOpH.RenewLicense)
-			r.Post("/organizations/{id}/regenerate-bootstrap", saasOpH.RegenerateBootstrapToken)
-			r.Get("/stats", saasOpH.GetStats)
-		})
-
+		// Organization & License Management
+		r.Get("/organization", licenseH.GetOrganization)
+		r.Put("/organization", licenseH.UpdateOrganization)
 		r.Get("/license/status", licenseH.GetStatus)
+		r.With(middleware.RequireAdmin()).Post("/license/activate", licenseH.ActivateLicense)
+
 		r.Get("/gateways", hubSpecH.ListGateways)
 		r.Get("/fleet/overview", fleetH.GetOverview)
 		r.Get("/fleet/agents", fleetH.ListAgents)
@@ -398,7 +342,7 @@ func main() {
 		r.Get("/fleet/events", fleetH.ListEvents)
 		r.Get("/fleet/agents/{agentID}/events", fleetH.ListEvents)
 
-		// Observability Center (LiteLLM-grade Request Logs, Live Tail SSE, Audit Logs & Deleted Entities)
+		// Observability Center
 		r.Route("/observability", func(r chi.Router) {
 			r.Get("/request-logs", observabilityH.ListRequestLogs)
 			r.Get("/request-logs/stream", observabilityH.StreamRequestLogs)
@@ -414,7 +358,6 @@ func main() {
 
 		// Effective Policy Explorer
 		r.Get("/policy/effective-explorer", effectivePolicyH.GetEffective)
-
 
 		// Sentry Device Governance & Tamper Log
 		r.Get("/devices", deviceH.ListDevices)
@@ -454,7 +397,7 @@ func main() {
 		r.Put("/users/{id}/password", userH.UpdatePassword)
 		r.With(middleware.RequireAdmin()).Delete("/users/{id}", userH.Delete)
 		
-		// Policy Management (Operator Auth)
+		// Policy Management
 		r.Get("/policies", policyMgmtH.List)
 		r.Get("/policies/active", policyMgmtH.GetActive)
 		r.Get("/policy/active", policyMgmtH.GetActive)
@@ -465,7 +408,6 @@ func main() {
 		r.With(middleware.RequireAdmin()).Post("/policies/templates", templateH.CreateCustomTemplate)
 		r.With(middleware.RequireAdmin()).Delete("/policies/templates/{id}", templateH.DeleteCustomTemplate)
 
-		// Gateway Management (Phase 1 Mock)
 		r.Post("/gateways/register", gatewayH.Register)
 
 		// Provider API Keys Management
@@ -478,18 +420,18 @@ func main() {
 
 		// Group Policy Management
 		r.Route("/group-policies", func(r chi.Router) {
-			r.Use(middleware.RequireTenantFeature(db, "group_policies"))
+			r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 			r.Get("/", groupPolicyH.ListGroupPolicies)
 			r.Get("/{groupID}", groupPolicyH.GetGroupPolicy)
 			r.With(middleware.RequireAdmin()).Post("/", groupPolicyH.PublishGroupPolicy)
 		})
 
-		// Safe Mode status (always active — static endpoint)
+		// Safe Mode status
 		r.Get("/policy/safe-mode/status", safeModeH.GetStatus)
 
-		// Spend Caps (Admin + Gateway API)
+		// Spend Caps
 		r.Route("/spend", func(r chi.Router) {
-			r.Use(middleware.RequireTenantFeature(db, "spend_caps"))
+			r.Use(middleware.RequireOrganizationFeature(db, "spend_caps"))
 			r.Get("/budgets", spendH.ListBudgets)
 			r.With(middleware.RequireAdmin()).Post("/budgets", spendH.CreateBudget)
 			r.Get("/snapshots", spendH.ListSnapshots)
@@ -506,7 +448,6 @@ func main() {
 		})
 		r.With(middleware.RequireAdmin()).Post("/admin/enrollment-tokens", enrollmentH.PostCreateToken)
 	})
-
 
 	<-ctx.Done()
 	log.Println("shutting down...")

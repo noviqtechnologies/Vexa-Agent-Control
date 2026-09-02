@@ -379,9 +379,10 @@ export default function RequestLogsTab() {
             </thead>
             <tbody>
               {logs.map((r) => {
-                const isDenied = r.state === 'DENIED' || r.state === 'BLOCKED' || (r.status_code === 403)
-                const isFailed = r.state === 'FAILED' || r.state === 'ERROR' || (r.status_code !== undefined && r.status_code >= 400 && !isDenied)
-                const isSuccess = (r.state === 'SETTLED' || (r.status_code !== undefined && r.status_code >= 200 && r.status_code < 300)) && !isFailed && !isDenied
+                const isDenied = r.state === 'DENIED' || r.state === 'BLOCKED' || (r.status_code === 403 || r.status_code === 429)
+                const isReleased = r.state === 'RELEASED'
+                const isFailed = r.state === 'FAILED' || r.state === 'ERROR' || (r.status_code !== undefined && r.status_code >= 400 && !isDenied) || (isReleased && (r.status_code === undefined || r.status_code >= 400))
+                const isSuccess = r.state === 'SETTLED' && (r.status_code === undefined || (r.status_code >= 200 && r.status_code < 300))
                 const isAuthorized = r.state === 'AUTHORIZED'
 
                 let badgeClass = 'obs-badge-warning'
@@ -399,9 +400,15 @@ export default function RequestLogsTab() {
                 } else if (isAuthorized) {
                   badgeClass = 'obs-badge-info'
                   badgeLabel = 'Authorized'
+                } else if (isReleased) {
+                  badgeClass = 'obs-badge-warning'
+                  badgeLabel = 'Released'
                 }
 
-                const costUSD = microcentsToUSD(r.settled_microcents || r.reserved_microcents)
+                // Billed cost: Only SETTLED runs incur actual spend.
+                // RELEASED, FAILED, DENIED, or in-flight AUTHORIZED runs have $0.00 settled spend.
+                const billedMicrocents = r.state === 'SETTLED' ? (r.settled_microcents || 0) : 0
+                const costUSD = microcentsToUSD(billedMicrocents)
 
                 return (
                   <tr

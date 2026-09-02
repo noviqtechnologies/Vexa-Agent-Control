@@ -2,8 +2,12 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 
 export interface UserProfile {
   id: string
-  tenant_id: string
+  organization_id: string
+  tenant_id: string // Alias for compatibility
   organization_name?: string
+  license_tier?: string
+  max_devices?: number
+  enrolled_devices?: number
   is_admin: boolean
   is_saas_operator: boolean
   needs_password_setup?: boolean
@@ -56,34 +60,34 @@ export function AuthProvider({ children }: Props) {
       if (res.ok) {
         const userData = await res.json()
         const isOperator = !!userData.is_saas_operator
+        const orgID = userData.organization_id || userData.tenant_id || '00000000-0000-0000-0000-000000000001'
         setAuthenticated(true)
         setUser({
           id: userData.user_id || 'user',
-          tenant_id: userData.tenant_id || '00000000-0000-0000-0000-000000000001',
-          organization_name: userData.organization_name,
+          organization_id: orgID,
+          tenant_id: orgID,
+          organization_name: userData.organization_name || 'Primary Organization',
+          license_tier: userData.license_tier || 'developer',
+          max_devices: userData.max_devices ?? 1,
+          enrolled_devices: userData.enrolled_devices ?? 0,
           is_admin: !!userData.is_admin,
           is_saas_operator: isOperator,
           needs_password_setup: !isOperator && !!userData.needs_password_setup,
         })
         setNeedsPasswordSetup(!isOperator && !!userData.needs_password_setup)
         
-        // SaaS Operators are never forced to configure tenant auth providers
-        if (!isOperator) {
-          try {
-            const authRes = await fetch('/api/v1/auth_providers')
-            if (authRes.ok) {
-              const data = await authRes.json()
-              if (Array.isArray(data) && data.filter((p: any) => p.enabled).length === 0) {
-                setNeedsAuthProviderConfig(true)
-              } else {
-                setNeedsAuthProviderConfig(false)
-              }
+        try {
+          const authRes = await fetch('/api/v1/auth_providers')
+          if (authRes.ok) {
+            const data = await authRes.json()
+            if (Array.isArray(data) && data.filter((p: any) => p.enabled).length === 0) {
+              setNeedsAuthProviderConfig(true)
+            } else {
+              setNeedsAuthProviderConfig(false)
             }
-          } catch {
-            // Ignore fetch error for providers
           }
-        } else {
-          setNeedsAuthProviderConfig(false)
+        } catch {
+          // Ignore fetch error for providers
         }
       } else {
         // Fallback check to fleet overview if /auth/me is not ready
@@ -92,7 +96,12 @@ export function AuthProvider({ children }: Props) {
           setAuthenticated(true)
           setUser({
             id: 'user',
+            organization_id: '00000000-0000-0000-0000-000000000001',
             tenant_id: '00000000-0000-0000-0000-000000000001',
+            organization_name: 'Primary Organization',
+            license_tier: 'developer',
+            max_devices: 1,
+            enrolled_devices: 0,
             is_admin: true,
             is_saas_operator: false,
           })
@@ -126,20 +135,21 @@ export function AuthProvider({ children }: Props) {
       if (res.ok) {
         const data = await res.json().catch(() => ({}))
         const isOperator = !!data.is_saas_operator
+        const orgID = data.organization_id || data.tenant_id || '00000000-0000-0000-0000-000000000001'
         setAuthenticated(true)
         setUser({
           id: data.user_id || 'user',
-          tenant_id: data.tenant_id || '00000000-0000-0000-0000-000000000001',
-          organization_name: data.organization_name,
+          organization_id: orgID,
+          tenant_id: orgID,
+          organization_name: data.organization_name || 'Primary Organization',
+          license_tier: data.license_tier || 'developer',
+          max_devices: data.max_devices ?? 1,
+          enrolled_devices: data.enrolled_devices ?? 0,
           is_admin: !!data.is_admin,
           is_saas_operator: isOperator,
           needs_password_setup: !isOperator && !!data.needs_password_setup,
         })
         setNeedsPasswordSetup(!isOperator && !!data.needs_password_setup)
-        if (isOperator) {
-          setNeedsAuthProviderConfig(false)
-        }
-        // Refresh session context
         await checkSession()
       } else {
         if (res.status === 429) {
@@ -148,12 +158,16 @@ export function AuthProvider({ children }: Props) {
           setError('Invalid email, username, or password.')
         } else if (res.status === 403) {
           setError('Access denied. You do not have permission to access this portal.')
+        } else if (res.status === 502) {
+          setError('502 Bad Gateway: The Control Plane API backend is currently unreachable or starting up. Please check service health and try again.')
+        } else if (res.status === 503 || res.status === 504) {
+          setError(`Service unavailable (${res.status}). The Control Plane is temporarily unreachable.`)
         } else if (res.status >= 500) {
           setError(`Server error (${res.status}). Please check control plane logs or try again shortly.`)
         } else {
           try {
             const data = await res.text()
-            if (!data || data.startsWith('<') || data.toLowerCase().includes('<!doctype')) {
+            if (!data || data.trim().startsWith('<') || data.toLowerCase().includes('<!doctype') || data.toLowerCase().includes('<html')) {
               setError(`Authentication failed with status ${res.status} (${res.statusText || 'Error'})`)
             } else {
               setError(data)
@@ -163,7 +177,7 @@ export function AuthProvider({ children }: Props) {
           }
         }
       }
-    } catch (e) {
+    } catch {
       setError('Network error')
     } finally {
       setLoading(false)

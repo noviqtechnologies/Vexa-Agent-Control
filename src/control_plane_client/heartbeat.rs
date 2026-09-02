@@ -112,9 +112,8 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
         .or_else(|| device_identity.as_ref().map(|id| id.device_id.clone()))
         .unwrap_or_else(|| "gw-default".to_string());
 
-    let hostname = std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "localhost".to_string());
+    let hostname = crate::identity::device::get_hostname();
+    let current_user = crate::identity::device::get_current_user();
 
     let os_arch = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     let pkg_ver = env!("CARGO_PKG_VERSION").to_string();
@@ -167,18 +166,18 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
         let mut req = client.post(&heartbeat_url).json(&payload);
 
         // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint.
-        // Prioritizes enrolled device_token, then explicit GATEWAY_SECRET (ignoring dev placeholder), and lastly fallback.
+        // Prioritizes enrolled device_token, then real GATEWAY_SECRET, and lastly device_id.
         let auth_token = if let Some(token) = crate::identity::device::load_device_token() {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty() && s != "local-dev-shared-secret-change-me" {
+            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
                 s
             } else {
-                "local-dev-shared-secret-change-me".to_string()
+                device_id.clone()
             }
         } else {
-            "local-dev-shared-secret-change-me".to_string()
+            device_id.clone()
         };
 
         req = req.header("Authorization", format!("Bearer {}", auth_token));
@@ -230,6 +229,8 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
 
         let telemetry_payload = serde_json::json!({
             "device_id": device_id,
+            "hostname": hostname,
+            "user_identifier": current_user,
             "overall_compliance": overall,
             "ide_targets": ide_statuses,
             "tamper_events": [],

@@ -10,7 +10,6 @@ import (
 )
 
 // Default embedded public key bytes (32 raw Ed25519 public key bytes)
-// Replace with production public key DER/PEM when building release binaries.
 var defaultPublicKeyBytes = []byte{
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -20,12 +19,13 @@ var defaultPublicKeyBytes = []byte{
 
 // Claims represents the decoded Agent Control license JWT payload.
 type Claims struct {
-	OrgID     string   `json:"sub"`
-	Tier      string   `json:"tier"`
-	MaxSeats  int      `json:"max_seats"`
-	Features  []string `json:"features"`
-	IsTrial   bool     `json:"is_trial,omitempty"`
-	TrialDays int      `json:"trial_days,omitempty"`
+	OrgID      string   `json:"sub"`
+	Tier       string   `json:"tier"` // "developer", "team", "enterprise"
+	MaxDevices int      `json:"max_devices"`
+	MaxSeats   int      `json:"max_seats,omitempty"`
+	Features   []string `json:"features"`
+	IsTrial    bool     `json:"is_trial,omitempty"`
+	TrialDays  int      `json:"trial_days,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -55,7 +55,6 @@ func NewValidatorFromEnv() (*Validator, error) {
 			return NewValidator(data)
 		}
 	}
-	// Fallback to default
 	return NewValidator(defaultPublicKeyBytes)
 }
 
@@ -88,15 +87,34 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// CommunityClaims returns default claims for un-licensed Community installations.
-func CommunityClaims() *Claims {
+// DeveloperClaims returns default claims for unlicensed Developer installations.
+func DeveloperClaims() *Claims {
 	return &Claims{
-		OrgID:    "community-local",
-		Tier:     "community",
-		MaxSeats: 10,
-		Features: []string{},
+		OrgID:      "developer-local",
+		Tier:       "developer",
+		MaxDevices: 1,
+		Features:   []string{},
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt: jwt.NewNumericDate(time.Now()),
 		},
 	}
+}
+
+// HasFeature returns true if the claims include the given feature or a wildcard.
+func (c *Claims) HasFeature(feature string) bool {
+	if c == nil {
+		return false
+	}
+	for _, f := range c.Features {
+		if f == "*" || f == "all" || f == feature {
+			return true
+		}
+		if (feature == "spend_caps" || feature == "spend_v2") && (f == "spend_caps" || f == "spend_v2") {
+			return true
+		}
+		if (feature == "siem_aggregation" || feature == "siem_export") && (f == "siem_aggregation" || f == "siem_export") {
+			return true
+		}
+	}
+	return false
 }

@@ -22,12 +22,12 @@ All three deployments provision the complete, self-contained AgentWall system:
 | **Control Plane Fee** | **$0.00 / month** | **$0.00 / month** | **$0.00 / month** |
 | **Ingress & Routing** | AWS Application Load Balancer (ALB) | Built-in Envoy Ingress (Free) | Built-in Google Cloud Ingress (Free) |
 | **TLS / SSL Certificate** | Free via ACM (or HTTP over ALB) | **Automatic Free Managed TLS** | **Automatic Free Managed TLS** |
-| **Scale-to-Zero ($0 Idle)** | Fixed 1 Task (Scale-to-zero via manual replica setting) | **Supported natively (`min_replicas = 0`)** | **Supported natively (`min_instances = 0`)** |
+| **Scale-to-Zero ($0 Idle)** | Fixed 1 Task for Stage | **Supported natively (`min_replicas = 0`)** | **Supported natively (`min_instances = 0`)** |
 | **Monthly Free Tier** | None for Fargate | **180k vCPU-s & 360k GiB-s free** | **2M reqs, 360k GB-s, 180k vCPU-s free** |
-| **Logging & Telemetry** | AWS CloudWatch Logs | Azure Log Analytics Workspace | Google Cloud Logging |
-| **Private Registry (Optional)** | AWS ECR | Azure Container Registry (ACR) | Google Artifact Registry (GAR) |
-| **VPC / VNet Isolation** | AWS Public/Private Subnets | Azure VNet Subnet Delegation | Serverless VPC Access Connector |
-| **ESTIMATED MONTHLY COST** | **~$15 – $25 / month** | **~$0 – $20 / month** | **~$0 – $15 / month** |
+| **Logging & Telemetry** | AWS CloudWatch Logs (3-day stage) | Azure Log Analytics (30-day free) | Google Cloud Logging (50 GiB/mo free) |
+| **Secret Management** | Automated Secret Generation & Inject | Built-in ACA Secrets Store | Google Secret Manager |
+| **ESTIMATED STAGE COST** | **~$15 – $25 / month** | **~$0 – $5 / month** | **~$0 – $2 / month** |
+| **Stage Deployment** | `terraform apply -var-file="terraform.stage.tfvars"` | `terraform apply -var-file="terraform.stage.tfvars"` | `terraform apply -var-file="terraform.stage.tfvars"` |
 | **Target Directory** | [`infra/aws/ecs/`](aws/README.md) | [`infra/azure/`](azure/README.md) | [`infra/gcp/`](gcp/README.md) |
 
 ---

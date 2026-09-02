@@ -45,8 +45,8 @@ func RequireFeature(requiredFeature string) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireTenantFeature resolves tenant from context/store and verifies feature flag entitlement.
-func RequireTenantFeature(st *store.Store, requiredFeature string) func(http.Handler) http.Handler {
+// RequireOrganizationFeature resolves organization and verifies feature flag entitlement.
+func RequireOrganizationFeature(st *store.Store, requiredFeature string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// 1. Direct claims in context
@@ -59,16 +59,10 @@ func RequireTenantFeature(st *store.Store, requiredFeature string) func(http.Han
 				return
 			}
 
-			// 2. If user is SaaS operator, permit
-			if IsSaaSOperatorFromContext(r.Context()) {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// 3. Resolve tenant and check license tier in DB
+			// 2. Resolve organization and check license tier in DB
 			if st != nil {
-				tenantID := ResolveTenantScope(r)
-				org, err := st.GetOrganization(r.Context(), tenantID)
+				orgID := ResolveOrganizationScope(r)
+				org, err := st.GetOrganization(r.Context(), orgID)
 				if err == nil && org != nil {
 					tierFeatures := license.TierToFeatures(org.LicenseTier)
 					tempClaims := &license.Claims{
@@ -87,9 +81,13 @@ func RequireTenantFeature(st *store.Store, requiredFeature string) func(http.Han
 			}
 
 			// Fallback: deny if unentitled
-			respondFeatureForbidden(w, requiredFeature, "community")
+			respondFeatureForbidden(w, requiredFeature, "developer")
 		})
 	}
+}
+
+func RequireTenantFeature(st *store.Store, requiredFeature string) func(http.Handler) http.Handler {
+	return RequireOrganizationFeature(st, requiredFeature)
 }
 
 func respondFeatureForbidden(w http.ResponseWriter, requiredFeature, tier string) {
@@ -99,7 +97,7 @@ func respondFeatureForbidden(w http.ResponseWriter, requiredFeature, tier string
 		"error":            "feature_not_licensed",
 		"required_feature": requiredFeature,
 		"tier":             tier,
-		"message":          "This feature requires an upgraded VexaSec Team or Enterprise license.",
+		"message":          "This feature requires an upgraded Vexa Agent Control Team or Enterprise license.",
 	})
 }
 
@@ -107,23 +105,12 @@ func hasFeature(c *license.Claims, feature string) bool {
 	if c == nil {
 		return false
 	}
-	for _, f := range c.Features {
-		if f == feature || f == "*" || f == "all" {
-			return true
-		}
-		if (feature == "spend_caps" || feature == "spend_v2") && (f == "spend_caps" || f == "spend_v2") {
-			return true
-		}
-		if (feature == "siem_export" || feature == "siem_aggregation") && (f == "siem_export" || f == "siem_aggregation") {
-			return true
-		}
-	}
-	return false
+	return c.HasFeature(feature)
 }
 
 func getTier(c *license.Claims) string {
 	if c != nil && c.Tier != "" {
 		return c.Tier
 	}
-	return "community"
+	return "developer"
 }

@@ -22,6 +22,7 @@ pub mod schema;
 pub mod schema_drift;
 pub mod semantic;
 pub mod sharding;
+pub mod snapshot;
 pub mod threat_intel;
 
 #[cfg(test)]

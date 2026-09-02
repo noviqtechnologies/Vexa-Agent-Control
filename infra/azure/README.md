@@ -1,6 +1,6 @@
-# 🛡️ AgentWall on Azure Container Apps (ACA)
+# 🛡️ AgentWall on Azure Container Apps (ACA) — Stage & Serverless Deployment
 
-Production-grade, highly cost-effective (~$15–$20/month) serverless deployment of **AgentWall** and its Enterprise Control Plane on **Microsoft Azure** using **Azure Container Apps (ACA)**.
+Ultra cost-effective (**~$0–$5/month** for Staging / **~$15–$20/month** for Production) serverless deployment of **AgentWall** and its Enterprise Control Plane on **Microsoft Azure** using **Azure Container Apps (ACA)** with scale-to-zero microservices and PostgreSQL engine.
 
 ---
 
@@ -13,243 +13,119 @@ flowchart TD
         Admin["Security Admin / SOC Team"]
     end
 
-    subgraph ACA_Env ["☁️ Azure Container Apps Environment (Serverless $0 Control Plane)"]
-        subgraph Ingress ["Built-in Envoy Ingress (Free Automatic HTTPS / TLS)"]
-            GW_Ingress["https://agentwall-gateway...azurecontainerapps.io"]
-            UI_Ingress["https://agentwall-ui...azurecontainerapps.io"]
-            API_Ingress["https://agentwall-api...azurecontainerapps.io"]
+    subgraph Azure ["☁️ Microsoft Azure (Serverless ACA Environment)"]
+        subgraph ACAEnv ["⚡ Azure Container Apps Managed Environment ($0 Control Plane)"]
+            subgraph GatewayApp ["🛡️ App: agentwall-gateway (Public Ingress)"]
+                GW["agentwall-gateway (Rust Proxy)\nPort: 8080 | 0.25 vCPU, 0.5 GiB | min=0"]
+            end
+
+            subgraph UIApp ["📊 App: agentwall-ui (Public Ingress)"]
+                UI["control-plane-ui (Frontend Portal)\nPort: 80 | 0.25 vCPU, 0.5 GiB | min=0"]
+            end
+
+            subgraph APIApp ["⚙️ App: agentwall-api (Public Ingress)"]
+                API["dashboard-api (Backend REST API)\nPort: 8400 | 0.25 vCPU, 0.5 GiB | min=0"]
+            end
+
+            subgraph DBApp ["🗄️ App: agentwall-db (Internal TCP)"]
+                DB["postgres (agentwall-db Engine)\nPort: 5432 (Internal Only) | min=0"]
+            end
+
+            subgraph ValkeyApp ["⚡ App: agentwall-valkey (Internal TCP)"]
+                Cache["valkey (Caching Engine)\nPort: 6379 (Internal Only) | min=0"]
+            end
         end
 
-        subgraph Apps ["Serverless Container Apps"]
-            Gateway["🛡️ agentwall-gateway (Rust Proxy)\nPort: 8080 | 0.25 vCPU, 0.5 GiB"]
-            UI["📊 agentwall-ui (Control Plane Frontend)\nPort: 80 | 0.25 vCPU, 0.5 GiB"]
-            API["⚙️ agentwall-api (Dashboard Backend)\nPort: 8400 | 0.25 vCPU, 0.5 GiB"]
-            DB["🗄️ agentwall-db (PostgreSQL + Migrations)\nPort: 5432 (Internal Only) | 0.25 vCPU, 0.5 GiB"]
+        subgraph Observability ["📊 Azure Log Analytics Workspace"]
+            Logs["Log Analytics (PerGB2018)\n(30-day retention)"]
         end
     end
 
-    subgraph Observability ["📊 Azure Monitor & Logging"]
-        LogAnalytics["Azure Log Analytics Workspace\n(First 5 GB/mo Free)"]
-    end
+    User -->|MCP Tool Calls (HTTPS:443)| GatewayApp --> GW
+    Admin -->|Dashboard Access (HTTPS:443)| UIApp --> UI
+    UI -->|REST API Calls (HTTPS:443)| APIApp --> API
+    GW -->|Fetch Active Policies (HTTP:8400)| APIApp --> API
+    API -->|Internal TCP:5432| DBApp --> DB
+    API -->|Internal TCP:6379| ValkeyApp --> Cache
 
-    User -->|MCP Tool Calls (HTTPS:443)| GW_Ingress --> Gateway
-    Admin -->|Dashboard Access (HTTPS:443)| UI_Ingress --> UI
-    UI -->|REST API Calls| API_Ingress --> API
-    Gateway -->|Poll Active Policy (Internal DNS)| API
-    API -->|Read/Write Schema & Audit| DB
-
-    Gateway -.->|Stream Logs & Audit Trail| LogAnalytics
-    API -.->|Telemetry| LogAnalytics
-    DB -.->|Engine Logs| LogAnalytics
+    GW -.->|Stream Audit Logs| Logs
+    UI -.->|Access Logs| Logs
+    API -.->|Telemetry & Traces| Logs
 ```
 
 ---
 
-## 💰 Cost Comparison: Azure Container Apps vs AWS vs AKS
+## 💰 Cost Optimization Matrix (Stage vs Prod)
 
-| Feature / Cost Factor | Azure Container Apps (This Module) | AWS ECS Fargate | AWS EKS Fargate | Azure AKS |
-| :--- | :--- | :--- | :--- | :--- |
-| **Control Plane Fee** | **$0.00 / month** | $0.00 / month | $73.00 / month | $0 - $73.00 / month |
-| **Load Balancer / Ingress** | **$0.00 / month** (Built-in Ingress) | ~$18 - $25 / month (ALB) | ~$18 - $25 / month (ALB) | ~$18 - $30 / month |
-| **TLS / SSL Certificates** | **$0.00** (Free Auto-Managed) | $0.00 (ACM) | $0.00 (ACM) | $0.00 (Cert-Manager) |
-| **Compute Sizing** | 4 × 0.25 vCPU / 0.5 GiB | 1 × 1.0 vCPU / 2.0 GiB | 2-4 Fargate Pods | Minimum 2 VM Nodes |
-| **Idle Scale-to-Zero** | **Supported (`min_replicas=0`)** | Not natively supported | Not supported | Requires KEDA setup |
-| **Monthly Free Allowance** | **180k vCPU-s & 360k GiB-s free** | None for Fargate | None | None |
-| **ESTIMATED MONTHLY COST** | **~$15 – $20 / month** | **~$18 – $25 / month** | **~$120 / month** | **~$100 – $140 / month** |
-
----
-
-## 💻 Cross-Platform Prerequisites
-
-This Terraform deployment runs seamlessly across **Windows**, **Linux**, and **macOS** with zero OS-specific dependencies.
-
-### 1. Install Terraform (>= 1.6.0)
-- **Windows (winget / choco)**:
-  ```powershell
-  winget install HashiCorp.Terraform
-  # or: choco install terraform
-  ```
-- **macOS (Homebrew)**:
-  ```bash
-  brew tap hashicorp/tap
-  brew install hashicorp/tap/terraform
-  ```
-- **Linux (Debian / Ubuntu / RHEL)**:
-  ```bash
-  sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
-  curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-  echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-  sudo apt-get update && sudo apt-get install terraform
-  ```
-
-### 2. Install Azure CLI (`az`) & Authenticate
-- **Windows (PowerShell / winget):**
-  ```powershell
-  winget install Microsoft.AzureCLI
-  ```
-- **macOS (Homebrew):**
-  ```bash
-  brew install azure-cli
-  ```
-- **Linux (Debian / Ubuntu):**
-  ```bash
-  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-  ```
-
-- **Login & Set Subscription:**
-  ```bash
-  az login
-  az account set --subscription "<your-subscription-id-or-name>"
-  ```
-
-- **Register Resource Providers (One-Time):**
-  ```bash
-  az provider register --namespace Microsoft.App
-  az provider register --namespace Microsoft.OperationalInsights
-  az provider register --namespace Microsoft.ContainerRegistry
-  ```
+| Feature / Resource | Stage Environment Configuration | Production Configuration | Monthly Staging Cost |
+| :--- | :--- | :--- | :--- |
+| **Compute Scaling** | **Scale-to-Zero (`min_replicas = 0`)** | Always-On (`min_replicas = 1`) | **$0.00** (Free Tier: 180k vCPU-s, 360k GiB-s) |
+| **Max Replicas** | `max_replicas = 3` (Budget safety) | `max_replicas = 5-10` | Included |
+| **Container Sizing** | 0.25 vCPU, 0.5 GiB RAM per app | 0.5 – 1.0 vCPU, 1.0 GiB | Included |
+| **Database Tier** | Serverless Container App PostgreSQL | Dedicated Managed Postgres | **$0.00** (No VM fee) |
+| **Ingress / TLS** | ACA Built-in Envoy Ingress (Free TLS) | ACA Built-in Ingress | **$0.00** (No ALB fee) |
+| **Networking (VNet)** | Serverless Direct (`enable_vnet_integration = false`) | Dedicated VNet + Subnet | **$0.00** (No VNet/NAT fee) |
+| **Log Analytics** | 30-day retention | 30-90 day retention | **$0.00** (Within free tier) |
+| **MONTHLY COST** | **~$0.00 – $5.00 / month** | **~$15 – $20 / month** | **~$0 – $5 / mo** |
 
 ---
 
-## 🚀 Quick Start Deployment
+## 🚀 Quick Start: Deploy Stage Environment
 
-### On Windows (PowerShell):
+### Step 1: Authenticate to Azure CLI
+```bash
+az login
+az account set --subscription "<your-subscription-id>"
+```
+
+### Step 2: Initialize & Validate Terraform
 ```powershell
 cd infra/azure
 
-# Copy the example variables file
-Copy-Item terraform.tfvars.example terraform.tfvars
-
-# Initialize Terraform
+# Initialize Terraform providers
 terraform init
 
-# Plan and preview resources
-terraform plan
-
-# Deploy infrastructure
-terraform apply
+# Validate configuration syntax
+terraform validate
 ```
 
-### On Linux or macOS (Bash / Zsh):
-```bash
-cd infra/azure
+### Step 3: Plan & Deploy Stage Environment
+```powershell
+# Review staging execution plan
+terraform plan -var-file="terraform.stage.tfvars"
 
-# Copy the example variables file
-cp terraform.tfvars.example terraform.tfvars
-
-# Initialize Terraform
-terraform init
-
-# Plan and preview resources
-terraform plan
-
-# Deploy infrastructure
-terraform apply
+# Apply staging infrastructure
+terraform apply -var-file="terraform.stage.tfvars"
 ```
 
 ---
 
-## 🔍 Post-Deployment Validation Suite (Across All OS Types)
+## 🔍 Post-Deployment Verification Suite
 
-Once `terraform apply` finishes, the outputs will display the public HTTPS URLs:
+Once `terraform apply` finishes, the outputs display public HTTPS endpoints:
 
 ```text
-Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
 
 Outputs:
-control_plane_ui_url = "https://agentwall-ui.<environment-id>.<region>.azurecontainerapps.io"
-gateway_url          = "https://agentwall-gateway.<environment-id>.<region>.azurecontainerapps.io"
-health_check_url     = "https://agentwall-gateway.<environment-id>.<region>.azurecontainerapps.io/healthz"
-quick_verify_command = "curl -i https://agentwall-gateway.<environment-id>.<region>.azurecontainerapps.io/healthz"
+control_plane_ui_url = "https://agentwall-ui.xxxxxx.westeurope.azurecontainerapps.io"
+gateway_url          = "https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io"
+dashboard_api_url    = "https://agentwall-api.xxxxxx.westeurope.azurecontainerapps.io"
+health_check_url     = "https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
+quick_verify_command = "curl -i https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
 ```
 
-### Step 1: Verify Gateway Health Check
-
-- **Windows (PowerShell):**
-  ```powershell
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>/healthz"
-  ```
-- **Linux / macOS (Bash / Zsh) & Windows CMD:**
-  ```bash
-  curl -i https://<gateway-fqdn>/healthz
-  ```
-*Expected response: `HTTP 200 OK`*
-
-### Step 2: Validate Policy Interception & Security Guardrails
-
-Send test JSON-RPC MCP tool calls to the Azure Container Apps gateway endpoint:
-
-- **Windows (PowerShell):**
-  ```powershell
-  # 1. Test blocked dangerous tool call (Default-Deny / Safe Mode)
-  $blockedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $blockedBody
-
-  # 2. Test safe authorized tool call
-  $safeBody = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
-  Invoke-RestMethod -Uri "https://<gateway-fqdn>" -Method Post -Headers @{ "Content-Type" = "application/json"; "Authorization" = "Bearer test-token" } -Body $safeBody
-  ```
-
-- **Linux / macOS (Bash / Zsh):**
-  ```bash
-  # 1. Test blocked dangerous tool call
-  curl -X POST https://<gateway-fqdn> \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_command","arguments":{"command":"rm -rf /"}}}'
-
-  # 2. Test safe authorized tool call
-  curl -X POST https://<gateway-fqdn> \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer test-token" \
-    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_directory","arguments":{"path":"/workspace"}}}'
-  ```
-
-### Step 3: Access the Enterprise Control Plane UI
-Open your browser and navigate to:
-```text
-https://<control-plane-ui-fqdn>
-```
-
-### Step 4: Stream Live Container Logs (Azure CLI)
+### 1. Verify Gateway Health Check
 ```bash
-# Windows PowerShell, macOS, or Linux
-az containerapp logs show \
-  --name agentwall-gateway \
-  --resource-group rg-agentwall-dev-westeurope \
-  --follow
+curl -i https://<gateway-url>/healthz
 ```
 
----
-
-## ⚙️ Advanced Customization
-
-### 1. Dev Mode: Scale-to-Zero ($0 Idle Compute)
-In `terraform.tfvars`, set `min_replicas = 0`:
-```hcl
-min_replicas = 0
-```
-When idle, instances spin down to 0 replicas, consuming zero CPU/memory and fitting completely within Azure's monthly free tier.
-
-### 2. Enterprise VNet Isolation
-To isolate Container Apps inside a custom Azure Virtual Network and Subnet, enable VNet integration:
-```hcl
-enable_vnet_integration = true
-vnet_cidr               = "10.10.0.0/16"
-aca_subnet_cidr         = "10.10.0.0/23"
-```
-
-### 3. Private Azure Container Registry (ACR)
-To provision a dedicated Azure Container Registry:
-```hcl
-acr_enabled = true
-```
-
----
-
-## 🧹 Teardown & Clean Up
-
-To delete all provisioned Azure resources cleanly:
+### 2. Stream Live Staging Logs
 ```bash
-terraform destroy
+az containerapp logs show --name agentwall-gateway --resource-group rg-agentwall-stage-westeurope --follow
+```
+
+### 3. Teardown Stage Environment
+```bash
+terraform destroy -var-file="terraform.stage.tfvars"
 ```

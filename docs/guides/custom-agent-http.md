@@ -33,6 +33,16 @@ $env:HTTP_PROXY = "http://127.0.0.1:8080"
 $env:HTTPS_PROXY = "http://127.0.0.1:8080"
 ```
 
+### Windows (Command Prompt - CMD)
+```cmd
+set AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
+set HTTP_PROXY=http://127.0.0.1:8080
+set HTTPS_PROXY=http://127.0.0.1:8080
+```
+
+> [!TIP]
+> If Vexa Agent Control is running in Docker, the proxy port `8080` is accessible via the exact same localhost URLs across Linux, macOS, and Windows.
+
 ---
 
 ## 2. Python Framework Examples

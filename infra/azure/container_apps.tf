@@ -14,7 +14,7 @@ resource "azurerm_container_app" "db" {
   }
 
   template {
-    min_replicas = 1
+    min_replicas = var.min_replicas
     max_replicas = 1
 
     container {
@@ -74,6 +74,46 @@ resource "azurerm_container_app" "db" {
   }
 }
 
+# ─── 1b. Valkey Distributed Cache & Rate Limiting Engine ────────────────────────
+resource "azurerm_container_app" "valkey" {
+  name                         = "agentwall-valkey"
+  container_app_environment_id = azurerm_container_app_environment.aca_env.id
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single"
+  tags                         = local.default_tags
+
+  template {
+    min_replicas = var.min_replicas
+    max_replicas = 1
+
+    container {
+      name   = "valkey"
+      image  = "valkey/valkey:7.2-alpine"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      startup_probe {
+        transport               = "TCP"
+        port                    = 6379
+        interval_seconds        = 5
+        timeout                 = 3
+        failure_count_threshold = 6
+      }
+    }
+  }
+
+  ingress {
+    external_enabled = false
+    target_port      = 6379
+    transport        = "tcp"
+
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+}
+
 # ─── 2. Enterprise Control Plane Dashboard API ────────────────────────────────
 # Exposes the management REST API and policy distribution endpoint.
 
@@ -100,6 +140,10 @@ resource "azurerm_container_app" "api" {
     name  = "encryption-secret"
     value = local.encryption_secret
   }
+  secret {
+    name  = "session-secret"
+    value = local.session_secret
+  }
 
   template {
     min_replicas = var.min_replicas
@@ -116,16 +160,24 @@ resource "azurerm_container_app" "api" {
         secret_name = "database-url"
       }
       env {
+        name  = "VALKEY_URL"
+        value = "agentwall-valkey:6379"
+      }
+      env {
         name  = "DASHBOARD_PORT"
         value = "8400"
       }
       env {
+        name  = "ENVIRONMENT"
+        value = var.environment
+      }
+      env {
         name  = "DEV_MODE"
-        value = "true"
+        value = var.environment == "dev" ? "true" : "false"
       }
       env {
         name  = "ALLOW_DEV_MODE"
-        value = "true"
+        value = var.environment == "dev" ? "true" : "false"
       }
       env {
         name        = "GATEWAY_SECRET"
@@ -142,6 +194,24 @@ resource "azurerm_container_app" "api" {
       env {
         name        = "PROVIDER_KEY_ENCRYPTION_SECRET"
         secret_name = "encryption-secret"
+      }
+      env {
+        name        = "AGENTWALL_SESSION_SECRET"
+        secret_name = "session-secret"
+      }
+      env {
+        name        = "AGENTCONTROL_SESSION_SECRET"
+        secret_name = "session-secret"
+      }
+      # Required by Go config.Load() in production: tells the API it runs behind
+      # a TLS-terminating ingress (ACA) so INGRESS_AUTH_SECRET is not enforced.
+      env {
+        name  = "DIRECT_TLS_ENABLED"
+        value = "true"
+      }
+      env {
+        name        = "INGRESS_AUTH_SECRET"
+        secret_name = "gateway-secret"
       }
 
       readiness_probe {
@@ -266,13 +336,38 @@ resource "azurerm_container_app" "gateway" {
       cpu    = var.gateway_cpu
       memory = var.gateway_memory
 
+      # AGENTCONTROL_LISTEN must be set — the Rust binary reads this env var first.
+      # Without it, the default is 127.0.0.1:8080 (loopback), which triggers a
+      # fatal security error when binding 0.0.0.0 without identity auth.
+      env {
+        name  = "AGENTCONTROL_LISTEN"
+        value = "0.0.0.0:8080"
+      }
       env {
         name  = "AGENTWALL_LISTEN"
         value = "0.0.0.0:8080"
       }
+      # AGENTCONTROL_CENTRALIZED=true + AGENTCONTROL_ADMIN_TOKEN are REQUIRED to
+      # pass the non-loopback bind security guard in src/main.rs.
+      env {
+        name  = "AGENTCONTROL_CENTRALIZED"
+        value = "true"
+      }
+      env {
+        name        = "AGENTCONTROL_ADMIN_TOKEN"
+        secret_name = "gateway-secret"
+      }
+      env {
+        name  = "AGENTCONTROL_POLICY_PATH"
+        value = "/app/policy.example.yaml"
+      }
+      env {
+        name  = "AGENTCONTROL_HUB_URL"
+        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
       env {
         name  = "DASHBOARD_API_URL"
-        value = "http://agentwall-api:8400"
+        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
       }
       env {
         name        = "POLICY_READ_SECRET"
@@ -287,8 +382,12 @@ resource "azurerm_container_app" "gateway" {
         value = "30"
       }
       env {
+        name  = "AGENTCONTROL_LOG_PATH"
+        value = "/var/log/agentcontrol/audit.log"
+      }
+      env {
         name  = "AGENTWALL_LOG_PATH"
-        value = "/var/log/agentwall/audit.log"
+        value = "/var/log/agentcontrol/audit.log"
       }
 
       readiness_probe {

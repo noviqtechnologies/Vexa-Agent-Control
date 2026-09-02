@@ -24,6 +24,23 @@ Because Windows Command Prompt does not have native cryptographic hash and JSON 
 
 ---
 
+## Alternative: Docker Deployment via CMD
+
+If Docker Desktop is installed, run Vexa Agent Control containers directly from CMD:
+
+```cmd
+:: Standalone Gateway Container:
+docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+
+:: Full-Stack Control Hub (Compose):
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+docker compose -f docker-compose.team.yml up -d
+```
+Access the Web Console at `http://localhost:3000`. Read the full [Docker Deployment Guide](../guides/docker-deployment.md).
+
+---
+
 ## Starting Protection in CMD
 
 ```cmd

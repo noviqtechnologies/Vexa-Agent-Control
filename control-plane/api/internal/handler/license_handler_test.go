@@ -12,9 +12,8 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 )
 
-func TestLicenseHandler_GetStatus_Community(t *testing.T) {
-	ms := &mockStore{}
-	h := NewLicenseHandler(ms, license.CommunityClaims())
+func TestLicenseHandler_GetStatus_Developer(t *testing.T) {
+	h := NewLicenseHandler(nil, license.DeveloperClaims())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/license/status", nil)
 	rr := httptest.NewRecorder()
@@ -30,11 +29,11 @@ func TestLicenseHandler_GetStatus_Community(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp["tier"] != "community" {
-		t.Errorf("tier = %v, want community", resp["tier"])
+	if resp["tier"] != "developer" {
+		t.Errorf("tier = %v, want developer", resp["tier"])
 	}
-	if resp["max_seats"].(float64) != 10 {
-		t.Errorf("max_seats = %v, want 10", resp["max_seats"])
+	if resp["max_devices"].(float64) != 1 {
+		t.Errorf("max_devices = %v, want 1", resp["max_devices"])
 	}
 }
 

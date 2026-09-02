@@ -4,6 +4,7 @@ import {
   revokeDeviceV2,
   createEnrollmentTokenV2,
   getSentryDeviceDetail,
+  resolveHubUrl,
   type SentryDeviceSummary,
   type SentryDeviceDetail,
   type EnrollmentTokenV2
@@ -160,6 +161,8 @@ export default function Devices() {
         return <span className="badge badge-success">COMPLIANT</span>
       case 'NON_COMPLIANT':
         return <span className="badge badge-danger">NON-COMPLIANT</span>
+      case 'NOT_INSTALLED':
+        return <span className="badge badge-secondary" style={{ opacity: 0.6, background: '#3f3f46', color: '#a1a1aa' }}>NOT INSTALLED</span>
       case 'OFFLINE':
       default:
         return <span className="badge badge-info" style={{ opacity: 0.7 }}>OFFLINE</span>
@@ -174,7 +177,7 @@ export default function Devices() {
     return os || 'Unknown'
   }
 
-  const hubUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'
+  const hubUrl = resolveHubUrl(generatedToken?.hub_url)
 
   const filteredDevices = devices.filter(d => {
     if (!searchQuery.trim()) return true
@@ -402,8 +405,8 @@ export default function Devices() {
                         <span style={{ color: 'var(--text-muted)' }}>0</span>
                       )}
                     </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                      {d.last_heartbeat_at ? new Date(d.last_heartbeat_at).toLocaleTimeString() : 'Never'}
+                    <td style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      {d.last_heartbeat_at ? new Date(d.last_heartbeat_at).toLocaleString() : 'Never'}
                     </td>
                     <td>{getComplianceBadge(d.overall_compliance)}</td>
                     <td style={{ textAlign: 'right' }}>
@@ -800,7 +803,7 @@ export default function Devices() {
                       className="btn btn-sm"
                       style={{ padding: '2px 8px', fontSize: '11px', backgroundColor: copiedField === 'cli' ? 'var(--success)' : 'var(--bg-surface-3)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       onClick={() => {
-                        const cmd = `agentcontrol enroll --hub ${hubUrl} --token ${generatedToken.token}`
+                        const cmd = `agentcontrol enroll --hub-url ${hubUrl} --token ${generatedToken.token}`
                         navigator.clipboard.writeText(cmd)
                         setCopiedField('cli')
                         setTimeout(() => setCopiedField(null), 2000)
@@ -810,7 +813,7 @@ export default function Devices() {
                     </button>
                   </div>
                   <pre style={{ margin: 0, fontSize: '11px', color: '#a78bfa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
-                    agentcontrol enroll --hub {hubUrl} --token {generatedToken.token}
+                    agentcontrol enroll --hub-url {hubUrl} --token {generatedToken.token}
                   </pre>
                 </div>
 
@@ -1013,7 +1016,7 @@ export default function Devices() {
                         backgroundColor: 'var(--bg-surface-0, #121214)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-sm, 6px)',
-                        borderLeft: `4px solid ${ide.compliance_state === 'COMPLIANT' ? '#22c55e' : '#ef4444'}`,
+                        borderLeft: `4px solid ${ide.compliance_state === 'COMPLIANT' ? '#22c55e' : ide.compliance_state === 'NOT_INSTALLED' || !ide.installed ? '#52525b' : '#ef4444'}`,
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -1028,15 +1031,15 @@ export default function Devices() {
                       <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, color: 'var(--text-secondary)' }}>
                         <div>
                           <span style={{ color: 'var(--text-muted)' }}>Config Path: </span>
-                          <code style={{ fontSize: 11, color: '#38bdf8', wordBreak: 'break-all' }}>{ide.config_path || 'Default User Settings'}</code>
+                          <code style={{ fontSize: 11, color: '#38bdf8', wordBreak: 'break-all' }}>{ide.config_path || (ide.installed ? 'Default User Settings' : 'Not Detected')}</code>
                         </div>
                         <div>
                           <span style={{ color: 'var(--text-muted)' }}>Proxy Base URL: </span>
                           <code style={{ fontSize: 11, color: '#a78bfa' }}>{ide.configured_base_url || 'http://127.0.0.1:8080'}</code>
                         </div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-                          <span style={{ color: ide.proxy_configured ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-                            {ide.proxy_configured ? '✔ Proxy Configured' : '✖ Proxy Missing'}
+                          <span style={{ color: ide.proxy_configured ? 'var(--success)' : ide.installed ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 600 }}>
+                            {ide.proxy_configured ? '✔ Proxy Configured' : ide.installed ? '✖ Proxy Missing' : '○ Not Configured'}
                           </span>
                           <span style={{ color: ide.mcp_wrapped ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
                             {ide.mcp_wrapped ? '✔ MCP Wrapped' : '○ Standard Tools'}

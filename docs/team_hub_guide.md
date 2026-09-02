@@ -43,6 +43,7 @@ Choose the deployment method that fits your environment requirements:
 └────────────────────────────────────────────────┴────────────────────────────────────────────────┘
 ```
 
+- **[Docker Deployment Guide](guides/docker-deployment.md)** — Zero-install standalone gateway container (`docker run`) and all-in-one Docker Compose developer stack.
 - **[Local Development & Testing Guide](team_hub_guide/local_development.md)** — Step-by-step instructions for running Team Hub locally using Docker Compose (`docker compose up -d --build`), executing native gateways, connecting local agent workflows, and verifying audit logs.
 - **[Kubernetes Deployment Guide](team_hub_guide/kubernetes_deployment.md)** — Comprehensive documentation for deploying Team Hub to production Kubernetes clusters using Helm (`./chart`), managing TLS secrets, configuring `Agent ControlPolicy` CRDs, and handling zero-downtime rolling upgrades.
 

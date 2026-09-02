@@ -20,7 +20,8 @@
 - [Who Should Use It](#who-should-use-it)
 - [Supported Platforms](#supported-platforms)
 - [Verified Integrations](#verified-integrations)
-- [10-Minute Quickstart](#10-minute-quickstart)
+- [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
+- [10-Minute Workstation Quickstart](#10-minute-quickstart)
 - [What Changes on Your Machine](#what-changes-on-your-machine)
 - [Modes Explained](#modes-explained)
 - [Small Team Path](#small-team-path)
@@ -34,14 +35,20 @@
 
 Vexa Agent Control acts as a local security sidecar and transparent proxy for AI agent tool calls:
 
+- **Phase-Oriented Request Pipeline:** Deterministic 9-stage execution lifecycle (Ingress, Identity Binding, Snapshot Acquisition, Security Inspection, Preflight Reservation, Route Planning, Upstream Execution, Stream Sanitization, Settlement & Outbox) with zero lock contention.
+- **Universal Provider Transformation Engine:** Native bidirectional protocol normalization across OpenAI, Azure OpenAI Service, Groq, Anthropic Claude, Google Gemini, and AWS Bedrock.
+- **Valkey-Powered Distributed State:** High-performance open-source Valkey (BSD) state layer for sub-millisecond virtual key caching, distributed rate limiting, and zero-lock atomic microcent spend reservations.
+- **Safe Operation Replay Taxonomy:** Strict classification separating safe `ReadOnly` requests from side-effecting MCP tool calls to prevent duplicate mutations.
+- **Decoupled Durable Outbox:** Local HMAC-SHA256 disk durability (`sync_all`) combined with non-blocking async SIEM / telemetry fan-out.
 - **Run Explorer & Forensic Dossiers:** Traces every LLM request through identity, policy snapshots, spend authorization, and upstream dispatch with forensic drawers and cryptographic correlation.
 - **Effective Policy Explorer:** Resolves deterministic multi-layer policy hierarchies (Organization, Group, Spend, Virtual-Key, Device) with point-in-time historical audit support.
-- **Fail-Closed Spend Governance:** Enforces integer microcent preflight reservations with row-level database locking and accurate SSE streaming token settlement.
+- **Fail-Closed Spend Governance:** Enforces integer microcent preflight reservations and accurate SSE streaming token settlement.
 - **Enrolled-Device Sentry & Attestation:** Provides continuous filesystem posture monitoring, auto-healing, and authentic Ed25519 cryptographic policy verification.
 - **Identity Provider Integration (Local, Google, Azure Entra ID):** Authenticates operators via Local Admin or SSO, validates agent JWTs via dynamic JWKS discovery, and attributes spend and audit events to verified identities.
 - **DLP & Secret Leak Prevention:** Detects AWS keys, OpenAI keys, SSH private keys, GitHub tokens, and high-entropy credentials before they leave your workstation.
 - **Prompt Injection & Loop Guards:** Evaluates tool arguments against deterministic rules and structural recursion limits.
 - **Tamper-Evident Audit Logging:** Emits durable, JSONL event records to `~/.agentcontrol/audit.jsonl` with HMAC signing.
+- **Cost-Effective Multi-Cloud OpenTofu Deployments:** Production-ready OpenTofu blueprints for AWS (ECS Fargate Spot), Azure (Container Apps), and GCP (Cloud Run) with containerized Valkey sidecars.
 
 > [!IMPORTANT]
 > **Protection Boundary:** Vexa Agent Control inspects traffic routed through wrapped MCP configurations, explicit HTTP proxy environment variables (`AGENTCONTROL_PROXY_URL` / `HTTP_PROXY`), and strict mTLS brokered routes. In Team Enforce Mode, spend governance and broker eligibility fail closed.
@@ -52,7 +59,8 @@ Vexa Agent Control acts as a local security sidecar and transparent proxy for AI
 
 | Profile | Typical Use Case | Recommended Starting Point |
 |---|---|---|
-| **Individual Developer** | Evaluating MCP tools, inspecting tool traffic, blocking accidental secret leakage. | [10-Minute Quickstart](#10-minute-quickstart) |
+| **Local Dev & PoC (Docker)** | Instant local evaluation without installing toolchains; running standalone container or full stack. | [Docker Quickstart](#docker-quickstart-2-minutes) · [Docker Guide](docs/guides/docker-deployment.md) |
+| **Individual Developer** | Evaluating MCP tools, inspecting tool traffic, blocking accidental secret leakage natively. | [10-Minute Quickstart](#10-minute-quickstart) |
 | **Small AI Team / SMB** | Shared security policies across engineers, unified audit logging, spend caps. | [Small Team Hub Guide](docs/guides/small-team-hub.md) |
 | **Platform & Enterprise** | Kubernetes Helm sidecars, OIDC identity binding, SIEM forwarding, zero-knowledge CMK. | [Enterprise Reference](docs/advanced/enterprise.md) |
 
@@ -62,6 +70,7 @@ Vexa Agent Control acts as a local security sidecar and transparent proxy for AI
 
 | Platform | Architecture | Status | Shell / Runtime Requirements | Notes |
 |---|---|---|---|---|
+| **Docker / Containers** | `x86_64` / `aarch64` | **Supported** | Docker Engine 24.0+ / Compose v2+ | Zero host setup; standalone or full stack |
 | **macOS (Apple Silicon)** | `aarch64` (M1/M2/M3/M4) | **Supported** | Zsh / Bash | Mandatory SHA-256 verified |
 | **macOS (Intel)** | `x86_64` | **Supported** | Zsh / Bash | Mandatory SHA-256 verified |
 | **Linux** | `x86_64` / `aarch64` | **Supported** | Bash / Zsh (`curl`, `unzip`, `sha256sum`) | Ubuntu, Debian, Fedora, Arch, Alpine |
@@ -86,7 +95,66 @@ Trust has levels. Vexa classifies integrations based on end-to-end automated tes
 
 ---
 
-## 10-Minute Quickstart
+## Docker Quickstart (2 Minutes)
+
+Get up and running immediately with zero host toolchain installation:
+
+### Option 1: Standalone Gateway Container (`docker run`)
+
+#### Basic Deployment
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+#### With Authentication (Recommended)
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
+  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
+  -e AGENTCONTROL_ADMIN_TOKEN=your-bootstrap-token \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+#### Using a Custom Port (e.g. `-p 9999:8080`)
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 9999:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_SERVER_HOSTNAME=localhost:9999 \
+  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
+  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+### Option 2: Full-Stack Control Hub (`docker compose`)
+```bash
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+
+# Launch PostgreSQL 16 + Control Plane API + Web Console UI + Gateway
+docker compose -f docker-compose.team.yml up -d
+```
+- **Web Console UI:** `http://localhost:3000` (Login: `admin@vexa.local` / `admin12345678`)
+- **Gateway Endpoint:** `http://localhost:8080`
+- Read the complete [Docker Deployment Guide](docs/guides/docker-deployment.md).
+
+---
+
+## 10-Minute Workstation Quickstart
 
 Follow this step-by-step developer journey to install, safely discover, protect one client, verify enforcement, and roll back.
 
@@ -277,12 +345,28 @@ For production deployments, security teams, and platform engineering:
 Explore the complete [Documentation Hub](docs/README.md):
 
 - **Install:** [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md)
-- **Guides:** [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md) · [Run Explorer](docs/guides/run-explorer.md) · [Effective Policy Explorer](docs/guides/effective-policy.md)
+- **Guides:** [Docker Deployment](docs/guides/docker-deployment.md) · [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md) · [Run Explorer](docs/guides/run-explorer.md) · [Effective Policy Explorer](docs/guides/effective-policy.md)
 - **Integrations:** [Matrix](docs/integrations/README.md) · [Claude Desktop](docs/integrations/claude-desktop.md) · [Cursor](docs/integrations/cursor.md) · [Codex](docs/integrations/codex.md) · [Antigravity](docs/integrations/antigravity.md)
 - **Reference:** [CLI Commands](docs/reference/cli.md) · [Configuration & Env Vars](docs/reference/configuration.md) · [Paths & State](docs/reference/paths-and-state.md) · [Troubleshooting](docs/reference/troubleshooting.md) · [Removal & Recovery](docs/reference/removal-and-recovery.md) · [Legacy Alias Migration](docs/reference/legacy-migration.md) · [Release Notes Template](docs/reference/release-notes-template.md)
 
 ---
 
-## License
+## Architecture & Licensing
 
-Vexa Agent Control is licensed under the [Apache 2.0 License](LICENSE).
+Vexa Agent Control operates on a **Single-Tenant Open-Core Dual-License Model**:
+
+### 1. Dual Licenses
+- **Core Open Source ([Apache-2.0](LICENSE)):** Covers the standalone Rust Gateway, local CLI protections (`agentcontrol protect`), MCP inspection, basic regex DLP, prompt injection guards, and community Control Plane.
+- **Enterprise Features ([enterprise/LICENSE.md](enterprise/LICENSE.md)):** Source-available commercial license governing OIDC/SAML SSO, multi-team RBAC, real-time SIEM streaming, spend caps & budgets v2, and zero-knowledge CMK custody.
+
+### 2. 3-Tier Capability Model
+
+| Tier | Enrolled Devices | Core Capabilities | Activation |
+|---|---|---|---|
+| **Developer** | 1 device | Standalone gateway, local proxy, MCP guardrails, JSONL audit logs, prompt injection filters | Free / Built-in |
+| **Team** | Up to 25 devices | Everything in Developer + Centralized SSE Policy Sync, Spend Caps v2, Group Policies, OTET Onboarding, Aggregated Audits | `VEXA_LICENSE_KEY` or Web UI |
+| **Enterprise** | Unlimited | Everything in Team + OIDC/SAML SSO, Strict mTLS Device Identity, Real-Time SIEM Streaming, Deep DLP, CMK Custody | Ed25519 Commercial Token |
+
+### 3. Single-Tenant Sovereign Ownership
+All Control Plane deployments operate within a single private organization boundary (`organization_id`). Live keys, tool calls, and LLM payloads never leave your infrastructure. Offline cryptographic validation (Ed25519) allows air-gapped deployments without outbound telemetry.
+

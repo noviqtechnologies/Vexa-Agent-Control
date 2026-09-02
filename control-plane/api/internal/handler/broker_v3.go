@@ -13,6 +13,7 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/valkey"
 )
 
 type BrokerV3Handler struct {
@@ -20,6 +21,7 @@ type BrokerV3Handler struct {
 	kmsProvider    kms.KMSProvider
 	spendStore     *spend.Store
 	providerClient broker.ProviderClient
+	valkeyClient   valkey.Client
 }
 
 func NewBrokerV3Handler(
@@ -28,12 +30,18 @@ func NewBrokerV3Handler(
 	spendStore *spend.Store,
 	pc broker.ProviderClient,
 ) *BrokerV3Handler {
+	vkClient, _ := valkey.NewClient()
 	return &BrokerV3Handler{
 		store:          st,
 		kmsProvider:    kmsProvider,
 		spendStore:     spendStore,
 		providerClient: pc,
+		valkeyClient:   vkClient,
 	}
+}
+
+func (h *BrokerV3Handler) SetValkeyClient(c valkey.Client) {
+	h.valkeyClient = c
 }
 
 type BrokerV3DispatchPayload struct {
@@ -105,7 +113,7 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 3. Preflight Microcents Spend Reservation Check
+	// 3. Preflight Microcents Spend Reservation Check (Valkey-backed atomic CAS)
 	if vk != nil && vk.MonthlyBudgetMicrocents > 0 {
 		estimatedTokens := req.InputTokenEstimate + req.MaxOutputTokens
 		if estimatedTokens == 0 {
@@ -114,14 +122,24 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 		// Baseline estimate: 1000 microcents per token
 		estimatedMicrocents := estimatedTokens * 1000
 
-		_, err := h.store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, estimatedMicrocents)
-		if err != nil {
-			if errors.Is(err, store.ErrVirtualKeyBudgetExceeded) {
-				http.Error(w, `{"error":{"code":"budget_exceeded","message":"Monthly spend budget exceeded for this virtual key"}}`, http.StatusPaymentRequired)
+		if h.valkeyClient != nil {
+			_, err := h.valkeyClient.ReserveSpend(r.Context(), vk.ID, estimatedMicrocents, vk.MonthlyBudgetMicrocents)
+			if err != nil {
+				if errors.Is(err, valkey.ErrBudgetCapExceeded) {
+					http.Error(w, `{"error":{"code":"budget_exceeded","message":"Monthly spend budget exceeded for this virtual key"}}`, http.StatusPaymentRequired)
+					return
+				}
+			}
+		} else {
+			_, err := h.store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, estimatedMicrocents)
+			if err != nil {
+				if errors.Is(err, store.ErrVirtualKeyBudgetExceeded) {
+					http.Error(w, `{"error":{"code":"budget_exceeded","message":"Monthly spend budget exceeded for this virtual key"}}`, http.StatusPaymentRequired)
+					return
+				}
+				http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
 				return
 			}
-			http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
-			return
 		}
 	}
 
@@ -137,16 +155,41 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Forward to Upstream Provider using ProviderClient
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Vexa-Tenant-ID", tenantID)
 	w.Header().Set("X-Broker-Version", "v3")
 
-	llmResp, _, err := h.providerClient.ForwardLLMRequest(r.Context(), req.Provider, req.Model, req.Stream, req.Payload, providerSecret)
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":{"code":"upstream_error","message":%q}}`, err.Error()), http.StatusBadGateway)
-		return
-	}
+	if req.Stream {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-transform")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
 
-	w.WriteHeader(http.StatusOK)
-	w.Write(llmResp.Response)
+		flusher, isFlusher := w.(http.Flusher)
+
+		_, err := h.providerClient.ForwardLLMRequestStream(r.Context(), req.Provider, req.Model, req.Payload, providerSecret, func(chunk []byte) error {
+			if _, wErr := w.Write(chunk); wErr != nil {
+				return wErr
+			}
+			if isFlusher {
+				flusher.Flush()
+			}
+			return nil
+		})
+
+		if err != nil {
+			// Stream already started, error reported
+			return
+		}
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+
+		llmResp, _, err := h.providerClient.ForwardLLMRequest(r.Context(), req.Provider, req.Model, false, req.Payload, providerSecret)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":{"code":"upstream_error","message":%q}}`, err.Error()), http.StatusBadGateway)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write(llmResp.Response)
+	}
 }

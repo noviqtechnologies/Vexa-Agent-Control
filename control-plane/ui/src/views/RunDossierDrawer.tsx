@@ -1,19 +1,43 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RunDossier } from '../api/client'
+import './RunExplorer.css'
 
 interface Props {
   dossier: RunDossier
   onClose: () => void
 }
 
-function microcentsToUSD(microcents: number): number {
+function microcentsToUSD(microcents?: number): number {
   return (microcents || 0) / 100_000_000
+}
+
+function formatStatusText(code?: number, state?: string): { label: string; badgeClass: string } {
+  const normState = (state || '').toUpperCase()
+  if (normState === 'AUTHORIZED') {
+    return { label: 'Pending (In-Flight)', badgeClass: 'badge-info' }
+  }
+  if (!code || code === 0) {
+    if (normState === 'RELEASED') return { label: '503 Service Unavailable', badgeClass: 'badge-danger' }
+    if (normState === 'DENIED' || normState === 'BLOCKED') return { label: '403 Forbidden', badgeClass: 'badge-danger' }
+    if (normState === 'FAILED' || normState === 'ERROR') return { label: '500 Server Error', badgeClass: 'badge-danger' }
+    return { label: '200 OK', badgeClass: 'badge-success' }
+  }
+  if (code === 200) return { label: '200 OK', badgeClass: 'badge-success' }
+  if (code === 503) return { label: '503 Service Unavailable', badgeClass: 'badge-danger' }
+  if (code === 502) return { label: '502 Bad Gateway', badgeClass: 'badge-danger' }
+  if (code === 504) return { label: '504 Gateway Timeout', badgeClass: 'badge-danger' }
+  if (code === 403) return { label: '403 Forbidden', badgeClass: 'badge-danger' }
+  if (code === 429) return { label: '429 Too Many Requests', badgeClass: 'badge-danger' }
+  if (code === 499) return { label: '499 Client Cancelled', badgeClass: 'badge-warning' }
+  if (code >= 400) return { label: `${code} Error`, badgeClass: 'badge-danger' }
+  return { label: `${code} OK`, badgeClass: 'badge-success' }
 }
 
 export default function RunDossierDrawer({ dossier, onClose }: Props) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<'identity' | 'policy' | 'economics' | 'events' | 'dispatch'>('economics')
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   const handleNavigateEffectivePolicy = () => {
     const params = new URLSearchParams()
@@ -23,6 +47,34 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
     if (dossier.dispatch?.model) params.set('model', dossier.dispatch.model)
     navigate(`/policy/effective-explorer?${params.toString()}`)
   }
+
+  const copyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), 2000)
+  }
+
+  const isSettled = dossier.outcome?.state?.toUpperCase() === 'SETTLED'
+  const isReleased = dossier.outcome?.state?.toUpperCase() === 'RELEASED'
+  const isDenied = dossier.outcome?.state?.toUpperCase() === 'DENIED' || dossier.outcome?.state?.toUpperCase() === 'BLOCKED'
+  const isFailed = dossier.outcome?.state?.toUpperCase() === 'FAILED' || dossier.outcome?.state?.toUpperCase() === 'ERROR'
+
+  // Billed financial impact: Only successfully SETTLED runs incur actual spend.
+  // RELEASED, FAILED, and DENIED runs have $0.00 actual billed cost.
+  const netBilledMicrocents = isSettled ? (dossier.economics?.settled_microcents || 0) : 0
+  const netBilledUSD = microcentsToUSD(netBilledMicrocents)
+
+  const reservedUSD = microcentsToUSD(dossier.economics?.reserved_microcents || 0)
+  const settledUSD = microcentsToUSD(dossier.economics?.settled_microcents || 0)
+  const releasedUSD = microcentsToUSD(
+    dossier.economics?.released_microcents !== undefined
+      ? dossier.economics.released_microcents
+      : isReleased || isDenied || isFailed
+      ? dossier.economics?.reserved_microcents || 0
+      : Math.max(0, (dossier.economics?.reserved_microcents || 0) - (dossier.economics?.settled_microcents || 0))
+  )
+
+  const statusInfo = formatStatusText(dossier.outcome?.status_code, dossier.outcome?.state)
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
@@ -79,41 +131,81 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
         <div className="drawer-body">
           {tab === 'economics' && (
             <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
-                <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>RESERVED</div>
-                  <div style={{ fontSize: 20, color: '#38bdf8', fontWeight: 600, marginTop: 4 }}>
-                    ${microcentsToUSD(dossier.economics?.reserved_microcents || 0).toFixed(4)}
+              {/* 4-KPI Grid with Net Billed Spend */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
+                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>RESERVED (HOLD)</div>
+                  <div style={{ fontSize: 18, color: '#38bdf8', fontWeight: 600, marginTop: 4 }}>
+                    ${reservedUSD.toFixed(4)}
                   </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Pre-flight ceiling</div>
                 </div>
-                <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>SETTLED (ACTUAL)</div>
-                  <div style={{ fontSize: 20, color: '#10b981', fontWeight: 600, marginTop: 4 }}>
-                    ${microcentsToUSD(dossier.economics?.settled_microcents || 0).toFixed(4)}
+
+                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>SETTLED (ACTUAL)</div>
+                  <div style={{ fontSize: 18, color: '#10b981', fontWeight: 600, marginTop: 4 }}>
+                    ${settledUSD.toFixed(4)}
                   </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Usage captured</div>
                 </div>
-                <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>RELEASED</div>
-                  <div style={{ fontSize: 20, color: '#f59e0b', fontWeight: 600, marginTop: 4 }}>
-                    ${microcentsToUSD(dossier.economics?.released_microcents || 0).toFixed(4)}
+
+                <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>RELEASED</div>
+                  <div style={{ fontSize: 18, color: '#f59e0b', fontWeight: 600, marginTop: 4 }}>
+                    ${releasedUSD.toFixed(4)}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Unused hold returned</div>
+                </div>
+
+                <div style={{ padding: 12, background: isSettled ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255,255,255,0.05)', borderRadius: 6, border: '1px solid ' + (isSettled ? 'rgba(16, 185, 129, 0.3)' : 'var(--border)') }}>
+                  <div style={{ fontSize: 10, color: isSettled ? '#10b981' : 'var(--text-muted)', fontWeight: 600 }}>NET BILLED SPEND</div>
+                  <div style={{ fontSize: 18, color: isSettled ? '#10b981' : '#f0f6fc', fontWeight: 700, marginTop: 4 }}>
+                    ${netBilledUSD.toFixed(4)}
+                  </div>
+                  <div style={{ fontSize: 10, color: isSettled ? '#10b981' : 'var(--text-muted)', marginTop: 2 }}>
+                    {isSettled ? 'Charged to tenant' : 'Zero spend incurred'}
                   </div>
                 </div>
               </div>
 
               <div className="dossier-kv-grid">
+                <span className="dossier-k">HTTP Status Code</span>
+                <span className="dossier-v">
+                  <span className={`badge ${statusInfo.badgeClass}`}>
+                    {statusInfo.label}
+                  </span>
+                </span>
+
+                <span className="dossier-k">Execution State</span>
+                <span className="dossier-v">
+                  <span className={`badge-state state-${dossier.outcome?.state?.toLowerCase() || 'settled'}`}>
+                    {dossier.outcome?.state || 'UNKNOWN'}
+                  </span>
+                </span>
+
                 <span className="dossier-k">Duration</span>
                 <span className="dossier-v">{dossier.outcome?.duration_ms || 0} ms</span>
 
                 <span className="dossier-k">Started At</span>
                 <span className="dossier-v">{dossier.outcome?.started_at ? new Date(dossier.outcome.started_at).toLocaleString() : 'N/A'}</span>
 
-                <span className="dossier-k">Settled At</span>
-                <span className="dossier-v">{dossier.outcome?.settled_at ? new Date(dossier.outcome.settled_at).toLocaleString() : 'N/A'}</span>
+                <span className="dossier-k">Settled / Closed At</span>
+                <span className="dossier-v">
+                  {dossier.outcome?.settled_at
+                    ? new Date(dossier.outcome.settled_at).toLocaleString()
+                    : dossier.outcome?.released_at
+                    ? new Date(dossier.outcome.released_at).toLocaleString()
+                    : 'N/A'}
+                </span>
 
                 {dossier.outcome?.release_reason && (
                   <>
                     <span className="dossier-k">Release Reason</span>
-                    <span className="dossier-v">{dossier.outcome.release_reason}</span>
+                    <span className="dossier-v">
+                      <code style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>
+                        {dossier.outcome.release_reason}
+                      </code>
+                    </span>
                   </>
                 )}
               </div>
@@ -123,10 +215,12 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
           {tab === 'identity' && (
             <div className="dossier-kv-grid">
               <span className="dossier-k">Device ID</span>
-              <span className="dossier-v" style={{ fontFamily: 'var(--font-mono)' }}>{dossier.identity?.device_id || 'N/A'}</span>
+              <span className="dossier-v" style={{ fontFamily: 'var(--font-mono)' }}>
+                {dossier.identity?.device_id || 'N/A'}
+              </span>
 
               <span className="dossier-k">Hostname</span>
-              <span className="dossier-v">{dossier.identity?.device_hostname || 'N/A'}</span>
+              <span className="dossier-v">{dossier.identity?.device_hostname || dossier.identity?.device_id || 'N/A'}</span>
 
               <span className="dossier-k">Compliance</span>
               <span className="dossier-v" style={{ color: '#10b981' }}>{dossier.identity?.device_compliance || 'COMPLIANT'}</span>
@@ -135,7 +229,19 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
               <span className="dossier-v">{dossier.identity?.project_id || 'default'}</span>
 
               <span className="dossier-k">Correlation Key</span>
-              <span className="dossier-v" style={{ fontFamily: 'var(--font-mono)' }}>{dossier.request_id || 'N/A'}</span>
+              <span className="dossier-v" style={{ fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{dossier.request_id || 'N/A'}</span>
+                {dossier.request_id && (
+                  <button
+                    type="button"
+                    className="soc-btn-secondary"
+                    style={{ fontSize: 11, padding: '2px 6px' }}
+                    onClick={() => copyText(dossier.request_id, 'req-id')}
+                  >
+                    {copiedKey === 'req-id' ? '✓ Copied' : 'Copy'}
+                  </button>
+                )}
+              </span>
             </div>
           )}
 
@@ -154,22 +260,79 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
 
           {tab === 'events' && (
             <div>
+              {/* Executive Ledger Summary */}
+              <div style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>TRANSACTION BALANCE SUMMARY</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-bright)', marginTop: 4 }}>
+                    Hold: <span style={{ color: '#38bdf8' }}>+${reservedUSD.toFixed(4)}</span>
+                    {' · '}
+                    Returned: <span style={{ color: '#f59e0b' }}>-${releasedUSD.toFixed(4)}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>NET BILLED IMPACT</div>
+                  <div style={{ fontSize: 16, color: isSettled ? '#10b981' : '#f0f6fc', fontWeight: 700 }}>
+                    ${netBilledUSD.toFixed(4)}
+                  </div>
+                </div>
+              </div>
+
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Immutable Append-Only Spend Events Ledger:</p>
               {(!dossier.economics?.events || dossier.economics.events.length === 0) ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No transaction events recorded for this reservation.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {dossier.economics.events.map((ev, idx) => (
-                    <div key={idx} style={{ padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span className={`badge ${ev.event_type === 'SETTLED' ? 'badge-success' : 'badge-info'}`}>{ev.event_type}</span>
-                        <strong style={{ color: 'var(--warning)' }}>${(ev.amount_microcents / 100_000_000).toFixed(4)}</strong>
+                  {dossier.economics.events.map((ev, idx) => {
+                    const isEvSettled = ev.event_type === 'SETTLED'
+                    const isEvReleased = ev.event_type === 'RELEASED'
+                    const isEvAuth = ev.event_type === 'AUTHORIZED'
+                    const amountUSD = (ev.amount_microcents / 100_000_000).toFixed(4)
+
+                    let badgeClass = 'badge-info'
+                    let amountColor = '#38bdf8'
+                    let amountPrefix = '+'
+                    let amountLabel = '(Hold / Ceiling)'
+                    let description = 'Budget ceiling reserved pre-execution'
+
+                    if (isEvSettled) {
+                      badgeClass = 'badge-success'
+                      amountColor = '#10b981'
+                      amountPrefix = '+'
+                      amountLabel = '(Actual Usage Billed)'
+                      description = 'Provider execution finalized and billed'
+                    } else if (isEvReleased) {
+                      badgeClass = 'badge-warning'
+                      amountColor = '#f59e0b'
+                      amountPrefix = '-'
+                      amountLabel = '(Unused Hold Returned)'
+                      description = `Hold cancelled & budget restored to tenant (Net charge: $0.00)`
+                    } else if (isEvAuth) {
+                      badgeClass = 'badge-info'
+                      amountColor = '#38bdf8'
+                      amountPrefix = '+'
+                      amountLabel = '(Pre-flight Hold)'
+                      description = 'Pre-flight budget reservation ceiling'
+                    }
+
+                    return (
+                      <div key={idx} style={{ padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span className={`badge ${badgeClass}`}>{ev.event_type}</span>
+                          <div style={{ textAlign: 'right' }}>
+                            <strong style={{ color: amountColor, fontSize: 14 }}>{amountPrefix}${amountUSD}</strong>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{amountLabel}</span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          Occurred: {new Date(ev.occurred_at).toLocaleTimeString()} · Reason: <code style={{ color: 'var(--text-bright)' }}>{ev.reason_code}</code>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                          {description}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        Occurred: {new Date(ev.occurred_at).toLocaleTimeString()} · Reason: {ev.reason_code}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -198,3 +361,4 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
     </div>
   )
 }
+

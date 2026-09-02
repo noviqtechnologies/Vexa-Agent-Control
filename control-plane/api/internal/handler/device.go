@@ -78,23 +78,7 @@ func (h *DeviceHandler) RecordTelemetry(w http.ResponseWriter, r *http.Request) 
 func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	orgID := middleware.ResolveTenantScope(r)
 
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil && val > 0 {
-			limit = val
-		}
-	}
-
-	offset := 0
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if val, err := strconv.Atoi(o); err == nil && val >= 0 {
-			offset = val
-		}
-	}
-
-	filter := r.URL.Query().Get("compliance_status")
-
-	resp, err := h.store.ListDevices(r.Context(), orgID, filter, limit, offset)
+	resp, err := h.store.ListDevices(r.Context(), orgID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -102,7 +86,10 @@ func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"devices": resp,
+		"total":   len(resp),
+	})
 }
 
 // ListTamperEvents handles GET /api/v1/devices/tamper-log

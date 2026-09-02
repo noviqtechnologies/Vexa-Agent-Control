@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ─── Stage 1: Build ──────────────────────────────────────────────────────────
 FROM rust:1.88-slim-bookworm AS builder
 
@@ -9,14 +10,30 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the entire workspace so all benchmarks, tests, and source files are present
-COPY . .
+# Copy workspace manifests to leverage Docker layer caching for dependencies
+COPY Cargo.toml Cargo.lock ./
+COPY control-plane/proto/Cargo.toml ./control-plane/proto/Cargo.toml
 
-# Build using BuildKit cache mounts for ultra-fast incremental compilation
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
-    cargo build --release --bin agentcontrol && \
-    cp /build/target/release/agentcontrol /usr/local/bin/agentcontrol
+# Pre-fetch and compile third-party dependencies with dummy source and bench files
+RUN mkdir -p src control-plane/proto/src benches && \
+    echo "fn main() {}" > src/main.rs && \
+    touch src/lib.rs && \
+    touch control-plane/proto/src/lib.rs && \
+    echo "fn main() {}" > benches/policy_eval.rs && \
+    echo "fn main() {}" > benches/proxy_overhead.rs && \
+    echo "fn main() {}" > benches/safe_mode.rs && \
+    cargo build --release --bin agentcontrol || true && \
+    rm -rf src control-plane/proto/src benches
+
+# Copy actual application source code and benchmarks
+COPY src/ ./src/
+COPY control-plane/proto/src/ ./control-plane/proto/src/
+COPY benches/ ./benches/
+COPY policy.example.yaml ./policy.example.yaml
+
+# Build release binary using pre-cached dependency layers
+RUN cargo build --release --bin agentcontrol && \
+    cp target/release/agentcontrol /usr/local/bin/agentcontrol
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM debian:bookworm-slim

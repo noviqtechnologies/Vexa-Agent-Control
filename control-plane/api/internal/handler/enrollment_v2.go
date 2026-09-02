@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
@@ -118,6 +120,19 @@ func (h *EnrollmentV2Handler) StartEnrollment(w http.ResponseWriter, r *http.Req
 	}
 	nonceBase64URL := base64.RawURLEncoding.EncodeToString(rawNonce)
 	nonceHash := sha256.Sum256(rawNonce)
+
+	// Check device enrollment limit based on license tier
+	if err := device.CheckDeviceEnrollmentLimit(r.Context(), h.Store, middleware.DefaultOrganizationID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"code":    "device_limit_reached",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
 
 	// 4. Atomically Consume Token in DB
 	txID, challengeID, tenantID, err := h.Store.AtomicallyConsumeOTET(

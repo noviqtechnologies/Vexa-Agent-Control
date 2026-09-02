@@ -7,6 +7,7 @@ Welcome to the technical documentation for **Vexa Agent Control**. This director
 ## 🚀 Start Here
 
 - **First time with Vexa?** Read the [10-Minute Developer Quickstart](quickstart.md).
+- **Evaluating with Docker?** Read the [Docker Deployment Guide](guides/docker-deployment.md).
 - **Evaluating in a team?** Read the [Small Team Hub Guide](guides/small-team-hub.md).
 
 ---
@@ -24,6 +25,7 @@ docs/
 │   ├── windows-powershell.md         # Windows 10/11 (PowerShell)
 │   └── windows-cmd.md                # Windows Command Prompt
 ├── guides/                           # Workflow guides
+│   ├── docker-deployment.md          # Docker deployment (standalone & full-stack compose)
 │   ├── workstation.md                # Local developer workflow (Observe → Enforce → Restore)
 │   ├── custom-agent-http.md          # Proxying Python/TS agents (LangChain, LlamaIndex, CrewAI)
 │   ├── small-team-hub.md             # Shared team hub with Docker Compose
@@ -57,6 +59,7 @@ docs/
 
 | Goal | Recommended Guide |
 |---|---|
+| Deploy with Docker / Compose | [Docker Deployment Guide](guides/docker-deployment.md) |
 | Install binary on macOS | [macOS Installation Guide](install/macos.md) |
 | Install binary on Linux | [Linux Installation Guide](install/linux.md) |
 | Install binary on Windows | [Windows PowerShell Guide](install/windows-powershell.md) |
@@ -66,6 +69,7 @@ docs/
 | View All CLI Options | [CLI Reference](reference/cli.md) |
 | Environment Variable Reference | [Configuration Reference](reference/configuration.md) |
 | Clean Uninstall / Rollback | [Removal & Recovery Guide](reference/removal-and-recovery.md) |
+| Organization & License Setup | [Organization Admin Guide](organization_admin_guide.md) |
 | Migrating from `AGENTWALL_*` | [Legacy Migration Guide](reference/legacy-migration.md) |
 
 ---

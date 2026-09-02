@@ -27,6 +27,25 @@ This guide explains how Vexa Agent Control functions inside WSL2 and defines the
 
 ---
 
+## Alternative: Docker Deployment with WSL2 Backend
+
+If you use **Docker Desktop for Windows** with the WSL2 backend enabled:
+
+```bash
+# Inside WSL2 terminal:
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+Because WSL2 seamlessly mirrors localhost ports, the gateway on port `8080` and the web console on port `3000` are accessible from both inside WSL2 and from Windows desktop browsers at `http://localhost:8080` / `http://localhost:3000`.
+
+Read the full [Docker Deployment Guide](../guides/docker-deployment.md).
+
+---
+
 ## Running in WSL
 
 Launch the local security gateway:

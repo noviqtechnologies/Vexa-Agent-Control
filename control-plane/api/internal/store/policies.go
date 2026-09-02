@@ -10,17 +10,20 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
-func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Policy, error) {
-	if tenantID == "" {
-		return nil, fmt.Errorf("tenant_id is required")
+func (s *Store) ListPolicies(ctx context.Context, organizationID string) ([]*model.Policy, error) {
+	if s.pool == nil {
+		return []*model.Policy{}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, version, content, is_active, created_at, updated_at
 		FROM policies
-		WHERE tenant_id = $1
+		WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
 		ORDER BY created_at DESC
 		LIMIT 50
-	`, tenantID)
+	`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -37,16 +40,21 @@ func (s *Store) ListPolicies(ctx context.Context, tenantID string) ([]*model.Pol
 	return policies, nil
 }
 
-func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
-	if tenantID == "" {
-		return nil, fmt.Errorf("tenant_id is required")
+func (s *Store) GetRawActivePolicy(ctx context.Context, organizationID string) (*model.Policy, error) {
+	if s.pool == nil {
+		return nil, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
 	var p model.Policy
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, version, content, is_active, created_at, updated_at
 		FROM policies
-		WHERE is_active = true AND tenant_id = $1
-	`, tenantID).Scan(
+		WHERE is_active = true AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		ORDER BY updated_at DESC
+		LIMIT 1
+	`, organizationID).Scan(
 		&p.ID, &p.Version, &p.Content, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -58,11 +66,11 @@ func (s *Store) GetRawActivePolicy(ctx context.Context, tenantID string) (*model
 	return &p, nil
 }
 
-func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Policy, error) {
-	if tenantID == "" {
-		return nil, fmt.Errorf("tenant_id is required")
+func (s *Store) GetActivePolicy(ctx context.Context, organizationID string) (*model.Policy, error) {
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
-	p, err := s.GetRawActivePolicy(ctx, tenantID)
+	p, err := s.GetRawActivePolicy(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +78,8 @@ func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Po
 		return nil, nil
 	}
 
-	// Dynamic Assembly: Merge active group_policy_versions into the served policy YAML (FR-112)
-	groupPolicies, err := s.ListGroupPolicies(ctx, tenantID)
+	// Dynamic Assembly: Merge active group_policy_versions into the served policy YAML
+	groupPolicies, err := s.ListGroupPolicies(ctx, organizationID)
 	if err == nil && len(groupPolicies) > 0 {
 		var groupsYaml strings.Builder
 		groupsYaml.WriteString("\n\ngroups:\n")
@@ -125,46 +133,38 @@ func (s *Store) GetActivePolicy(ctx context.Context, tenantID string) (*model.Po
 	return p, nil
 }
 
-// EnsurePoliciesSchema ensures policies table exists and has tenant_id with tenant-scoped unique active index.
+// EnsurePoliciesSchema ensures policies table exists.
 func (s *Store) EnsurePoliciesSchema(ctx context.Context) error {
 	if s.pool == nil {
 		return nil
 	}
 	q := `
 		CREATE TABLE IF NOT EXISTS policies (
-			id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			tenant_id  UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE,
-			version    TEXT NOT NULL,
-			content    TEXT NOT NULL,
-			is_active  BOOLEAN NOT NULL DEFAULT false,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			version         TEXT NOT NULL,
+			content         TEXT NOT NULL,
+			is_active       BOOLEAN NOT NULL DEFAULT false,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CONSTRAINT uq_policies_org_version UNIQUE (organization_id, version)
 		);
-
-		ALTER TABLE policies ADD COLUMN IF NOT EXISTS tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES tenants(id) ON DELETE CASCADE;
-		ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key;
-		DROP INDEX IF EXISTS idx_policies_active_unique;
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_version ON policies (tenant_id, version);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_active_unique ON policies (organization_id, is_active) WHERE is_active = true;
 	`
 	_, err := s.pool.Exec(ctx, q)
 	return err
 }
 
-func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy) error {
-	if tenantID == "" {
-		return fmt.Errorf("tenant_id is required")
+func (s *Store) SavePolicy(ctx context.Context, organizationID string, p *model.Policy) error {
+	if s.pool == nil {
+		return nil
 	}
-	// If this one is active, deactivate all others within tenant first in a transaction
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		if p.IsActive {
-			// Ensure obsolete global index is dropped and per-tenant index exists
-			_, _ = tx.Exec(ctx, "ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_version_key")
-			_, _ = tx.Exec(ctx, "DROP INDEX IF EXISTS idx_policies_active_unique")
-			_, _ = tx.Exec(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_version ON policies (tenant_id, version)")
-			_, _ = tx.Exec(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_tenant_active_unique ON policies (tenant_id, is_active) WHERE is_active = true")
-
-			_, err := tx.Exec(ctx, "UPDATE policies SET is_active = false WHERE is_active = true AND (tenant_id = $1 OR tenant_id IS NULL)", tenantID)
+			_, err := tx.Exec(ctx, "UPDATE policies SET is_active = false WHERE is_active = true AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)", organizationID)
 			if err != nil {
 				return err
 			}
@@ -172,14 +172,14 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 
 		var id string
 		err := tx.QueryRow(ctx, `
-			INSERT INTO policies (tenant_id, version, content, is_active, created_at, updated_at)
+			INSERT INTO policies (organization_id, version, content, is_active, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, now(), now())
-			ON CONFLICT (tenant_id, version) DO UPDATE SET
+			ON CONFLICT (organization_id, version) DO UPDATE SET
 				content = EXCLUDED.content,
 				is_active = EXCLUDED.is_active,
 				updated_at = now()
 			RETURNING id
-		`, tenantID, p.Version, p.Content, p.IsActive).Scan(&id)
+		`, organizationID, p.Version, p.Content, p.IsActive).Scan(&id)
 		
 		if err == nil {
 			p.ID = id
@@ -190,9 +190,9 @@ func (s *Store) SavePolicy(ctx context.Context, tenantID string, p *model.Policy
 		return err
 	}
 
-	// Record administrative audit log
-	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
-		TenantID:       tenantID,
+	_ = s.InsertAuditEvent(ctx, organizationID, &AuditEvent{
+		OrganizationID: organizationID,
+		TenantID:       organizationID,
 		TableName:      "policies",
 		Action:         "updated",
 		ChangedBy:      "admin",

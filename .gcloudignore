@@ -1,0 +1,49 @@
+# ─── Google Cloud Build Ignore Filter ──────────────────────────────────────────
+# Exclude heavy local build artifacts, dependencies, and git history from upload.
+
+.git/
+.github/
+.gitignore
+.gitattributes
+.claude/
+.gemini/
+.vscode/
+.idea/
+
+# Rust build artifacts (Prevents gigabytes of local debug/release binaries from uploading)
+target/
+**/target/
+
+# Node.js dependencies & builds
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Infrastructure state & providers
+infra/
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.log
+*.mjs
+*.tsbuildinfo
+
+# Documentation, Specs & Tests
+docs/
+PRD/
+design/
+enterprise/
+manual_test/
+tests/
+chart/
+sdks/
+*.md
+!policy.example.yaml
+
+# Temporary files
+tmp/
+bin/
+.DS_Store
+Thumbs.db

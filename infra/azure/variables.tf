@@ -7,13 +7,13 @@ variable "azure_region" {
 }
 
 variable "environment" {
-  description = "Deployment environment name (e.g. dev, staging, prod)."
+  description = "Deployment environment name (e.g. stage, dev, prod)."
   type        = string
-  default     = "dev"
+  default     = "stage"
 }
 
 variable "resource_group_name" {
-  description = "Name of the Azure Resource Group. If left empty, it defaults to rg-agentwall-<environment>."
+  description = "Name of the Azure Resource Group. If left empty, it defaults to rg-agentwall-<environment>-<region>."
   type        = string
   default     = ""
 }
@@ -47,7 +47,7 @@ variable "control_plane_db_image" {
 # ─── Networking & VNet Integration ────────────────────────────────────────────
 
 variable "enable_vnet_integration" {
-  description = "When true, deploys a dedicated VNet and delegated ACA subnet. When false, runs in Azure-managed serverless network for lowest complexity and cost."
+  description = "When true, deploys a dedicated VNet and delegated ACA subnet. Set to false for staging for lowest cost ($0 networking)."
   type        = bool
   default     = false
 }
@@ -67,7 +67,7 @@ variable "aca_subnet_cidr" {
 # ─── Azure Container Registry (ACR) ───────────────────────────────────────────
 
 variable "acr_enabled" {
-  description = "When true, provisions a private Azure Container Registry (ACR) with managed identity authentication."
+  description = "When true, provisions a private Azure Container Registry (ACR) Basic tier."
   type        = bool
   default     = false
 }
@@ -75,15 +75,15 @@ variable "acr_enabled" {
 # ─── Sizing & Auto-Scaling ────────────────────────────────────────────────────
 
 variable "min_replicas" {
-  description = "Minimum number of container replicas (set to 0 for scale-to-zero in idle dev, or 1 for always-on)."
+  description = "Minimum number of container replicas (0 = true scale-to-zero in idle stage for $0 compute cost)."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "max_replicas" {
   description = "Maximum number of container replicas for auto-scaling under load."
   type        = number
-  default     = 5
+  default     = 3
 }
 
 variable "gateway_cpu" {
@@ -123,35 +123,42 @@ variable "ui_memory" {
 }
 
 variable "db_cpu" {
-  description = "vCPU allocated to the Database container."
+  description = "vCPU allocated to the PostgreSQL container."
   type        = number
   default     = 0.25
 }
 
 variable "db_memory" {
-  description = "Memory allocated to the Database container."
+  description = "Memory allocated to the PostgreSQL container."
   type        = string
   default     = "0.5Gi"
 }
 
-# ─── Secrets & Credentials ────────────────────────────────────────────────────
+# ─── Secrets & Database Credentials ───────────────────────────────────────────
 
 variable "gateway_secret" {
-  description = "Shared secret authenticating telemetry pushes from the CLI to the API. If left empty, an auto-generated random token is used."
+  description = "Shared secret authenticating telemetry pushes from the CLI to the API. If left empty, an auto-generated token is used."
   type        = string
   default     = ""
   sensitive   = true
 }
 
 variable "policy_read_secret" {
-  description = "Shared secret used by the Gateway to pull the active policy from the API. If left empty, an auto-generated random token is used."
+  description = "Shared secret used by the Gateway to pull active policies from the API. If left empty, an auto-generated token is used."
   type        = string
   default     = ""
   sensitive   = true
 }
 
 variable "encryption_secret" {
-  description = "Master 32-byte hex encryption key (64 hex characters) for provider API key storage. If left empty, an auto-generated 64-char key is used."
+  description = "Master 32-byte hex encryption key (64 hex characters) for provider API key storage. If left empty, an auto-generated key is used."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "session_secret" {
+  description = "Cookie signing secret for dashboard session authentication. If left empty, an auto-generated token is used."
   type        = string
   default     = ""
   sensitive   = true
@@ -176,10 +183,10 @@ variable "postgres_db" {
   default     = "agentwall"
 }
 
-# ─── Resource Tags ────────────────────────────────────────────────────────────
+# ─── Custom Resource Tags ─────────────────────────────────────────────────────
 
 variable "tags" {
-  description = "Custom resource tags merged with standard deployment tags."
+  description = "Custom Azure resource tags merged with default deployment tags."
   type        = map(string)
   default     = {}
 }

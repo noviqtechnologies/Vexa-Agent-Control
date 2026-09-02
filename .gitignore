@@ -4,7 +4,7 @@ design/
 agentinfo/
 scratch/
 graphify-out/
-infra/gcp-teams-saas-hub/
+infra/
 
 # Terraform
 .terraform/

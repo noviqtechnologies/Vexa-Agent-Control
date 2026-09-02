@@ -132,24 +132,66 @@ Press the `Windows` key on your keyboard, type `PowerShell` or `cmd`, and launch
 
 ## 🐳 Docker Deployment (For Dev, Testing & PoC)
 
-For local development, testing, and proof-of-concept (PoC) scenarios, you can run Agent Control and the Team Control Hub stack using Docker or Docker Compose.
+Deploying Vexa Agent Control using Docker is the fastest, cleanest way to test, develop, and evaluate the platform without installing local compilers or dependencies on the host machine.
 
+### Method 1: Standalone Gateway Container (`docker run`)
+
+#### Basic Deployment
 ```bash
-# Option A: Standalone Gateway Container
 docker run -d \
   --name agentcontrol \
   -p 8080:8080 \
-  -v ./policy.yaml:/etc/agentcontrol/policy.yaml:ro \
-  -v ./audit.log:/var/log/agentcontrol/audit.log \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
   ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --policy /etc/agentcontrol/policy.yaml --listen 0.0.0.0:8080
-
-# Option B: Complete Control Hub Stack (Compose)
-cd control-plane
-docker compose up -d --build
+  start --listen 0.0.0.0:8080
 ```
 
-For full details, see → [Team Control Hub Guide — Docker Deployment](team_hub_guide.md#21-docker-deployment-local-dev-testing--poc).
+#### With Authentication (Recommended)
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
+  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
+  -e AGENTCONTROL_ADMIN_TOKEN=your-bootstrap-token \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+#### Using a Custom Port (e.g., `-p 9999:8080`)
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 9999:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_SERVER_HOSTNAME=localhost:9999 \
+  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
+  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+### Method 2: Full-Stack Control Hub (`docker compose`)
+
+Spin up the complete multi-service stack (PostgreSQL 16, Go Control Plane API, React Management Console UI, and Rust Agent Control Gateway) with a single command:
+
+```bash
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+
+# Launch full development stack:
+docker compose -f docker-compose.team.yml up -d
+```
+
+- **Web Management Console:** `http://localhost:3000` (Default login: `admin@vexa.local` / `admin12345678`)
+- **Control Plane API:** `http://localhost:8081`
+- **Security Gateway Endpoint:** `http://localhost:8080`
+
+For complete options (cross-OS commands, agent proxying, data persistence, and health probes), see the dedicated → **[Docker Deployment Guide](guides/docker-deployment.md)**.
 
 ---
 
@@ -206,6 +248,39 @@ helm install agentcontrol ./chart \
 ```
 
 For custom configuration parameters and full values reference, see `chart/values.yaml`.
+
+---
+
+## ☁️ Cost-Effective OpenTofu Multi-Cloud Deployment
+
+Agent Control provides production-ready OpenTofu blueprints (`tofu`) for AWS, Azure, and GCP that run with containerized Valkey sidecars to achieve enterprise scale at minimal infrastructure cost:
+
+### 1. AWS ECS Fargate Deployment
+```bash
+cd infra/aws/ecs
+tofu init
+tofu plan -out=tfplan
+tofu apply tfplan
+```
+* **Architecture:** Zero control plane fee ($0 ECS cluster), ALB, and Fargate Spot task running PostgreSQL, Valkey 7.2, Dashboard API, and UI in a unified security boundary.
+
+### 2. Azure Container Apps Deployment
+```bash
+cd infra/azure
+tofu init
+tofu plan -out=tfplan
+tofu apply tfplan
+```
+* **Architecture:** Azure Container Apps Environment with internal Valkey and PostgreSQL containers, auto-scaling to zero or minimal baseline replicas.
+
+### 3. GCP Cloud Run Deployment
+```bash
+cd infra/gcp
+tofu init
+tofu plan -out=tfplan
+tofu apply tfplan
+```
+* **Architecture:** Multi-container Cloud Run services for API + PostgreSQL + Valkey sidecar with scale-to-zero capability and Cloud Load Balancing.
 
 ---
 

@@ -67,14 +67,21 @@ impl TelemetryClient {
         };
 
         let endpoint = format!("{}/api/v1/devices/{}/telemetry", self.hub_url, self.device_id);
-        let gateway_secret = std::env::var("GATEWAY_SECRET").ok();
+        let auth_token = if let Some(tok) = crate::identity::device::load_device_token() {
+            tok
+        } else if let Ok(sec) = std::env::var("GATEWAY_SECRET") {
+            let s = sec.trim().to_string();
+            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
+                s
+            } else {
+                self.device_id.clone()
+            }
+        } else {
+            self.device_id.clone()
+        };
 
         let mut req_builder = self.client.post(&endpoint);
-        if let Some(ref sec) = gateway_secret {
-            req_builder = req_builder.header("Authorization", format!("Bearer {}", sec));
-        } else {
-            req_builder = req_builder.header("Authorization", format!("Bearer {}", self.device_id));
-        }
+        req_builder = req_builder.header("Authorization", format!("Bearer {}", auth_token));
 
         let resp = req_builder
             .json(&req_body)

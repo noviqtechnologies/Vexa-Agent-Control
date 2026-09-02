@@ -26,12 +26,13 @@ Type=simple
 ExecStart={} start --centralized --listen 127.0.0.1:8080
 Restart=always
 RestartSec=5s
+Environment=AGENTCONTROL_HUB_URL="{}"
 Environment=DASHBOARD_API_URL="{}"
 {}
 [Install]
 WantedBy=multi-user.target
 "#,
-        bin_path, hub_url, agent_id_line
+        bin_path, hub_url, hub_url, agent_id_line
     );
 
     let unit_path = "/etc/systemd/system/agent-control.service";

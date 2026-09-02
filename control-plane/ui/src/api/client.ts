@@ -310,11 +310,13 @@ export interface RunDossier {
     reserved_microcents: number
     settled_microcents: number
     released_microcents: number
+    net_billed_microcents?: number
     currency: string
     events: SpendEventV2[]
   }
   outcome: {
     state: string
+    status_code?: number
     started_at: string
     settled_at?: string
     released_at?: string
@@ -463,17 +465,35 @@ export const api = {
   // Spend V2 (Authoritative PostgreSQL Ledger)
   getEffectiveSpendV2: async () => {
     const res = await fetch('/api/v2/spend/effective', { headers: authHeaders() })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json() as Promise<{ organization_id: string; windows: BudgetWindowV2[] }>
   },
   listSpendEventsV2: async (limit = 100) => {
     const res = await fetch(`/api/v2/spend/events?limit=${limit}`, { headers: authHeaders() })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json() as Promise<{ organization_id: string; events: SpendEventV2[] }>
   },
   listSpendPoliciesV2: async () => {
     const res = await fetch('/api/v2/spend/policies', { headers: authHeaders() })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json() as Promise<{ policies: SpendPolicyV2[] }>
   },
   createSpendPolicyV2: async (data: { scope_type: string; scope_id: string; period_type: string; limit_usd: number; action?: string }) => {
@@ -482,12 +502,24 @@ export const api = {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json()
   },
   listIncreaseRequestsV2: async () => {
     const res = await fetch('/api/v2/spend/increase-requests', { headers: authHeaders() })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json() as Promise<{ requests: IncreaseRequestV2[] }>
   },
   createIncreaseRequestV2: async (data: { project_id: string; requested_limit_usd: number; current_limit_microcents: number; reason: string }) => {
@@ -496,7 +528,13 @@ export const api = {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json()
   },
   decideIncreaseRequestV2: async (id: string, decision: 'APPROVED' | 'REJECTED', reason: string) => {
@@ -505,7 +543,13 @@ export const api = {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ decision, reason })
     })
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const err = new Error(extractErrorMessage(text, res.status)) as any
+      err.status = res.status
+      err.raw = text
+      throw err
+    }
     return res.json()
   },
 
@@ -821,6 +865,41 @@ export interface EnrollmentTokenV2 {
   expires_at: string
   max_uses: number
   status: string
+  hub_url?: string
+}
+
+/**
+ * Intelligently resolve the public Control Hub API URL for enrollment.
+ * Avoids accidentally pointing CLI installers to frontend UI containers/domains.
+ */
+export function resolveHubUrl(tokenHubUrl?: string): string {
+  if (tokenHubUrl && tokenHubUrl.trim().length > 0) {
+    return tokenHubUrl.trim()
+  }
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin
+    const hostname = window.location.hostname
+
+    // 1. Cloud Run Stage/Prod split UI vs API (e.g. *-stage-ui-*.run.app -> *-stage-api-*.run.app)
+    if (hostname.includes('-ui-') && hostname.includes('.run.app')) {
+      return origin.replace('-ui-', '-api-')
+    }
+    if (hostname.includes('-ui') && hostname.includes('.run.app')) {
+      return origin.replace('-ui', '-api')
+    }
+
+    // 2. Custom Domain Patterns (e.g. console-stage.vexasec.io -> enroll-stage.vexasec.io)
+    if (hostname.startsWith('console-stage.')) {
+      return origin.replace('console-stage.', 'enroll-stage.')
+    }
+    if (hostname.startsWith('console.')) {
+      return origin.replace('console.', 'enroll.')
+    }
+
+    // 3. Fallback to current browser origin
+    return origin
+  }
+  return 'http://localhost:8400'
 }
 
 export async function createEnrollmentTokenV2(reason: string, deviceLabel = '', targetOwner = '', ttlHours = 24): Promise<EnrollmentTokenV2> {

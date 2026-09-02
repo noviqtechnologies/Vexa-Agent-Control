@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
@@ -37,6 +38,7 @@ type CreateTokenResponseV2 struct {
 	ExpiresAt string `json:"expires_at"`
 	MaxUses   int    `json:"max_uses"`
 	Status    string `json:"status"`
+	HubURL    string `json:"hub_url,omitempty"`
 }
 
 // POST /api/v2/admin/enrollment-tokens
@@ -77,8 +79,17 @@ func (h *AdminV2Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Re
 	)
 
 	if err != nil {
-		http.Error(w, `{"error":{"code":"internal_error"}}`, http.StatusInternalServerError)
+		log.Printf("[AdminV2Handler.CreateEnrollmentToken] Error inserting enrollment token for tenant %s: %v", tenantID, err)
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
 		return
+	}
+
+	hubURL := os.Getenv("AGENTCONTROL_HUB_URL")
+	if hubURL == "" {
+		hubURL = os.Getenv("PUBLIC_API_URL")
+	}
+	if hubURL == "" {
+		hubURL = os.Getenv("HUB_URL")
 	}
 
 	resp := CreateTokenResponseV2{
@@ -88,6 +99,7 @@ func (h *AdminV2Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Re
 		ExpiresAt: rec.ExpiresAt.Format("2006-01-02T15:04:05.000Z"),
 		MaxUses:   rec.MaxUses,
 		Status:    string(rec.Status),
+		HubURL:    hubURL,
 	}
 
 	w.Header().Set("Cache-Control", "no-store")
@@ -120,15 +132,10 @@ func (h *AdminV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := middleware.ResolveTenantScope(r)
 
-	actor := "admin_operator"
-	if claims := middleware.UserClaimsFromContext(r.Context()); claims != nil && claims.UserID != "" {
-		actor = claims.UserID
-	}
-
-	err := h.Store.RevokeDeviceV2(r.Context(), tenantID, deviceID, req.Reason, actor)
+	err := h.Store.RevokeDevice(r.Context(), tenantID, deviceID)
 	if err != nil {
 		log.Printf("RevokeDevice error for device %s: %v", deviceID, err)
-		if errors.Is(err, store.ErrDeviceNotFoundV2) || errors.Is(err, store.ErrDeviceNotFound) {
+		if errors.Is(err, store.ErrDeviceNotFound) {
 			http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found or already revoked"}}`, http.StatusNotFound)
 			return
 		}

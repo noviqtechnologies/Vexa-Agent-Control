@@ -74,21 +74,21 @@ Every agent tool call and LLM egress payload traversing Agent Control passes seq
 Agent Control adapts to your infrastructure across three operational deployment profiles:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   Agent Control Operating Profiles                                  │
-├──────────────────────────┬───────────────────────────────┬──────────────────────────────────────┤
-│ 1. Workstation Sidecar   │ 2. Team Control Hub           │ 3. Enterprise Fleet                  │
-│    • Individual Devs     │    • Engineering Teams        │    • Enterprise Production Fleet     │
-│    • Zero Configuration  │    • Central Docker Compose   │    • Kubernetes Helm Release         │
-│    • Embedded SQLite     │    • PostgreSQL Ledger        │    • HAR Container Sidecars          │
-│    • Local Dashboard     │    • OIDC Claim Binding       │    • WebSocket Egress Tunneling      │
-│    → [Workstation Guide] │    → [Team Hub Guide]         │    → [Enterprise Guide]              │
-└──────────────────────────┴───────────────────────────────┴──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   Agent Control Operating Profiles                                      │
+├──────────────────────────┬───────────────────────────────┬───────────────────────────────┬──────────────┤
+│ 1. Workstation Sidecar   │ 2. Docker Local / PoC         │ 3. Team Control Hub           │ 4. Enterprise│
+│    • Individual Devs     │    • Zero Host Installation   │    • Engineering Teams        │    • K8s / HA│
+│    • Statically Linked   │    • Standalone or Full Stack │    • Central Docker Compose   │    • HAR OCI │
+│    • Embedded SQLite     │    • Instant Evaluation       │    • PostgreSQL Ledger        │    • CMK     │
+│    → [Workstation Guide] │    → [Docker Guide]           │    → [Team Hub Guide]         │    → [Enterp]│
+└──────────────────────────┴───────────────────────────────┴───────────────────────────────┴──────────────┘
 ```
 
 1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides one-command discovery and wrapping of all installed IDEs (`agentcontrol protect`), 15 out-of-the-box safe mode rules, inline DLP, passive shadow discovery, and an embedded browser dashboard on `http://127.0.0.1:8080`.
-2. **[Team Control Hub](team_hub_guide.md)** — Self-hosted centralized management plane deployed via Docker Compose (Go REST API on `:8400`, React Management Console on `:8081`, PostgreSQL database). Coordinates distributed gateways with real-time SSE policy push, OIDC identity binding, centralized provider key custody, and authoritative spend ledgers.
-3. **[Enterprise Fleet](enterprise_guide.md)** — High-availability Kubernetes Helm deployment (`./chart`) featuring the Hardened Agent Container Runtime (HAR) sidecar image (`Dockerfile.har`), hardened WebSocket egress tunneling, offline Ed25519 licensing, pure-Rust TLS (`rustls`), and zero-knowledge customer-managed key (CMK) SIEM export.
+2. **[Docker Local / PoC Deployment](guides/docker-deployment.md)** — Containerized gateway or all-in-one full stack (PostgreSQL + Control Plane API + React Console + Gateway) for fast zero-install development, testing, and PoC evaluation.
+3. **[Team Control Hub](team_hub_guide.md)** — Self-hosted centralized management plane deployed via Docker Compose (Go REST API on `:8081`, React Management Console on `:3000`, PostgreSQL database). Coordinates distributed gateways with real-time SSE policy push, OIDC identity binding, centralized provider key custody, and authoritative spend ledgers.
+4. **[Enterprise Fleet](enterprise_guide.md)** — High-availability Kubernetes Helm deployment (`./chart`) featuring the Hardened Agent Container Runtime (HAR) sidecar image (`Dockerfile.har`), hardened WebSocket egress tunneling, offline Ed25519 licensing, pure-Rust TLS (`rustls`), and zero-knowledge customer-managed key (CMK) SIEM export.
 
 ---
 
@@ -666,6 +666,19 @@ agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format j
 | `agentcontrol license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
 
 ---
+
+## 13. Specialist Documentation Links
+
+For focused operational guides and deep-dive technical references:
+
+- **[Docker Deployment Guide](guides/docker-deployment.md)** — Standalone gateway container & Docker Compose full-stack setup.
+- **[10-Minute Quickstart](quickstart.md)** — Step-by-step developer guide with proven rollback paths.
+- **[Workstation Sidecar Guide](workstation_guide.md)** — Local shadow discovery, safe rules, and policy synthesis.
+- **[Small Team Hub Guide](guides/small-team-hub.md)** — Centralized policy sync, OTET enrollment, and Caddy TLS.
+- **[Enterprise Fleet Guide](enterprise_guide.md)** — Kubernetes Helm chart, HAR container sidecars, and CMK encryption.
+- **[Custom Agent HTTP Guide](guides/custom-agent-http.md)** — Integrating Python, TypeScript, LangChain, and CrewAI agents.
+- **[CLI Reference](reference/cli.md)** — Authoritative reference for all CLI commands, flags, and environment variables.
+- **[Configuration Reference](reference/configuration.md)** — Policy Schema v2, detectors, and canonical environment variables.
 
 ---
 

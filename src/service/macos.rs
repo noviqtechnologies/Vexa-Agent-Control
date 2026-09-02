@@ -42,13 +42,15 @@ pub fn install_macos_service(
     <true/>
     <key>EnvironmentVariables</key>
     <dict>
+        <key>AGENTCONTROL_HUB_URL</key>
+        <string>{}</string>
         <key>DASHBOARD_API_URL</key>
         <string>{}</string>
 {}    </dict>
 </dict>
 </plist>
 "#,
-        bin_path, hub_url, agent_id_plist
+        bin_path, hub_url, hub_url, agent_id_plist
     );
 
     let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentcontrol.plist";

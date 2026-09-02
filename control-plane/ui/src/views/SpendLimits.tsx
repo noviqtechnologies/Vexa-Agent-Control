@@ -31,17 +31,24 @@ export default function SpendLimits() {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null)
 
+  const [licenseNotAvailable, setLicenseNotAvailable] = useState<string | null>(null)
+
   useEffect(() => {
     fetchData()
   }, [])
 
   const fetchData = async () => {
     setLoading(true)
+    setLicenseNotAvailable(null)
     try {
       const res = await api.listSpendPoliciesV2()
       setPolicies(res.policies || [])
-    } catch (e) {
-      console.error(e)
+    } catch (e: any) {
+      if (e.status === 403 || (e.message && e.message.includes('license'))) {
+        setLicenseNotAvailable(e.message || 'Spend Caps & Policies require a Team or Enterprise license tier.')
+      } else {
+        console.error(e)
+      }
     } finally {
       setLoading(false)
     }
@@ -87,6 +94,18 @@ export default function SpendLimits() {
         <h1>Spend Policy Governance</h1>
         <p>Define authoritative PostgreSQL spend policies with preflight bounded reservation limits and hard fail-closed enforcement.</p>
       </div>
+
+      {licenseNotAvailable && (
+        <div className="card" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 24 }}>🛡️</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#f59e0b' }}>Team or Enterprise Feature</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{licenseNotAvailable}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 24, marginBottom: 24 }}>
         <h3 style={{ marginBottom: 16, fontSize: 16 }}>Publish New Spend Policy</h3>

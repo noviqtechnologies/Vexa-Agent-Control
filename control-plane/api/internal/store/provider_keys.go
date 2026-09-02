@@ -7,7 +7,8 @@ import (
 
 type ProviderKey struct {
 	ID              string    `json:"id"`
-	TenantID        string    `json:"tenant_id"`
+	OrganizationID  string    `json:"organization_id"`
+	TenantID        string    `json:"tenant_id"` // Alias
 	Provider        string    `json:"provider"`
 	KeyAlias        string    `json:"key_alias,omitempty"`
 	Version         int       `json:"version,omitempty"`
@@ -24,58 +25,37 @@ func (s *Store) EnsureProviderKeysSchema(ctx context.Context) error {
 	}
 	q := `
 		CREATE TABLE IF NOT EXISTS provider_keys (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 			provider TEXT NOT NULL,
 			key_alias TEXT NOT NULL DEFAULT 'default',
 			version INT NOT NULL DEFAULT 1,
 			status TEXT NOT NULL DEFAULT 'ACTIVE',
 			api_key_masked TEXT NOT NULL DEFAULT '',
 			api_key_encrypted TEXT NOT NULL DEFAULT '',
+			is_default BOOLEAN NOT NULL DEFAULT true,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (tenant_id, provider)
+			CONSTRAINT uq_provider_alias UNIQUE (organization_id, provider, key_alias)
 		);
-
-		DO $$
-		BEGIN
-			IF EXISTS (
-				SELECT 1 FROM information_schema.columns 
-				WHERE table_name = 'provider_keys' AND column_name = 'key_preview'
-			) AND NOT EXISTS (
-				SELECT 1 FROM information_schema.columns 
-				WHERE table_name = 'provider_keys' AND column_name = 'api_key_masked'
-			) THEN
-				ALTER TABLE provider_keys RENAME COLUMN key_preview TO api_key_masked;
-			END IF;
-
-			IF EXISTS (
-				SELECT 1 FROM information_schema.columns 
-				WHERE table_name = 'provider_keys' AND column_name = 'encrypted_key'
-			) AND NOT EXISTS (
-				SELECT 1 FROM information_schema.columns 
-				WHERE table_name = 'provider_keys' AND column_name = 'api_key_encrypted'
-			) THEN
-				ALTER TABLE provider_keys RENAME COLUMN encrypted_key TO api_key_encrypted;
-			END IF;
-		END $$;
-
 		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS key_alias TEXT NOT NULL DEFAULT 'default';
 		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;
 		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ACTIVE';
-		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS api_key_masked TEXT NOT NULL DEFAULT '';
-		ALTER TABLE provider_keys ADD COLUMN IF NOT EXISTS api_key_encrypted TEXT NOT NULL DEFAULT '';
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_keys_provider ON provider_keys(tenant_id, provider);
+		CREATE INDEX IF NOT EXISTS idx_provider_keys_org ON provider_keys(organization_id, provider);
 	`
 	_, err := s.pool.Exec(ctx, q)
 	return err
 }
 
-func (s *Store) InsertProviderKey(ctx context.Context, tenantID string, k *ProviderKey) error {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+func (s *Store) InsertProviderKey(ctx context.Context, organizationID string, k *ProviderKey) error {
+	if s.pool == nil {
+		return nil
 	}
-	k.TenantID = tenantID
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	k.OrganizationID = organizationID
+	k.TenantID = organizationID
 	if k.KeyAlias == "" {
 		k.KeyAlias = "default"
 	}
@@ -86,49 +66,35 @@ func (s *Store) InsertProviderKey(ctx context.Context, tenantID string, k *Provi
 		k.Status = "ACTIVE"
 	}
 	q := `
-		INSERT INTO provider_keys (tenant_id, provider, key_alias, version, status, api_key_encrypted, api_key_masked)
+		INSERT INTO provider_keys (organization_id, provider, key_alias, version, status, api_key_encrypted, api_key_masked)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (tenant_id, provider) 
+		ON CONFLICT (organization_id, provider, key_alias) 
 		DO UPDATE SET api_key_encrypted = EXCLUDED.api_key_encrypted, 
 		              api_key_masked = EXCLUDED.api_key_masked,
-		              key_alias = EXCLUDED.key_alias,
 		              version = EXCLUDED.version,
 		              status = EXCLUDED.status,
 		              updated_at = now()
 		RETURNING id, created_at
 	`
-	err := s.pool.QueryRow(ctx, q, tenantID, k.Provider, k.KeyAlias, k.Version, k.Status, k.APIKeyEncrypted, k.APIKeyMasked).
+	err := s.pool.QueryRow(ctx, q, organizationID, k.Provider, k.KeyAlias, k.Version, k.Status, k.APIKeyEncrypted, k.APIKeyMasked).
 		Scan(&k.ID, &k.CreatedAt)
-	if err != nil {
-		return err
-	}
-
-	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
-		TenantID:       tenantID,
-		TableName:      "provider_keys",
-		Action:         "created",
-		ChangedBy:      "admin",
-		ActorRole:      "admin",
-		AffectedItemID: k.Provider,
-		UpdatedValue: map[string]interface{}{
-			"id":             k.ID,
-			"provider":       k.Provider,
-			"key_alias":      k.KeyAlias,
-			"status":         k.Status,
-			"api_key_masked": k.APIKeyMasked,
-		},
-		Outcome: "SUCCESS",
-	})
-
-	return nil
+	return err
 }
 
-func (s *Store) ListProviderKeys(ctx context.Context, tenantID string) ([]ProviderKey, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+func (s *Store) ListProviderKeys(ctx context.Context, organizationID string) ([]ProviderKey, error) {
+	if s.pool == nil {
+		return []ProviderKey{}, nil
 	}
-	q := `SELECT id, tenant_id, provider, key_alias, version, status, api_key_masked, created_at FROM provider_keys WHERE tenant_id = $1 ORDER BY created_at DESC`
-	rows, err := s.pool.Query(ctx, q, tenantID)
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	q := `
+		SELECT id, organization_id, provider, key_alias, version, status, api_key_masked, created_at
+		FROM provider_keys
+		WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+		ORDER BY provider ASC
+	`
+	rows, err := s.pool.Query(ctx, q, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,57 +103,53 @@ func (s *Store) ListProviderKeys(ctx context.Context, tenantID string) ([]Provid
 	var keys []ProviderKey
 	for rows.Next() {
 		var k ProviderKey
-		if err := rows.Scan(&k.ID, &k.TenantID, &k.Provider, &k.KeyAlias, &k.Version, &k.Status, &k.APIKeyMasked, &k.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&k.ID, &k.OrganizationID, &k.Provider, &k.KeyAlias, &k.Version, &k.Status, &k.APIKeyMasked, &k.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
+		k.TenantID = k.OrganizationID
 		keys = append(keys, k)
 	}
-	return keys, nil
+	return keys, rows.Err()
 }
 
-func (s *Store) DeleteProviderKey(ctx context.Context, tenantID, id string) error {
-	var err error
-	if tenantID != "" {
-		q := `DELETE FROM provider_keys WHERE id = $1 AND tenant_id = $2`
-		_, err = s.pool.Exec(ctx, q, id, tenantID)
-	} else {
-		q := `DELETE FROM provider_keys WHERE id = $1`
-		_, err = s.pool.Exec(ctx, q, id)
+func (s *Store) GetProviderKey(ctx context.Context, organizationID, provider string) (*ProviderKey, error) {
+	if s.pool == nil {
+		return nil, nil
 	}
-	if err != nil {
-		return err
+	if organizationID == "" {
+		organizationID = DefaultOrgID
 	}
-
-	_ = s.InsertAuditEvent(ctx, tenantID, &AuditEvent{
-		TenantID:       tenantID,
-		TableName:      "provider_keys",
-		Action:         "deleted",
-		ChangedBy:      "admin",
-		ActorRole:      "admin",
-		AffectedItemID: id,
-		UpdatedValue: map[string]interface{}{
-			"id": id,
-		},
-		Outcome: "SUCCESS",
-	})
-
-	return nil
-}
-
-func (s *Store) GetProviderKeyByProvider(ctx context.Context, tenantID, provider string) (*ProviderKey, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
-	q := `SELECT id, tenant_id, provider, key_alias, version, status, api_key_masked, api_key_encrypted, created_at 
-	      FROM provider_keys 
-	      WHERE tenant_id = $1 AND LOWER(provider) = LOWER($2) AND status = 'ACTIVE'
-	      LIMIT 1`
+	q := `
+		SELECT id, organization_id, provider, key_alias, version, status, api_key_masked, api_key_encrypted, created_at
+		FROM provider_keys
+		WHERE provider = $2 AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		LIMIT 1
+	`
 	var k ProviderKey
-	err := s.pool.QueryRow(ctx, q, tenantID, provider).Scan(
-		&k.ID, &k.TenantID, &k.Provider, &k.KeyAlias, &k.Version, &k.Status, &k.APIKeyMasked, &k.APIKeyEncrypted, &k.CreatedAt,
+	err := s.pool.QueryRow(ctx, q, organizationID, provider).Scan(
+		&k.ID, &k.OrganizationID, &k.Provider, &k.KeyAlias, &k.Version, &k.Status, &k.APIKeyMasked, &k.APIKeyEncrypted, &k.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	k.TenantID = k.OrganizationID
 	return &k, nil
+}
+
+func (s *Store) GetProviderKeyByProvider(ctx context.Context, organizationID, provider string) (*ProviderKey, error) {
+	return s.GetProviderKey(ctx, organizationID, provider)
+}
+
+func (s *Store) DeleteProviderKey(ctx context.Context, organizationID, provider string) error {
+	if s.pool == nil {
+		return nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	q := `DELETE FROM provider_keys WHERE provider = $2 AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)`
+	_, err := s.pool.Exec(ctx, q, organizationID, provider)
+	return err
 }

@@ -403,8 +403,10 @@ pub fn gather_servers_for_snapshot(
 }
 
 pub fn gather_and_send_mcp_servers_snapshot() {
-    // Only attempt remote sync if an enrolled device token or explicit AGENT_ID is present
-    let token_opt = std::env::var("AGENT_ID").ok().or_else(crate::identity::device::load_device_token);
+    let token_opt = std::env::var("AGENT_ID")
+        .ok()
+        .or_else(crate::identity::device::load_device_token)
+        .or_else(|| crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id));
     if token_opt.is_none() {
         return;
     }

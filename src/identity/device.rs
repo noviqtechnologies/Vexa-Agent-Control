@@ -137,10 +137,83 @@ fn sanitize_hostname(h: &str) -> String {
         .to_lowercase()
 }
 
-fn get_hostname() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "localhost".to_string())
+pub fn get_hostname() -> String {
+    #[cfg(windows)]
+    {
+        if let Ok(c) = std::env::var("COMPUTERNAME") {
+            let t = c.trim();
+            if !t.is_empty() && t.to_lowercase() != "localhost" {
+                return t.to_string();
+            }
+        }
+    }
+    if let Ok(h) = std::env::var("HOSTNAME") {
+        let t = h.trim();
+        if !t.is_empty() && t.to_lowercase() != "localhost" {
+            return t.to_string();
+        }
+    }
+    if let Ok(c) = std::env::var("COMPUTERNAME") {
+        let t = c.trim();
+        if !t.is_empty() && t.to_lowercase() != "localhost" {
+            return t.to_string();
+        }
+    }
+    if let Ok(h) = std::env::var("HOST") {
+        let t = h.trim();
+        if !t.is_empty() && t.to_lowercase() != "localhost" {
+            return t.to_string();
+        }
+    }
+    if let Ok(output) = std::process::Command::new("hostname").output() {
+        if let Ok(s) = String::from_utf8(output.stdout) {
+            let t = s.trim();
+            if !t.is_empty() && t.to_lowercase() != "localhost" {
+                return t.to_string();
+            }
+        }
+    }
+    "workstation".to_string()
+}
+
+pub fn get_current_user() -> String {
+    #[cfg(windows)]
+    {
+        if let Ok(u) = std::env::var("USERNAME") {
+            let t = u.trim();
+            if !t.is_empty() && t.to_lowercase() != "system" && !t.to_lowercase().ends_with('$') {
+                return t.to_string();
+            }
+        }
+        let homes = crate::wrap::config_path::get_windows_user_homes();
+        if let Some(first) = homes.first() {
+            if let Some(name) = first.file_name().and_then(|n| n.to_str()) {
+                if !name.is_empty() {
+                    return name.to_string();
+                }
+            }
+        }
+    }
+    if let Ok(u) = std::env::var("USER") {
+        let t = u.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    if let Ok(u) = std::env::var("LOGNAME") {
+        let t = u.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        if let Some(name) = home.file_name().and_then(|n| n.to_str()) {
+            if !name.is_empty() {
+                return name.to_string();
+            }
+        }
+    }
+    "Developer".to_string()
 }
 
 fn get_key_filepath() -> Result<PathBuf, String> {
@@ -362,7 +435,6 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     };
     let key_mgr = IdentityKeyManager::new(&home_dir);
 
-    let hostname = get_hostname();
     let device_identity = match DeviceIdentity::load_or_create() {
         Ok(id) => id,
         Err(e) => {
@@ -381,15 +453,17 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         }
     };
 
-    println!("  Device Identity: {}", stable_device_id.bold());
+    println!("  Device Identity: {}", device_identity.device_id.bold());
     println!("  Ed25519 Fingerprint: {}...", &bundle.ed25519_fingerprint[..16]);
     println!("  ECDSA P-256 CSR Hash: {}...", &bundle.csr_sha256[..16]);
 
+    let hostname = get_hostname();
+    let user_name = get_current_user();
+    let stable_device_id = device_identity.device_id.clone();
     let ed25519_b64 = base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         &bundle.ed25519_public_bytes,
     );
-
     let os_family = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let pkg_ver = env!("CARGO_PKG_VERSION");
@@ -399,7 +473,7 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         enrollment_token: token,
         stable_device_id: &stable_device_id,
         display_name: &hostname,
-        owner_subject: "",
+        owner_subject: &user_name,
         identity_public_key: IdentityPubKeyPayload {
             algorithm: "Ed25519",
             value: ed25519_b64,

@@ -111,7 +111,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tenantID := principal.TenantID
+	tenantID := principal.OrganizationID
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
@@ -218,6 +218,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 				RequestID:      reqID,
 				IdempotencyKey: fmt.Sprintf("release-%s", reqID),
 				Reason:         "provider_credential_unavailable",
+				StatusCode:     http.StatusServiceUnavailable,
 				RequestHash:    reqID,
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)
@@ -256,6 +257,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 				RequestID:      reqID,
 				IdempotencyKey: fmt.Sprintf("release-%s", reqID),
 				Reason:         "upstream_provider_error",
+				StatusCode:     http.StatusBadGateway,
 				RequestHash:    reqID,
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)
@@ -305,7 +307,7 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 	}
 	req.Stream = true
 
-	tenantID := principal.TenantID
+	tenantID := principal.OrganizationID
 	if tenantID == "" {
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
@@ -411,6 +413,7 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 				RequestID:      reqID,
 				IdempotencyKey: fmt.Sprintf("release-%s", reqID),
 				Reason:         "provider_credential_unavailable",
+				StatusCode:     http.StatusServiceUnavailable,
 				RequestHash:    reqID,
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)
@@ -480,6 +483,7 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 				RequestID:      reqID,
 				IdempotencyKey: fmt.Sprintf("release-%s", reqID),
 				Reason:         "streaming_interrupted",
+				StatusCode:     http.StatusBadGateway,
 				RequestHash:    reqID,
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)

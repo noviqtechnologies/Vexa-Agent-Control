@@ -29,14 +29,12 @@ func NewIssuerFromEnv() (*Issuer, error) {
 		keyHex = os.Getenv("AGENTWALL_LICENSE_SIGNING_KEY")
 	}
 	if keyHex == "" {
-		// If no key is configured in env, check if dev mode or generate an ephemeral fallback key
 		if os.Getenv("DEV_MODE") == "true" {
-			// Deterministic 32-byte seed for dev mode
 			seed := []byte("01234567890123456789012345678901")
 			privKey := ed25519.NewKeyFromSeed(seed)
 			return NewIssuer(privKey), nil
 		}
-		return nil, nil // Nil issuer means automated minting is disabled
+		return nil, nil
 	}
 
 	decoded, err := hex.DecodeString(keyHex)
@@ -68,11 +66,16 @@ func TierToFeatures(tier string) []string {
 			"sse_push",
 			"vault_custody",
 			"device_governance",
+			"otet_enrollment",
+			"aggregated_audit",
 			"siem_export", "siem_aggregation",
 			"hitl",
 			"group_policies",
-			"airgap_oidc",
+			"oidc_sso",
+			"mtls_identity",
 			"compliance_reports",
+			"cmk_custody",
+			"advanced_rbac",
 		}
 	case "team":
 		return []string{
@@ -80,8 +83,12 @@ func TierToFeatures(tier string) []string {
 			"sse_push",
 			"vault_custody",
 			"group_policies",
-			"siem_export", "siem_aggregation",
+			"otet_enrollment",
+			"aggregated_audit",
+			"alerts",
 		}
+	case "developer":
+		fallthrough
 	case "community":
 		fallthrough
 	default:
@@ -89,7 +96,22 @@ func TierToFeatures(tier string) []string {
 	}
 }
 
-func (i *Issuer) MintLicense(orgSlug, tier string, maxSeats int, features []string, validDays int, isTrial bool) (string, time.Time, error) {
+func TierToMaxDevices(tier string) int {
+	switch tier {
+	case "enterprise":
+		return -1 // Unlimited
+	case "team":
+		return 25
+	case "developer":
+		fallthrough
+	case "community":
+		fallthrough
+	default:
+		return 1
+	}
+}
+
+func (i *Issuer) MintLicense(orgSlug, tier string, maxDevices int, features []string, validDays int, isTrial bool) (string, time.Time, error) {
 	if i == nil || i.privateKey == nil {
 		return "", time.Time{}, fmt.Errorf("license issuer not initialized")
 	}
@@ -102,43 +124,44 @@ func (i *Issuer) MintLicense(orgSlug, tier string, maxSeats int, features []stri
 		}
 	}
 
+	if maxDevices == 0 {
+		maxDevices = TierToMaxDevices(tier)
+	}
+
 	if len(features) == 0 {
 		features = TierToFeatures(tier)
 	}
 
 	now := time.Now().UTC()
-	expiresAt := now.AddDate(0, 0, validDays)
+	expiresAt := now.Add(time.Duration(validDays) * 24 * time.Hour)
 
-	trialDays := 0
-	if isTrial {
-		trialDays = validDays
-	}
-
-	claims := Claims{
-		OrgID:     orgSlug,
-		Tier:      tier,
-		MaxSeats:  maxSeats,
-		Features:  features,
-		IsTrial:   isTrial,
-		TrialDays: trialDays,
+	claims := &Claims{
+		OrgID:      orgSlug,
+		Tier:       tier,
+		MaxDevices: maxDevices,
+		MaxSeats:   maxDevices,
+		Features:   features,
+		IsTrial:    isTrial,
+		TrialDays:  validDays,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "https://auth.vexa.ai",
 			Subject:   orgSlug,
-			Issuer:    "vexa-saas-hub",
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			NotBefore: jwt.NewNumericDate(now.Add(-1 * time.Minute)),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	signedJWT, err := token.SignedString(i.privateKey)
+	tokenString, err := token.SignedString(i.privateKey)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("sign license jwt: %w", err)
+		return "", time.Time{}, fmt.Errorf("sign license token: %w", err)
 	}
 
-	return signedJWT, expiresAt, nil
+	return tokenString, expiresAt, nil
 }
 
-func (i *Issuer) ExtendLicense(claims *Claims, additionalDays int) (string, time.Time, error) {
+func (i *Issuer) ExtendLicense(existingClaims *Claims, additionalDays int) (string, time.Time, error) {
 	if i == nil || i.privateKey == nil {
 		return "", time.Time{}, fmt.Errorf("license issuer not initialized")
 	}
@@ -147,36 +170,36 @@ func (i *Issuer) ExtendLicense(claims *Claims, additionalDays int) (string, time
 		additionalDays = 30
 	}
 
-	now := time.Now().UTC()
-	var baseExpiry time.Time
-	if claims.ExpiresAt != nil && claims.ExpiresAt.After(now) {
-		baseExpiry = claims.ExpiresAt.Time
-	} else {
-		baseExpiry = now
+	currentExpiry := time.Now().UTC()
+	if existingClaims.ExpiresAt != nil && existingClaims.ExpiresAt.After(currentExpiry) {
+		currentExpiry = existingClaims.ExpiresAt.Time
 	}
 
-	newExpiry := baseExpiry.AddDate(0, 0, additionalDays)
+	newExpiry := currentExpiry.Add(time.Duration(additionalDays) * 24 * time.Hour)
+	now := time.Now().UTC()
 
-	newClaims := Claims{
-		OrgID:     claims.OrgID,
-		Tier:      claims.Tier,
-		MaxSeats:  claims.MaxSeats,
-		Features:  claims.Features,
-		IsTrial:   claims.IsTrial,
-		TrialDays: claims.TrialDays,
+	claims := &Claims{
+		OrgID:      existingClaims.OrgID,
+		Tier:       existingClaims.Tier,
+		MaxDevices: existingClaims.MaxDevices,
+		MaxSeats:   existingClaims.MaxSeats,
+		Features:   existingClaims.Features,
+		IsTrial:    existingClaims.IsTrial,
+		TrialDays:  existingClaims.TrialDays + additionalDays,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   claims.OrgID,
-			Issuer:    "vexa-saas-hub",
+			Issuer:    "https://auth.vexa.ai",
+			Subject:   existingClaims.OrgID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(newExpiry),
+			NotBefore: jwt.NewNumericDate(now.Add(-1 * time.Minute)),
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, newClaims)
-	signedJWT, err := token.SignedString(i.privateKey)
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	tokenString, err := token.SignedString(i.privateKey)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("sign extended license jwt: %w", err)
+		return "", time.Time{}, fmt.Errorf("sign extended license token: %w", err)
 	}
 
-	return signedJWT, newExpiry, nil
+	return tokenString, newExpiry, nil
 }
