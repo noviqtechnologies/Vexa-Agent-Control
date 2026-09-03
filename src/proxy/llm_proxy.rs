@@ -1,5 +1,7 @@
 use crate::proxy::handler::ProxyState;
+use crate::proxy::server::{full_to_box_body, BoxBody};
 use bytes::Bytes;
+use futures_util::StreamExt;
 use http_body_util::Full;
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
@@ -49,10 +51,56 @@ pub(crate) fn infer_provider_from_model(model: &str) -> String {
     }
 }
 
+/// Sanitizes an individual SSE line, stripping broker-internal fields (`obfuscation`)
+/// and ensuring clean standard SSE formatting with `\n\n` delimiters.
+pub(crate) fn sanitize_sse_line(line: &str) -> Option<String> {
+    let line_trimmed = line.trim();
+    if line_trimmed.is_empty() {
+        return None;
+    }
+    if line_trimmed == "data: [DONE]" || line_trimmed == "data:[DONE]" {
+        return Some("data: [DONE]\n\n".to_string());
+    }
+    if let Some(data_str) = line_trimmed.strip_prefix("data: ") {
+        let trimmed_data = data_str.trim();
+        if trimmed_data == "[DONE]" {
+            return Some("data: [DONE]\n\n".to_string());
+        }
+        if let Ok(mut json_val) = serde_json::from_str::<serde_json::Value>(trimmed_data) {
+            if let Some(obj) = json_val.as_object_mut() {
+                obj.remove("obfuscation");
+            }
+            if let Ok(clean_json) = serde_json::to_string(&json_val) {
+                return Some(format!("data: {}\n\n", clean_json));
+            }
+        }
+        return Some(format!("data: {}\n\n", trimmed_data));
+    } else if let Some(data_str) = line_trimmed.strip_prefix("data:") {
+        let trimmed_data = data_str.trim();
+        if trimmed_data == "[DONE]" {
+            return Some("data: [DONE]\n\n".to_string());
+        }
+        if let Ok(mut json_val) = serde_json::from_str::<serde_json::Value>(trimmed_data) {
+            if let Some(obj) = json_val.as_object_mut() {
+                obj.remove("obfuscation");
+            }
+            if let Ok(clean_json) = serde_json::to_string(&json_val) {
+                return Some(format!("data: {}\n\n", clean_json));
+            }
+        }
+        return Some(format!("data: {}\n\n", trimmed_data));
+    }
+    if line_trimmed.starts_with(':') {
+        return Some(format!("{}\n\n", line_trimmed));
+    }
+    Some(format!("{}\n\n", line_trimmed))
+}
+
 /// Robust Server-Sent Events (SSE) stream sanitizer and normalizer.
 /// Strips broker-internal fields (like `obfuscation`), standardizes CRLF/LF line endings,
 /// preserves event framing, keep-alives, and `data: [DONE]`, ensuring strict compliance
 /// with OpenAI / Anthropic / Cline SDK parsers.
+#[allow(dead_code)]
 pub(crate) fn clean_sse_stream(raw_bytes: &[u8]) -> Vec<u8> {
     let text = match std::str::from_utf8(raw_bytes) {
         Ok(t) => t,
@@ -63,45 +111,9 @@ pub(crate) fn clean_sse_stream(raw_bytes: &[u8]) -> Vec<u8> {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     let mut out = String::with_capacity(normalized.len() + 64);
 
-    for block in normalized.split("\n\n") {
-        let trimmed_block = block.trim();
-        if trimmed_block.is_empty() {
-            continue;
-        }
-
-        let mut block_lines = Vec::new();
-        for line in trimmed_block.lines() {
-            let line_trimmed = line.trim();
-            if line_trimmed.is_empty() {
-                continue;
-            }
-
-            if let Some(data_str) = line_trimmed.strip_prefix("data: ") {
-                let data_trimmed = data_str.trim();
-                if data_trimmed == "[DONE]" {
-                    block_lines.push("data: [DONE]".to_string());
-                } else if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(data_trimmed) {
-                    if let Some(obj) = val.as_object_mut() {
-                        obj.remove("obfuscation");
-                    }
-                    if let Ok(serialized) = serde_json::to_string(&val) {
-                        block_lines.push(format!("data: {}", serialized));
-                    } else {
-                        block_lines.push(format!("data: {}", data_trimmed));
-                    }
-                } else {
-                    block_lines.push(line_trimmed.to_string());
-                }
-            } else if line_trimmed == "data:[DONE]" {
-                block_lines.push("data: [DONE]".to_string());
-            } else {
-                block_lines.push(line_trimmed.to_string());
-            }
-        }
-
-        if !block_lines.is_empty() {
-            out.push_str(&block_lines.join("\n"));
-            out.push_str("\n\n");
+    for line in normalized.lines() {
+        if let Some(clean_line) = sanitize_sse_line(line) {
+            out.push_str(&clean_line);
         }
     }
 
@@ -123,7 +135,7 @@ pub(crate) fn make_error_response(
     details: Option<serde_json::Value>,
     is_streaming: bool,
     req_id: &str,
-) -> Response<Full<Bytes>> {
+) -> Response<BoxBody> {
     let mut err_obj = serde_json::json!({
         "origin": origin,
         "type": if origin == "agentcontrol" { "agentcontrol_error" } else { "upstream_provider_error" },
@@ -157,6 +169,9 @@ pub(crate) fn make_error_response(
         });
 
         let sse_payload = format!("data: {}\n\ndata: [DONE]\n\n", serde_json::to_string(&sse_chunk).unwrap_or_default());
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(2);
+        let _ = tx.try_send(Ok(hyper::body::Frame::data(Bytes::from(sse_payload))));
+        let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx)));
 
         Response::builder()
             .status(StatusCode::OK) // 200 OK so SSE stream parser in IDE consumes it
@@ -167,7 +182,7 @@ pub(crate) fn make_error_response(
             .header("X-AgentControl-Origin", origin)
             .header("X-AgentControl-Verdict", if origin == "agentcontrol" { "blocked" } else { "upstream_error" })
             .header("X-AgentControl-Request-ID", req_id)
-            .body(Full::new(Bytes::from(sse_payload)))
+            .body(stream_body)
             .unwrap()
     } else {
         Response::builder()
@@ -176,7 +191,7 @@ pub(crate) fn make_error_response(
             .header("X-AgentControl-Origin", origin)
             .header("X-AgentControl-Verdict", if origin == "agentcontrol" { "blocked" } else { "upstream_error" })
             .header("X-AgentControl-Request-ID", req_id)
-            .body(Full::new(Bytes::from(json_bytes)))
+            .body(full_to_box_body(Full::new(Bytes::from(json_bytes))))
             .unwrap()
     }
 }
@@ -185,7 +200,7 @@ pub async fn handle_request(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
     client_ip: &str,
-) -> Result<Response<Full<Bytes>>, hyper::Error> {
+) -> Result<Response<BoxBody>, hyper::Error> {
     let start_time = std::time::Instant::now();
 
     // Handle GET /v1/models and GET /models connectivity check for Cline / OpenAI clients
@@ -556,17 +571,47 @@ pub async fn handle_request(
             match broker.invoke_brokered_stream(&broker_req).await {
                 Ok(upstream_resp) => {
                     let status = StatusCode::from_u16(upstream_resp.status().as_u16()).unwrap_or(StatusCode::OK);
-                    let raw_bytes = upstream_resp.bytes().await.unwrap_or_default();
 
                     if !status.is_success() {
+                        let raw_bytes = upstream_resp.bytes().await.unwrap_or_default();
                         let mut resp_builder = Response::builder().status(status);
                         resp_builder = resp_builder.header(hyper::header::CONTENT_TYPE, "application/json");
-                        return Ok(resp_builder.body(Full::new(raw_bytes)).unwrap());
+                        return Ok(resp_builder.body(full_to_box_body(Full::new(raw_bytes))).unwrap());
                     }
 
-                    let cleaned = clean_sse_stream(&raw_bytes);
-                    let resp_bytes = bytes::Bytes::from(cleaned);
+                    let mut stream = upstream_resp.bytes_stream();
+                    let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(64);
+                    tokio::spawn(async move {
+                        let mut buffer = String::new();
+                        while let Some(chunk_res) = stream.next().await {
+                            match chunk_res {
+                                Ok(chunk) => {
+                                    if let Ok(text) = std::str::from_utf8(&chunk) {
+                                        buffer.push_str(text);
+                                        while let Some(pos) = buffer.find('\n') {
+                                            let line = buffer[..pos].to_string();
+                                            buffer = buffer[pos + 1..].to_string();
+                                            if let Some(clean_event) = sanitize_sse_line(&line) {
+                                                if tx.send(Ok(hyper::body::Frame::data(Bytes::from(clean_event)))).await.is_err() {
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    break;
+                                }
+                            }
+                        }
+                        if !buffer.trim().is_empty() {
+                            if let Some(clean_event) = sanitize_sse_line(&buffer) {
+                                let _ = tx.send(Ok(hyper::body::Frame::data(Bytes::from(clean_event)))).await;
+                            }
+                        }
+                    });
 
+                    let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx)));
                     let resp_builder = Response::builder()
                         .status(status)
                         .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
@@ -574,7 +619,7 @@ pub async fn handle_request(
                         .header(hyper::header::CONNECTION, "keep-alive")
                         .header("X-Accel-Buffering", "no");
 
-                    return Ok(resp_builder.body(Full::new(resp_bytes)).unwrap());
+                    return Ok(resp_builder.body(stream_body).unwrap());
                 }
                 Err(e) => {
                     return Ok(make_error_response(
@@ -594,7 +639,7 @@ pub async fn handle_request(
                     let resp_bytes = serde_json::to_vec(&brokered_resp.response).unwrap_or_default();
                     let mut builder = Response::builder().status(StatusCode::OK);
                     builder = builder.header(hyper::header::CONTENT_TYPE, "application/json");
-                    return Ok(builder.body(Full::new(Bytes::from(resp_bytes))).unwrap());
+                    return Ok(builder.body(full_to_box_body(Full::new(Bytes::from(resp_bytes)))).unwrap());
                 }
                 Err(e) => {
                     return Ok(make_error_response(
@@ -625,7 +670,7 @@ pub async fn handle_request(
         .or_else(|| {
             auth_header.as_deref().and_then(|h| {
                 let token = h.strip_prefix("Bearer ").unwrap_or(h).trim();
-                if token.starts_with("sk-") {
+                if !token.is_empty() && (token.starts_with("sk-") || token.starts_with("AIza") || token.len() > 15) {
                     Some(token.to_string())
                 } else {
                     None
@@ -842,198 +887,9 @@ pub async fn handle_request(
     match state.http_client.execute(req_to_send).await {
         Ok(resp) => {
             let status = resp.status();
-            let resp_bytes = resp.bytes().await.unwrap_or_default();
 
-            let mut total_tokens = None;
-            let mut prompt_tokens_val = 0i64;
-            let mut completion_tokens_val = 0i64;
-            let mut cached_tokens_val = 0i64;
-
-            let mut is_estimated = false;
-            let mut usage_source = "provider_reported".to_string();
-
-            // Attempt direct JSON parse for non-streaming responses
-            if let Ok(resp_json) = serde_json::from_slice::<Value>(&resp_bytes) {
-                if let Some(usage) = resp_json.get("usage") {
-                    prompt_tokens_val = usage
-                        .get("prompt_tokens")
-                        .or_else(|| usage.get("input_tokens"))
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
-                    completion_tokens_val = usage
-                        .get("completion_tokens")
-                        .or_else(|| usage.get("output_tokens"))
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
-                    if let Some(prompt_details) = usage.get("prompt_tokens_details") {
-                        cached_tokens_val = prompt_details.get("cached_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-                    }
-
-                    if let Some(tt) = usage.get("total_tokens").and_then(|v| v.as_u64()) {
-                        total_tokens = Some(tt);
-                        session
-                            .tokens_used
-                            .fetch_add(tt, std::sync::atomic::Ordering::Relaxed);
-                    }
-                }
-            } else if is_streaming {
-                // Streaming SSE stream framing parser
-                if let Ok(text) = std::str::from_utf8(&resp_bytes) {
-                    let mut accumulated_chars = 0usize;
-                    let mut found_provider_usage = false;
-                    for line in text.lines() {
-                        let trimmed = line.trim();
-                        if let Some(data_str) = trimmed.strip_prefix("data: ") {
-                            if data_str == "[DONE]" {
-                                continue;
-                            }
-                            if let Ok(chunk_json) = serde_json::from_str::<Value>(data_str) {
-                                if let Some(usage) = chunk_json.get("usage") {
-                                    found_provider_usage = true;
-                                    if let Some(pt) = usage.get("prompt_tokens").or_else(|| usage.get("input_tokens")).and_then(|v| v.as_i64()) {
-                                        prompt_tokens_val = pt;
-                                    }
-                                    if let Some(ct) = usage.get("completion_tokens").or_else(|| usage.get("output_tokens")).and_then(|v| v.as_i64()) {
-                                        completion_tokens_val = ct;
-                                    }
-                                    if let Some(tt) = usage.get("total_tokens").and_then(|v| v.as_u64()) {
-                                        total_tokens = Some(tt);
-                                    }
-                                }
-                                if let Some(choices) = chunk_json.get("choices").and_then(|v| v.as_array()) {
-                                    for choice in choices {
-                                        if let Some(delta) = choice.get("delta") {
-                                            if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
-                                                accumulated_chars += content.len();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if !found_provider_usage {
-                        is_estimated = true;
-                        usage_source = "character_estimate".to_string();
-                        if prompt_tokens_val == 0 {
-                            prompt_tokens_val = input_est;
-                        }
-                        if completion_tokens_val == 0 && accumulated_chars > 0 {
-                            completion_tokens_val = (accumulated_chars as i64 / 4) + 1;
-                        }
-                    }
-                    if total_tokens.is_none() && (prompt_tokens_val > 0 || completion_tokens_val > 0) {
-                        total_tokens = Some((prompt_tokens_val + completion_tokens_val) as u64);
-                    }
-                }
-            }
-
-            // ── Postflight Spend Settlement / Release ────────────────────────
-            if let Some(ref hub_base) = hub_url {
-                if let Some(ref res_id) = active_reservation_id {
-                    if status.is_success() {
-                        let settle_req = crate::spend::types::SpendV2SettleReq {
-                            request_id: req_uuid.clone(),
-                            idempotency_key: format!("settle-{}", req_uuid),
-                            provider_request_id: None,
-                            input_tokens: prompt_tokens_val,
-                            output_tokens: completion_tokens_val,
-                            cached_input_tokens: cached_tokens_val,
-                            is_estimated,
-                            usage_source: Some(usage_source),
-                            status: status.as_u16() as i32,
-                            request_hash: req_uuid.clone(),
-                        };
-                        let settle_url = format!(
-                            "{}/api/v2/spend/reservations/{}/settle",
-                            hub_base.trim_end_matches('/'),
-                            res_id
-                        );
-                        let mut settle_builder = state.http_client.post(&settle_url);
-                        if let Some(ref sec) = gateway_secret {
-                            settle_builder = settle_builder.header("Authorization", format!("Bearer {}", sec));
-                        }
-                        let _ = settle_builder.json(&settle_req).send().await;
-                    } else {
-                        let release_req = crate::spend::types::SpendV2ReleaseReq {
-                            request_id: req_uuid.clone(),
-                            idempotency_key: format!("release-{}", req_uuid),
-                            reason: "provider_error".to_string(),
-                            request_hash: req_uuid.clone(),
-                        };
-                        let release_url = format!(
-                            "{}/api/v2/spend/reservations/{}/release",
-                            hub_base.trim_end_matches('/'),
-                            res_id
-                        );
-                        let mut release_builder = state.http_client.post(&release_url);
-                        if let Some(ref sec) = gateway_secret {
-                            release_builder = release_builder.header("Authorization", format!("Bearer {}", sec));
-                        }
-                        let _ = release_builder.json(&release_req).send().await;
-                    }
-                }
-            }
-
-            // Write HMAC audit log entry for proxied request (US-008 / FR-006)
-            let _ = state
-                .audit_logger
-                .write_entry(
-                    &session.session_id,
-                    "llm_allow",
-                    &format!("{}:{}", provider_name, model),
-                    Some(json!({"provider": provider_name, "model": model, "total_tokens": total_tokens})),
-                    None,
-                    Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                    session.identity_sub.clone(),
-                    session.identity_email.clone(),
-                    Some("sha256:active".to_string()),
-                    session.request_ip.clone(),
-                    None,
-                )
-                .await;
-
-            let egress_event = crate::proxy::db::EgressEvent {
-                timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                session_id: session.session_id.clone(),
-                transport: "llm".to_string(),
-                method: Some("POST".to_string()),
-                target_host: match provider_name.as_str() {
-                    "anthropic" => "api.anthropic.com".to_string(),
-                    "openai" => "api.openai.com".to_string(),
-                    "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
-                    _ => "api.openai.com".to_string(),
-                },
-                target_port: Some(443),
-                url_path: Some(format!("/v1/chat/completions?model={}", model)),
-                request_headers: None,
-                request_body: Some(serde_json::to_string(&body).unwrap_or_default()),
-                request_body_hash: None,
-                response_status: Some(status.as_u16() as i64),
-                response_body: None,
-                response_body_hash: None,
-                dlp_findings: None,
-                injection_findings: None,
-                latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                verdict: Some("allow".to_string()),
-                semantic_anomaly_score: None,
-                identity_context: session.identity_sub.clone(),
-                source: Some("production".to_string()),
-                policy_rule: Some("llm_egress_allowlist".to_string()),
-            };
-
-            let db = state.db_manager.clone();
-            if let Ok(json_str) = serde_json::to_string(&egress_event) {
-                let _ = state.event_tx.send(json_str);
-            }
-            tokio::spawn(async move {
-                let _ = db.insert(egress_event).await;
-                db.prune();
-            });
-
-            let mut builder = Response::builder().status(status);
             if !status.is_success() {
-                // Upstream provider returned HTTP error (401 Unauthorized, 429 Rate Limit, 500, etc.)
+                let resp_bytes = resp.bytes().await.unwrap_or_default();
                 let upstream_err_json = serde_json::from_slice::<Value>(&resp_bytes).ok();
                 let err_msg = upstream_err_json
                     .as_ref()
@@ -1052,6 +908,27 @@ pub async fn handle_request(
 
                 let formatted_msg = format!("Upstream {} returned HTTP {}: {}", provider_name.to_uppercase(), status.as_u16(), err_msg);
 
+                if let Some(ref hub_base) = hub_url {
+                    if let Some(ref res_id) = active_reservation_id {
+                        let release_req = crate::spend::types::SpendV2ReleaseReq {
+                            request_id: req_uuid.clone(),
+                            idempotency_key: format!("release-{}", req_uuid),
+                            reason: "provider_error".to_string(),
+                            request_hash: req_uuid.clone(),
+                        };
+                        let release_url = format!(
+                            "{}/api/v2/spend/reservations/{}/release",
+                            hub_base.trim_end_matches('/'),
+                            res_id
+                        );
+                        let mut release_builder = state.http_client.post(&release_url);
+                        if let Some(ref sec) = gateway_secret {
+                            release_builder = release_builder.header("Authorization", format!("Bearer {}", sec));
+                        }
+                        let _ = release_builder.json(&release_req).send().await;
+                    }
+                }
+
                 return Ok(make_error_response(
                     status,
                     "upstream_provider",
@@ -1064,23 +941,313 @@ pub async fn handle_request(
             }
 
             if is_streaming {
-                let cleaned = clean_sse_stream(&resp_bytes);
-                builder = builder
+                let mut stream = resp.bytes_stream();
+                let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(64);
+
+                let state_clone = state.clone();
+                let session_clone = session.clone();
+                let provider_name_clone = provider_name.clone();
+                let model_clone = model.clone();
+                let req_uuid_clone = req_uuid.clone();
+                let hub_url_clone = hub_url.clone();
+                let active_reservation_id_clone = active_reservation_id.clone();
+                let gateway_secret_clone = gateway_secret.clone();
+                let body_clone = body.clone();
+                let start_time_clone = start_time;
+
+                tokio::spawn(async move {
+                    let mut accumulated_chars = 0usize;
+                    let mut prompt_tokens_val = input_est;
+                    let mut completion_tokens_val = 0i64;
+                    let mut cached_tokens_val = 0i64;
+                    let mut total_tokens_val = None;
+                    let mut found_provider_usage = false;
+                    let mut buffer = String::new();
+
+                    while let Some(chunk_res) = stream.next().await {
+                        match chunk_res {
+                            Ok(chunk) => {
+                                if let Ok(text) = std::str::from_utf8(&chunk) {
+                                    buffer.push_str(text);
+                                    while let Some(pos) = buffer.find('\n') {
+                                        let line = buffer[..pos].to_string();
+                                        buffer = buffer[pos + 1..].to_string();
+
+                                        let trimmed = line.trim();
+                                        if let Some(data_str) = trimmed.strip_prefix("data: ") {
+                                            let data_trimmed = data_str.trim();
+                                            if data_trimmed != "[DONE]" {
+                                                if let Ok(chunk_json) = serde_json::from_str::<Value>(data_trimmed) {
+                                                    if let Some(usage) = chunk_json.get("usage") {
+                                                        found_provider_usage = true;
+                                                        if let Some(pt) = usage.get("prompt_tokens").or_else(|| usage.get("input_tokens")).and_then(|v| v.as_i64()) {
+                                                            prompt_tokens_val = pt;
+                                                        }
+                                                        if let Some(ct) = usage.get("completion_tokens").or_else(|| usage.get("output_tokens")).and_then(|v| v.as_i64()) {
+                                                            completion_tokens_val = ct;
+                                                        }
+                                                        if let Some(details) = usage.get("prompt_tokens_details") {
+                                                            if let Some(c) = details.get("cached_tokens").and_then(|v| v.as_i64()) {
+                                                                cached_tokens_val = c;
+                                                            }
+                                                        }
+                                                        if let Some(tt) = usage.get("total_tokens").and_then(|v| v.as_u64()) {
+                                                            total_tokens_val = Some(tt);
+                                                        }
+                                                    }
+                                                    if let Some(choices) = chunk_json.get("choices").and_then(|v| v.as_array()) {
+                                                        for choice in choices {
+                                                            if let Some(delta) = choice.get("delta") {
+                                                                if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                                                                    accumulated_chars += content.len();
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if let Some(clean_event) = sanitize_sse_line(&line) {
+                                            if tx.send(Ok(hyper::body::Frame::data(Bytes::from(clean_event)))).await.is_err() {
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                break;
+                            }
+                        }
+                    }
+
+                    if !buffer.trim().is_empty() {
+                        if let Some(clean_event) = sanitize_sse_line(&buffer) {
+                            let _ = tx.send(Ok(hyper::body::Frame::data(Bytes::from(clean_event)))).await;
+                        }
+                    }
+
+                    if !found_provider_usage {
+                        if completion_tokens_val == 0 && accumulated_chars > 0 {
+                            completion_tokens_val = (accumulated_chars as i64 / 4) + 1;
+                        }
+                    }
+                    if total_tokens_val.is_none() && (prompt_tokens_val > 0 || completion_tokens_val > 0) {
+                        total_tokens_val = Some((prompt_tokens_val + completion_tokens_val) as u64);
+                    }
+                    if let Some(tt) = total_tokens_val {
+                        session_clone.tokens_used.fetch_add(tt, std::sync::atomic::Ordering::Relaxed);
+                    }
+
+                    if let Some(ref hub_base) = hub_url_clone {
+                        if let Some(ref res_id) = active_reservation_id_clone {
+                            let settle_req = crate::spend::types::SpendV2SettleReq {
+                                request_id: req_uuid_clone.clone(),
+                                idempotency_key: format!("settle-{}", req_uuid_clone),
+                                provider_request_id: None,
+                                input_tokens: prompt_tokens_val,
+                                output_tokens: completion_tokens_val,
+                                cached_input_tokens: cached_tokens_val,
+                                is_estimated: !found_provider_usage,
+                                usage_source: Some(if found_provider_usage { "provider_reported".to_string() } else { "character_estimate".to_string() }),
+                                status: 200,
+                                request_hash: req_uuid_clone.clone(),
+                            };
+                            let settle_url = format!("{}/api/v2/spend/reservations/{}/settle", hub_base.trim_end_matches('/'), res_id);
+                            let mut settle_builder = state_clone.http_client.post(&settle_url);
+                            if let Some(ref sec) = gateway_secret_clone {
+                                settle_builder = settle_builder.header("Authorization", format!("Bearer {}", sec));
+                            }
+                            let _ = settle_builder.json(&settle_req).send().await;
+                        }
+                    }
+
+                    let _ = state_clone.audit_logger.write_entry(
+                        &session_clone.session_id,
+                        "llm_allow",
+                        &format!("{}:{}", provider_name_clone, model_clone),
+                        Some(json!({"provider": provider_name_clone, "model": model_clone, "total_tokens": total_tokens_val})),
+                        None,
+                        Some(start_time_clone.elapsed().as_secs_f64() * 1000.0),
+                        session_clone.identity_sub.clone(),
+                        session_clone.identity_email.clone(),
+                        Some("sha256:active".to_string()),
+                        session_clone.request_ip.clone(),
+                        None,
+                    ).await;
+
+                    let egress_event = crate::proxy::db::EgressEvent {
+                        timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                        session_id: session_clone.session_id.clone(),
+                        transport: "llm".to_string(),
+                        method: Some("POST".to_string()),
+                        target_host: match provider_name_clone.as_str() {
+                            "anthropic" => "api.anthropic.com".to_string(),
+                            "openai" => "api.openai.com".to_string(),
+                            "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
+                            _ => "api.openai.com".to_string(),
+                        },
+                        target_port: Some(443),
+                        url_path: Some(format!("/v1/chat/completions?model={}", model_clone)),
+                        request_headers: None,
+                        request_body: Some(serde_json::to_string(&body_clone).unwrap_or_default()),
+                        request_body_hash: None,
+                        response_status: Some(200),
+                        response_body: None,
+                        response_body_hash: None,
+                        dlp_findings: None,
+                        injection_findings: None,
+                        latency_ms: Some(start_time_clone.elapsed().as_secs_f64() * 1000.0),
+                        verdict: Some("allow".to_string()),
+                        semantic_anomaly_score: None,
+                        identity_context: session_clone.identity_sub.clone(),
+                        source: Some("production".to_string()),
+                        policy_rule: Some("llm_egress_allowlist".to_string()),
+                    };
+
+                    let db = state_clone.db_manager.clone();
+                    if let Ok(json_str) = serde_json::to_string(&egress_event) {
+                        let _ = state_clone.event_tx.send(json_str);
+                    }
+                    tokio::spawn(async move {
+                        let _ = db.insert(egress_event).await;
+                        db.prune();
+                    });
+                });
+
+                let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx)));
+                let resp = Response::builder()
+                    .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
                     .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
                     .header(hyper::header::CONNECTION, "keep-alive")
                     .header("X-Accel-Buffering", "no")
                     .header("X-AgentControl-Origin", "upstream_provider")
                     .header("X-AgentControl-Verdict", "allowed")
-                    .header("X-AgentControl-Request-ID", &req_uuid);
-                Ok(builder.body(Full::new(Bytes::from(cleaned))).unwrap())
+                    .header("X-AgentControl-Request-ID", &req_uuid)
+                    .body(stream_body)
+                    .unwrap();
+
+                return Ok(resp);
             } else {
+                let resp_bytes = resp.bytes().await.unwrap_or_default();
+                let mut total_tokens = None;
+                let mut prompt_tokens_val = 0i64;
+                let mut completion_tokens_val = 0i64;
+                let mut cached_tokens_val = 0i64;
+                let is_estimated = false;
+                let usage_source = "provider_reported".to_string();
+
+                if let Ok(resp_json) = serde_json::from_slice::<Value>(&resp_bytes) {
+                    if let Some(usage) = resp_json.get("usage") {
+                        prompt_tokens_val = usage
+                            .get("prompt_tokens")
+                            .or_else(|| usage.get("input_tokens"))
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        completion_tokens_val = usage
+                            .get("completion_tokens")
+                            .or_else(|| usage.get("output_tokens"))
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        if let Some(prompt_details) = usage.get("prompt_tokens_details") {
+                            cached_tokens_val = prompt_details.get("cached_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                        }
+                        if let Some(tt) = usage.get("total_tokens").and_then(|v| v.as_u64()) {
+                            total_tokens = Some(tt);
+                            session
+                                .tokens_used
+                                .fetch_add(tt, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                }
+
+                if let Some(ref hub_base) = hub_url {
+                    if let Some(ref res_id) = active_reservation_id {
+                        let settle_req = crate::spend::types::SpendV2SettleReq {
+                            request_id: req_uuid.clone(),
+                            idempotency_key: format!("settle-{}", req_uuid),
+                            provider_request_id: None,
+                            input_tokens: prompt_tokens_val,
+                            output_tokens: completion_tokens_val,
+                            cached_input_tokens: cached_tokens_val,
+                            is_estimated,
+                            usage_source: Some(usage_source),
+                            status: status.as_u16() as i32,
+                            request_hash: req_uuid.clone(),
+                        };
+                        let settle_url = format!("{}/api/v2/spend/reservations/{}/settle", hub_base.trim_end_matches('/'), res_id);
+                        let mut settle_builder = state.http_client.post(&settle_url);
+                        if let Some(ref sec) = gateway_secret {
+                            settle_builder = settle_builder.header("Authorization", format!("Bearer {}", sec));
+                        }
+                        let _ = settle_builder.json(&settle_req).send().await;
+                    }
+                }
+
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &session.session_id,
+                        "llm_allow",
+                        &format!("{}:{}", provider_name, model),
+                        Some(json!({"provider": provider_name, "model": model, "total_tokens": total_tokens})),
+                        None,
+                        Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        Some("sha256:active".to_string()),
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+
+                let egress_event = crate::proxy::db::EgressEvent {
+                    timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                    session_id: session.session_id.clone(),
+                    transport: "llm".to_string(),
+                    method: Some("POST".to_string()),
+                    target_host: match provider_name.as_str() {
+                        "anthropic" => "api.anthropic.com".to_string(),
+                        "openai" => "api.openai.com".to_string(),
+                        "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
+                        _ => "api.openai.com".to_string(),
+                    },
+                    target_port: Some(443),
+                    url_path: Some(format!("/v1/chat/completions?model={}", model)),
+                    request_headers: None,
+                    request_body: Some(serde_json::to_string(&body).unwrap_or_default()),
+                    request_body_hash: None,
+                    response_status: Some(status.as_u16() as i64),
+                    response_body: None,
+                    response_body_hash: None,
+                    dlp_findings: None,
+                    injection_findings: None,
+                    latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                    verdict: Some("allow".to_string()),
+                    semantic_anomaly_score: None,
+                    identity_context: session.identity_sub.clone(),
+                    source: Some("production".to_string()),
+                    policy_rule: Some("llm_egress_allowlist".to_string()),
+                };
+
+                let db = state.db_manager.clone();
+                if let Ok(json_str) = serde_json::to_string(&egress_event) {
+                    let _ = state.event_tx.send(json_str);
+                }
+                tokio::spawn(async move {
+                    let _ = db.insert(egress_event).await;
+                    db.prune();
+                });
+
+                let mut builder = Response::builder().status(status);
                 builder = builder
                     .header(hyper::header::CONTENT_TYPE, "application/json")
                     .header("X-AgentControl-Origin", "upstream_provider")
                     .header("X-AgentControl-Verdict", "allowed")
                     .header("X-AgentControl-Request-ID", &req_uuid);
-                Ok(builder.body(Full::new(resp_bytes)).unwrap())
+                Ok(builder.body(full_to_box_body(Full::new(resp_bytes))).unwrap())
             }
         }
         Err(e) => {

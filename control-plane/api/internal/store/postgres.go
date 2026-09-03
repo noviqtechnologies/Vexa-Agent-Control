@@ -283,10 +283,35 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 		hours = 24
 	}
 	rows, err := s.pool.Query(ctx, `
-		WITH paged_agents AS (
-			SELECT agent_id, display_name, status, policy_version, last_seen_at
+		WITH combined_agents AS (
+			SELECT 
+				agent_id, 
+				display_name, 
+				status::text, 
+				policy_version, 
+				last_seen_at
 			FROM agents
 			WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+			UNION ALL
+			SELECT 
+				COALESCE(stable_device_id, id::text) AS agent_id,
+				COALESCE(display_name, hostname, 'Workstation') AS display_name,
+				CASE 
+					WHEN state = 'COMPLIANT' THEN 'active'
+					WHEN state = 'REVOKED' THEN 'revoked'
+					ELSE 'inactive'
+				END AS status,
+				COALESCE(policy_version, 'v1.0.0') AS policy_version,
+				COALESCE(last_heartbeat_at, registered_at, created_at, now()) AS last_seen_at
+			FROM devices
+			WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND COALESCE(stable_device_id, id::text) NOT IN (
+				SELECT agent_id FROM agents WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+			  )
+		),
+		paged_agents AS (
+			SELECT agent_id, display_name, status, policy_version, last_seen_at
+			FROM combined_agents
 			ORDER BY last_seen_at DESC
 			LIMIT $2 OFFSET $3
 		)
@@ -358,7 +383,7 @@ func (s *Store) GetFleetStats(ctx context.Context, organizationID string, hours 
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED'),
-			(SELECT COUNT(*) FROM devices WHERE state = 'COMPLIANT' AND last_heartbeat_at >= NOW() - INTERVAL '3 minutes'),
+			(SELECT COUNT(*) FROM devices WHERE state = 'COMPLIANT' AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes'),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 || ' hours')::interval),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND decision = 'denied' AND created_at >= NOW() - ($2 || ' hours')::interval),
 			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 || ' hours')::interval),
@@ -444,6 +469,50 @@ func (s *Store) ListRecentEvents(ctx context.Context, organizationID, agentID st
 	}
 
 	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []RecentEvent
+	for rows.Next() {
+		var e RecentEvent
+		var dlpJSON, injJSON, semJSON []byte
+		if err := rows.Scan(
+			&e.EventID, &e.TimestampMs, &e.SessionID, &e.AgentID,
+			&e.ToolName, &e.Decision,
+			&dlpJSON, &injJSON, &semJSON, &e.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(dlpJSON, &e.DlpFindings)
+		_ = json.Unmarshal(injJSON, &e.InjectionFindings)
+		_ = json.Unmarshal(semJSON, &e.SemanticFindings)
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
+func (s *Store) ListEventsBySession(ctx context.Context, organizationID, sessionID string, limit int) ([]RecentEvent, error) {
+	if s.pool == nil {
+		return []RecentEvent{}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	query := `
+		SELECT event_id, timestamp_ms, session_id, agent_id, tool_name,
+		       decision, dlp_findings, injection_findings, semantic_findings, created_at
+		FROM telemetry_events
+		WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		  AND session_id = $2
+		ORDER BY timestamp_ms ASC
+		LIMIT $3
+	`
+	rows, err := s.pool.Query(ctx, query, organizationID, sessionID, limit)
 	if err != nil {
 		return nil, err
 	}

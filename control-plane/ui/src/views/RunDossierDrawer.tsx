@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RunDossier } from '../api/client'
+import SessionTraceDrawer from '../components/observability/SessionTraceDrawer'
 import './RunExplorer.css'
 
 interface Props {
@@ -38,6 +39,7 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<'identity' | 'policy' | 'economics' | 'events' | 'dispatch'>('economics')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [traceSessionId, setTraceSessionId] = useState<string | null>(null)
 
   const handleNavigateEffectivePolicy = () => {
     const params = new URLSearchParams()
@@ -93,6 +95,16 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {dossier.identity?.session_id && (
+              <button
+                type="button"
+                className="soc-btn-secondary"
+                style={{ fontSize: 12, padding: '5px 10px', borderColor: '#a78bfa', color: '#c4b5fd' }}
+                onClick={() => setTraceSessionId(dossier.identity?.session_id || null)}
+              >
+                🧭 Trace Session
+              </button>
+            )}
             <button
               type="button"
               className="soc-btn-secondary"
@@ -168,6 +180,42 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
                 </div>
               </div>
 
+              {/* Token & Cache Economics Breakdown */}
+              <div style={{ padding: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  🪙 Token Volume & Prompt Cache Economics
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>PROMPT TOKENS</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{(dossier.economics?.input_tokens || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>COMPLETION TOKENS</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{(dossier.economics?.output_tokens || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>CACHED TOKENS</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#38bdf8', marginTop: 2 }}>
+                      {(dossier.economics?.cached_tokens || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>CACHE HIT RATIO</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: (dossier.economics?.cached_tokens || 0) > 0 ? '#10b981' : 'var(--text-muted)', marginTop: 2 }}>
+                      {((dossier.economics?.input_tokens || 0) + (dossier.economics?.cached_tokens || 0)) > 0
+                        ? `${(((dossier.economics?.cached_tokens || 0) / ((dossier.economics?.input_tokens || 0) + (dossier.economics?.cached_tokens || 0))) * 100).toFixed(1)}%`
+                        : '0.0%'}
+                    </div>
+                  </div>
+                </div>
+                {Boolean(dossier.economics?.ttft_ms) && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                    ⚡ Time to First Token (TTFT): <strong>{dossier.economics?.ttft_ms} ms</strong>
+                  </div>
+                )}
+              </div>
+
               <div className="dossier-kv-grid">
                 <span className="dossier-k">HTTP Status Code</span>
                 <span className="dossier-v">
@@ -223,7 +271,60 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
               <span className="dossier-v">{dossier.identity?.device_hostname || dossier.identity?.device_id || 'N/A'}</span>
 
               <span className="dossier-k">Compliance</span>
-              <span className="dossier-v" style={{ color: '#10b981' }}>{dossier.identity?.device_compliance || 'COMPLIANT'}</span>
+              <span className="dossier-v">
+                <span
+                  style={{
+                    color: dossier.identity?.device_compliance === 'COMPLIANT'
+                      ? '#10b981'
+                      : dossier.identity?.device_compliance === 'NON_COMPLIANT'
+                      ? '#ef4444'
+                      : dossier.identity?.device_compliance === 'UNREGISTERED' || dossier.identity?.device_compliance === 'NOT_ENROLLED'
+                      ? '#94a3b8'
+                      : '#f59e0b',
+                    fontWeight: 600,
+                  }}
+                >
+                  {dossier.identity?.device_compliance || 'UNKNOWN'}
+                </span>
+              </span>
+
+              {dossier.identity?.session_id && (
+                <>
+                  <span className="dossier-k">Session Trace</span>
+                  <span className="dossier-v" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ fontFamily: 'var(--font-mono)' }}>{dossier.identity.session_id}</code>
+                    <button
+                      type="button"
+                      className="soc-btn-secondary"
+                      style={{ fontSize: 11, padding: '2px 8px', borderColor: '#a78bfa', color: '#c4b5fd' }}
+                      onClick={() => setTraceSessionId(dossier.identity?.session_id || null)}
+                    >
+                      🧭 Trace Session
+                    </button>
+                  </span>
+                </>
+              )}
+
+              {dossier.identity?.virtual_key_prefix && (
+                <>
+                  <span className="dossier-k">Virtual Key</span>
+                  <span className="dossier-v">
+                    <span className="obs-key-pill">{dossier.identity.virtual_key_prefix}</span>
+                    {dossier.identity.virtual_key_alias && (
+                      <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>({dossier.identity.virtual_key_alias})</span>
+                    )}
+                  </span>
+                </>
+              )}
+
+              {(dossier.identity?.internal_user_id || dossier.identity?.end_user_id) && (
+                <>
+                  <span className="dossier-k">Attributed User</span>
+                  <span className="dossier-v">
+                    {dossier.identity.internal_user_id || dossier.identity.end_user_id}
+                  </span>
+                </>
+              )}
 
               <span className="dossier-k">Project Scope</span>
               <span className="dossier-v">{dossier.identity?.project_id || 'default'}</span>
@@ -354,10 +455,18 @@ export default function RunDossierDrawer({ dossier, onClose }: Props) {
 
         {/* Provenance Footer */}
         <div style={{ padding: '14px 24px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-          <span>Confidence: <strong style={{ color: '#10b981' }}>{dossier.provenance?.confidence || 'observed'}</strong></span>
+          <span>Confidence: <strong style={{ color: dossier.provenance?.confidence === 'observed' ? '#10b981' : '#f59e0b' }}>{dossier.provenance?.confidence || 'observed'}</strong></span>
           <span>Source: {dossier.provenance?.evidence_source || 'postgresql_spend_reservations'}</span>
         </div>
       </div>
+
+      {/* Embedded Session Trace Drawer */}
+      {traceSessionId && (
+        <SessionTraceDrawer
+          sessionId={traceSessionId}
+          onClose={() => setTraceSessionId(null)}
+        />
+      )}
     </div>
   )
 }

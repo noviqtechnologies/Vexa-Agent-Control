@@ -82,25 +82,52 @@ func (s *Store) EnrollDevice(ctx context.Context, orgID string, req *EnrollDevic
 
 	var deviceID string
 	var createdAt time.Time
+	var existingID string
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO devices (
-			organization_id, stable_device_id, display_name, owner_subject,
-			os_family, architecture, os_version_summary, public_key, daemon_version, state, state_changed_at, updated_at
-		) VALUES ($1, $2, $2, $3, $4, 'x86_64', $5, $6, $7, 'COMPLIANT', now(), now())
-		ON CONFLICT (stable_device_id)
-		DO UPDATE SET 
-			display_name = EXCLUDED.display_name,
-			owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
-			os_family = EXCLUDED.os_family,
-			os_version_summary = EXCLUDED.os_version_summary,
-			public_key = COALESCE(NULLIF(EXCLUDED.public_key, ''), devices.public_key),
-			daemon_version = EXCLUDED.daemon_version,
-			state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
-			last_heartbeat_at = now(),
-			updated_at = now()
-		RETURNING id::text, created_at
-	`, orgID, req.Hostname, req.UserIdentifier, req.OS, req.OSVersion, req.PublicKey, req.DaemonVersion).
-		Scan(&deviceID, &createdAt)
+		SELECT id::text FROM devices 
+		WHERE (organization_id = $1::uuid OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		  AND (stable_device_id = $2 OR LOWER(display_name) = LOWER($2))
+		ORDER BY last_heartbeat_at DESC NULLS LAST
+		LIMIT 1
+	`, orgID, req.Hostname).Scan(&existingID)
+
+	if err == nil && existingID != "" {
+		err = s.pool.QueryRow(ctx, `
+			UPDATE devices SET
+				display_name = $2,
+				owner_subject = COALESCE(NULLIF($3, ''), devices.owner_subject),
+				os_family = $4,
+				os_version_summary = $5,
+				public_key = COALESCE(NULLIF($6, ''), devices.public_key),
+				daemon_version = $7,
+				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
+				last_heartbeat_at = now(),
+				updated_at = now()
+			WHERE id::text = $1
+			RETURNING id::text, created_at
+		`, existingID, req.Hostname, req.UserIdentifier, req.OS, req.OSVersion, req.PublicKey, req.DaemonVersion).
+			Scan(&deviceID, &createdAt)
+	} else {
+		err = s.pool.QueryRow(ctx, `
+			INSERT INTO devices (
+				organization_id, stable_device_id, display_name, owner_subject,
+				os_family, architecture, os_version_summary, public_key, daemon_version, state, state_changed_at, updated_at
+			) VALUES ($1, $2, $2, $3, $4, 'x86_64', $5, $6, $7, 'COMPLIANT', now(), now())
+			ON CONFLICT (stable_device_id)
+			DO UPDATE SET 
+				display_name = EXCLUDED.display_name,
+				owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
+				os_family = EXCLUDED.os_family,
+				os_version_summary = EXCLUDED.os_version_summary,
+				public_key = COALESCE(NULLIF(EXCLUDED.public_key, ''), devices.public_key),
+				daemon_version = EXCLUDED.daemon_version,
+				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
+				last_heartbeat_at = now(),
+				updated_at = now()
+			RETURNING id::text, created_at
+		`, orgID, req.Hostname, req.UserIdentifier, req.OS, req.OSVersion, req.PublicKey, req.DaemonVersion).
+			Scan(&deviceID, &createdAt)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to enroll device: %w", err)

@@ -10,13 +10,12 @@ Under the **Single-Tenant Open-Core** model:
 
 ---
 
-## 2. 3-Tier Licensing Model
+## 2. Edition & Licensing Model
 
-| Tier | Enrolled Devices | Capabilities Included | Activation Method |
+| Edition | Capacity | Capabilities Included | Activation Method |
 |---|---|---|---|
-| **Developer** | 1 device | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, prompt injection guards, regex DLP | Free / Built-in Default |
-| **Team** | Up to 25 devices | Everything in Developer + Centralized SSE Policy Sync, Spend Caps & Budgets v2, Group Policies, OTET Device Enrollment, Aggregated Audits & Alerts | `VEXA_LICENSE_KEY="eyJ..."` or UI Activation |
-| **Enterprise** | Unlimited | Everything in Team + OIDC/SAML SSO, Strict mTLS Device Identity, Real-Time SIEM Streaming (Splunk, Datadog, OpenSearch), Deep DLP, Zero-Knowledge CMK Custody | Ed25519 Commercial License Token |
+| **Community (Open Source)** | Unlimited | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, prompt injection guards, regex DLP, team control plane | Free & Open Source (Apache 2.0) |
+| **Commercial / Enterprise** | Custom / Enterprise SLA | Everything in Community + Dedicated enterprise SLA, custom deployment support, sovereign deployment assistance | Signed Commercial License Token or Contract |
 
 ---
 

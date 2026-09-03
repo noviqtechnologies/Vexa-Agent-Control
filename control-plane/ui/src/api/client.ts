@@ -210,6 +210,9 @@ export interface SpendAnalytics {
     total_released_microcents: number
     request_count: number
     denied_count: number
+    total_cached_tokens?: number
+    total_input_tokens?: number
+    total_output_tokens?: number
   }
   time_series: Array<{
     hour: string
@@ -297,6 +300,12 @@ export interface RunDossier {
     device_hostname?: string
     device_compliance?: string
     project_id: string
+    virtual_key_id?: string
+    virtual_key_prefix?: string
+    virtual_key_alias?: string
+    session_id?: string
+    internal_user_id?: string
+    end_user_id?: string
   }
   policy: {
     snapshot: any
@@ -312,6 +321,11 @@ export interface RunDossier {
     released_microcents: number
     net_billed_microcents?: number
     currency: string
+    input_tokens?: number
+    output_tokens?: number
+    cached_tokens?: number
+    total_tokens?: number
+    ttft_ms?: number
     events: SpendEventV2[]
   }
   outcome: {
@@ -328,6 +342,76 @@ export interface RunDossier {
     evidence_source: string
     confidence: string
   }
+}
+
+export interface SessionTimelineItem {
+  type: 'llm_completion' | 'tool_call'
+  timestamp: string
+  llm_run?: RunSummary
+  tool_event?: {
+    event_id: string
+    timestamp_ms: number
+    session_id: string
+    agent_id: string
+    tool_name: string
+    decision: string
+    dlp_findings?: any
+    injection_findings?: any
+    semantic_findings?: any
+    created_at?: string
+  }
+}
+
+export interface SessionTraceResponse {
+  session_id: string
+  summary: {
+    total_llm_calls: number
+    total_tool_calls: number
+    total_tokens: number
+    total_cached_tokens: number
+    total_settled_microcents: number
+    policy_interventions_count: number
+    started_at: string
+    ended_at: string
+    duration_ms: number
+  }
+  timeline: SessionTimelineItem[]
+}
+
+export interface SupportedIdeCoverage {
+  id: string
+  name: string
+  status: 'ENFORCED' | 'NOT_DETECTED'
+  is_wrapped: boolean
+}
+
+export interface WorkstationCoverageItem {
+  device_id: string
+  hostname: string
+  user_identifier: string
+  os: string
+  os_version: string
+  health_state: 'PROTECTED' | 'STALE' | 'EXPOSED' | 'REVOKED'
+  overall_compliance: string
+  last_heartbeat_at?: string
+  tamper_count_24h: number
+  active_ides: string[]
+  ide_coverage: SupportedIdeCoverage[]
+}
+
+export interface CoverageHealthResponse {
+  summary: {
+    total_workstations: number
+    protected_workstations: number
+    exposed_workstations: number
+    stale_workstations: number
+    revoked_workstations: number
+    total_active_ides: number
+    tamper_alerts_24h: number
+    fleet_protection_score: number
+  }
+  workstations: WorkstationCoverageItem[]
+  generated_at: string
 }
 
 export interface EffectivePolicyResponse {
@@ -579,6 +663,20 @@ export const api = {
     const res = await fetch(`/api/v2/spend/analytics?hours=${hours}&group_by=${groupBy}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
     return res.json() as Promise<{ organization_id: string; analytics: SpendAnalytics; generated_at: string }>
+  },
+
+  // Session Multi-Turn Forensics
+  getSessionTrace: async (sessionId: string) => {
+    const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<SessionTraceResponse>
+  },
+
+  // Coverage & Control Health
+  getCoverageHealth: async () => {
+    const res = await fetch('/api/v1/fleet/coverage-health', { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<CoverageHealthResponse>
   },
 
   // Observability & Request Logs (LiteLLM-grade)

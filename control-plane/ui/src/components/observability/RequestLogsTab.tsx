@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api, type RunSummary, type RunDossier } from '../../api/client'
 import RunDossierDrawer from '../../views/RunDossierDrawer'
+import SessionTraceDrawer from './SessionTraceDrawer'
 
 function microcentsToUSD(microcents?: number): string {
   if (microcents === undefined || microcents === null || microcents === 0) return '$0.00'
@@ -40,11 +41,95 @@ function formatTimestamp(isoString: string): string {
   }
 }
 
+interface TypeBadgeInfo {
+  label: string
+  icon: string
+  badgeClass: string
+  tooltip: string
+}
+
+function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = []): TypeBadgeInfo {
+  const type = (r.request_type || '').toUpperCase()
+  const tags = r.tags || {}
+
+  if (type === 'TOOL_CALL' || type === 'TOOL' || tags.type === 'tool_call' || tags.tool_calls) {
+    return {
+      label: 'Tool Call',
+      icon: '🛠️',
+      badgeClass: 'obs-badge-tool',
+      tooltip: 'Agent action: LLM selected and invoked a tool/function call',
+    }
+  }
+
+  if (type === 'RESPONSE' || type === 'SYNTHESIS' || tags.type === 'synthesis' || tags.role === 'tool_result') {
+    return {
+      label: 'Response',
+      icon: '💬',
+      badgeClass: 'obs-badge-response',
+      tooltip: 'Agent answer: LLM synthesized final response from tool execution outputs',
+    }
+  }
+
+  if (type === 'EMBEDDING' || type === 'EMBEDDINGS') {
+    return {
+      label: 'Embedding',
+      icon: '⚡',
+      badgeClass: 'obs-badge-embedding',
+      tooltip: 'Vector text embedding generation',
+    }
+  }
+
+  // Smart heuristic for consecutive agent loop steps when request_type is 'LLM':
+  if (allLogs.length > 1) {
+    const currentTime = new Date(r.started_at).getTime()
+    const prevLog = index + 1 < allLogs.length ? allLogs[index + 1] : null // earlier chronological log
+    const nextLog = index - 1 >= 0 ? allLogs[index - 1] : null // later chronological log
+
+    const isCorrelatedWith = (other: RunSummary | null) => {
+      if (!other) return false
+      const otherTime = new Date(other.started_at).getTime()
+      if (isNaN(currentTime) || isNaN(otherTime)) return false
+      const diffSec = Math.abs(currentTime - otherTime) / 1000
+      if (r.session_id && other.session_id && r.session_id === other.session_id) return true
+      return diffSec <= 30 && r.model === other.model && (r.project_id === other.project_id || (!r.project_id && !other.project_id))
+    }
+
+    const isPrecededByCorrelated = isCorrelatedWith(prevLog)
+    const isFollowedByCorrelated = isCorrelatedWith(nextLog)
+
+    if (isFollowedByCorrelated && !isPrecededByCorrelated) {
+      return {
+        label: (r.output_tokens || 0) < 60 ? 'Tool Call' : 'Agent Step 1',
+        icon: (r.output_tokens || 0) < 60 ? '🛠️' : '✦',
+        badgeClass: (r.output_tokens || 0) < 60 ? 'obs-badge-tool' : 'obs-badge-type',
+        tooltip: `Agent Step 1: Tool invocation / prompt processing (${r.output_tokens || 0} completion tokens)`,
+      }
+    }
+
+    if (isPrecededByCorrelated) {
+      return {
+        label: 'Response',
+        icon: '💬',
+        badgeClass: 'obs-badge-response',
+        tooltip: `Agent Step 2: Synthesis after tool execution (${r.input_tokens || 0} context tokens)`,
+      }
+    }
+  }
+
+  return {
+    label: r.request_type || 'LLM',
+    icon: '✦',
+    badgeClass: 'obs-badge-type',
+    tooltip: 'Standard LLM generation / single completion request',
+  }
+}
+
 export default function RequestLogsTab() {
   const [logs, setLogs] = useState<RunSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDossier, setSelectedDossier] = useState<RunDossier | null>(null)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -202,6 +287,14 @@ export default function RequestLogsTab() {
         >
           {autoRefresh ? 'Stop' : 'Resume'}
         </button>
+      </div>
+
+      {/* Agentic Observability Tip Banner */}
+      <div className="obs-agentic-tip">
+        <span className="obs-tip-icon">💡</span>
+        <div className="obs-tip-text">
+          <strong>Agent Observability Notice:</strong> Autonomous coding agents (such as Roo Code, Cline, and Cursor) execute multi-step ReAct loops. A single user prompt often triggers multiple sequential requests (e.g. tool execution + result synthesis). Each step is logged individually for exact token and cost accounting.
+        </div>
       </div>
 
       {/* Filter toolbar */}
@@ -378,7 +471,7 @@ export default function RequestLogsTab() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((r) => {
+              {logs.map((r, index) => {
                 const isDenied = r.state === 'DENIED' || r.state === 'BLOCKED' || (r.status_code === 403 || r.status_code === 429)
                 const isReleased = r.state === 'RELEASED'
                 const isFailed = r.state === 'FAILED' || r.state === 'ERROR' || (r.status_code !== undefined && r.status_code >= 400 && !isDenied) || (isReleased && (r.status_code === undefined || r.status_code >= 400))
@@ -409,6 +502,7 @@ export default function RequestLogsTab() {
                 // RELEASED, FAILED, DENIED, or in-flight AUTHORIZED runs have $0.00 settled spend.
                 const billedMicrocents = r.state === 'SETTLED' ? (r.settled_microcents || 0) : 0
                 const costUSD = microcentsToUSD(billedMicrocents)
+                const typeBadge = getRequestTypeBadge(r, index, logs)
 
                 return (
                   <tr
@@ -418,8 +512,8 @@ export default function RequestLogsTab() {
                   >
                     <td className="obs-col-time">{formatTimestamp(r.started_at)}</td>
                     <td>
-                      <span className="obs-badge obs-badge-type">
-                        <span className="obs-type-sparkle">✦</span> {r.request_type || 'LLM'}
+                      <span className={`obs-badge ${typeBadge.badgeClass}`} title={typeBadge.tooltip}>
+                        <span className="obs-type-sparkle">{typeBadge.icon}</span> {typeBadge.label}
                       </span>
                     </td>
                     <td>
@@ -429,15 +523,28 @@ export default function RequestLogsTab() {
                     </td>
                     <td className="obs-col-mono">
                       {r.session_id ? (
-                        <button
-                          type="button"
-                          className="obs-copy-id-btn"
-                          onClick={(e) => copyToClipboard(r.session_id!, `sess-${r.session_id}`, e)}
-                          title={`Click to copy: ${r.session_id}`}
-                        >
-                          {r.session_id.slice(0, 10)}...
-                          {copiedKey === `sess-${r.session_id}` && <span className="obs-copied-tag">✓</span>}
-                        </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="obs-copy-id-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedSessionId(r.session_id!)
+                            }}
+                            title={`View Session Trace: ${r.session_id}`}
+                            style={{ color: '#38bdf8' }}
+                          >
+                            🧭 {r.session_id.slice(0, 8)}...
+                          </button>
+                          <button
+                            type="button"
+                            className="obs-copy-id-btn"
+                            onClick={(e) => copyToClipboard(r.session_id!, `sess-${r.session_id}`, e)}
+                            title={`Copy Session ID`}
+                          >
+                            {copiedKey === `sess-${r.session_id}` ? <span className="obs-copied-tag">✓</span> : '📋'}
+                          </button>
+                        </div>
                       ) : (
                         <span className="obs-muted">-</span>
                       )}
@@ -496,6 +603,15 @@ export default function RequestLogsTab() {
         <RunDossierDrawer
           dossier={selectedDossier}
           onClose={() => setSelectedDossier(null)}
+        />
+      )}
+
+      {/* Session Trace Drawer */}
+      {selectedSessionId && (
+        <SessionTraceDrawer
+          sessionId={selectedSessionId}
+          onClose={() => setSelectedSessionId(null)}
+          onOpenRunDossier={(runId) => openDossier(runId)}
         />
       )}
     </div>

@@ -17,17 +17,17 @@ Vexa Agent Control supports envelope encryption for all at-rest SQLite databases
 
 ---
 
-## Compliance & Standard Mappings
+## Compliance Audit Evidence & Standard Mappings
 
-Vexa Agent Control provides built-in compliance report generators for:
+Vexa Agent Control generates auditor-ready evidence logs mapped to key framework controls:
 
 - **OWASP Top 10 for Agentic Applications (ASI 2026)**
-- **SOC 2 Type II (Trust Services Criteria - Security & Confidentiality)**
-- **ISO/IEC 27001:2022 Annex A**
-- **NIST AI Risk Management Framework (AI RMF 1.0)**
+- **SOC 2 Type II (Trust Services Criteria - Common Criteria 6.1, 6.6, 6.8)**
+- **ISO/IEC 27001:2022 Annex A (A.8.12 Data Leakage, A.8.16 Monitoring)**
+- **NIST AI Risk Management Framework (AI RMF 1.0 - Govern & Measure)**
 
-### Generate Compliance Artifacts
+### Generate Compliance Evidence Reports
 ```bash
-agentcontrol compliance soc2 --output soc2-report.json
-agentcontrol compliance nist --output nist-ai-rmf.json
+agentcontrol compliance report --format markdown --output audit-evidence.md
+agentcontrol compliance report --format json --output audit-evidence.json
 ```

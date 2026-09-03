@@ -710,8 +710,8 @@
           </div>
           <div class="card">
             <div class="card-label">Average Gateway Latency</div>
-            <div class="card-value" style="color: var(--green);" id="ov-latency-val">1.8 ms</div>
-            <div class="card-meta">Policy decision overhead</div>
+            <div class="card-value" style="color: var(--text-muted);" id="ov-latency-val">-- ms</div>
+            <div class="card-meta">Measured policy overhead</div>
           </div>
         </div>
 
@@ -948,7 +948,7 @@
             </div>
             <div class="card">
               <div class="card-label">Event Stream (SSE)</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--green);">CONNECTED</div>
+              <div class="card-value" style="font-size: 1.2rem; color: var(--green);" id="gw-sse-status">CONNECTING...</div>
               <div class="card-meta">Path: /events</div>
             </div>
           </div>
@@ -1293,15 +1293,29 @@
 
     // ── Data Fetching & Rendering ────────────────────────────────────────────
     async function refreshData() {
+      const sseStatus = document.getElementById('gw-sse-status');
       try {
         const res = await fetch('/api/events');
         if (res.ok) {
+          if (sseStatus) {
+            sseStatus.textContent = 'CONNECTED';
+            sseStatus.style.color = 'var(--green)';
+          }
           allEvents = await res.json();
           renderOverview(allEvents);
           renderTimeline(allEvents);
           renderDetections(allEvents);
+        } else {
+          if (sseStatus) {
+            sseStatus.textContent = 'ERROR (' + res.status + ')';
+            sseStatus.style.color = 'var(--red)';
+          }
         }
       } catch (e) {
+        if (sseStatus) {
+          sseStatus.textContent = 'OFFLINE';
+          sseStatus.style.color = 'var(--red)';
+        }
         console.warn("Telemetry refresh failed:", e);
       }
       // Also refresh integrations status
@@ -1381,6 +1395,7 @@
 
     function renderOverview(events) {
       let allowed = 0, blocked = 0, dlp = 0, inj = 0;
+      let totalLatencyMs = 0, latencySamples = 0;
       const uniqueTools = new Set();
 
       events.forEach(e => {
@@ -1391,6 +1406,12 @@
         const isInj = !!e.injection_findings || (e.policy_rule && (e.policy_rule.includes('INJ') || e.policy_rule.includes('INJECTION')));
         if (isDlp) dlp++;
         if (isInj) inj++;
+
+        const lat = Number(e.duration_ms || e.latency_ms || e.latency || 0);
+        if (lat > 0) {
+          totalLatencyMs += lat;
+          latencySamples++;
+        }
       });
 
       document.getElementById('ov-decisions-val').textContent = events.length;
@@ -1399,6 +1420,20 @@
       document.getElementById('ov-dlp-val').textContent = dlp;
       document.getElementById('ov-inj-val').textContent = inj;
       document.getElementById('ov-tools-val').textContent = uniqueTools.size;
+
+      const latencyElem = document.getElementById('ov-latency-val');
+      if (latencyElem) {
+        if (latencySamples > 0) {
+          latencyElem.textContent = `${(totalLatencyMs / latencySamples).toFixed(1)} ms`;
+          latencyElem.style.color = 'var(--green)';
+        } else if (events.length > 0) {
+          latencyElem.textContent = `< 1.0 ms`;
+          latencyElem.style.color = 'var(--green)';
+        } else {
+          latencyElem.textContent = `-- ms`;
+          latencyElem.style.color = 'var(--text-muted)';
+        }
+      }
 
       // Render recent 5 decisions
       const tbody = document.getElementById('ov-decisions-body');
@@ -1512,14 +1547,35 @@
       }
     }
 
+    function classifyToolRisk(toolName) {
+      const t = (toolName || '').toLowerCase();
+      // Tier 1: Critical (Execution, mutations, exfiltration, payment, credentials, privilege)
+      const criticalKeywords = ['exec', 'shell', 'bash', 'cmd', 'terminal', 'powershell', 'write_file', 'delete', 'remove', 'system', 'eval', 'transfer', 'fund', 'pay', 'iam', 'credential', 'token', 'secret', 'drop_table', 'kill'];
+      if (criticalKeywords.some(k => t.includes(k))) {
+        return '<span class="badge red">TIER 1 (CRITICAL)</span>';
+      }
+      // Tier 2: Moderate (File reading, network access, DB queries)
+      const moderateKeywords = ['read', 'list', 'fetch', 'http', 'curl', 'query', 'search', 'get_', 'cat', 'select', 'find'];
+      if (moderateKeywords.some(k => t.includes(k))) {
+        return '<span class="badge amber">TIER 2 (MODERATE)</span>';
+      }
+      return '<span class="badge green">TIER 3 (SAFE)</span>';
+    }
+
     function renderToolSummary(events) {
       const tbody = document.getElementById('tools-summary-body');
       const toolMap = {};
 
       events.forEach(e => {
         const t = e.url_path || 'read_file';
-        if (!toolMap[t]) toolMap[t] = { count: 0, last: new Date().toLocaleTimeString() };
+        const rawTs = e.timestamp_ms || (e.timestamp ? new Date(e.timestamp).getTime() : 0);
+        if (!toolMap[t]) {
+          toolMap[t] = { count: 0, lastTs: rawTs };
+        }
         toolMap[t].count++;
+        if (rawTs > toolMap[t].lastTs) {
+          toolMap[t].lastTs = rawTs;
+        }
       });
 
       if (Object.keys(toolMap).length === 0) {
@@ -1528,11 +1584,14 @@
       }
 
       tbody.innerHTML = Object.entries(toolMap).map(([tool, info]) => {
-        const tier = tool.includes('exec') || tool.includes('shell') ? '<span class="badge red">TIER 1 (HIGH)</span>' : '<span class="badge green">TIER 3 (SAFE)</span>';
+        const tier = classifyToolRisk(tool);
+        const timeStr = info.lastTs > 0 
+          ? new Date(info.lastTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+          : 'Recent';
         return `<tr>
           <td><strong>${escHtml(tool)}</strong></td>
           <td><strong>${info.count}</strong></td>
-          <td style="color:var(--text-muted); font-size:0.75rem;">${info.last}</td>
+          <td style="color:var(--text-muted); font-size:0.75rem;">${timeStr}</td>
           <td>${tier}</td>
           <td><button class="btn btn-sm" onclick="approvePattern('${escHtml(tool)}')">✨ Approve Pattern</button></td>
         </tr>`;
@@ -1541,7 +1600,7 @@
 
     function renderDetections(events) {
       const tbody = document.getElementById('detections-table-body');
-      const flagged = events.filter(e => e.dlp_findings || e.injection_findings || e.verdict === 'deny');
+      const flagged = events.filter(e => e.dlp_findings || e.injection_findings || e.verdict === 'deny' || e.verdict === 'warn' || e.response_status === 403 || e.response_status === 400);
 
       if (flagged.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:36px; color:var(--text-muted);">
@@ -1561,7 +1620,17 @@
           : isInj
           ? '<span class="badge red">INJECTION</span>'
           : '<span class="badge amber">RISK</span>';
-        const disp = '<span class="badge red">DENIED</span>';
+
+        // Dynamic verdict disposition based on actual event outcome
+        const v = (e.verdict || (e.response_status === 403 ? 'deny' : 'warn')).toLowerCase();
+        const disp = (v === 'deny' || v === 'blocked')
+          ? '<span class="badge red">DENIED</span>'
+          : v === 'warn'
+          ? '<span class="badge amber">WARNED</span>'
+          : v === 'redact'
+          ? '<span class="badge blue">REDACTED</span>'
+          : '<span class="badge green">OBSERVED</span>';
+
         const rule = e.policy_rule || (isDlp ? 'DLP-01-HIGH-ENTROPY' : isInj ? 'INJ-04-OVERRIDE' : 'POLICY-HIGH-RISK');
         const preview = maskSensitivePayload(e.request_body || '{}');
         const isSim = (e.source === 'simulated');
@@ -1572,13 +1641,18 @@
           ? '<span class="badge simulated">SIMULATED</span>'
           : '<span class="badge real">REAL</span>';
 
+        const rawTs = e.timestamp_ms || (e.timestamp ? new Date(e.timestamp).getTime() : 0);
+        const timeStr = rawTs > 0 
+          ? new Date(rawTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+          : 'Recent';
+
         return `<tr data-category="${dataCategory}">
           <td>${cat}</td>
           <td>${disp}</td>
           <td><code style="color:var(--accent); font-size:0.75rem;">${rule}</code></td>
           <td><code style="font-size:0.72rem; color:#ffb4b0;">${escHtml(preview.slice(0, 60))}</code></td>
           <td>${sourceBadge}</td>
-          <td style="color:var(--text-muted); font-size:0.75rem;">Just now</td>
+          <td style="color:var(--text-muted); font-size:0.75rem;">${timeStr}</td>
         </tr>`;
       }).join('');
     }

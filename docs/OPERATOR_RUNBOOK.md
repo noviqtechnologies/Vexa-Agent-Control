@@ -140,12 +140,12 @@ The SaaS Operator interface (`/operator/tenants`) automates tenant onboarding, f
 ### 1. Secret Manager Key Setup (One-Time Infra Task)
 ```bash
 # Store Ed25519 private signing seed in GCP Secret Manager
-gcloud secrets create vexa-prod-license-signing-key \
-  --project="vexa-prod" \
+gcloud secrets create vexa-license-signing-key \
+  --project="<YOUR_GCP_PROJECT_ID>" \
   --replication-policy="automatic"
 
-echo -n "<64-hex-char-private-seed>" | gcloud secrets versions add vexa-prod-license-signing-key \
-  --project="vexa-prod" \
+echo -n "<64-hex-char-private-seed>" | gcloud secrets versions add vexa-license-signing-key \
+  --project="<YOUR_GCP_PROJECT_ID>" \
   --data-file=-
 ```
 

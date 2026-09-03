@@ -34,6 +34,12 @@ use crate::kill::{self};
 use crate::logging;
 use crate::policy::response_scanner::ScanResult;
 
+pub type BoxBody = http_body_util::combinators::BoxBody<Bytes, hyper::Error>;
+
+pub fn full_to_box_body(body: Full<Bytes>) -> BoxBody {
+    body.map_err(|e| match e {}).boxed()
+}
+
 /// Run the proxy server. Blocks until shutdown signal.
 pub async fn run_server(
     state: Arc<ProxyState>,
@@ -112,8 +118,7 @@ pub async fn run_server(
                             if (req.uri().path() == "/api/events/stream" || req.uri().path() == "/api/v1/telemetry/stream") && req.method() == hyper::Method::GET {
                                 let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
                                 if !is_authorized_management(&client_ip, auth_hdr, state.admin_token.as_deref()) {
-                                    use http_body_util::BodyExt;
-                                    let err_body = http_body_util::Full::new(Bytes::from(r#"{"error":"admin_authorization_required"}"#)).map_err(|e| match e {}).boxed();
+                                    let err_body = full_to_box_body(Full::new(Bytes::from(r#"{"error":"admin_authorization_required"}"#)));
                                     return Ok::<_, hyper::Error>(Response::builder()
                                         .status(StatusCode::UNAUTHORIZED)
                                         .header("Content-Type", "application/json")
@@ -131,19 +136,17 @@ pub async fn run_server(
                                     }
                                 });
                                 let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-                                use http_body_util::BodyExt;
                                 let body = http_body_util::StreamBody::new(stream).boxed();
                                 return Ok::<_, hyper::Error>(Response::builder()
                                     .status(StatusCode::OK)
-                                    .header("Content-Type", "text/event-stream")
+                                    .header("Content-Type", "text/event-stream; charset=utf-8")
                                     .header("Cache-Control", "no-cache")
                                     .body(body)
                                     .unwrap());
                             }
 
                             let res = handle_request(req, state.clone(), &client_ip).await?;
-                            use http_body_util::BodyExt;
-                            Ok::<_, hyper::Error>(res.map(|b| b.map_err(|e| match e {}).boxed()))
+                            Ok::<_, hyper::Error>(res)
                         }
                     });
 
@@ -574,7 +577,7 @@ async fn handle_request(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
     client_ip: &str,
-) -> Result<Response<Full<Bytes>>, hyper::Error> {
+) -> Result<Response<BoxBody>, hyper::Error> {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
@@ -656,7 +659,7 @@ async fn handle_request(
             }
         };
 
-        return crate::proxy::egress::handle_egress(req, state, &session, client_ip).await;
+        return crate::proxy::egress::handle_egress(req, state, &session, client_ip).await.map(|r| r.map(full_to_box_body));
     }
 
     // Health/readiness/metrics/dashboard endpoints
@@ -667,7 +670,7 @@ async fn handle_request(
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, "text/html; charset=utf-8")
-                    .body(Full::new(Bytes::from(html)))
+                    .body(full_to_box_body(Full::new(Bytes::from(html))))
                     .unwrap());
             }
             "/api/stats" => match state.db_manager.get_stats().await {
@@ -734,19 +737,19 @@ async fn handle_request(
             "/healthz" => {
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .body(Full::new(Bytes::from("OK")))
+                    .body(full_to_box_body(Full::new(Bytes::from("OK"))))
                     .unwrap());
             }
             "/readyz" => {
                 if state.ready {
                     return Ok(Response::builder()
                         .status(StatusCode::OK)
-                        .body(Full::new(Bytes::from("OK")))
+                        .body(full_to_box_body(Full::new(Bytes::from("OK"))))
                         .unwrap());
                 } else {
                     return Ok(Response::builder()
                         .status(StatusCode::SERVICE_UNAVAILABLE)
-                        .body(Full::new(Bytes::from("NOT READY")))
+                        .body(full_to_box_body(Full::new(Bytes::from("NOT READY"))))
                         .unwrap());
                 }
             }
@@ -1061,7 +1064,7 @@ async fn handle_request(
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, "text/yaml; charset=utf-8")
-                    .body(Full::new(Bytes::from(yaml_str)))
+                    .body(full_to_box_body(Full::new(Bytes::from(yaml_str))))
                     .unwrap());
             }
             Err(e) => {
@@ -1306,7 +1309,7 @@ async fn handle_request(
     if method != hyper::Method::POST {
         return Ok(Response::builder()
             .status(StatusCode::METHOD_NOT_ALLOWED)
-            .body(Full::new(Bytes::from("Method Not Allowed")))
+            .body(full_to_box_body(Full::new(Bytes::from("Method Not Allowed"))))
             .unwrap());
     }
 
@@ -1342,7 +1345,7 @@ async fn handle_request(
         Err(_) => {
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from("Bad Request")))
+                .body(full_to_box_body(Full::new(Bytes::from("Bad Request"))))
                 .unwrap());
         }
     };
@@ -1618,12 +1621,12 @@ async fn handle_request(
 }
 
 /// Create a JSON response
-pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<Full<Bytes>> {
+pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<BoxBody> {
     let json_str = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
-        .body(Full::new(Bytes::from(json_str)))
+        .body(full_to_box_body(Full::new(Bytes::from(json_str))))
         .unwrap()
 }
 
@@ -1631,7 +1634,7 @@ pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Res
 ///
 /// Returns all operational counters in standard Prometheus exposition format
 /// (text/plain; version=0.0.4). Counters are safe to scrape concurrently.
-fn prometheus_metrics_response(state: &ProxyState) -> Response<Full<Bytes>> {
+fn prometheus_metrics_response(state: &ProxyState) -> Response<BoxBody> {
     use std::sync::atomic::Ordering;
 
     let requests = state.metrics_requests_total.load(Ordering::Relaxed);
@@ -1671,7 +1674,7 @@ fn prometheus_metrics_response(state: &ProxyState) -> Response<Full<Bytes>> {
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-        .body(Full::new(Bytes::from(body)))
+        .body(full_to_box_body(Full::new(Bytes::from(body))))
         .unwrap()
 }
 

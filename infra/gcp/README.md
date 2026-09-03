@@ -122,7 +122,7 @@ curl -i https://<gateway-url>/healthz
 
 ### 2. Stream Live Staging Logs
 ```bash
-gcloud run services logs tail agentcontrol-stage-gateway --project vexa-prod --region europe-west1
+gcloud run services logs tail agentcontrol-stage-gateway --project <your-gcp-project-id> --region europe-west1
 ```
 
 ### 3. Teardown Stage Environment

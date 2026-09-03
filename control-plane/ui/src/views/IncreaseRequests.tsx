@@ -50,8 +50,27 @@ export default function IncreaseRequests() {
   return (
     <div>
       <div className="page-header">
-        <h1>Spend Limit Increase Requests</h1>
-        <p>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ margin: 0 }}>Spend Limit Increase Requests</h1>
+          <span className="coming-soon-badge">Coming Soon</span>
+        </div>
+        <p style={{ margin: '4px 0 0' }}>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
+      </div>
+
+      {/* Roadmap Preview Banner */}
+      <div className="roadmap-preview-banner">
+        <span style={{ fontSize: 24, lineHeight: 1 }}>🚀</span>
+        <div>
+          <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 600, color: '#e0e7ff' }}>
+            Roadmap Preview — Self-Service Budget Approval Workflows
+          </h4>
+          <div style={{ fontSize: '13px', color: '#c7d2fe', lineHeight: '1.5' }}>
+            Self-service developer token cap requests, multi-tier manager approvals, and Slack/Teams notification webhooks are coming in an upcoming release.
+            <div style={{ marginTop: 4 }}>
+              <strong>Current Governance:</strong> Administrators can set and adjust team and project budget ceilings directly under <a href="#/spend/limits" style={{ color: '#93c5fd', textDecoration: 'underline' }}>Spend Limits</a>.
+            </div>
+          </div>
+        </div>
       </div>
 
       {licenseNotAvailable && (

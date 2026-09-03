@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-/// Enumerates user profile home directories on Windows (e.g., `["C:\\Users\\wasim", "C:\\Users\\dev2"]`).
+/// Enumerates user profile home directories on Windows (e.g., `["C:\\Users\\alice", "C:\\Users\\dev2"]`).
 pub fn enumerate_user_profiles() -> Vec<PathBuf> {
     let mut profiles = Vec::new();
 

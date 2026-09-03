@@ -27,23 +27,49 @@ import RunExplorer from './views/RunExplorer'
 import EffectivePolicyExplorer from './views/EffectivePolicyExplorer'
 import Devices from './views/Devices'
 import TamperLog from './views/TamperLog'
+import CoverageControlHealth from './views/CoverageControlHealth'
 import LicenseSettings from './views/LicenseSettings'
 import CommandPalette from './components/CommandPalette'
 import NotificationCenter from './components/NotificationCenter'
 import SetInitialPasswordModal from './components/SetInitialPasswordModal'
 import SessionTimeoutModal from './components/SessionTimeoutModal'
 
+interface NavItem {
+  label: string
+  to: string
+  badge?: string
+}
+
 interface NavSection {
   id: string
   label: string
   icon: React.ReactNode
-  children: { label: string; to: string }[]
+  children: NavItem[]
 }
 
 const OPERATOR_NAV_SECTIONS: NavSection[] = [
   {
-    id: 'settings',
-    label: 'Organization Settings',
+    id: 'operator',
+    label: 'Platform Administration',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+    ),
+    children: [
+      { label: 'SaaS Operator Console', to: '/operator' },
+      { label: 'Global Audit Ledger', to: '/observability/logs' },
+      { label: 'Global LLM Providers', to: '/integrations/llm-providers' },
+      { label: 'Global Spend Visualization', to: '/spend/visualization' },
+      { label: 'Global Users & SSO', to: '/admin/users' },
+    ],
+  },
+]
+
+const CUSTOMER_NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'devices',
+    label: 'Device & Fleet Governance',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
@@ -52,45 +78,27 @@ const OPERATOR_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Organization & License', to: '/settings/license' },
-    ],
-  },
-  {
-    id: 'audit-section',
-    label: 'Audit & Compliance',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
-      </svg>
-    ),
-    children: [
-      { label: 'Platform Audit Ledger', to: '/audit' },
-    ],
-  },
-]
-
-const CUSTOMER_NAV_SECTIONS: NavSection[] = [
-  {
-    id: 'team',
-    label: 'Team & Organization',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Organization & License', to: '/settings/license' },
       { label: 'Device Governance', to: '/devices' },
+      { label: 'Coverage & Control Health', to: '/coverage-health' },
       { label: 'IDE Tamper Log', to: '/devices/tamper-log' },
-      { label: 'Users & Roles', to: '/admin/users' },
-      { label: 'Auth Providers & SSO', to: '/admin/auth-providers' },
+    ],
+  },
+  {
+    id: 'policies',
+    label: 'Policies & Security',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    ),
+    children: [
+      { label: 'Policy Editor', to: '/policy/edit' },
+      { label: 'Policy Marketplace', to: '/policy/marketplace' },
+      { label: 'Group Policies', to: '/policy/group' },
+      { label: 'Effective Policy Explorer', to: '/policy/effective-explorer' },
+      { label: 'Threat Intelligence', to: '/threats' },
+      { label: 'Safe Mode', to: '/policy/safe-mode' },
+      { label: 'Agent Identity', to: '/identity', badge: 'Coming Soon' },
     ],
   },
   {
@@ -109,19 +117,6 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'spend',
-    label: 'Spend & Budgets',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Spend Limits', to: '/spend/limits' },
-      { label: 'Increase Requests', to: '/spend/requests' },
-    ],
-  },
-  {
     id: 'observability',
     label: 'Observability & Runs',
     icon: (
@@ -135,24 +130,35 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       { label: 'Run Explorer', to: '/runs' },
       { label: 'Spend Analytics', to: '/spend/visualization' },
     ],
-
   },
   {
-    id: 'policies',
-    label: 'Policies & Security',
+    id: 'spend',
+    label: 'Spend & Budgets',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
       </svg>
     ),
     children: [
-      { label: 'Policy Editor', to: '/policy/edit' },
-      { label: 'Effective Policy Explorer', to: '/policy/effective-explorer' },
-      { label: 'Policy Marketplace', to: '/policy/marketplace' },
-      { label: 'Group Policies', to: '/policy/group' },
-      { label: 'Threat Intelligence', to: '/threats' },
-      { label: 'Safe Mode', to: '/policy/safe-mode' },
-      { label: 'Agent Identity', to: '/identity' },
+      { label: 'Spend Limits', to: '/spend/limits' },
+      { label: 'Increase Requests', to: '/spend/requests', badge: 'Coming Soon' },
+    ],
+  },
+  {
+    id: 'team',
+    label: 'Team & Organization',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+    children: [
+      { label: 'Organization & License', to: '/settings/license' },
+      { label: 'Users & Roles', to: '/admin/users' },
+      { label: 'Auth Providers & SSO', to: '/admin/auth-providers' },
     ],
   },
 ]
@@ -310,6 +316,9 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
                       >
                         <span className="child-dot" />
                         <span className="item-label">{child.label}</span>
+                        {child.badge && !isAuthProviders && (
+                          <span className="sidebar-coming-soon-pill">{child.badge}</span>
+                        )}
                         {isAuthProviders && isEnforced && (
                           <span className="sidebar-action-pill">Setup Required</span>
                         )}
@@ -516,6 +525,7 @@ export default function App() {
                       <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
                       <Route path="/spend/visualization" element={<SpendVisualization />} />
                       <Route path="/runs" element={<RunExplorer />} />
+                      <Route path="/coverage-health" element={<CoverageControlHealth />} />
                       <Route path="/observability/logs" element={<ObservabilityLogs />} />
                       <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
                       <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />

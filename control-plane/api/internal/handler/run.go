@@ -9,21 +9,28 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 )
 
 // RunHandler exposes broker LLM run inspection and forensic dossiers.
 type RunHandler struct {
-	spendStore *spend.Store
-	store      DataStore
+	spendStore  *spend.Store
+	store       DataStore
+	deviceStore *device.Store
 }
 
 // NewRunHandler creates a new RunHandler.
-func NewRunHandler(ss *spend.Store, ds DataStore) *RunHandler {
+func NewRunHandler(ss *spend.Store, ds DataStore, devStores ...*device.Store) *RunHandler {
+	var devStore *device.Store
+	if len(devStores) > 0 {
+		devStore = devStores[0]
+	}
 	return &RunHandler{
-		spendStore: ss,
-		store:      ds,
+		spendStore:  ss,
+		store:       ds,
+		deviceStore: devStore,
 	}
 }
 
@@ -114,14 +121,41 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		netBilledMicrocents = int64(dossier.SettledMicrocents)
 	}
 
+	// Resolve true device identity and compliance
+	deviceCompliance := "NOT_ENROLLED"
+	deviceHostname := dossier.DeviceID
+	confidence := "observed"
+
+	if h.deviceStore != nil && dossier.DeviceID != "" {
+		dev, devErr := h.deviceStore.GetDevice(r.Context(), tenantID, dossier.DeviceID)
+		if devErr == nil && dev != nil {
+			deviceCompliance = dev.OverallCompliance
+			if dev.Hostname != "" {
+				deviceHostname = dev.Hostname
+			}
+		} else {
+			deviceCompliance = "UNREGISTERED"
+			confidence = "inferred"
+		}
+	} else if dossier.DeviceID == "" {
+		deviceCompliance = "UNSPECIFIED"
+		confidence = "inferred"
+	}
+
 	resp := map[string]interface{}{
 		"run_id":     dossier.RunID,
 		"request_id": dossier.RequestID,
 		"identity": map[string]interface{}{
-			"device_id":         dossier.DeviceID,
-			"device_hostname":   dossier.DeviceID,
-			"device_compliance": "COMPLIANT",
-			"project_id":        dossier.ProjectID,
+			"device_id":          dossier.DeviceID,
+			"device_hostname":    deviceHostname,
+			"device_compliance":  deviceCompliance,
+			"project_id":         dossier.ProjectID,
+			"virtual_key_id":     dossier.VirtualKeyID,
+			"virtual_key_prefix": dossier.VirtualKeyPrefix,
+			"virtual_key_alias":  dossier.VirtualKeyAlias,
+			"session_id":         dossier.SessionID,
+			"internal_user_id":   dossier.InternalUserID,
+			"end_user_id":        dossier.EndUserID,
 		},
 		"policy": map[string]interface{}{
 			"snapshot":               parsedPolicy,
@@ -137,6 +171,11 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 			"released_microcents":   dossier.ReleasedMicrocents,
 			"net_billed_microcents": netBilledMicrocents,
 			"currency":              "USD",
+			"input_tokens":          dossier.InputTokens,
+			"output_tokens":         dossier.OutputTokens,
+			"cached_tokens":         dossier.CachedTokens,
+			"total_tokens":          dossier.TotalTokens,
+			"ttft_ms":               dossier.TTFTMs,
 			"events":                dossier.Events,
 		},
 		"outcome": map[string]interface{}{
@@ -151,7 +190,7 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		"provenance": map[string]interface{}{
 			"data_freshness":  time.Now().UTC().Format(time.RFC3339),
 			"evidence_source": "postgresql_spend_reservations",
-			"confidence":      "observed",
+			"confidence":      confidence,
 		},
 	}
 

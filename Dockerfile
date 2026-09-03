@@ -29,10 +29,19 @@ RUN mkdir -p src control-plane/proto/src benches && \
 COPY src/ ./src/
 COPY control-plane/proto/src/ ./control-plane/proto/src/
 COPY benches/ ./benches/
+COPY keys/ ./keys/
 COPY policy.example.yaml ./policy.example.yaml
 
-# Build release binary using pre-cached dependency layers
-RUN cargo build --release --bin agentcontrol && \
+# Invalidate dummy binary and workspace library artifacts, then build actual release binary
+RUN rm -rf target/release/deps/agentcontrol* \
+           target/release/deps/libagentcontrol* \
+           target/release/deps/control_plane_proto* \
+           target/release/deps/libcontrol_plane_proto* \
+           target/release/.fingerprint/agentcontrol* \
+           target/release/.fingerprint/control_plane_proto* \
+           target/release/agentcontrol \
+           target/release/agentcontrol.d && \
+    cargo build --release --bin agentcontrol && \
     cp target/release/agentcontrol /usr/local/bin/agentcontrol
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────

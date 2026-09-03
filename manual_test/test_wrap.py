@@ -23,7 +23,7 @@ def setup_mock_config(temp_dir):
         "mcpServers": {
             "filesystem": {
                 "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/wasim/Documents"],
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/dev/Documents"],
                 "env": {"NODE_ENV": "production"}
             },
             "memory": {

@@ -1327,7 +1327,10 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 			COALESCE(SUM(settled_microcents), 0),
 			COALESCE(SUM(CASE WHEN state = 'RELEASED' THEN reserved_microcents - settled_microcents ELSE 0 END), 0),
 			COUNT(*),
-			COUNT(*) FILTER (WHERE state = 'DENIED')
+			COUNT(*) FILTER (WHERE state = 'DENIED'),
+			COALESCE(SUM(cached_tokens), 0),
+			COALESCE(SUM(input_tokens), 0),
+			COALESCE(SUM(output_tokens), 0)
 		FROM spend_reservations
 		WHERE organization_id = $1 AND created_at >= $2
 	`, orgID, since).Scan(
@@ -1336,6 +1339,9 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 		&a.Summary.TotalReleasedMoney,
 		&a.Summary.RequestCount,
 		&a.Summary.DeniedCount,
+		&a.Summary.TotalCachedTokens,
+		&a.Summary.TotalInputTokens,
+		&a.Summary.TotalOutputTokens,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("spend analytics summary: %w", err)
@@ -1370,6 +1376,8 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 		"provider": "provider",
 		"model":    "model",
 		"project":  "project_id",
+		"user":     "COALESCE(internal_user_id, end_user_id, 'unattributed')",
+		"team":     "COALESCE(virtual_key_alias, 'default')",
 	}
 	col, ok := validGroupBy[groupBy]
 	if !ok {
@@ -1609,9 +1617,19 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 		       reserved_microcents, settled_microcents, policy_snapshot::text, price_book_version_id,
 		       created_at, settled_at, released_at, release_reason,
 		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
+		       COALESCE(ttft_ms, 0),
 		       COALESCE(input_tokens, 0),
 		       COALESCE(output_tokens, 0),
 		       COALESCE(cached_tokens, 0),
+		       virtual_key_id::text,
+		       virtual_key_hash,
+		       virtual_key_prefix,
+		       virtual_key_alias,
+		       session_id,
+		       internal_user_id,
+		       end_user_id,
+		       COALESCE(tags, '{}'::jsonb),
+		       COALESCE(request_type, 'LLM'),
 		       status_code
 		FROM spend_reservations
 		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
@@ -1619,7 +1637,10 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
 		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,
 		&d.StartedAt, &settledAt, &releasedAt, &releaseReason, &d.DurationMs,
-		&d.InputTokens, &d.OutputTokens, &d.CachedTokens, &rawStatusCode,
+		&d.TTFTMs, &d.InputTokens, &d.OutputTokens, &d.CachedTokens,
+		&d.VirtualKeyID, &d.VirtualKeyHash, &d.VirtualKeyPrefix, &d.VirtualKeyAlias,
+		&d.SessionID, &d.InternalUserID, &d.EndUserID, &d.Tags, &d.RequestType,
+		&rawStatusCode,
 	)
 	if err != nil {
 		return nil, err

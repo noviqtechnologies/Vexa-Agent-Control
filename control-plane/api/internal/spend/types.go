@@ -278,6 +278,9 @@ type SpendAnalyticsSummary struct {
 	TotalReleasedMoney MoneyMicrocents `json:"total_released_microcents"`
 	RequestCount       int64           `json:"request_count"`
 	DeniedCount        int64           `json:"denied_count"`
+	TotalCachedTokens  int64           `json:"total_cached_tokens"`
+	TotalInputTokens   int64           `json:"total_input_tokens"`
+	TotalOutputTokens  int64           `json:"total_output_tokens"`
 }
 
 // SpendTimeSeriesPoint represents hourly aggregated spend metrics.

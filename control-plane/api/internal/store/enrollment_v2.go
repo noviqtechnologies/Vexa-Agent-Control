@@ -467,32 +467,64 @@ func (s *Store) CompleteEnrollmentTransaction(
 	}
 
 	// Insert or update device record
-	devQuery := `
-		INSERT INTO devices (
-			organization_id, stable_device_id, display_name, owner_subject,
-			os_family, os_version_summary, architecture, state, state_changed_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', now())
-		ON CONFLICT (stable_device_id) DO UPDATE SET
-			organization_id = EXCLUDED.organization_id,
-			display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), devices.display_name),
-			owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
-			os_family = EXCLUDED.os_family,
-			os_version_summary = EXCLUDED.os_version_summary,
-			architecture = EXCLUDED.architecture,
-			state = 'PENDING'::device_state,
-			state_reason_code = 'REENROLLED_VIA_OTET',
-			revoked_at = NULL,
-			revocation_reason = NULL,
-			state_changed_at = now(),
-			updated_at = now()
-		RETURNING id, state;
-	`
-	err = tx.QueryRow(ctx, devQuery,
-		orgID, stableDevID, finalDispName, ownerSub,
-		finalOSFam, osVer, finalArch,
-	).Scan(&deviceID, &state)
+	var existingDeviceID string
+	_ = tx.QueryRow(ctx, `
+		SELECT id::text FROM devices 
+		WHERE organization_id = $1 
+		  AND (stable_device_id = $2 OR LOWER(display_name) = LOWER($3))
+		LIMIT 1;
+	`, orgID, stableDevID, finalDispName).Scan(&existingDeviceID)
+
+	if existingDeviceID != "" {
+		updateDevQuery := `
+			UPDATE devices SET
+				stable_device_id = $2,
+				display_name = $3,
+				owner_subject = COALESCE(NULLIF($4, ''), devices.owner_subject),
+				os_family = $5,
+				os_version_summary = $6,
+				architecture = $7,
+				state = 'PENDING'::device_state,
+				state_reason_code = 'REENROLLED_VIA_OTET',
+				revoked_at = NULL,
+				revocation_reason = NULL,
+				state_changed_at = now(),
+				updated_at = now()
+			WHERE id = $1::uuid
+			RETURNING id, state;
+		`
+		err = tx.QueryRow(ctx, updateDevQuery,
+			existingDeviceID, stableDevID, finalDispName, ownerSub,
+			finalOSFam, osVer, finalArch,
+		).Scan(&deviceID, &state)
+	} else {
+		devQuery := `
+			INSERT INTO devices (
+				organization_id, stable_device_id, display_name, owner_subject,
+				os_family, os_version_summary, architecture, state, state_changed_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', now())
+			ON CONFLICT (stable_device_id) DO UPDATE SET
+				organization_id = EXCLUDED.organization_id,
+				display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), devices.display_name),
+				owner_subject = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
+				os_family = EXCLUDED.os_family,
+				os_version_summary = EXCLUDED.os_version_summary,
+				architecture = EXCLUDED.architecture,
+				state = 'PENDING'::device_state,
+				state_reason_code = 'REENROLLED_VIA_OTET',
+				revoked_at = NULL,
+				revocation_reason = NULL,
+				state_changed_at = now(),
+				updated_at = now()
+			RETURNING id, state;
+		`
+		err = tx.QueryRow(ctx, devQuery,
+			orgID, stableDevID, finalDispName, ownerSub,
+			finalOSFam, osVer, finalArch,
+		).Scan(&deviceID, &state)
+	}
 	if err != nil {
-		return "", "", fmt.Errorf("insert device: %w", err)
+		return "", "", fmt.Errorf("upsert device: %w", err)
 	}
 
 	// Insert certificate record

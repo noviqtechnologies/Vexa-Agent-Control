@@ -3,11 +3,11 @@
 variable "gcp_project_id" {
   description = "The Google Cloud Project ID where all AgentControl resources will be deployed."
   type        = string
-  default     = "vexa-prod"
+  default     = "your-gcp-project-id"
 }
 
 variable "gcp_project_number" {
-  description = "Optional GCP Project Number (e.g. 569175508122)."
+  description = "Optional GCP Project Number (e.g. 123456789012)."
   type        = number
   default     = null
 }
@@ -207,6 +207,13 @@ variable "postgres_db" {
   description = "PostgreSQL database name for AgentControl."
   type        = string
   default     = "agentcontrol"
+}
+
+variable "database_url" {
+  description = "Optional connection string for a persistent external PostgreSQL database (e.g. Cloud SQL, Neon, Supabase, RDS). When provided, the dashboard API connects to this persistent database and retains all logs, telemetry, and audit history across deployments and scale-to-zero restarts."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 # ─── Custom Labels ────────────────────────────────────────────────────────────

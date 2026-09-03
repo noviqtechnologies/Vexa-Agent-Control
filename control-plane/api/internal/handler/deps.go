@@ -17,6 +17,7 @@ type DataStore interface {
 	ListAgents(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error)
 	GetDecisionHeatmap(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
 	ListRecentEvents(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
+	ListEventsBySession(ctx context.Context, tenantID, sessionID string, limit int) ([]store.RecentEvent, error)
 
 	ListCredentials(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error)
 

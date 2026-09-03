@@ -182,9 +182,11 @@ func main() {
 	invalidationBroadcaster := handler.NewInvalidationBroadcaster()
 	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
 	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
-	runH := handler.NewRunHandler(spendStore, db)
+	runH := handler.NewRunHandler(spendStore, db, deviceStore)
 	observabilityH := handler.NewObservabilityHandler(spendStore, db)
-	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db)
+	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db, deviceStore)
+	sessionH := handler.NewSessionHandler(spendStore, db)
+	coverageHealthH := handler.NewCoverageHealthHandler(deviceStore)
 	healthH := handler.NewHealthHandler(db)
 
 	legacyAuthCfg := middleware.LegacyAuthConfig{
@@ -337,6 +339,7 @@ func main() {
 
 		r.Get("/gateways", hubSpecH.ListGateways)
 		r.Get("/fleet/overview", fleetH.GetOverview)
+		r.Get("/fleet/coverage-health", coverageHealthH.GetCoverageHealth)
 		r.Get("/fleet/agents", fleetH.ListAgents)
 		r.Get("/fleet/heatmap", fleetH.GetHeatmap)
 		r.Get("/fleet/events", fleetH.ListEvents)
@@ -355,6 +358,9 @@ func main() {
 		// Run Explorer & Forensics
 		r.Get("/runs", runH.ListRuns)
 		r.Get("/runs/{run_id}", runH.GetRun)
+
+		// Session Forensics & Multi-Turn Tracing
+		r.Get("/sessions/{session_id}", sessionH.GetSessionTrace)
 
 		// Effective Policy Explorer
 		r.Get("/policy/effective-explorer", effectivePolicyH.GetEffective)

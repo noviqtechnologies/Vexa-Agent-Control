@@ -79,8 +79,11 @@ export default function IdentityGovernance() {
     <>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1>Identity Governance</h1>
-          <p>Agent credentials, scopes, TTLs, and rotation history</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ margin: 0 }}>Identity Governance</h1>
+            <span className="coming-soon-badge">Coming Soon</span>
+          </div>
+          <p style={{ margin: '4px 0 0' }}>Autonomous agent credentials, tool-level scopes, TTLs, and rotation history</p>
         </div>
         <button
           type="button"
@@ -89,6 +92,22 @@ export default function IdentityGovernance() {
         >
           + Issue Sample Credential
         </button>
+      </div>
+
+      {/* Roadmap Preview Banner */}
+      <div className="roadmap-preview-banner">
+        <span style={{ fontSize: 24, lineHeight: 1 }}>🚀</span>
+        <div>
+          <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 600, color: '#e0e7ff' }}>
+            Roadmap Preview — Autonomous AI Daemon Identity Management (IAM)
+          </h4>
+          <div style={{ fontSize: '13px', color: '#c7d2fe', lineHeight: '1.5' }}>
+            Autonomous background AI daemons will use short-lived cryptographic tokens with tool-level scopes (e.g. <code>mcp:tools:execute</code>) and automated policy-driven rotation.
+            <div style={{ marginTop: 4 }}>
+              <strong>Current Governance:</strong> Developer workstations and IDEs are active in <a href="#/devices" style={{ color: '#93c5fd', textDecoration: 'underline' }}>Device Governance</a>, and LLM access is governed via <a href="#/integrations/virtual-keys" style={{ color: '#93c5fd', textDecoration: 'underline' }}>Virtual Keys</a>.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Summary stats */}

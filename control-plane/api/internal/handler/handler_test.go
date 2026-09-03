@@ -64,6 +64,9 @@ func (m *mockStore) ListRecentEvents(ctx context.Context, tenantID, agentID stri
 	}
 	return nil, nil
 }
+func (m *mockStore) ListEventsBySession(ctx context.Context, tenantID, sessionID string, limit int) ([]store.RecentEvent, error) {
+	return []store.RecentEvent{}, nil
+}
 func (m *mockStore) ListCredentials(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error) {
 	if m.listCredentialsFunc != nil {
 		return m.listCredentialsFunc(ctx, tenantID, agentID)

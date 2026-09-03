@@ -4,7 +4,8 @@ design/
 agentinfo/
 scratch/
 graphify-out/
-infra/
+scripts/
+infra/gcp-teams-saas-hub
 
 # Terraform
 .terraform/
@@ -32,6 +33,9 @@ matrix_results.json
 *.db
 *.db-shm
 *.db-wal
+*.key
+keys/*.key
+!keys/vexa_license.pub
 audit.key
 device_identity.key
 device_token

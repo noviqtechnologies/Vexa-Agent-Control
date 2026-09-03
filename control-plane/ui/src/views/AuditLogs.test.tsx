@@ -22,7 +22,7 @@ const mockEvents: RedactedEvent[] = [
     event_id: 'evt-001',
     timestamp_ms: Date.now() - 5000,
     session_id: 'sess-123',
-    agent_id: 'cursor@wasim-thinkpad',
+    agent_id: 'cursor@workstation-alpha',
     tool_name: 'read_file',
     decision: 'allowed',
     dlp_findings: [],
@@ -33,7 +33,7 @@ const mockEvents: RedactedEvent[] = [
     event_id: 'evt-002',
     timestamp_ms: Date.now() - 3000,
     session_id: 'sess-456',
-    agent_id: 'claude@wasim-thinkpad',
+    agent_id: 'claude@workstation-alpha',
     tool_name: '<unlisted_tool>',
     decision: 'denied',
     dlp_findings: [{ category: 'API_KEY', pattern_name: 'OpenAI Secret', count: 1 }],
@@ -71,8 +71,8 @@ describe('AuditLogs View', () => {
     expect(screen.getByText('Injection')).toBeInTheDocument()
 
     // Check rows data
-    expect(await screen.findByText('cursor@wasim-thinkpad')).toBeInTheDocument()
-    expect(screen.getByText('claude@wasim-thinkpad')).toBeInTheDocument()
+    expect(await screen.findByText('cursor@workstation-alpha')).toBeInTheDocument()
+    expect(screen.getByText('claude@workstation-alpha')).toBeInTheDocument()
     expect(screen.getByText('read_file')).toBeInTheDocument()
   })
 
@@ -81,13 +81,13 @@ describe('AuditLogs View', () => {
     const user = userEvent.setup()
     renderView()
 
-    expect(await screen.findByText('cursor@wasim-thinkpad')).toBeInTheDocument()
+    expect(await screen.findByText('cursor@workstation-alpha')).toBeInTheDocument()
 
     const searchInput = screen.getByPlaceholderText('Search by agent ID or subject…')
     await user.type(searchInput, 'cursor')
 
-    expect(screen.getByText('cursor@wasim-thinkpad')).toBeInTheDocument()
-    expect(screen.queryByText('claude@wasim-thinkpad')).not.toBeInTheDocument()
+    expect(screen.getByText('cursor@workstation-alpha')).toBeInTheDocument()
+    expect(screen.queryByText('claude@workstation-alpha')).not.toBeInTheDocument()
   })
 
   it('opens event detail modal upon inspect click', async () => {
@@ -95,7 +95,7 @@ describe('AuditLogs View', () => {
     const user = userEvent.setup()
     renderView()
 
-    expect(await screen.findByText('cursor@wasim-thinkpad')).toBeInTheDocument()
+    expect(await screen.findByText('cursor@workstation-alpha')).toBeInTheDocument()
 
     const inspectButtons = screen.getAllByText('Inspect')
     await user.click(inspectButtons[0])

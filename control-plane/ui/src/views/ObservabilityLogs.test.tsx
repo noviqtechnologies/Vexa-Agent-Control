@@ -47,8 +47,27 @@ vi.mock('../api/client', () => ({
           total_tokens: 0,
           request_type: 'LLM',
         },
+        {
+          run_id: 'run-103',
+          request_id: 'c8179b27-b001-4444-9999-111122223333',
+          session_id: '73fc9665-6112-4c6d-9781-37dfd125fa0a',
+          device_id: 'dev-1',
+          project_id: 'default',
+          provider: 'openai',
+          model: 'gpt-4o',
+          state: 'SETTLED',
+          status_code: 200,
+          reserved_microcents: 149000,
+          settled_microcents: 149000,
+          started_at: '2026-09-03T12:37:06Z',
+          duration_ms: 2870,
+          input_tokens: 10436,
+          output_tokens: 36,
+          total_tokens: 10472,
+          request_type: 'TOOL_CALL',
+        },
       ],
-      total: 2,
+      total: 3,
       data_freshness: '2026-08-31T15:02:10Z',
       confidence: 'observed',
     }),
@@ -118,13 +137,18 @@ describe('ObservabilityLogs View', () => {
 
     // Verifies Request Logs tab table content loaded with proper Success/Failure status and costs
     await waitFor(() => {
+      expect(screen.getByText(/Agent Observability Notice/i)).toBeInTheDocument()
       expect(screen.getByText('099b5405-e...')).toBeInTheDocument()
       expect(screen.getByText('b87819b3-d...')).toBeInTheDocument()
-      expect(screen.getByText('Success')).toBeInTheDocument()
+      expect(screen.getByText('c8179b27-b...')).toBeInTheDocument()
+      expect(screen.getByText('Tool Call')).toBeInTheDocument()
+      expect(screen.getAllByText('Success').length).toBeGreaterThan(0)
       expect(screen.getByText('Failure')).toBeInTheDocument()
       expect(screen.getByText('$0.0018')).toBeInTheDocument()
+      expect(screen.getByText('$0.0015')).toBeInTheDocument()
       expect(screen.getByText('$0.00')).toBeInTheDocument()
       expect(screen.getByText('vk-abc12')).toBeInTheDocument()
+      expect(screen.getAllByText(/73fc9665/).length).toBeGreaterThan(0)
     })
   })
 

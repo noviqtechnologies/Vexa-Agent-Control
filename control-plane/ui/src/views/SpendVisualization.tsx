@@ -19,7 +19,7 @@ export default function SpendVisualization() {
   const [analytics, setAnalytics] = useState<SpendAnalytics | null>(null)
   const [events, setEvents] = useState<SpendEventV2[]>([])
   const [hours, setHours] = useState<number>(24)
-  const [groupBy, setGroupBy] = useState<'provider' | 'device' | 'model' | 'project'>('provider')
+  const [groupBy, setGroupBy] = useState<'provider' | 'device' | 'model' | 'project' | 'user' | 'team'>('provider')
   const [dataFreshness, setDataFreshness] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
@@ -90,35 +90,47 @@ export default function SpendVisualization() {
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="card" style={{ padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
+      {/* 5-KPI High-Level Summary Card */}
+      <div className="card" style={{ padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
         <div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL SETTLED</p>
-          <div style={{ fontSize: 32, fontWeight: 600, color: '#10b981' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL SETTLED SPEND</p>
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981' }}>
             ${totalSettledUSD.toFixed(4)}
           </div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Actual upstream API spend</span>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 20 }}>
+        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>ACTIVE RESERVATIONS</p>
-          <div style={{ fontSize: 32, fontWeight: 600, color: '#38bdf8' }}>
+          <div style={{ fontSize: 28, fontWeight: 600, color: '#38bdf8' }}>
             ${totalReservedUSD.toFixed(4)}
           </div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Preflight locks held</span>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 20 }}>
+        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>BUDGET RELEASED</p>
-          <div style={{ fontSize: 32, fontWeight: 600, color: '#f59e0b' }}>
+          <div style={{ fontSize: 28, fontWeight: 600, color: '#f59e0b' }}>
             ${totalReleasedUSD.toFixed(4)}
           </div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Returned unspent budget</span>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 20 }}>
+        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>CACHE EFFICIENCY</p>
+          <div style={{ fontSize: 28, fontWeight: 600, color: (summary?.total_cached_tokens || 0) > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+            {((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0)) > 0
+              ? `${(((summary?.total_cached_tokens || 0) / ((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0))) * 100).toFixed(1)}%`
+              : '0.0%'}
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {((summary?.total_cached_tokens || 0)).toLocaleString()} cached tokens
+          </span>
+        </div>
+
+        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL REQUESTS</p>
-          <div style={{ fontSize: 32, fontWeight: 600 }}>
+          <div style={{ fontSize: 28, fontWeight: 600 }}>
             {requestCount.toLocaleString()}
           </div>
           <span style={{ fontSize: 12, color: deniedCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
@@ -171,7 +183,7 @@ export default function SpendVisualization() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0 }}>Top Spenders & Resource Breakdown</h3>
           <div style={{ display: 'flex', gap: 8 }}>
-            {(['provider', 'device', 'model', 'project'] as const).map((g) => (
+            {(['provider', 'device', 'model', 'project', 'user', 'team'] as const).map((g) => (
               <button
                 key={g}
                 type="button"
@@ -179,7 +191,7 @@ export default function SpendVisualization() {
                 style={{ textTransform: 'capitalize' }}
                 onClick={() => setGroupBy(g)}
               >
-                {g}
+                {g === 'team' ? 'Team (Key)' : g}
               </button>
             ))}
           </div>

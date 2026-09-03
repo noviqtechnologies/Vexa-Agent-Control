@@ -162,41 +162,44 @@ resource "google_cloud_run_v2_service" "api" {
       }
     }
 
-    # Sidecar Container: PostgreSQL Engine with Automatic Migrations
-    containers {
-      name  = "postgres"
-      image = var.control_plane_db_image
+    # Sidecar Container: PostgreSQL Engine (used when no external persistent database_url is specified)
+    dynamic "containers" {
+      for_each = var.database_url == "" ? [1] : []
+      content {
+        name  = "postgres"
+        image = var.control_plane_db_image
 
-      resources {
-        limits = {
-          cpu    = var.db_cpu
-          memory = var.db_memory
+        resources {
+          limits = {
+            cpu    = var.db_cpu
+            memory = var.db_memory
+          }
+          cpu_idle          = false
+          startup_cpu_boost = true
         }
-        cpu_idle          = false
-        startup_cpu_boost = true
-      }
 
-      env {
-        name  = "POSTGRES_USER"
-        value = var.postgres_user
-      }
-      env {
-        name  = "POSTGRES_PASSWORD"
-        value = local.effective_postgres_password
-      }
-      env {
-        name  = "POSTGRES_DB"
-        value = var.postgres_db
-      }
-
-      startup_probe {
-        tcp_socket {
-          port = 5432
+        env {
+          name  = "POSTGRES_USER"
+          value = var.postgres_user
         }
-        initial_delay_seconds = 3
-        period_seconds        = 5
-        failure_threshold     = 24
-        timeout_seconds       = 3
+        env {
+          name  = "POSTGRES_PASSWORD"
+          value = local.effective_postgres_password
+        }
+        env {
+          name  = "POSTGRES_DB"
+          value = var.postgres_db
+        }
+
+        startup_probe {
+          tcp_socket {
+            port = 5432
+          }
+          initial_delay_seconds = 3
+          period_seconds        = 5
+          failure_threshold     = 24
+          timeout_seconds       = 3
+        }
       }
     }
 

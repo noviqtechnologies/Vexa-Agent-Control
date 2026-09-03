@@ -44,8 +44,38 @@ func TestEffectivePolicyHandler_GetEffective_Defaults(t *testing.T) {
 	if resp.Effective.SpendLimitMicrocents != 10000000000 {
 		t.Errorf("spend limit = %d, want 10000000000", resp.Effective.SpendLimitMicrocents)
 	}
-	if resp.Effective.Action != "allow" {
-		t.Errorf("action = %s, want allow", resp.Effective.Action)
+	if resp.Confidence != "observed" {
+		t.Errorf("confidence = %s, want observed", resp.Confidence)
+	}
+}
+
+func TestEffectivePolicyHandler_GetEffective_UnregisteredDevice(t *testing.T) {
+	spendStore := spend.NewStore(nil)
+	ds := &mockStore{}
+	h := NewEffectivePolicyHandler(spendStore, ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/policy/effective-explorer?device_id=unknown-dev-999", nil)
+	rr := httptest.NewRecorder()
+
+	h.GetEffective(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		ProvenanceLadder []PolicyLadderLevel `json:"provenance_ladder"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	devLevel := resp.ProvenanceLadder[4]
+	if devLevel.Level != "device" {
+		t.Fatalf("expected level 5 to be device, got %s", devLevel.Level)
+	}
+	if devLevel.Confidence != "unobserved" {
+		t.Errorf("expected confidence unobserved for unregistered device, got %s", devLevel.Confidence)
 	}
 }
 

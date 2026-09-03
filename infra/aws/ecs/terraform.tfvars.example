@@ -1,0 +1,33 @@
+# ─── AWS ECS Deployment Configuration Example ──────────────────────────────────
+# Copy this file to terraform.tfvars or use terraform.stage.tfvars:
+#   Windows (PowerShell): Copy-Item terraform.stage.tfvars terraform.tfvars
+#   Linux / macOS:        cp terraform.stage.tfvars terraform.tfvars
+
+aws_region  = "eu-west-1"
+environment = "stage"
+
+# Container Images (defaults to latest official GHCR releases; or private ECR repositories)
+container_image         = "ghcr.io/noviqtechnologies/agentwall:latest"
+control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+control_plane_api_image = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+control_plane_db_image  = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+
+# Task Resources
+task_cpu    = "1024" # 1 vCPU
+task_memory = "2048" # 2 GiB
+
+# Optional Amazon ECR Private Repositories with 2-version automated retention
+ecr_enabled = false
+
+# Custom Secrets (leave blank for automatic random generation)
+# gateway_secret     = "your-custom-gateway-secret-token"
+# policy_read_secret = "your-custom-policy-read-secret"
+# encryption_secret  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# session_secret     = "your-custom-session-signing-secret"
+# postgres_password  = "your-custom-db-password"
+
+tags = {
+  Project     = "agentwall"
+  Environment = "stage"
+  ManagedBy   = "terraform"
+}

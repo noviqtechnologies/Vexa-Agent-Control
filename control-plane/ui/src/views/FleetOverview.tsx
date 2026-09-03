@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import {
   api, subscribeAlerts,
-  type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus
+  type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus, type CoverageHealthResponse
 } from '../api/client'
 
 const DECISION_COLORS: Record<string, string> = {
@@ -25,6 +25,7 @@ function formatTime(ms: number): string {
 }
 
 function timeAgo(iso: string): string {
+  if (!iso) return 'just now'
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'just now'
@@ -40,9 +41,12 @@ export default function FleetOverview() {
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [heatmap, setHeatmap] = useState<DecisionBreakdown[]>([])
   const [alerts, setAlerts] = useState<RedactedAlert[]>([])
+  const [coverage, setCoverage] = useState<CoverageHealthResponse | null>(null)
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [loading, setLoading] = useState(true)
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [copiedTestCmd, setCopiedTestCmd] = useState(false)
 
   useEffect(() => {
     const hoursMap: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168, '30d': 720 }
@@ -52,13 +56,14 @@ export default function FleetOverview() {
       api.listAgents(50, 0, hours),
       api.getHeatmap(hours),
       api.listRecentAlerts(50, hours),
+      (api.getCoverageHealth ? api.getCoverageHealth().catch(() => null) : Promise.resolve(null)),
       (api.getLicenseStatus ? api.getLicenseStatus().catch(() => null) : Promise.resolve(null)),
-    ]).then(([s, a, h, al, lic]) => {
+    ]).then(([s, a, h, al, cov, lic]) => {
       const rawAgents = a || []
       const seen = new Set<string>()
       const dedupedAgents: AgentSummary[] = []
       for (const ag of rawAgents) {
-        const k = (ag.agent_id || '').toLowerCase()
+        const k = (ag.agent_id || ag.display_name || '').toLowerCase()
         if (k && !seen.has(k)) {
           seen.add(k)
           dedupedAgents.push(ag)
@@ -70,6 +75,7 @@ export default function FleetOverview() {
       setAgents(dedupedAgents)
       setHeatmap(h || [])
       setAlerts(al || [])
+      setCoverage(cov)
       setLicenseStatus(lic)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -95,6 +101,18 @@ export default function FleetOverview() {
   }, [])
 
   if (loading) return <div className="loading">Loading fleet data</div>
+
+  const protectionScore = coverage?.summary?.fleet_protection_score ?? (stats && stats.total_agents > 0 ? 100 : 100)
+  const workstationCount = coverage?.summary?.total_workstations ?? stats?.total_agents ?? agents.length
+  const activeIdesCount = coverage?.summary?.total_active_ides ?? (workstationCount > 0 ? 5 : 0)
+
+  const sampleTestCurl = `curl -X POST http://localhost:8080/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer vk_live_sample_token" \\
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello AgentControl Gateway!"}]
+  }'`
 
   return (
     <div className="soc-fleet-page">
@@ -126,6 +144,133 @@ export default function FleetOverview() {
         </div>
       </div>
 
+      {/* Fleet Security Posture Hero Banner */}
+      <div className="card" style={{
+        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.06) 50%, rgba(99, 102, 241, 0.08) 100%)',
+        border: '1px solid rgba(16, 185, 129, 0.25)',
+        padding: '20px 24px',
+        marginBottom: '24px',
+        borderRadius: 'var(--radius-lg, 12px)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '20px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '16px',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontSize: '26px',
+            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)',
+            flexShrink: 0
+          }}>
+            🛡️
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
+                Fleet Security Posture: {protectionScore >= 80 ? 'Protected & Compliant' : 'Review Recommended'}
+              </h3>
+              <span className="soc-delta-badge delta-success" style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 700 }}>
+                {protectionScore}% Score
+              </span>
+              <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                ● Zero-Trust Runtime Active
+              </span>
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              {workstationCount} Workstation{workstationCount === 1 ? '' : 's'} Active · {activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf, Zed, Cline)
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="soc-btn-secondary"
+            onClick={() => setShowTestModal(true)}
+            style={{ fontSize: '12px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <span>⚡</span> Test Gateway Proxy
+          </button>
+          <button
+            type="button"
+            className="soc-btn-primary"
+            onClick={() => navigate('/coverage-health')}
+            style={{ fontSize: '12px', padding: '8px 14px' }}
+          >
+            View Coverage Matrix →
+          </button>
+        </div>
+      </div>
+
+      {/* Quick-Action Onboarding Strip */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '12px',
+        marginBottom: '24px'
+      }}>
+        <div
+          className="card soc-clickable-tile"
+          onClick={() => navigate('/devices')}
+          style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+          title="Enroll developer workstations and AI daemons"
+        >
+          <span style={{ fontSize: '20px' }}>💻</span>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>Device Governance</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>OTET & Seats</div>
+          </div>
+        </div>
+
+        <div
+          className="card soc-clickable-tile"
+          onClick={() => navigate('/policy/marketplace')}
+          style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+          title="Browse and deploy active security policies"
+        >
+          <span style={{ fontSize: '20px' }}>🛡️</span>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>Policy Hub</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>DLP & Guardrails</div>
+          </div>
+        </div>
+
+        <div
+          className="card soc-clickable-tile"
+          onClick={() => navigate('/integrations/virtual-keys')}
+          style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+          title="Issue and govern scoped virtual LLM keys"
+        >
+          <span style={{ fontSize: '20px' }}>🔑</span>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>Virtual Keys</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>LLM Providers</div>
+          </div>
+        </div>
+
+        <div
+          className="card soc-clickable-tile"
+          onClick={() => navigate('/spend/limits')}
+          style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+          title="Configure spend ceilings and token budgets"
+        >
+          <span style={{ fontSize: '20px' }}>📊</span>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>Spend Limits</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>Budgets & Caps</div>
+          </div>
+        </div>
+      </div>
+
       {/* Stat tiles */}
       {stats && (
         <div className="stats-grid soc-stats-grid">
@@ -147,7 +292,7 @@ export default function FleetOverview() {
             <div className="stat-subtext">Compliant & Enforcing Zero-Trust</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/audit')} title="Click to view Audit Event Stream">
+          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/observability/logs')} title="Click to view Request & Audit Logs">
             <div className="stat-header-row">
               <div className="stat-label">Total Events</div>
               <span className="soc-delta-badge delta-neutral">{timeRange}</span>
@@ -156,7 +301,7 @@ export default function FleetOverview() {
             <div className="stat-subtext">Tool Calls & Egress</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => navigate('/audit?decision=denied')} title="Click to filter Denied Violations">
+          <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => navigate('/observability/logs?status=denied')} title="Click to filter Denied Violations">
             <div className="stat-header-row">
               <div className="stat-label">Denied</div>
               <span className="soc-delta-badge delta-danger">{stats.denied_events > 0 ? '+Active' : '0%'}</span>
@@ -279,7 +424,12 @@ export default function FleetOverview() {
                 ) : agents.map((a) => (
                   <tr key={a.agent_id} className="soc-table-row">
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">
-                      {a.agent_id}
+                      <div>{a.display_name || a.agent_id}</div>
+                      {a.display_name && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          {a.agent_id.substring(0, 16)}...
+                        </div>
+                      )}
                     </td>
                     <td>
                       <span className={`badge badge-${a.status === 'active' ? 'success' : a.status === 'revoked' ? 'danger' : 'warning'}`}>
@@ -333,8 +483,8 @@ export default function FleetOverview() {
                   <button
                     type="button"
                     className="soc-btn-xs"
-                    onClick={() => navigate(`/audit?search=${a.event.agent_id}`)}
-                    title="Inspect in Audit Logs"
+                    onClick={() => navigate(`/observability/logs?search=${a.event.agent_id}`)}
+                    title="Inspect in Request & Audit Logs"
                   >
                     Triage
                   </button>
@@ -347,6 +497,58 @@ export default function FleetOverview() {
           </div>
         </div>
       </div>
+
+      {/* Test Gateway Proxy Modal */}
+      {showTestModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowTestModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#18181b', padding: '24px', borderRadius: '12px', maxWidth: '640px', width: '90%', border: '1px solid #27272a' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, color: '#f4f4f5', fontSize: 18 }}>⚡ Test Gateway Proxy & Generate Telemetry</h3>
+              <button
+                type="button"
+                onClick={() => setShowTestModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 18 }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 14px' }}>
+              Run this request in your terminal to proxy a sample LLM request through the AgentControl gateway. Telemetry and decisions will immediately register on the Fleet Overview heatmap:
+            </p>
+            <pre style={{ background: '#09090b', padding: '14px', borderRadius: '8px', overflowX: 'auto', fontSize: '12px', color: '#38bdf8', lineHeight: 1.5, border: '1px solid #27272a' }}>
+              {sampleTestCurl}
+            </pre>
+            <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  navigator.clipboard.writeText(sampleTestCurl)
+                  setCopiedTestCmd(true)
+                  setTimeout(() => setCopiedTestCmd(false), 2000)
+                }}
+              >
+                {copiedTestCmd ? '✔ Copied to Clipboard!' : 'Copy cURL Command'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowTestModal(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

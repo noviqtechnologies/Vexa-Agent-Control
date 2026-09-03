@@ -7,7 +7,7 @@
 use bytes::Bytes;
 use futures_util::StreamExt;
 use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Full, StreamBody};
+use http_body_util::{BodyExt, StreamBody};
 use hyper::body::{Frame, Incoming};
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
@@ -23,9 +23,9 @@ use crate::proxy::llm_proxy::make_error_response;
 
 type BoxedBody = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Helper to convert Full<Bytes> to BoxedBody
-fn full_to_boxed_body(body: Full<Bytes>) -> BoxedBody {
-    body.map_err(|e: std::convert::Infallible| -> Box<dyn std::error::Error + Send + Sync> { match e {} })
+/// Helper to convert crate::proxy::server::BoxBody to BoxedBody
+fn box_body_to_boxed_body(body: crate::proxy::server::BoxBody) -> BoxedBody {
+    body.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
         .boxed()
 }
 
@@ -126,7 +126,7 @@ impl MitmEngine {
                             false,
                             &sid,
                         );
-                        Ok::<_, hyper::Error>(err_resp.map(full_to_boxed_body))
+                        Ok::<_, hyper::Error>(err_resp.map(box_body_to_boxed_body))
                     }
                 }
             }
@@ -260,7 +260,7 @@ async fn handle_mitm_http_request(
                 };
                 let _ = state.db_manager.insert(event).await;
 
-                return Ok(err_res.map(full_to_boxed_body));
+                return Ok(err_res.map(box_body_to_boxed_body));
             }
         }
     }
@@ -342,7 +342,7 @@ async fn handle_mitm_http_request(
                 };
                 let _ = state.db_manager.insert(event).await;
 
-                return Ok(err_res.map(full_to_boxed_body));
+                return Ok(err_res.map(box_body_to_boxed_body));
             }
         }
     } else {
@@ -450,7 +450,7 @@ async fn handle_mitm_http_request(
                         false,
                         &session_id_str,
                     );
-                    return Ok(err_res.map(full_to_boxed_body));
+                    return Ok(err_res.map(box_body_to_boxed_body));
                 }
             }
         }
@@ -508,7 +508,7 @@ async fn handle_mitm_http_request(
                 false,
                 &session_id_str,
             );
-            return Ok(err_res.map(full_to_boxed_body));
+            return Ok(err_res.map(box_body_to_boxed_body));
         }
     }
 
@@ -532,7 +532,7 @@ async fn handle_mitm_http_request(
                 false,
                 &session_id_str,
             );
-            return Ok(err_res.map(full_to_boxed_body));
+            return Ok(err_res.map(box_body_to_boxed_body));
         }
     };
 

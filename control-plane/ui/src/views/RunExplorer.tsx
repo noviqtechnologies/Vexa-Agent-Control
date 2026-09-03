@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, type RunSummary, type RunDossier } from '../api/client'
 import RunDossierDrawer from './RunDossierDrawer'
+import SessionTraceDrawer from '../components/observability/SessionTraceDrawer'
+import VirtualKeyQuickView from '../components/observability/VirtualKeyQuickView'
 import './RunExplorer.css'
 
 function microcentsToUSD(microcents: number): number {
@@ -17,6 +19,29 @@ export default function RunExplorer() {
   const [dataFreshness, setDataFreshness] = useState<string>('')
   const [confidence, setConfidence] = useState<string>('observed')
 
+  // Live Tail SSE State
+  const [liveTail, setLiveTail] = useState<boolean>(() => {
+    return sessionStorage.getItem('vexa_run_live_tail') === 'true'
+  })
+
+  // Popover / Drawer States
+  const [activeTraceSessionId, setActiveTraceSessionId] = useState<string | null>(null)
+  const [activeKeyModal, setActiveKeyModal] = useState<string | null>(null)
+
+  // Column visibility state
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState({
+    session: true,
+    key: true,
+    tokens: true,
+    ttft: false,
+    status: true,
+  })
+
+  // Sorting state
+  const [sortField, setSortField] = useState<'started' | 'duration' | 'settled' | 'tokens' | 'ttft'>('started')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
   // Filter state
   const [hours, setHours] = useState<number>(24)
   const [provider, setProvider] = useState<string>('')
@@ -24,6 +49,10 @@ export default function RunExplorer() {
   const [model, setModel] = useState<string>('')
 
   const urlRunID = searchParams.get('run_id')
+
+  useEffect(() => {
+    sessionStorage.setItem('vexa_run_live_tail', String(liveTail))
+  }, [liveTail])
 
   useEffect(() => {
     loadRuns()
@@ -36,6 +65,30 @@ export default function RunExplorer() {
       setSelectedDossier(null)
     }
   }, [urlRunID])
+
+  // Live Tail SSE Stream
+  useEffect(() => {
+    if (!liveTail) return
+    const es = new EventSource('/api/v1/observability/request-logs/stream')
+    es.addEventListener('logs', (e) => {
+      try {
+        const newRuns = JSON.parse(e.data) as RunSummary[]
+        if (Array.isArray(newRuns) && newRuns.length > 0) {
+          setRuns((prev) => {
+            const existingIds = new Set(prev.map((r) => r.run_id))
+            const unique = newRuns.filter((r) => !existingIds.has(r.run_id))
+            return [...unique, ...prev].slice(0, 150)
+          })
+          setDataFreshness(new Date().toISOString())
+        }
+      } catch (err) {
+        console.error('Error parsing live tail stream:', err)
+      }
+    })
+    return () => {
+      es.close()
+    }
+  }, [liveTail])
 
   const loadRuns = async () => {
     setLoading(true)
@@ -73,12 +126,129 @@ export default function RunExplorer() {
     setSearchParams({})
   }
 
+  const handleSort = (field: 'started' | 'duration' | 'settled' | 'tokens' | 'ttft') => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortOrder('desc')
+    }
+  }
+
+  // Sorted list
+  const sortedRuns = useMemo(() => {
+    return [...runs].sort((a, b) => {
+      let diff = 0
+      if (sortField === 'started') {
+        diff = new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+      } else if (sortField === 'duration') {
+        diff = (a.duration_ms || 0) - (b.duration_ms || 0)
+      } else if (sortField === 'settled') {
+        diff = (a.settled_microcents || 0) - (b.settled_microcents || 0)
+      } else if (sortField === 'tokens') {
+        diff = (a.total_tokens || 0) - (b.total_tokens || 0)
+      } else if (sortField === 'ttft') {
+        diff = (a.ttft_ms || 0) - (b.ttft_ms || 0)
+      }
+      return sortOrder === 'asc' ? diff : -diff
+    })
+  }, [runs, sortField, sortOrder])
+
   return (
     <div className="run-explorer-page">
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1>Run Explorer & Forensics</h1>
           <p>Trace every LLM request through identity, policy snapshot, spend authorization, and upstream dispatch.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* Live Tail Toggle Button */}
+          <button
+            type="button"
+            className={`soc-btn-secondary ${liveTail ? 'active' : ''}`}
+            onClick={() => setLiveTail(!liveTail)}
+            style={{
+              borderColor: liveTail ? '#10b981' : 'var(--border)',
+              color: liveTail ? '#10b981' : 'var(--text-bright)',
+              background: liveTail ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            {liveTail ? '● LIVE TAIL (ON)' : '○ Live Tail'}
+          </button>
+
+          {/* Columns Dropdown Toggle */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="soc-btn-secondary"
+              onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
+              style={{ fontSize: 13 }}
+            >
+              Columns ▾
+            </button>
+            {columnsMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '110%',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  padding: 10,
+                  minWidth: 160,
+                  zIndex: 100,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.session}
+                    onChange={(e) => setVisibleColumns({ ...visibleColumns, session: e.target.checked })}
+                  />
+                  Session ID
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.key}
+                    onChange={(e) => setVisibleColumns({ ...visibleColumns, key: e.target.checked })}
+                  />
+                  Virtual Key
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.tokens}
+                    onChange={(e) => setVisibleColumns({ ...visibleColumns, tokens: e.target.checked })}
+                  />
+                  Tokens & Cache
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.ttft}
+                    onChange={(e) => setVisibleColumns({ ...visibleColumns, ttft: e.target.checked })}
+                  />
+                  TTFT
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.status}
+                    onChange={(e) => setVisibleColumns({ ...visibleColumns, status: e.target.checked })}
+                  />
+                  Status Code
+                </label>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -140,7 +310,7 @@ export default function RunExplorer() {
 
       {/* Runs Table */}
       <div className="runs-table-card card">
-        {loading ? (
+        {loading && runs.length === 0 ? (
           <div className="loading" style={{ height: 200 }}>Loading run telemetry...</div>
         ) : runs.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -153,17 +323,36 @@ export default function RunExplorer() {
               <thead>
                 <tr>
                   <th>Run ID</th>
-                  <th>Started</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('started')}>
+                    Started {sortField === 'started' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
                   <th>Device / Origin</th>
                   <th>Provider & Model</th>
                   <th>State</th>
+                  {visibleColumns.status && <th>Status</th>}
+                  {visibleColumns.session && <th>Session Context</th>}
+                  {visibleColumns.key && <th>Virtual Key</th>}
                   <th>Reserved</th>
-                  <th>Settled</th>
-                  <th>Duration</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('settled')}>
+                    Settled {sortField === 'settled' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
+                  {visibleColumns.tokens && (
+                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('tokens')}>
+                      Tokens {sortField === 'tokens' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                  )}
+                  {visibleColumns.ttft && (
+                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('ttft')}>
+                      TTFT {sortField === 'ttft' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                  )}
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('duration')}>
+                    Duration {sortField === 'duration' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r) => {
+                {sortedRuns.map((r) => {
                   const stateClass = `state-${r.state.toLowerCase()}`
                   return (
                     <tr
@@ -189,12 +378,66 @@ export default function RunExplorer() {
                           {r.state}
                         </span>
                       </td>
+                      {visibleColumns.status && (
+                        <td>
+                          <span className={`badge ${r.status_code === 200 ? 'green' : (r.status_code && r.status_code >= 400) ? 'red' : 'blue'}`}>
+                            {r.status_code || 200}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.session && (
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {r.session_id ? (
+                            <button
+                              type="button"
+                              className="soc-btn-secondary"
+                              style={{ fontSize: 11, padding: '2px 6px', borderColor: '#a78bfa', color: '#c4b5fd' }}
+                              onClick={() => setActiveTraceSessionId(r.session_id || null)}
+                              title="Click to open session multi-turn trajectory"
+                            >
+                              🧭 {r.session_id.slice(0, 8)}...
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                      )}
+                      {visibleColumns.key && (
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {r.virtual_key_prefix ? (
+                            <button
+                              type="button"
+                              className="obs-key-pill"
+                              style={{ border: 'none', cursor: 'pointer' }}
+                              onClick={() => setActiveKeyModal(r.virtual_key_prefix || null)}
+                              title="Click to preview key budget & scope"
+                            >
+                              {r.virtual_key_prefix}
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                      )}
                       <td style={{ color: '#38bdf8', fontSize: 13 }}>
                         ${microcentsToUSD(r.reserved_microcents).toFixed(4)}
                       </td>
                       <td style={{ color: '#10b981', fontWeight: 600, fontSize: 13 }}>
                         ${microcentsToUSD(r.settled_microcents).toFixed(4)}
                       </td>
+                      {visibleColumns.tokens && (
+                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          <span>{r.input_tokens || 0} / {r.output_tokens || 0}</span>
+                          {Boolean(r.cached_tokens) && (
+                            <span style={{ color: '#38bdf8', marginLeft: 4 }} title="Cached Tokens">⚡{r.cached_tokens}</span>
+                          )}
+                        </td>
+                      )}
+                      {visibleColumns.ttft && (
+                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {r.ttft_ms ? `${r.ttft_ms} ms` : '—'}
+                        </td>
+                      )}
                       <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                         {r.duration_ms || 0} ms
                       </td>
@@ -218,6 +461,26 @@ export default function RunExplorer() {
         <RunDossierDrawer
           dossier={selectedDossier}
           onClose={closeDossier}
+        />
+      )}
+
+      {/* Session Trajectory Drawer */}
+      {activeTraceSessionId && (
+        <SessionTraceDrawer
+          sessionId={activeTraceSessionId}
+          onClose={() => setActiveTraceSessionId(null)}
+          onOpenRunDossier={(runId) => {
+            setActiveTraceSessionId(null)
+            openDossier(runId)
+          }}
+        />
+      )}
+
+      {/* Virtual Key Quick View */}
+      {activeKeyModal && (
+        <VirtualKeyQuickView
+          keyPrefixOrId={activeKeyModal}
+          onClose={() => setActiveKeyModal(null)}
         />
       )}
     </div>

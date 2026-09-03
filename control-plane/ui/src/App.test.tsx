@@ -47,6 +47,7 @@ describe('App routing', () => {
   it('renders accordion navigation items', async () => {
     renderAt('/')
     expect(await screen.findByText('Fleet Overview')).toBeInTheDocument()
+    expect(screen.getByText('Device & Fleet Governance')).toBeInTheDocument()
     expect(screen.getByText('Team & Organization')).toBeInTheDocument()
     expect(screen.getByText('Policies & Security')).toBeInTheDocument()
     expect(screen.getByText('Spend & Budgets')).toBeInTheDocument()

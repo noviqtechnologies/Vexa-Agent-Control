@@ -716,7 +716,7 @@ export default function Devices() {
                       type="text"
                       value={deviceLabel}
                       onChange={(e) => setDeviceLabel(e.target.value)}
-                      placeholder="e.g. dev-laptop-wasim"
+                      placeholder="e.g. dev-laptop-alex"
                       className="input"
                       style={{ width: '100%', padding: '8px 12px' }}
                     />

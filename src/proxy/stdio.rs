@@ -246,7 +246,7 @@ fn extract_decision_evidence(
 /// 1. Explicit JWT / SSO subject (identity_sub)
 /// 2. Explicit AGENT_ID environment variable
 /// 3. Sentry Device Enrollment token / ID (if present)
-/// 4. Auto-detected IDE / agent + user + host (e.g. "cursor@wasim-thinkpad", "claude-desktop@macbook")
+/// 4. Auto-detected IDE / agent + user + host (e.g. "cursor@workstation-01", "claude-desktop@macbook")
 /// 5. Fallback: "agent-<user>@<host>" or "workstation-agent"
 fn resolve_workstation_agent_id(session: &crate::proxy::session::SessionContext) -> String {
     if let Some(sub) = session.identity_sub.as_deref() {

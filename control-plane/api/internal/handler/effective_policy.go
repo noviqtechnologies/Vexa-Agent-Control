@@ -5,21 +5,28 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 )
 
 // EffectivePolicyHandler resolves the synthesized effective policy across all 5 layers.
 type EffectivePolicyHandler struct {
-	spendStore *spend.Store
-	store      DataStore
+	spendStore  *spend.Store
+	store       DataStore
+	deviceStore *device.Store
 }
 
 // NewEffectivePolicyHandler creates a new EffectivePolicyHandler.
-func NewEffectivePolicyHandler(ss *spend.Store, ds DataStore) *EffectivePolicyHandler {
+func NewEffectivePolicyHandler(ss *spend.Store, ds DataStore, devStores ...*device.Store) *EffectivePolicyHandler {
+	var devStore *device.Store
+	if len(devStores) > 0 {
+		devStore = devStores[0]
+	}
 	return &EffectivePolicyHandler{
-		spendStore: ss,
-		store:      ds,
+		spendStore:  ss,
+		store:       ds,
+		deviceStore: devStore,
 	}
 }
 
@@ -169,14 +176,27 @@ func (h *EffectivePolicyHandler) GetEffective(w http.ResponseWriter, r *http.Req
 
 	// 5. Device Level
 	if deviceID != "" {
+		confidence := "unobserved"
+		complianceStatus := "UNREGISTERED"
+		deviceState := "UNKNOWN"
+
+		if h.deviceStore != nil {
+			dev, devErr := h.deviceStore.GetDevice(r.Context(), tenantID, deviceID)
+			if devErr == nil && dev != nil {
+				confidence = "observed"
+				complianceStatus = dev.OverallCompliance
+				deviceState = dev.EnrollmentStatus
+			}
+		}
+
 		ladder = append(ladder, PolicyLadderLevel{
 			Level:      "device",
 			Source:     "device_governance",
-			Confidence: "observed",
+			Confidence: confidence,
 			State: map[string]interface{}{
 				"device_id":         deviceID,
-				"compliance_status": "COMPLIANT",
-				"state":             "RUNNING",
+				"compliance_status": complianceStatus,
+				"state":             deviceState,
 			},
 		})
 	} else {
