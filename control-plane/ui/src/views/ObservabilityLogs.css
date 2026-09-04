@@ -1,10 +1,7 @@
-/* Observability Logs — LiteLLM-Grade Design System */
+/* Observability Logs — SOC Design System */
 
 .obs-logs-page {
-  padding: 24px 32px;
-  max-width: 1600px;
-  margin: 0 auto;
-  min-height: calc(100vh - 70px);
+  width: 100%;
 }
 
 .obs-page-header {
@@ -15,16 +12,16 @@
 }
 
 .obs-header-left h1 {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
-  color: var(--text-primary, #f8fafc);
-  margin: 0 0 4px 0;
+  color: #f8fafc;
+  margin: 0 0 6px 0;
   letter-spacing: -0.02em;
 }
 
 .obs-header-left p {
-  font-size: 13px;
-  color: var(--text-secondary, #94a3b8);
+  font-size: 13.5px;
+  color: var(--text-muted);
   margin: 0;
 }
 

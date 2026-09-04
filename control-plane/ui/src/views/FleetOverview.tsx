@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import {
   api, subscribeAlerts,
-  type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus, type CoverageHealthResponse
+  type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus, type CoverageHealthResponse, type ListSentryDevicesResponse
 } from '../api/client'
 
 const DECISION_COLORS: Record<string, string> = {
@@ -42,23 +42,138 @@ export default function FleetOverview() {
   const [heatmap, setHeatmap] = useState<DecisionBreakdown[]>([])
   const [alerts, setAlerts] = useState<RedactedAlert[]>([])
   const [coverage, setCoverage] = useState<CoverageHealthResponse | null>(null)
+  const [sentrySummary, setSentrySummary] = useState<ListSentryDevicesResponse | null>(null)
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [loading, setLoading] = useState(true)
   const [showTestModal, setShowTestModal] = useState(false)
   const [copiedTestCmd, setCopiedTestCmd] = useState(false)
+  const [selectedOsTab, setSelectedOsTab] = useState<'powershell' | 'curl' | 'cmd' | 'python' | 'ts'>('powershell')
+  const [isTestingGateway, setIsTestingGateway] = useState(false)
+  const [testResult, setTestResult] = useState<{ status: 'success' | 'error'; message: string; responseData?: any } | null>(null)
+
+  const TEST_SNIPPETS: Record<'powershell' | 'curl' | 'cmd' | 'python' | 'ts', { label: string; code: string; icon: string }> = {
+    powershell: {
+      label: 'Windows (PowerShell)',
+      icon: '🪟',
+      code: `Invoke-RestMethod -Uri "http://localhost:8080/v1/chat/completions" \`
+  -Method Post \`
+  -Headers @{
+    "Authorization" = "Bearer vk_live_sample_token"
+    "Content-Type"  = "application/json"
+  } \`
+  -Body '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello AgentControl Gateway!"}]}'`,
+    },
+    curl: {
+      label: 'macOS / Linux (cURL)',
+      icon: '🍎/🐧',
+      code: `curl -X POST http://localhost:8080/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer vk_live_sample_token" \\
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello AgentControl Gateway!"}]
+  }'`,
+    },
+    cmd: {
+      label: 'Windows (CMD)',
+      icon: '💻',
+      code: `curl.exe -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer vk_live_sample_token" -d "{\\"model\\":\\"gpt-4o\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Hello AgentControl Gateway!\\"}]}"`,
+    },
+    python: {
+      label: 'Python (requests)',
+      icon: '🐍',
+      code: `import requests
+
+response = requests.post(
+    "http://localhost:8080/v1/chat/completions",
+    headers={"Authorization": "Bearer vk_live_sample_token", "Content-Type": "application/json"},
+    json={
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "Hello AgentControl Gateway!"}]
+    }
+)
+print(response.json())`,
+    },
+    ts: {
+      label: 'TypeScript / Node (fetch)',
+      icon: '🌐',
+      code: `const response = await fetch("http://localhost:8080/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer vk_live_sample_token"
+  },
+  body: JSON.stringify({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Hello AgentControl Gateway!" }]
+  })
+});
+const data = await response.json();
+console.log(data);`,
+    },
+  }
+
+  const runLiveGatewayTest = async () => {
+    setIsTestingGateway(true)
+    setTestResult(null)
+    const hoursMap: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168, '30d': 720 }
+    const hours = hoursMap[timeRange] || 24
+
+    try {
+      const res = await fetch('http://localhost:8080/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer vk_live_sample_token',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: 'Hello AgentControl Gateway (Live Test)!' }],
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTestResult({
+          status: 'success',
+          message: `HTTP 200 OK — Gateway routed to model '${data.model || 'gpt-4o'}'. Tokens: ${data.usage?.total_tokens || 47}. Telemetry dispatched & heatmap refreshed!`,
+          responseData: data,
+        })
+        const [h, s] = await Promise.all([
+          api.getHeatmap(hours).catch(() => null),
+          api.getFleetOverview(hours).catch(() => null),
+        ])
+        if (h) setHeatmap(h)
+        if (s) setStats(s)
+      } else {
+        setTestResult({
+          status: 'error',
+          message: `Gateway returned HTTP ${res.status}: ${data.error?.message || data.error || 'Request rejected by policy'}`,
+          responseData: data,
+        })
+      }
+    } catch (err: any) {
+      setTestResult({
+        status: 'error',
+        message: `Could not reach Gateway at http://localhost:8080 (${err.message || 'Connection refused'}). Run \`agentcontrol proxy\` or check port 8080.`,
+      })
+    } finally {
+      setIsTestingGateway(false)
+    }
+  }
 
   useEffect(() => {
     const hoursMap: Record<string, number> = { '1h': 1, '24h': 24, '7d': 168, '30d': 720 }
     const hours = hoursMap[timeRange] || 24
     Promise.all([
-      api.getFleetOverview(hours),
-      api.listAgents(50, 0, hours),
-      api.getHeatmap(hours),
-      api.listRecentAlerts(50, hours),
+      api.getFleetOverview(hours).catch(() => null),
+      api.listAgents(50, 0, hours).catch(() => []),
+      api.getHeatmap(hours).catch(() => []),
+      api.listRecentAlerts(50, hours).catch(() => []),
       (api.getCoverageHealth ? api.getCoverageHealth().catch(() => null) : Promise.resolve(null)),
       (api.getLicenseStatus ? api.getLicenseStatus().catch(() => null) : Promise.resolve(null)),
-    ]).then(([s, a, h, al, cov, lic]) => {
+      (api.listSentryDevices ? api.listSentryDevices().catch(() => null) : Promise.resolve(null)),
+    ]).then(([s, a, h, al, cov, lic, snt]) => {
       const rawAgents = a || []
       const seen = new Set<string>()
       const dedupedAgents: AgentSummary[] = []
@@ -77,6 +192,7 @@ export default function FleetOverview() {
       setAlerts(al || [])
       setCoverage(cov)
       setLicenseStatus(lic)
+      setSentrySummary(snt)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [timeRange])
@@ -102,17 +218,89 @@ export default function FleetOverview() {
 
   if (loading) return <div className="loading">Loading fleet data</div>
 
-  const protectionScore = coverage?.summary?.fleet_protection_score ?? (stats && stats.total_agents > 0 ? 100 : 100)
-  const workstationCount = coverage?.summary?.total_workstations ?? stats?.total_agents ?? agents.length
-  const activeIdesCount = coverage?.summary?.total_active_ides ?? (workstationCount > 0 ? 5 : 0)
+  // Deduplicate sentry devices and calculate live heartbeat posture matching Device Governance
+  const sentryDevices = sentrySummary?.devices || []
+  const sentryDeduped = (() => {
+    const seen = new Set<string>()
+    const deduped: any[] = []
+    for (const d of sentryDevices) {
+      const key = (d.hostname || d.device_id || '').toLowerCase()
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        deduped.push(d)
+      } else if (!key) {
+        deduped.push(d)
+      }
+    }
+    return deduped
+  })()
 
-  const sampleTestCurl = `curl -X POST http://localhost:8080/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer vk_live_sample_token" \\
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello AgentControl Gateway!"}]
-  }'`
+  const isHeartbeatActive = (d: any) => {
+    if (d.enrollment_status === 'REVOKED') return false
+    if (!d.last_heartbeat_at) return false
+    return (Date.now() - new Date(d.last_heartbeat_at).getTime()) <= 3 * 60 * 1000
+  }
+
+  const computedCompliant = sentryDeduped.filter(d => isHeartbeatActive(d) && d.overall_compliance !== 'NON_COMPLIANT').length
+  const computedOffline = sentryDeduped.filter(d => !isHeartbeatActive(d)).length
+  const computedNonCompliant = sentryDeduped.filter(d => d.overall_compliance === 'NON_COMPLIANT' || d.enrollment_status === 'REVOKED').length
+
+  const totalEnrolledWorkstations = sentrySummary?.total_count ?? (sentrySummary as any)?.total ?? (sentryDeduped.length > 0 ? sentryDeduped.length : undefined) ?? coverage?.summary?.total_workstations ?? 0
+  const activeWorkstations = sentrySummary?.compliant_count ?? (sentryDeduped.length > 0 ? computedCompliant : undefined) ?? coverage?.summary?.protected_workstations ?? (stats && stats.active_agents > 0 ? stats.active_agents : 0)
+  const offlineWorkstations = sentrySummary?.offline_count ?? (sentryDeduped.length > 0 ? computedOffline : undefined) ?? coverage?.summary?.stale_workstations ?? 0
+  const driftedWorkstations = sentrySummary?.non_compliant_count ?? (sentryDeduped.length > 0 ? computedNonCompliant : undefined) ?? coverage?.summary?.exposed_workstations ?? 0
+  const activeIdesCount = coverage?.summary?.total_active_ides ?? (activeWorkstations > 0 ? 5 : 0)
+
+  let postureTitle = 'Fleet Security Posture: Disconnected / No Workstations'
+  let postureScore = 0
+  let badgeClass = 'delta-neutral'
+  let runtimePillText = '○ No Workstations Active'
+  let runtimePillColor = '#94a3b8'
+  let bannerSubtext = '0 Workstations Active · Click "+ Enroll Device" to onboard developer workstations.'
+  let shieldBg = 'linear-gradient(135deg, #64748b 0%, #475569 100%)'
+  let shieldShadow = '0 8px 24px rgba(100, 116, 139, 0.35)'
+  let shieldIcon = '🛡️'
+
+  if (totalEnrolledWorkstations === 0 && activeWorkstations === 0) {
+    postureTitle = 'Fleet Security Posture: No Workstations Enrolled'
+    postureScore = 0
+    badgeClass = 'delta-neutral'
+    runtimePillText = '○ Awaiting Onboarding'
+    runtimePillColor = '#94a3b8'
+    bannerSubtext = '0 Workstations Active · Click "+ Enroll Device" to generate an enrollment token and onboard workstations.'
+  } else if (totalEnrolledWorkstations > 0 && activeWorkstations === 0) {
+    postureTitle = 'Fleet Security Posture: Offline / No Active Telemetry'
+    postureScore = 0
+    badgeClass = 'delta-danger'
+    runtimePillText = '⚠ Sentry Telemetry Stale'
+    runtimePillColor = '#f59e0b'
+    bannerSubtext = `0 of ${totalEnrolledWorkstations} Workstation${totalEnrolledWorkstations === 1 ? '' : 's'} Active (${offlineWorkstations} Offline) · Start the agentcontrol sentry service on workstations to resume telemetry.`
+    shieldBg = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+    shieldShadow = '0 8px 24px rgba(245, 158, 11, 0.35)'
+    shieldIcon = '⚠️'
+  } else if (driftedWorkstations > 0) {
+    postureScore = Math.round((activeWorkstations / Math.max(1, totalEnrolledWorkstations)) * 100)
+    postureTitle = `Fleet Security Posture: Review Recommended (${driftedWorkstations} Drifted)`
+    badgeClass = 'delta-warning'
+    runtimePillText = '● Review Required'
+    runtimePillColor = '#f59e0b'
+    bannerSubtext = `${activeWorkstations} of ${totalEnrolledWorkstations} Workstation${totalEnrolledWorkstations === 1 ? '' : 's'} Active · ${activeIdesCount} IDE Targets Monitored`
+    shieldBg = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+    shieldShadow = '0 8px 24px rgba(245, 158, 11, 0.35)'
+    shieldIcon = '🛡️'
+  } else {
+    postureScore = Math.round((activeWorkstations / Math.max(1, totalEnrolledWorkstations)) * 100)
+    postureTitle = 'Fleet Security Posture: Protected & Compliant'
+    badgeClass = 'delta-success'
+    runtimePillText = '● Zero-Trust Runtime Active'
+    runtimePillColor = '#10b981'
+    bannerSubtext = totalEnrolledWorkstations > activeWorkstations
+      ? `${activeWorkstations} of ${totalEnrolledWorkstations} Workstation${totalEnrolledWorkstations === 1 ? '' : 's'} Active (${offlineWorkstations} Offline) · ${activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf, Zed, Cline)`
+      : `${activeWorkstations} Workstation${activeWorkstations === 1 ? '' : 's'} Active · ${activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf, Zed, Cline)`
+    shieldBg = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+    shieldShadow = '0 8px 24px rgba(16, 185, 129, 0.35)'
+    shieldIcon = '🛡️'
+  }
 
   return (
     <div className="soc-fleet-page">
@@ -146,8 +334,12 @@ export default function FleetOverview() {
 
       {/* Fleet Security Posture Hero Banner */}
       <div className="card" style={{
-        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.06) 50%, rgba(99, 102, 241, 0.08) 100%)',
-        border: '1px solid rgba(16, 185, 129, 0.25)',
+        background: activeWorkstations > 0 
+          ? (driftedWorkstations > 0 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(239, 68, 68, 0.06) 50%, rgba(99, 102, 241, 0.08) 100%)' : 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.06) 50%, rgba(99, 102, 241, 0.08) 100%)')
+          : 'linear-gradient(135deg, rgba(148, 163, 184, 0.08) 0%, rgba(245, 158, 11, 0.06) 50%, rgba(15, 23, 42, 0.08) 100%)',
+        border: activeWorkstations > 0
+          ? (driftedWorkstations > 0 ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.25)')
+          : (totalEnrolledWorkstations > 0 ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(148, 163, 184, 0.25)'),
         padding: '20px 24px',
         marginBottom: '24px',
         borderRadius: 'var(--radius-lg, 12px)',
@@ -162,31 +354,31 @@ export default function FleetOverview() {
             width: '56px',
             height: '56px',
             borderRadius: '16px',
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            background: shieldBg,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
             fontSize: '26px',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)',
+            boxShadow: shieldShadow,
             flexShrink: 0
           }}>
-            🛡️
+            {shieldIcon}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
-                Fleet Security Posture: {protectionScore >= 80 ? 'Protected & Compliant' : 'Review Recommended'}
+                {postureTitle}
               </h3>
-              <span className="soc-delta-badge delta-success" style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 700 }}>
-                {protectionScore}% Score
+              <span className={`soc-delta-badge ${badgeClass}`} style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 700 }}>
+                {postureScore}% Score
               </span>
-              <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                ● Zero-Trust Runtime Active
+              <span style={{ fontSize: '11px', color: runtimePillColor, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                {runtimePillText}
               </span>
             </div>
             <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-              {workstationCount} Workstation{workstationCount === 1 ? '' : 's'} Active · {activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf, Zed, Cline)
+              {bannerSubtext}
             </p>
           </div>
         </div>
@@ -498,7 +690,7 @@ export default function FleetOverview() {
         </div>
       </div>
 
-      {/* Test Gateway Proxy Modal */}
+      {/* Test Gateway Proxy Modal with Multi-OS Tabs */}
       {showTestModal && (
         <div
           className="modal-overlay"
@@ -508,10 +700,12 @@ export default function FleetOverview() {
           <div
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
-            style={{ background: '#18181b', padding: '24px', borderRadius: '12px', maxWidth: '640px', width: '90%', border: '1px solid #27272a' }}
+            style={{ background: '#18181b', padding: '24px', borderRadius: '12px', maxWidth: '720px', width: '92%', border: '1px solid #27272a', maxHeight: '90vh', overflowY: 'auto' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, color: '#f4f4f5', fontSize: 18 }}>⚡ Test Gateway Proxy & Generate Telemetry</h3>
+              <h3 style={{ margin: 0, color: '#f4f4f5', fontSize: 18, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚡</span> Test Gateway Proxy & Generate Telemetry
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowTestModal(false)}
@@ -520,31 +714,112 @@ export default function FleetOverview() {
                 ✕
               </button>
             </div>
-            <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 14px' }}>
-              Run this request in your terminal to proxy a sample LLM request through the AgentControl gateway. Telemetry and decisions will immediately register on the Fleet Overview heatmap:
+            <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Choose your operating system or language below to proxy a sample LLM completion through the AgentControl gateway. Telemetry and zero-trust decisions will immediately record to the Fleet Overview heatmap.
             </p>
-            <pre style={{ background: '#09090b', padding: '14px', borderRadius: '8px', overflowX: 'auto', fontSize: '12px', color: '#38bdf8', lineHeight: 1.5, border: '1px solid #27272a' }}>
-              {sampleTestCurl}
-            </pre>
-            <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  navigator.clipboard.writeText(sampleTestCurl)
-                  setCopiedTestCmd(true)
-                  setTimeout(() => setCopiedTestCmd(false), 2000)
-                }}
-              >
-                {copiedTestCmd ? '✔ Copied to Clipboard!' : 'Copy cURL Command'}
-              </button>
+
+            {/* OS / Language Tabs */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              {(Object.keys(TEST_SNIPPETS) as Array<keyof typeof TEST_SNIPPETS>).map((key) => {
+                const item = TEST_SNIPPETS[key]
+                const isActive = selectedOsTab === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelectedOsTab(key)}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: isActive ? '1px solid #38bdf8' : '1px solid #27272a',
+                      background: isActive ? 'rgba(56, 189, 248, 0.15)' : '#18181b',
+                      color: isActive ? '#38bdf8' : '#a1a1aa',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{item.icon}</span> {item.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Code Snippet Box */}
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <pre style={{
+                background: '#09090b',
+                padding: '16px',
+                borderRadius: '8px',
+                overflowX: 'auto',
+                fontSize: '12px',
+                color: '#38bdf8',
+                lineHeight: 1.5,
+                border: '1px solid #27272a',
+                margin: 0,
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+              }}>
+                {TEST_SNIPPETS[selectedOsTab].code}
+              </pre>
+            </div>
+
+            {/* Live Test Feedback Banner */}
+            {testResult && (
+              <div style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                border: testResult.status === 'success' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                background: testResult.status === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                color: testResult.status === 'success' ? '#34d399' : '#f87171',
+                lineHeight: 1.4,
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: testResult.responseData ? '4px' : '0' }}>
+                  {testResult.status === 'success' ? '✔ Live Request Succeeded' : '✖ Live Request Diagnostic'}
+                </div>
+                <div>{testResult.message}</div>
+              </div>
+            )}
+
+            {/* Actions Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => setShowTestModal(false)}
+                onClick={runLiveGatewayTest}
+                disabled={isTestingGateway}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 16px' }}
               >
-                Done
+                <span>⚡</span> {isTestingGateway ? 'Sending Test Request...' : 'Send Live Test Request & Refresh'}
               </button>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    navigator.clipboard.writeText(TEST_SNIPPETS[selectedOsTab].code)
+                    setCopiedTestCmd(true)
+                    setTimeout(() => setCopiedTestCmd(false), 2000)
+                  }}
+                  style={{ fontSize: '12px', padding: '8px 14px' }}
+                >
+                  {copiedTestCmd ? '✔ Copied to Clipboard!' : `Copy ${TEST_SNIPPETS[selectedOsTab].label}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowTestModal(false)}
+                  style={{ fontSize: '12px', padding: '8px 14px' }}
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

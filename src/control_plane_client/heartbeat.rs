@@ -71,14 +71,23 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                                         .filter(|v| {
                                             v.get("command")
                                                 .and_then(|c| c.as_str())
-                                                .map(|cmd| cmd.to_lowercase().contains("agentwall"))
+                                                .map(|cmd| {
+                                                    let cl = cmd.to_lowercase();
+                                                    cl.contains("agentwall") || cl.contains("agentcontrol")
+                                                })
                                                 .unwrap_or(false)
                                         })
                                         .count();
                                 }
                             }
                         } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                            if let Some(servers) = v.get("mcpServers").and_then(|s| s.as_object()) {
+                            let servers = v.get("mcpServers")
+                                .or_else(|| v.get("mcp_servers"))
+                                .or_else(|| v.get("context_servers"))
+                                .or_else(|| v.get("experimental.context_servers"))
+                                .and_then(|s| s.as_object());
+
+                            if let Some(servers) = servers {
                                 total_servers += servers.len();
                                 wrapped_servers += servers
                                     .values()
@@ -156,10 +165,8 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             uptime_seconds,
         };
 
-        let base_url = std::env::var("AGENTCONTROL_HUB_URL")
-            .or_else(|_| std::env::var("AGENTWALL_HUB_URL"))
-            .or_else(|_| std::env::var("DASHBOARD_API_URL"))
-            .unwrap_or_else(|_| "https://console.vexasec.io".to_string());
+        let base_url = crate::identity::device::load_hub_url()
+            .unwrap_or_else(|| "https://console.vexasec.io".to_string());
 
         let heartbeat_url = format!("{}/api/v1/ingest/heartbeat", base_url.trim_end_matches('/'));
 

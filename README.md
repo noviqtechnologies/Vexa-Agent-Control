@@ -35,6 +35,7 @@
   - [3. Fail-Closed Spend Governance & Policy Enforcement](#3-fail-closed-spend-governance--policy-enforcement)
   - [4. Forensic Dossiers & Run Explorer](#4-forensic-dossiers--run-explorer)
   - [5. Multi-Cloud OpenTofu Deployments](#5-multi-cloud-opentofu-deployments)
+  - [6. Pluggable Routing Engine & Pipeline Hooks](#6-pluggable-routing-engine--pipeline-hooks)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -207,6 +208,25 @@ llm:
       - entity: "CREDIT_CARD"
         action: "deny"
 
+  # Model Groups with Pluggable Routing (AR-2)
+  model_groups:
+    - name: "production-chat"
+      routing_strategy: "lowest_latency" # priority | lowest_latency | weighted_random | region_affinity
+      allowed_regions: ["us-east-1", "eu-central-1"]
+      deployments:
+        - id: "openai-primary"
+          provider: "openai"
+          model_name: "gpt-4o"
+          endpoint_url: "https://api.openai.com/v1"
+          priority: 1
+          weight: 80
+        - id: "azure-failover"
+          provider: "azure"
+          model_name: "gpt-4o"
+          endpoint_url: "https://my-eu.openai.azure.com"
+          priority: 2
+          weight: 20
+
 # Microcent Spend Caps & Concurrency Limits
 spend_caps:
   enabled: true
@@ -296,6 +316,30 @@ terraform apply -var-file="terraform.stage.tfvars"
 - **GCP Cloud Run (v2):** Multi-container revision with Valkey sidecar and Secret Manager integration.
 
 [**Read the Multi-Cloud Infra Hub →**](infra/README.md)
+
+</details>
+
+<details>
+<summary><b>6. Pluggable Routing Engine & Pipeline Hooks</b> — Dynamic Model Groups & Modular Lifecycle Interception</summary>
+
+Tailor request routing and wire-level transformations to meet rigorous latency, cost, and data residency standards.
+
+### Pluggable Upstream Routing Strategies (AR-2)
+Model groups support 4 dynamic selection strategies:
+* **`priority` (Default):** Deterministic failover based on ascending deployment priority with health check circuit breakers.
+* **`lowest_latency`:** Automatically dispatches incoming requests to the deployment exhibiting the lowest rolling exponential moving average (EMA) response latency.
+* **`weighted_random`:** Proportional distribution based on configured traffic weights (e.g. 80% primary, 20% canary).
+* **`region_affinity`:** Strict sovereign data residency compliance. Fails closed immediately (HTTP 503 `routing_policy_violation`) if the target deployment resides in an unapproved jurisdiction.
+
+### Extensible Pipeline Hook Lifecycle (AR-1)
+Intercept and mutate traffic at each processing phase across both raw HTTP and structured MCP tool calls:
+* **`PreRoute` Stage:** Intercept raw HTTP requests, inject custom audit headers, and redact wire payloads.
+* **`PreExecute` Stage:** Inspect structured MCP tool calls (`serde_json::Value`), enforcing in-place parameter redaction (`ModifyJson`) or blocking dangerous actions (`Block`).
+* **`PostExecute` Stage:** Inspect downstream response chunks and streaming SSE token frames (`ModifyBytes`) to prevent data exfiltration.
+
+### High-Throughput Asynchronous Control Plane (AR-3, AR-4, AR-5)
+* **`SpendEventWriter`:** Bounded in-memory event buffer with PostgreSQL batch ingestion (`pgx.Batch`), graceful shutdown draining, and 2-second backpressure shed protection.
+* **Centralized `Scheduler`:** Deterministic background daemon managing periodic database sweeps (e.g. expiring stale reservation holds) with live introspection at `/internal/jobs`.
 
 </details>
 

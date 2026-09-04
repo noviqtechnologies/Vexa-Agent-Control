@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// A concrete upstream deployment for a model capability.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Deployment {
     pub id: String,
     pub provider: String,
@@ -113,26 +113,40 @@ impl ProviderRouter {
         *stats.last_failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     }
 
-    /// Select the best available healthy deployment for a given model alias.
+    /// Select the best available healthy deployment for a given model alias using default PriorityStrategy.
     pub fn select_deployment(&self, model_alias: &str) -> Option<Deployment> {
+        self.select_deployment_with_strategy(model_alias, &crate::proxy::routing::PriorityStrategy)
+    }
+
+    /// Select deployment using a custom pluggable routing strategy (AR-2).
+    pub fn select_deployment_with_strategy(
+        &self,
+        model_alias: &str,
+        strategy: &dyn crate::proxy::routing::RoutingStrategy,
+    ) -> Option<Deployment> {
         if let Some(deps) = self.deployments.get(model_alias) {
-            let mut candidates: Vec<Deployment> = deps
-                .iter()
-                .filter(|d| self.is_healthy(&d.endpoint_url))
-                .cloned()
-                .collect();
-
-            if candidates.is_empty() {
-                // If all candidates in cooldown, half-open fallback to lowest priority
-                candidates = deps.clone();
+            match strategy.select(&deps, self) {
+                crate::proxy::routing::RoutingDecision::Selected(d) => Some(d),
+                crate::proxy::routing::RoutingDecision::NoEligibleDeployment { .. } => None,
             }
-
-            // Sort by priority (ascending) and rolling latency
-            candidates.sort_by_key(|d| d.priority);
-            return candidates.first().cloned();
+        } else {
+            None
         }
+    }
 
-        None
+    /// Select deployment returning full decision context (e.g. for region compliance diagnostics).
+    pub fn select_deployment_decision(
+        &self,
+        model_alias: &str,
+        strategy: &dyn crate::proxy::routing::RoutingStrategy,
+    ) -> crate::proxy::routing::RoutingDecision {
+        if let Some(deps) = self.deployments.get(model_alias) {
+            strategy.select(&deps, self)
+        } else {
+            crate::proxy::routing::RoutingDecision::NoEligibleDeployment {
+                reason: format!("No deployment group registered for model alias '{}'", model_alias),
+            }
+        }
     }
 
     /// Pick the lowest latency healthy endpoint among a set of candidate URLs.
@@ -164,3 +178,20 @@ impl ProviderRouter {
         best.map(|(ep, _)| ep)
     }
 }
+
+impl crate::proxy::routing::StatsProvider for ProviderRouter {
+    fn is_healthy(&self, endpoint: &str) -> bool {
+        self.is_healthy(endpoint)
+    }
+
+    fn avg_latency_ms(&self, endpoint: &str) -> Option<u64> {
+        let stats = self.get_or_create_stats(endpoint);
+        let latencies = stats.rolling_latency_ms.lock().unwrap_or_else(|e| e.into_inner());
+        if latencies.is_empty() {
+            None
+        } else {
+            Some(latencies.iter().sum::<u64>() / latencies.len() as u64)
+        }
+    }
+}
+

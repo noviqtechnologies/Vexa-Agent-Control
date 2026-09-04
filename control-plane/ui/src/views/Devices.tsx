@@ -24,6 +24,7 @@ export default function Devices() {
   const [compliantCount, setCompliantCount] = useState(0)
   const [nonCompliantCount, setNonCompliantCount] = useState(0)
   const [offlineCount, setOfflineCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
   const [filter, setFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -53,6 +54,23 @@ export default function Devices() {
   const [tokenError, setTokenError] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<'unix' | 'win' | 'cli' | null>(null)
 
+  const getEffectiveCompliance = (d: SentryDeviceSummary | SentryDeviceDetail): 'COMPLIANT' | 'NON_COMPLIANT' | 'OFFLINE' => {
+    if (d.enrollment_status === 'REVOKED' || d.overall_compliance === 'NON_COMPLIANT') {
+      return 'NON_COMPLIANT'
+    }
+    if (d.overall_compliance === 'OFFLINE') {
+      return 'OFFLINE'
+    }
+    if (!d.last_heartbeat_at) {
+      return 'OFFLINE'
+    }
+    const hbTime = new Date(d.last_heartbeat_at).getTime()
+    if (Date.now() - hbTime > 3 * 60 * 1000) {
+      return 'OFFLINE'
+    }
+    return (d.overall_compliance as any) || 'COMPLIANT'
+  }
+
   useEffect(() => {
     fetchDevices()
   }, [filter])
@@ -66,6 +84,8 @@ export default function Devices() {
       const deduped: SentryDeviceSummary[] = []
       for (const d of rawList) {
         const key = (d.hostname || d.device_id || '').toLowerCase()
+        const effective = getEffectiveCompliance(d)
+        d.overall_compliance = effective
         if (key && !seen.has(key)) {
           seen.add(key)
           deduped.push(d)
@@ -74,9 +94,25 @@ export default function Devices() {
         }
       }
       setDevices(deduped)
-      setCompliantCount(res.compliant_count || 0)
-      setNonCompliantCount(res.non_compliant_count || 0)
-      setOfflineCount(res.offline_count || 0)
+
+      const fleetTotal = res.total_count ?? (res as any).total ?? deduped.length
+      if (!filter || totalCount === 0) {
+        setTotalCount(fleetTotal)
+      }
+
+      const comp = res.compliant_count !== undefined
+        ? res.compliant_count
+        : deduped.filter(d => getEffectiveCompliance(d) === 'COMPLIANT').length
+      const nonComp = res.non_compliant_count !== undefined
+        ? res.non_compliant_count
+        : deduped.filter(d => getEffectiveCompliance(d) === 'NON_COMPLIANT' || d.enrollment_status === 'REVOKED').length
+      const offl = res.offline_count !== undefined
+        ? res.offline_count
+        : deduped.filter(d => getEffectiveCompliance(d) === 'OFFLINE').length
+
+      setCompliantCount(comp)
+      setNonCompliantCount(nonComp)
+      setOfflineCount(offl)
     } catch (e) {
       console.error(e)
     } finally {
@@ -164,8 +200,9 @@ export default function Devices() {
       case 'NOT_INSTALLED':
         return <span className="badge badge-secondary" style={{ opacity: 0.6, background: '#3f3f46', color: '#a1a1aa' }}>NOT INSTALLED</span>
       case 'OFFLINE':
+        return <span className="badge badge-secondary" style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.3)' }}>OFFLINE</span>
       default:
-        return <span className="badge badge-info" style={{ opacity: 0.7 }}>OFFLINE</span>
+        return <span className="badge badge-secondary" style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.3)' }}>{status}</span>
     }
   }
 
@@ -180,6 +217,14 @@ export default function Devices() {
   const hubUrl = resolveHubUrl(generatedToken?.hub_url)
 
   const filteredDevices = devices.filter(d => {
+    const effective = getEffectiveCompliance(d)
+    if (filter) {
+      if (filter === 'NON_COMPLIANT' && (effective === 'NON_COMPLIANT' || d.enrollment_status === 'REVOKED')) {
+        // match
+      } else if (effective !== filter) {
+        return false
+      }
+    }
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase()
     return (
@@ -191,7 +236,7 @@ export default function Devices() {
   })
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="soc-device-page">
       {/* Toast Notification Banner */}
       {notification && (
         <div
@@ -232,78 +277,84 @@ export default function Devices() {
       )}
 
       {/* Header Bar */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+      <div className="page-header soc-page-header">
         <div>
           <h1>Device Governance</h1>
           <p>Continuous configuration locking, zero-master-key posture, and real-time compliance across developer workstations.</p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setGeneratedToken(null)
-            setTokenError(null)
-            setShowTokenModal(true)
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontWeight: 600 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Generate Enrollment Token
-        </button>
+        <div className="soc-header-controls">
+          <button
+            type="button"
+            className="soc-btn-primary"
+            onClick={() => {
+              setGeneratedToken(null)
+              setTokenError(null)
+              setShowTokenModal(true)
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Generate Enrollment Token
+          </button>
+        </div>
       </div>
 
       {/* Summary Metric Cards */}
-      <div className="card" style={{ padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
-        <div style={{ cursor: 'pointer' }} onClick={() => setFilter('')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL ENROLLED DEVICES</p>
-          <div style={{ fontSize: 36, fontWeight: 300, color: 'var(--text-main)' }}>
-            {devices.length}
+      <div className="stats-grid soc-stats-grid">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('')} title="Filter All Enrolled Workstations">
+          <div className="stat-header-row">
+            <div className="stat-label">Total Enrolled Devices</div>
+            <span className="soc-delta-badge delta-neutral">Seats</span>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Registered developer seats</span>
+          <div className="stat-value">{totalCount || devices.length}</div>
+          <div className="stat-subtext">Registered developer seats</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 24, cursor: 'pointer' }} onClick={() => setFilter('COMPLIANT')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>COMPLIANT WORKSTATIONS</p>
-          <div style={{ fontSize: 36, fontWeight: 300, color: 'var(--success)' }}>
-            {compliantCount}
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('COMPLIANT')} title="Filter Compliant Workstations">
+          <div className="stat-header-row">
+            <div className="stat-label">Compliant Workstations</div>
+            <span className="soc-delta-badge delta-success">Active</span>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Proxy locked & active</span>
+          <div className="stat-value" style={{ color: 'var(--success)' }}>{compliantCount}</div>
+          <div className="stat-subtext">Proxy locked & active</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 24, cursor: 'pointer' }} onClick={() => setFilter('NON_COMPLIANT')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>DRIFTED / NON-COMPLIANT</p>
-          <div style={{ fontSize: 36, fontWeight: 300, color: nonCompliantCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-            {nonCompliantCount}
+        <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => setFilter('NON_COMPLIANT')} title="Filter Drifted Workstations">
+          <div className="stat-header-row">
+            <div className="stat-label">Drifted / Non-Compliant</div>
+            <span className="soc-delta-badge delta-danger">{nonCompliantCount > 0 ? 'Review' : '0'}</span>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Requires admin review</span>
+          <div className="stat-value" style={{ color: nonCompliantCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{nonCompliantCount}</div>
+          <div className="stat-subtext">Requires admin review</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 24, cursor: 'pointer' }} onClick={() => setFilter('OFFLINE')}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>OFFLINE WORKSTATIONS</p>
-          <div style={{ fontSize: 36, fontWeight: 300, color: 'var(--text-muted)' }}>
-            {offlineCount}
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('OFFLINE')} title="Filter Offline Workstations">
+          <div className="stat-header-row">
+            <div className="stat-label">Offline Workstations</div>
+            <span className="soc-delta-badge delta-neutral">No signal</span>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No heartbeat in {'>'} 3m</span>
+          <div className="stat-value" style={{ color: 'var(--text-muted)' }}>{offlineCount}</div>
+          <div className="stat-subtext">No heartbeat in &gt; 3m</div>
         </div>
       </div>
 
       {/* Sentry Compliance Posture Guide Card */}
-      <div className="card" style={{ padding: '16px 20px', marginBottom: '24px', backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border)' }}>
-        <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="card soc-panel" style={{ padding: '18px 22px', marginBottom: '24px' }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <span>🛡️</span> Understanding Sentry Governance & Posture
-        </h4>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16, 185, 129, 0.25)', backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16, 185, 129, 0.25)', backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
             <span style={{ color: 'var(--success)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● COMPLIANT</span>
             Sentry Daemon active (heartbeat ≤ 3m) and all detected IDE AI completions route securely through the local gateway (<code>127.0.0.1:8080</code>).
           </div>
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.25)', backgroundColor: 'rgba(239, 68, 68, 0.05)' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.25)', backgroundColor: 'rgba(239, 68, 68, 0.05)' }}>
             <span style={{ color: 'var(--danger)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● NON-COMPLIANT / DRIFTED</span>
             Triggered if an IDE configuration is altered or removed without auto-heal, an unmanaged LLM client is detected, or the device was revoked.
           </div>
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.05)' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.05)' }}>
             <span style={{ color: 'var(--text-muted)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● OFFLINE (&gt; 3m)</span>
             Workstation daemon has not transmitted telemetry in over 3 minutes. Machine may be asleep, shut down, or disconnected from the network.
           </div>
@@ -311,22 +362,28 @@ export default function Devices() {
       </div>
 
       {/* Filter & Devices Table */}
-      <div className="card">
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <h3 style={{ fontSize: 16, margin: 0 }}>Workstation Fleet Inventory</h3>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <input
-              type="text"
-              placeholder="Search hostname, user, or device ID..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="input"
-              style={{ padding: '6px 12px', fontSize: 13, minWidth: 260 }}
-            />
+      <div className="card soc-panel">
+        <div className="soc-card-header" style={{ marginBottom: 20 }}>
+          <div>
+            <div className="card-title">Workstation Fleet Inventory</div>
+            <div className="soc-card-subtitle">{filteredDevices.length} of {totalCount || devices.length} workstations matching criteria</div>
+          </div>
+          <div className="soc-filter-bar">
+            <div className="soc-filter-search-box">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search hostname, user, or device ID..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="soc-filter-input"
+                style={{ width: 280 }}
+              />
+            </div>
             <select 
               value={filter} 
               onChange={e => setFilter(e.target.value)}
-              style={{ padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: '#fff', borderRadius: 'var(--radius-sm)' }}
+              className="soc-select-filter"
             >
               <option value="">All Statuses</option>
               <option value="COMPLIANT">Compliant Only</option>
@@ -339,13 +396,13 @@ export default function Devices() {
         {loading ? (
           <div className="loading" style={{ padding: '32px' }}>Loading fleet devices...</div>
         ) : filteredDevices.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>No enrolled developer workstations found.</p>
             <p style={{ fontSize: 13, marginTop: 6 }}>Click <strong>"+ Generate Enrollment Token"</strong> above or run <code>agentcontrol enroll</code> on a workstation to onboard it.</p>
           </div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Hostname</th>
@@ -408,7 +465,7 @@ export default function Devices() {
                     <td style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
                       {d.last_heartbeat_at ? new Date(d.last_heartbeat_at).toLocaleString() : 'Never'}
                     </td>
-                    <td>{getComplianceBadge(d.overall_compliance)}</td>
+                    <td>{getComplianceBadge(getEffectiveCompliance(d))}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         <button
@@ -907,7 +964,7 @@ export default function Devices() {
                     <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-main, #f4f4f5)' }}>
                       {selectedDevice.hostname}
                     </h2>
-                    {getComplianceBadge(selectedDevice.overall_compliance)}
+                    {getComplianceBadge(getEffectiveCompliance(selectedDevice))}
                     <span
                       style={{
                         fontSize: '11px',

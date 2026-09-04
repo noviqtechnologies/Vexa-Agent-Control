@@ -136,6 +136,31 @@ pub struct LlmConfig {
     pub allowed_models: Option<Vec<String>>,
     pub default_model: Option<String>,
     pub model_enforcement: Option<String>,
+    /// Model groups with pluggable routing strategies (AR-2).
+    pub model_groups: Option<Vec<ModelGroupConfig>>,
+}
+
+/// Model group configuration for pluggable routing (AR-2).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelGroupConfig {
+    pub name: String,
+    pub routing_strategy: Option<String>,
+    pub allowed_regions: Option<Vec<String>>,
+    pub deployments: Vec<ModelDeploymentConfig>,
+}
+
+/// Deployment entry inside a model group.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelDeploymentConfig {
+    pub id: String,
+    pub provider: String,
+    pub model_name: String,
+    pub endpoint_url: String,
+    pub priority: Option<u32>,
+    pub weight: Option<u32>,
+    pub credential_ref: Option<String>,
 }
 
 /// LLM Provider access rule.

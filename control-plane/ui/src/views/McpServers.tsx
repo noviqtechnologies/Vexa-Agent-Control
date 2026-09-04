@@ -148,7 +148,7 @@ export default function McpServers() {
         <div className="soc-header-controls">
           <button
             type="button"
-            className="refresh-btn"
+            className="soc-btn-secondary"
             onClick={fetchServers}
             title="Reload live MCP server inventory"
           >

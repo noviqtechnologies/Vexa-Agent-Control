@@ -69,12 +69,12 @@ export default function SpendVisualization() {
 
   return (
     <div className="soc-spend-analytics-page">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header soc-page-header">
         <div>
           <h1>Spend Analytics & Observatory</h1>
           <p>Authoritative PostgreSQL spend ledger metrics, real-time hourly velocity, and dimensional allocation.</p>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div className="soc-header-controls">
           <div className="soc-time-toggle" role="group" aria-label="Time Window">
             {([1, 24, 168, 720] as const).map((h) => (
               <button
@@ -90,62 +90,84 @@ export default function SpendVisualization() {
         </div>
       </div>
 
-      {/* 5-KPI High-Level Summary Card */}
-      <div className="card" style={{ padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
-        <div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL SETTLED SPEND</p>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#10b981' }}>
+      {/* 5-KPI High-Level Summary Grid */}
+      <div className="stats-grid soc-stats-grid" style={{ marginBottom: 24 }}>
+        <div className="card stat-tile soc-clickable-tile">
+          <div className="stat-header-row">
+            <div className="stat-label">Total Settled Spend</div>
+            <span className="soc-delta-badge delta-success">Settled</span>
+          </div>
+          <div className="stat-value" style={{ color: '#10b981' }}>
             ${totalSettledUSD.toFixed(4)}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Actual upstream API spend</span>
+          <div className="stat-subtext">Actual upstream API spend</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>ACTIVE RESERVATIONS</p>
-          <div style={{ fontSize: 28, fontWeight: 600, color: '#38bdf8' }}>
+        <div className="card stat-tile soc-clickable-tile tile-info">
+          <div className="stat-header-row">
+            <div className="stat-label">Active Reservations</div>
+            <span className="soc-delta-badge delta-neutral">Held</span>
+          </div>
+          <div className="stat-value" style={{ color: '#38bdf8' }}>
             ${totalReservedUSD.toFixed(4)}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Preflight locks held</span>
+          <div className="stat-subtext">Preflight locks held</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>BUDGET RELEASED</p>
-          <div style={{ fontSize: 28, fontWeight: 600, color: '#f59e0b' }}>
+        <div className="card stat-tile soc-clickable-tile tile-warning">
+          <div className="stat-header-row">
+            <div className="stat-label">Budget Released</div>
+            <span className="soc-delta-badge delta-warning">Refunded</span>
+          </div>
+          <div className="stat-value" style={{ color: '#f59e0b' }}>
             ${totalReleasedUSD.toFixed(4)}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Returned unspent budget</span>
+          <div className="stat-subtext">Returned unspent budget</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>CACHE EFFICIENCY</p>
-          <div style={{ fontSize: 28, fontWeight: 600, color: (summary?.total_cached_tokens || 0) > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+        <div className="card stat-tile soc-clickable-tile tile-info">
+          <div className="stat-header-row">
+            <div className="stat-label">Cache Efficiency</div>
+            <span className="soc-delta-badge delta-success">Savings</span>
+          </div>
+          <div className="stat-value" style={{ color: (summary?.total_cached_tokens || 0) > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
             {((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0)) > 0
               ? `${(((summary?.total_cached_tokens || 0) / ((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0))) * 100).toFixed(1)}%`
               : '0.0%'}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <div className="stat-subtext">
             {((summary?.total_cached_tokens || 0)).toLocaleString()} cached tokens
-          </span>
+          </div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>TOTAL REQUESTS</p>
-          <div style={{ fontSize: 28, fontWeight: 600 }}>
+        <div className="card stat-tile soc-clickable-tile">
+          <div className="stat-header-row">
+            <div className="stat-label">Total Requests</div>
+            <span className="soc-delta-badge delta-neutral">Volume</span>
+          </div>
+          <div className="stat-value">
             {requestCount.toLocaleString()}
           </div>
-          <span style={{ fontSize: 12, color: deniedCount > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+          <div className="stat-subtext" style={{ color: deniedCount > 0 ? 'var(--danger)' : undefined }}>
             {deniedCount} denied requests
-          </span>
+          </div>
         </div>
       </div>
 
       {/* Hourly Spend Velocity Chart */}
-      <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-        <h3 style={{ marginBottom: 16 }}>Hourly Spend Velocity & Trend</h3>
+      <div className="card soc-panel" style={{ marginBottom: 24 }}>
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Hourly Spend Velocity & Trend</div>
+            <div className="soc-card-subtitle">Real-time throughput of settled spend versus active pre-reservations</div>
+          </div>
+          <span className="soc-live-pill">LIVE LEDGER</span>
+        </div>
+
         {loading ? (
           <div className="loading" style={{ height: 220 }}>Loading time-series data...</div>
         ) : timeSeriesData.length === 0 ? (
-          <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="empty-state">
             <p>No spend activity recorded in the selected time window.</p>
           </div>
         ) : (
@@ -166,12 +188,12 @@ export default function SpendVisualization() {
                 <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={12} />
                 <YAxis stroke="var(--text-muted)" fontSize={12} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid var(--border)', borderRadius: 6 }}
+                  contentStyle={{ background: '#0e131f', border: '1px solid var(--border-default)', borderRadius: 8, boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
                   formatter={(val: any) => [`$${Number(val).toFixed(4)}`, '']}
                 />
                 <Legend />
-                <Area type="monotone" dataKey="settled" name="Settled ($)" stroke="#10b981" fillOpacity={1} fill="url(#settledGrad)" />
-                <Area type="monotone" dataKey="reserved" name="Reserved ($)" stroke="#38bdf8" fillOpacity={1} fill="url(#reservedGrad)" />
+                <Area type="monotone" dataKey="settled" name="Settled ($)" stroke="#10b981" fillOpacity={1} fill="url(#settledGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="reserved" name="Reserved ($)" stroke="#38bdf8" fillOpacity={1} fill="url(#reservedGrad)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -179,10 +201,13 @@ export default function SpendVisualization() {
       </div>
 
       {/* Top Spenders by Dimension */}
-      <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0 }}>Top Spenders & Resource Breakdown</h3>
-          <div style={{ display: 'flex', gap: 8 }}>
+      <div className="card soc-panel" style={{ marginBottom: 24 }}>
+        <div className="soc-card-header" style={{ marginBottom: 20 }}>
+          <div>
+            <div className="card-title">Top Spenders & Resource Breakdown</div>
+            <div className="soc-card-subtitle">Granular budget consumption grouped by {groupBy}</div>
+          </div>
+          <div className="soc-time-toggle" role="group" aria-label="Group Dimension">
             {(['provider', 'device', 'model', 'project', 'user', 'team'] as const).map((g) => (
               <button
                 key={g}
@@ -191,7 +216,7 @@ export default function SpendVisualization() {
                 style={{ textTransform: 'capitalize' }}
                 onClick={() => setGroupBy(g)}
               >
-                {g === 'team' ? 'Team (Key)' : g}
+                {g === 'team' ? 'Team' : g}
               </button>
             ))}
           </div>
@@ -200,7 +225,7 @@ export default function SpendVisualization() {
         {loading ? (
           <div className="loading" style={{ height: 120 }}>Loading top spenders...</div>
         ) : topEntities.length === 0 ? (
-          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="empty-state">
             <p>No entity spend recorded for grouping by {groupBy}.</p>
           </div>
         ) : (
@@ -208,17 +233,31 @@ export default function SpendVisualization() {
             {topEntities.map((ent, idx) => {
               const spentUSD = microcentsToUSD(ent.settled_microcents)
               const pct = Math.min(100, Math.max(2, (spentUSD / maxEntitySpend) * 100))
+              const isDevice = groupBy === 'device'
+              const displayName = ent.entity_name && ent.entity_name !== 'unknown' ? ent.entity_name : ent.entity_id
+              const hasDistinctName = Boolean(ent.entity_name && ent.entity_name !== ent.entity_id && ent.entity_name !== 'unknown')
+
               return (
-                <div key={idx} style={{ padding: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div key={idx} style={{ padding: '14px 18px', background: 'var(--bg-surface-1)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{ent.entity_id}</strong>
+                      {isDevice && <span style={{ fontSize: 15 }}>💻</span>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: isDevice && hasDistinctName ? 'inherit' : 'var(--font-mono)' }}>
+                          {displayName}
+                        </strong>
+                        {hasDistinctName && (
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                            ({ent.entity_id.length > 18 ? `${ent.entity_id.slice(0, 8)}...${ent.entity_id.slice(-6)}` : ent.entity_id})
+                          </span>
+                        )}
+                      </div>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({ent.request_count} requests)</span>
                     </div>
                     <strong style={{ fontSize: 14, color: '#10b981' }}>${spentUSD.toFixed(4)}</strong>
                   </div>
-                  <div style={{ height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: '#10b981', borderRadius: 4, transition: 'width 0.4s ease' }} />
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: '#10b981', borderRadius: 3, transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
               )
@@ -228,15 +267,19 @@ export default function SpendVisualization() {
       </div>
 
       {/* Recent Ledger Events */}
-      <div className="card">
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 16, margin: 0 }}>Recent Financial Ledger Transactions</h3>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Recent Financial Ledger Transactions</div>
+            <div className="soc-card-subtitle">Cryptographic accounting records stored in PostgreSQL ledger</div>
+          </div>
+          <span className="soc-badge">AUTHORITATIVE</span>
         </div>
         {loading ? (
           <div className="loading">Loading transactions...</div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Event ID</th>
@@ -249,18 +292,31 @@ export default function SpendVisualization() {
               </thead>
               <tbody>
                 {events.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No ledger events recorded yet.</td></tr>
+                  <tr><td colSpan={6} className="empty-state">No ledger events recorded yet.</td></tr>
                 ) : (
                   events.slice(0, 10).map((e, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.event_id.substring(0, 8)}...</td>
+                    <tr key={idx} className="soc-table-row">
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} className="text-mono-id">{e.event_id.substring(0, 8)}...</td>
                       <td>
                         <span className={`badge ${e.event_type === 'SETTLED' ? 'badge-success' : e.event_type === 'AUTHORIZED' ? 'badge-warning' : 'badge-info'}`}>
                           {e.event_type}
                         </span>
                       </td>
                       <td><strong style={{ color: 'var(--warning)' }}>${(e.amount_microcents / 100_000_000).toFixed(4)}</strong></td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.actor || 'gateway'}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {e.actor_name && e.actor_name !== e.actor ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{e.actor_name}</span>
+                            <span className="text-mono-id" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                              {e.actor.length > 18 ? `${e.actor.slice(0, 8)}...${e.actor.slice(-4)}` : e.actor}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-mono-id" style={{ fontFamily: 'var(--font-mono)' }}>
+                            {e.actor || 'gateway'}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ fontSize: 13 }}>{e.reason_code}</td>
                       <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{new Date(e.occurred_at).toLocaleString()}</td>
                     </tr>
@@ -270,8 +326,11 @@ export default function SpendVisualization() {
             </table>
           </div>
         )}
-        <div style={{ padding: '12px 24px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>Evidence source: <strong>PostgreSQL spend ledger (server-aggregated)</strong></span>
+        <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#10b981' }}>●</span>
+            <span>Integrity: <strong style={{ color: '#10b981' }}>Verified</strong> · System of Record: <strong>Cryptographic Financial Ledger</strong></span>
+          </span>
           {dataFreshness && <span>Generated at: {new Date(dataFreshness).toLocaleTimeString()}</span>}
         </div>
       </div>

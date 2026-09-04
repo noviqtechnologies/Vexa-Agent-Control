@@ -48,13 +48,15 @@ export default function IncreaseRequests() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 style={{ margin: 0 }}>Spend Limit Increase Requests</h1>
-          <span className="coming-soon-badge">Coming Soon</span>
+    <div className="soc-increase-requests-page">
+      <div className="page-header soc-page-header">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1>Spend Limit Increase Requests</h1>
+            <span className="coming-soon-badge">Coming Soon</span>
+          </div>
+          <p>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
         </div>
-        <p style={{ margin: '4px 0 0' }}>Review and decide budget increase requests from project workloads with automatic PostgreSQL policy updates.</p>
       </div>
 
       {/* Roadmap Preview Banner */}
@@ -74,7 +76,7 @@ export default function IncreaseRequests() {
       </div>
 
       {licenseNotAvailable && (
-        <div className="card" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
+        <div className="card soc-panel" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 24 }}>🛡️</span>
             <div>
@@ -86,17 +88,24 @@ export default function IncreaseRequests() {
       )}
 
       {message && (
-        <div style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)', fontSize: 13 }}>
           {message.text}
         </div>
       )}
 
-      <div className="card">
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Pending & Historical Limit Requests</div>
+            <div className="soc-card-subtitle">{requests.length} self-service workload spend increase petitions</div>
+          </div>
+          <span className="soc-badge">{requests.length} Requests</span>
+        </div>
         {loading ? (
           <div className="loading">Loading requests...</div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Request ID</th>
@@ -109,49 +118,50 @@ export default function IncreaseRequests() {
                 </tr>
               </thead>
               <tbody>
-                {requests.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No increase requests found.</td></tr>
-                )}
-                {requests.map(r => (
-                  <tr key={r.request_id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{r.request_id.substring(0, 8)}...</td>
-                    <td><strong style={{ fontFamily: 'var(--font-mono)' }}>{r.project_id}</strong></td>
-                    <td><strong style={{ color: 'var(--warning)' }}>${microcentsToUSD(r.requested_limit_microcents)}</strong></td>
-                    <td style={{ maxWidth: 300, fontSize: 13 }}>{r.reason}</td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.created_by}</td>
-                    <td>
-                      <span className={`badge ${r.status === 'APPROVED' ? 'badge-success' : r.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td>
-                      {r.status === 'PENDING' ? (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button 
-                            className="btn-primary" 
-                            disabled={resolvingId === r.request_id}
-                            onClick={() => handleResolve(r.request_id, 'APPROVED')}
-                            style={{ padding: '6px 12px', fontSize: 12 }}
-                          >
-                            Approve
-                          </button>
-                          <button 
-                            className="btn-secondary" 
-                            disabled={resolvingId === r.request_id}
-                            onClick={() => handleResolve(r.request_id, 'REJECTED')}
-                            style={{ padding: '6px 12px', fontSize: 12 }}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          Decided by {r.decided_by || 'admin'}
+                {requests.length === 0 ? (
+                  <tr><td colSpan={7} className="empty-state">No increase requests found.</td></tr>
+                ) : (
+                  requests.map(r => (
+                    <tr key={r.request_id} className="soc-table-row">
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">{r.request_id.substring(0, 8)}...</td>
+                      <td><strong style={{ fontFamily: 'var(--font-mono)' }} className="text-mono-id">{r.project_id}</strong></td>
+                      <td><strong style={{ color: 'var(--warning)' }}>${microcentsToUSD(r.requested_limit_microcents)}</strong></td>
+                      <td style={{ maxWidth: 300, fontSize: 13 }}>{r.reason}</td>
+                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.created_by}</td>
+                      <td>
+                        <span className={`badge ${r.status === 'APPROVED' ? 'badge-success' : r.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
+                          {r.status}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        {r.status === 'PENDING' ? (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button 
+                              className="btn-primary" 
+                              disabled={resolvingId === r.request_id}
+                              onClick={() => handleResolve(r.request_id, 'APPROVED')}
+                              style={{ padding: '6px 12px', fontSize: 12 }}
+                            >
+                              Approve
+                            </button>
+                            <button 
+                              className="btn-secondary" 
+                              disabled={resolvingId === r.request_id}
+                              onClick={() => handleResolve(r.request_id, 'REJECTED')}
+                              style={{ padding: '6px 12px', fontSize: 12 }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            Decided by {r.decided_by || 'admin'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

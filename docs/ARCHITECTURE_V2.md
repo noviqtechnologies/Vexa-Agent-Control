@@ -138,3 +138,33 @@ Standardizes incoming OpenAI-formatted chat requests across heterogeneous upstre
 * **Tamper-Evident Durability:** The local HMAC-SHA256 audit logger commits each entry to local disk via `sync_all()` before confirming the request.
 * **Non-Blocking Asynchronous Fan-Out:** Network SIEM exports (Splunk, Datadog, OpenSearch) and Control Hub telemetry are dispatched via `DurableOutbox` worker tasks, preventing remote network latencies from stalling the gateway.
 
+---
+
+## 11. Pluggable Routing Engine & Data Residency (AR-2)
+
+The gateway features a pluggable routing layer supporting diverse multi-model selection strategies per model group:
+* **`PriorityStrategy`:** Primary/secondary fallback sequence honoring explicit deployment priority ordinals.
+* **`LowestLatencyStrategy`:** Evaluates exponential moving average (EMA) response latency metrics reported by `StatsProvider` to route to the fastest available deployment.
+* **`WeightedRandomStrategy`:** Proportional distribution based on deployment traffic weights for canary and load distribution scenarios.
+* **`RegionAffinityStrategy`:** Strict data residency compliance. If the chosen deployment region violates `allowed_regions`, the engine deterministically fails closed with HTTP 503 `routing_policy_violation` rather than silently leaking data across borders.
+
+---
+
+## 12. Extensible Pipeline Hook Lifecycle Framework (AR-1)
+
+A unified hook system provides lifecycle interception across three distinct stages:
+* **`PreRoute`:** Intercepts raw HTTP requests before routing decisions or payload parsing. Supports header injection and raw byte mutations (`ModifyBytes`).
+* **`PreExecute`:** Intercepts structured MCP tool calls (`serde_json::Value`), executing content sanitizers, inline DLP redactions (`ModifyJson`), and security blocks (`Block`).
+* **`PostExecute`:** Intercepts outbound downstream responses and streaming token chunks (`ModifyBytes`).
+* **Unified Scanner Construction:** Detectors (DLP, Prompt Injection, Safe Mode) are compiled once at gateway startup inside `ProxyState` and shared cleanly across pipeline hooks and request handlers.
+
+---
+
+## 13. Decomposed Control Plane & Asynchronous Batch Durability (AR-3, AR-4, AR-5)
+
+The Go Control Plane separates monolithic spend database operations into specialized, high-throughput components:
+* **`runs.Store`:** Decoupled execution history and forensic run dossiers (`ListRuns`, `GetRunDossier`), preventing analytical queries from interfering with transaction hot paths.
+* **`SpendEventWriter`:** Asynchronous bounded queue with batch ingestion via `pgx.Batch`. Incorporates a 2-second backpressure timeout to drop-and-alert instead of exhausting memory or stalling proxies, with clean shutdown drain guarantees.
+* **Centralized `Scheduler`:** Deterministic background daemon managing periodic tasks (e.g. `SweepJob` for expired reservation holds) with graceful cancellation context and live introspection endpoint at `/internal/jobs`.
+
+

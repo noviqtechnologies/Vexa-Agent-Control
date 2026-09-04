@@ -140,6 +140,14 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
+      dynamic "volume_mounts" {
+        for_each = var.enable_cloud_sql ? [1] : []
+        content {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+
       startup_probe {
         http_get {
           path = "/healthz"
@@ -164,7 +172,7 @@ resource "google_cloud_run_v2_service" "api" {
 
     # Sidecar Container: PostgreSQL Engine (used when no external persistent database_url is specified)
     dynamic "containers" {
-      for_each = var.database_url == "" ? [1] : []
+      for_each = (var.database_url == "" && !var.enable_cloud_sql) ? [1] : []
       content {
         name  = "postgres"
         image = var.control_plane_db_image
@@ -225,6 +233,16 @@ resource "google_cloud_run_v2_service" "api" {
         failure_threshold     = 12
       }
     }
+
+    dynamic "volumes" {
+      for_each = var.enable_cloud_sql ? [1] : []
+      content {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.postgres[0].connection_name]
+        }
+      }
+    }
   }
 
   traffic {
@@ -240,7 +258,8 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret_version.encryption_secret,
     google_secret_manager_secret_version.session_secret,
     google_project_iam_member.artifact_registry_reader_sa,
-    google_project_iam_member.artifact_registry_reader_agent
+    google_project_iam_member.artifact_registry_reader_agent,
+    google_project_iam_member.cloudsql_client
   ]
 }
 

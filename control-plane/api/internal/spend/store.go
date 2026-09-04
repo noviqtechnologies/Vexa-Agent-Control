@@ -6,14 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/runs"
 )
 
 func isSerializationError(err error) bool {
@@ -33,6 +30,11 @@ type Store struct {
 
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
+}
+
+// Pool returns the underlying pgxpool.Pool.
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
 }
 
 // EnsureSchema creates spend v2 tables and seeds default price book if they do not exist
@@ -68,6 +70,26 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			CONSTRAINT uq_spend_policy_version UNIQUE (policy_id, version)
 		);
 
+		CREATE TABLE IF NOT EXISTS price_book_versions (
+			price_book_version_id VARCHAR(64) PRIMARY KEY,
+			description TEXT NOT NULL DEFAULT '',
+			published_by VARCHAR(128) NOT NULL DEFAULT 'system',
+			published_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		CREATE TABLE IF NOT EXISTS price_book_items (
+			item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			price_book_version_id VARCHAR(64) NOT NULL REFERENCES price_book_versions(price_book_version_id) ON DELETE CASCADE,
+			provider VARCHAR(64) NOT NULL,
+			model_selector VARCHAR(128) NOT NULL,
+			input_rate_microcents_per_million BIGINT NOT NULL,
+			output_rate_microcents_per_million BIGINT NOT NULL,
+			cached_input_rate_microcents_per_million BIGINT NOT NULL DEFAULT 0,
+			effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+			effective_to TIMESTAMPTZ,
+			CONSTRAINT uq_price_book_item UNIQUE (price_book_version_id, provider, model_selector)
+		);
+
 		CREATE TABLE IF NOT EXISTS budget_windows (
 			window_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			organization_id UUID NOT NULL,
@@ -82,29 +104,7 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			version BIGINT NOT NULL DEFAULT 1,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			CONSTRAINT uq_budget_window UNIQUE (organization_id, policy_version_id, window_start),
-			CONSTRAINT chk_window_bounds CHECK (window_end > window_start)
-		);
-
-		CREATE TABLE IF NOT EXISTS price_book_versions (
-			price_book_version_id TEXT PRIMARY KEY,
-			organization_id UUID NULL,
-			source TEXT NOT NULL,
-			published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			published_by TEXT NOT NULL,
-			hash TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS price_book_items (
-			item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			price_book_version_id TEXT NOT NULL REFERENCES price_book_versions(price_book_version_id) ON DELETE CASCADE,
-			provider TEXT NOT NULL,
-			model_selector TEXT NOT NULL,
-			input_rate_microcents_per_million BIGINT NOT NULL CHECK (input_rate_microcents_per_million >= 0),
-			output_rate_microcents_per_million BIGINT NOT NULL CHECK (output_rate_microcents_per_million >= 0),
-			cached_input_rate_microcents_per_million BIGINT NOT NULL DEFAULT 0 CHECK (cached_input_rate_microcents_per_million >= 0),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			CONSTRAINT uq_price_book_item UNIQUE (price_book_version_id, provider, model_selector)
+			CONSTRAINT uq_budget_window UNIQUE (organization_id, policy_version_id, window_start)
 		);
 
 		CREATE TABLE IF NOT EXISTS spend_reservations (
@@ -124,25 +124,43 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			model VARCHAR(128) NOT NULL,
 			input_tokens_estimated BIGINT NOT NULL DEFAULT 0,
 			max_output_tokens BIGINT NOT NULL DEFAULT 0,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			input_tokens BIGINT NOT NULL DEFAULT 0,
+			output_tokens BIGINT NOT NULL DEFAULT 0,
+			cached_tokens BIGINT NOT NULL DEFAULT 0,
+			status_code INT NOT NULL DEFAULT 200,
+			release_reason VARCHAR(128),
+			released_microcents BIGINT NOT NULL DEFAULT 0,
+			virtual_key_id UUID,
+			virtual_key_hash VARCHAR(64),
+			virtual_key_prefix VARCHAR(16),
+			virtual_key_alias VARCHAR(64),
+			session_id VARCHAR(128),
+			internal_user_id VARCHAR(128),
+			end_user_id VARCHAR(128),
+			tags JSONB NOT NULL DEFAULT '{}'::jsonb,
+			request_type VARCHAR(32) NOT NULL DEFAULT 'LLM',
+			ttft_ms BIGINT NOT NULL DEFAULT 0,
 			settled_at TIMESTAMPTZ,
 			released_at TIMESTAMPTZ,
-			release_reason VARCHAR(64),
-			CONSTRAINT uq_spend_reservation_req UNIQUE (organization_id, request_id)
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CONSTRAINT uq_reservation_req UNIQUE (organization_id, request_id)
 		);
 
 		CREATE TABLE IF NOT EXISTS spend_events (
 			event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			organization_id UUID NOT NULL,
-			reservation_id UUID REFERENCES spend_reservations(reservation_id) ON DELETE SET NULL,
+			reservation_id UUID NOT NULL REFERENCES spend_reservations(reservation_id) ON DELETE CASCADE,
 			request_id VARCHAR(128) NOT NULL,
+			project_id VARCHAR(128) NOT NULL DEFAULT 'default',
+			provider VARCHAR(64) NOT NULL DEFAULT 'openai',
+			model VARCHAR(128) NOT NULL DEFAULT 'unknown',
 			event_type VARCHAR(32) NOT NULL,
 			amount_microcents BIGINT NOT NULL,
 			currency VARCHAR(8) NOT NULL DEFAULT 'USD',
 			usage_json JSONB NOT NULL DEFAULT '{}'::jsonb,
 			provider_request_id VARCHAR(128),
-			actor VARCHAR(128) NOT NULL,
-			reason_code VARCHAR(64) NOT NULL,
+			actor VARCHAR(128) NOT NULL DEFAULT 'gateway',
+			reason_code VARCHAR(64) NOT NULL DEFAULT 'normal',
 			occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 
@@ -163,47 +181,49 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			organization_id UUID NOT NULL,
 			project_id VARCHAR(128) NOT NULL DEFAULT 'default',
 			requested_limit_microcents BIGINT NOT NULL,
-			current_limit_microcents BIGINT NOT NULL DEFAULT 0,
-			reason TEXT NOT NULL,
-			status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-			created_by VARCHAR(128) NOT NULL,
+			current_limit_microcents BIGINT NOT NULL,
+			reason TEXT NOT NULL DEFAULT '',
+			status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+			created_by VARCHAR(128) NOT NULL DEFAULT 'user',
 			decided_by VARCHAR(128),
 			decision_reason TEXT,
-			resulting_policy_version_id UUID REFERENCES spend_policy_versions(policy_version_id) ON DELETE SET NULL,
+			resulting_policy_version_id UUID,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			decided_at TIMESTAMPTZ
 		);
 
-		INSERT INTO price_book_versions (price_book_version_id, source, published_by, hash)
-		VALUES ('price-book-v1', 'default_seed', 'system', 'sha256:price-book-v1-seed')
+		-- Seed default price book version if not exists
+		INSERT INTO price_book_versions (price_book_version_id, description, published_by)
+		VALUES ('price-book-v1', 'Default standard model rate card', 'system')
 		ON CONFLICT (price_book_version_id) DO NOTHING;
 
+		-- Seed default standard model rates in microcents ($0.01 = 1,000,000 microcents)
 		INSERT INTO price_book_items (price_book_version_id, provider, model_selector, input_rate_microcents_per_million, output_rate_microcents_per_million, cached_input_rate_microcents_per_million)
 		VALUES 
+			-- OpenAI
 			('price-book-v1', 'openai', 'gpt-4o', 250000000, 1000000000, 125000000),
 			('price-book-v1', 'openai', 'gpt-4o-mini', 15000000, 60000000, 7500000),
-			('price-book-v1', 'openai', 'gpt-4-turbo', 1000000000, 3000000000, 500000000),
+			('price-book-v1', 'openai', 'o1', 1500000000, 6000000000, 750000000),
+			('price-book-v1', 'openai', 'o3-mini', 110000000, 440000000, 55000000),
+			('price-book-v1', 'openai', '*', 250000000, 1000000000, 125000000),
+			-- Anthropic
 			('price-book-v1', 'anthropic', 'claude-3-5-sonnet-20241022', 300000000, 1500000000, 30000000),
-			('price-book-v1', 'anthropic', 'claude-3-haiku-20240307', 25000000, 125000000, 2500000),
-			('price-book-v1', 'groq', 'llama-3.3-70b-versatile', 59000000, 79000000, 0)
+			('price-book-v1', 'anthropic', 'claude-3-5-haiku-20241022', 80000000, 400000000, 8000000),
+			('price-book-v1', 'anthropic', 'claude-3-opus-20240229', 1500000000, 7500000000, 150000000),
+			('price-book-v1', 'anthropic', '*', 300000000, 1500000000, 30000000),
+			-- Google Gemini
+			('price-book-v1', 'google', 'gemini-1.5-pro', 125000000, 500000000, 31250000),
+			('price-book-v1', 'google', 'gemini-1.5-flash', 7500000, 30000000, 1875000),
+			('price-book-v1', 'google', 'gemini-2.0-flash', 10000000, 40000000, 2500000),
+			('price-book-v1', 'google', '*', 125000000, 500000000, 31250000),
+			-- Groq
+			('price-book-v1', 'groq', 'llama-3.3-70b-versatile', 59000000, 79000000, 0),
+			('price-book-v1', 'groq', '*', 59000000, 79000000, 0),
+			-- Azure
+			('price-book-v1', 'azure', '*', 250000000, 1000000000, 125000000),
+			-- Bedrock
+			('price-book-v1', 'bedrock', '*', 300000000, 1500000000, 30000000)
 		ON CONFLICT (price_book_version_id, provider, model_selector) DO NOTHING;
-
-		INSERT INTO spend_policies (
-			policy_id, organization_id, scope_type, scope_id, currency, period_type,
-			limit_microcents, action, effective_from, status
-		) VALUES (
-			'00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000001',
-			'organization', '00000000-0000-0000-0000-000000000001', 'USD', 'monthly',
-			10000000000, 'hard_deny', now(), 'PUBLISHED'
-		) ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO NOTHING;
-
-		INSERT INTO spend_policy_versions (
-			policy_version_id, policy_id, version, snapshot_json, published_by, published_at
-		) VALUES (
-			'00000000-0000-0000-0000-000000000020', '00000000-0000-0000-0000-000000000010',
-			1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
-			'system', now()
-		) ON CONFLICT (policy_id, version) DO NOTHING;
 
 		CREATE INDEX IF NOT EXISTS idx_spend_res_org_created 
 			ON spend_reservations(organization_id, created_at DESC);
@@ -245,1534 +265,121 @@ func GetWindowBoundsUTC(periodType string, t time.Time) (time.Time, time.Time) {
 	return start, end
 }
 
-// ── 1. AUTHORIZE ─────────────────────────────────────────────────────────────
-
-func (s *Store) Authorize(ctx context.Context, orgID string, req *AuthorizeRequest) (*AuthorizeResponse, error) {
-	const maxRetries = 5
-	var backoff = 10 * time.Millisecond
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		resp, err := s.authorizeTx(ctx, orgID, req)
-		if err != nil && isSerializationError(err) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2
-				continue
-			}
-		}
-		return resp, err
-	}
-	return nil, errors.New("spend authorization failed: maximum serialization retries exceeded")
-}
-
-func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeRequest) (*AuthorizeResponse, error) {
-	if s.pool == nil {
-		return nil, errors.New("database pool uninitialized")
-	}
-	if orgID == "" {
-		return nil, errors.New("organization_id is required")
-	}
-	if req.ProjectID == "" {
-		req.ProjectID = "default"
-	}
-	if req.Provider == "" {
-		req.Provider = "openai"
-	}
-
-	payloadHash := req.RequestHash
-	if payloadHash == "" {
-		payloadHash = ComputePayloadHash(req)
-	}
-
-	// 1. Check idempotency record
-	var cachedRespJSON []byte
-	var cachedStatus int
-	err := s.pool.QueryRow(ctx, `
-		SELECT response_json, response_status FROM spend_idempotency
-		WHERE organization_id = $1 AND operation = 'authorize' AND idempotency_key = $2
-	`, orgID, req.IdempotencyKey).Scan(&cachedRespJSON, &cachedStatus)
-	if err == nil {
-		var resp AuthorizeResponse
-		if err := json.Unmarshal(cachedRespJSON, &resp); err == nil {
-			return &resp, nil
-		}
-	}
-
-	// 2. Resolve Active Price Book item
-	activePriceBookID := s.GetActivePriceBookVersionID(ctx)
-	priceItem, err := s.GetPriceBookItem(ctx, activePriceBookID, req.Provider, req.Model)
-	if err != nil || priceItem == nil {
-		denyResp := &AuthorizeResponse{
-			Decision:            "deny",
-			ReasonCode:          ErrCodePriceUnknown,
-			CorrelationID:       req.RequestID,
-			DisclosureSafeScope: "price_book",
-			PriceBookVersion:    activePriceBookID,
-		}
-		return denyResp, nil
-	}
-
-	// 3. Compute Bounded Reserve
-	reserveMicrocents, err := priceItem.CalculateReserve(req.InputTokenEstimate, req.MaxOutputTokens)
-	if err != nil {
-		denyResp := &AuthorizeResponse{
-			Decision:            "deny",
-			ReasonCode:          ErrCodeOutputBoundMissing,
-			CorrelationID:       req.RequestID,
-			DisclosureSafeScope: "request_bounds",
-		}
-		return denyResp, nil
-	}
-
-	// 4. Begin Serializable / Row-Locked Transaction
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	now := time.Now().UTC()
-
-	// 5. Query effective published policies (Org level, Project level, and Provider level)
-	rows, err := tx.Query(ctx, `
-		SELECT p.policy_id, p.scope_type, p.scope_id, p.period_type, p.limit_microcents, p.action,
-		       pv.policy_version_id, pv.version
-		FROM spend_policies p
-		JOIN spend_policy_versions pv ON p.policy_id = pv.policy_id
-		WHERE p.organization_id = $1 
-		  AND p.status = 'PUBLISHED'
-		  AND (
-		    p.scope_type = 'organization' 
-		    OR (p.scope_type = 'project' AND p.scope_id = $2)
-		    OR (p.scope_type = 'provider' AND LOWER(p.scope_id) = LOWER($3))
-		  )
-		  AND (p.effective_to IS NULL OR p.effective_to > $4)
-		ORDER BY pv.policy_version_id ASC
-	`, orgID, req.ProjectID, req.Provider, now)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query policies: %w", err)
-	}
-
-	type activePolicy struct {
-		PolicyID        string
-		ScopeType       string
-		ScopeID         string
-		PeriodType      string
-		LimitMicrocents MoneyMicrocents
-		Action          string
-		PolicyVersionID string
-		Version         int
-	}
-
-	var activePolicies []activePolicy
-	for rows.Next() {
-		var ap activePolicy
-		if err := rows.Scan(&ap.PolicyID, &ap.ScopeType, &ap.ScopeID, &ap.PeriodType, &ap.LimitMicrocents, &ap.Action, &ap.PolicyVersionID, &ap.Version); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		activePolicies = append(activePolicies, ap)
-	}
-	rows.Close()
-
-	if len(activePolicies) == 0 {
-		var defPolID, defPolVerID string
-		err := tx.QueryRow(ctx, `
-			INSERT INTO spend_policies (organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action, status)
-			VALUES ($1, 'organization', $1, 'USD', 'monthly', 10000000000, 'hard_deny', 'PUBLISHED')
-			ON CONFLICT (organization_id, scope_type, scope_id, period_type)
-			DO UPDATE SET status = 'PUBLISHED'
-			RETURNING policy_id
-		`, orgID).Scan(&defPolID)
-		if err == nil {
-			_ = tx.QueryRow(ctx, `
-				INSERT INTO spend_policy_versions (policy_id, version, snapshot_json, published_by)
-				VALUES ($1, 1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb, 'system')
-				ON CONFLICT (policy_id, version) DO UPDATE SET published_at = now()
-				RETURNING policy_version_id
-			`, defPolID).Scan(&defPolVerID)
-
-			if defPolVerID != "" {
-				activePolicies = append(activePolicies, activePolicy{
-					PolicyID:        defPolID,
-					ScopeType:       "organization",
-					ScopeID:         orgID,
-					PeriodType:      PeriodMonthly,
-					LimitMicrocents: 10_000_000_000,
-					Action:          ActionHardDeny,
-					PolicyVersionID: defPolVerID,
-					Version:         1,
-				})
-			}
-		}
-	}
-
-	var policyVersionsPinned []string
-	var windowsToUpdate []string
-
-	for _, pol := range activePolicies {
-		policyVersionsPinned = append(policyVersionsPinned, pol.PolicyVersionID)
-		wStart, wEnd := GetWindowBoundsUTC(pol.PeriodType, now)
-
-		// Upsert budget window deterministically
-		var windowID string
-		var limitMicrocents, reservedMicrocents, settledMicrocents MoneyMicrocents
-		var winVersion int64
-
-		err = tx.QueryRow(ctx, `
-			INSERT INTO budget_windows (
-				organization_id, policy_version_id, scope_type, scope_id,
-				window_start, window_end, limit_microcents, reserved_microcents, settled_microcents, version
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, 1)
-			ON CONFLICT (organization_id, policy_version_id, window_start) 
-			DO UPDATE SET limit_microcents = EXCLUDED.limit_microcents, updated_at = now()
-			RETURNING window_id, limit_microcents, reserved_microcents, settled_microcents, version
-		`, orgID, pol.PolicyVersionID, pol.ScopeType, pol.ScopeID, wStart, wEnd, pol.LimitMicrocents).
-			Scan(&windowID, &limitMicrocents, &reservedMicrocents, &settledMicrocents, &winVersion)
-		if err != nil {
-			return nil, fmt.Errorf("failed to upsert budget window: %w", err)
-		}
-
-		// Row-lock the window for serializable check
-		err = tx.QueryRow(ctx, `
-			SELECT limit_microcents, reserved_microcents, settled_microcents
-			FROM budget_windows
-			WHERE window_id = $1
-			FOR UPDATE
-		`, windowID).Scan(&limitMicrocents, &reservedMicrocents, &settledMicrocents)
-		if err != nil {
-			return nil, fmt.Errorf("failed to lock budget window: %w", err)
-		}
-
-		// Enforce Hard Deny Budget Invariant: reserved + settled + reserve <= limit
-		if pol.Action == ActionHardDeny {
-			if reservedMicrocents+settledMicrocents+reserveMicrocents > limitMicrocents {
-				denyResp := &AuthorizeResponse{
-					Decision:            "deny",
-					ReasonCode:          ErrCodeSpendBudgetExhausted,
-					DisclosureSafeScope: pol.ScopeType,
-					ResetAt:             &wEnd,
-					CorrelationID:       req.RequestID,
-				}
-				// Save denial idempotency record
-				respBytes, _ := json.Marshal(denyResp)
-				_, _ = tx.Exec(ctx, `
-					INSERT INTO spend_idempotency (organization_id, operation, idempotency_key, payload_hash, response_json, response_status, expires_at)
-					VALUES ($1, 'authorize', $2, $3, $4, 200, $5)
-					ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
-				`, orgID, req.IdempotencyKey, payloadHash, respBytes, now.Add(24*time.Hour))
-				_ = tx.Commit(ctx)
-				return denyResp, nil
-			}
-		}
-
-		windowsToUpdate = append(windowsToUpdate, windowID)
-	}
-
-	// 6. Apply Reservation on all applicable budget windows
-	for _, winID := range windowsToUpdate {
-		_, err = tx.Exec(ctx, `
-			UPDATE budget_windows
-			SET reserved_microcents = reserved_microcents + $1,
-			    version = version + 1,
-			    updated_at = now()
-			WHERE window_id = $2
-		`, reserveMicrocents, winID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update budget window reserve: %w", err)
-		}
-	}
-
-	// 7. Insert Spend Reservation
-	var reservationID string
-	expiresAt := now.Add(5 * time.Minute)
-	policySnapshotBytes, _ := json.Marshal(activePolicies)
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO spend_reservations (
-			organization_id, request_id, gateway_id, project_id, state,
-			reserved_microcents, settled_microcents, currency, expires_at,
-			policy_snapshot, price_book_version_id, provider, model,
-			input_tokens_estimated, max_output_tokens, created_at
-		) VALUES ($1, $2, $3, $4, 'AUTHORIZED', $5, 0, 'USD', $6, $7, $8, $9, $10, $11, $12, now())
-		RETURNING reservation_id
-	`, orgID, req.RequestID, req.GatewayID, req.ProjectID, reserveMicrocents, expiresAt,
-		policySnapshotBytes, activePriceBookID, req.Provider, req.Model, req.InputTokenEstimate, req.MaxOutputTokens).
-		Scan(&reservationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert spend reservation: %w", err)
-	}
-
-	// 8. Append Immutable Spend Event
-	_, err = tx.Exec(ctx, `
-		INSERT INTO spend_events (
-			organization_id, reservation_id, request_id, event_type,
-			amount_microcents, currency, usage_json, actor, reason_code, occurred_at
-		) VALUES ($1, $2, $3, 'AUTHORIZED', $4, 'USD', '{}'::jsonb, $5, 'authorized', now())
-	`, orgID, reservationID, req.RequestID, reserveMicrocents, req.GatewayID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to append spend event: %w", err)
-	}
-
-	allowResp := &AuthorizeResponse{
-		Decision:             "allow",
-		ReasonCode:           "authorized",
-		ReservationID:        reservationID,
-		ReservationExpiresAt: &expiresAt,
-		ReservedMicrocents:   reserveMicrocents,
-		Currency:             CurrencyUSD,
-		PolicyVersions:       policyVersionsPinned,
-		PriceBookVersion:     activePriceBookID,
-		CorrelationID:        req.RequestID,
-	}
-
-	respBytes, _ := json.Marshal(allowResp)
-	_, err = tx.Exec(ctx, `
-		INSERT INTO spend_idempotency (organization_id, operation, idempotency_key, payload_hash, response_json, response_status, expires_at)
-		VALUES ($1, 'authorize', $2, $3, $4, 200, $5)
-		ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
-	`, orgID, req.IdempotencyKey, payloadHash, respBytes, now.Add(24*time.Hour))
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert idempotency record: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit authorization tx: %w", err)
-	}
-
-	return allowResp, nil
-}
-
-func (s *Store) Settle(ctx context.Context, orgID, reservationID string, req *SettleRequest) (*SettleResponse, error) {
-	const maxRetries = 5
-	var backoff = 10 * time.Millisecond
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		resp, err := s.settleTx(ctx, orgID, reservationID, req)
-		if err != nil && isSerializationError(err) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2
-				continue
-			}
-		}
-		return resp, err
-	}
-	return nil, errors.New("spend settlement failed: maximum serialization retries exceeded")
-}
-
-func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *SettleRequest) (*SettleResponse, error) {
-	if s.pool == nil {
-		return nil, errors.New("database pool uninitialized")
-	}
-	if orgID == "" || reservationID == "" {
-		return nil, errors.New("organization_id and reservation_id are required")
-	}
-
-	payloadHash := req.RequestHash
-	if payloadHash == "" {
-		payloadHash = ComputePayloadHash(req)
-	}
-
-	// 1. Check idempotency
-	var cachedRespJSON []byte
-	err := s.pool.QueryRow(ctx, `
-		SELECT response_json FROM spend_idempotency
-		WHERE organization_id = $1 AND operation = 'settle' AND idempotency_key = $2
-	`, orgID, req.IdempotencyKey).Scan(&cachedRespJSON)
-	if err == nil {
-		var resp SettleResponse
-		if err := json.Unmarshal(cachedRespJSON, &resp); err == nil {
-			return &resp, nil
-		}
-	}
-
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin settle tx: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// 2. Lock and retrieve reservation
-	var res SpendReservation
-	var policySnapshotBytes []byte
-	err = tx.QueryRow(ctx, `
-		SELECT reservation_id, organization_id, request_id, gateway_id, project_id, state,
-		       reserved_microcents, settled_microcents, price_book_version_id, provider, model, policy_snapshot
-		FROM spend_reservations
-		WHERE reservation_id = $1 AND organization_id = $2
-		FOR UPDATE
-	`, reservationID, orgID).Scan(
-		&res.ReservationID, &res.OrganizationID, &res.RequestID, &res.GatewayID, &res.ProjectID,
-		&res.State, &res.ReservedMicrocents, &res.SettledMicrocents, &res.PriceBookVersionID,
-		&res.Provider, &res.Model, &policySnapshotBytes,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New(ErrCodeReservationNotFound)
-		}
-		return nil, err
-	}
-
-	if res.State == StateSettled {
-		// Already settled, return idempotent state
-		resp := &SettleResponse{
-			Status:             "settled",
-			ReservationID:      res.ReservationID,
-			SettledMicrocents:  res.SettledMicrocents,
-			ReleasedMicrocents: res.ReservedMicrocents - res.SettledMicrocents,
-			Currency:           CurrencyUSD,
-		}
-		return resp, nil
-	}
-
-	if res.State == StateReleased || res.State == StateExpired || res.State == StateReversed {
-		return nil, fmt.Errorf("%s: reservation is in terminal state %s", ErrCodeReservationTerminal, res.State)
-	}
-
-	// 3. Compute Actual Cost
-	priceItem, err := s.GetPriceBookItem(ctx, res.PriceBookVersionID, res.Provider, res.Model)
-	if err != nil || priceItem == nil {
-		return nil, fmt.Errorf("%s: pricing unavailable for settled model %s", ErrCodePriceUnknown, res.Model)
-	}
-
-	actualCost, err := priceItem.CalculateSettlement(req.InputTokens, req.OutputTokens, req.CachedInputTokens)
-	if err != nil {
-		return nil, fmt.Errorf("settlement calculation failed: %w", err)
-	}
-
-	// 4. Update associated budget windows: decrement reserve, increment settled
-	type activePolicy struct {
-		PolicyVersionID string
-		PeriodType      string
-	}
-	var policies []activePolicy
-	_ = json.Unmarshal(policySnapshotBytes, &policies)
-
-	now := time.Now().UTC()
-	for _, pol := range policies {
-		wStart, _ := GetWindowBoundsUTC(pol.PeriodType, now)
-		_, err = tx.Exec(ctx, `
-			UPDATE budget_windows
-			SET reserved_microcents = GREATEST(0, reserved_microcents - $1),
-			    settled_microcents = settled_microcents + $2,
-			    version = version + 1,
-			    updated_at = now()
-			WHERE organization_id = $3 AND policy_version_id = $4 AND window_start = $5
-		`, res.ReservedMicrocents, actualCost, orgID, pol.PolicyVersionID, wStart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update budget window settlement: %w", err)
-		}
-	}
-
-	// 5. Update Reservation
-	status := req.Status
-	if status == 0 {
-		status = 200
-	}
-	_, err = tx.Exec(ctx, `
-		UPDATE spend_reservations
-		SET state = 'SETTLED',
-		    settled_microcents = $1,
-		    input_tokens = $2,
-		    output_tokens = $3,
-		    cached_tokens = $4,
-		    status_code = $5,
-		    settled_at = now()
-		WHERE reservation_id = $6 AND organization_id = $7
-	`, actualCost, req.InputTokens, req.OutputTokens, req.CachedInputTokens, status, reservationID, orgID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update reservation: %w", err)
-	}
-
-	// 6. Write Append-Only Event
-	usageSource := req.UsageSource
-	if usageSource == "" {
-		if req.IsEstimated {
-			usageSource = UsageSourceCharacterEstimate
-		} else {
-			usageSource = UsageSourceProviderReported
-		}
-	}
-	usageMap := map[string]interface{}{
-		"input_tokens":        req.InputTokens,
-		"output_tokens":       req.OutputTokens,
-		"cached_input_tokens": req.CachedInputTokens,
-		"is_estimated":        req.IsEstimated,
-		"usage_source":        usageSource,
-		"provider_status":     req.Status,
-	}
-	usageBytes, _ := json.Marshal(usageMap)
-
-	var provReqID *string
-	if req.ProviderRequestID != "" {
-		provReqID = &req.ProviderRequestID
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO spend_events (
-			organization_id, reservation_id, request_id, event_type,
-			amount_microcents, currency, usage_json, provider_request_id,
-			actor, reason_code, occurred_at
-		) VALUES ($1, $2, $3, 'SETTLED', $4, 'USD', $5, $6, $7, 'settled', now())
-	`, orgID, reservationID, res.RequestID, actualCost, usageBytes, provReqID, res.GatewayID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to append settlement event: %w", err)
-	}
-
-	releasedMicrocents := res.ReservedMicrocents - actualCost
-	if releasedMicrocents < 0 {
-		releasedMicrocents = 0
-	}
-
-	resp := &SettleResponse{
-		Status:             "settled",
-		ReservationID:      reservationID,
-		SettledMicrocents:  actualCost,
-		ReleasedMicrocents: releasedMicrocents,
-		Currency:           CurrencyUSD,
-	}
-
-	respBytes, _ := json.Marshal(resp)
-	_, _ = tx.Exec(ctx, `
-		INSERT INTO spend_idempotency (organization_id, operation, idempotency_key, payload_hash, response_json, response_status, expires_at)
-		VALUES ($1, 'settle', $2, $3, $4, 200, $5)
-		ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
-	`, orgID, req.IdempotencyKey, payloadHash, respBytes, now.Add(24*time.Hour))
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit settlement tx: %w", err)
-	}
-
-	return resp, nil
-}
-
-// ── 3. RELEASE ───────────────────────────────────────────────────────────────
-
-func (s *Store) Release(ctx context.Context, orgID, reservationID string, req *ReleaseRequest) (*ReleaseResponse, error) {
-	const maxRetries = 5
-	var backoff = 10 * time.Millisecond
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		resp, err := s.releaseTx(ctx, orgID, reservationID, req)
-		if err != nil && isSerializationError(err) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2
-				continue
-			}
-		}
-		return resp, err
-	}
-	return nil, errors.New("spend release failed: maximum serialization retries exceeded")
-}
-
-func (s *Store) releaseTx(ctx context.Context, orgID, reservationID string, req *ReleaseRequest) (*ReleaseResponse, error) {
-	if s.pool == nil {
-		return nil, errors.New("database pool uninitialized")
-	}
-	if orgID == "" || reservationID == "" {
-		return nil, errors.New("organization_id and reservation_id are required")
-	}
-
-	reason := req.Reason
-	if reason == "" {
-		reason = "client_cancelled"
-	}
-
-	statusCode := req.StatusCode
-	if statusCode == 0 {
-		switch reason {
-		case "provider_credential_unavailable":
-			statusCode = http.StatusServiceUnavailable
-		case "upstream_provider_error", "streaming_interrupted":
-			statusCode = http.StatusBadGateway
-		case ErrCodeReservationExpired, "timeout":
-			statusCode = http.StatusRequestTimeout
-		case "spend_budget_exhausted":
-			statusCode = http.StatusTooManyRequests
-		case "client_cancelled":
-			statusCode = 499
-		default:
-			statusCode = http.StatusBadRequest
-		}
-	}
-
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin release tx: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var res SpendReservation
-	var policySnapshotBytes []byte
-	err = tx.QueryRow(ctx, `
-		SELECT reservation_id, organization_id, request_id, gateway_id, state,
-		       reserved_microcents, policy_snapshot
-		FROM spend_reservations
-		WHERE reservation_id = $1 AND organization_id = $2
-		FOR UPDATE
-	`, reservationID, orgID).Scan(
-		&res.ReservationID, &res.OrganizationID, &res.RequestID, &res.GatewayID,
-		&res.State, &res.ReservedMicrocents, &policySnapshotBytes,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New(ErrCodeReservationNotFound)
-		}
-		return nil, err
-	}
-
-	if res.State == StateReleased {
-		return &ReleaseResponse{
-			Status:             "released",
-			ReservationID:      res.ReservationID,
-			ReleasedMicrocents: res.ReservedMicrocents,
-		}, nil
-	}
-
-	if res.State == StateSettled {
-		return nil, fmt.Errorf("%s: cannot release an already settled reservation", ErrCodeReservationTerminal)
-	}
-
-	// Decrement reserve from budget windows
-	type activePolicy struct {
-		PolicyVersionID string
-		PeriodType      string
-	}
-	var policies []activePolicy
-	_ = json.Unmarshal(policySnapshotBytes, &policies)
-
-	now := time.Now().UTC()
-	for _, pol := range policies {
-		wStart, _ := GetWindowBoundsUTC(pol.PeriodType, now)
-		_, err = tx.Exec(ctx, `
-			UPDATE budget_windows
-			SET reserved_microcents = GREATEST(0, reserved_microcents - $1),
-			    version = version + 1,
-			    updated_at = now()
-			WHERE organization_id = $2 AND policy_version_id = $3 AND window_start = $4
-		`, res.ReservedMicrocents, orgID, pol.PolicyVersionID, wStart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to adjust budget window on release: %w", err)
-		}
-	}
-
-	// Update reservation to RELEASED with effective status_code
-	_, err = tx.Exec(ctx, `
-		UPDATE spend_reservations
-		SET state = 'RELEASED',
-		    status_code = $1,
-		    released_at = now(),
-		    release_reason = $2
-		WHERE reservation_id = $3 AND organization_id = $4
-	`, statusCode, reason, reservationID, orgID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update reservation state: %w", err)
-	}
-
-	// Append Spend Event
-	_, err = tx.Exec(ctx, `
-		INSERT INTO spend_events (
-			organization_id, reservation_id, request_id, event_type,
-			amount_microcents, currency, usage_json, actor, reason_code, occurred_at
-		) VALUES ($1, $2, $3, 'RELEASED', $4, 'USD', '{}'::jsonb, $5, $6, now())
-	`, orgID, reservationID, res.RequestID, res.ReservedMicrocents, res.GatewayID, reason)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write release event: %w", err)
-	}
-
-	resp := &ReleaseResponse{
-		Status:             "released",
-		ReservationID:      reservationID,
-		ReleasedMicrocents: res.ReservedMicrocents,
-	}
-
-	respBytes, _ := json.Marshal(resp)
-	_, _ = tx.Exec(ctx, `
-		INSERT INTO spend_idempotency (organization_id, operation, idempotency_key, payload_hash, response_json, response_status, expires_at)
-		VALUES ($1, 'release', $2, $3, $4, 200, $5)
-		ON CONFLICT (organization_id, operation, idempotency_key) DO NOTHING
-	`, orgID, req.IdempotencyKey, req.RequestHash, respBytes, now.Add(24*time.Hour))
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit release tx: %w", err)
-	}
-
-	return resp, nil
-}
-
-// ── 4. SWEEPER ───────────────────────────────────────────────────────────────
-
-func (s *Store) SweepExpiredReservations(ctx context.Context) (int, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT reservation_id, organization_id
-		FROM spend_reservations
-		WHERE state IN ('AUTHORIZED', 'ACTIVE') AND expires_at < now()
-		LIMIT 100
-	`)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	type item struct {
-		resID string
-		orgID string
-	}
-	var items []item
-	for rows.Next() {
-		var it item
-		if err := rows.Scan(&it.resID, &it.orgID); err == nil {
-			items = append(items, it)
-		}
-	}
-	rows.Close()
-
-	count := 0
-	for _, it := range items {
-		req := &ReleaseRequest{
-			IdempotencyKey: fmt.Sprintf("sweep-%s-%d", it.resID, time.Now().Unix()),
-			Reason:         ErrCodeReservationExpired,
-			StatusCode:     http.StatusRequestTimeout,
-		}
-		if _, err := s.Release(ctx, it.orgID, it.resID, req); err == nil {
-			count++
-		}
-	}
-	return count, nil
-}
-
-// ── 5. PRICE BOOK & QUERIES ──────────────────────────────────────────────────
-
-// GetActivePriceBookVersionID returns the most recently published active price book version ID.
-func (s *Store) GetActivePriceBookVersionID(ctx context.Context) string {
-	if s.pool == nil {
-		return "price-book-v1"
-	}
-	var versionID string
-	err := s.pool.QueryRow(ctx, `
-		SELECT price_book_version_id FROM price_book_versions
-		ORDER BY published_at DESC LIMIT 1
-	`).Scan(&versionID)
-	if err != nil || versionID == "" {
-		return "price-book-v1"
-	}
-	return versionID
-}
-
-// GetPriceBookItem queries the exact or wildcard model rate in the specified price book.
-// Returns pgx.ErrNoRows if no pricing rule matches. Never returns synthetic fallback rates.
-func (s *Store) GetPriceBookItem(ctx context.Context, versionID, provider, model string) (*PriceBookItem, error) {
-	if s.pool == nil {
-		return nil, errors.New("database pool uninitialized")
-	}
-	var item PriceBookItem
-	err := s.pool.QueryRow(ctx, `
-		SELECT item_id, price_book_version_id, provider, model_selector,
-		       input_rate_microcents_per_million, output_rate_microcents_per_million, cached_input_rate_microcents_per_million
-		FROM price_book_items
-		WHERE price_book_version_id = $1 AND LOWER(provider) = LOWER($2) AND (
-			model_selector = $3 
-			OR model_selector = '*' 
-			OR ($3 LIKE REPLACE(model_selector, '*', '%'))
-		)
-		ORDER BY 
-			CASE WHEN model_selector = $3 THEN 1 WHEN model_selector != '*' THEN 2 ELSE 3 END
-		LIMIT 1
-	`, versionID, provider, model).Scan(
-		&item.ItemID, &item.PriceBookVersionID, &item.Provider, &item.ModelSelector,
-		&item.InputRateMicrocentsPerMillion, &item.OutputRateMicrocentsPerMillion,
-		&item.CachedInputRateMicrocentsPerMillion,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &item, nil
-}
-
-// ── 6. POLICY MANAGEMENT & EFFECTIVE BUDGETS ─────────────────────────────────
-
-func (s *Store) CreatePolicy(ctx context.Context, p *SpendPolicy) error {
-	return s.pool.QueryRow(ctx, `
-		INSERT INTO spend_policies (
-			organization_id, scope_type, scope_id, currency, period_type,
-			limit_microcents, action, effective_from, status
-		) VALUES ($1, $2, $3, 'USD', $4, $5, $6, now(), 'DRAFT')
-		ON CONFLICT (organization_id, scope_type, scope_id, period_type)
-		DO UPDATE SET limit_microcents = EXCLUDED.limit_microcents, action = EXCLUDED.action, updated_at = now()
-		RETURNING policy_id, created_at, updated_at
-	`, p.OrganizationID, p.ScopeType, p.ScopeID, p.PeriodType, p.LimitMicrocents, p.Action).
-		Scan(&p.PolicyID, &p.CreatedAt, &p.UpdatedAt)
-}
-
-func (s *Store) PublishPolicy(ctx context.Context, orgID, policyID, publishedBy string) (*SpendPolicyVersion, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	var p SpendPolicy
-	err = tx.QueryRow(ctx, `
-		SELECT policy_id, organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action
-		FROM spend_policies
-		WHERE policy_id = $1 AND organization_id = $2
-		FOR UPDATE
-	`, policyID, orgID).Scan(
-		&p.PolicyID, &p.OrganizationID, &p.ScopeType, &p.ScopeID, &p.Currency, &p.PeriodType, &p.LimitMicrocents, &p.Action,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("policy not found: %w", err)
-	}
-
-	var nextVersion int
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(MAX(version), 0) + 1 FROM spend_policy_versions WHERE policy_id = $1
-	`, policyID).Scan(&nextVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotBytes, _ := json.Marshal(p)
-	var pv SpendPolicyVersion
-	err = tx.QueryRow(ctx, `
-		INSERT INTO spend_policy_versions (policy_id, version, snapshot_json, published_by, published_at)
-		VALUES ($1, $2, $3, $4, now())
-		RETURNING policy_version_id, version, published_at
-	`, policyID, nextVersion, snapshotBytes, publishedBy).Scan(&pv.PolicyVersionID, &pv.Version, &pv.PublishedAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create policy version: %w", err)
-	}
-	pv.PolicyID = policyID
-	pv.PublishedBy = publishedBy
-	pv.SnapshotJSON = string(snapshotBytes)
-
-	_, err = tx.Exec(ctx, `UPDATE spend_policies SET status = 'PUBLISHED', updated_at = now() WHERE policy_id = $1`, policyID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
-	return &pv, nil
-}
-
-// EnsureDefaultPolicyForOrg ensures an organization has at least a default monthly policy ($100/mo) seeded and published.
-func (s *Store) EnsureDefaultPolicyForOrg(ctx context.Context, orgID string) error {
-	if s.pool == nil || orgID == "" {
-		return nil
-	}
-	var count int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spend_policies WHERE organization_id = $1`, orgID).Scan(&count)
-	if err != nil || count > 0 {
-		return err
-	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	var policyID string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO spend_policies (
-			organization_id, scope_type, scope_id, currency, period_type,
-			limit_microcents, action, effective_from, status
-		) VALUES (
-			$1, 'organization', $1, 'USD', 'monthly',
-			10000000000, 'hard_deny', now(), 'PUBLISHED'
-		) ON CONFLICT (organization_id, scope_type, scope_id, period_type) DO UPDATE SET updated_at = now()
-		RETURNING policy_id
-	`, orgID).Scan(&policyID)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO spend_policy_versions (
-			policy_id, version, snapshot_json, published_by, published_at
-		) VALUES (
-			$1, 1, '{"scope_type":"organization","limit_microcents":10000000000,"period_type":"monthly"}'::jsonb,
-			'system', now()
-		) ON CONFLICT (policy_id, version) DO NOTHING
-	`, policyID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
-}
-
-func (s *Store) ListPolicies(ctx context.Context, orgID string) ([]SpendPolicy, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT policy_id, organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action, effective_from, status, created_at, updated_at
-		FROM spend_policies
-		WHERE organization_id = $1
-		ORDER BY scope_type, scope_id, period_type
-	`, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []SpendPolicy
-	for rows.Next() {
-		var p SpendPolicy
-		if err := rows.Scan(&p.PolicyID, &p.OrganizationID, &p.ScopeType, &p.ScopeID, &p.Currency, &p.PeriodType, &p.LimitMicrocents, &p.Action, &p.EffectiveFrom, &p.Status, &p.CreatedAt, &p.UpdatedAt); err == nil {
-			res = append(res, p)
-		}
-	}
-	return res, rows.Err()
-}
-
-func (s *Store) ListEffectiveBudgetWindows(ctx context.Context, orgID string) ([]BudgetWindow, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT window_id, organization_id, policy_version_id, scope_type, scope_id,
-		       window_start, window_end, limit_microcents, reserved_microcents, settled_microcents, version
-		FROM budget_windows
-		WHERE organization_id = $1 AND window_end >= now()
-		ORDER BY scope_type, scope_id, window_start DESC
-	`, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []BudgetWindow
-	for rows.Next() {
-		var w BudgetWindow
-		if err := rows.Scan(
-			&w.WindowID, &w.OrganizationID, &w.PolicyVersionID, &w.ScopeType, &w.ScopeID,
-			&w.WindowStart, &w.WindowEnd, &w.LimitMicrocents, &w.ReservedMicrocents, &w.SettledMicrocents, &w.Version,
-		); err == nil {
-			w.AvailableMicrocents = w.LimitMicrocents - w.ReservedMicrocents - w.SettledMicrocents
-			res = append(res, w)
-		}
-	}
-	return res, rows.Err()
-}
-
-func (s *Store) ListSpendEvents(ctx context.Context, orgID string, limit int) ([]SpendEvent, error) {
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT event_id, organization_id, reservation_id, request_id, event_type,
-		       amount_microcents, currency, usage_json, provider_request_id, actor, reason_code, occurred_at
-		FROM spend_events
-		WHERE organization_id = $1
-		ORDER BY occurred_at DESC
-		LIMIT $2
-	`, orgID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []SpendEvent
-	for rows.Next() {
-		var e SpendEvent
-		var usageRaw []byte
-		if err := rows.Scan(
-			&e.EventID, &e.OrganizationID, &e.ReservationID, &e.RequestID, &e.EventType,
-			&e.AmountMicrocents, &e.Currency, &usageRaw, &e.ProviderRequestID, &e.Actor, &e.ReasonCode, &e.OccurredAt,
-		); err == nil {
-			e.UsageJSON = string(usageRaw)
-			res = append(res, e)
-		}
-	}
-	return res, rows.Err()
-}
-
-func (s *Store) CreateIncreaseRequest(ctx context.Context, r *IncreaseRequestV2) error {
-	return s.pool.QueryRow(ctx, `
-		INSERT INTO spend_v2_increase_requests (
-			organization_id, project_id, requested_limit_microcents, current_limit_microcents, reason, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING request_id, created_at
-	`, r.OrganizationID, r.ProjectID, r.RequestedLimitMicrocents, r.CurrentLimitMicrocents, r.Reason, r.CreatedBy).
-		Scan(&r.RequestID, &r.CreatedAt)
-}
-
-func (s *Store) ResolveIncreaseRequest(ctx context.Context, orgID, reqID, status, decidedBy, decisionReason string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	var req IncreaseRequestV2
-	err = tx.QueryRow(ctx, `
-		SELECT request_id, organization_id, project_id, requested_limit_microcents, current_limit_microcents, reason, status
-		FROM spend_v2_increase_requests
-		WHERE request_id = $1 AND organization_id = $2
-		FOR UPDATE
-	`, reqID, orgID).Scan(
-		&req.RequestID, &req.OrganizationID, &req.ProjectID, &req.RequestedLimitMicrocents, &req.CurrentLimitMicrocents, &req.Reason, &req.Status,
-	)
-	if err != nil {
-		return fmt.Errorf("increase request not found: %w", err)
-	}
-
-	var polVerID *string
-	if status == "APPROVED" {
-		// Create or update project policy with requested limit
-		p := SpendPolicy{
-			OrganizationID:  orgID,
-			ScopeType:       ScopeProject,
-			ScopeID:         req.ProjectID,
-			PeriodType:      PeriodMonthly,
-			LimitMicrocents: req.RequestedLimitMicrocents,
-			Action:          ActionHardDeny,
-		}
-		var polID string
-		err = tx.QueryRow(ctx, `
-			INSERT INTO spend_policies (organization_id, scope_type, scope_id, currency, period_type, limit_microcents, action, status)
-			VALUES ($1, 'project', $2, 'USD', 'monthly', $3, 'hard_deny', 'PUBLISHED')
-			ON CONFLICT (organization_id, scope_type, scope_id, period_type)
-			DO UPDATE SET limit_microcents = EXCLUDED.limit_microcents, updated_at = now()
-			RETURNING policy_id
-		`, orgID, req.ProjectID, req.RequestedLimitMicrocents).Scan(&polID)
-		if err != nil {
-			return fmt.Errorf("failed to upsert policy on approval: %w", err)
-		}
-
-		var nextVer int
-		_ = tx.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM spend_policy_versions WHERE policy_id = $1`, polID).Scan(&nextVer)
-
-		p.PolicyID = polID
-		snapBytes, _ := json.Marshal(p)
-		var vID string
-		err = tx.QueryRow(ctx, `
-			INSERT INTO spend_policy_versions (policy_id, version, snapshot_json, published_by, published_at)
-			VALUES ($1, $2, $3, $4, now())
-			RETURNING policy_version_id
-		`, polID, nextVer, snapBytes, decidedBy).Scan(&vID)
-		if err == nil {
-			polVerID = &vID
-		}
-	}
-
-	_, err = tx.Exec(ctx, `
-		UPDATE spend_v2_increase_requests
-		SET status = $1, decided_by = $2, decision_reason = $3, resulting_policy_version_id = $4, decided_at = now()
-		WHERE request_id = $5 AND organization_id = $6
-	`, status, decidedBy, decisionReason, polVerID, reqID, orgID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
-}
-
-func (s *Store) ListIncreaseRequests(ctx context.Context, orgID string) ([]IncreaseRequestV2, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT request_id, organization_id, project_id, requested_limit_microcents, current_limit_microcents,
-		       reason, status, created_by, decided_by, decision_reason, resulting_policy_version_id, created_at, decided_at
-		FROM spend_v2_increase_requests
-		WHERE organization_id = $1
-		ORDER BY created_at DESC
-	`, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []IncreaseRequestV2
-	for rows.Next() {
-		var r IncreaseRequestV2
-		if err := rows.Scan(
-			&r.RequestID, &r.OrganizationID, &r.ProjectID, &r.RequestedLimitMicrocents, &r.CurrentLimitMicrocents,
-			&r.Reason, &r.Status, &r.CreatedBy, &r.DecidedBy, &r.DecisionReason, &r.ResultingPolicyVersionID,
-			&r.CreatedAt, &r.DecidedAt,
-		); err == nil {
-			res = append(res, r)
-		}
-	}
-	return res, rows.Err()
-}
-
-// ── 5. SPEND ANALYTICS & RUN EXPLORER ─────────────────────────────────────────
-
-// GetSpendAnalytics returns server-aggregated ledger totals, hourly time-series, and top spenders.
-func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, groupBy string) (*SpendAnalytics, error) {
-	if s.pool == nil {
-		return &SpendAnalytics{
-			Summary:     SpendAnalyticsSummary{},
-			TimeSeries:  []SpendTimeSeriesPoint{},
-			TopEntities: []SpendTopEntity{},
-		}, nil
-	}
-
-	if hours <= 0 || hours > 720 {
-		hours = 24
-	}
-	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
-
-	var a SpendAnalytics
-	a.TimeSeries = []SpendTimeSeriesPoint{}
-	a.TopEntities = []SpendTopEntity{}
-
-	// 1. High-level Summary
-	err := s.pool.QueryRow(ctx, `
-		SELECT 
-			COALESCE(SUM(reserved_microcents), 0),
-			COALESCE(SUM(settled_microcents), 0),
-			COALESCE(SUM(CASE WHEN state = 'RELEASED' THEN reserved_microcents - settled_microcents ELSE 0 END), 0),
-			COUNT(*),
-			COUNT(*) FILTER (WHERE state = 'DENIED'),
-			COALESCE(SUM(cached_tokens), 0),
-			COALESCE(SUM(input_tokens), 0),
-			COALESCE(SUM(output_tokens), 0)
-		FROM spend_reservations
-		WHERE organization_id = $1 AND created_at >= $2
-	`, orgID, since).Scan(
-		&a.Summary.TotalReservedMoney,
-		&a.Summary.TotalSettledMoney,
-		&a.Summary.TotalReleasedMoney,
-		&a.Summary.RequestCount,
-		&a.Summary.DeniedCount,
-		&a.Summary.TotalCachedTokens,
-		&a.Summary.TotalInputTokens,
-		&a.Summary.TotalOutputTokens,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("spend analytics summary: %w", err)
-	}
-
-	// 2. Hourly Time Series
-	tsRows, err := s.pool.Query(ctx, `
-		SELECT 
-			to_char(date_trunc('hour', created_at), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as hr,
-			COALESCE(SUM(reserved_microcents), 0),
-			COALESCE(SUM(settled_microcents), 0),
-			COALESCE(SUM(CASE WHEN state = 'RELEASED' THEN reserved_microcents - settled_microcents ELSE 0 END), 0),
-			COUNT(*)
-		FROM spend_reservations
-		WHERE organization_id = $1 AND created_at >= $2
-		GROUP BY date_trunc('hour', created_at)
-		ORDER BY date_trunc('hour', created_at) ASC
-	`, orgID, since)
-	if err == nil {
-		defer tsRows.Close()
-		for tsRows.Next() {
-			var pt SpendTimeSeriesPoint
-			if err := tsRows.Scan(&pt.Hour, &pt.ReservedMicrocents, &pt.SettledMicrocents, &pt.ReleasedMicrocents, &pt.RequestCount); err == nil {
-				a.TimeSeries = append(a.TimeSeries, pt)
-			}
-		}
-	}
-
-	// 3. Top Entities by Dimension
-	validGroupBy := map[string]string{
-		"device":   "gateway_id",
-		"provider": "provider",
-		"model":    "model",
-		"project":  "project_id",
-		"user":     "COALESCE(internal_user_id, end_user_id, 'unattributed')",
-		"team":     "COALESCE(virtual_key_alias, 'default')",
-	}
-	col, ok := validGroupBy[groupBy]
-	if !ok {
-		col = "provider"
-	}
-
-	query := fmt.Sprintf(`
-		SELECT 
-			COALESCE(%s, 'unknown'),
-			COALESCE(SUM(settled_microcents), 0),
-			COUNT(*)
-		FROM spend_reservations
-		WHERE organization_id = $1 AND created_at >= $2
-		GROUP BY %s
-		ORDER BY SUM(settled_microcents) DESC, COUNT(*) DESC
-		LIMIT 20
-	`, col, col)
-
-	topRows, err := s.pool.Query(ctx, query, orgID, since)
-	if err == nil {
-		defer topRows.Close()
-		for topRows.Next() {
-			var ent SpendTopEntity
-			if err := topRows.Scan(&ent.EntityID, &ent.SettledMicrocents, &ent.RequestCount); err == nil {
-				ent.EntityName = ent.EntityID
-				a.TopEntities = append(a.TopEntities, ent)
-			}
-		}
-	}
-
-	return &a, nil
-}
-
-// ListRuns returns filtered broker LLM runs & request logs for Observability.
+// ListRuns delegates to the runs package while preserving backward compatibility for spend.Store callers.
 func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSummary, error) {
-	if s.pool == nil {
-		return []RunSummary{}, nil
+	rq := runs.RunQuery{
+		Limit:          q.Limit,
+		Offset:         q.Offset,
+		Since:          q.Since,
+		Until:          q.Until,
+		DeviceID:       q.DeviceID,
+		Provider:       q.Provider,
+		Model:          q.Model,
+		State:          q.State,
+		RequestID:      q.RequestID,
+		SessionID:      q.SessionID,
+		VirtualKeyHash: q.VirtualKeyHash,
+		VirtualKeyID:   q.VirtualKeyID,
+		User:           q.User,
+		Search:         q.Search,
 	}
-
-	if q.Limit <= 0 || q.Limit > 500 {
-		q.Limit = 50
-	}
-	if q.Since.IsZero() {
-		q.Since = time.Now().UTC().Add(-24 * time.Hour)
-	}
-
-	sql := `
-		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
-		       reserved_microcents, settled_microcents, created_at, settled_at,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
-		       COALESCE(ttft_ms, 0),
-		       COALESCE(input_tokens, 0),
-		       COALESCE(output_tokens, 0),
-		       COALESCE(cached_tokens, 0),
-		       virtual_key_id::text,
-		       virtual_key_hash,
-		       virtual_key_prefix,
-		       virtual_key_alias,
-		       session_id,
-		       internal_user_id,
-		       end_user_id,
-		       COALESCE(tags, '{}'::jsonb),
-		       COALESCE(request_type, 'LLM'),
-		       COALESCE(status_code, 200)
-		FROM spend_reservations
-		WHERE organization_id = $1 AND created_at >= $2`
-
-	args := []interface{}{orgID, q.Since}
-	argIdx := 3
-
-	if !q.Until.IsZero() {
-		sql += fmt.Sprintf(" AND created_at <= $%d", argIdx)
-		args = append(args, q.Until)
-		argIdx++
-	}
-	if q.DeviceID != "" {
-		sql += fmt.Sprintf(" AND gateway_id = $%d", argIdx)
-		args = append(args, q.DeviceID)
-		argIdx++
-	}
-	if q.Provider != "" {
-		sql += fmt.Sprintf(" AND LOWER(provider) LIKE LOWER($%d)", argIdx)
-		args = append(args, "%"+q.Provider+"%")
-		argIdx++
-	}
-	if q.Model != "" {
-		sql += fmt.Sprintf(" AND LOWER(model) LIKE LOWER($%d)", argIdx)
-		args = append(args, "%"+q.Model+"%")
-		argIdx++
-	}
-	if q.State != "" {
-		switch strings.ToUpper(q.State) {
-		case "FAILURE", "FAILED", "ERROR":
-			sql += " AND (UPPER(state) IN ('FAILED', 'ERROR', 'DENIED') OR COALESCE(status_code, 200) >= 400 OR release_reason ILIKE '%error%' OR release_reason ILIKE '%fail%' OR release_reason ILIKE '%unavailable%' OR UPPER(state) = 'RELEASED')"
-		case "SUCCESS", "SETTLED":
-			sql += " AND (UPPER(state) = 'SETTLED' AND COALESCE(status_code, 200) >= 200 AND COALESCE(status_code, 200) < 300)"
-		case "DENIED", "BLOCKED":
-			sql += " AND (UPPER(state) IN ('DENIED', 'BLOCKED') OR COALESCE(status_code, 200) IN (403, 429))"
-		default:
-			sql += fmt.Sprintf(" AND UPPER(state) = UPPER($%d)", argIdx)
-			args = append(args, q.State)
-			argIdx++
-		}
-	}
-	if q.RequestID != "" {
-		sql += fmt.Sprintf(" AND (request_id ILIKE $%d OR reservation_id::text ILIKE $%d)", argIdx, argIdx)
-		args = append(args, "%"+q.RequestID+"%")
-		argIdx++
-	}
-	if q.SessionID != "" {
-		sql += fmt.Sprintf(" AND session_id ILIKE $%d", argIdx)
-		args = append(args, "%"+q.SessionID+"%")
-		argIdx++
-	}
-	if q.VirtualKeyHash != "" {
-		sql += fmt.Sprintf(" AND (virtual_key_hash ILIKE $%d OR virtual_key_prefix ILIKE $%d)", argIdx, argIdx)
-		args = append(args, "%"+q.VirtualKeyHash+"%")
-		argIdx++
-	}
-	if q.VirtualKeyID != "" {
-		sql += fmt.Sprintf(" AND virtual_key_id::text = $%d", argIdx)
-		args = append(args, q.VirtualKeyID)
-		argIdx++
-	}
-	if q.User != "" {
-		sql += fmt.Sprintf(" AND (internal_user_id ILIKE $%d OR end_user_id ILIKE $%d)", argIdx, argIdx)
-		args = append(args, "%"+q.User+"%")
-		argIdx++
-	}
-	if q.Search != "" {
-		sql += fmt.Sprintf(" AND (request_id ILIKE $%d OR session_id ILIKE $%d OR virtual_key_prefix ILIKE $%d OR virtual_key_alias ILIKE $%d OR model ILIKE $%d)", argIdx, argIdx, argIdx, argIdx, argIdx)
-		args = append(args, "%"+q.Search+"%")
-		argIdx++
-	}
-
-	sql += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argIdx)
-	args = append(args, q.Limit)
-	argIdx++
-
-	if q.Offset > 0 {
-		sql += fmt.Sprintf(" OFFSET $%d", argIdx)
-		args = append(args, q.Offset)
-	}
-
-	rows, err := s.pool.Query(ctx, sql, args...)
-	if err != nil {
-		// Fallback for schemas where migration 000003 columns might not be applied yet
-		return s.listRunsLegacyFallback(ctx, orgID, q)
-	}
-	defer rows.Close()
-
-	runs := make([]RunSummary, 0)
-	for rows.Next() {
-		var r RunSummary
-		var settledAt *time.Time
-		var tagsJSON []byte
-		if err := rows.Scan(
-			&r.RunID, &r.RequestID, &r.DeviceID, &r.ProjectID, &r.Provider, &r.Model, &r.State,
-			&r.ReservedMicrocents, &r.SettledMicrocents, &r.StartedAt, &settledAt, &r.DurationMs,
-			&r.TTFTMs, &r.InputTokens, &r.OutputTokens, &r.CachedTokens,
-			&r.VirtualKeyID, &r.VirtualKeyHash, &r.VirtualKeyPrefix, &r.VirtualKeyAlias,
-			&r.SessionID, &r.InternalUserID, &r.EndUserID,
-			&tagsJSON, &r.RequestType, &r.StatusCode,
-		); err != nil {
-			continue
-		}
-		r.SettledAt = settledAt
-		r.TotalTokens = r.InputTokens + r.OutputTokens
-		if r.StatusCode == 0 {
-			switch strings.ToUpper(r.State) {
-			case "SETTLED":
-				r.StatusCode = 200
-			case "RELEASED":
-				r.StatusCode = 503
-			case "DENIED", "BLOCKED":
-				r.StatusCode = 403
-			case "FAILED", "ERROR":
-				r.StatusCode = 500
-			}
-		}
-		if len(tagsJSON) > 0 {
-			_ = json.Unmarshal(tagsJSON, &r.Tags)
-		}
-		runs = append(runs, r)
-	}
-	return runs, rows.Err()
-}
-
-func (s *Store) listRunsLegacyFallback(ctx context.Context, orgID string, q RunQuery) ([]RunSummary, error) {
-	sql := `
-		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
-		       reserved_microcents, settled_microcents, created_at, settled_at,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint
-		FROM spend_reservations
-		WHERE organization_id = $1 AND created_at >= $2
-		ORDER BY created_at DESC LIMIT $3`
-
-	rows, err := s.pool.Query(ctx, sql, orgID, q.Since, q.Limit)
-	if err != nil {
-		return nil, fmt.Errorf("list runs legacy query: %w", err)
-	}
-	defer rows.Close()
-
-	runs := make([]RunSummary, 0)
-	for rows.Next() {
-		var r RunSummary
-		var settledAt *time.Time
-		if err := rows.Scan(
-			&r.RunID, &r.RequestID, &r.DeviceID, &r.ProjectID, &r.Provider, &r.Model, &r.State,
-			&r.ReservedMicrocents, &r.SettledMicrocents, &r.StartedAt, &settledAt, &r.DurationMs,
-		); err != nil {
-			continue
-		}
-		r.SettledAt = settledAt
-		r.RequestType = "LLM"
-		r.StatusCode = 200
-		runs = append(runs, r)
-	}
-	return runs, rows.Err()
-}
-
-
-// GetRunDossier retrieves complete identity, policy, economic, and immutable event details for a run.
-func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDossier, error) {
-	if s.pool == nil {
-		return nil, errors.New("database not available")
-	}
-
-	var d RunDossier
-	var policyRaw []byte
-	var settledAt, releasedAt *time.Time
-	var releaseReason *string
-	var rawStatusCode *int
-
-	err := s.pool.QueryRow(ctx, `
-		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
-		       reserved_microcents, settled_microcents, policy_snapshot::text, price_book_version_id,
-		       created_at, settled_at, released_at, release_reason,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
-		       COALESCE(ttft_ms, 0),
-		       COALESCE(input_tokens, 0),
-		       COALESCE(output_tokens, 0),
-		       COALESCE(cached_tokens, 0),
-		       virtual_key_id::text,
-		       virtual_key_hash,
-		       virtual_key_prefix,
-		       virtual_key_alias,
-		       session_id,
-		       internal_user_id,
-		       end_user_id,
-		       COALESCE(tags, '{}'::jsonb),
-		       COALESCE(request_type, 'LLM'),
-		       status_code
-		FROM spend_reservations
-		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
-	`, runID, orgID).Scan(
-		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
-		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,
-		&d.StartedAt, &settledAt, &releasedAt, &releaseReason, &d.DurationMs,
-		&d.TTFTMs, &d.InputTokens, &d.OutputTokens, &d.CachedTokens,
-		&d.VirtualKeyID, &d.VirtualKeyHash, &d.VirtualKeyPrefix, &d.VirtualKeyAlias,
-		&d.SessionID, &d.InternalUserID, &d.EndUserID, &d.Tags, &d.RequestType,
-		&rawStatusCode,
-	)
+	runsList, err := runs.NewStore(s.pool).ListRuns(ctx, orgID, rq)
 	if err != nil {
 		return nil, err
 	}
-
-	d.TotalTokens = d.InputTokens + d.OutputTokens
-
-	d.PolicySnapshot = string(policyRaw)
-	d.SettledAt = settledAt
-	d.ReleasedAt = releasedAt
-	d.ReleaseReason = releaseReason
-
-	if rawStatusCode != nil && *rawStatusCode > 0 {
-		d.StatusCode = *rawStatusCode
-	} else {
-		switch strings.ToUpper(d.State) {
-		case "SETTLED":
-			d.StatusCode = 200
-		case "RELEASED":
-			if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "provider_credential_unavailable") {
-				d.StatusCode = 503
-			} else if releaseReason != nil && (strings.Contains(strings.ToLower(*releaseReason), "timeout") || strings.Contains(strings.ToLower(*releaseReason), "expired")) {
-				d.StatusCode = 504
-			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "exhausted") {
-				d.StatusCode = 429
-			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "cancelled") {
-				d.StatusCode = 499
-			} else if releaseReason != nil && strings.Contains(strings.ToLower(*releaseReason), "upstream") {
-				d.StatusCode = 502
-			} else {
-				d.StatusCode = 400
-			}
-		case "DENIED", "BLOCKED":
-			d.StatusCode = 403
-		case "FAILED", "ERROR":
-			d.StatusCode = 500
-		default:
-			d.StatusCode = 0
+	res := make([]RunSummary, len(runsList))
+	for i, r := range runsList {
+		res[i] = RunSummary{
+			RunID:              r.RunID,
+			RequestID:          r.RequestID,
+			DeviceID:           r.DeviceID,
+			ProjectID:          r.ProjectID,
+			Provider:           r.Provider,
+			Model:              r.Model,
+			State:              r.State,
+			ReservedMicrocents: MoneyMicrocents(r.ReservedMicrocents),
+			SettledMicrocents:  MoneyMicrocents(r.SettledMicrocents),
+			StartedAt:          r.StartedAt,
+			SettledAt:          r.SettledAt,
+			DurationMs:         r.DurationMs,
+			TTFTMs:             r.TTFTMs,
+			InputTokens:        r.InputTokens,
+			OutputTokens:       r.OutputTokens,
+			CachedTokens:       r.CachedTokens,
+			TotalTokens:        r.TotalTokens,
+			VirtualKeyID:       r.VirtualKeyID,
+			VirtualKeyHash:     r.VirtualKeyHash,
+			VirtualKeyPrefix:   r.VirtualKeyPrefix,
+			VirtualKeyAlias:    r.VirtualKeyAlias,
+			SessionID:          r.SessionID,
+			InternalUserID:     r.InternalUserID,
+			EndUserID:          r.EndUserID,
+			Tags:               r.Tags,
+			RequestType:        r.RequestType,
+			StatusCode:         r.StatusCode,
 		}
 	}
-
-	if strings.ToUpper(d.State) == StateReleased || strings.ToUpper(d.State) == "FAILED" || strings.ToUpper(d.State) == "ERROR" || strings.ToUpper(d.State) == "DENIED" {
-		d.ReleasedMicrocents = d.ReservedMicrocents
-		d.SettledMicrocents = 0
-	} else if strings.ToUpper(d.State) == StateSettled {
-		d.ReleasedMicrocents = d.ReservedMicrocents - d.SettledMicrocents
-		if d.ReleasedMicrocents < 0 {
-			d.ReleasedMicrocents = 0
-		}
-	}
-
-	// Fetch Immutable Events
-	d.Events = []SpendEvent{}
-	evRows, err := s.pool.Query(ctx, `
-		SELECT event_id::text, organization_id::text, COALESCE(reservation_id::text, ''), request_id,
-		       event_type, amount_microcents, currency, usage_json::text, provider_request_id,
-		       actor, reason_code, occurred_at
-		FROM spend_events
-		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
-		ORDER BY occurred_at ASC
-	`, d.RunID, orgID)
-	if err == nil {
-		defer evRows.Close()
-		for evRows.Next() {
-			var e SpendEvent
-			var resID string
-			var usageStr string
-			if err := evRows.Scan(
-				&e.EventID, &e.OrganizationID, &resID, &e.RequestID,
-				&e.EventType, &e.AmountMicrocents, &e.Currency, &usageStr, &e.ProviderRequestID,
-				&e.Actor, &e.ReasonCode, &e.OccurredAt,
-			); err == nil {
-				e.ReservationID = resID
-				e.UsageJSON = usageStr
-				d.Events = append(d.Events, e)
-			}
-		}
-	}
-
-	return &d, nil
+	return res, nil
 }
 
-// ResolveEffectivePolicies resolves active published spend policies at a given timestamp.
-func (s *Store) ResolveEffectivePolicies(ctx context.Context, orgID, projectID, provider string, at time.Time) ([]SpendPolicy, error) {
-	if s.pool == nil {
-		return []SpendPolicy{}, nil
-	}
-
-	if at.IsZero() {
-		at = time.Now().UTC()
-	}
-
-	rows, err := s.pool.Query(ctx, `
-		SELECT p.policy_id::text, p.organization_id::text, p.scope_type, p.scope_id, p.currency,
-		       p.period_type, p.limit_microcents, p.action, p.effective_from, p.effective_to, p.status,
-		       p.created_at, p.updated_at
-		FROM spend_policies p
-		WHERE p.organization_id = $1
-		  AND p.status = 'PUBLISHED'
-		  AND p.effective_from <= $2
-		  AND (p.effective_to IS NULL OR p.effective_to > $2)
-		  AND (
-		    p.scope_type = 'organization'
-		    OR (p.scope_type = 'project' AND p.scope_id = $3)
-		    OR (p.scope_type = 'provider' AND LOWER(p.scope_id) = LOWER($4))
-		  )
-		ORDER BY 
-		    CASE p.scope_type 
-		        WHEN 'organization' THEN 1 
-		        WHEN 'project' THEN 2 
-		        WHEN 'provider' THEN 3 
-		    END,
-		    p.created_at DESC
-	`, orgID, at, projectID, provider)
+// GetRunDossier delegates to the runs package while preserving backward compatibility for spend.Store callers.
+func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDossier, error) {
+	d, err := runs.NewStore(s.pool).GetRunDossier(ctx, orgID, runID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve effective policies: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	policies := make([]SpendPolicy, 0)
-	for rows.Next() {
-		var p SpendPolicy
-		var effTo *time.Time
-		if err := rows.Scan(
-			&p.PolicyID, &p.OrganizationID, &p.ScopeType, &p.ScopeID, &p.Currency,
-			&p.PeriodType, &p.LimitMicrocents, &p.Action, &p.EffectiveFrom, &effTo, &p.Status,
-			&p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
-			continue
+	events := make([]SpendEvent, len(d.Events))
+	for i, ev := range d.Events {
+		events[i] = SpendEvent{
+			EventID:           ev.EventID,
+			OrganizationID:    ev.OrganizationID,
+			ReservationID:     ev.ReservationID,
+			RequestID:         ev.RequestID,
+			EventType:         ev.EventType,
+			AmountMicrocents:  MoneyMicrocents(ev.AmountMicrocents),
+			Currency:          ev.Currency,
+			UsageJSON:         ev.UsageJSON,
+			ProviderRequestID: ev.ProviderRequestID,
+			Actor:             ev.Actor,
+			ReasonCode:        ev.ReasonCode,
+			OccurredAt:        ev.OccurredAt,
 		}
-		p.EffectiveTo = effTo
-		policies = append(policies, p)
 	}
-	return policies, rows.Err()
+	return &RunDossier{
+		RunSummary: RunSummary{
+			RunID:              d.RunID,
+			RequestID:          d.RequestID,
+			DeviceID:           d.DeviceID,
+			ProjectID:          d.ProjectID,
+			Provider:           d.Provider,
+			Model:              d.Model,
+			State:              d.State,
+			ReservedMicrocents: MoneyMicrocents(d.ReservedMicrocents),
+			SettledMicrocents:  MoneyMicrocents(d.SettledMicrocents),
+			StartedAt:          d.StartedAt,
+			SettledAt:          d.SettledAt,
+			DurationMs:         d.DurationMs,
+			TTFTMs:             d.TTFTMs,
+			InputTokens:        d.InputTokens,
+			OutputTokens:       d.OutputTokens,
+			CachedTokens:       d.CachedTokens,
+			TotalTokens:        d.TotalTokens,
+			VirtualKeyID:       d.VirtualKeyID,
+			VirtualKeyHash:     d.VirtualKeyHash,
+			VirtualKeyPrefix:   d.VirtualKeyPrefix,
+			VirtualKeyAlias:    d.VirtualKeyAlias,
+			SessionID:          d.SessionID,
+			InternalUserID:     d.InternalUserID,
+			EndUserID:          d.EndUserID,
+			Tags:               d.Tags,
+			RequestType:        d.RequestType,
+			StatusCode:         d.StatusCode,
+		},
+		ReleasedMicrocents: MoneyMicrocents(d.ReleasedMicrocents),
+		ReleaseReason:      d.ReleaseReason,
+		ReleasedAt:         d.ReleasedAt,
+		PolicySnapshot:     d.PolicySnapshot,
+		PriceBookVersionID: d.PriceBookVersionID,
+		Events:             events,
+	}, nil
 }

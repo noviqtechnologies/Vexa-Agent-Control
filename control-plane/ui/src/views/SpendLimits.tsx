@@ -89,14 +89,16 @@ export default function SpendLimits() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Spend Policy Governance</h1>
-        <p>Define authoritative PostgreSQL spend policies with preflight bounded reservation limits and hard fail-closed enforcement.</p>
+    <div className="soc-spend-limits-page">
+      <div className="page-header soc-page-header">
+        <div>
+          <h1>Spend Policy Governance</h1>
+          <p>Define authoritative PostgreSQL spend policies with preflight bounded reservation limits and hard fail-closed enforcement.</p>
+        </div>
       </div>
 
       {licenseNotAvailable && (
-        <div className="card" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
+        <div className="card soc-panel" style={{ padding: 20, marginBottom: 24, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 24 }}>🛡️</span>
             <div>
@@ -107,79 +109,88 @@ export default function SpendLimits() {
         </div>
       )}
 
-      <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-        <h3 style={{ marginBottom: 16, fontSize: 16 }}>Publish New Spend Policy</h3>
+      <div className="card soc-panel" style={{ marginBottom: 24 }}>
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Publish New Spend Policy</div>
+            <div className="soc-card-subtitle">Set preflight budget ceilings with hard 429 denial or passive observation</div>
+          </div>
+        </div>
         
         {message && (
-          <div style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)' }}>
+          <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', marginBottom: 20, background: message.type === 'success' ? 'var(--success-dim)' : 'var(--danger-dim)', color: message.type === 'success' ? 'var(--success)' : 'var(--danger)', fontSize: 13 }}>
             {message.text}
           </div>
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 150 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>SCOPE</label>
-            <select value={scope} onChange={e => setScope(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
-              <option value="organization" style={{ background: '#12121a', color: '#e8e8ed' }}>Organization (Global)</option>
-              <option value="project" style={{ background: '#12121a', color: '#e8e8ed' }}>Project / Workload</option>
-              <option value="provider" style={{ background: '#12121a', color: '#e8e8ed' }}>LLM Provider</option>
+            <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>SCOPE</label>
+            <select value={scope} onChange={e => setScope(e.target.value)} className="soc-select-filter" style={{ width: '100%', padding: '10px 12px' }}>
+              <option value="organization">Organization (Global)</option>
+              <option value="project">Project / Workload</option>
+              <option value="provider">LLM Provider</option>
             </select>
           </div>
           
           {scope === 'project' && (
             <div style={{ flex: 2, minWidth: 180 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>PROJECT / SCOPE ID</label>
-              <input type="text" value={targetId} onChange={e => setTargetId(e.target.value)} placeholder="e.g. customer-support" required style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }} />
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PROJECT / SCOPE ID</label>
+              <input type="text" value={targetId} onChange={e => setTargetId(e.target.value)} placeholder="e.g. customer-support" required className="soc-filter-input" style={{ width: '100%', padding: '10px 12px' }} />
             </div>
           )}
 
           {scope === 'provider' && (
             <div style={{ flex: 2, minWidth: 180 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>LLM PROVIDER</label>
-              <select value={providerChoice} onChange={e => setProviderChoice(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
-                <option value="openai" style={{ background: '#12121a', color: '#e8e8ed' }}>OpenAI</option>
-                <option value="anthropic" style={{ background: '#12121a', color: '#e8e8ed' }}>Anthropic</option>
-                <option value="google" style={{ background: '#12121a', color: '#e8e8ed' }}>Google Gemini</option>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LLM PROVIDER</label>
+              <select value={providerChoice} onChange={e => setProviderChoice(e.target.value)} className="soc-select-filter" style={{ width: '100%', padding: '10px 12px' }}>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google Gemini</option>
               </select>
             </div>
           )}
 
           <div style={{ flex: 1, minWidth: 120 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>PERIOD</label>
-            <select value={period} onChange={e => setPeriod(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
-              <option value="daily" style={{ background: '#12121a', color: '#e8e8ed' }}>Daily</option>
-              <option value="monthly" style={{ background: '#12121a', color: '#e8e8ed' }}>Monthly</option>
+            <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PERIOD</label>
+            <select value={period} onChange={e => setPeriod(e.target.value)} className="soc-select-filter" style={{ width: '100%', padding: '10px 12px' }}>
+              <option value="daily">Daily</option>
+              <option value="monthly">Monthly</option>
             </select>
           </div>
 
           <div style={{ flex: 1, minWidth: 130 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>ACTION</label>
-            <select value={action} onChange={e => setAction(e.target.value)} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }}>
-              <option value="hard_deny" style={{ background: '#12121a', color: '#e8e8ed' }}>Hard Deny (429)</option>
-              <option value="warn" style={{ background: '#12121a', color: '#e8e8ed' }}>Warn / Observe</option>
+            <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ACTION</label>
+            <select value={action} onChange={e => setAction(e.target.value)} className="soc-select-filter" style={{ width: '100%', padding: '10px 12px' }}>
+              <option value="hard_deny">Hard Deny (429)</option>
+              <option value="warn">Warn / Observe</option>
             </select>
           </div>
 
           <div style={{ flex: 1, minWidth: 130 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>LIMIT (USD)</label>
-            <input type="number" step="0.01" value={limit} onChange={e => setLimit(e.target.value)} min="0.01" required style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#fff' }} />
+            <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LIMIT (USD)</label>
+            <input type="number" step="0.01" value={limit} onChange={e => setLimit(e.target.value)} min="0.01" required className="soc-filter-input" style={{ width: '100%', padding: '10px 12px' }} />
           </div>
 
-          <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: '10px 24px', height: 41 }}>
+          <button type="submit" className="soc-btn-primary" disabled={submitting} style={{ padding: '10px 22px', height: 42 }}>
             {submitting ? 'Publishing...' : 'Publish Policy'}
           </button>
         </form>
       </div>
 
-      <div className="card">
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 16, margin: 0 }}>Published Spend Policies</h3>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Published Spend Policies</div>
+            <div className="soc-card-subtitle">{policies.length} active budget allocation rules enforced across workloads</div>
+          </div>
+          <span className="soc-badge">{policies.length} Rules</span>
         </div>
         {loading ? (
           <div className="loading">Loading policies...</div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Scope</th>
@@ -192,24 +203,25 @@ export default function SpendLimits() {
                 </tr>
               </thead>
               <tbody>
-                {policies.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No policies configured.</td></tr>
+                {policies.length === 0 ? (
+                  <tr><td colSpan={7} className="empty-state">No policies configured.</td></tr>
+                ) : (
+                  policies.map((p, idx) => (
+                    <tr key={idx} className="soc-table-row">
+                      <td><span className="badge badge-info">{p.scope_type}</span></td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }} className="text-mono-id">{formatScopeLabel(p.scope_type, p.scope_id, user?.tenant_id)}</td>
+                      <td>{p.period_type}</td>
+                      <td>
+                        <span className={`badge ${p.action === 'hard_deny' ? 'badge-danger' : 'badge-warning'}`}>
+                          {p.action}
+                        </span>
+                      </td>
+                      <td><strong style={{ color: 'var(--warning)' }}>${microcentsToUSD(p.limit_microcents)}</strong></td>
+                      <td><span className="badge badge-success">{p.status}</span></td>
+                      <td style={{ color: 'var(--text-muted)' }}>{p.updated_at ? new Date(p.updated_at).toLocaleString() : '—'}</td>
+                    </tr>
+                  ))
                 )}
-                {policies.map((p, idx) => (
-                  <tr key={idx}>
-                    <td><span className="badge badge-info">{p.scope_type}</span></td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{formatScopeLabel(p.scope_type, p.scope_id, user?.tenant_id)}</td>
-                    <td>{p.period_type}</td>
-                    <td>
-                      <span className={`badge ${p.action === 'hard_deny' ? 'badge-danger' : 'badge-warning'}`}>
-                        {p.action}
-                      </span>
-                    </td>
-                    <td><strong style={{ color: 'var(--warning)' }}>${microcentsToUSD(p.limit_microcents)}</strong></td>
-                    <td><span className="badge badge-success">{p.status}</span></td>
-                    <td style={{ color: 'var(--text-muted)' }}>{p.updated_at ? new Date(p.updated_at).toLocaleString() : '—'}</td>
-                  </tr>
-                ))}
               </tbody>
             </table>
           </div>

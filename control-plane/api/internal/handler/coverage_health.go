@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"math"
 	"net/http"
 	"strings"
@@ -71,6 +72,9 @@ var canonicalIDEs = []struct {
 	{"windsurf", "Windsurf"},
 	{"zed", "Zed Editor"},
 	{"cline", "Cline"},
+	{"antigravity", "Antigravity"},
+	{"codex", "Codex"},
+	{"opencode", "OpenCode"},
 }
 
 // GetCoverageHealth evaluates fleet workstations against active boundary controls.
@@ -85,6 +89,7 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 
 	devicesList, err := h.deviceStore.ListDevices(r.Context(), tenantID)
 	if err != nil {
+		log.Printf("[CoverageHealthHandler.GetCoverageHealth] Error listing devices for tenant %s: %v", tenantID, err)
 		http.Error(w, `{"error":"failed to query device coverage"}`, http.StatusInternalServerError)
 		return
 	}
@@ -93,6 +98,14 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 	var protectedCount, exposedCount, staleCount, revokedCount, totalIDEs, totalTamper int
 	workstations := make([]WorkstationCoverageItem, 0, len(devicesList))
 	seenHosts := make(map[string]int) // maps lower(hostname) -> index in workstations
+
+	normalizeKey := func(s string) string {
+		r := strings.ToLower(s)
+		r = strings.ReplaceAll(r, "_", "")
+		r = strings.ReplaceAll(r, "-", "")
+		r = strings.ReplaceAll(r, " ", "")
+		return r
+	}
 
 	for _, d := range devicesList {
 		hostKey := strings.ToLower(strings.TrimSpace(d.Hostname))
@@ -104,19 +117,24 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 		if idx, seen := seenHosts[hostKey]; seen && hostKey != "" {
 			existing := &workstations[idx]
 			existingActive := make(map[string]bool)
+			existingNormActive := make(map[string]bool)
 			for _, ide := range existing.ActiveIDEs {
 				existingActive[strings.ToLower(ide)] = true
+				existingNormActive[normalizeKey(ide)] = true
 			}
 			for _, ide := range d.ActiveIDEs {
 				if !existingActive[strings.ToLower(ide)] {
 					existing.ActiveIDEs = append(existing.ActiveIDEs, ide)
 					existingActive[strings.ToLower(ide)] = true
+					existingNormActive[normalizeKey(ide)] = true
 					totalIDEs++
 				}
 			}
 			// Refresh IDE coverage for existing workstation
 			for i, c := range canonicalIDEs {
-				if existingActive[c.ID] || existingActive[strings.ToLower(c.Name)] {
+				normID := normalizeKey(c.ID)
+				normName := normalizeKey(c.Name)
+				if existingActive[c.ID] || existingActive[strings.ToLower(c.Name)] || existingNormActive[normID] || existingNormActive[normName] {
 					existing.IdeCoverage[i].Status = "ENFORCED"
 					existing.IdeCoverage[i].IsWrapped = true
 				}
@@ -125,15 +143,19 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 		}
 
 		activeSet := make(map[string]bool)
+		activeNormSet := make(map[string]bool)
 		for _, ide := range d.ActiveIDEs {
 			activeSet[strings.ToLower(ide)] = true
+			activeNormSet[normalizeKey(ide)] = true
 		}
 		totalIDEs += len(d.ActiveIDEs)
 		totalTamper += d.TamperCount24h
 
 		var ideCoverage []SupportedIdeCoverage
 		for _, c := range canonicalIDEs {
-			isWrapped := activeSet[c.ID] || activeSet[strings.ToLower(c.Name)]
+			normID := normalizeKey(c.ID)
+			normName := normalizeKey(c.Name)
+			isWrapped := activeSet[c.ID] || activeSet[strings.ToLower(c.Name)] || activeNormSet[normID] || activeNormSet[normName]
 			status := "NOT_DETECTED"
 			if isWrapped {
 				status = "ENFORCED"
@@ -151,7 +173,7 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 		if strings.ToUpper(d.EnrollmentStatus) == "REVOKED" {
 			healthState = "REVOKED"
 			revokedCount++
-		} else if d.LastHeartbeatAt == nil || now.Sub(*d.LastHeartbeatAt) > 24*time.Hour {
+		} else if d.LastHeartbeatAt == nil || now.Sub(*d.LastHeartbeatAt) > 3*time.Minute || d.OverallCompliance == "OFFLINE" {
 			healthState = "STALE"
 			staleCount++
 		} else if d.TamperCount24h > 0 || d.OverallCompliance == "NON_COMPLIANT" {
@@ -181,8 +203,8 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 	}
 
 	total := len(workstations)
-	score := 100.0
-	if total > 0 {
+	score := 0.0
+	if total > 0 && protectedCount > 0 {
 		score = math.Round((float64(protectedCount)/float64(total))*1000) / 10
 	}
 

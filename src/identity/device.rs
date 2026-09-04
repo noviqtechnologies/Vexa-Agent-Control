@@ -311,6 +311,137 @@ pub fn load_device_token() -> Option<String> {
     None
 }
 
+/// Persist enrolled Control Hub API URL to ~/.agentcontrol/hub_url and ProgramData (Windows) or /etc (Unix)
+pub fn save_hub_url(url: &str) -> Result<(), String> {
+    let clean = url.trim_end_matches('/');
+    if clean.is_empty() {
+        return Ok(());
+    }
+    std::env::set_var("AGENTCONTROL_HUB_URL", clean);
+    std::env::set_var("DASHBOARD_API_URL", clean);
+
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".agentcontrol");
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(dir.join("hub_url"), clean);
+    }
+    #[cfg(windows)]
+    {
+        let program_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
+        let _ = fs::create_dir_all(&program_data);
+        let _ = fs::write(program_data.join("hub_url"), clean);
+        let _ = std::process::Command::new("setx")
+            .args(&["AGENTCONTROL_HUB_URL", clean])
+            .output();
+        let _ = std::process::Command::new("setx")
+            .args(&["DASHBOARD_API_URL", clean])
+            .output();
+    }
+    #[cfg(not(windows))]
+    {
+        let etc_dir = std::path::PathBuf::from("/etc/agentcontrol");
+        if etc_dir.exists() || fs::create_dir_all(&etc_dir).is_ok() {
+            let _ = fs::write(etc_dir.join("hub_url"), clean);
+        }
+    }
+    Ok(())
+}
+
+/// Load enrolled Control Hub URL from environment, ~/.agentcontrol/hub_url, or machine-wide store
+pub fn load_hub_url() -> Option<String> {
+    // 1. Explicit override if set and not a default placeholder
+    if let Ok(v) = std::env::var("AGENTCONTROL_HUB_URL") {
+        let trimmed = v.trim().trim_end_matches('/');
+        if !trimmed.is_empty() 
+            && trimmed != "https://console.vexasec.io" 
+            && trimmed != "https://console-stage.vexasec.io" 
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(v) = std::env::var("DASHBOARD_API_URL") {
+        let trimmed = v.trim().trim_end_matches('/');
+        if !trimmed.is_empty() 
+            && trimmed != "https://console.vexasec.io" 
+            && trimmed != "https://console-stage.vexasec.io" 
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    // 2. Authoritative enrolled hub URL saved on disk
+    #[cfg(windows)]
+    {
+        let prog_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl\hub_url");
+        if let Ok(content) = fs::read_to_string(&prog_data) {
+            let trimmed = content.trim().trim_end_matches('/').to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        let hub_path = home.join(".agentcontrol").join("hub_url");
+        if let Ok(content) = fs::read_to_string(&hub_path) {
+            let trimmed = content.trim().trim_end_matches('/').to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let etc_path = std::path::PathBuf::from("/etc/agentcontrol/hub_url");
+        if let Ok(content) = fs::read_to_string(&etc_path) {
+            let trimmed = content.trim().trim_end_matches('/').to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        for profile in crate::service::windows_profiles::enumerate_user_profiles() {
+            let hub_path = profile.join(".agentcontrol").join("hub_url");
+            if let Ok(content) = fs::read_to_string(&hub_path) {
+                let trimmed = content.trim().trim_end_matches('/').to_string();
+                if !trimmed.is_empty() {
+                    return Some(trimmed);
+                }
+            }
+        }
+    }
+
+    // 3. Fall back to any env var if set
+    std::env::var("AGENTCONTROL_HUB_URL")
+        .or_else(|_| std::env::var("DASHBOARD_API_URL"))
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Check if the local machine has valid enrollment credentials (token or mTLS certs)
+pub fn is_device_enrolled() -> bool {
+    if load_device_token().is_some() {
+        return true;
+    }
+    if let Some(home) = dirs::home_dir() {
+        if home.join(".agentcontrol").join("device_cert.pem").exists() {
+            return true;
+        }
+    }
+    #[cfg(windows)]
+    {
+        if std::path::Path::new(r"C:\ProgramData\AgentControl\device_cert.pem").exists() {
+            return true;
+        }
+    }
+    false
+}
+
 use colored::*;
 
 use crate::identity::keys::IdentityKeyManager;
@@ -646,10 +777,12 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     }
 
     let _ = save_device_token(&complete_data.device.id);
+    let _ = save_hub_url(clean_hub);
 
     println!();
     println!("{} Device enrolled successfully!", "✔".green().bold());
     println!("  Device ID:          {}", complete_data.device.id.cyan());
+    println!("  Control Hub URL:    {}", clean_hub.cyan());
     println!("  Initial State:      {}", complete_data.device.state.yellow());
     println!("  Certificate Serial: {}", complete_data.mtls_certificate.serial.bold());
     println!("  Cert Location:      {}", cert_path.display());
@@ -676,5 +809,27 @@ mod tests {
         let payload = b"test_payload_string";
         let sig_hex = identity.sign(payload);
         assert_eq!(sig_hex.len(), 128); // Ed25519 signature is 64 bytes -> 128 hex chars
+    }
+
+    #[test]
+    fn test_hub_url_persistence_roundtrip() {
+        let orig = load_hub_url();
+        let test_url = "https://hub.example.corp:8400/";
+        let res = save_hub_url(test_url);
+        assert!(res.is_ok());
+
+        let loaded = load_hub_url();
+        assert!(loaded.is_some());
+        assert_eq!(loaded.unwrap(), "https://hub.example.corp:8400");
+
+        if let Some(orig_url) = orig {
+            let _ = save_hub_url(&orig_url);
+        }
+    }
+
+    #[test]
+    fn test_is_device_enrolled_check() {
+        // Enrolled check should run safely without panic
+        let _ = is_device_enrolled();
     }
 }

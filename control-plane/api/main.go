@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"encoding/json"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
@@ -20,6 +21,7 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/scheduler"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
@@ -102,10 +104,23 @@ func main() {
 	if err := spendStore.EnsureSchema(ctx); err != nil {
 		log.Printf("[spend] schema initialization warning: %v", err)
 	}
-	spendSweeper := spend.NewSweeper(spendStore, 30*time.Second)
-	spendSweeper.Start(ctx)
-	defer spendSweeper.Stop()
+	// Centralized Background Daemon Job Scheduler
+	sched := scheduler.New(
+		spend.NewSweepJob(spendStore, 30*time.Second),
+	)
+	sched.Start(ctx)
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		_ = sched.Stop(stopCtx)
+	}()
 	spendV2H := handler.NewSpendV2Handler(spendStore)
+
+	// Expose background scheduler introspection
+	r.Get("/internal/jobs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sched.Statuses())
+	})
 
 	// Initialize Device Governance Store & Handler
 	deviceStore := device.NewStore(db.Pool())

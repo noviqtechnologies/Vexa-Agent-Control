@@ -271,16 +271,19 @@ pub fn ensure_json_proxy_setting(
     Ok(false)
 }
 
-/// Checks if an MCP config file contains wrapped servers
+/// Checks if an MCP config file contains wrapped servers (or has 0 servers / compliant)
 fn check_mcp_config_wrapped(path: &Path) -> bool {
     if !path.exists() {
-        return false;
+        return true;
     }
     if let Ok(raw) = fs::read_to_string(path) {
         if path.extension().and_then(|e| e.to_str()) == Some("toml") {
             if let Ok(val) = toml::from_str::<toml::Value>(&raw) {
                 if let Some(servers) = val.get("mcp_servers").and_then(|s| s.as_table()) {
-                    return servers.values().any(|v| {
+                    if servers.is_empty() {
+                        return true;
+                    }
+                    return servers.values().all(|v| {
                         v.get("command")
                             .and_then(|c| c.as_str())
                             .map(|cmd| cmd.to_lowercase().contains("agentwall") || cmd.to_lowercase().contains("agentcontrol"))
@@ -289,15 +292,21 @@ fn check_mcp_config_wrapped(path: &Path) -> bool {
                 }
             }
         } else if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-            if let Some(servers) = v.get("mcpServers").and_then(|s| s.as_object()) {
-                return servers.values().any(crate::wrap::transformer::is_already_wrapped);
-            }
-            if let Some(servers) = v.get("mcp_servers").and_then(|s| s.as_object()) {
-                return servers.values().any(crate::wrap::transformer::is_already_wrapped);
+            let servers = v.get("mcpServers")
+                .or_else(|| v.get("mcp_servers"))
+                .or_else(|| v.get("context_servers"))
+                .or_else(|| v.get("experimental.context_servers"))
+                .and_then(|s| s.as_object());
+
+            if let Some(servers) = servers {
+                if servers.is_empty() {
+                    return true;
+                }
+                return servers.values().all(crate::wrap::transformer::is_already_wrapped);
             }
         }
     }
-    false
+    true
 }
 
 /// Enforces Agent Control proxy configuration across a named IDE target

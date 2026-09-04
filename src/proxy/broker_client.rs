@@ -17,6 +17,8 @@ pub struct BrokerLLMRequest {
     pub input_token_estimate: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub virtual_key: Option<String>,
     pub payload: serde_json::Value,
 }
 
@@ -84,9 +86,7 @@ impl BrokerClient {
         }
 
         let resolved_url = base_url
-            .or_else(|| std::env::var("AGENTCONTROL_HUB_URL").ok())
-            .or_else(|| std::env::var("AGENTWALL_HUB_URL").ok())
-            .or_else(|| std::env::var("DASHBOARD_API_URL").ok())
+            .or_else(crate::identity::device::load_hub_url)
             .unwrap_or_else(|| "https://console.vexasec.io".to_string());
 
         Self {
@@ -106,11 +106,17 @@ impl BrokerClient {
         let device_token = crate::identity::device::load_device_token()
             .unwrap_or_else(|| gateway_secret.clone());
 
-        let resp = self.http_client
+        let mut req_builder = self.http_client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .header("X-Request-ID", &request.request_id)
-            .header("Authorization", format!("Bearer {}", device_token))
+            .header("Authorization", format!("Bearer {}", device_token));
+
+        if let Some(ref vk) = request.virtual_key {
+            req_builder = req_builder.header("X-Virtual-Key", vk);
+        }
+
+        let resp = req_builder
             .json(request)
             .send()
             .await?;
@@ -136,12 +142,18 @@ impl BrokerClient {
         let device_token = crate::identity::device::load_device_token()
             .unwrap_or_else(|| gateway_secret.clone());
 
-        let resp = self.http_client
+        let mut req_builder = self.http_client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
             .header("X-Request-ID", &request.request_id)
-            .header("Authorization", format!("Bearer {}", device_token))
+            .header("Authorization", format!("Bearer {}", device_token));
+
+        if let Some(ref vk) = request.virtual_key {
+            req_builder = req_builder.header("X-Virtual-Key", vk);
+        }
+
+        let resp = req_builder
             .json(request)
             .send()
             .await?;

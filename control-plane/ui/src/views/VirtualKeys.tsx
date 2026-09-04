@@ -14,6 +14,14 @@ function usdToMicrocents(usd: number): number {
   return Math.round((usd || 0) * 100_000_000)
 }
 
+function formatUSD(amount: number): string {
+  if (!amount || amount === 0) return '$0.00'
+  if (amount > 0 && amount < 0.01) {
+    return `$${amount.toFixed(4)}`
+  }
+  return `$${amount.toFixed(2)}`
+}
+
 export function formatErrorMessage(err: any): string {
   if (!err) return 'An unexpected error occurred'
   const message = typeof err === 'string' ? err : err.message || 'An unexpected error occurred'
@@ -392,7 +400,7 @@ async function main() {
             </svg>
           </div>
           <div className="vk-metric-data">
-            <div className="vk-metric-value">${totalSpentUSD.toFixed(2)}</div>
+            <div className="vk-metric-value">{formatUSD(totalSpentUSD)}</div>
             <div className="vk-metric-label">MTD Spend Consumed</div>
           </div>
         </div>
@@ -529,7 +537,7 @@ async function main() {
                     <td>
                       <div className="vk-spend-meter-wrapper">
                         <div className="vk-spend-labels">
-                          <span className="vk-spend-spent">${spentUSD.toFixed(2)}</span>
+                          <span className="vk-spend-spent">{formatUSD(spentUSD)}</span>
                           <span>${budgetUSD.toFixed(2)} / {key.budget_period === 'daily' ? 'day' : key.budget_period === 'weekly' ? 'wk' : 'mo'}</span>
                         </div>
                         <div className="vk-progress-track">

@@ -46,7 +46,7 @@ export default function CoverageControlHealth() {
   const summary = data?.summary
   const score = totalCount > 0
     ? Math.round((protectedCount / totalCount) * 1000) / 10
-    : (summary?.fleet_protection_score ?? 100.0)
+    : (summary?.fleet_protection_score ?? 0.0)
 
   const filteredWorkstations = deduplicatedWorkstations.filter((w) => {
     if (search) {
@@ -65,19 +65,18 @@ export default function CoverageControlHealth() {
   })
 
   return (
-    <div className="soc-spend-analytics-page">
+    <div className="soc-coverage-page">
       {/* Header */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header soc-page-header">
         <div>
           <h1>Coverage & Control Health</h1>
           <p>Live boundary inspection: which workstations, developer environments, and AI coding tools are actively wrapped, enforced, stale, or bypassing proxy controls.</p>
         </div>
-        <div>
+        <div className="soc-header-controls">
           <button
             type="button"
             className="soc-btn-secondary"
             onClick={loadData}
-            style={{ fontSize: 13 }}
           >
             🔄 Refresh Boundary Map
           </button>
@@ -85,135 +84,138 @@ export default function CoverageControlHealth() {
       </div>
 
       {/* Top KPI Banner */}
-      <div className="card" style={{ padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
-        <div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>
-            FLEET PROTECTION SCORE
-          </p>
+      <div className="stats-grid soc-stats-grid">
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('all')}>
+          <div className="stat-header-row">
+            <div className="stat-label">FLEET PROTECTION SCORE</div>
+            <span className={`soc-delta-badge ${score >= 90 ? 'delta-success' : score >= 70 ? 'delta-warning' : 'delta-danger'}`}>
+              Health
+            </span>
+          </div>
           <div
+            className="stat-value"
             style={{
-              fontSize: 32,
-              fontWeight: 700,
               color: score >= 90 ? '#10b981' : score >= 70 ? '#f59e0b' : '#ef4444',
             }}
           >
             {score.toFixed(1)}%
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Active control enclosed
-          </span>
+          <div className="stat-subtext">Active control enclosed</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>
-            PROTECTED WORKSTATIONS
-          </p>
-          <div style={{ fontSize: 32, fontWeight: 700, color: '#10b981' }}>
+        <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('protected')}>
+          <div className="stat-header-row">
+            <div className="stat-label">PROTECTED WORKSTATIONS</div>
+            <span className="soc-delta-badge delta-success">Live</span>
+          </div>
+          <div className="stat-value" style={{ color: '#10b981' }}>
             {protectedCount}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Heartbeat live & enforced
-          </span>
+          <div className="stat-subtext">Heartbeat live & enforced</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>
-            EXPOSED / UNWRAPPED
-          </p>
-          <div style={{ fontSize: 32, fontWeight: 700, color: exposedCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+        <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => setFilter('action_needed')}>
+          <div className="stat-header-row">
+            <div className="stat-label">EXPOSED / UNWRAPPED</div>
+            <span className="soc-delta-badge delta-danger">{exposedCount > 0 ? 'Urgent' : '0'}</span>
+          </div>
+          <div className="stat-value" style={{ color: exposedCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
             {exposedCount}
           </div>
-          <span style={{ fontSize: 12, color: exposedCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
-            Action required immediately
-          </span>
+          <div className="stat-subtext">Action required immediately</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>
-            STALE HEARTBEATS
-          </p>
-          <div style={{ fontSize: 32, fontWeight: 700, color: staleCount > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
+        <div className="card stat-tile soc-clickable-tile tile-warning" onClick={() => setFilter('stale')}>
+          <div className="stat-header-row">
+            <div className="stat-label">STALE HEARTBEATS</div>
+            <span className="soc-delta-badge delta-warning">{staleCount > 0 ? 'Review' : '0'}</span>
+          </div>
+          <div className="stat-value" style={{ color: staleCount > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
             {staleCount}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            No ping in &gt; 24h
-          </span>
+          <div className="stat-subtext">No ping in &gt; 24h</div>
         </div>
 
-        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 4 }}>
-            TAMPER DETECTIONS
-          </p>
-          <div style={{ fontSize: 32, fontWeight: 700, color: (summary?.tamper_alerts_24h ?? 0) > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+        <div className="card stat-tile soc-clickable-tile tile-danger">
+          <div className="stat-header-row">
+            <div className="stat-label">TAMPER DETECTIONS (24H)</div>
+            <span className="soc-delta-badge delta-danger">24H</span>
+          </div>
+          <div className="stat-value" style={{ color: (summary?.tamper_alerts_24h ?? 0) > 0 ? '#ef4444' : 'var(--text-muted)' }}>
             {summary?.tamper_alerts_24h ?? 0}
           </div>
-          <span style={{ fontSize: 12, color: (summary?.tamper_alerts_24h ?? 0) > 0 ? '#ef4444' : 'var(--text-muted)' }}>
-            Config reversion / bypass
-          </span>
+          <div className="stat-subtext">Config reversion / bypass</div>
         </div>
       </div>
 
-      {/* Filter and Search Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 16 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className={`soc-time-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            All Workstations ({totalCount})
-          </button>
-          <button
-            type="button"
-            className={`soc-time-btn ${filter === 'protected' ? 'active' : ''}`}
-            onClick={() => setFilter('protected')}
-          >
-            🛡️ Protected ({protectedCount})
-          </button>
-          <button
-            type="button"
-            className={`soc-time-btn ${filter === 'action_needed' ? 'active' : ''}`}
-            onClick={() => setFilter('action_needed')}
-          >
-            ⚠️ Action Needed ({exposedCount + staleCount})
-          </button>
-          <button
-            type="button"
-            className={`soc-time-btn ${filter === 'stale' ? 'active' : ''}`}
-            onClick={() => setFilter('stale')}
-          >
-            🕒 Stale ({staleCount})
-          </button>
+      {/* Coverage Matrix Table Panel */}
+      <div className="card soc-panel">
+        <div className="soc-card-header" style={{ marginBottom: 20 }}>
+          <div>
+            <div className="card-title">Workstation Boundary Health Matrix</div>
+            <div className="soc-card-subtitle">{filteredWorkstations.length} of {totalCount} workstations monitored</div>
+          </div>
+          <div className="soc-filter-bar">
+            <div className="soc-time-toggle" role="group" aria-label="Health Filter">
+              <button
+                type="button"
+                className={`soc-time-btn ${filter === 'all' ? 'active' : ''}`}
+                onClick={() => setFilter('all')}
+              >
+                All ({totalCount})
+              </button>
+              <button
+                type="button"
+                className={`soc-time-btn ${filter === 'protected' ? 'active' : ''}`}
+                onClick={() => setFilter('protected')}
+              >
+                🛡️ Protected ({protectedCount})
+              </button>
+              <button
+                type="button"
+                className={`soc-time-btn ${filter === 'action_needed' ? 'active' : ''}`}
+                onClick={() => setFilter('action_needed')}
+              >
+                ⚠️ Action Needed ({exposedCount + staleCount})
+              </button>
+              <button
+                type="button"
+                className={`soc-time-btn ${filter === 'stale' ? 'active' : ''}`}
+                onClick={() => setFilter('stale')}
+              >
+                🕒 Stale ({staleCount})
+              </button>
+            </div>
+            <div className="soc-filter-search-box">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                className="soc-filter-input"
+                placeholder="Filter by hostname, user or ID..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: 240 }}
+              />
+            </div>
+          </div>
         </div>
 
-        <input
-          type="text"
-          className="run-filter-input"
-          placeholder="Filter by hostname, user or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: 280 }}
-        />
-      </div>
+        {error && (
+          <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)', marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
 
-      {error && (
-        <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)', marginBottom: 16 }}>
-          {error}
-        </div>
-      )}
-
-      {/* Coverage Matrix Table */}
-      <div className="runs-table-card card">
         {loading ? (
           <div className="loading" style={{ height: 220 }}>Inspecting workstation boundary health...</div>
         ) : filteredWorkstations.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No developer workstations found matching the criteria.</p>
             <p style={{ fontSize: 13, marginTop: 4 }}>Deploy the Agent Control daemon (`agentcontrol enroll`) to observe developer coverage.</p>
           </div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Workstation</th>
@@ -300,8 +302,11 @@ export default function CoverageControlHealth() {
         )}
 
         {/* Provenance Footer */}
-        <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>Confidence: <strong style={{ color: '#10b981' }}>observed</strong> · Evidence source: <strong>devices + device_compliance_reports</strong></span>
+        <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#10b981' }}>●</span>
+            <span>Integrity: <strong style={{ color: '#10b981' }}>Continuous</strong> · System of Record: <strong>Workstation Compliance & Telemetry Store</strong></span>
+          </span>
           <span>Last audit generation: {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString() : 'N/A'}</span>
         </div>
       </div>

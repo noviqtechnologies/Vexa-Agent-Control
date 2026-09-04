@@ -216,6 +216,24 @@ variable "database_url" {
   sensitive   = true
 }
 
+variable "enable_cloud_sql" {
+  description = "When true, provisions a managed Google Cloud SQL PostgreSQL 16 instance. Guarantees permanent persistence for provider keys, virtual keys, audit logs, and spend data across Cloud Run deployments and scale-to-zero restarts."
+  type        = bool
+  default     = false
+}
+
+variable "cloud_sql_tier" {
+  description = "Machine tier for the managed Cloud SQL PostgreSQL instance (e.g. 'db-f1-micro' for stage ~$7.50/mo, 'db-g1-small' ~$15/mo)."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "cloud_sql_disk_size_gb" {
+  description = "Initial SSD disk size in GB for the managed Cloud SQL instance."
+  type        = number
+  default     = 10
+}
+
 # ─── Custom Labels ────────────────────────────────────────────────────────────
 
 variable "labels" {

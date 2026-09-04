@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentcontrol"
-version = "1.0.73"
+version = "1.0.74"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -61,6 +61,7 @@ tokio = { version = "1", features = [
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = "0.1"
 socket2 = { version = "0.5", features = ["all"] }
+async-trait = "0.1"
 
 # HTTP Engine (Hyper 1.0 ecosystem)
 hyper = { version = "1", features = ["server", "client", "http1", "http2"] }

@@ -31,6 +31,10 @@ locals {
   effective_postgres_password  = var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result
   effective_encryption_secret  = var.encryption_secret != "" ? var.encryption_secret : random_id.encryption_secret.hex
   effective_session_secret     = var.session_secret != "" ? var.session_secret : random_password.session_secret.result
+
+  effective_database_url = var.database_url != "" ? var.database_url : (
+    var.enable_cloud_sql ? "postgres://${var.postgres_user}:${random_password.cloud_sql_password[0].result}@/${var.postgres_db}?host=/cloudsql/${google_sql_database_instance.postgres[0].connection_name}" : "postgres://${var.postgres_user}:${local.effective_postgres_password}@127.0.0.1:5432/${var.postgres_db}?sslmode=disable"
+  )
 }
 
 # ─── Secret Manager Secrets & Versions ────────────────────────────────────────
@@ -49,7 +53,7 @@ resource "google_secret_manager_secret" "db_credentials" {
 
 resource "google_secret_manager_secret_version" "db_credentials" {
   secret      = google_secret_manager_secret.db_credentials.id
-  secret_data = var.database_url != "" ? var.database_url : "postgres://${var.postgres_user}:${local.effective_postgres_password}@127.0.0.1:5432/${var.postgres_db}?sslmode=disable"
+  secret_data = local.effective_database_url
 }
 
 # 2. Gateway Ingest Secret

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
@@ -84,11 +86,39 @@ func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var compliantCount, nonCompliantCount, offlineCount int
+	now := time.Now().UTC()
+	for i := range resp {
+		if strings.ToUpper(resp[i].EnrollmentStatus) == "REVOKED" || strings.ToUpper(resp[i].OverallCompliance) == "NON_COMPLIANT" {
+			nonCompliantCount++
+		} else if resp[i].LastHeartbeatAt == nil || now.Sub(*resp[i].LastHeartbeatAt) > 3*time.Minute {
+			resp[i].OverallCompliance = "OFFLINE"
+			offlineCount++
+		} else {
+			compliantCount++
+		}
+	}
+
+	statusFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("compliance_status")))
+	filteredResp := resp
+	if statusFilter != "" {
+		filteredResp = make([]device.DeviceComplianceSummary, 0, len(resp))
+		for _, d := range resp {
+			if strings.ToUpper(d.OverallCompliance) == statusFilter {
+				filteredResp = append(filteredResp, d)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"devices": resp,
-		"total":   len(resp),
+		"devices":             filteredResp,
+		"total":               len(resp),
+		"total_count":         len(resp),
+		"compliant_count":     compliantCount,
+		"non_compliant_count": nonCompliantCount,
+		"offline_count":       offlineCount,
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 
 type mockProviderClient struct {
 	lastAPIKey string
+	streamErr  error
 }
 
 func (m *mockProviderClient) ForwardLLMRequest(ctx context.Context, provider, model string, stream bool, payload json.RawMessage, apiKey string) (*broker.LLMResponse, *broker.UsageReport, error) {
@@ -39,6 +40,9 @@ func (m *mockProviderClient) ForwardLLMRequest(ctx context.Context, provider, mo
 
 func (m *mockProviderClient) ForwardLLMRequestStream(ctx context.Context, provider, model string, payload json.RawMessage, apiKey string, onChunk func(chunk []byte) error) (*broker.UsageReport, error) {
 	m.lastAPIKey = apiKey
+	if m.streamErr != nil {
+		return nil, m.streamErr
+	}
 	_ = onChunk([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n"))
 	_ = onChunk([]byte("data: [DONE]\n\n"))
 	return &broker.UsageReport{
@@ -177,5 +181,53 @@ func TestBrokerV2Handler_StreamFailClosedOnMissingCredential(t *testing.T) {
 	}
 	if errResp["error"]["code"] != "provider_credential_unavailable" {
 		t.Fatalf("expected error code 'provider_credential_unavailable', got %v", errResp["error"]["code"])
+	}
+}
+
+func TestBrokerV2Handler_HandleLLMStream_UpstreamErrorPropagation(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-mock-key")
+
+	mockClient := &mockProviderClient{
+		streamErr: &broker.UpstreamHTTPError{
+			StatusCode: http.StatusBadRequest,
+			Body:       []byte(`{"error":{"message":"Invalid temperature parameter","type":"invalid_request_error"}}`),
+		},
+	}
+	h := &BrokerV2Handler{
+		ProviderClient: mockClient,
+	}
+
+	reqPayload := BrokerRequestPayload{
+		SchemaVersion: "1.0",
+		RequestID:     "req-stream-err",
+		Provider:      "openai",
+		Model:         "gpt-4o",
+		Stream:        true,
+		Payload:       json.RawMessage(`{"messages":[{"role":"user","content":"hello"}]}`),
+	}
+	bodyBytes, _ := json.Marshal(reqPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v3/broker/llm-stream", bytes.NewReader(bodyBytes))
+
+	principal := &model.DevicePrincipal{
+		DeviceID:       "dev-1",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
+		DeviceState:    model.DeviceStateCompliant,
+	}
+	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	h.HandleLLMStream(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 propagated from upstream, got %d", rr.Code)
+	}
+
+	var errResp map[string]map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp["error"]["message"] != "Invalid temperature parameter" {
+		t.Fatalf("expected message 'Invalid temperature parameter', got %v", errResp["error"]["message"])
 	}
 }

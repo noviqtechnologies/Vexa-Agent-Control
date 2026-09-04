@@ -102,46 +102,69 @@ export default function PolicyInsights() {
   const highAnomalySuggestions = suggestions?.filter(s => s.anomaly_score >= 0.95) ?? []
 
   return (
-    <>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="soc-policy-insights-page">
+      <div className="page-header soc-page-header">
         <div>
           <h1>Policy Insights</h1>
           <p>Self-healing engine status, tool confidence decay, and policy suggestions</p>
         </div>
-        <button className="refresh-btn" onClick={handleRefresh} disabled={refreshing}>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div className="soc-header-controls">
+          <button className="soc-btn-secondary" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Stat tiles */}
       {status && (
-        <div className="stats-grid">
-          <div className="card stat-tile">
+        <div className="stats-grid soc-stats-grid">
+          <div className="card stat-tile soc-clickable-tile">
+            <div className="stat-header-row">
+              <div className="stat-label">Engine Status</div>
+              <span className={`soc-delta-badge ${status.enabled ? 'delta-success' : 'delta-danger'}`}>
+                {status.enabled ? 'Active' : 'Disabled'}
+              </span>
+            </div>
             <div className="stat-value" style={{ color: status.enabled ? 'var(--success)' : 'var(--danger)' }}>
               {status.enabled ? 'Active' : 'Disabled'}
             </div>
-            <div className="stat-label">Engine Status</div>
+            <div className="stat-subtext">Zero-trust autonomous drift analysis</div>
           </div>
-          <div className="card stat-tile">
+
+          <div className="card stat-tile soc-clickable-tile">
+            <div className="stat-header-row">
+              <div className="stat-label">Monitored Tools</div>
+              <span className="soc-delta-badge delta-neutral">MCP</span>
+            </div>
             <div className="stat-value">{status.tools?.length || 0}</div>
-            <div className="stat-label">Monitored Tools</div>
+            <div className="stat-subtext">Active fleet tools tracked</div>
           </div>
-          <div className="card stat-tile">
-            <div className="stat-value" style={{ color: 'var(--danger)' }}>{staleTools.length}</div>
-            <div className="stat-label">Stale Tools</div>
+
+          <div className="card stat-tile soc-clickable-tile tile-danger">
+            <div className="stat-header-row">
+              <div className="stat-label">Stale Tools</div>
+              <span className="soc-delta-badge delta-danger">{staleTools.length > 0 ? 'Decayed' : '0'}</span>
+            </div>
+            <div className="stat-value" style={{ color: staleTools.length > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{staleTools.length}</div>
+            <div className="stat-subtext">Decayed beyond confidence window</div>
           </div>
-          <div className="card stat-tile">
-            <div className="stat-value" style={{ color: 'var(--warning)' }}>{suggestions?.length ?? 0}</div>
-            <div className="stat-label">Pending Suggestions</div>
+
+          <div className="card stat-tile soc-clickable-tile tile-warning">
+            <div className="stat-header-row">
+              <div className="stat-label">Pending Suggestions</div>
+              <span className="soc-delta-badge delta-warning">Review</span>
+            </div>
+            <div className="stat-value" style={{ color: (suggestions?.length ?? 0) > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>{suggestions?.length ?? 0}</div>
+            <div className="stat-subtext">Automated self-healing suggestions</div>
           </div>
         </div>
       )}
 
       {/* High anomaly alert */}
       {highAnomalySuggestions.length > 0 && (
-        <div className="card" style={{ marginBottom: 24, borderColor: 'var(--danger)', background: 'var(--danger-dim)' }}>
+        <div className="card soc-panel" style={{ marginBottom: 24, borderColor: 'var(--danger)', background: 'var(--danger-dim)' }}>
           <div className="card-title" style={{ color: 'var(--danger)' }}>High Anomaly Alerts</div>
-          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>
             {highAnomalySuggestions.length} suggestion{highAnomalySuggestions.length > 1 ? 's' : ''} with anomaly score above 95% detected.
             These may indicate policy baseline deviations requiring immediate review.
           </div>
@@ -149,11 +172,11 @@ export default function PolicyInsights() {
       )}
 
       {/* Engine Architecture & How It Works Banner */}
-      <div className="card" style={{ padding: '16px 20px', marginBottom: 24, backgroundColor: '#18181b', borderColor: '#27272a' }}>
-        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#f4f4f5' }}>
-          🧠 How the Self-Healing Engine Works
-        </h4>
-        <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: '1.5' }}>
+      <div className="card soc-panel" style={{ padding: '18px 22px', marginBottom: 24 }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span>🧠</span> How the Self-Healing Engine Works
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
           The Self-Healing Engine monitors MCP tools invoked by AI agents through the proxy.
           As agents invoke tools, confidence decay values update over a 30-day window. If anomalous tool arguments or unexpected egress behavior are detected, automated policy suggestions appear below for administrator approval.
         </div>
@@ -161,11 +184,16 @@ export default function PolicyInsights() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
         {/* Tool confidence */}
-        <div className="card">
-          <div className="card-title">Tool Confidence Decay</div>
+        <div className="card soc-panel">
+          <div className="soc-card-header">
+            <div>
+              <div className="card-title">Tool Confidence Decay</div>
+              <div className="soc-card-subtitle">30-day probabilistic decay scores</div>
+            </div>
+          </div>
           {status && status.tools?.length > 0 ? (
             <div className="table-wrap">
-              <table>
+              <table className="soc-table">
                 <thead>
                   <tr>
                     <th>Tool</th>
@@ -237,11 +265,17 @@ export default function PolicyInsights() {
       </div>
 
       {/* Suggestions table */}
-      <div className="card">
-        <div className="card-title">Policy Suggestions</div>
+      <div className="card soc-panel" style={{ marginBottom: 24 }}>
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Policy Suggestions</div>
+            <div className="soc-card-subtitle">Automated policy adjustments generated from tool telemetry</div>
+          </div>
+          <span className="soc-badge">{suggestions?.length || 0} Suggestions</span>
+        </div>
         {suggestions && suggestions.length > 0 ? (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Tool</th>
@@ -256,8 +290,8 @@ export default function PolicyInsights() {
                 {suggestions.map((s, i) => {
                   const scoreClass = s.anomaly_score >= 0.95 ? 'danger' : s.anomaly_score >= 0.8 ? 'warning' : 'info'
                   return (
-                    <tr key={`${s.tool}-${s.field}-${i}`}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{s.tool}</td>
+                    <tr key={`${s.tool}-${s.field}-${i}`} className="soc-table-row">
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">{s.tool}</td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{s.field}</td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {s.new_value}
@@ -277,17 +311,17 @@ export default function PolicyInsights() {
       </div>
 
       {/* OWASP Agentic Top 10 (ASI 2026) Compliance Scorecard */}
-      <div className="card" style={{ marginTop: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className="card soc-panel">
+        <div className="soc-card-header" style={{ marginBottom: 16 }}>
           <div>
-            <div className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               🛡️ OWASP Agentic Top 10 (ASI 2026) Security Readiness
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-              Architectural alignment against the OWASP Agentic System Security Standard.
-            </p>
+            <div className="soc-card-subtitle">
+              Architectural alignment against the OWASP Agentic System Security Standard
+            </div>
           </div>
-          <span className="badge badge-success" style={{ fontSize: 12, padding: '4px 10px' }}>
+          <span className="soc-delta-badge delta-success" style={{ fontSize: 12, padding: '4px 10px' }}>
             8/10 Full · 1/10 Partial · 1/10 Scoped
           </span>
         </div>
@@ -305,19 +339,19 @@ export default function PolicyInsights() {
             { id: 'ASI09', name: 'Human Trust Exploitation', status: 'Enforcing', coverage: 'Full', desc: 'HMAC-signed Human-in-the-Loop approval webhooks' },
             { id: 'ASI10', name: 'Rogue Egress / Shadow Traffic', status: 'Enforcing', coverage: 'Full', desc: 'Hardware-bound PKI daemon & persistent watch loops' },
           ].map(item => (
-            <div key={item.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <div key={item.id} style={{ background: 'var(--bg-surface-1)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{item.id}</span>
                 <span className={`badge badge-${item.coverage === 'Full' ? 'success' : item.coverage === 'Partial' ? 'warning' : 'info'}`} style={{ fontSize: 10 }}>
                   {item.coverage}
                 </span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{item.desc}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>{item.desc}</div>
             </div>
           ))}
         </div>
       </div>
-    </>
+    </div>
   )
 }

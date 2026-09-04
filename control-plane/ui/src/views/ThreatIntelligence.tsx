@@ -41,13 +41,13 @@ export default function ThreatIntelligence() {
     : 0
 
   return (
-    <>
-      <div className="page-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1>Threat Intelligence</h1>
-            <p>DLP violations, injection attempts, and semantic anomalies</p>
-          </div>
+    <div className="soc-threat-page">
+      <div className="page-header soc-page-header">
+        <div>
+          <h1>Threat Intelligence</h1>
+          <p>DLP violations, injection attempts, and semantic anomalies</p>
+        </div>
+        <div className="soc-header-controls">
           <div className="soc-time-toggle" role="group" aria-label="Telemetry Time Range">
             {[
               { label: '6H', val: 6 },
@@ -69,36 +69,67 @@ export default function ThreatIntelligence() {
       </div>
 
       {summary && (
-        <div className="stats-grid">
-          <div className="card stat-tile">
+        <div className="stats-grid soc-stats-grid">
+          <div className="card stat-tile soc-clickable-tile">
+            <div className="stat-header-row">
+              <div className="stat-label">Total Findings</div>
+              <span className="soc-delta-badge delta-neutral">{hours}h</span>
+            </div>
             <div className="stat-value">{totalFindings.toLocaleString()}</div>
-            <div className="stat-label">Total Findings</div>
+            <div className="stat-subtext">Security violations detected</div>
           </div>
-          <div className="card stat-tile">
+          <div className="card stat-tile soc-clickable-tile tile-info">
+            <div className="stat-header-row">
+              <div className="stat-label">DLP Violations</div>
+              <span className="soc-delta-badge delta-neutral">Data</span>
+            </div>
             <div className="stat-value" style={{ color: THREAT_COLORS.dlp }}>{summary.dlp_total.toLocaleString()}</div>
-            <div className="stat-label">DLP Violations</div>
+            <div className="stat-subtext">Redacted / blocked secrets</div>
           </div>
-          <div className="card stat-tile">
+          <div className="card stat-tile soc-clickable-tile tile-danger">
+            <div className="stat-header-row">
+              <div className="stat-label">Injection Attempts</div>
+              <span className="soc-delta-badge delta-danger">{summary.injection_total > 0 ? 'Critical' : '0'}</span>
+            </div>
             <div className="stat-value" style={{ color: THREAT_COLORS.injection }}>{summary.injection_total.toLocaleString()}</div>
-            <div className="stat-label">Injection Attempts</div>
+            <div className="stat-subtext">Prompt jailbreaks blocked</div>
           </div>
-          <div className="card stat-tile">
+          <div className="card stat-tile soc-clickable-tile tile-warning">
+            <div className="stat-header-row">
+              <div className="stat-label">Semantic Anomalies</div>
+              <span className="soc-delta-badge delta-warning">{summary.semantic_total > 0 ? 'Review' : '0'}</span>
+            </div>
             <div className="stat-value" style={{ color: THREAT_COLORS.semantic }}>{summary.semantic_total.toLocaleString()}</div>
-            <div className="stat-label">Semantic Anomalies</div>
+            <div className="stat-subtext">Tool loop / jailbreak drifts</div>
           </div>
-          <div className="card stat-tile">
+          <div className="card stat-tile soc-clickable-tile">
+            <div className="stat-header-row">
+              <div className="stat-label">Events with DLP</div>
+              <span className="soc-delta-badge delta-neutral">Fleet</span>
+            </div>
             <div className="stat-value">{summary.events_with_dlp.toLocaleString()}</div>
-            <div className="stat-label">Events with DLP</div>
+            <div className="stat-subtext">Requests containing PII/keys</div>
           </div>
-          <div className="card stat-tile">
+          <div className="card stat-tile soc-clickable-tile">
+            <div className="stat-header-row">
+              <div className="stat-label">Events with Inj/Sem</div>
+              <span className="soc-delta-badge delta-neutral">Payloads</span>
+            </div>
             <div className="stat-value">{(summary.events_with_injection + summary.events_with_semantic).toLocaleString()}</div>
-            <div className="stat-label">Events with Inj/Sem</div>
+            <div className="stat-subtext">Compromise attempts caught</div>
           </div>
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="card-title">Threat Timeline ({hours}h)</div>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Threat Timeline ({hours}h)</div>
+            <div className="soc-card-subtitle">Telemetry trajectory of DLP violations, prompt injections, and semantic threats</div>
+          </div>
+          <span className="soc-live-pill">LIVE STREAM</span>
+        </div>
+
         {timeline.length > 0 ? (
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={timeline}>
@@ -118,27 +149,29 @@ export default function ThreatIntelligence() {
               </defs>
               <XAxis
                 dataKey="hour"
-                tick={{ fill: '#5a5a6e', fontSize: 11 }}
+                tick={{ fill: '#64748b', fontSize: 11 }}
                 tickFormatter={(v: string) => v.split(' ')[1] || v}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: '#5a5a6e', fontSize: 11 }}
+                tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
                 contentStyle={{
-                  background: '#1a1a24',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: '#0e131f',
+                  border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 8,
                   fontSize: 13,
+                  boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                  color: '#f8fafc',
                 }}
               />
-              <Area type="monotone" dataKey="dlp" stroke={THREAT_COLORS.dlp} fill="url(#gradDlp)" strokeWidth={2} />
-              <Area type="monotone" dataKey="injection" stroke={THREAT_COLORS.injection} fill="url(#gradInj)" strokeWidth={2} />
-              <Area type="monotone" dataKey="semantic" stroke={THREAT_COLORS.semantic} fill="url(#gradSem)" strokeWidth={2} />
+              <Area type="monotone" dataKey="dlp" name="DLP Violations" stroke={THREAT_COLORS.dlp} fill="url(#gradDlp)" strokeWidth={2} />
+              <Area type="monotone" dataKey="injection" name="Injection Attempts" stroke={THREAT_COLORS.injection} fill="url(#gradInj)" strokeWidth={2} />
+              <Area type="monotone" dataKey="semantic" name="Semantic Anomalies" stroke={THREAT_COLORS.semantic} fill="url(#gradSem)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -146,10 +179,17 @@ export default function ThreatIntelligence() {
         )}
       </div>
 
-      <div className="card">
-        <div className="card-title">Top Threat Patterns</div>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Top Threat Patterns</div>
+            <div className="soc-card-subtitle">Most frequently triggered signatures, DLP entities, and injection heuristics</div>
+          </div>
+          <span className="soc-badge">{patterns.length} Signatures</span>
+        </div>
+
         <div className="table-wrap">
-          <table>
+          <table className="soc-table">
             <thead>
               <tr>
                 <th>Type</th>
@@ -163,15 +203,15 @@ export default function ThreatIntelligence() {
               {patterns.length === 0 ? (
                 <tr><td colSpan={5} className="empty-state">No patterns detected</td></tr>
               ) : patterns.map((p, i) => (
-                <tr key={`${p.type}-${p.pattern_name}-${i}`}>
+                <tr key={`${p.type}-${p.pattern_name}-${i}`} className="soc-table-row">
                   <td>
                     <span className={`badge badge-${p.type === 'injection' ? 'danger' : p.type === 'dlp' ? 'info' : 'warning'}`}>
                       {p.type}
                     </span>
                   </td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{p.pattern_name}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">{p.pattern_name}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{p.category || '—'}</td>
-                  <td>{p.total_count.toLocaleString()}</td>
+                  <td><strong>{p.total_count.toLocaleString()}</strong></td>
                   <td>{p.event_count.toLocaleString()}</td>
                 </tr>
               ))}
@@ -179,6 +219,6 @@ export default function ThreatIntelligence() {
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }

@@ -76,22 +76,24 @@ export default function IdentityGovernance() {
   }'`
 
   return (
-    <>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="soc-identity-page">
+      <div className="page-header soc-page-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ margin: 0 }}>Identity Governance</h1>
+            <h1>Identity Governance</h1>
             <span className="coming-soon-badge">Coming Soon</span>
           </div>
-          <p style={{ margin: '4px 0 0' }}>Autonomous agent credentials, tool-level scopes, TTLs, and rotation history</p>
+          <p>Autonomous agent credentials, tool-level scopes, TTLs, and rotation history</p>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => setShowModal(true)}
-        >
-          + Issue Sample Credential
-        </button>
+        <div className="soc-header-controls">
+          <button
+            type="button"
+            className="soc-btn-primary"
+            onClick={() => setShowModal(true)}
+          >
+            + Issue Sample Credential
+          </button>
+        </div>
       </div>
 
       {/* Roadmap Preview Banner */}
@@ -111,40 +113,56 @@ export default function IdentityGovernance() {
       </div>
 
       {/* Summary stats */}
-      <div className="stats-grid">
-        <div className="card stat-tile">
+      <div className="stats-grid soc-stats-grid">
+        <div className="card stat-tile soc-clickable-tile">
+          <div className="stat-header-row">
+            <div className="stat-label">Total Credentials</div>
+            <span className="soc-delta-badge delta-neutral">Issued</span>
+          </div>
           <div className="stat-value">{credentials.length}</div>
-          <div className="stat-label">Total Credentials</div>
+          <div className="stat-subtext">Issued identity tokens</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile">
+          <div className="stat-header-row">
+            <div className="stat-label">Active</div>
+            <span className="soc-delta-badge delta-success">Live</span>
+          </div>
           <div className="stat-value" style={{ color: 'var(--success)' }}>
             {credentials.filter(c => c.expires_at_ms > Date.now()).length}
           </div>
-          <div className="stat-label">Active</div>
+          <div className="stat-subtext">Within valid TTL window</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile tile-danger">
+          <div className="stat-header-row">
+            <div className="stat-label">Expired</div>
+            <span className="soc-delta-badge delta-danger">Revoked</span>
+          </div>
           <div className="stat-value" style={{ color: 'var(--danger)' }}>
             {credentials.filter(c => c.expires_at_ms <= Date.now()).length}
           </div>
-          <div className="stat-label">Expired</div>
+          <div className="stat-subtext">Requires credential rotation</div>
         </div>
-        <div className="card stat-tile">
+        <div className="card stat-tile soc-clickable-tile tile-warning">
+          <div className="stat-header-row">
+            <div className="stat-label">Expiring Soon</div>
+            <span className="soc-delta-badge delta-warning">&lt; 1h</span>
+          </div>
           <div className="stat-value" style={{ color: 'var(--warning)' }}>
             {credentials.filter(c => {
               const remaining = c.expires_at_ms - Date.now()
               return remaining > 0 && remaining < 3600_000
             }).length}
           </div>
-          <div className="stat-label">Expiring Soon</div>
+          <div className="stat-subtext">Pending automatic rotation</div>
         </div>
       </div>
 
       {/* Identity Posture Reference Guide */}
-      <div className="card" style={{ padding: '16px', marginBottom: '24px', backgroundColor: '#18181b', borderColor: '#27272a' }}>
-        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#f4f4f5' }}>
-          🔐 Understanding Agent Identity & Scoped Credentials
-        </h4>
-        <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: '1.5' }}>
+      <div className="card soc-panel" style={{ padding: '18px 22px', marginBottom: '24px' }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span>🔐</span> Understanding Agent Identity & Scoped Credentials
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
           Agent Control enforces least-privilege Zero-Trust identity binding for AI daemons.
           Credentials define tool scopes (e.g. <code>mcp:tools:execute</code>) and strict TTLs. Gateway proxies auto-rotate tokens based on security policies.
         </div>
@@ -277,6 +295,6 @@ export default function IdentityGovernance() {
           })}
         </div>
       )}
-    </>
+    </div>
   )
 }

@@ -46,7 +46,11 @@ locals {
     "vpcaccess.googleapis.com"
   ] : []
 
-  gcp_services = concat(local.base_gcp_services, local.vpc_gcp_services)
+  cloud_sql_services = var.enable_cloud_sql ? [
+    "sqladmin.googleapis.com"
+  ] : []
+
+  gcp_services = concat(local.base_gcp_services, local.vpc_gcp_services, local.cloud_sql_services)
 }
 
 # ─── Required GCP Service APIs ────────────────────────────────────────────────
@@ -89,5 +93,12 @@ resource "google_project_iam_member" "metric_writer" {
 resource "google_project_iam_member" "secret_accessor" {
   project = var.gcp_project_id
   role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+resource "google_project_iam_member" "cloudsql_client" {
+  count   = var.enable_cloud_sql ? 1 : 0
+  project = var.gcp_project_id
+  role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }

@@ -34,6 +34,15 @@ type LLMResponse struct {
 	Response json.RawMessage        `json:"response"`
 }
 
+type UpstreamHTTPError struct {
+	StatusCode int
+	Body       []byte
+}
+
+func (e *UpstreamHTTPError) Error() string {
+	return fmt.Sprintf("upstream provider returned status %d: %s", e.StatusCode, string(e.Body))
+}
+
 type GenericProviderClient struct {
 	httpClient *http.Client
 }
@@ -144,7 +153,10 @@ func (c *GenericProviderClient) ForwardLLMRequest(ctx context.Context, provider,
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("upstream provider returned status %d: %s", resp.StatusCode, string(respBytes))
+		return nil, nil, &UpstreamHTTPError{
+			StatusCode: resp.StatusCode,
+			Body:       respBytes,
+		}
 	}
 
 	var usageMap map[string]interface{}
@@ -242,7 +254,10 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("upstream provider returned status %d: %s", resp.StatusCode, string(body))
+		return nil, &UpstreamHTTPError{
+			StatusCode: resp.StatusCode,
+			Body:       body,
+		}
 	}
 
 	reader := bufio.NewReader(resp.Body)

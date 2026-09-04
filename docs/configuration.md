@@ -222,6 +222,43 @@ agentcontrol watch --all
 agentcontrol status
 ```
 
+---
+
+## 9. Model Groups & Pluggable Routing Configuration
+
+Under the `llm:` block, `model_groups:` defines upstream model clusters, failover pools, and data residency boundaries.
+
+### Schema:
+```yaml
+llm:
+  model_groups:
+    - name: "production-chat"
+      routing_strategy: "lowest_latency" # priority | lowest_latency | weighted_random | region_affinity
+      allowed_regions: ["us-east-1", "eu-central-1"] # Enforced by region_affinity
+      deployments:
+        - id: "openai-us-east"
+          provider: "openai"
+          model_name: "gpt-4o"
+          endpoint_url: "https://api.openai.com/v1"
+          priority: 1
+          weight: 80
+          region: "us-east-1"
+        - id: "azure-eu-central"
+          provider: "azure"
+          model_name: "gpt-4o"
+          endpoint_url: "https://my-eu.openai.azure.com"
+          priority: 2
+          weight: 20
+          region: "eu-central-1"
+```
+
+### Strategy Behaviors:
+1. **`priority` (Default):** Dispatches to the deployment with the lowest priority integer. If the primary deployment fails or health checks degrade, traffic fails over seamlessly to the secondary deployment.
+2. **`lowest_latency`:** Queries rolling exponential moving average (EMA) response latencies across deployments and automatically routes requests to the fastest available provider.
+3. **`weighted_random`:** Distributes requests proportionally according to the relative weights configured on each deployment (useful for canary deployments or load distribution).
+4. **`region_affinity`:** Strict sovereign data residency enforcement. If a deployment's region is not in `allowed_regions`, Agent Control rejects the request with HTTP 503 `routing_policy_violation` rather than allowing cross-border data transfer.
+
+
 
 
 <!--

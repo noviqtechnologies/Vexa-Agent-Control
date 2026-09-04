@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +46,7 @@ type BrokerRequestPayload struct {
 	LLMMode            string          `json:"llm_mode,omitempty"` // central_enforce | central_shadow | local_compat
 	InputTokenEstimate int64           `json:"input_token_estimate,omitempty"`
 	MaxOutputTokens    int64           `json:"max_output_tokens,omitempty"`
+	VirtualKey         string          `json:"virtual_key,omitempty"`
 	Payload            json.RawMessage `json:"payload"`
 }
 
@@ -126,6 +129,56 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 	llmMode := req.LLMMode
 	if llmMode == "" {
 		llmMode = "central_enforce"
+	}
+
+	// 0. Extract & Validate Scoped Virtual Key if present
+	virtualKeySecret := r.Header.Get("X-Virtual-Key")
+	if virtualKeySecret == "" {
+		virtualKeySecret = req.VirtualKey
+	}
+	virtualKeySecret = strings.TrimPrefix(virtualKeySecret, "Bearer ")
+	virtualKeySecret = strings.TrimSpace(virtualKeySecret)
+
+	var vk *store.VirtualKey
+	if virtualKeySecret != "" && h.Store != nil {
+		hasher := sha256.New()
+		hasher.Write([]byte(virtualKeySecret))
+		keyHash := hex.EncodeToString(hasher.Sum(nil))
+		vk, _ = h.Store.GetVirtualKeyByHash(r.Context(), keyHash)
+	}
+
+	if vk != nil {
+		if vk.MonthlyBudgetMicrocents > 0 && vk.SpentMicrocents >= vk.MonthlyBudgetMicrocents {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusPaymentRequired)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
+					"code":    "budget_exceeded",
+					"message": "Monthly spend budget exceeded for this virtual key",
+				},
+			})
+			return
+		}
+		if len(vk.AllowedModels) > 0 {
+			modelAllowed := false
+			for _, m := range vk.AllowedModels {
+				if strings.EqualFold(m, req.Model) || m == "*" {
+					modelAllowed = true
+					break
+				}
+			}
+			if !modelAllowed {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    "model_not_allowed",
+						"message": fmt.Sprintf("Model '%s' is not permitted for this virtual key", req.Model),
+					},
+				})
+				return
+			}
+		}
 	}
 
 	// 1. Spend Preflight Authorization
@@ -238,7 +291,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 
 	// 3. Dispatch Egress & Handle Streaming / Buffered
 	if req.Stream {
-		h.handleStreamingDispatch(w, r, tenantID, reqID, &req, apiKey, authResp)
+		h.handleStreamingDispatch(w, r, tenantID, reqID, &req, apiKey, authResp, vk)
 		return
 	}
 
@@ -262,11 +315,19 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)
 		}
+		var upstreamErr *broker.UpstreamHTTPError
+		if errors.As(err, &upstreamErr) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(upstreamErr.StatusCode)
+			_, _ = w.Write(upstreamErr.Body)
+			return
+		}
 		http.Error(w, fmt.Sprintf(`{"error":{"code":"upstream_provider_error","message":%q}}`, err.Error()), http.StatusBadGateway)
 		return
 	}
 
-	// 4. Settle Reservation
+	// 4. Settle Reservation & Record Virtual Key Spend
+	var settledMicrocents int64
 	if authResp != nil && authResp.ReservationID != "" && h.SpendStore != nil && usageRep != nil {
 		settleReq := &spend.SettleRequest{
 			RequestID:         reqID,
@@ -280,7 +341,20 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			Status:            usageRep.StatusCode,
 			RequestHash:       reqID,
 		}
-		_, _ = h.SpendStore.Settle(r.Context(), tenantID, authResp.ReservationID, settleReq)
+		settledResp, _ := h.SpendStore.Settle(r.Context(), tenantID, authResp.ReservationID, settleReq)
+		if settledResp != nil && settledResp.SettledMicrocents > 0 {
+			settledMicrocents = int64(settledResp.SettledMicrocents)
+		}
+	}
+	if settledMicrocents <= 0 && usageRep != nil {
+		toks := usageRep.InputTokens + usageRep.OutputTokens
+		if toks <= 0 {
+			toks = req.InputTokenEstimate + 50
+		}
+		settledMicrocents = toks * 1000
+	}
+	if vk != nil && settledMicrocents > 0 && h.Store != nil {
+		_, _ = h.Store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, settledMicrocents)
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -322,6 +396,56 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 	llmMode := req.LLMMode
 	if llmMode == "" {
 		llmMode = "central_enforce"
+	}
+
+	// 0. Extract & Validate Scoped Virtual Key if present
+	virtualKeySecret := r.Header.Get("X-Virtual-Key")
+	if virtualKeySecret == "" {
+		virtualKeySecret = req.VirtualKey
+	}
+	virtualKeySecret = strings.TrimPrefix(virtualKeySecret, "Bearer ")
+	virtualKeySecret = strings.TrimSpace(virtualKeySecret)
+
+	var vk *store.VirtualKey
+	if virtualKeySecret != "" && h.Store != nil {
+		hasher := sha256.New()
+		hasher.Write([]byte(virtualKeySecret))
+		keyHash := hex.EncodeToString(hasher.Sum(nil))
+		vk, _ = h.Store.GetVirtualKeyByHash(r.Context(), keyHash)
+	}
+
+	if vk != nil {
+		if vk.MonthlyBudgetMicrocents > 0 && vk.SpentMicrocents >= vk.MonthlyBudgetMicrocents {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusPaymentRequired)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
+					"code":    "budget_exceeded",
+					"message": "Monthly spend budget exceeded for this virtual key",
+				},
+			})
+			return
+		}
+		if len(vk.AllowedModels) > 0 {
+			modelAllowed := false
+			for _, m := range vk.AllowedModels {
+				if strings.EqualFold(m, req.Model) || m == "*" {
+					modelAllowed = true
+					break
+				}
+			}
+			if !modelAllowed {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    "model_not_allowed",
+						"message": fmt.Sprintf("Model '%s' is not permitted for this virtual key", req.Model),
+					},
+				})
+				return
+			}
+		}
 	}
 
 	// Spend Preflight Authorization
@@ -430,7 +554,7 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.handleStreamingDispatch(w, r, tenantID, reqID, &req, apiKey, authResp)
+	h.handleStreamingDispatch(w, r, tenantID, reqID, &req, apiKey, authResp, vk)
 }
 
 func (h *BrokerV2Handler) handleStreamingDispatch(
@@ -440,6 +564,7 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 	req *BrokerRequestPayload,
 	apiKey string,
 	authResp *spend.AuthorizeResponse,
+	vk *store.VirtualKey,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -447,18 +572,20 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
+	var headersWritten bool
 	onChunk := func(chunk []byte) error {
 		select {
 		case <-r.Context().Done():
 			return errors.New("client disconnected")
 		default:
+			if !headersWritten {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+				w.Header().Set("X-Accel-Buffering", "no")
+				w.WriteHeader(http.StatusOK)
+				headersWritten = true
+			}
 			_, err := w.Write(chunk)
 			if err != nil {
 				return err
@@ -488,9 +615,43 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 			}
 			_, _ = h.SpendStore.Release(r.Context(), tenantID, authResp.ReservationID, relReq)
 		}
+
+		if !headersWritten {
+			var upstreamErr *broker.UpstreamHTTPError
+			if errors.As(err, &upstreamErr) {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(upstreamErr.StatusCode)
+				_, _ = w.Write(upstreamErr.Body)
+			} else {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusBadGateway)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":       "upstream_provider_error",
+						"message":    err.Error(),
+						"request_id": reqID,
+					},
+				})
+			}
+		} else {
+			errEvt := fmt.Sprintf("data: {\"error\":{\"code\":\"streaming_interrupted\",\"message\":%q,\"type\":\"upstream_error\"}}\n\ndata: [DONE]\n\n", err.Error())
+			_, _ = w.Write([]byte(errEvt))
+			flusher.Flush()
+		}
 		return
 	}
 
+	if !headersWritten {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		flusher.Flush()
+	}
+
+	var settledMicrocents int64
 	if authResp != nil && authResp.ReservationID != "" && h.SpendStore != nil && usageRep != nil {
 		settleReq := &spend.SettleRequest{
 			RequestID:         reqID,
@@ -504,6 +665,19 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 			Status:            usageRep.StatusCode,
 			RequestHash:       reqID,
 		}
-		_, _ = h.SpendStore.Settle(r.Context(), tenantID, authResp.ReservationID, settleReq)
+		settledResp, _ := h.SpendStore.Settle(r.Context(), tenantID, authResp.ReservationID, settleReq)
+		if settledResp != nil && settledResp.SettledMicrocents > 0 {
+			settledMicrocents = int64(settledResp.SettledMicrocents)
+		}
+	}
+	if settledMicrocents <= 0 && usageRep != nil {
+		toks := usageRep.InputTokens + usageRep.OutputTokens
+		if toks <= 0 {
+			toks = req.InputTokenEstimate + 50
+		}
+		settledMicrocents = toks * 1000
+	}
+	if vk != nil && settledMicrocents > 0 && h.Store != nil {
+		_, _ = h.Store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, settledMicrocents)
 	}
 }

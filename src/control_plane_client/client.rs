@@ -16,10 +16,8 @@ impl DashboardClient {
     ///
     /// Falls back to local dev defaults if environment variables are unset.
     pub fn from_env() -> Option<Self> {
-        let base_url = std::env::var("AGENTCONTROL_HUB_URL")
-            .or_else(|_| std::env::var("AGENTWALL_HUB_URL"))
-            .or_else(|_| std::env::var("DASHBOARD_API_URL"))
-            .unwrap_or_else(|_| "https://console.vexasec.io".to_string());
+        let base_url = crate::identity::device::load_hub_url()
+            .unwrap_or_else(|| "https://console.vexasec.io".to_string());
         if base_url.trim().is_empty() {
             return None;
         }

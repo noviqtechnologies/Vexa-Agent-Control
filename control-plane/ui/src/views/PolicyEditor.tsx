@@ -177,21 +177,21 @@ export default function PolicyEditor() {
 
   return (
     <div className="policy-editor-page">
-      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <header className="page-header soc-page-header">
         <div>
           <h1>Policy Editor</h1>
           <p>Edit the global Agent Control YAML policy for runtime evaluation.</p>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="soc-header-controls">
           <button 
             id="btn-goto-marketplace"
-            className="btn-secondary" 
+            type="button"
+            className="soc-btn-secondary" 
             onClick={() => navigate('/policy/marketplace')}
-            style={{ padding: '10px 16px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}
           >
             🏪 Browse Marketplace
           </button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          <button type="button" className="soc-btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save & Apply'}
           </button>
         </div>

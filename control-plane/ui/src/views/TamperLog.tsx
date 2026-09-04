@@ -36,27 +36,33 @@ export default function TamperLog() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>IDE Tamper & Drift Audit Log</h1>
-        <p>Immutable forensic record of configuration tampering, proxy bypass attempts, and automatic self-healing events across developer workstations.</p>
+    <div className="soc-tamper-log-page">
+      <div className="page-header soc-page-header">
+        <div>
+          <h1>IDE Tamper & Drift Audit Log</h1>
+          <p>Immutable forensic record of configuration tampering, proxy bypass attempts, and automatic self-healing events across developer workstations.</p>
+        </div>
       </div>
 
-      <div className="card">
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 16, margin: 0 }}>Workstation Event Stream</h3>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Workstation Event Stream</div>
+            <div className="soc-card-subtitle">Real-time tamper detections and proxy lock integrity alerts</div>
+          </div>
+          <span className="soc-live-pill">FORENSIC LOG</span>
         </div>
 
         {loading ? (
           <div className="loading">Loading tamper events...</div>
         ) : events.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <p>No configuration tampering or bypass events recorded.</p>
-            <p style={{ fontSize: 12, marginTop: 4 }}>Workstation Sentry Daemons are actively maintaining required proxy locks.</p>
+          <div className="empty-state">
+            <p style={{ fontSize: 15, fontWeight: 500 }}>No configuration tampering or bypass events recorded.</p>
+            <p style={{ fontSize: 13, marginTop: 4 }}>Workstation Sentry Daemons are actively maintaining required proxy locks.</p>
           </div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Event ID</th>
@@ -70,8 +76,8 @@ export default function TamperLog() {
               </thead>
               <tbody>
                 {events.map((e, idx) => (
-                  <tr key={idx}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.event_id.substring(0, 8)}...</td>
+                  <tr key={idx} className="soc-table-row">
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} className="text-mono-id">{e.event_id.substring(0, 8)}...</td>
                     <td>
                       <div><strong>{e.hostname}</strong></div>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{e.user_identifier}</span>

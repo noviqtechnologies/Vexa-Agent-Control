@@ -147,6 +147,10 @@ func (s *Store) EnsureEnrollmentV2Schema(ctx context.Context) error {
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS csr_sha256 TEXT;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS public_key_fingerprint TEXT;
 		ALTER TABLE device_certificates ADD COLUMN IF NOT EXISTS renew_after TIMESTAMPTZ;
+
+		-- Ensure unique indexes for ON CONFLICT resolution
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_stable_device_id ON devices(stable_device_id);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_device_certs_serial ON device_certificates(serial_number);
 	`
 	_, err := s.pool.Exec(ctx, q)
 	return err
@@ -484,7 +488,7 @@ func (s *Store) CompleteEnrollmentTransaction(
 				os_family = $5,
 				os_version_summary = $6,
 				architecture = $7,
-				state = 'PENDING'::device_state,
+				state = 'PENDING',
 				state_reason_code = 'REENROLLED_VIA_OTET',
 				revoked_at = NULL,
 				revocation_reason = NULL,
@@ -510,7 +514,7 @@ func (s *Store) CompleteEnrollmentTransaction(
 				os_family = EXCLUDED.os_family,
 				os_version_summary = EXCLUDED.os_version_summary,
 				architecture = EXCLUDED.architecture,
-				state = 'PENDING'::device_state,
+				state = 'PENDING',
 				state_reason_code = 'REENROLLED_VIA_OTET',
 				revoked_at = NULL,
 				revocation_reason = NULL,

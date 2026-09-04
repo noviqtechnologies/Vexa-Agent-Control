@@ -120,6 +120,10 @@ Agent Control adapts to your infrastructure across three operational deployment 
 | **Real-Time Threat Intel Feed** | — | — | ✓ | SSE malware signature stream |
 | **Zero-Knowledge CMK Encryption** | — | — | ✓ | AES-256-GCM client-side export |
 | **Pure-Rust TLS Termination** | — | — | ✓ | `rustls` native HTTPS listener |
+| **Pluggable Model Routing (4 Strategies)** | ✓ | ✓ | ✓ | `model_groups` policy config (AR-2) |
+| **Extensible Pipeline Hook Framework** | ✓ | ✓ | ✓ | PreRoute, PreExecute, PostExecute hooks (AR-1) |
+| **Asynchronous Spend Batch Writer** | — | ✓ | ✓ | Bounded buffer with backpressure protection (AR-3) |
+| **Centralized Daemon Job Scheduler** | — | ✓ | ✓ | Introspection endpoint `/internal/jobs` (AR-4) |
 
 ---
 
@@ -564,6 +568,30 @@ agentcontrol ca uninstall    # Cleanly remove Root CA from trust store
 2. Review project budget limits, current window consumption, and active reservations.
 3. Submit a budget increase request with requested amount and business justification.
 4. Once approved by an operator in `/spend/requests`, the new limit takes effect immediately with zero downtime.
+
+### Pluggable Model Groups & Routing Strategies (AR-2)
+
+When defining upstream model providers in `agentcontrol-policy.yaml`, operators can group multiple deployments under a unified alias with dynamic routing strategies:
+- **`priority`:** Fallback ladder prioritizing primary deployments and shifting to backup endpoints upon failure.
+- **`lowest_latency`:** Dynamically dispatches queries to whichever deployment exhibits the lowest exponential moving average (EMA) response latency.
+- **`weighted_random`:** Proportional traffic routing across deployments based on assigned weights.
+- **`region_affinity`:** Strict sovereign data residency compliance. If the resolved deployment violates `allowed_regions`, Agent Control deterministically rejects the request with HTTP 503 `routing_policy_violation` to prevent cross-border data leakage.
+
+### High-Throughput Asynchronous Spend Event Writer (AR-3, AR-5)
+
+In high-concurrency enterprise deployments, logging individual token spend events synchronously can bottleneck database transaction pools. Agent Control decouples spend event recording via an asynchronous `SpendEventWriter`:
+- **Bounded In-Memory Ring Buffer:** Holds up to 50,000 pending spend events.
+- **Multi-Row Batch Flushing:** Batches flushes into PostgreSQL using `pgx.Batch` every 100ms or 1,000 records.
+- **Backpressure Shed Protection:** Under extreme database saturation, write attempts block for up to 2 seconds before shedding load with critical audit alerts, shielding request proxies from unbounded latencies.
+- **Graceful Shutdown Drain:** Flushes all buffered events to durable storage upon SIGTERM/SIGINT.
+- **Decoupled Execution Runs (`runs.Store`):** Analytical run queries (`ListRuns`, `GetRunDossier`) are isolated from transactional ledger updates, preventing dashboard queries from degrading active agent execution.
+
+### Centralized Daemon Job Scheduler (AR-4)
+
+The Go Control Plane manages true background daemons using a centralized, context-aware `Scheduler`:
+- **Deterministic Sweeper Registration:** Periodic maintenance jobs (e.g. `SweepJob` for cleaning expired reservation holds) register with specific intervals and jitter.
+- **Live Introspection Endpoint:** Operators can inspect active jobs, execution schedules, and run statistics via `GET /internal/jobs`.
+- **Graceful Cancellation:** All daemon jobs link directly to the application termination context, guaranteeing clean cancellation on service shutdown.
 
 ---
 

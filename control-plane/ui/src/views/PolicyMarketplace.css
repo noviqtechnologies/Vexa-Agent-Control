@@ -1,9 +1,6 @@
 .marketplace-container {
-  padding: 24px 32px;
-  max-width: 1560px;
-  margin: 0 auto;
-  color: var(--text-main, #f8fafc);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  width: 100%;
+  color: var(--text-primary);
 }
 
 /* Header */
@@ -14,23 +11,21 @@
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid var(--border-default);
   padding-bottom: 20px;
 }
 
 .marketplace-title-section h1 {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   margin: 0 0 6px 0;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #f8fafc;
 }
 
 .marketplace-title-section p {
-  color: var(--text-muted, #94a3b8);
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 13.5px;
   margin: 0;
 }
 

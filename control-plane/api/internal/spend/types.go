@@ -183,6 +183,7 @@ type SpendEvent struct {
 	UsageJSON         string          `json:"usage_json"`
 	ProviderRequestID *string         `json:"provider_request_id,omitempty"`
 	Actor             string          `json:"actor"`
+	ActorName         string          `json:"actor_name,omitempty"`
 	ReasonCode        string          `json:"reason_code"`
 	OccurredAt        time.Time       `json:"occurred_at"`
 }
@@ -330,6 +331,7 @@ type RunSummary struct {
 	RunID              string          `json:"run_id"`
 	RequestID          string          `json:"request_id"`
 	DeviceID           string          `json:"device_id"`
+	DeviceName         string          `json:"device_name,omitempty"`
 	ProjectID          string          `json:"project_id"`
 	Provider           string          `json:"provider"`
 	Model              string          `json:"model"`

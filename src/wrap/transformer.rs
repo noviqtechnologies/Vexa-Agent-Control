@@ -20,6 +20,26 @@ pub fn is_already_wrapped(entry: &Value) -> bool {
             return true;
         }
     }
+    // Support object command format (Zed: { "command": { "path": "...", "args": [...] } })
+    if let Some(cmd_obj) = entry.get("command").and_then(|c| c.as_object()) {
+        if let Some(path) = cmd_obj.get("path").and_then(|p| p.as_str()) {
+            let path_lower = path.to_lowercase();
+            if path_lower.contains("agentcontrol") || path_lower.contains("agentwall") {
+                return true;
+            }
+        }
+        let obj_first_arg = cmd_obj.get("args")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_str());
+        if obj_first_arg == Some(STDIO_PROXY_MARKER) {
+            return true;
+        }
+    }
+    // If entry has no command property (e.g. Zed native/remote extension), it is compliant
+    if entry.get("command").is_none() {
+        return true;
+    }
     false
 }
 
@@ -29,6 +49,22 @@ pub fn is_already_wrapped(entry: &Value) -> bool {
 pub fn wrap_entry(entry: &mut Value, agentwall_bin: &str) -> Result<(), WrapError> {
     if is_already_wrapped(entry) {
         return Err(WrapError::AlreadyWrapped);
+    }
+
+    if let Some(cmd_obj) = entry.get_mut("command").and_then(|c| c.as_object_mut()) {
+        let path = cmd_obj.get("path")
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| WrapError::InvalidJson("mcpServer command object missing 'path'".to_string()))?
+            .to_string();
+        let existing_args: Vec<Value> = cmd_obj.get("args")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let mut new_args = vec![json!(STDIO_PROXY_MARKER), json!("--"), json!(path)];
+        new_args.extend(existing_args);
+        cmd_obj.insert("path".to_string(), json!(agentwall_bin));
+        cmd_obj.insert("args".to_string(), json!(new_args));
+        return Ok(());
     }
 
     let command = entry["command"]
@@ -57,6 +93,20 @@ pub fn unwrap_entry(entry: &mut Value) -> Result<(), WrapError> {
     if !is_already_wrapped(entry) {
         // Not wrapped by us — leave as-is
         return Ok(());
+    }
+
+    if let Some(cmd_obj) = entry.get_mut("command").and_then(|c| c.as_object_mut()) {
+        let args = cmd_obj.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+        if args.len() >= 3 && args.first().and_then(|a| a.as_str()) == Some(STDIO_PROXY_MARKER) {
+            let original_command = args[2]
+                .as_str()
+                .ok_or_else(|| WrapError::InvalidJson("Original command is not a string".to_string()))?
+                .to_string();
+            let original_args: Vec<Value> = args[3..].to_vec();
+            cmd_obj.insert("path".to_string(), json!(original_command));
+            cmd_obj.insert("args".to_string(), json!(original_args));
+            return Ok(());
+        }
     }
 
     let args = entry["args"].as_array().cloned().unwrap_or_default();
@@ -110,7 +160,9 @@ pub fn wrap_all_servers(
     let mut already = 0;
     let mut command_based = 0;
     for (_name, entry) in servers.iter_mut() {
-        if entry.get("command").and_then(|c| c.as_str()).is_none() {
+        let has_cmd = entry.get("command").and_then(|c| c.as_str()).is_some()
+            || entry.get("command").and_then(|c| c.as_object()).and_then(|o| o.get("path").and_then(|p| p.as_str())).is_some();
+        if !has_cmd {
             continue;
         }
         command_based += 1;

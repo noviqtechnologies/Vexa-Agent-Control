@@ -83,89 +83,89 @@ export const LicenseSettings: React.FC = () => {
   const isUnlimited = maxDevices === -1 || maxDevices >= 999999
 
   return (
-    <div style={{ padding: '24px', maxWidth: '900px', margin: '0 auto', color: '#f8fafc' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: '0 0 8px 0' }}>Organization & License</h1>
-        <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>
-          Manage your organization profile, active license tier, and enrolled device capacity.
-        </p>
+    <div className="soc-license-page" style={{ maxWidth: '1000px', margin: '0 auto' }}>
+      <div className="page-header soc-page-header">
+        <div>
+          <h1>Organization & License</h1>
+          <p>Manage your organization profile, active license tier, and enrolled device capacity.</p>
+        </div>
       </div>
 
       {error && (
-        <div style={{ padding: '12px 16px', background: '#ef444420', border: '1px solid #ef444460', borderRadius: '6px', color: '#fca5a5', marginBottom: '16px', fontSize: '14px' }}>
+        <div style={{ padding: '12px 16px', background: 'var(--danger-dim)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 'var(--radius-sm)', color: '#fca5a5', marginBottom: '16px', fontSize: '14px' }}>
           {error}
         </div>
       )}
 
       {success && (
-        <div style={{ padding: '12px 16px', background: '#22c55e20', border: '1px solid #22c55e60', borderRadius: '6px', color: '#86efac', marginBottom: '16px', fontSize: '14px' }}>
+        <div style={{ padding: '12px 16px', background: 'var(--success-dim)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: 'var(--radius-sm)', color: '#86efac', marginBottom: '16px', fontSize: '14px' }}>
           {success}
         </div>
       )}
 
       {/* Organization Details Card */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0', color: '#e2e8f0' }}>Organization Profile</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Organization Name</div>
-            <div style={{ fontSize: '15px', fontWeight: 500, marginTop: '4px' }}>{org?.name || 'Primary Organization'}</div>
+            <div className="card-title">Organization Profile</div>
+            <div className="soc-card-subtitle">Tenant identity and administrator contact coordinates</div>
+          </div>
+          <span className="soc-badge">ID: {org?.id ? org.id.substring(0, 8) + '...' : 'default'}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+          <div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organization Name</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>{org?.name || 'Primary Organization'}</div>
           </div>
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Organization Slug</div>
-            <div style={{ fontSize: '15px', fontWeight: 500, marginTop: '4px' }}>{org?.slug || 'default'}</div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organization Slug</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>{org?.slug || 'default'}</div>
           </div>
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Email</div>
-            <div style={{ fontSize: '15px', fontWeight: 500, marginTop: '4px' }}>{org?.contact_email || 'admin@agentcontrol.local'}</div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Email</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>{org?.contact_email || 'admin@agentcontrol.local'}</div>
           </div>
         </div>
       </div>
 
       {/* License Tier Card */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0, color: '#e2e8f0' }}>Active License Tier</h2>
-          <span style={{
-            padding: '4px 10px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            background: tier === 'enterprise' ? '#8b5cf630' : tier === 'team' ? '#3b82f630' : '#64748b30',
-            color: tier === 'enterprise' ? '#c084fc' : tier === 'team' ? '#60a5fa' : '#cbd5e1',
-            border: `1px solid ${tier === 'enterprise' ? '#8b5cf660' : tier === 'team' ? '#3b82f660' : '#64748b60'}`,
-          }}>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Active License Tier</div>
+            <div className="soc-card-subtitle">Zero-Trust entitlement enforcement and seat quota</div>
+          </div>
+          <span className={`soc-delta-badge ${tier === 'enterprise' ? 'delta-success' : tier === 'team' ? 'delta-warning' : 'delta-neutral'}`} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase' }}>
             {tier}
           </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '24px' }}>
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Enrolled Devices</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '4px' }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enrolled Devices</div>
+            <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
               {enrolledDevices} / {isUnlimited ? 'Unlimited' : maxDevices}
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
               {isUnlimited ? 'No device enrollment cap' : `${Math.max(0, maxDevices - enrolledDevices)} device slots remaining`}
             </div>
           </div>
 
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>License Status</div>
-            <div style={{ fontSize: '15px', fontWeight: 500, marginTop: '4px', color: '#4ade80' }}>
-              Active
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>License Status</div>
+            <div style={{ fontSize: '16px', fontWeight: 600, marginTop: '6px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>●</span> Active
             </div>
             {org?.days_remaining !== undefined && org.days_remaining > 0 && (
-              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                 {org.days_remaining} days remaining
               </div>
             )}
           </div>
 
           <div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Features Enabled</div>
-            <div style={{ fontSize: '13px', color: '#cbd5e1', marginTop: '4px' }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Features Enabled</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.5 }}>
               {tier === 'enterprise'
                 ? 'Unlimited Devices, OIDC SSO, Spend Caps, SIEM Streaming, Deep DLP'
                 : tier === 'team'
@@ -177,11 +177,13 @@ export const LicenseSettings: React.FC = () => {
       </div>
 
       {/* License Activation Form */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '20px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 8px 0', color: '#e2e8f0' }}>Activate License Key</h2>
-        <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 16px 0' }}>
-          Paste your cryptographically-signed Ed25519 license JWT below to unlock Team or Enterprise capabilities.
-        </p>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Activate License Key</div>
+            <div className="soc-card-subtitle">Paste your cryptographically-signed Ed25519 license JWT below to unlock Team or Enterprise capabilities</div>
+          </div>
+        </div>
 
         <form onSubmit={handleActivateLicense}>
           <textarea
@@ -191,31 +193,23 @@ export const LicenseSettings: React.FC = () => {
             rows={4}
             style={{
               width: '100%',
-              padding: '10px',
-              fontFamily: 'monospace',
-              fontSize: '12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
+              padding: '12px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12.5px',
+              background: 'var(--bg-surface-1)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
               boxSizing: 'border-box',
               resize: 'vertical',
+              outline: 'none',
             }}
           />
-          <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
             <button
               type="submit"
               disabled={submitting || !licenseKey.trim()}
-              style={{
-                padding: '8px 16px',
-                background: submitting || !licenseKey.trim() ? '#475569' : '#2563eb',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '13px',
-                cursor: submitting || !licenseKey.trim() ? 'not-allowed' : 'pointer',
-              }}
+              className="soc-btn-primary"
             >
               {submitting ? 'Verifying...' : 'Activate License'}
             </button>

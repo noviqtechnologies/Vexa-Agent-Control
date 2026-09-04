@@ -667,15 +667,23 @@ fn build_proxy_state(
 
     let provider_keys = {
         let map = dashmap::DashMap::new();
-        if let Ok(k) = std::env::var("OPENAI_API_KEY") {
-            if !k.is_empty() {
-                map.insert("openai".to_string(), k);
-            }
+        if let Some(k) = agentcontrol::proxy::llm_proxy::get_env_or_dotenv("OPENAI_API_KEY") {
+            map.insert("openai".to_string(), k);
         }
-        if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
-            if !k.is_empty() {
-                map.insert("anthropic".to_string(), k);
-            }
+        if let Some(k) = agentcontrol::proxy::llm_proxy::get_env_or_dotenv("ANTHROPIC_API_KEY") {
+            map.insert("anthropic".to_string(), k);
+        }
+        if let Some(k) = agentcontrol::proxy::llm_proxy::get_env_or_dotenv("GEMINI_API_KEY")
+            .or_else(|| agentcontrol::proxy::llm_proxy::get_env_or_dotenv("GOOGLE_API_KEY"))
+        {
+            map.insert("google".to_string(), k.clone());
+            map.insert("gemini".to_string(), k);
+        }
+        if let Some(k) = agentcontrol::proxy::llm_proxy::get_env_or_dotenv("DEEPSEEK_API_KEY") {
+            map.insert("deepseek".to_string(), k);
+        }
+        if let Some(k) = agentcontrol::proxy::llm_proxy::get_env_or_dotenv("GROQ_API_KEY") {
+            map.insert("groq".to_string(), k);
         }
         map
     };
@@ -694,6 +702,13 @@ fn build_proxy_state(
         (mode, allowed, default_m, enf)
     };
 
+    let dlp_scanner_arc = std::sync::Arc::new(
+        agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
+    );
+    let hook_registry = Arc::new(
+        agentcontrol::proxy::hooks::HookRegistry::with_default_scanners(dlp_scanner_arc.clone()),
+    );
+
     Arc::new(ProxyState {
         policy: std::sync::RwLock::new(compiled_policy.clone()),
         audit_logger,
@@ -711,9 +726,7 @@ fn build_proxy_state(
         db_manager,
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
-        dlp_scanner: std::sync::Arc::new(
-            agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-        ),
+        dlp_scanner: dlp_scanner_arc,
         semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
             agentcontrol::policy::semantic::SemanticConfig::default(),
         )),
@@ -769,6 +782,7 @@ fn build_proxy_state(
         adaptive_timeout: Arc::new(agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager::default()),
         embedding_batcher: Arc::new(agentcontrol::proxy::embedding_batcher::EmbeddingBatcher::default()),
         provider_router: Arc::new(agentcontrol::proxy::provider_router::ProviderRouter::default()),
+        hook_registry,
     })
 }
 
@@ -914,13 +928,15 @@ async fn dispatch_start(args: cli::StartArgs) -> i32 {
 async fn run_start(args: cli::StartArgs) -> i32 {
     println!("{} Loading configuration...", "ℹ".blue());
 
+    let is_enrolled = agentcontrol::identity::device::is_device_enrolled();
+
     let profile = args
         .profile
         .as_deref()
         .map(cli::DeploymentProfile::parse)
         .unwrap_or(if args.shadow_mode {
             cli::DeploymentProfile::LocalShadow
-        } else if args.centralized {
+        } else if args.centralized || is_enrolled {
             cli::DeploymentProfile::TeamEnforce
         } else {
             cli::DeploymentProfile::LocalEnforce
@@ -956,7 +972,7 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     let strict_credential_scope = args.strict_credential_scope;
     let tls_cert = args.tls_cert;
     let tls_key = args.tls_key;
-    let centralized = args.centralized;
+    let centralized = args.centralized || is_enrolled;
 
     // Parse kill mode
     let kill_mode = match KillMode::from_str(&kill_mode_str) {
@@ -974,15 +990,23 @@ async fn run_start(args: cli::StartArgs) -> i32 {
 
     // NFR-203: Startup self-check
     // 1. Load policy — priority order:
-    //    a) DASHBOARD_API_URL is set  → fetch active policy from PostgreSQL via dashboard API
+    //    a) DASHBOARD_API_URL or load_hub_url() is set → fetch active policy from PostgreSQL via dashboard API
     //    b) --policy <file> is set    → load from local YAML file (fallback / dev override)
     //    c) neither                   → Safe Mode (no policy enforcement, audit only)
-    let dashboard_api_url = std::env::var("DASHBOARD_API_URL")
-        .ok()
-        .filter(|s| !s.is_empty());
+    let dashboard_api_url = agentcontrol::identity::device::load_hub_url();
     let policy_read_secret_env = std::env::var("POLICY_READ_SECRET")
         .ok()
         .filter(|s| !s.is_empty());
+
+    if is_enrolled {
+        if let Some(ref hub) = dashboard_api_url {
+            println!(
+                "{} Device enrolled — active enterprise governance via {} (central-enforce)",
+                "●".green().bold(),
+                hub.cyan()
+            );
+        }
+    }
 
     let (compiled_policy, _policy_hash, _warnings, policy_loaded) =
         if let Some(ref path) = policy_path {
@@ -1384,22 +1408,20 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     );
 
     if state.dashboard_client.is_some() {
-        let msg = if std::env::var("DASHBOARD_API_URL").is_ok() {
-            "Connected (DASHBOARD_API_URL set)".green()
+        let msg = if agentcontrol::identity::device::load_hub_url().is_some() {
+            "Connected (Hub URL resolved)".green()
         } else {
             "Connected (Local Dev Fallback: http://localhost:8400)".yellow()
         };
         println!("{} {} {}", "📊".green(), "FR-23 Dashboard:".bold(), msg);
     }
 
-    // Background policy push subscriber — active when DASHBOARD_API_URL is set.
+    // Background policy push subscriber — active when Hub URL is configured or enrolled.
     // Listens for Server-Sent Events (SSE) from the Hub to instantly hot-swap
     // the policy in memory. Runs regardless of whether --policy was provided so
     // that live updates from the Policy Editor are seamlessly applied (last-write-wins).
     {
-        let sse_api_url = std::env::var("DASHBOARD_API_URL")
-            .ok()
-            .filter(|s| !s.is_empty());
+        let sse_api_url = agentcontrol::identity::device::load_hub_url();
         if let Some(api_url) = sse_api_url {
             let sub_state = state.clone();
             let sub_secret = std::env::var("POLICY_READ_SECRET").unwrap_or_default();

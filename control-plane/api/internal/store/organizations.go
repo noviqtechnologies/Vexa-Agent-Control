@@ -71,6 +71,33 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		UPDATE organizations
 		SET license_tier = 'team', max_devices = GREATEST(max_devices, 25), updated_at = now()
 		WHERE id = '00000000-0000-0000-0000-000000000001' AND license_tier = 'developer';
+
+		CREATE TABLE IF NOT EXISTS teams (
+			id              TEXT PRIMARY KEY,
+			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			name            TEXT NOT NULL,
+			description     TEXT NOT NULL DEFAULT '',
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+
+		INSERT INTO teams (id, organization_id, name, description)
+		VALUES ('default', '00000000-0000-0000-0000-000000000001', 'Default Team', 'Default team workspace')
+		ON CONFLICT (id) DO NOTHING;
+
+		CREATE TABLE IF NOT EXISTS users (
+			id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			auth_provider_id  UUID,
+			email             TEXT NOT NULL,
+			password_hash     TEXT,
+			is_admin          BOOLEAN NOT NULL DEFAULT false,
+			role              TEXT NOT NULL DEFAULT 'ADMIN',
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CONSTRAINT uq_users_org_email UNIQUE (organization_id, email)
+		);
+		CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 	`
 	_, err := s.pool.Exec(ctx, q)
 	return err

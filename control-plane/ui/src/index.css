@@ -794,15 +794,32 @@ select option {
 
 .soc-page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.soc-page-header h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.soc-page-header p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .soc-header-controls {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .soc-time-toggle {
@@ -838,19 +855,144 @@ select option {
 .soc-btn-primary {
   background: var(--accent);
   color: #ffffff;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm);
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+  text-decoration: none;
 }
 
-.soc-btn-primary:hover {
+.soc-btn-primary:hover:not(:disabled) {
   background: #4f46e5;
   transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+  color: #ffffff;
+}
+
+.soc-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.soc-btn-secondary {
+  background: var(--bg-surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.soc-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-surface-3);
+  border-color: var(--border-accent);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.soc-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Standard SOC Card Panels & Filter Bars ──────────────────────────────── */
+
+.card.soc-panel {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card.soc-panel:hover {
+  border-color: var(--border-hover);
+}
+
+.soc-hero-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.06) 50%, rgba(99, 102, 241, 0.08) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.soc-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.soc-filter-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.soc-filter-search-box .search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.soc-filter-input {
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px 7px 30px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.soc-filter-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.soc-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.soc-select-filter {
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.soc-select-filter:focus {
+  border-color: var(--accent);
 }
 
 
@@ -1507,11 +1649,30 @@ tr:hover td {
 
 /* ── Loading / Empty States ──────────────────────────────────────────────── */
 
-.loading, .empty-state {
+.loading {
   text-align: center;
   padding: 48px;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 44px 24px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+div.empty-state {
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.15);
+  margin: 8px 0;
+}
+
+td.empty-state {
+  padding: 40px 16px;
+  border-bottom: none;
 }
 
 .loading::after {

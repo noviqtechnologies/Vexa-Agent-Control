@@ -30,7 +30,7 @@ export default function ObservabilityLogs() {
 
   return (
     <div className="obs-logs-page">
-      <div className="obs-page-header">
+      <div className="page-header soc-page-header obs-page-header">
         <div className="obs-header-left">
           <h1>Observability & Logs</h1>
           <p>Real-time gateway traffic telemetry, immutable management audit ledger, and compliance tombstone tracking.</p>

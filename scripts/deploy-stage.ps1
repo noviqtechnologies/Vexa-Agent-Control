@@ -108,22 +108,44 @@ if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
     Write-Error "terraform CLI not found. Please install Terraform."
 }
 
+# Check database persistence configuration to determine if ephemeral sidecar DB build is required
+$TfVarsContent = ""
+if (Test-Path "$InfraDir\terraform.stage.tfvars") {
+    $TfVarsContent = Get-Content "$InfraDir\terraform.stage.tfvars" -Raw
+}
+$HasDbUrl = ($TfVarsContent -match '(?m)^\s*database_url\s*=\s*"[^"]+"')
+$HasCloudSql = ($TfVarsContent -match '(?m)^\s*enable_cloud_sql\s*=\s*true')
+$HasPersistentDb = $HasDbUrl -or $HasCloudSql
+
 # Calculate source hashes for deterministic tagging
 $ApiHash = Get-DirSourceHash -Paths @("$RepoRoot\control-plane\api")
 $UiHash = Get-DirSourceHash -Paths @("$RepoRoot\control-plane\ui")
-$DbHash = Get-DirSourceHash -Paths @("$RepoRoot\control-plane\db")
 $GwHash = Get-DirSourceHash -Paths @("$RepoRoot\src", "$RepoRoot\benches", "$RepoRoot\control-plane\proto", "$RepoRoot\keys") -ExtraFiles @("$RepoRoot\Cargo.toml", "$RepoRoot\Cargo.lock", "$RepoRoot\Dockerfile")
 
+$ApiImage = "$Region-docker.pkg.dev/$ProjectId/$RepoId/dashboard-api:$ApiHash"
+$UiImage = "$Region-docker.pkg.dev/$ProjectId/$RepoId/control-plane-ui:$UiHash"
+$GwImage = "$Region-docker.pkg.dev/$ProjectId/$RepoId/agentcontrol-gateway:$GwHash"
+
 $BuildTargets = @(
-    @{ Name = "Dashboard API"; Dir = "$RepoRoot\control-plane\api"; Image = "$Region-docker.pkg.dev/$ProjectId/$RepoId/dashboard-api:$ApiHash" },
-    @{ Name = "Control Plane UI"; Dir = "$RepoRoot\control-plane\ui"; Image = "$Region-docker.pkg.dev/$ProjectId/$RepoId/control-plane-ui:$UiHash" },
-    @{ Name = "Database"; Dir = "$RepoRoot\control-plane\db"; Image = "$Region-docker.pkg.dev/$ProjectId/$RepoId/agentcontrol-db:$DbHash" },
-    @{ Name = "Gateway Proxy"; Dir = $RepoRoot; Image = "$Region-docker.pkg.dev/$ProjectId/$RepoId/agentcontrol-gateway:$GwHash" }
+    @{ Name = "Dashboard API"; Dir = "$RepoRoot\control-plane\api"; Image = $ApiImage },
+    @{ Name = "Control Plane UI"; Dir = "$RepoRoot\control-plane\ui"; Image = $UiImage },
+    @{ Name = "Gateway Proxy"; Dir = $RepoRoot; Image = $GwImage }
 )
+
+$DbImage = $null
+if (-not $HasPersistentDb) {
+    $DbHash = Get-DirSourceHash -Paths @("$RepoRoot\control-plane\db")
+    $DbImage = "$Region-docker.pkg.dev/$ProjectId/$RepoId/agentcontrol-db:$DbHash"
+    $BuildTargets += @{ Name = "Database (Sidecar)"; Dir = "$RepoRoot\control-plane\db"; Image = $DbImage }
+}
 
 # 2. Build Container Images (if not skipped)
 if (-not $SkipBuild) {
     Write-Host "`n[2/4] Checking image registry & submitting builds (Workers: $MachineType)..." -ForegroundColor Yellow
+
+    if ($HasPersistentDb) {
+        Write-Host "  * Database: Skipped (PostgreSQL / Cloud SQL persistence active)" -ForegroundColor Green
+    }
 
     $Jobs = @()
     foreach ($bt in $BuildTargets) {
@@ -133,7 +155,7 @@ if (-not $SkipBuild) {
         }
         else {
             Write-Host "[BUILDING IN CLOUD BUILD]" -ForegroundColor Cyan
-            $jobName = "Build-$($bt.Name -replace ' ', '')"
+            $jobName = "Build-$($bt.Name -replace '[^a-zA-Z0-9]', '')"
             $Jobs += Start-Job -Name $jobName -ScriptBlock {
                 param($Dir, $Tag, $Proj, $Reg, $Mach)
                 Set-Location $Dir
@@ -178,7 +200,7 @@ if (-not $SkipBuild) {
         }
     }
     else {
-        Write-Host "  All container images are up-to-date and cached in Artifact Registry." -ForegroundColor Green
+        Write-Host "  All required container images are up-to-date and cached in Artifact Registry." -ForegroundColor Green
     }
 }
 else {
@@ -197,10 +219,19 @@ $GcpHosts = @(
     "artifactregistry.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
-    "cloudbuild.googleapis.com"
+    "cloudbuild.googleapis.com",
+    "sqladmin.googleapis.com",
+    "serviceusage.googleapis.com"
 )
 foreach ($h in $GcpHosts) {
     $null = Resolve-DnsName -Name $h -Type A -ErrorAction SilentlyContinue
+}
+
+if (-not $HasPersistentDb) {
+    Write-Host "`n  ⚠️  [DATA LOSS WARNING] Ephemeral database sidecar detected!" -ForegroundColor Yellow
+    Write-Host "  Neither 'database_url' nor 'enable_cloud_sql = true' is active in terraform.stage.tfvars." -ForegroundColor Yellow
+    Write-Host "  Any Provider Keys, Virtual Keys, and Logs will be WIPED upon the next revision or idle scale-to-zero." -ForegroundColor Yellow
+    Write-Host "  To persist data permanently across deployments, set 'enable_cloud_sql = true' or provide a persistent 'database_url'.`n" -ForegroundColor Cyan
 }
 
 Push-Location $InfraDir
@@ -208,12 +239,14 @@ try {
     $TfArgs = @(
         "apply",
         "-var-file=terraform.stage.tfvars",
-        "-var=container_image=$($BuildTargets[3].Image)",
-        "-var=control_plane_api_image=$($BuildTargets[0].Image)",
-        "-var=control_plane_ui_image=$($BuildTargets[1].Image)",
-        "-var=control_plane_db_image=$($BuildTargets[2].Image)",
+        "-var=container_image=$GwImage",
+        "-var=control_plane_api_image=$ApiImage",
+        "-var=control_plane_ui_image=$UiImage",
         "-parallelism=$Parallelism"
     )
+    if ($DbImage) {
+        $TfArgs += "-var=control_plane_db_image=$DbImage"
+    }
     if ($AutoApprove) {
         $TfArgs += "-auto-approve"
     }

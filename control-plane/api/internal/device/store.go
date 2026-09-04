@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -49,6 +50,20 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_stable_device_id ON devices(stable_device_id);
+
+		CREATE TABLE IF NOT EXISTS device_compliance_reports (
+			report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES organizations(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE UNIQUE,
+			overall_compliance TEXT NOT NULL DEFAULT 'COMPLIANT',
+			tamper_event_count_24h INT NOT NULL DEFAULT 0,
+			mcp_servers_total INT NOT NULL DEFAULT 0,
+			mcp_servers_wrapped INT NOT NULL DEFAULT 0,
+			report_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
+			generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_compliance_reports_device ON device_compliance_reports(device_id);
 	`)
 	return err
 }
@@ -100,7 +115,7 @@ func (s *Store) EnrollDevice(ctx context.Context, orgID string, req *EnrollDevic
 				os_version_summary = $5,
 				public_key = COALESCE(NULLIF($6, ''), devices.public_key),
 				daemon_version = $7,
-				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
+				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT' END,
 				last_heartbeat_at = now(),
 				updated_at = now()
 			WHERE id::text = $1
@@ -121,7 +136,7 @@ func (s *Store) EnrollDevice(ctx context.Context, orgID string, req *EnrollDevic
 				os_version_summary = EXCLUDED.os_version_summary,
 				public_key = COALESCE(NULLIF(EXCLUDED.public_key, ''), devices.public_key),
 				daemon_version = EXCLUDED.daemon_version,
-				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT'::device_state END,
+				state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE 'COMPLIANT' END,
 				last_heartbeat_at = now(),
 				updated_at = now()
 			RETURNING id::text, created_at
@@ -297,6 +312,11 @@ func (s *Store) ListDevices(ctx context.Context, orgID string) ([]DeviceComplian
 		w.EnrollmentStatus = stateStr
 		w.LastHeartbeatAt = lastHb
 		w.TamperCount24h = tamperCount
+		if strings.ToUpper(stateStr) != "REVOKED" && strings.ToUpper(stateStr) != "NON_COMPLIANT" {
+			if lastHb == nil || time.Since(*lastHb) > 3*time.Minute {
+				w.OverallCompliance = "OFFLINE"
+			}
+		}
 
 		activeMap := make(map[string]bool)
 		if len(rawPayload) > 0 {
@@ -390,6 +410,11 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 	w.CreatedAt = created
 	w.UpdatedAt = updated
 	w.TamperCount24h = tamperCount
+	if strings.ToUpper(stateStr) != "REVOKED" && strings.ToUpper(stateStr) != "NON_COMPLIANT" {
+		if lastHb == nil || time.Since(*lastHb) > 3*time.Minute {
+			w.OverallCompliance = "OFFLINE"
+		}
+	}
 
 	var statuses []IdeTargetStatus
 	if len(rawPayload) > 0 {
@@ -417,7 +442,7 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 				var total, wrapped int
 				if err := mcpRows.Scan(&target, &total, &wrapped); err == nil {
 					compliance := "COMPLIANT"
-					if wrapped < total {
+					if total > 0 && wrapped < total {
 						compliance = "NON_COMPLIANT"
 					}
 					statuses = append(statuses, IdeTargetStatus{

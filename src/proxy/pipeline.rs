@@ -95,6 +95,23 @@ impl RequestContext {
     pub fn elapsed_ms(&self) -> f64 {
         self.created_at.elapsed().as_secs_f64() * 1000.0
     }
+
+    pub fn for_session(session_id: &str) -> Self {
+        Self::new(
+            uuid::Uuid::new_v4().to_string(),
+            session_id.to_string(),
+            "default".to_string(),
+            None,
+            None,
+            Vec::new(),
+            "127.0.0.1".to_string(),
+            OperationKind::McpToolCall {
+                tool_name: "default".to_string(),
+                is_idempotent: false,
+            },
+            "default".to_string(),
+        )
+    }
 }
 
 /// Security decision outcome from inline detectors and compiled policy evaluation.

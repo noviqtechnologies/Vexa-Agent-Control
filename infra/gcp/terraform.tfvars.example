@@ -42,8 +42,12 @@ enable_vpc     = false
 # Private Container Registry (GAR): Automated retention policy keeps latest 2 tags
 gar_enabled = true
 
-# Secrets (Leave blank to automatically generate secure random tokens)
-# database_url       = "postgres://user:password@cloudsql-or-external-host:5432/agentcontrol?sslmode=require" # Persistent external database (Cloud SQL, Neon, Supabase, etc.)
+# Persistent Database Options (Prevents data loss on Cloud Run deployments and scale-to-zero)
+# Option A (Google Cloud SQL): Provision a managed PostgreSQL instance in GCP:
+# enable_cloud_sql       = true
+# cloud_sql_tier         = "db-f1-micro"
+# Option B (External Serverless PostgreSQL): Connect to free serverless Postgres (Neon / Supabase):
+# database_url           = "postgres://user:password@external-host:5432/agentcontrol?sslmode=require"
 # gateway_secret     = "your-custom-gateway-secret-token"
 # policy_read_secret = "your-custom-policy-read-secret"
 # encryption_secret  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import FleetOverview from './FleetOverview'
 import type { FleetStats, AgentSummary, DecisionBreakdown, RedactedAlert } from '../api/client'
@@ -206,5 +206,34 @@ describe('FleetOverview', () => {
       expect(api.getHeatmap).toHaveBeenCalledWith(1)
       expect(api.listRecentAlerts).toHaveBeenCalledWith(50, 1)
     })
+  })
+
+  it('opens Test Gateway Proxy modal and allows switching OS tabs', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+
+    const testBtn = screen.getByText(/Test Gateway Proxy/i)
+    fireEvent.click(testBtn)
+
+    expect(screen.getByText(/Test Gateway Proxy & Generate Telemetry/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /🪟 Windows \(PowerShell\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /🍎\/🐧 macOS \/ Linux \(cURL\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /💻 Windows \(CMD\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /🐍 Python \(requests\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /🌐 TypeScript \/ Node \(fetch\)/i })).toBeInTheDocument()
+
+    // Switch to cURL tab
+    const curlTab = screen.getByRole('button', { name: /🍎\/🐧 macOS \/ Linux \(cURL\)/i })
+    fireEvent.click(curlTab)
+
+    expect(screen.getByText(/Copy macOS \/ Linux \(cURL\)/i)).toBeInTheDocument()
   })
 })

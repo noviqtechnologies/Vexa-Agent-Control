@@ -156,23 +156,22 @@ export default function RunExplorer() {
 
   return (
     <div className="run-explorer-page">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header soc-page-header">
         <div>
           <h1>Run Explorer & Forensics</h1>
           <p>Trace every LLM request through identity, policy snapshot, spend authorization, and upstream dispatch.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="soc-header-controls">
           {/* Live Tail Toggle Button */}
           <button
             type="button"
             className={`soc-btn-secondary ${liveTail ? 'active' : ''}`}
             onClick={() => setLiveTail(!liveTail)}
             style={{
-              borderColor: liveTail ? '#10b981' : 'var(--border)',
-              color: liveTail ? '#10b981' : 'var(--text-bright)',
-              background: liveTail ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+              borderColor: liveTail ? '#10b981' : undefined,
+              color: liveTail ? '#10b981' : undefined,
+              background: liveTail ? 'rgba(16, 185, 129, 0.1)' : undefined,
               fontWeight: 600,
-              fontSize: 13,
             }}
           >
             {liveTail ? '● LIVE TAIL (ON)' : '○ Live Tail'}
@@ -184,7 +183,6 @@ export default function RunExplorer() {
               type="button"
               className="soc-btn-secondary"
               onClick={() => setColumnsMenuOpen(!columnsMenuOpen)}
-              style={{ fontSize: 13 }}
             >
               Columns ▾
             </button>
@@ -194,19 +192,19 @@ export default function RunExplorer() {
                   position: 'absolute',
                   right: 0,
                   top: '110%',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  padding: 10,
-                  minWidth: 160,
+                  background: 'var(--bg-surface-2)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: 12,
+                  minWidth: 170,
                   zIndex: 100,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 8,
                 }}
               >
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={visibleColumns.session}
@@ -214,7 +212,7 @@ export default function RunExplorer() {
                   />
                   Session ID
                 </label>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={visibleColumns.key}
@@ -222,7 +220,7 @@ export default function RunExplorer() {
                   />
                   Virtual Key
                 </label>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={visibleColumns.tokens}
@@ -230,7 +228,7 @@ export default function RunExplorer() {
                   />
                   Tokens & Cache
                 </label>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={visibleColumns.ttft}
@@ -238,7 +236,7 @@ export default function RunExplorer() {
                   />
                   TTFT
                 </label>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={visibleColumns.status}
@@ -268,7 +266,7 @@ export default function RunExplorer() {
         </div>
 
         <select
-          className="run-filter-select"
+          className="soc-select-filter"
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
           aria-label="Provider Filter"
@@ -280,7 +278,7 @@ export default function RunExplorer() {
         </select>
 
         <select
-          className="run-filter-select"
+          className="soc-select-filter"
           value={state}
           onChange={(e) => setState(e.target.value)}
           aria-label="State Filter"
@@ -294,7 +292,7 @@ export default function RunExplorer() {
 
         <input
           type="text"
-          className="run-filter-input"
+          className="soc-filter-input"
           placeholder="Filter by model (e.g. gpt-4o)..."
           value={model}
           onChange={(e) => setModel(e.target.value)}
@@ -303,23 +301,33 @@ export default function RunExplorer() {
       </div>
 
       {error && (
-        <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+        <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)', marginBottom: 20 }}>
           {error}
         </div>
       )}
 
       {/* Runs Table */}
-      <div className="runs-table-card card">
+      <div className="runs-table-card card soc-panel">
+        <div className="soc-card-header" style={{ marginBottom: 20 }}>
+          <div>
+            <div className="card-title">LLM Execution Streams</div>
+            <div className="soc-card-subtitle">{runs.length} broker execution records within {hours === 1 ? '1 hour' : hours === 24 ? '24 hours' : hours === 168 ? '7 days' : '30 days'}</div>
+          </div>
+          <span className={`soc-live-pill ${liveTail ? '' : 'pill-offline'}`}>
+            {liveTail ? 'LIVE TAIL' : 'STANDBY'}
+          </span>
+        </div>
+
         {loading && runs.length === 0 ? (
           <div className="loading" style={{ height: 200 }}>Loading run telemetry...</div>
         ) : runs.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No broker LLM runs found in the selected time window.</p>
-            <p style={{ fontSize: 13, marginTop: 4 }}>Workstations routing completions through Vexa will automatically appear here.</p>
+            <p style={{ fontSize: 13, marginTop: 4 }}>Workstations routing completions through Agent Control will automatically appear here.</p>
           </div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Run ID</th>
@@ -367,7 +375,24 @@ export default function RunExplorer() {
                         {new Date(r.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td style={{ fontSize: 13 }}>
-                        {r.device_id || 'gateway-default'}
+                        {r.device_name && r.device_name !== r.device_id ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span>💻</span>
+                              <span>{r.device_name}</span>
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                              {r.device_id.length > 18 ? `${r.device_id.slice(0, 8)}...${r.device_id.slice(-4)}` : r.device_id}
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span>💻</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                              {r.device_id ? (r.device_id.length > 18 ? `${r.device_id.slice(0, 8)}...${r.device_id.slice(-4)}` : r.device_id) : 'gateway-default'}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{r.provider?.toUpperCase()}</strong>
@@ -450,8 +475,11 @@ export default function RunExplorer() {
         )}
 
         {/* Provenance Footer */}
-        <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>Confidence: <strong style={{ color: '#10b981' }}>{confidence}</strong> · Evidence source: <strong>PostgreSQL spend_reservations</strong></span>
+        <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#10b981' }}>●</span>
+            <span>Confidence: <strong style={{ color: '#10b981' }}>{confidence}</strong> · System of Record: <strong>Authoritative LLM Gateway Ledger</strong></span>
+          </span>
           {dataFreshness && <span>Data freshness: {new Date(dataFreshness).toLocaleTimeString()}</span>}
         </div>
       </div>

@@ -93,7 +93,7 @@ func (s *Store) TransitionDeviceState(
 
 	updateQuery := `
 		UPDATE devices 
-		SET state = $2::device_state,
+		SET state = $2,
 		    state_reason_code = $3,
 		    state_changed_at = now(),
 		    updated_at = now()

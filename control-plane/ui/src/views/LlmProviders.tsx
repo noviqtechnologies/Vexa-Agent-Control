@@ -135,89 +135,99 @@ export default function LlmProviders() {
   }
 
   return (
-    <div className="view-container">
-      <div className="view-header">
+    <div className="soc-llm-providers-page">
+      <div className="page-header soc-page-header">
         <div>
-          <h1 className="view-title">LLM Providers & Spend Governance</h1>
-          <p className="view-subtitle">Manage centralized API keys and enforce provider-level spend budgets</p>
+          <h1>LLM Providers & Spend Governance</h1>
+          <p>Manage centralized upstream API keys and enforce provider-level spend budgets across proxy gateways.</p>
         </div>
       </div>
 
       {error && <div className="error-banner" style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: 'var(--danger-dim)', color: 'var(--danger)' }}>{error}</div>}
       {successMsg && <div style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginBottom: 20, background: 'var(--success-dim)', color: 'var(--success)' }}>{successMsg}</div>}
 
-      <div className="card glass mb-20" style={{ padding: '24px' }}>
-        <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Add Provider Key</h2>
+      <div className="card soc-panel" style={{ marginBottom: 24 }}>
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Add Provider Gateway Key</div>
+            <div className="soc-card-subtitle">Secure upstream master token with optional initial monthly budget cap</div>
+          </div>
+        </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 150 }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Provider</label>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Provider</label>
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="form-input"
-              style={{ width: '100%', padding: '10px' }}
+              className="soc-select-filter"
+              style={{ width: '100%', padding: '10px 12px' }}
             >
               <option value="openai">OpenAI (Central Enforce & Local)</option>
               <option value="anthropic">Anthropic (Central Enforce & Local)</option>
               <option value="google">Google Gemini (Central Enforce & Local)</option>
             </select>
           </div>
-          <div style={{ flex: 2, minWidth: 200 }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>API Key</label>
+          <div style={{ flex: 2, minWidth: 220 }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>API Key</label>
             <input
               type="password"
-              className="form-input"
+              className="soc-filter-input"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="sk-..."
               required
-              style={{ width: '100%', padding: '10px' }}
+              style={{ width: '100%', padding: '10px 12px' }}
             />
           </div>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Monthly Spend Cap ($)</label>
+          <div style={{ flex: 1, minWidth: 150 }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Monthly Spend Cap ($)</label>
             <input
               type="number"
               step="0.01"
-              className="form-input"
+              className="soc-filter-input"
               value={initialSpendLimit}
               onChange={(e) => setInitialSpendLimit(e.target.value)}
               placeholder="e.g. 100.00"
-              style={{ width: '100%', padding: '10px' }}
+              style={{ width: '100%', padding: '10px 12px' }}
             />
           </div>
           <button 
             type="submit" 
-            className="btn btn-primary" 
+            className="soc-btn-primary" 
             disabled={saving || !apiKey}
-            style={{ padding: '10px 24px', height: '41px' }}
+            style={{ padding: '10px 22px', height: '42px' }}
           >
             {saving ? 'Saving...' : 'Add Key'}
           </button>
         </form>
       </div>
 
-      <div className="card glass">
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: 16, margin: 0 }}>Configured Provider Gateways</h3>
+      <div className="card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Configured Provider Gateways</div>
+            <div className="soc-card-subtitle">{keys.length} upstream provider master credentials registered</div>
+          </div>
+          <span className="soc-badge">{keys.length} Providers</span>
         </div>
         {loading ? (
-          <div className="loading" style={{ padding: 24 }}>Loading provider keys & budgets...</div>
+          <div className="loading" style={{ padding: 32 }}>Loading provider keys & budgets...</div>
         ) : keys.length === 0 ? (
-          <div className="empty-state" style={{ padding: 24 }}>No provider keys configured yet.</div>
+          <div className="empty-state" style={{ padding: 32 }}>No provider keys configured yet.</div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>API Key (Masked)</th>
-                <th>Monthly Spend Limit</th>
-                <th>Current Consumption</th>
-                <th>Added</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="table-wrap">
+            <table className="soc-table">
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>API Key (Masked)</th>
+                  <th>Monthly Spend Limit</th>
+                  <th>Current Consumption</th>
+                  <th>Added</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
               {keys.map((k) => {
                 const pol = getProviderPolicy(k.provider)
                 const win = getProviderWindow(k.provider)
@@ -298,6 +308,7 @@ export default function LlmProviders() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

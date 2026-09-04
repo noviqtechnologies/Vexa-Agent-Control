@@ -240,12 +240,14 @@ export default function AuthProviders() {
 
   return (
     <div className="ap-page">
-      <div className="page-header">
-        <h1>Auth Providers</h1>
-        <p>
-          Authentication providers allow users to sign in to Agent Control. Configure at least one
-          provider before inviting users.
-        </p>
+      <div className="page-header soc-page-header">
+        <div>
+          <h1>Auth Providers</h1>
+          <p>
+            Authentication providers allow users to sign in to Agent Control. Configure at least one
+            provider before inviting users.
+          </p>
+        </div>
       </div>
 
       {noProvidersConfigured && !user?.is_saas_operator && (
@@ -278,7 +280,7 @@ export default function AuthProviders() {
         <div style={{
           background: 'rgba(99, 102, 241, 0.12)',
           border: '1px solid rgba(99, 102, 241, 0.3)',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-sm)',
           padding: '14px 18px',
           marginBottom: '20px',
           display: 'flex',
@@ -303,7 +305,7 @@ export default function AuthProviders() {
         {Object.entries(PROVIDER_META).map(([type, meta]) => {
           const configured = isConfigured(type)
           return (
-            <div key={type} className={`ap-card card ${configured ? 'ap-card--active' : ''}`}>
+            <div key={type} className={`ap-card card soc-panel ${configured ? 'ap-card--active' : ''}`}>
               <div className="ap-card-header">
                 <div className={`ap-icon ${configured ? 'ap-icon--active' : ''}`}>
                   <ProviderIcon type={type} />
@@ -327,7 +329,7 @@ export default function AuthProviders() {
               <h3 className="ap-card-title">{meta.label}</h3>
               <p className="ap-card-desc">{meta.description}</p>
               <div className="ap-card-footer">
-                <button className="btn-secondary ap-configure-btn" onClick={() => openModal(type)} disabled={meta.isEnterprise}>
+                <button className="soc-btn-secondary ap-configure-btn" onClick={() => openModal(type)} disabled={meta.isEnterprise}>
                   {configured ? 'Reconfigure' : 'Configure'}
                 </button>
               </div>

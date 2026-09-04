@@ -1,50 +1,62 @@
 .policy-editor-page {
-  padding: 24px;
+  width: 100%;
 }
 
 .message-banner {
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   margin-bottom: 24px;
   font-weight: 500;
   animation: fadeIn 0.3s ease-out;
 }
 
 .message-banner.success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .message-banner.error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .editor-layout {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 24px;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 210px);
+  min-height: 520px;
 }
 
 .editor-sidebar {
   display: flex;
   flex-direction: column;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 22px 20px;
+  overflow-y: auto;
 }
 
 .editor-sidebar h3 {
   margin-top: 0;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .info-block {
   margin-top: 24px;
-  padding: 16px;
-  background: var(--bg-color);
-  border-radius: 8px;
-  font-size: 13px;
+  padding: 14px 16px;
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -54,26 +66,35 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
 }
 
 .editor-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.2);
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-surface-1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .editor-header h3 {
   margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .code-editor {
   flex: 1;
   width: 100%;
-  padding: 24px;
-  background: #1e1e1e; /* VSCode-like dark bg */
-  color: #d4d4d4;
-  font-family: 'Fira Code', 'Courier New', Courier, monospace;
-  font-size: 14px;
+  padding: 20px;
+  background: var(--bg-surface-0);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
   line-height: 1.6;
   border: none;
   resize: none;

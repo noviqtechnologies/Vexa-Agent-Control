@@ -190,6 +190,8 @@ pub struct ProxyState {
     pub embedding_batcher: Arc<super::embedding_batcher::EmbeddingBatcher>,
     /// Latency-based provider router
     pub provider_router: Arc<super::provider_router::ProviderRouter>,
+    /// Extensible lifecycle pipeline hook registry (AR-1)
+    pub hook_registry: Arc<super::hooks::HookRegistry>,
 }
 
 impl ProxyState {
@@ -287,6 +289,7 @@ impl ProxyState {
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+            hook_registry: Arc::new(super::hooks::HookRegistry::default()),
         })
     }
 
@@ -382,6 +385,7 @@ impl ProxyState {
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+            hook_registry: Arc::new(super::hooks::HookRegistry::default()),
         })
     }
 
@@ -477,6 +481,7 @@ impl ProxyState {
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
+            hook_registry: Arc::new(super::hooks::HookRegistry::default()),
         })
     }
 }
@@ -815,7 +820,7 @@ pub async fn evaluate_jsonrpc(
     }
 
     // FR-12: Content-Aware DLP & Secret Detection on outbound tool call parameters
-    let params_str = tool_params.to_string();
+    let mut params_str = tool_params.to_string();
     let dlp_findings = state.dlp_scanner.scan_content(&params_str);
     if !dlp_findings.is_empty() {
         if state.shadow_mode.load(Ordering::Relaxed) {
@@ -1013,6 +1018,43 @@ pub async fn evaluate_jsonrpc(
                     "pattern": &f.pattern_name
                 }),
             );
+        }
+        _ => {}
+    }
+
+    // AR-1: Pipeline Hook Framework Execution (PreExecute Stage)
+    let mut req_ctx = crate::proxy::pipeline::RequestContext::for_session(&session.session_id);
+    let hook_outcome = state
+        .hook_registry
+        .execute_mcp_tool_hooks(
+            crate::proxy::hooks::HookStage::PreExecute,
+            tool_name,
+            &mut tool_params,
+            &mut req_ctx,
+        )
+        .await;
+
+    match hook_outcome {
+        crate::proxy::hooks::HookOutcome::Block { status: _, reason } => {
+            return handle_deny(
+                state,
+                &session.session_id,
+                &id,
+                tool_name,
+                &format!("hook_block: {}", reason),
+                session.identity_sub.clone(),
+                session.identity_email.clone(),
+                session.request_ip.clone(),
+                true,
+                None,
+                None,
+                None,
+            )
+            .await;
+        }
+        crate::proxy::hooks::HookOutcome::ModifyJson(new_params) => {
+            tool_params = new_params;
+            params_str = tool_params.to_string();
         }
         _ => {}
     }

@@ -170,18 +170,20 @@ export default function Users() {
   const selectedProviderType = getProviderType(form.auth_provider_id)
 
   return (
-    <div className="users-page">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="soc-users-page">
+      <div className="page-header soc-page-header">
         <div>
           <h1>Users & Access Control</h1>
           <p>Manage local operator passwords and enterprise identity users for this tenant.</p>
         </div>
-        <button className="btn-primary" onClick={openModal}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add User
-        </button>
+        <div className="soc-header-controls">
+          <button className="soc-btn-primary" onClick={openModal}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add User
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -213,9 +215,16 @@ export default function Users() {
       {loading ? (
         <div className="loading">Loading users</div>
       ) : (
-        <div className="card">
+        <div className="card soc-panel">
+          <div className="soc-card-header">
+            <div>
+              <div className="card-title">Organization Directory</div>
+              <div className="soc-card-subtitle">{users.length} registered tenant user accounts</div>
+            </div>
+            <span className="soc-badge">{users.length} Users</span>
+          </div>
           <div className="table-wrap">
-            <table>
+            <table className="soc-table">
               <thead>
                 <tr>
                   <th>Email / Account</th>
@@ -231,7 +240,7 @@ export default function Users() {
                     <td colSpan={5} className="empty-state">No users found. Add the first one.</td>
                   </tr>
                 ) : users.map(u => (
-                  <tr key={u.id}>
+                  <tr key={u.id} className="soc-table-row">
                     <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{u.email}</td>
                     <td>
                       <span className="users-provider-badge">

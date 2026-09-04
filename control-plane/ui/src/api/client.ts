@@ -183,6 +183,7 @@ export interface SpendEventV2 {
   usage_json: string
   provider_request_id?: string
   actor: string
+  actor_name?: string
   reason_code: string
   occurred_at: string
 }
@@ -233,6 +234,7 @@ export interface RunSummary {
   run_id: string
   request_id: string
   device_id: string
+  device_name?: string
   project_id: string
   provider: string
   model: string

@@ -224,7 +224,7 @@ func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, params DeviceHeartbea
 	err := s.pool.QueryRow(ctx, `
 		UPDATE devices
 		SET last_heartbeat_at = NOW(),
-		    state = CASE WHEN state = 'REVOKED' THEN 'REVOKED'::device_state ELSE $2::device_state END,
+		    state = CASE WHEN state::text = 'REVOKED' THEN state ELSE $2 END,
 		    updated_at = NOW()
 		WHERE (
 			id::text = $1 
@@ -265,11 +265,11 @@ func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, params DeviceHeartbea
 				) VALUES (
 					$1::uuid, $2, $3, 'Developer',
 					$4, $5, $4, $6,
-					$7::device_state, 'HEARTBEAT_PROVISIONED', now(), now(), now()
+					$7, 'HEARTBEAT_PROVISIONED', now(), now(), now()
 				)
 				ON CONFLICT (stable_device_id) DO UPDATE SET
 					last_heartbeat_at = NOW(),
-					state = CASE WHEN devices.state = 'REVOKED' THEN 'REVOKED'::device_state ELSE EXCLUDED.state END,
+					state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE EXCLUDED.state END,
 					updated_at = NOW()
 				RETURNING id::text, organization_id::text
 			`, org, params.DeviceID, displayName, osFamily, arch, version, status).Scan(&canonicalDeviceID, &devOrgID)
@@ -528,6 +528,7 @@ func (s *Store) EnsureDevicesSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE INDEX IF NOT EXISTS idx_devices_org_state ON devices(organization_id, state);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_stable_device_id ON devices(stable_device_id);
 
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS os_version_summary TEXT;
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS daemon_version TEXT DEFAULT '2.1.0';
@@ -535,6 +536,19 @@ func (s *Store) EnsureDevicesSchema(ctx context.Context) error {
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
+
+		CREATE TABLE IF NOT EXISTS device_compliance_reports (
+			report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE UNIQUE,
+			overall_compliance TEXT NOT NULL DEFAULT 'COMPLIANT',
+			tamper_event_count_24h INT NOT NULL DEFAULT 0,
+			mcp_servers_total INT NOT NULL DEFAULT 0,
+			mcp_servers_wrapped INT NOT NULL DEFAULT 0,
+			report_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
+			generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_compliance_reports_device ON device_compliance_reports(device_id);
 	`)
 	return err
 }

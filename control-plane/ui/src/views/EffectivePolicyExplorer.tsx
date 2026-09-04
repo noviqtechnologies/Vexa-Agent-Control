@@ -65,8 +65,8 @@ export default function EffectivePolicyExplorer() {
   }
 
   return (
-    <div className="effective-policy-page">
-      <div className="page-header">
+    <div className="soc-effective-policy-page">
+      <div className="page-header soc-page-header">
         <div>
           <h1>Effective Policy Explorer</h1>
           <p>Deterministic multi-layer policy resolution across Organization, Group, Spend, Virtual-Key, and Device governance.</p>
@@ -74,8 +74,14 @@ export default function EffectivePolicyExplorer() {
       </div>
 
       {/* Query Builder */}
-      <div className="query-builder-card card">
-        <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Query Parameters</h3>
+      <div className="query-builder-card card soc-panel">
+        <div className="soc-card-header">
+          <div>
+            <div className="card-title">Query Parameters</div>
+            <div className="soc-card-subtitle">Evaluate deterministic runtime precedence ladder across entities</div>
+          </div>
+        </div>
+
         <div className="query-grid">
           <div className="query-field">
             <label className="query-label" htmlFor="device-id-input">Device ID</label>
@@ -166,7 +172,7 @@ export default function EffectivePolicyExplorer() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
           <button
             type="button"
             className="soc-btn-primary"
@@ -186,20 +192,18 @@ export default function EffectivePolicyExplorer() {
       </div>
 
       {error && (
-        <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+        <div className="card" style={{ padding: 16, borderColor: 'var(--danger)', color: 'var(--danger)', marginBottom: 20 }}>
           {error}
         </div>
       )}
 
       {/* Effective Decision Summary */}
       {response && (
-        <div className="effective-summary-card card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div className="effective-summary-card card soc-panel">
+          <div className="soc-card-header" style={{ marginBottom: 20 }}>
             <div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>
-                SYNTHESIZED EFFECTIVE CONSTRAINT
-              </span>
-              <h2 style={{ fontSize: 22, margin: '4px 0 0' }}>Enforced Policy Bound</h2>
+              <div className="card-title">Enforced Policy Bound</div>
+              <div className="soc-card-subtitle">Synthesized effective constraint derived from precedence evaluation</div>
             </div>
             <span className={`badge-state state-${response.effective.action === 'hard_deny' ? 'denied' : response.effective.action === 'warn' ? 'released' : 'settled'}`}>
               ACTION: {response.effective.action.toUpperCase()}
@@ -209,19 +213,19 @@ export default function EffectivePolicyExplorer() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
             <div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Effective Spend Limit</div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: '#10b981', marginTop: 4 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981', marginTop: 4 }}>
                 ${microcentsToUSD(response.effective.spend_limit_microcents).toFixed(2)}/mo
               </div>
             </div>
             <div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Allowed Models</div>
-              <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', marginTop: 6 }}>
+              <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', marginTop: 6, color: 'var(--text-primary)' }}>
                 {response.effective.allowed_models.join(', ') || '*'}
               </div>
             </div>
             <div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Allowed Routes</div>
-              <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', marginTop: 6 }}>
+              <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', marginTop: 6, color: 'var(--text-primary)' }}>
                 {response.effective.allowed_routes.join(', ') || '*'}
               </div>
             </div>
@@ -231,11 +235,14 @@ export default function EffectivePolicyExplorer() {
 
       {/* 5-Level Provenance Ladder */}
       {response && (
-        <div className="card" style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>5-Level Provenance Ladder</h3>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-            Policy evaluation is resolved hierarchically. Confidence indicators reflect authoritative measurements versus unconfigured tiers.
-          </p>
+        <div className="card soc-panel">
+          <div className="soc-card-header">
+            <div>
+              <div className="card-title">5-Level Provenance Ladder</div>
+              <div className="soc-card-subtitle">Hierarchical policy precedence resolution from default to device override</div>
+            </div>
+            <span className="soc-live-pill">RESOLVED</span>
+          </div>
 
           <div className="provenance-ladder-container">
             {response.provenance_ladder.map((tier, idx) => {
