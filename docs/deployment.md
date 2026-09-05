@@ -146,7 +146,7 @@ cd Vexa-Agent-Control
 docker compose -f docker-compose.team.yml up -d
 ```
 
-- **Web Management Console:** Open `http://localhost:3000` (Default login: `admin@vexa.local` / `admin12345678`)
+- **Web Management Console:** Open `http://localhost:3000` (Default login: `admin` / `admin123!`)
 - **Control Plane API:** `http://localhost:8081`
 - **Security Gateway Endpoint:** `http://localhost:8080`
 

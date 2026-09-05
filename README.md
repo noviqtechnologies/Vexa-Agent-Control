@@ -372,8 +372,9 @@ cd Vexa-Agent-Control
 docker compose -f docker-compose.team.yml up -d
 ```
 
-- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin@vexa.local` / `admin12345678`)
+- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin` / `admin123!`)
 - **Security Gateway Endpoint:** `http://localhost:8080`
+- **Pre-enrolled Evaluation Gateway:** The bundled gateway automatically registers as `vexa-demo-gateway` in **Device Governance** as an active evaluation node. To enroll your host machine / IDEs, click **`+ Generate Enrollment Token`** in the UI.
 - Read the complete [Docker Deployment Guide](docs/guides/docker-deployment.md).
 
 ---

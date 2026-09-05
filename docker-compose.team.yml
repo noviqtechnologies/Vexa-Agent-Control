@@ -88,6 +88,7 @@ services:
     depends_on:
       - control-plane-api
     environment:
+      AGENTCONTROL_API_URL: http://control-plane-api:8081
       AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
     ports:
       - "127.0.0.1:3000:80"
@@ -101,11 +102,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: vexa-team-gateway
+    hostname: vexa-demo-gateway
     restart: unless-stopped
     depends_on:
       - control-plane-api
     environment:
       AGENTCONTROL_LISTEN: 0.0.0.0:8080
+      AGENTCONTROL_CENTRALIZED: "true"
+      AGENTCONTROL_ADMIN_TOKEN: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
       AGENTCONTROL_DRY_RUN: "false"
       AGENTCONTROL_HUB_URL: http://control-plane-api:8081

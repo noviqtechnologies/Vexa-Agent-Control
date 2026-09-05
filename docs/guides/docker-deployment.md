@@ -74,9 +74,9 @@ docker compose -f docker-compose.team.yml up -d
 ```
 
 This single command starts:
-- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin@vexa.local` / `admin12345678`)
+- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin` / `admin123!`)
 - **Control Plane API:** `http://localhost:8081`
-- **Security Gateway Endpoint:** `http://localhost:8080`
+- **Security Gateway Endpoint:** `http://localhost:8080` (appears as `vexa-demo-gateway` in **Device Governance**)
 - **PostgreSQL 16 Database:** internal port 5432
 
 To check running services:
@@ -287,9 +287,11 @@ Once the containers are running:
 
 | Component | URL | Default Credentials | Description |
 |---|---|---|---|
-| **Web Console UI** | [http://localhost:3000](http://localhost:3000) | `admin@vexa.local` / `admin12345678` | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
+| **Web Console UI** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin123!` | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
 | **Control Plane API** | [http://localhost:8081/healthz](http://localhost:8081/healthz) | Bearer Token (`GATEWAY_SECRET`) | REST API for policies, telemetry, and device enrollment |
-| **Security Gateway** | [http://localhost:8080](http://localhost:8080) | N/A (Transparent Proxy) | Intercepts MCP tool calls, OpenAI/Anthropic/Gemini LLM traffic |
+| **Security Gateway** | [http://localhost:8080](http://localhost:8080) | N/A (Transparent Proxy) | Intercepts MCP tool calls, OpenAI/Anthropic/Gemini LLM traffic (registered as `vexa-demo-gateway`) |
+
+> **Note on Device Governance:** The bundled evaluation gateway container automatically registers itself with the Control Plane as `vexa-demo-gateway` to provide immediate telemetry and test proxying out of the box. To enroll your local IDEs (VS Code, Cursor, Windsurf) on your physical computer, click **`+ Generate Enrollment Token`** in the Device Governance console.
 
 ---
 

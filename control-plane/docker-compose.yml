@@ -119,8 +119,8 @@ services:
       # Each service gets its own network namespace, so the Fargate default
       # (127.0.0.1:8400) is unreachable. Docker DNS resolves 'dashboard-api'
       # to the API container's internal IP inside the Compose bridge network.
+      AGENTCONTROL_API_URL: "http://dashboard-api:8400"
       AGENTCONTROL_API_UPSTREAM: "dashboard-api:8400"
 
 volumes:
   agentcontrol_pg_data:
-
