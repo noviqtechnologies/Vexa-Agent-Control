@@ -62,7 +62,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 > **Prefer Running with Docker?**
 > If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker run`:
 > ```bash
-> docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+> docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
 > ```
 > See the full [Docker Deployment Guide](guides/docker-deployment.md).
 

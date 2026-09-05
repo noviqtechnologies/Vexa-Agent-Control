@@ -60,6 +60,7 @@ services:
 
   # ── Control Plane API ─────────────────────────────────────────────────────
   control-plane-api:
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest
     build:
       context: ./control-plane/api
       dockerfile: Dockerfile
@@ -90,6 +91,7 @@ services:
 
   # ── Control Plane Web UI Console ──────────────────────────────────────────
   control-plane-ui:
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest
     build:
       context: ./control-plane/ui
       dockerfile: Dockerfile

@@ -29,6 +29,7 @@ services:
       - vexa-team-net
 
   control-plane-api:
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest
     build:
       context: ./control-plane/api
       dockerfile: Dockerfile
@@ -60,6 +61,7 @@ services:
       - vexa-team-net
 
   control-plane-ui:
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest
     build:
       context: ./control-plane/ui
       dockerfile: Dockerfile
@@ -75,6 +77,7 @@ services:
       - vexa-team-net
 
   agentcontrol-gw:
+    image: ghcr.io/noviqtechnologies/agentcontrol:latest
     build:
       context: .
       dockerfile: Dockerfile

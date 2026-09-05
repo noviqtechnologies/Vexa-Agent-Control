@@ -37,157 +37,9 @@ Ensure the following ports are free on your host machine:
 
 ## Quick Start
 
-### Option A: Standalone Gateway Container (`docker run`)
+Choose the deployment setup matching your goal:
 
-Run the standalone Vexa Agent Control gateway container. This provides an instant local security proxy for MCP tools and HTTP LLM traffic with built-in safe rules and DLP scanning:
-
-#### 1. Basic Deployment (Built-in Local State & Logging)
-
-##### macOS / Linux / WSL (Bash / Zsh):
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 8080:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (PowerShell):
-```powershell
-docker run -d `
-  --name agentcontrol `
-  -p 8080:8080 `
-  -v agentcontrol-data:/app/data `
-  -v agentcontrol-logs:/var/log/agentcontrol `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (Command Prompt - CMD):
-```cmd
-docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
-```
-
-> [!IMPORTANT]
-> **Authentication Recommendation:**
-> Running Agent Control without authentication is suitable for local loopback development behind a trusted firewall. For shared workstations, network-reachable servers, or multi-user environments, enabling authentication is strongly recommended to protect management endpoints and proxy routes.
-
----
-
-#### 2. With Authentication (Recommended)
-
-Run the container with bootstrap authentication tokens enabled:
-
-##### macOS / Linux / WSL (Bash / Zsh):
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 8080:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
-  -e AGENTCONTROL_ADMIN_TOKEN=your-bootstrap-token \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (PowerShell):
-```powershell
-docker run -d `
-  --name agentcontrol `
-  -p 8080:8080 `
-  -v agentcontrol-data:/app/data `
-  -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true `
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN="your-bootstrap-token" `
-  -e AGENTCONTROL_ADMIN_TOKEN="your-bootstrap-token" `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (Command Prompt - CMD):
-```cmd
-docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ENABLE_AUTHENTICATION=true -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token -e AGENTCONTROL_ADMIN_TOKEN=your-bootstrap-token ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
-```
-
----
-
-#### 3. Using a Custom Port (e.g., `-p 9999:8080`)
-
-If you want to expose Agent Control on a different port (e.g., `-p 9999:8080`), set `AGENTCONTROL_SERVER_HOSTNAME` (or `AGENTCONTROL_LISTEN`) so that proxy redirects and MCP connection URLs resolve correctly:
-
-##### macOS / Linux / WSL (Bash / Zsh):
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 9999:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_SERVER_HOSTNAME=localhost:9999 \
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (PowerShell):
-```powershell
-docker run -d `
-  --name agentcontrol `
-  -p 9999:8080 `
-  -v agentcontrol-data:/app/data `
-  -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_SERVER_HOSTNAME="localhost:9999" `
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true `
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN="your-bootstrap-token" `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
-  start --listen 0.0.0.0:8080
-```
-
-##### Windows (Command Prompt - CMD):
-```cmd
-docker run -d --name agentcontrol -p 9999:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_SERVER_HOSTNAME=localhost:9999 -e AGENTCONTROL_ENABLE_AUTHENTICATION=true -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
-```
-
----
-
-### Using a Custom Policy File
-
-Mount your own `agentcontrol-policy.yaml` into the container:
-
-#### macOS / Linux / WSL (Bash / Zsh):
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 8080:8080 \
-  -v "$(pwd)/agentcontrol-policy.yaml:/app/policy.yaml:ro" \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --policy /app/policy.yaml --listen 0.0.0.0:8080
-```
-
-#### Windows (PowerShell):
-```powershell
-docker run -d `
-  --name agentcontrol `
-  -p 8080:8080 `
-  -v "${PWD}/agentcontrol-policy.yaml:/app/policy.yaml:ro" `
-  -v agentcontrol-logs:/var/log/agentcontrol `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
-  start --policy /app/policy.yaml --listen 0.0.0.0:8080
-```
-
-#### Windows (Command Prompt - CMD):
-```cmd
-docker run -d --name agentcontrol -p 8080:8080 -v "%cd%/agentcontrol-policy.yaml:/app/policy.yaml:ro" -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --policy /app/policy.yaml --listen 0.0.0.0:8080
-```
-
----
-
-### Option B: Full-Stack Docker Compose (All-in-One Local Development Stack)
+### 🌟 Option A: Full-Stack Control Hub with Web Management UI (Recommended for Evaluation)
 
 For evaluating the complete Vexa Agent Control platform — including the **PostgreSQL database**, **Central Control Plane API**, **React Web Management Console**, and **Agent Control Gateway** — use Docker Compose:
 
@@ -222,14 +74,128 @@ docker compose -f docker-compose.team.yml up -d
 ```
 
 This single command starts:
-- **PostgreSQL 16** (`vexa-team-postgres` on internal port 5432)
-- **Control Plane API** (`vexa-team-api` on `http://127.0.0.1:8081`)
-- **Web Management Console** (`vexa-team-ui` on `http://127.0.0.1:3000`)
-- **Agent Control Gateway** (`vexa-team-gateway` on `http://127.0.0.1:8080`)
+- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin@vexa.local` / `admin12345678`)
+- **Control Plane API:** `http://localhost:8081`
+- **Security Gateway Endpoint:** `http://localhost:8080`
+- **PostgreSQL 16 Database:** internal port 5432
 
 To check running services:
 ```bash
 docker compose -f docker-compose.team.yml ps
+```
+
+---
+
+### ⚡ Option B: Headless Security Proxy (`docker run`)
+
+Best for lightweight background proxying (~7MB RAM) of IDE MCP tools and LLM traffic on port `8080`:
+
+#### Windows (PowerShell):
+```powershell
+docker run -d `
+  --name agentcontrol `
+  -p 8080:8080 `
+  -v agentcontrol-data:/app/data `
+  -v agentcontrol-logs:/var/log/agentcontrol `
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
+  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  start --listen 0.0.0.0:8080
+```
+
+#### Windows (Command Prompt - CMD):
+```cmd
+docker run -d ^
+  --name agentcontrol ^
+  -p 8080:8080 ^
+  -v agentcontrol-data:/app/data ^
+  -v agentcontrol-logs:/var/log/agentcontrol ^
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
+  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  start --listen 0.0.0.0:8080
+```
+
+#### macOS / Linux / WSL (Bash / Zsh):
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+#### Verifying & Interacting with the Headless Gateway
+
+1. **Check Status:**
+   ```bash
+   docker ps --filter "name=agentcontrol"
+   ```
+   *(Expected status: `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
+
+2. **Test Admin API:**
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+
+3. **Stream Live Logs:**
+   ```bash
+   docker logs -f agentcontrol
+   ```
+
+4. **Container Lifecycle:**
+   ```bash
+   # Stop gateway
+   docker stop agentcontrol
+
+   # Restart gateway
+   docker start agentcontrol
+
+   # Remove container
+   docker rm -f agentcontrol
+   ```
+
+---
+
+### Using a Custom Policy File
+
+Mount your own `agentcontrol-policy.yaml` into the container:
+
+#### macOS / Linux / WSL (Bash / Zsh):
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v "$(pwd)/agentcontrol-policy.yaml:/app/policy.yaml:ro" \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --policy /app/policy.yaml --listen 0.0.0.0:8080
+```
+
+#### Windows (PowerShell):
+```powershell
+docker run -d `
+  --name agentcontrol `
+  -p 8080:8080 `
+  -v "${PWD}/agentcontrol-policy.yaml:/app/policy.yaml:ro" `
+  -v agentcontrol-logs:/var/log/agentcontrol `
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
+  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  start --policy /app/policy.yaml --listen 0.0.0.0:8080
+```
+
+#### Windows (Command Prompt - CMD):
+```cmd
+docker run -d ^
+  --name agentcontrol ^
+  -p 8080:8080 ^
+  -v "%cd%/agentcontrol-policy.yaml:/app/policy.yaml:ro" ^
+  -v agentcontrol-logs:/var/log/agentcontrol ^
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
+  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 
 ---

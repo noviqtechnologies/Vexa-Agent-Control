@@ -52,7 +52,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     ```
   - *Alternative (Docker - Zero Host Installation):*
     ```bash
-    docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-logs:/var/log/agentcontrol ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+    docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
     ```
 - **Expected Result:** Prints `agentcontrol 1.0.70`.
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/) or the [Docker Deployment Guide](guides/docker-deployment.md).

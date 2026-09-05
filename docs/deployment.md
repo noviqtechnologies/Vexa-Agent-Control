@@ -134,48 +134,7 @@ Press the `Windows` key on your keyboard, type `PowerShell` or `cmd`, and launch
 
 Deploying Vexa Agent Control using Docker is the fastest, cleanest way to test, develop, and evaluate the platform without installing local compilers or dependencies on the host machine.
 
-### Method 1: Standalone Gateway Container (`docker run`)
-
-#### Basic Deployment
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 8080:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-#### With Authentication (Recommended)
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 8080:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
-  -e AGENTCONTROL_ADMIN_TOKEN=your-bootstrap-token \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-#### Using a Custom Port (e.g., `-p 9999:8080`)
-```bash
-docker run -d \
-  --name agentcontrol \
-  -p 9999:8080 \
-  -v agentcontrol-data:/app/data \
-  -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_SERVER_HOSTNAME=localhost:9999 \
-  -e AGENTCONTROL_ENABLE_AUTHENTICATION=true \
-  -e AGENTCONTROL_BOOTSTRAP_TOKEN=your-bootstrap-token \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
-```
-
-### Method 2: Full-Stack Control Hub (`docker compose`)
+### Method 1: Full-Stack Control Hub with Web Management UI (Recommended for Evaluation)
 
 Spin up the complete multi-service stack (PostgreSQL 16, Go Control Plane API, React Management Console UI, and Rust Agent Control Gateway) with a single command:
 
@@ -187,11 +146,71 @@ cd Vexa-Agent-Control
 docker compose -f docker-compose.team.yml up -d
 ```
 
-- **Web Management Console:** `http://localhost:3000` (Default login: `admin@vexa.local` / `admin12345678`)
+- **Web Management Console:** Open `http://localhost:3000` (Default login: `admin@vexa.local` / `admin12345678`)
 - **Control Plane API:** `http://localhost:8081`
 - **Security Gateway Endpoint:** `http://localhost:8080`
 
 For complete options (cross-OS commands, agent proxying, data persistence, and health probes), see the dedicated → **[Docker Deployment Guide](guides/docker-deployment.md)**.
+
+---
+
+### Method 2: Headless Security Proxy (`docker run`)
+
+Runs the standalone security gateway proxy for MCP tools and LLM traffic on `http://localhost:8080`:
+
+**Windows (PowerShell):**
+```powershell
+docker run -d `
+  --name agentcontrol `
+  -p 8080:8080 `
+  -v agentcontrol-data:/app/data `
+  -v agentcontrol-logs:/var/log/agentcontrol `
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
+  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  start --listen 0.0.0.0:8080
+```
+
+**Windows (Command Prompt - CMD):**
+```cmd
+docker run -d ^
+  --name agentcontrol ^
+  -p 8080:8080 ^
+  -v agentcontrol-data:/app/data ^
+  -v agentcontrol-logs:/var/log/agentcontrol ^
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
+  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  start --listen 0.0.0.0:8080
+```
+
+**macOS / Linux / WSL (Bash / Zsh):**
+```bash
+docker run -d \
+  --name agentcontrol \
+  -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
+  -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
+  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  start --listen 0.0.0.0:8080
+```
+
+#### Verifying the Headless Gateway
+
+1. **Check Status:**
+   ```bash
+   docker ps --filter "name=agentcontrol"
+   ```
+   *(Status should show `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
+
+2. **Test Admin API:**
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+
+3. **Stream Live Logs:**
+   ```bash
+   docker logs -f agentcontrol
+   ```
 
 ---
 

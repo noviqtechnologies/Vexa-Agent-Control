@@ -36,7 +36,9 @@ If you use **Docker Desktop for Windows** with the WSL2 backend enabled:
 docker run -d \
   --name agentcontrol \
   -p 8080:8080 \
+  -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
+  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
   ghcr.io/noviqtechnologies/agentcontrol:latest \
   start --listen 0.0.0.0:8080
 ```
