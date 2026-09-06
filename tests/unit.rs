@@ -15,6 +15,7 @@ mod unit {
     mod prompt_cache_test;
     mod routing_tests;
     mod schema_drift_test;
+    mod semantic_cache_test;
     mod siem_tests;
     mod sprint5_safety_test;
     mod transformer;

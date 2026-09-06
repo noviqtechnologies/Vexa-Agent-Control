@@ -201,4 +201,81 @@ describe('PolicyMarketplace', () => {
     expect(await screen.findByText(/Top Recommended Postures:/i)).toBeInTheDocument()
     expect(screen.getAllByText(/% Match/i).length).toBeGreaterThan(0)
   })
+
+  it('filters templates by domain navigation tab', async () => {
+    render(
+      <MemoryRouter>
+        <PolicyMarketplace />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Advanced PII Protection (Australia)')).toBeInTheDocument()
+      expect(screen.getByText('Safe Cursor Workstation')).toBeInTheDocument()
+    })
+
+    const devSandboxTab = screen.getByRole('button', { name: /IDE & Agent Sandbox/i })
+    fireEvent.click(devSandboxTab)
+
+    await waitFor(() => {
+      expect(screen.getByText('Safe Cursor Workstation')).toBeInTheDocument()
+      expect(screen.queryByText('Advanced PII Protection (Australia)')).not.toBeInTheDocument()
+    })
+  })
+
+  it('filters templates by quick preset pill', async () => {
+    render(
+      <MemoryRouter>
+        <PolicyMarketplace />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Advanced PII Protection (Australia)')).toBeInTheDocument()
+      expect(screen.getByText('Safe Cursor Workstation')).toBeInTheDocument()
+    })
+
+    const hipaaPreset = screen.getByRole('button', { name: /HIPAA & Health PHI/i })
+    fireEvent.click(hipaaPreset)
+
+    await waitFor(() => {
+      expect(screen.getByText('HIPAA & Medical PII Protection')).toBeInTheDocument()
+      expect(screen.queryByText('Safe Cursor Workstation')).not.toBeInTheDocument()
+    })
+  })
+
+  it('toggles between Grid Cards view and High-Density SOC Table view', async () => {
+    render(
+      <MemoryRouter>
+        <PolicyMarketplace />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Advanced PII Protection (Australia)')).toBeInTheDocument()
+    })
+
+    // Switch to Table view
+    const tableBtn = screen.getByRole('button', { name: /Table/i })
+    fireEvent.click(tableBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('Posture & Architecture')).toBeInTheDocument()
+      expect(screen.getByText('Target & Jurisdiction')).toBeInTheDocument()
+      expect(screen.getByText('Guardrails Enforced')).toBeInTheDocument()
+      expect(screen.getByText('Risk Level')).toBeInTheDocument()
+    })
+
+    // Verify row rendered in table
+    expect(screen.getByText('Advanced PII Protection (Australia)')).toBeInTheDocument()
+
+    // Switch back to Grid view
+    const gridBtn = screen.getByRole('button', { name: /Grid/i })
+    fireEvent.click(gridBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByText('Posture & Architecture')).not.toBeInTheDocument()
+    })
+  })
 })
+

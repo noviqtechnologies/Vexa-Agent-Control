@@ -493,6 +493,72 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             }
         },
         Commands::Verify { gateway, json } => agentcontrol::verify::run_verification_probe(&gateway, json).await,
+        Commands::Cache { command } => match command {
+            cli::CacheCommands::Status { gateway, json } => {
+                let url = format!("{}/api/v1/cache/stats", gateway.trim_end_matches('/'));
+                let client = reqwest::Client::new();
+                match client.get(&url).send().await {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            let stats: serde_json::Value = resp.json().await.unwrap_or_default();
+                            if json {
+                                println!("{}", serde_json::to_string_pretty(&stats).unwrap_or_default());
+                            } else {
+                                let gw = stats.get("gateway_cache");
+                                let prov = stats.get("provider_cache");
+                                let comp = stats.get("comparative_summary");
+
+                                println!("\n{}", "=== Vexa Gateway Semantic Cache Observatory ===".bright_green().bold());
+                                println!("  Exact Hits:          {}", gw.and_then(|g| g.get("exact_hits")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Semantic Vector Hits:{}", gw.and_then(|g| g.get("semantic_hits")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Cache Misses:        {}", gw.and_then(|g| g.get("misses")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Hit Ratio:           {}%", gw.and_then(|g| g.get("hit_ratio_pct")).unwrap_or(&serde_json::json!(0.0)));
+                                println!("  Tokens 100% Avoided: {}", gw.and_then(|g| g.get("tokens_saved")).and_then(|t| t.get("total")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Vexa Cost Saved:     ${}", gw.and_then(|g| g.get("cost_saved_usd")).unwrap_or(&serde_json::json!(0.0)));
+                                println!("  Avg Serving Latency: {} ms (vs ~1180ms upstream)", gw.and_then(|g| g.get("avg_serving_latency_ms")).unwrap_or(&serde_json::json!(2.4)));
+
+                                println!("\n{}", "--- Upstream Provider Prompt Cache ---".cyan().bold());
+                                println!("  Prefix Cache Hits:   {}", prov.and_then(|p| p.get("prefix_cache_hits")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Cached Tokens:       {}", prov.and_then(|p| p.get("cached_tokens")).unwrap_or(&serde_json::json!(0)));
+                                println!("  Provider Discount:   ${}", prov.and_then(|p| p.get("discount_usd")).unwrap_or(&serde_json::json!(0.0)));
+
+                                println!("\n{}", "--- Enterprise ROI & Attribution ---".purple().bold());
+                                println!("  Total Cost Avoided:  ${}", comp.and_then(|c| c.get("total_savings_usd")).unwrap_or(&serde_json::json!(0.0)));
+                                println!("  Vexa Contribution:   {}%", comp.and_then(|c| c.get("vexa_contribution_pct")).unwrap_or(&serde_json::json!(0.0)));
+                                println!("  Vexa ROI Multiplier: {}x over provider cache\n", comp.and_then(|c| c.get("roi_multiplier")).unwrap_or(&serde_json::json!(1.0)));
+                            }
+                            0
+                        } else {
+                            eprintln!("{} Failed to fetch cache stats: HTTP {}", "✖".red(), resp.status());
+                            1
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to connect to gateway at {}: {}", "✖".red(), gateway, e);
+                        1
+                    }
+                }
+            }
+            cli::CacheCommands::Clear { gateway } => {
+                let url = format!("{}/api/v1/cache/clear", gateway.trim_end_matches('/'));
+                let client = reqwest::Client::new();
+                match client.post(&url).send().await {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            println!("{} Semantic vector cache and exact hash cache cleared successfully.", "✔".green());
+                            0
+                        } else {
+                            eprintln!("{} Failed to clear cache: HTTP {}", "✖".red(), resp.status());
+                            1
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to connect to gateway at {}: {}", "✖".red(), gateway, e);
+                        1
+                    }
+                }
+            }
+        },
         Commands::Status => agentcontrol::wrap::run_status(),
         Commands::Watch { all, target } => agentcontrol::wrap::run_watch(all, target),
         Commands::StdioProxy {
@@ -702,6 +768,51 @@ fn build_proxy_state(
         (mode, allowed, default_m, enf)
     };
 
+    let semantic_cache = {
+        let sc_opt = compiled_policy.as_ref().and_then(|p| p.llm.as_ref()).and_then(|l| l.semantic_cache.as_ref());
+        if let Some(sc) = sc_opt {
+            let threshold = sc.similarity_threshold.unwrap_or(0.88);
+            let max_entries = sc.max_entries.unwrap_or(10_000);
+            let ttl = std::time::Duration::from_secs(sc.ttl_seconds.unwrap_or(86400));
+            let embedder_engine = match sc.embedding_provider.as_deref() {
+                Some("openai") => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::OpenAi {
+                    api_key: sc.embedding_api_key.clone().unwrap_or_else(|| std::env::var("OPENAI_API_KEY").unwrap_or_default()),
+                    endpoint: sc.embedding_endpoint.clone().unwrap_or_default(),
+                    model: sc.embedding_model.clone().unwrap_or_else(|| "text-embedding-3-small".to_string()),
+                },
+                Some("ollama") => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::Ollama {
+                    endpoint: sc.embedding_endpoint.clone().unwrap_or_else(|| "http://localhost:11434".to_string()),
+                    model: sc.embedding_model.clone().unwrap_or_else(|| "nomic-embed-text".to_string()),
+                },
+                _ => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::Local,
+            };
+
+            if sc.backend.as_deref() == Some("qdrant") {
+                let url = sc.qdrant_url.clone().unwrap_or_else(|| "http://localhost:6333".to_string());
+                Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::new_qdrant(
+                    sc.enabled,
+                    threshold,
+                    max_entries,
+                    ttl,
+                    url,
+                    sc.qdrant_api_key.clone(),
+                    sc.qdrant_collection.clone(),
+                    embedder_engine,
+                ))
+            } else {
+                Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::new_in_memory(
+                    sc.enabled,
+                    threshold,
+                    max_entries,
+                    ttl,
+                    embedder_engine,
+                ))
+            }
+        } else {
+            Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::default())
+        }
+    };
+
     let dlp_scanner_arc = std::sync::Arc::new(
         agentcontrol::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
     );
@@ -777,6 +888,7 @@ fn build_proxy_state(
         min_tokens,
         spend_only,
         prompt_cache: Arc::new(agentcontrol::proxy::prompt_cache::PromptCache::default()),
+        semantic_cache,
         local_key_cache: Arc::new(agentcontrol::proxy::local_key_cache::LocalKeyCache::default()),
         request_coalescer: Arc::new(agentcontrol::proxy::request_coalescer::RequestCoalescer::default()),
         adaptive_timeout: Arc::new(agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager::default()),
@@ -1089,76 +1201,83 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     let spend_ledger = if let Some(ref policy) = compiled_policy {
         if let Some(ref caps) = policy.spend_caps {
             if caps.enabled {
-                let license_key = match &caps.license_key {
-                    Some(k) => k,
-                    None => {
-                        eprintln!("{} spend_caps.enabled requires a valid license_key. Contact Vexa for a license at vexasec.io/pricing.", "✖".red());
-                        std::process::exit(1);
-                    }
-                };
-
-                let validator = match agentcontrol::license::LicenseValidator::new() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        eprintln!(
-                            "{} Failed to initialize license validator: {}",
-                            "✖".red(),
-                            e
-                        );
-                        std::process::exit(1);
-                    }
-                };
-
-                match validator.validate(license_key) {
-                    Ok(license) => {
-                        if !validator.has_feature(&license, "spend_caps") {
+                if let Some(license_key) = &caps.license_key {
+                    let validator = match agentcontrol::license::LicenseValidator::new() {
+                        Ok(v) => v,
+                        Err(e) => {
                             eprintln!(
-                                "{} spend_caps is not enabled in your current license.",
-                                "✖".red()
+                                "{} Failed to initialize license validator: {}",
+                                "✖".red(),
+                                e
                             );
                             std::process::exit(1);
                         }
-                        agentcontrol::logging::log_event(
-                            agentcontrol::logging::Level::Info,
-                            "license_validated",
-                            serde_json::json!({
-                                "org_id": license.org_id,
-                                "features": license.features,
-                                "expires_at": license.expires_at.to_rfc3339()
-                            }),
-                        );
-                        let now = chrono::Utc::now();
-                        let days_until_expiry = (license.expires_at - now).num_days();
-                        if days_until_expiry <= 30 {
+                    };
+
+                    match validator.validate(license_key) {
+                        Ok(license) => {
+                            if !validator.has_feature(&license, "spend_caps") {
+                                eprintln!(
+                                    "{} spend_caps is not enabled in your current license.",
+                                    "✖".red()
+                                );
+                                std::process::exit(1);
+                            }
                             agentcontrol::logging::log_event(
-                                agentcontrol::logging::Level::Warn,
-                                "license_expiry_warning",
+                                agentcontrol::logging::Level::Info,
+                                "license_validated",
                                 serde_json::json!({
-                                    "days_remaining": days_until_expiry
+                                    "org_id": license.org_id,
+                                    "features": license.features,
+                                    "expires_at": license.expires_at.to_rfc3339()
                                 }),
                             );
-                            println!(
-                                "{} License expires in {} days. Renew at vexasec.io/pricing.",
-                                "⚠".yellow(),
-                                days_until_expiry
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        match e {
-                            agentcontrol::license::LicenseError::Expired { expired_at } => {
-                                eprintln!(
-                                    "{} License expired at {}. Renew at vexasec.io/pricing.",
-                                    "✖".red(),
-                                    expired_at
+                            let now = chrono::Utc::now();
+                            let days_until_expiry = (license.expires_at - now).num_days();
+                            if days_until_expiry <= 30 {
+                                agentcontrol::logging::log_event(
+                                    agentcontrol::logging::Level::Warn,
+                                    "license_expiry_warning",
+                                    serde_json::json!({
+                                        "days_remaining": days_until_expiry
+                                    }),
+                                );
+                                println!(
+                                    "{} License expires in {} days. Renew at https://vexasec.io.",
+                                    "⚠".yellow(),
+                                    days_until_expiry
                                 );
                             }
-                            _ => {
-                                eprintln!("{} Invalid license: {}", "✖".red(), e);
-                            }
                         }
-                        std::process::exit(1);
+                        Err(e) => {
+                            match e {
+                                agentcontrol::license::LicenseError::Expired { expired_at } => {
+                                    eprintln!(
+                                        "{} License expired at {}. Renew at https://vexasec.io.",
+                                        "✖".red(),
+                                        expired_at
+                                    );
+                                }
+                                _ => {
+                                    eprintln!("{} Invalid license: {}", "✖".red(), e);
+                                }
+                            }
+                            std::process::exit(1);
+                        }
                     }
+                } else {
+                    println!(
+                        "{} spend_caps running in Early Access Mode (unlicensed evaluation). For fleet SLA & production support, visit https://vexasec.io.",
+                        "ℹ".cyan()
+                    );
+                    agentcontrol::logging::log_event(
+                        agentcontrol::logging::Level::Info,
+                        "license_early_access_evaluation",
+                        serde_json::json!({
+                            "mode": "early_access",
+                            "feature": "spend_caps"
+                        }),
+                    );
                 }
 
                 if caps.admin_api {

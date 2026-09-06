@@ -20,6 +20,7 @@ pub mod provider_router;
 pub mod replay_guard;
 pub mod request_coalescer;
 pub mod routing;
+pub mod semantic_cache;
 pub mod server;
 pub mod session;
 pub mod stdio;

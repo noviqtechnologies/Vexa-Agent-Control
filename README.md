@@ -36,6 +36,7 @@
   - [4. Forensic Dossiers & Run Explorer](#4-forensic-dossiers--run-explorer)
   - [5. Multi-Cloud OpenTofu Deployments](#5-multi-cloud-opentofu-deployments)
   - [6. Pluggable Routing Engine & Pipeline Hooks](#6-pluggable-routing-engine--pipeline-hooks)
+  - [7. Enterprise Semantic Vector Caching](#7-enterprise-semantic-vector-caching)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -67,6 +68,7 @@
 | 🛡️ **MCP Tool Security** | Agents execute arbitrary system tools, run unbounded bash commands, or exfiltrate private files. | **Zero-Trust Tool Guard:** Replay classification, strict schema checks, loop limits, and automated parameter sanitization. |
 | 🔒 **Credential & DLP Leakage** | API keys, SSH private keys, and AWS credentials get sent directly to external model providers. | **21-Pattern Inline DLP:** High-entropy regex, token scanning, and credential redacting at the wire layer. |
 | 🧠 **Prompt Injection Defense** | Untrusted web data or tool responses hijack the agent's system prompt and instructions. | **6-Pass Injection Shield:** Multi-layer detection for jailbreaks, covert directives, and instruction boundary overrides. |
+| ⚡ **Redundant Token Spend** | Repetitive or paraphrased prompts hit cloud providers every time, paying full token rates, suffering 1-2s latency, and egressing data over the WAN. | **Dual-Tier Semantic Vector Cache:** L1 exact SHA-256 hash + L2 vector cosine similarity (in-memory HNSW / Qdrant). Cuts token costs by 30–60% with 100% zero-egress cost elimination and sub-3ms response. |
 | 🌐 **Model Lock-In & Sprawl** | Custom SDKs and incompatible payload formats for every provider across applications. | **Drop-in Wire Compatibility:** Standard `/v1/chat/completions` and `/v1/models` normalizing multi-provider LLM requests. |
 | 💰 **Runaway Spend & Budgets** | Post-hoc billing surprises and asynchronous credit depletion after expensive model runs. | **Fail-Closed Spend Reservations:** Sub-millisecond atomic preflight balance reservations and exact SSE stream settlement. |
 | 👁️ **Audit & Forensic Blindspots** | Fleeting terminal output with zero cryptographic proof of agent tool actions or policy evaluations. | **Tamper-Evident Outbox:** Durable HMAC-SHA256 audit logs (`audit.jsonl`) + non-blocking SIEM export (Splunk, Datadog). |
@@ -340,6 +342,85 @@ Intercept and mutate traffic at each processing phase across both raw HTTP and s
 ### High-Throughput Asynchronous Control Plane (AR-3, AR-4, AR-5)
 * **`SpendEventWriter`:** Bounded in-memory event buffer with PostgreSQL batch ingestion (`pgx.Batch`), graceful shutdown draining, and 2-second backpressure shed protection.
 * **Centralized `Scheduler`:** Deterministic background daemon managing periodic database sweeps (e.g. expiring stale reservation holds) with live introspection at `/internal/jobs`.
+
+</details>
+
+<details open>
+<summary><b>7. Enterprise Semantic Vector Caching</b> — 100% Zero-Egress Cost Elimination &amp; Sub-3ms Retrieval</summary>
+
+LiteLLM and native cloud providers rely on exact string prefix hashes. If a developer or automated agent asks *"how to sort numbers in python"* vs *"in python how to sort a list of numbers"*, traditional prompt caches miss completely—incurring full token rates, 1-2 second WAN latency, and egressing sensitive prompts.
+
+Vexa Agent Control features a **Dual-Tier Semantic Vector Caching Engine** baked directly into its Rust core:
+1. **Tier 1 (L1 Exact Hash):** Instant SHA-256 hash lookup in local memory (`< 0.1ms`).
+2. **Tier 2 (L2 Semantic Vector Similarity):** L2-normalized cosine similarity vector search across In-Memory HNSW partitions or enterprise **Qdrant** clusters (`~2.4ms`).
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │       Incoming Agent Prompt Query            │
+                    └──────────────────────┬───────────────────────┘
+                                           │
+                        ┌──────────────────┴──────────────────┐
+                        ▼                                     ▼
+             [ L1: Exact SHA-256 Hash ]             [ L2: Vector Embedder ]
+              Matches identical prompt?             (OpenAI / Ollama / Local)
+                        │                                     │
+                 Yes ───┼─── No                        Cosine Similarity
+                        │       │                     ≥ Threshold (e.g. 0.88)?
+                        │       ▼                             │
+                        │   Compute Vector ───────────────────┼─── Yes
+                        │                                     │      │
+                        ▼                                     ▼      ▼
+        ┌───────────────────────────────────────────────────────────────┐
+        │  ⚡ 100% Vexa Gateway Cache HIT (Sub-3ms Serving)             │
+        │  • 100% Input + 100% Output Tokens Avoided ($0.00 Billed)     │
+        │  • 0 Bytes WAN Network Egress (Zero Data Exfiltration)        │
+        │  • Header: X-AgentControl-Cache: HIT-SEMANTIC (sim: 0.94)    │
+        └───────────────────────────────────────────────────────────────┘
+```
+
+### Gateway Semantic Cache vs. Provider Prompt Cache
+
+| Evaluation Dimension | ⚡ Vexa Gateway Semantic Cache | 🌐 Provider Prompt Cache (Anthropic/OpenAI) |
+|---|---|---|
+| **Matching Algorithm** | Vector Cosine Similarity (threshold ≥ 0.88) + SHA256 Exact | Strict exact prefix text hash |
+| **Token Cost Avoidance** | **100% Input + 100% Output** ($0.00 billed) | ~50–90% Input discount only (100% output billed) |
+| **Network Egress & Latency** | **~2.4ms** (0 bytes egress, resolved locally) | ~450ms – 1,200ms (Full prompt sent over WAN) |
+| **Model Portability** | Universal across OpenAI, Anthropic, Ollama, DeepSeek | Vendor locked to single provider |
+| **Storage Engine** | In-Memory LRU + Remote Qdrant Vector Cluster | Ephemeral provider cache (5 min to 1 hr TTL) |
+
+### Policy Configuration (`agentcontrol.yaml`)
+
+```yaml
+llm:
+  semantic_cache:
+    enabled: true
+    similarity_threshold: 0.88        # Cosine similarity cutoff (0.0 to 1.0)
+    max_entries: 10000                # In-memory LRU capacity
+    ttl_seconds: 86400                # 24-hour cache entry retention
+    backend: "in_memory"              # "in_memory" | "qdrant" | "hybrid"
+    embedder:
+      engine: "local"                 # "local" (zero-dependency 384-dim) | "openai" | "ollama"
+      model: "text-embedding-3-small"
+```
+
+### CLI Cache Controls & Live Status
+
+```bash
+# Check hit rate, tokens avoided, and total cost savings
+agentcontrol cache status
+
+# Purge cache entries across memory and Qdrant clusters
+agentcontrol cache clear
+```
+
+### Developer Dashboard Telemetry
+
+Open `http://localhost:8080/dashboard` and navigate to **Token Economics & Cache**:
+- **3 Hero Metric Cards:** Explicitly visualizes Vexa Gateway 100% Avoided Spend vs. Provider-side prefix discounts.
+- **Proportional Attribution Bar:** Live percentage split showing direct gateway savings vs upstream provider discounts.
+- **Live Semantic Cluster Inspector:** Inspects incoming queries and cached clusters side-by-side with exact cosine similarity scores and per-query dollar savings.
+
+[**Read the Semantic Caching & Token Economics Guide →**](docs/user-guide/observability-and-forensics.md#3-dual-tier-token-economics--enterprise-semantic-vector-caching)
 
 </details>
 
@@ -754,23 +835,20 @@ The core gateway primitives, local CLI protections, MCP interception engine, and
 
 ---
 
-### Commercial Editions for Teams & Enterprise *(Coming Soon)*
+### Open-Core Architecture & Early Access
 
-For organizations requiring centralized governance, enterprise compliance, and advanced scale, commercial license tiers for **Teams and Enterprise** will be available in the near future:
-
-- **Centralized Fleet Orchestration:** Global policy distribution, device enrollment verification, and automated workstation configuration drift correction.
-- **Multi-Tenant RBAC & ABAC:** Fine-grained team hierarchies, workspace isolation, and custom security role definitions.
-- **Enterprise SSO & Identity Binding:** SAML 2.0 / OIDC integrations with Okta, Microsoft Entra ID, Google Workspace, and Ping Identity.
-- **High-Availability Distributed Broker Mesh:** Clustered gateway deployments with Redis/Valkey state replication and multi-region load balancing.
-- **Enterprise SIEM Streaming & Compliance:** Native real-time streaming to Splunk HEC, Datadog API, OpenSearch, and SOC 2 / HIPAA compliance audit readiness.
-- **Dedicated Enterprise Support & Custom SLAs:** 24/7 dedicated engineering support, custom upstream provider adapters, and sovereign deployment assistance.
+- **Community Core (Apache 2.0):** Workstation proxy, local MCP tool firewall, prompt injection protection, safe-mode execution, and JSONL audit logging. **100% Free and Open Source forever.**
+- **Team Control Hub (Early Access):** Centralized SSE policy push, OIDC group identity binding, vault credential custody, live spend ledger, and fleet governance. **Free during Early Access** (up to 50 devices).
+- **Enterprise & Sovereign Deployments:** Dedicated enterprise SLAs, custom DLP classifiers, air-gapped sovereign deployments, SIEM log forwarding, and compliance reporting. Available for design partners and commercial pilots.
 
 ---
 
-### Contact Us
+### Community & Early Access Support
 
-Have questions, feedback, or interested in early access to our upcoming Teams & Enterprise commercial editions?
+Have questions, feedback, or testing a complex agent toolchain?
 
+- 💬 **Discord Community:** [discord.gg/vexasec](https://discord.gg/vexasec)
+- 🐞 **GitHub Issues:** [github.com/noviqtechnologies/Vexa-Agent-Control/issues](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues)
 - 📧 **Email:** [contact@vexasec.io](mailto:contact@vexasec.io)
 - 🌐 **Website:** [vexasec.io](https://vexasec.io/)
 

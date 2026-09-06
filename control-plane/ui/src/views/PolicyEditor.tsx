@@ -16,21 +16,87 @@ llm:
   model_enforcement: restrict  # "restrict" (block unapproved models) or "fallback"
   default_model: "gpt-4o"
   allowed_models:
-    - "gpt-4o*"
+    # Frontier & Latest Generation
+    - "claude-fable-5*"
+    - "claude-fable-5-1*"
+    - "claude-sonnet-5*"
+    - "claude-opus-5*"
+    - "claude-haiku-4-5*"
+    - "gpt-6-astra*"
+    - "gpt-5*"
+    - "o3*"
+    - "o4-mini*"
+    - "gemini-3.8-flash*"
+    - "gemini-3.8-flash-cyber*"
+    - "gemini-2.5-pro*"
+    - "gemini-2.5-flash*"
+    - "deepseek-v4-pro*"
+    - "deepseek-v4-flash*"
+    # Supported Previous Generations
+    - "claude-3-7-sonnet*"
     - "claude-3-5-sonnet*"
+    - "claude-3-5-haiku*"
+    - "gpt-4o*"
+    - "gpt-4o-mini*"
+    - "o1*"
+    - "o3-mini*"
+    - "gemini-2.0-flash*"
     - "gemini-1.5-pro*"
+    - "deepseek-chat*"
+    - "deepseek-reasoner*"
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "gpt-4o-mini*", "o1*"]
-      dlp_tier: "strict"
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*", "claude-3-5-haiku*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
       dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*", "gemini-1.5-flash*", "gemini-2.0-flash*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
       dlp_tier: "strict"
   dlp:
     actions:

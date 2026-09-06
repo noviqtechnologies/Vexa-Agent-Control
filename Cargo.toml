@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentcontrol"
-version = "1.0.75"
+version = "1.0.76"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -20,8 +20,8 @@ path = "src/lib.rs"
 # The minimal set for individual developers (Local Safe Mode + Proxy)
 default = ["local-core"]
 
-# SMB / Team Edition (Adds Passport Model + SaaS Sync)
-team = ["local-core", "passport-injection", "saas-sync"]
+# SMB / Team Edition (Adds Passport Model + Hub Sync)
+team = ["local-core", "passport-injection", "hub-sync"]
 
 # Enterprise Edition (Adds OIDC, mTLS, and SIEM Export)
 enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]
@@ -29,7 +29,8 @@ enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]
 # Internal Functional Flags
 local-core = []
 passport-injection = []
-saas-sync = []
+hub-sync = []
+saas-sync = ["hub-sync"] # Deprecated backwards-compatibility alias
 oidc-auth = []
 mtls-identity = []
 siem-export = []

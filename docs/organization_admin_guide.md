@@ -12,10 +12,13 @@ Under the **Single-Tenant Open-Core** model:
 
 ## 2. Edition & Licensing Model
 
-| Edition | Capacity | Capabilities Included | Activation Method |
+Vexa operates on an **Open-Core** distribution model:
+
+| Edition | Capacity | Capabilities Included | Licensing & Availability |
 |---|---|---|---|
-| **Community (Open Source)** | Unlimited | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, prompt injection guards, regex DLP, team control plane | Free & Open Source (Apache 2.0) |
-| **Commercial / Enterprise** | Custom / Enterprise SLA | Everything in Community + Dedicated enterprise SLA, custom deployment support, sovereign deployment assistance | Signed Commercial License Token or Contract |
+| **Community Core (Open Source)** | Unlimited | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, safe-mode execution, prompt injection firewall, regex DLP | **Free & Open Source** (Apache 2.0 forever) |
+| **Team Control Hub** | Up to 50 devices | Centralized SSE policy push, OIDC identity binding, vault credential custody, live spend ledger, device compliance governance | **Free during Early Access** (Self-hosted via Docker Compose / Helm) |
+| **Enterprise / Sovereign** | Custom / Unlimited | Dedicated enterprise SLA, custom deployment support, sovereign air-gapped deployment assistance, SIEM streaming, custom DLP classifiers | **Commercial License / Design Partner Pilot** (Ed25519 Token) |
 
 ---
 
@@ -27,13 +30,13 @@ Under the **Single-Tenant Open-Core** model:
 3. View your active organization details:
    - **Organization Name & Slug**
    - **Active License Tier** (`DEVELOPER`, `TEAM`, `ENTERPRISE`)
-   - **Device Quota & Capacity:** Real-time count of enrolled devices against your tier limit (e.g. `1/1`, `12/25`, or `Unlimited`).
-   - **Expiration Countdown:** Days remaining on your active license key.
+   - **Device Quota & Capacity:** Real-time count of enrolled devices against your tier limit (e.g. `1/1`, `12/50`, or `Unlimited`).
+   - **Expiration Countdown:** Days remaining on your active license key (if applicable).
 
 ### Activating a License Key
-To upgrade or renew your license tier:
-1. Obtain your cryptographically signed Ed25519 license JWT from your Vexa representative.
-2. In **Organization & License**, paste the JWT into the **Activate License Key** input.
+To upgrade or apply a commercial enterprise or design partner license:
+1. Obtain your cryptographically signed Ed25519 license JWT from your Vexa representative or design partner onboarding.
+2. In **Organization & License**, paste the JWT into the **Activate Design Partner / Enterprise License** input.
 3. Click **Activate License**. The control plane verifies the signature offline and immediately unlocks your new device capacity and capabilities.
 
 Alternatively, set the environment variable on your Control Plane container:
@@ -46,8 +49,8 @@ export VEXA_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
 ## 4. Device Enrollment Governance & Caps
 
 When an agent workstation initiates enrollment via `agentcontrol enroll --token <TOKEN> --hub-url <URL>`:
-1. The Control Plane verifies that the active enrolled device count has not exceeded the license tier limit (`1` for Developer, `25` for Team, unlimited for Enterprise).
-2. If the quota is full, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`).
+1. The Control Plane verifies that the active enrolled device count has not exceeded the license tier limit (`1` for Developer, `50` for Team during Early Access, unlimited for Enterprise).
+2. If the quota is full, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`). To request additional Early Access device capacity, reach out on the community Discord or email `early-access@vexasec.io`.
 3. Revoking decommissioned devices in **Device Governance** immediately frees up capacity for new enrollments.
 
 ---

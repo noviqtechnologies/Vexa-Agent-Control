@@ -1,7 +1,7 @@
 //! Decoupled Durable Event Outbox (Phase 2)
 //!
 //! Separates synchronous, tamper-evident local audit disk commits (`sync_all`) from
-//! asynchronous, distributed network exports (SIEM, Central SaaS Hub, Dashboard).
+//! asynchronous, distributed network exports (SIEM, Central Control Hub, Dashboard).
 //! Prevents slow or unreachable remote network endpoints from stalling the local
 //! security gateway execution loop.
 

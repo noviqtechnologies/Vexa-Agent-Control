@@ -190,7 +190,7 @@ gateway:
       maxSurge: 1
       maxUnavailable: 0
 
-# ─── FR-23 SaaS Dashboard ──────────────────────────────────────────────────
+# ─── FR-23 Team Dashboard ──────────────────────────────────────────────────
 # Opt-in. All three sub-components default to enabled=false so existing
 # deployments are completely unaffected by helm upgrade.
 

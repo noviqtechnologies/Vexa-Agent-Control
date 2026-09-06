@@ -45,7 +45,7 @@ export default function SpendLimits() {
       setPolicies(res.policies || [])
     } catch (e: any) {
       if (e.status === 403 || (e.message && e.message.includes('license'))) {
-        setLicenseNotAvailable(e.message || 'Spend Caps & Policies require a Team or Enterprise license tier.')
+        setLicenseNotAvailable(e.message || 'Spend Caps & Policies are currently in Early Access preview. If you encounter authorization issues, verify your organization settings or join the community Discord.')
       } else {
         console.error(e)
       }
@@ -58,15 +58,16 @@ export default function SpendLimits() {
     e.preventDefault()
     let scopeId = 'global'
     if (scope === 'organization') {
-      scopeId = user?.tenant_id || 'global'
-    } else if (scope === 'provider') {
-      scopeId = providerChoice.toLowerCase()
-    } else {
       scopeId = targetId || 'default'
+    } else if (scope === 'team' || scope === 'project' || scope === 'agent') {
+      scopeId = targetId
     }
 
-    if (!limit) return
-    
+    if (!scopeId) {
+      setMessage({ type: 'error', text: 'Target ID is required for non-global scopes' })
+      return
+    }
+
     setSubmitting(true)
     setMessage(null)
     try {
@@ -82,7 +83,7 @@ export default function SpendLimits() {
       setLimit('100.00')
       fetchData()
     } catch (e: any) {
-      setMessage({ type: 'error', text: e.message })
+      setMessage({ type: 'error', text: e.message || 'Failed to create spend policy' })
     } finally {
       setSubmitting(false)
     }
@@ -102,7 +103,7 @@ export default function SpendLimits() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 24 }}>🛡️</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, color: '#f59e0b' }}>Team or Enterprise Feature</h3>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#f59e0b' }}>Early Access Policy Feature</h3>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{licenseNotAvailable}</p>
             </div>
           </div>

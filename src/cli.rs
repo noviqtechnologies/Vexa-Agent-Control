@@ -45,7 +45,7 @@ pub enum Commands {
         #[arg(long)]
         token: String,
 
-        /// Control Hub / SaaS URL
+        /// Control Hub URL
         #[arg(long, default_value = "https://app.vexasec.io")]
         hub_url: String,
     },
@@ -407,6 +407,32 @@ pub enum Commands {
     Ca {
         #[command(subcommand)]
         command: CaCommands,
+    },
+
+    /// Manage gateway semantic vector cache and prompt economics
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommands,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum CacheCommands {
+    /// Show semantic cache hit ratio, tokens saved, and dollar cost advantage
+    Status {
+        /// Gateway URL to query (default: http://127.0.0.1:8080)
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        gateway: String,
+
+        /// Output results as raw JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Clear all in-memory and Qdrant cache entries
+    Clear {
+        /// Gateway URL to query (default: http://127.0.0.1:8080)
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        gateway: String,
     },
 }
 

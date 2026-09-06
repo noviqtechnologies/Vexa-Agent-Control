@@ -140,10 +140,10 @@ Route high-risk tool execution prompts (e.g. `DROP DATABASE`, `aws iam attach-us
 
 ## 6. Multi-Tenant Teams & Zero-Trust BYOK
 
-The Team SaaS Hub is built on a shared multi-tenant architecture where every data row is scoped to your organization UUID:
-- **Trial Visibility:** View remaining days on your 15-day or 30-day free evaluation in the console header.
-- **Seat Allocation:** Real-time seat consumption tracker preventing license overages.
-- **Seamless Upgrade:** Converting from a trial to a paid annual contract occurs in-place with zero data migration or infrastructure rebuilds.
+The Team Control Hub provides isolated organization boundaries where all telemetry and credentials are scoped to your private organization UUID:
+- **Early Access Evaluation:** Enjoy full Team Hub capabilities with no initial billing required during the public Early Access phase.
+- **Fleet Governance:** Real-time device enrollment tracking with generous evaluation quotas (up to 50 devices).
+- **Seamless Upgrade:** Converting to a dedicated Enterprise SLA occurs in-place with zero data migration or infrastructure rebuilds via cryptographically signed Ed25519 tokens.
 
 ---
 

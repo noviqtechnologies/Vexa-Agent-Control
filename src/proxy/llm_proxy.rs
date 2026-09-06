@@ -55,11 +55,63 @@ fn estimate_input_tokens(body: &Value) -> i64 {
     }
 }
 
+pub(crate) fn extract_prompt_text(body: &Value) -> String {
+    let mut parts = Vec::new();
+    if let Some(sys) = body.get("system").and_then(|v| v.as_str()) {
+        if !sys.trim().is_empty() {
+            parts.push(sys.trim());
+        }
+    }
+    if let Some(messages) = body.get("messages").and_then(|v| v.as_array()) {
+        for msg in messages {
+            if let Some(content) = msg.get("content").and_then(|v| v.as_str()) {
+                if !content.trim().is_empty() {
+                    parts.push(content.trim());
+                }
+            } else if let Some(blocks) = msg.get("content").and_then(|v| v.as_array()) {
+                for b in blocks {
+                    if let Some(t) = b.get("text").and_then(|v| v.as_str()) {
+                        if !t.trim().is_empty() {
+                            parts.push(t.trim());
+                        }
+                    }
+                }
+            }
+        }
+    } else if let Some(prompt) = body.get("prompt").and_then(|v| v.as_str()) {
+        if !prompt.trim().is_empty() {
+            parts.push(prompt.trim());
+        }
+    }
+    parts.join("\n")
+}
+
+pub(crate) fn extract_completion_text_from_bytes(bytes: &[u8]) -> String {
+    if let Ok(json_val) = serde_json::from_slice::<Value>(bytes) {
+        if let Some(choices) = json_val.get("choices").and_then(|v| v.as_array()) {
+            if let Some(first) = choices.first() {
+                if let Some(content) = first.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()) {
+                    return content.to_string();
+                }
+            }
+        }
+        if let Some(content_arr) = json_val.get("content").and_then(|v| v.as_array()) {
+            for block in content_arr {
+                if let Some(t) = block.get("text").and_then(|v| v.as_str()) {
+                    return t.to_string();
+                }
+            }
+        }
+    }
+    String::from_utf8_lossy(bytes).to_string()
+}
+
 pub(crate) fn infer_provider_from_model(model: &str) -> String {
     let lower = model.to_lowercase();
     if lower.starts_with("gpt-")
         || lower.starts_with("o1")
         || lower.starts_with("o3")
+        || lower.starts_with("o4")
         || lower.starts_with("text-")
         || lower.starts_with("chatgpt")
         || lower.contains("openai")
@@ -1270,6 +1322,136 @@ pub async fn handle_request(
         }
     };
 
+    // ── Gateway Semantic Cache Lookup (Pillar 1) ─────────────────────────────
+    let prompt_text = extract_prompt_text(&body);
+    let tenant_id = session.identity_sub.as_deref().unwrap_or("default").to_string();
+
+    if state.semantic_cache.is_enabled() && !prompt_text.is_empty() {
+        if let Some(hit) = state.semantic_cache.lookup(&state.http_client, &tenant_id, &model, &prompt_text).await {
+            session.tokens_used.fetch_add((hit.prompt_tokens + hit.completion_tokens) as u64, std::sync::atomic::Ordering::Relaxed);
+
+            emit_llm_telemetry(&state, &session, &model, control_plane_proto::redact::RawDecision::Allowed);
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "llm_cache_hit",
+                    &format!("{}:{}", provider_name, model),
+                    Some(json!({
+                        "provider": provider_name,
+                        "model": model,
+                        "cache_hit_type": hit.hit_type,
+                        "similarity": hit.similarity,
+                        "tokens_saved": hit.prompt_tokens + hit.completion_tokens,
+                        "cost_saved_usd": hit.cost_saved_usd,
+                        "cached_prompt": hit.cached_prompt,
+                    })),
+                    Some(format!("Satisfied by Vexa Gateway Semantic Cache ({}) with similarity {:.3}", hit.hit_type, hit.similarity)),
+                    Some(start_time.elapsed().as_secs_f64() * 1000.0),
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    Some("sha256:active".to_string()),
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+
+            let hit_header = if hit.hit_type == "exact" { "HIT-EXACT" } else { "HIT-SEMANTIC" };
+            let sim_str = format!("{:.3}", hit.similarity);
+            let cost_saved_str = format!("{:.4}", hit.cost_saved_usd);
+            let tokens_saved_str = format!("{}", hit.prompt_tokens + hit.completion_tokens);
+
+            if is_streaming {
+                let cached_text = extract_completion_text_from_bytes(&hit.response_body);
+                let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(4);
+
+                let stream_payload = if is_anthropic_protocol {
+                    format!(
+                        "event: message_start\ndata: {}\n\nevent: content_block_start\ndata: {}\n\nevent: content_block_delta\ndata: {}\n\nevent: content_block_stop\ndata: {{\"type\":\"content_block_stop\",\"index\":0}}\n\nevent: message_delta\ndata: {}\n\nevent: message_stop\ndata: {{\"type\":\"message_stop\"}}\n\n",
+                        serde_json::json!({
+                            "type": "message_start",
+                            "message": {
+                                "id": format!("msg-cached-{}", req_uuid),
+                                "type": "message",
+                                "role": "assistant",
+                                "model": model,
+                                "content": [],
+                                "stop_reason": null,
+                                "stop_sequence": null,
+                                "usage": { "input_tokens": 0, "output_tokens": hit.completion_tokens }
+                            }
+                        }),
+                        serde_json::json!({
+                            "type": "content_block_start",
+                            "index": 0,
+                            "content_block": { "type": "text", "text": "" }
+                        }),
+                        serde_json::json!({
+                            "type": "content_block_delta",
+                            "index": 0,
+                            "delta": { "type": "text_delta", "text": cached_text }
+                        }),
+                        serde_json::json!({
+                            "type": "message_delta",
+                            "delta": { "stop_reason": "end_turn", "stop_sequence": null },
+                            "usage": { "output_tokens": hit.completion_tokens }
+                        })
+                    )
+                } else {
+                    let sse_chunk = serde_json::json!({
+                        "id": format!("chatcmpl-cached-{}", req_uuid),
+                        "object": "chat.completion.chunk",
+                        "created": chrono::Utc::now().timestamp(),
+                        "model": model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": cached_text
+                            },
+                            "finish_reason": "stop"
+                        }]
+                    });
+                    format!("data: {}\n\ndata: [DONE]\n\n", serde_json::to_string(&sse_chunk).unwrap_or_default())
+                };
+
+                let _ = tx.try_send(Ok(hyper::body::Frame::data(Bytes::from(stream_payload))));
+                let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx)));
+
+                return Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                    .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
+                    .header(hyper::header::CONNECTION, "keep-alive")
+                    .header("X-Accel-Buffering", "no")
+                    .header("X-AgentControl-Origin", "agentcontrol")
+                    .header("X-AgentControl-Verdict", "allowed")
+                    .header("X-AgentControl-Cache", hit_header)
+                    .header("X-AgentControl-Similarity", sim_str)
+                    .header("X-AgentControl-Savings-Type", "GATEWAY_FULL_AVOIDANCE")
+                    .header("X-AgentControl-Cost-Saved-USD", cost_saved_str)
+                    .header("X-AgentControl-Tokens-Saved", tokens_saved_str)
+                    .header("X-AgentControl-Request-ID", &req_uuid)
+                    .body(stream_body)
+                    .unwrap());
+            } else {
+                return Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .header(hyper::header::CONTENT_TYPE, hit.content_type)
+                    .header("X-AgentControl-Origin", "agentcontrol")
+                    .header("X-AgentControl-Verdict", "allowed")
+                    .header("X-AgentControl-Cache", hit_header)
+                    .header("X-AgentControl-Similarity", sim_str)
+                    .header("X-AgentControl-Savings-Type", "GATEWAY_FULL_AVOIDANCE")
+                    .header("X-AgentControl-Cost-Saved-USD", cost_saved_str)
+                    .header("X-AgentControl-Tokens-Saved", tokens_saved_str)
+                    .header("X-AgentControl-Request-ID", &req_uuid)
+                    .body(full_to_box_body(Full::new(hit.response_body)))
+                    .unwrap());
+            }
+        }
+    }
+
     // ── Preflight Spend Authorization (Optional in local_compat) ──────────────
     let hub_url = crate::identity::device::load_hub_url();
     let mut active_reservation_id: Option<String> = None;
@@ -1707,9 +1889,12 @@ pub async fn handle_request(
                 let body_clone = body.clone();
                 let start_time_clone = start_time;
                 let is_anthropic_protocol_clone = is_anthropic_protocol;
+                let prompt_text_clone = prompt_text.clone();
+                let tenant_id_clone = tenant_id.clone();
 
                 tokio::spawn(async move {
                     let mut accumulated_chars = 0usize;
+                    let mut accumulated_text = String::new();
                     let mut prompt_tokens_val = input_est;
                     let mut completion_tokens_val = 0i64;
                     let mut cached_tokens_val = 0i64;
@@ -1742,6 +1927,7 @@ pub async fn handle_request(
                                                                     if let Some(txt) = delta.get("content").and_then(|v| v.as_str()) {
                                                                         if !txt.is_empty() {
                                                                             accumulated_chars += txt.len();
+                                                                            accumulated_text.push_str(txt);
                                                                             has_emitted_content_or_tool = true;
                                                                         }
                                                                     }
@@ -1776,6 +1962,7 @@ pub async fn handle_request(
                                                                 if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                                                                     if !content.is_empty() {
                                                                         accumulated_chars += content.len();
+                                                                        accumulated_text.push_str(content);
                                                                         has_emitted_content_or_tool = true;
                                                                         let anthropic_event = format!(
                                                                             "event: content_block_delta\ndata: {}\n\n",
@@ -1830,6 +2017,7 @@ pub async fn handle_request(
                                                                     if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                                                                         if !content.is_empty() {
                                                                             accumulated_chars += content.len();
+                                                                            accumulated_text.push_str(content);
                                                                             has_emitted_content_or_tool = true;
                                                                         }
                                                                     }
@@ -1843,6 +2031,7 @@ pub async fn handle_request(
                                                             if let Some(t) = delta.get("text").and_then(|v| v.as_str()) {
                                                                 if !t.is_empty() {
                                                                     accumulated_chars += t.len();
+                                                                    accumulated_text.push_str(t);
                                                                     has_emitted_content_or_tool = true;
                                                                 }
                                                             }
@@ -1935,6 +2124,42 @@ pub async fn handle_request(
                             }
                             let _ = settle_builder.json(&settle_req).send().await;
                         }
+                    }
+
+                    if cached_tokens_val > 0 {
+                        state_clone.semantic_cache.metrics.record_provider_discount(&model_clone, cached_tokens_val);
+                    }
+                    if has_emitted_content_or_tool && !accumulated_text.is_empty() {
+                        let synthetic_resp = serde_json::json!({
+                            "id": format!("chatcmpl-{}", req_uuid_clone),
+                            "object": "chat.completion",
+                            "created": chrono::Utc::now().timestamp(),
+                            "model": model_clone,
+                            "choices": [{
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": accumulated_text
+                                },
+                                "finish_reason": "stop"
+                            }],
+                            "usage": {
+                                "prompt_tokens": prompt_tokens_val,
+                                "completion_tokens": completion_tokens_val,
+                                "total_tokens": prompt_tokens_val + completion_tokens_val
+                            }
+                        });
+                        let bytes = Bytes::from(serde_json::to_vec(&synthetic_resp).unwrap_or_default());
+                        state_clone.semantic_cache.store(
+                            &state_clone.http_client,
+                            &tenant_id_clone,
+                            &model_clone,
+                            &prompt_text_clone,
+                            bytes,
+                            "application/json",
+                            prompt_tokens_val,
+                            completion_tokens_val,
+                        ).await;
                     }
 
                     emit_llm_telemetry(&state_clone, &session_clone, &model_clone, control_plane_proto::redact::RawDecision::Allowed);
@@ -2179,6 +2404,22 @@ pub async fn handle_request(
                     let _ = db.insert(egress_event).await;
                     db.prune();
                 });
+
+                if cached_tokens_val > 0 {
+                    state.semantic_cache.metrics.record_provider_discount(&model, cached_tokens_val);
+                }
+                if status.is_success() && !final_resp_bytes.is_empty() {
+                    state.semantic_cache.store(
+                        &state.http_client,
+                        &tenant_id,
+                        &model,
+                        &prompt_text,
+                        final_resp_bytes.clone(),
+                        "application/json",
+                        prompt_tokens_val,
+                        completion_tokens_val,
+                    ).await;
+                }
 
                 let mut builder = Response::builder().status(status);
                 builder = builder

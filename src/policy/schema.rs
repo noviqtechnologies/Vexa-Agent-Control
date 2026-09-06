@@ -138,6 +138,27 @@ pub struct LlmConfig {
     pub model_enforcement: Option<String>,
     /// Model groups with pluggable routing strategies (AR-2).
     pub model_groups: Option<Vec<ModelGroupConfig>>,
+    /// Semantic vector caching configuration.
+    pub semantic_cache: Option<SemanticCacheConfig>,
+}
+
+/// Semantic Cache configuration block.
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticCacheConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub backend: Option<String>,
+    pub similarity_threshold: Option<f32>,
+    pub max_entries: Option<usize>,
+    pub ttl_seconds: Option<u64>,
+    pub qdrant_url: Option<String>,
+    pub qdrant_api_key: Option<String>,
+    pub qdrant_collection: Option<String>,
+    pub embedding_provider: Option<String>,
+    pub embedding_model: Option<String>,
+    pub embedding_api_key: Option<String>,
+    pub embedding_endpoint: Option<String>,
 }
 
 /// Model group configuration for pluggable routing (AR-2).

@@ -101,7 +101,7 @@ func TierToMaxDevices(tier string) int {
 	case "enterprise":
 		return -1 // Unlimited
 	case "team":
-		return 25
+		return 50
 	case "developer":
 		fallthrough
 	case "community":

@@ -36,7 +36,7 @@ pub mod detector;
 #[cfg(feature = "passport-injection")]
 pub mod passport;
 
-#[cfg(feature = "saas-sync")]
+#[cfg(feature = "hub-sync")]
 pub mod sync;
 
 #[cfg(feature = "enterprise")]

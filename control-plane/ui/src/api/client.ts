@@ -270,8 +270,8 @@ export interface AuditLogItem {
   changed_by: string
   actor_role?: string
   affected_item_id: string
-  before_value?: Record<string, any>
-  updated_value?: Record<string, any>
+  before_value?: Record<string, any> | null
+  updated_value?: Record<string, any> | null
   ip_address?: string
   outcome?: string
 }

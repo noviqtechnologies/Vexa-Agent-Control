@@ -32,18 +32,70 @@ Navigate to any run or click the **Session Trace** button to view:
 
 ---
 
-## 3. Token Economics & Prompt Cache Analytics
+## 3. Dual-Tier Token Economics & Enterprise Semantic Vector Caching
 
-Modern LLM providers (Anthropic Prompt Caching, OpenAI Cached Tokens) offer deep discounts for shared prompt prefixes. Vexa automatically tracks and credits prompt cache hits.
+Modern enterprises cannot rely solely on upstream provider prompt caching. While providers like Anthropic and OpenAI offer discounts for exact prefix matches, **they still charge for output tokens, incur 400ms–1,500ms WAN latency, and egress sensitive prompt data over the internet**.
 
-- **Cache Hit Ratio Gauge:** Visualizes `(cached_tokens / (cached_tokens + prompt_tokens)) * 100` across hourly buckets.
-- **Cost Avoidance Calculation:** Computes financial savings realized through cached prefixes.
-- **Dimensional Attribution:** Group spend and token volume by:
-  - **Provider:** OpenAI, Anthropic, Groq, Bedrock, Azure.
-  - **Model:** `gpt-4o`, `claude-3-7-sonnet`, `llama-3.3-70b`.
-  - **Workstation / Device:** Developer machine or CI runner.
-  - **User:** Specific internal user ID or end-user identity.
-  - **Team:** Virtual Key alias and department budget.
+Vexa Agent Control introduces **Dual-Tier Token Economics**, explicitly differentiating between **Vexa Gateway Vector Caching (100% Cost Avoidance & Zero-Egress)** and **Provider-Side Prompt Caching (Partial Upstream Prefix Discounts)**:
+
+### Architectural Comparison
+
+| Dimension | ⚡ Vexa Gateway Semantic Cache | 🌐 Upstream Provider Prompt Cache |
+|---|---|---|
+| **Matching Engine** | L1 exact SHA-256 + L2 Vector Cosine Similarity | Strict exact prefix text hash only |
+| **Token Cost Avoidance** | **100% Input + 100% Output tokens avoided** ($0.00 billed) | ~50–90% Input discount only (100% output tokens billed) |
+| **Network Egress** | **0 Bytes (Eliminated)** — resolved in local memory / private cluster | Full prompt payload egressed across Internet WAN |
+| **Execution Latency** | **~2.4 ms** (Sub-millisecond retrieval) | ~450 ms – 1,500 ms (WAN network roundtrip) |
+| **Portability** | **Cross-Model & Cross-Provider** (unified gateway layer) | Vendor-locked (isolated per provider account) |
+| **Storage Tiering** | In-Memory HNSW vector index + Enterprise Qdrant clusters | Ephemeral in-memory provider cache (5 min to 1 hr TTL) |
+
+### Vector Backends & Embedder Options
+
+Configure semantic vector caching in your policy YAML (`agentcontrol.yaml`):
+
+```yaml
+llm:
+  semantic_cache:
+    enabled: true
+    similarity_threshold: 0.88        # Cosine similarity cutoff (0.0 to 1.0)
+    max_entries: 25000                # In-memory LRU capacity limit
+    ttl_seconds: 86400                # 24-hour knowledge retention window
+    backend: "in_memory"              # "in_memory" | "qdrant" | "hybrid"
+    qdrant:
+      url: "http://qdrant.internal.net:6333"
+      api_key: "env:QDRANT_API_KEY"
+      collection: "vexa-semantic-cache"
+    embedder:
+      engine: "local"                 # "local" (zero-dependency 384-dim) | "openai" | "ollama"
+      model: "text-embedding-3-small"
+      endpoint: "https://api.openai.com/v1"
+```
+
+### Similarity Threshold Tuning Guidelines
+
+- **0.95 – 0.98 (Strict / Critical):** Financial compliance, legal analysis, medical diagnosis where slight variations could change meaning.
+- **0.88 – 0.92 (Recommended Default):** General enterprise support, customer service, internal technical documentation, and repetitive developer queries.
+- **0.80 – 0.85 (High Recall):** Code generation, summarization, exploratory brainstorming, and high-volume conversational bots.
+
+### CLI Management & Status Inspection
+
+Inspect real-time cache performance, hit rates, and dollar savings directly from the terminal:
+
+```bash
+# Check cache status, hit rate, and economic attribution
+agentcontrol cache status
+
+# Purge cache entries across in-memory and Qdrant clusters
+agentcontrol cache clear
+```
+
+### Dashboard Visualization & Semantic Cluster Inspector
+
+The local developer dashboard (`http://127.0.0.1:8080/dashboard`) provides a dedicated **Token Economics & Cache** tab:
+1. **3 Hero Impact Cards:** Visualizes Vexa Gateway 100% Avoided Costs ($), Provider-Side Prefix Discounts ($), and Total Combined Net Value.
+2. **Proportional Contribution Bar:** Displays the exact percentage split between Gateway Zero-Egress savings vs. Upstream provider discounts.
+3. **Live Semantic Cluster Inspector:** Inspects incoming prompt queries alongside matched cluster centroids, displaying exact cosine similarity (%), latency speedup, and per-query net dollars saved.
+4. **Interactive Cache Purge:** One-click instant purge modal invoking `POST /api/v1/cache/clear`.
 
 ---
 

@@ -57,7 +57,7 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 			contact_email TEXT NOT NULL DEFAULT 'admin@agentcontrol.local',
 			license_tier TEXT NOT NULL DEFAULT 'team',
 			license_key_jwt TEXT,
-			max_devices INT NOT NULL DEFAULT 25,
+			max_devices INT NOT NULL DEFAULT 50,
 			license_expires_at TIMESTAMPTZ,
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -65,11 +65,11 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		);
 
 		INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', 'admin@agentcontrol.local', 'team', 25, 'active')
+		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', 'admin@agentcontrol.local', 'team', 50, 'active')
 		ON CONFLICT (id) DO NOTHING;
 
 		UPDATE organizations
-		SET license_tier = 'team', max_devices = GREATEST(max_devices, 25), updated_at = now()
+		SET license_tier = 'team', max_devices = GREATEST(max_devices, 50), updated_at = now()
 		WHERE id = '00000000-0000-0000-0000-000000000001' AND license_tier = 'developer';
 
 		CREATE TABLE IF NOT EXISTS teams (
@@ -112,7 +112,7 @@ func (s *Store) GetOrganization(ctx context.Context, idOrSlug string) (*model.Or
 			Name:        "Primary Organization",
 			Slug:        "default",
 			LicenseTier: "team",
-			MaxDevices:  25,
+			MaxDevices:  50,
 			Status:      model.OrgStatusActive,
 		}, nil
 	}
@@ -158,7 +158,7 @@ func (s *Store) GetPrimaryOrganization(ctx context.Context) (*model.Organization
 			Name:        "Primary Organization",
 			Slug:        "default",
 			LicenseTier: "team",
-			MaxDevices:  25,
+			MaxDevices:  50,
 			Status:      model.OrgStatusActive,
 		}, nil
 	}
@@ -185,7 +185,7 @@ func (s *Store) GetPrimaryOrganization(ctx context.Context) (*model.Organization
 				Name:        "Primary Organization",
 				Slug:        "default",
 				LicenseTier: "team",
-				MaxDevices:  25,
+				MaxDevices:  50,
 				Status:      model.OrgStatusActive,
 			}, nil
 		}

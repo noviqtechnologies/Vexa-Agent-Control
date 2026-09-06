@@ -36,15 +36,56 @@ llm:
   providers:
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*", "claude-3-7-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
       dlp_tier: "strict"
+
     - name: "openai"
       action: "allow"
-      models: ["gpt-4o*", "o3-mini*"]
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
       dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*", "gemini-2.0-flash*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
       dlp_tier: "strict"
   dlp:
     actions:
@@ -129,13 +170,53 @@ llm:
   providers:
     - name: "anthropic"
       action: "allow"
-      models: ["claude*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
     - name: "openai"
       action: "allow"
-      models: ["gpt*"]
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
   dlp:
     actions:
       - entity: "API_KEY"
@@ -194,15 +275,55 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "gpt-4o-mini*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*", "gemini-2.0-flash*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
   prompt_injection:
     action: "block"
     threshold: 0.85
@@ -256,15 +377,55 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
 
 response_scanning:
   enabled: true
@@ -302,15 +463,55 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "gpt-4o-mini*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*", "claude-3-7-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*", "gemini-2.0-flash*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
   prompt_injection:
     action: "block"
     threshold: 0.80
@@ -361,17 +562,58 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "gpt-4o-mini*"]
-      dlp_tier: "strict"
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
       dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
       dlp_tier: "strict"
   dlp:
     actions:
@@ -438,19 +680,84 @@ llm:
   cursor_mode: byok
   model_enforcement: restrict
   allowed_models:
+    # Frontier & Latest Generation
+    - "claude-fable-5*"
+    - "claude-fable-5-1*"
+    - "claude-sonnet-5*"
+    - "claude-opus-5*"
+    - "claude-haiku-4-5*"
+    - "gpt-6-astra*"
+    - "gpt-5*"
+    - "o3*"
+    - "o4-mini*"
+    - "gemini-3.8-flash*"
+    - "gemini-3.8-flash-cyber*"
+    - "gemini-2.5-pro*"
+    - "gemini-2.5-flash*"
+    - "deepseek-v4-pro*"
+    - "deepseek-v4-flash*"
+    # Supported Previous Generations
+    - "claude-3-7-sonnet*"
     - "claude-3-5-sonnet*"
+    - "claude-3-5-haiku*"
     - "gpt-4o*"
+    - "gpt-4o-mini*"
+    - "o1*"
+    - "o3-mini*"
+    - "gemini-2.0-flash*"
     - "gemini-1.5-pro*"
+    - "deepseek-chat*"
+    - "deepseek-reasoner*"
   providers:
     - name: "anthropic"
       action: "allow"
-      models: ["claude*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
     - name: "openai"
       action: "allow"
-      models: ["gpt*"]
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
 
 sequence_rules:
   - name: block_exfiltration_after_reading_secrets
@@ -535,15 +842,59 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+      dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
+      dlp_tier: "strict"
   dlp:
     actions:
       - entity: "CREDIT_CARD"
@@ -613,17 +964,58 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o", "gpt-4-turbo"]
-      dlp_tier: "strict"
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
       dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
       dlp_tier: "strict"
   dlp:
     actions:
@@ -698,15 +1090,55 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
 
 tools:
   - name: read_file
@@ -777,15 +1209,59 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+      dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
     - name: "google"
       action: "allow"
-      models: ["gemini-1.5-pro*"]
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
+      dlp_tier: "strict"
   dlp:
     actions:
       - entity: "CA_SIN"
@@ -839,12 +1315,59 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+      dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
+      dlp_tier: "strict"
   dlp:
     actions:
       - entity: "SG_NRIC_FIN"
@@ -895,12 +1418,59 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+      dlp_tier: "strict"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+      dlp_tier: "strict"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+      dlp_tier: "strict"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
+      dlp_tier: "strict"
   dlp:
     actions:
       - entity: "UAE_EMIRATES_ID"
@@ -946,9 +1516,55 @@ session:
 
 llm:
   providers:
+    - name: "anthropic"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
     - name: "openai"
       action: "allow"
-      models: ["gpt-4o*"]
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
   prompt_injection:
     action: "block"
     threshold: 0.90
@@ -994,12 +1610,55 @@ session:
 
 llm:
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "gpt-4o-mini*"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-sonnet*"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
 
 response_scanning:
   enabled: true
@@ -1037,19 +1696,66 @@ llm:
   model_enforcement: fallback
   default_model: "gpt-4o-mini"
   allowed_models:
+    # High-efficiency fallback tier
     - "gpt-4o-mini"
-    - "gemini-1.5-flash"
+    - "o4-mini"
+    - "claude-haiku-4-5"
     - "claude-3-5-haiku"
+    - "gemini-3.8-flash"
+    - "gemini-2.5-flash"
+    - "gemini-2.0-flash"
+    - "deepseek-v4-flash"
+    - "deepseek-chat"
   providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o-mini"]
-    - name: "google"
-      action: "allow"
-      models: ["gemini-1.5-flash"]
     - name: "anthropic"
       action: "allow"
-      models: ["claude-3-5-haiku"]
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
 
 firewall:
   enabled: true
@@ -1082,6 +1788,56 @@ session:
   max_calls_per_second: 15
 
 llm:
+  providers:
+    - name: "anthropic"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "claude-fable-5*"
+        - "claude-fable-5-1*"
+        - "claude-sonnet-5*"
+        - "claude-opus-5*"
+        - "claude-haiku-4-5*"
+        # Supported Previous Generations
+        - "claude-3-7-sonnet*"
+        - "claude-3-5-sonnet*"
+        - "claude-3-5-haiku*"
+
+    - name: "openai"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gpt-6-astra*"
+        - "gpt-5*"
+        - "o3*"
+        - "o4-mini*"
+        # Supported Previous Generations
+        - "gpt-4o*"
+        - "gpt-4o-mini*"
+        - "o1*"
+        - "o3-mini*"
+
+    - name: "google"
+      action: "allow"
+      models:
+        # Frontier & Latest Generation
+        - "gemini-3.8-flash*"
+        - "gemini-3.8-flash-cyber*"
+        - "gemini-2.5-pro*"
+        - "gemini-2.5-flash*"
+        # Supported Previous Generations
+        - "gemini-2.0-flash*"
+        - "gemini-1.5-pro*"
+
+    - name: "deepseek"
+      action: "allow"
+      models:
+        # Core API Routing Aliases
+        - "deepseek-chat*"
+        - "deepseek-reasoner*"
+        # Specific V4 Generation Endpoints
+        - "deepseek-v4-pro*"
+        - "deepseek-v4-flash*"
   prompt_injection:
     action: "block"
     threshold: 0.82
@@ -1131,12 +1887,134 @@ const SIDEBAR_CATEGORIES = [
   'UAE',
 ]
 
+interface DomainFilter {
+  id: string
+  label: string
+  icon: string
+  matchCats?: string[]
+  matchIds?: string[]
+}
+
+const DOMAIN_FILTERS: DomainFilter[] = [
+  { id: 'all', label: 'All Postures', icon: '🌐' },
+  { id: 'pii', label: 'Data & PII Privacy', icon: '🛡️', matchCats: ['PII Protection', 'Australia', 'EU', 'Canada', 'FIPPA', 'PIPEDA', 'Healthcare', 'Singapore'] },
+  { id: 'developer', label: 'IDE & Agent Sandbox', icon: '💻', matchCats: ['Developer Security'], matchIds: ['safe-cursor'] },
+  { id: 'autonomous', label: 'Autonomous & MCP Tools', icon: '🤖', matchCats: ['Production Governance'], matchIds: ['autonomous-agent-guardrails'] },
+  { id: 'regulatory', label: 'Regulatory & Standards', icon: '🏛️', matchCats: ['Regulatory', 'Financial Services', 'Singapore', 'UAE', 'Australia', 'Aviation', 'Claims'] },
+  { id: 'safety', label: 'Threat & Content Safety', icon: '⚡', matchCats: ['Content Safety'], matchIds: ['prompt-injection-jailbreak-shield', 'all-regions-nsfw-filter', 'basic-nsfw-filter', 'au-nsfw-filter'] },
+  { id: 'governance', label: 'Cost & Token Routing', icon: '💰', matchCats: ['Cost & Governance'], matchIds: ['cost-governance-fallback'] },
+  { id: 'custom', label: 'Custom Team Postures', icon: '🏢', matchCats: ['Custom'] },
+]
+
+const QUICK_PRESETS = [
+  { label: '🇦🇺 Australia APRA & TFN', query: 'Australia', category: 'Australia' },
+  { label: '💻 Safe Cursor Workstation', query: 'Cursor', category: 'Developer Security' },
+  { label: '🏥 HIPAA & Health PHI', query: 'HIPAA', category: 'Healthcare' },
+  { label: '🇪🇺 EU GDPR Art. 32', query: 'GDPR', category: 'EU' },
+  { label: '💳 PCI-DSS Financial', query: 'PCI', category: 'Financial Services' },
+  { label: '🤖 MCP Autonomous Tools', query: 'MCP', category: 'Production Governance' },
+]
+
+interface PostureTelemetry {
+  rateLimit: string
+  dlpAction: string
+  cycleBreak: string
+  guardrailsCount: number
+  jurisdiction: string
+  targetEcosystem: string
+}
+
+function getPostureTelemetry(tpl: PolicyTemplate): PostureTelemetry {
+  const content = tpl.content || ''
+  
+  const rateMatch = content.match(/max_calls_per_second:\s*(\d+)/)
+  const rateLimit = rateMatch ? `${rateMatch[1]} req/s` : '20 req/s'
+
+  let dlpAction = 'Standard DLP'
+  if (content.includes('action: "deny"') && content.includes('action: "redact"')) {
+    dlpAction = 'Strict Deny & Redact'
+  } else if (content.includes('action: "deny"')) {
+    dlpAction = 'Strict Deny'
+  } else if (content.includes('action: "redact"')) {
+    dlpAction = 'Auto-Redact'
+  } else if (content.includes('prompt_injection')) {
+    dlpAction = 'Jailbreak & Injection Shield'
+  }
+
+  let cycleBreak = 'Protected'
+  const cycleMatch = content.match(/max_attempts:\s*(\d+)/)
+  if (cycleMatch) {
+    cycleBreak = `Cycle Break (${cycleMatch[1]}x)`
+  } else if (content.includes('cycle_detection')) {
+    cycleBreak = 'Cycle Break'
+  }
+
+  const nameLower = (tpl.name || '').toLowerCase()
+  const catLower = (tpl.category || '').toLowerCase()
+  const catsLower = (tpl.categories || []).map(c => c.toLowerCase()).join(' ')
+  
+  let jurisdiction = 'Global'
+  let targetEcosystem = 'Enterprise Gateway'
+
+  if (nameLower.includes('australia') || catLower.includes('australia') || catsLower.includes('australia')) {
+    jurisdiction = '🇦🇺 Australia'
+    targetEcosystem = 'APRA CPS 234 / TFN'
+  } else if (nameLower.includes('eu') || nameLower.includes('gdpr') || catLower.includes('eu') || catsLower.includes('eu')) {
+    jurisdiction = '🇪🇺 EU'
+    targetEcosystem = 'GDPR Art. 32'
+  } else if (nameLower.includes('hipaa') || catLower.includes('healthcare') || catsLower.includes('healthcare')) {
+    jurisdiction = '🇺🇸 US'
+    targetEcosystem = 'HIPAA / PHI Safe Harbor'
+  } else if (nameLower.includes('pci') || catLower.includes('financial') || catsLower.includes('financial')) {
+    jurisdiction = 'Global'
+    targetEcosystem = 'PCI-DSS v4.0'
+  } else if (tpl.id === 'safe-cursor' || nameLower.includes('cursor')) {
+    jurisdiction = 'Developer Fleet'
+    targetEcosystem = 'Cursor & Cline Workstations'
+  } else if (tpl.id === 'autonomous-agent-guardrails' || nameLower.includes('mcp')) {
+    jurisdiction = 'Agent Mesh'
+    targetEcosystem = 'Model Context Protocol (MCP)'
+  } else if (nameLower.includes('singapore') || catLower.includes('singapore')) {
+    jurisdiction = '🇸🇬 Singapore'
+    targetEcosystem = 'PDPA / MAS FinTech'
+  } else if (nameLower.includes('uae') || catLower.includes('uae')) {
+    jurisdiction = '🇦🇪 UAE'
+    targetEcosystem = 'Sovereign AI Framework'
+  } else if (nameLower.includes('pipeda') || nameLower.includes('canada') || catLower.includes('canada')) {
+    jurisdiction = '🇨🇦 Canada'
+    targetEcosystem = 'PIPEDA / FIPPA'
+  } else if (nameLower.includes('aviation')) {
+    jurisdiction = 'Aerospace'
+    targetEcosystem = 'Mission-Critical Operations'
+  } else if (nameLower.includes('brand')) {
+    jurisdiction = 'Global'
+    targetEcosystem = 'Brand Protection'
+  } else if (nameLower.includes('cost')) {
+    jurisdiction = 'Global'
+    targetEcosystem = 'Token & Budget Governor'
+  } else if (nameLower.includes('injection') || nameLower.includes('jailbreak')) {
+    jurisdiction = 'Global'
+    targetEcosystem = 'Adversarial Heuristics'
+  }
+
+  return {
+    rateLimit,
+    dlpAction,
+    cycleBreak,
+    guardrailsCount: tpl.guardrails?.length || 0,
+    jurisdiction,
+    targetEcosystem
+  }
+}
+
 export default function PolicyMarketplace() {
   const [templates, setTemplates] = useState<PolicyTemplate[]>(BUILTIN_TEMPLATES)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedComplexity, setSelectedComplexity] = useState<string>('All')
+  const [selectedDomain, setSelectedDomain] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
   
   // Modals state
   const [previewTemplate, setPreviewTemplate] = useState<PolicyTemplate | null>(null)
@@ -1223,6 +2101,28 @@ export default function PolicyMarketplace() {
     return counts
   }, [templates])
 
+  // Calculate dynamic counts for each domain
+  const domainCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: templates.length }
+    DOMAIN_FILTERS.forEach(df => {
+      if (df.id === 'all') return
+      let c = 0
+      templates.forEach(t => {
+        const templateCats = [t.category, ...(t.categories || []), ...(t.tags || [])].filter(Boolean)
+        const matchCat = df.matchCats?.some(cat =>
+          templateCats.some(tc => tc.toLowerCase() === cat.toLowerCase())
+        )
+        const matchId = df.matchIds?.includes(t.id)
+        const matchCustom = df.id === 'custom' && (t.is_custom || t.category === 'Custom')
+        if (matchCat || matchId || matchCustom) {
+          c++
+        }
+      })
+      counts[df.id] = c
+    })
+    return counts
+  }, [templates])
+
   const toggleCategory = (cat: string) => {
     setSelectedCategories(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
@@ -1233,7 +2133,7 @@ export default function PolicyMarketplace() {
     setSelectedCategories([])
   }
 
-  // Filter templates based on Search, Multi-Select Categories, and Complexity
+  // Filter templates based on Domain, Multi-Select Categories, Complexity, and Search
   const filteredTemplates = useMemo(() => {
     return (Array.isArray(templates) ? templates : []).filter(t => {
       if (!t) return false
@@ -1243,35 +2143,50 @@ export default function PolicyMarketplace() {
       const guardrails = Array.isArray(t.guardrails) ? t.guardrails : []
       const templateCats = [t.category, ...(t.categories || []), ...tags].filter(Boolean)
 
+      // Domain Filter
+      if (selectedDomain !== 'all') {
+        const domain = DOMAIN_FILTERS.find(d => d.id === selectedDomain)
+        if (domain) {
+          const matchCat = domain.matchCats?.some(cat => 
+            templateCats.some(tc => tc.toLowerCase() === cat.toLowerCase())
+          )
+          const matchId = domain.matchIds?.includes(t.id)
+          const matchCustom = domain.id === 'custom' && (t.is_custom || t.category === 'Custom')
+          if (!matchCat && !matchId && !matchCustom) {
+            return false
+          }
+        }
+      }
+
       // Category filter (if any selected, template must match at least one)
-      let matchesCategory = true
       if (selectedCategories.length > 0) {
-        matchesCategory = selectedCategories.some(selectedCat =>
+        const matchesCategory = selectedCategories.some(selectedCat =>
           templateCats.some(tc => tc.toLowerCase() === selectedCat.toLowerCase())
         )
+        if (!matchesCategory) return false
       }
 
       // Complexity filter
-      let matchesComplexity = true
       if (selectedComplexity !== 'All') {
-        matchesComplexity = (t.complexity || '').toLowerCase().includes(selectedComplexity.toLowerCase())
+        const matchesComplexity = (t.complexity || '').toLowerCase().includes(selectedComplexity.toLowerCase())
+        if (!matchesComplexity) return false
       }
 
       // Search filter
       const q = searchQuery.toLowerCase().trim()
-      let matchesSearch = true
       if (q) {
-        matchesSearch =
+        const matchesSearch =
           name.toLowerCase().includes(q) ||
           desc.toLowerCase().includes(q) ||
           tags.some(tag => (tag || '').toLowerCase().includes(q)) ||
           guardrails.some(g => (g || '').toLowerCase().includes(q)) ||
           templateCats.some(c => (c || '').toLowerCase().includes(q))
+        if (!matchesSearch) return false
       }
 
-      return matchesCategory && matchesComplexity && matchesSearch
+      return true
     })
-  }, [templates, selectedCategories, selectedComplexity, searchQuery])
+  }, [templates, selectedDomain, selectedCategories, selectedComplexity, searchQuery])
 
   const handleApplyTemplate = async (template: PolicyTemplate) => {
     if (!template) return
@@ -1471,48 +2386,144 @@ export default function PolicyMarketplace() {
 
   return (
     <div className="marketplace-container">
-      {/* Top Header */}
-      <header className="marketplace-header">
-        <div className="marketplace-title-section">
-          <h1>Policy Templates</h1>
-          <p>Start with a pre-configured policy template to quickly set up guardrails for your organization.</p>
+      {/* Hero & Header Section */}
+      <section className="marketplace-hero-section">
+        <header className="marketplace-header">
+          <div className="marketplace-title-section">
+            <div className="catalog-badge-row">
+              <span className="catalog-badge">VEXA SECURITY POSTURE CATALOG</span>
+              <span className="live-status-pill">
+                <span className="live-pulse" /> Active Fleet Enforced
+              </span>
+            </div>
+            <h1>Policy Templates</h1>
+            <p>
+              Pre-configured enterprise security postures, regulatory blueprints, and zero-trust sandboxes for AI agents and LLM gateways.
+            </p>
+          </div>
+          <div className="marketplace-header-actions">
+            <button
+              id="btn-use-ai-finder"
+              className="btn-ai-finder"
+              onClick={() => {
+                setShowAiModal(true)
+                if (!aiResults && aiQuery) handleRunAiRecommendation()
+              }}
+            >
+              ✨ Use AI to find templates
+            </button>
+            <button
+              id="btn-create-custom-template"
+              className="btn-secondary-action"
+              onClick={() => setShowCustomModal(true)}
+            >
+              + Save Custom Template
+            </button>
+            <button
+              id="btn-open-editor"
+              className="btn-secondary-action"
+              onClick={() => navigate('/policy/edit')}
+            >
+              Open YAML Editor
+            </button>
+          </div>
+        </header>
+
+        {/* Posture KPI Summary Ribbon */}
+        <div className="posture-kpi-ribbon">
+          <div className="kpi-metric-item">
+            <div className="kpi-icon">🛡️</div>
+            <div className="kpi-content">
+              <span className="kpi-value">{templates.length} Curated Postures</span>
+              <span className="kpi-label">Ready-to-Deploy Blueprints</span>
+            </div>
+          </div>
+          <div className="kpi-metric-item">
+            <div className="kpi-icon">🏛️</div>
+            <div className="kpi-content">
+              <span className="kpi-value">5 Compliance Frameworks</span>
+              <span className="kpi-label">APRA, HIPAA, GDPR, PCI, PDPA</span>
+            </div>
+          </div>
+          <div className="kpi-metric-item">
+            <div className="kpi-icon">💻</div>
+            <div className="kpi-content">
+              <span className="kpi-value">Developer & Agent Sandboxes</span>
+              <span className="kpi-label">Cursor, Cline, MCP Servers</span>
+            </div>
+          </div>
+          <div className="kpi-metric-item">
+            <div className="kpi-icon">⚡</div>
+            <div className="kpi-content">
+              <span className="kpi-value">Zero-Downtime Deployment</span>
+              <span className="kpi-label">Instant Gateway Hot-Reload</span>
+            </div>
+          </div>
         </div>
-        <div className="marketplace-header-actions">
-          <button
-            id="btn-use-ai-finder"
-            className="btn-ai-finder"
-            onClick={() => {
-              setShowAiModal(true)
-              if (!aiResults && aiQuery) handleRunAiRecommendation()
-            }}
-          >
-            ✨ Use AI to find templates
-          </button>
-          <button
-            id="btn-create-custom-template"
-            className="btn-secondary-action"
-            onClick={() => setShowCustomModal(true)}
-          >
-            + Save Custom Template
-          </button>
-          <button
-            id="btn-open-editor"
-            className="btn-secondary-action"
-            onClick={() => navigate('/policy/edit')}
-          >
-            Open YAML Editor
-          </button>
-        </div>
-      </header>
+      </section>
 
       {message && (
-        <div className={`message-banner ${message.type}`} style={{ marginBottom: 20 }}>
+        <div className={`message-banner ${message.type}`}>
           {message.text}
         </div>
       )}
 
-      {/* Top Filter & Search Bar */}
-      <div className="marketplace-top-controls">
+      {/* Domain Navigation Tabs */}
+      <div className="domain-nav-tabs-wrapper">
+        <div className="domain-nav-tabs">
+          {DOMAIN_FILTERS.map(df => {
+            const count = domainCounts[df.id] || 0
+            const isActive = selectedDomain === df.id
+            return (
+              <button
+                key={df.id}
+                className={`domain-tab-btn ${isActive ? 'active' : ''}`}
+                onClick={() => setSelectedDomain(df.id)}
+              >
+                <span>{df.icon}</span>
+                <span>{df.label}</span>
+                <span className="domain-tab-count">{count}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Quick-Filter Presets */}
+      <div className="quick-presets-bar">
+        <span className="preset-title">⚡ Quick Presets:</span>
+        {QUICK_PRESETS.map((p, idx) => {
+          const isActive = searchQuery.toLowerCase().includes(p.query.toLowerCase())
+          return (
+            <button
+              key={idx}
+              className={`quick-preset-pill ${isActive ? 'active' : ''}`}
+              onClick={() => {
+                if (isActive) {
+                  setSearchQuery('')
+                } else {
+                  setSearchQuery(p.query)
+                  setSelectedDomain('all')
+                }
+              }}
+            >
+              {p.label}
+            </button>
+          )
+        })}
+        {searchQuery && (
+          <button
+            className="clear-link"
+            style={{ marginLeft: 6 }}
+            onClick={() => setSearchQuery('')}
+          >
+            Reset Query
+          </button>
+        )}
+      </div>
+
+      {/* Universal Controls Toolbar */}
+      <div className="marketplace-controls-toolbar">
         <div className="search-box">
           <span className="search-icon">🔍</span>
           <input
@@ -1527,22 +2538,43 @@ export default function PolicyMarketplace() {
           )}
         </div>
 
-        <div className="complexity-filter-group">
-          <span className="complexity-label">Complexity:</span>
-          {['All', 'Low', 'Medium', 'High'].map(lvl => (
+        <div className="toolbar-right-actions">
+          {/* Complexity Filter Segmented Control */}
+          <div className="complexity-filter-group">
+            <span className="complexity-label">Complexity:</span>
+            {['All', 'Low', 'Medium', 'High'].map(lvl => (
+              <button
+                key={lvl}
+                id={`complexity-btn-${lvl.toLowerCase()}`}
+                className={`complexity-btn ${selectedComplexity === lvl ? 'active' : ''}`}
+                onClick={() => setSelectedComplexity(lvl)}
+              >
+                {lvl === 'All' ? 'All Levels' : `${lvl} Complexity`}
+              </button>
+            ))}
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="view-mode-toggle">
             <button
-              key={lvl}
-              id={`complexity-btn-${lvl.toLowerCase()}`}
-              className={`complexity-btn ${selectedComplexity === lvl ? 'active' : ''}`}
-              onClick={() => setSelectedComplexity(lvl)}
+              className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="Visual Cards Grid"
             >
-              {lvl === 'All' ? 'All Levels' : `${lvl} Complexity`}
+              ⊞ Grid
             </button>
-          ))}
+            <button
+              className={`view-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+              title="High-Density SOC Table"
+            >
+              ☰ Table
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* Main Content Layout */}
       <div className="marketplace-main-layout">
         {/* Left Sidebar: Categories with Counts */}
         <aside className="marketplace-sidebar">
@@ -1579,17 +2611,47 @@ export default function PolicyMarketplace() {
           </div>
         </aside>
 
-        {/* Right Content Area: Template Cards Grid */}
+        {/* Right Content Area */}
         <main className="marketplace-content">
           <div className="results-meta-bar">
-            <span>Showing <strong>{filteredTemplates.length}</strong> template{filteredTemplates.length === 1 ? '' : 's'}</span>
-            {selectedCategories.length > 0 && (
+            <span>
+              Showing <strong>{filteredTemplates.length}</strong> posture template{filteredTemplates.length === 1 ? '' : 's'}
+            </span>
+            {(selectedCategories.length > 0 || selectedDomain !== 'all' || selectedComplexity !== 'All' || searchQuery) && (
               <div className="active-filter-pills">
+                {selectedDomain !== 'all' && (
+                  <span className="active-filter-pill">
+                    Domain: {DOMAIN_FILTERS.find(d => d.id === selectedDomain)?.label}
+                    <button onClick={() => setSelectedDomain('all')}>✕</button>
+                  </span>
+                )}
+                {selectedComplexity !== 'All' && (
+                  <span className="active-filter-pill">
+                    {selectedComplexity} Complexity
+                    <button onClick={() => setSelectedComplexity('All')}>✕</button>
+                  </span>
+                )}
                 {selectedCategories.map(c => (
                   <span key={c} className="active-filter-pill">
                     {c} <button onClick={() => toggleCategory(c)}>✕</button>
                   </span>
                 ))}
+                {searchQuery && (
+                  <span className="active-filter-pill">
+                    "{searchQuery}" <button onClick={() => setSearchQuery('')}>✕</button>
+                  </span>
+                )}
+                <button
+                  className="clear-link"
+                  onClick={() => {
+                    setSearchQuery('')
+                    clearAllCategories()
+                    setSelectedComplexity('All')
+                    setSelectedDomain('all')
+                  }}
+                >
+                  Reset All
+                </button>
               </div>
             )}
           </div>
@@ -1597,85 +2659,227 @@ export default function PolicyMarketplace() {
           {loading ? (
             <div className="loading-state">
               <div className="spinner" />
-              <p>Loading security posture templates...</p>
+              <p>Loading security posture blueprints...</p>
             </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">🛡️</div>
               <h3>No templates found</h3>
               <p>No policy templates matched your active category filters or search query.</p>
-              <button className="btn-secondary-action" onClick={() => { setSearchQuery(''); clearAllCategories(); setSelectedComplexity('All') }}>
+              <button
+                className="btn-secondary-action"
+                onClick={() => {
+                  setSearchQuery('')
+                  clearAllCategories()
+                  setSelectedComplexity('All')
+                  setSelectedDomain('all')
+                }}
+              >
                 Reset All Filters
               </button>
             </div>
+          ) : viewMode === 'table' ? (
+            /* SOC High-Density Table View */
+            <div className="templates-table-wrapper">
+              <table className="soc-postures-table">
+                <thead>
+                  <tr>
+                    <th>Posture & Architecture</th>
+                    <th>Target & Jurisdiction</th>
+                    <th>Capabilities</th>
+                    <th>Guardrails Enforced</th>
+                    <th>Risk Level</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTemplates.map(tpl => {
+                    const telemetry = getPostureTelemetry(tpl)
+                    return (
+                      <tr key={tpl.id} id={`template-row-${tpl.id}`}>
+                        <td>
+                          <div className="table-posture-info">
+                            <div className={`template-card-icon ${getIconBgClass(tpl.icon, tpl.category, tpl.complexity)}`} style={{ width: 36, height: 36, fontSize: 18 }}>
+                              <span>{getIconElement(tpl.icon, tpl.category)}</span>
+                            </div>
+                            <div>
+                              <div className="table-posture-title">{tpl.name}</div>
+                              <div className="table-posture-desc">{tpl.description}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="template-ecosystem-tag">
+                            {telemetry.jurisdiction}
+                          </span>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                            {telemetry.targetEcosystem}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>
+                            <span>⚡ {telemetry.rateLimit}</span>
+                            <span>🔒 {telemetry.dlpAction}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="guardrails-list" style={{ maxWidth: 260 }}>
+                            {(tpl.guardrails || []).slice(0, 2).map((g, idx) => (
+                              <span key={idx} className="guardrail-pill" style={{ fontSize: 10 }}>
+                                {g}
+                              </span>
+                            ))}
+                            {(tpl.guardrails?.length || 0) > 2 && (
+                              <span className="guardrail-pill-more" style={{ fontSize: 10 }}>
+                                +{(tpl.guardrails?.length || 0) - 2}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`complexity-badge ${getComplexityClass(tpl.complexity)}`}>
+                            <span className="complexity-dot" />
+                            {tpl.complexity || 'Medium Complexity'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="table-actions-cell" style={{ justifyContent: 'flex-end' }}>
+                            <button
+                              className="btn-table-action btn-table-primary"
+                              onClick={() => setSelectedActionTemplate(tpl)}
+                            >
+                              Use Template
+                            </button>
+                            <button
+                              className="btn-table-action btn-table-subtle"
+                              onClick={() => setPreviewTemplate(tpl)}
+                              title="Preview YAML"
+                            >
+                              YAML
+                            </button>
+                            <button
+                              className="btn-table-action btn-table-subtle"
+                              onClick={() => handleOpenInEditor(tpl)}
+                              title="Open in Policy Editor"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
+            /* Cards Grid View */
             <div className="templates-grid">
-              {filteredTemplates.map(tpl => (
-                <div key={tpl.id} className="template-card" id={`template-card-${tpl.id}`}>
-                  {/* Top Row: Icon Box + Complexity Pill */}
-                  <div className="template-card-top">
-                    <div className={`template-icon-container ${getIconBgClass(tpl.icon, tpl.category, tpl.complexity)}`}>
-                      <span className="template-icon">{getIconElement(tpl.icon, tpl.category)}</span>
-                    </div>
-                    <span className={`complexity-badge ${getComplexityClass(tpl.complexity)}`}>
-                      {tpl.complexity || 'Medium Complexity'}
-                    </span>
-                  </div>
-
-                  {/* Title & Description */}
-                  <h3 className="template-title">{tpl.name}</h3>
-                  <p className="template-desc">{tpl.description}</p>
-
-                  {/* Category / Region Badges */}
-                  <div className="template-categories-row">
-                    {(tpl.categories || [tpl.category]).slice(0, 2).map((cat, idx) => (
-                      <span key={idx} className="category-pill-tag">
-                        {cat}
+              {filteredTemplates.map(tpl => {
+                const telemetry = getPostureTelemetry(tpl)
+                return (
+                  <div key={tpl.id} className="template-card" id={`template-card-${tpl.id}`}>
+                    {/* Top Row: Target Ecosystem Pill + Complexity Badge */}
+                    <div className="template-card-top">
+                      <span className="template-ecosystem-tag">
+                        {telemetry.jurisdiction} · {telemetry.targetEcosystem}
                       </span>
-                    ))}
-                    {tpl.is_custom && <span className="category-pill-tag custom-tag">Custom</span>}
-                  </div>
+                      <span className={`complexity-badge ${getComplexityClass(tpl.complexity)}`}>
+                        <span className="complexity-dot" />
+                        {tpl.complexity || 'Medium Complexity'}
+                      </span>
+                    </div>
 
-                  {/* Included Guardrails Section */}
-                  <div className="included-guardrails-section">
-                    <span className="included-guardrails-label">INCLUDED GUARDRAILS</span>
-                    <div className="guardrails-list">
-                      {(tpl.guardrails && tpl.guardrails.length > 0
-                        ? tpl.guardrails
-                        : ['general-policy-enforcement']
-                      ).slice(0, 8).map((guard, gIdx) => (
-                        <span key={gIdx} className="guardrail-pill" title={guard}>
-                          {guard}
-                        </span>
-                      ))}
-                      {(tpl.guardrails?.length || 0) > 8 && (
-                        <span className="guardrail-pill-more">
-                          +{(tpl.guardrails?.length || 0) - 8} more
-                        </span>
-                      )}
+                    {/* Header: Icon + Title */}
+                    <div className="template-card-header">
+                      <div className={`template-card-icon ${getIconBgClass(tpl.icon, tpl.category, tpl.complexity)}`}>
+                        <span>{getIconElement(tpl.icon, tpl.category)}</span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h3 className="template-title">{tpl.name}</h3>
+                        <div className="template-categories-row" style={{ margin: '4px 0 0 0' }}>
+                          {(tpl.categories || [tpl.category]).slice(0, 2).map((cat, idx) => (
+                            <span key={idx} className="category-pill-tag">
+                              {cat}
+                            </span>
+                          ))}
+                          {tpl.is_custom && <span className="category-pill-tag custom-tag">Custom</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <p className="template-desc">{tpl.description}</p>
+
+                    {/* Posture Capabilities Telemetry Grid */}
+                    <div className="posture-capabilities-grid">
+                      <div className="capability-item" title="Throughput limit">
+                        <span className="capability-icon">⚡</span>
+                        <span className="capability-text">{telemetry.rateLimit}</span>
+                      </div>
+                      <div className="capability-item" title="DLP protection mode">
+                        <span className="capability-icon">🔒</span>
+                        <span className="capability-text">{telemetry.dlpAction}</span>
+                      </div>
+                      <div className="capability-item" title="Firewall cycle break">
+                        <span className="capability-icon">🔄</span>
+                        <span className="capability-text">{telemetry.cycleBreak}</span>
+                      </div>
+                      <div className="capability-item" title="Enforced guardrails count">
+                        <span className="capability-icon">🛡️</span>
+                        <span className="capability-text">{telemetry.guardrailsCount} Guardrails</span>
+                      </div>
+                    </div>
+
+                    {/* Included Guardrails Section */}
+                    <div className="included-guardrails-section">
+                      <span className="included-guardrails-label">ENFORCED GUARDRAILS & PROTOCOLS</span>
+                      <div className="guardrails-list">
+                        {(tpl.guardrails && tpl.guardrails.length > 0
+                          ? tpl.guardrails
+                          : ['general-policy-enforcement']
+                        ).slice(0, 8).map((guard, gIdx) => (
+                          <span key={gIdx} className="guardrail-pill" title={guard}>
+                            {guard}
+                          </span>
+                        ))}
+                        {(tpl.guardrails?.length || 0) > 8 && (
+                          <span className="guardrail-pill-more">
+                            +{(tpl.guardrails?.length || 0) - 8} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card Actions */}
+                    <div className="template-actions">
+                      <button
+                        id={`btn-use-template-${tpl.id}`}
+                        className="btn-use-template"
+                        onClick={() => setSelectedActionTemplate(tpl)}
+                      >
+                        <span>🚀</span> Use Template
+                      </button>
+                      <button
+                        id={`btn-preview-${tpl.id}`}
+                        className="btn-preview-subtle"
+                        onClick={() => setPreviewTemplate(tpl)}
+                        title="Preview YAML"
+                      >
+                        YAML
+                      </button>
+                      <button
+                        id={`btn-edit-${tpl.id}`}
+                        className="btn-editor-shortcut"
+                        onClick={() => handleOpenInEditor(tpl)}
+                        title="Open in Policy Editor"
+                      >
+                        ✏️
+                      </button>
                     </div>
                   </div>
-
-                  {/* Card Actions */}
-                  <div className="template-actions">
-                    <button
-                      id={`btn-use-template-${tpl.id}`}
-                      className="btn-use-template"
-                      onClick={() => setSelectedActionTemplate(tpl)}
-                    >
-                      Use Template
-                    </button>
-                    <button
-                      id={`btn-preview-${tpl.id}`}
-                      className="btn-preview-subtle"
-                      onClick={() => setPreviewTemplate(tpl)}
-                      title="Preview YAML"
-                    >
-                      YAML
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </main>
@@ -1687,12 +2891,13 @@ export default function PolicyMarketplace() {
           <div className="modal-card use-template-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className={`template-icon-container ${getIconBgClass(selectedActionTemplate.icon, selectedActionTemplate.category, selectedActionTemplate.complexity)}`}>
-                  <span className="template-icon">{getIconElement(selectedActionTemplate.icon, selectedActionTemplate.category)}</span>
+                <div className={`template-card-icon ${getIconBgClass(selectedActionTemplate.icon, selectedActionTemplate.category, selectedActionTemplate.complexity)}`}>
+                  <span>{getIconElement(selectedActionTemplate.icon, selectedActionTemplate.category)}</span>
                 </div>
                 <div>
                   <h2>{selectedActionTemplate.name}</h2>
                   <span className={`complexity-badge ${getComplexityClass(selectedActionTemplate.complexity)}`}>
+                    <span className="complexity-dot" />
                     {selectedActionTemplate.complexity || 'Medium Complexity'}
                   </span>
                 </div>
@@ -1707,10 +2912,10 @@ export default function PolicyMarketplace() {
 
               <div className="guardrails-summary-box">
                 <h4>Included Guardrails & Rule Enforcements ({selectedActionTemplate.guardrails?.length || 0}):</h4>
-                <div className="guardrails-list" style={{ marginTop: 8 }}>
+                <div className="guardrails-list" style={{ marginTop: 10 }}>
                   {(selectedActionTemplate.guardrails || []).map((g, idx) => (
                     <span key={idx} className="guardrail-pill">
-                      ✓ {g}
+                      {g}
                     </span>
                   ))}
                 </div>
@@ -1723,7 +2928,7 @@ export default function PolicyMarketplace() {
                 >
                   <div className="option-title">🚀 Apply Immediately to Active Fleet</div>
                   <div className="option-sub">
-                    Instantly deploys this posture version to the gateway and enforces all included guardrails.
+                    Instantly deploys this posture version to the gateway and enforces all included guardrails across live agents.
                   </div>
                   <button
                     className="btn-apply"
@@ -1744,7 +2949,7 @@ export default function PolicyMarketplace() {
                   </div>
                   <button
                     className="btn-preview-subtle"
-                    style={{ marginTop: 12, width: '100%' }}
+                    style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
                     onClick={(e) => { e.stopPropagation(); handleOpenInEditor(selectedActionTemplate) }}
                   >
                     Open in Editor
@@ -1864,7 +3069,7 @@ export default function PolicyMarketplace() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
                   <button
                     id="btn-ai-recommend"
                     className="btn-ai-finder"
@@ -1887,11 +3092,11 @@ export default function PolicyMarketplace() {
                       <div key={tpl.id} className="ai-result-card">
                         <div className="ai-result-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div className={`template-icon-container small ${getIconBgClass(tpl.icon, tpl.category, tpl.complexity)}`}>
-                              <span className="template-icon">{getIconElement(tpl.icon, tpl.category)}</span>
+                            <div className={`template-card-icon ${getIconBgClass(tpl.icon, tpl.category, tpl.complexity)}`} style={{ width: 34, height: 34, fontSize: 16 }}>
+                              <span>{getIconElement(tpl.icon, tpl.category)}</span>
                             </div>
                             <div>
-                              <h3 className="template-title" style={{ fontSize: 16, margin: 0 }}>{tpl.name}</h3>
+                              <h3 className="template-title" style={{ fontSize: 15, margin: 0 }}>{tpl.name}</h3>
                               <span style={{ fontSize: 12, color: '#94a3b8' }}>{tpl.category}</span>
                             </div>
                           </div>
@@ -1947,12 +3152,13 @@ export default function PolicyMarketplace() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className={`template-icon-container ${getIconBgClass(previewTemplate.icon, previewTemplate.category, previewTemplate.complexity)}`}>
-                  <span className="template-icon">{getIconElement(previewTemplate.icon, previewTemplate.category)}</span>
+                <div className={`template-card-icon ${getIconBgClass(previewTemplate.icon, previewTemplate.category, previewTemplate.complexity)}`}>
+                  <span>{getIconElement(previewTemplate.icon, previewTemplate.category)}</span>
                 </div>
                 <div>
                   <h2>{previewTemplate.name}</h2>
                   <span className={`complexity-badge ${getComplexityClass(previewTemplate.complexity)}`}>
+                    <span className="complexity-dot" />
                     {previewTemplate.complexity || 'Medium Complexity'}
                   </span>
                 </div>
@@ -2018,7 +3224,7 @@ export default function PolicyMarketplace() {
                       placeholder="e.g. Finance Team Strict Workstation"
                       value={customName}
                       onChange={e => setCustomName(e.target.value)}
-                      style={{ width: '100%', padding: '10px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#fff' }}
+                      style={{ width: '100%', padding: '10px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff' }}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -2028,7 +3234,7 @@ export default function PolicyMarketplace() {
                         id="custom-template-category-select"
                         value={customCategory}
                         onChange={e => setCustomCategory(e.target.value)}
-                        style={{ width: '100%', padding: '10px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#fff' }}
+                        style={{ width: '100%', padding: '10px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff' }}
                       >
                         {SIDEBAR_CATEGORIES.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
@@ -2041,7 +3247,7 @@ export default function PolicyMarketplace() {
                         id="custom-template-complexity-select"
                         value={customComplexity}
                         onChange={e => setCustomComplexity(e.target.value)}
-                        style={{ width: '100%', padding: '10px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#fff' }}
+                        style={{ width: '100%', padding: '10px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff' }}
                       >
                         <option value="Low Complexity">Low Complexity</option>
                         <option value="Medium Complexity">Medium Complexity</option>
@@ -2057,7 +3263,7 @@ export default function PolicyMarketplace() {
                       placeholder="Brief description of security rules..."
                       value={customDesc}
                       onChange={e => setCustomDesc(e.target.value)}
-                      style={{ width: '100%', padding: '10px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#fff' }}
+                      style={{ width: '100%', padding: '10px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff' }}
                     />
                   </div>
                   <div>
@@ -2068,7 +3274,7 @@ export default function PolicyMarketplace() {
                       placeholder="e.g. au-pii-tax-identifiers, credentials-api-keys, shell-destructive-blocks"
                       value={customGuardrails}
                       onChange={e => setCustomGuardrails(e.target.value)}
-                      style={{ width: '100%', padding: '10px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#fff' }}
+                      style={{ width: '100%', padding: '10px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff' }}
                     />
                   </div>
                   <div>
@@ -2080,7 +3286,7 @@ export default function PolicyMarketplace() {
                       placeholder={`version: "2"\ndefault_action: deny\n\nsession:\n  max_calls_per_second: 15\n\nllm:\n  dlp:\n    actions:\n      - entity: "API_KEY"\n        action: "deny"\n\nfirewall:\n  enabled: true`}
                       value={customYaml}
                       onChange={e => setCustomYaml(e.target.value)}
-                      style={{ width: '100%', padding: '12px', background: '#020617', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, color: '#38bdf8', fontFamily: 'monospace', fontSize: 13 }}
+                      style={{ width: '100%', padding: '12px', background: '#07090e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#38bdf8', fontFamily: 'monospace', fontSize: 13 }}
                     />
                   </div>
                 </div>
@@ -2098,3 +3304,4 @@ export default function PolicyMarketplace() {
     </div>
   )
 }
+

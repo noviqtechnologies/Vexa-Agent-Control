@@ -54,3 +54,44 @@ impl PricingTable {
         (input_cost + output_cost).ceil() as u64
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bundled_pricing_table_loads_and_verifies_frontier_rates() {
+        let table = PricingTable::load(None).expect("Bundled pricing table must load and parse cleanly");
+        assert_eq!(table.version, "2026-09-01");
+
+        // Verify Anthropic frontier
+        assert!(table.models.contains_key("claude-fable-5.1"));
+        assert!(table.models.contains_key("claude-fable-5"));
+        assert!(table.models.contains_key("claude-opus-5"));
+        assert!(table.models.contains_key("claude-sonnet-5"));
+        assert!(table.models.contains_key("claude-haiku-4.5"));
+
+        // Verify OpenAI frontier
+        assert!(table.models.contains_key("gpt-6-astra"));
+        assert!(table.models.contains_key("gpt-5.6-sol"));
+        assert!(table.models.contains_key("o4-mini"));
+        assert!(table.models.contains_key("o3"));
+
+        // Verify Google frontier
+        assert!(table.models.contains_key("gemini-3.8-flash"));
+        assert!(table.models.contains_key("gemini-2.5-pro"));
+
+        // Verify DeepSeek frontier
+        assert!(table.models.contains_key("deepseek-v4-pro"));
+        assert!(table.models.contains_key("deepseek-v4-flash"));
+
+        // Test estimate calculation for gpt-6-astra: 1000 cents input / 5000 cents output per 1M
+        // 10,000 in (10 cents), 2,000 out (10 cents) => 20 cents
+        let cost = table.estimate_cents("gpt-6-astra", 10_000, 2_000);
+        assert_eq!(cost, 20);
+
+        // Test deepseek-v4-flash: 14 cents in / 28 cents out per 1M
+        let ds_cost = table.estimate_cents("deepseek-v4-flash", 1_000_000, 1_000_000);
+        assert_eq!(ds_cost, 42);
+    }
+}

@@ -307,7 +307,7 @@ fn resolve_workstation_agent_id(session: &crate::proxy::session::SessionContext)
     }
 }
 
-/// Helper to asynchronously transmit redacted telemetry to SaaS Central Hub if configured
+/// Helper to asynchronously transmit redacted telemetry to Central Control Hub if configured
 fn send_dashboard_event(
     state: &ProxyState,
     session: &crate::proxy::session::SessionContext,

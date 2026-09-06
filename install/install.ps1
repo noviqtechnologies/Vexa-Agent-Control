@@ -195,6 +195,10 @@ param(
     Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
     Write-Host "│    `$env:Path = `"$InstallDir;`$env:Path`"; agentcontrol protect           │" -ForegroundColor $ColorGreen
     Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
+    Write-Host "│  💬 Early Access Developer Community & Edge-Case Support:              │" -ForegroundColor $ColorCyan
+    Write-Host "│     Discord : https://discord.gg/vexasec                               │" -ForegroundColor $ColorCyan
+    Write-Host "│     Issues  : https://github.com/noviqtechnologies/Vexa-Agent-Control   │" -ForegroundColor $ColorCyan
+    Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
     Write-Host "└────────────────────────────────────────────────────────────────────────┘" -ForegroundColor $ColorCyan
     Write-Host ""
 }

@@ -13,7 +13,7 @@ var (
 )
 
 // CheckDeviceEnrollmentLimit verifies if the organization can enroll another device.
-// Developer tier = 1 device, Team tier = 25 devices, Enterprise tier = unlimited (-1).
+// Developer tier = 1 device, Team tier = 50 devices, Enterprise tier = unlimited (-1).
 func CheckDeviceEnrollmentLimit(ctx context.Context, st *store.Store, organizationID string) error {
 	if st == nil {
 		return nil
@@ -30,7 +30,7 @@ func CheckDeviceEnrollmentLimit(ctx context.Context, st *store.Store, organizati
 	if maxDevices <= 0 {
 		switch org.LicenseTier {
 		case "team":
-			maxDevices = 25
+			maxDevices = 50
 		case "enterprise":
 			return nil
 		default:
@@ -44,7 +44,7 @@ func CheckDeviceEnrollmentLimit(ctx context.Context, st *store.Store, organizati
 	}
 
 	if currentEnrolled >= maxDevices {
-		return fmt.Errorf("%w: current enrolled (%d) >= max allowed (%d) on '%s' tier",
+		return fmt.Errorf("%w: current enrolled (%d) >= max allowed (%d) on '%s' tier. To request additional Early Access fleet capacity, join our Discord or contact early-access@vexasec.io",
 			ErrDeviceLimitReached, currentEnrolled, maxDevices, org.LicenseTier)
 	}
 

@@ -428,13 +428,7 @@ pub(crate) async fn resolve_session(
     } else {
         // OIDC is NOT configured.
         // If listener is non-loopback and request is not from loopback, unauthenticated requests are strictly rejected.
-        let is_loopback_client = client_ip == "127.0.0.1"
-            || client_ip == "::1"
-            || client_ip == "localhost"
-            || client_ip
-                .parse::<std::net::IpAddr>()
-                .map(|ip| ip.is_loopback())
-                .unwrap_or(false);
+        let is_loopback_client = is_loopback(client_ip);
 
         if !state.listen_is_loopback && !is_loopback_client && auth_header.is_none() {
             crate::logging::log_event(
@@ -547,8 +541,60 @@ pub(crate) async fn resolve_session(
     }
 }
 
-fn is_loopback(ip: &str) -> bool {
-    ip == "127.0.0.1" || ip == "::1" || ip == "localhost" || ip.starts_with("127.")
+pub(crate) fn is_loopback(ip: &str) -> bool {
+    let mut s = ip.trim();
+
+    // 1. Direct SocketAddr parse handles addresses with ports across OSes
+    // e.g. "127.0.0.1:8080", "[::1]:8080", "[::ffff:127.0.0.1]:8080"
+    if let Ok(sock) = s.parse::<std::net::SocketAddr>() {
+        return is_ip_loopback(&sock.ip());
+    }
+
+    // 2. Strip bracket notation for IPv6: "[::1]" -> "::1", "[::ffff:127.0.0.1]" -> "::ffff:127.0.0.1"
+    if s.starts_with('[') {
+        if let Some(idx) = s.find(']') {
+            s = &s[1..idx];
+        }
+    }
+
+    // 3. Strip trailing port if present on hostname or IPv4 (e.g. "localhost:8080", "127.0.0.1:8080")
+    if let Some((host, port)) = s.rsplit_once(':') {
+        if !host.contains(':') && port.chars().all(|c| c.is_ascii_digit()) {
+            s = host;
+        }
+    }
+
+    // 4. Strip OS-specific IPv6 scope / zone IDs (e.g. "::1%lo" on Linux, "::1%lo0" on macOS, "::1%1" on Windows)
+    if let Some((base, _zone)) = s.split_once('%') {
+        s = base;
+    }
+
+    // 5. Hostname checks across Unix (/etc/hosts) and Windows
+    if s.eq_ignore_ascii_case("localhost")
+        || s.eq_ignore_ascii_case("ip6-localhost")
+        || s.eq_ignore_ascii_case("localhost6")
+    {
+        return true;
+    }
+
+    // 6. Robust IP parsing (prevents host spoofing like "127.0.0.1.attacker.com")
+    if let Ok(addr) = s.parse::<std::net::IpAddr>() {
+        is_ip_loopback(&addr)
+    } else {
+        false
+    }
+}
+
+#[inline]
+fn is_ip_loopback(addr: &std::net::IpAddr) -> bool {
+    match addr {
+        std::net::IpAddr::V4(v4) => v4.is_loopback(),
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.to_ipv4_mapped().map(|v4| v4.is_loopback()).unwrap_or(false)
+                || v6.to_ipv4().map(|v4| v4.is_loopback()).unwrap_or(false)
+        }
+    }
 }
 
 fn is_authorized_management(client_ip: &str, auth_header: Option<&str>, admin_token: Option<&str>) -> bool {
@@ -673,9 +719,16 @@ async fn handle_request(
                     .body(full_to_box_body(Full::new(Bytes::from(html))))
                     .unwrap());
             }
+            "/api/v1/cache/stats" | "/api/cache/stats" => {
+                let snapshot = state.semantic_cache.metrics.snapshot();
+                return Ok(json_response(StatusCode::OK, &snapshot));
+            }
             "/api/stats" => match state.db_manager.get_stats().await {
                 Ok(stats) => {
-                    let json_val = serde_json::to_value(&stats).unwrap();
+                    let mut json_val = serde_json::to_value(&stats).unwrap();
+                    if let Some(obj) = json_val.as_object_mut() {
+                        obj.insert("semantic_cache".to_string(), state.semantic_cache.metrics.snapshot());
+                    }
                     return Ok(json_response(StatusCode::OK, &json_val));
                 }
                 Err(e) => {
@@ -802,6 +855,7 @@ async fn handle_request(
                         "siem_export_total": state.metrics_siem_export_total.load(Ordering::Relaxed),
                         "siem_export_failed_total": state.metrics_siem_export_failed_total.load(Ordering::Relaxed),
                     },
+                    "semantic_cache": state.semantic_cache.metrics.snapshot(),
                     "upstream_url": &state.upstream_url,
                 });
                 return Ok(json_response(StatusCode::OK, &status));
@@ -909,6 +963,15 @@ async fn handle_request(
 
             _ => {}
         }
+    }
+
+    if method == hyper::Method::POST && (path == "/api/v1/cache/clear" || path == "/api/cache/clear") {
+        state.semantic_cache.clear();
+        let resp = serde_json::json!({
+            "status": "cleared",
+            "message": "Semantic vector cache and exact hash cache cleared successfully"
+        });
+        return Ok(json_response(StatusCode::OK, &resp));
     }
 
     // FR-5 v2.0: Policy hot-reload endpoint (AC-5.6)
@@ -1668,7 +1731,35 @@ fn prometheus_metrics_response(state: &ProxyState) -> Response<BoxBody> {
          agentwall_siem_export_total {siem_ok}\n\
          # HELP agentwall_siem_export_failed_total Audit entries that failed SIEM export (local disk fallback applied).\n\
          # TYPE agentwall_siem_export_failed_total counter\n\
-         agentwall_siem_export_failed_total {siem_failed}\n",
+         agentwall_siem_export_failed_total {siem_failed}\n\
+         # HELP agentcontrol_cache_hits_total Gateway prompt cache hits partitioned by type.\n\
+         # TYPE agentcontrol_cache_hits_total counter\n\
+         agentcontrol_cache_hits_total{{type=\"exact\"}} {}\n\
+         agentcontrol_cache_hits_total{{type=\"semantic\"}} {}\n\
+         # HELP agentcontrol_cache_misses_total Gateway prompt cache misses.\n\
+         # TYPE agentcontrol_cache_misses_total counter\n\
+         agentcontrol_cache_misses_total {}\n\
+         # HELP agentcontrol_cache_tokens_saved_total Tokens 100% avoided by gateway caching.\n\
+         # TYPE agentcontrol_cache_tokens_saved_total counter\n\
+         agentcontrol_cache_tokens_saved_total{{type=\"prompt\"}} {}\n\
+         agentcontrol_cache_tokens_saved_total{{type=\"completion\"}} {}\n\
+         # HELP agentcontrol_cache_cost_saved_usd_total Total USD savings directly generated by gateway caching.\n\
+         # TYPE agentcontrol_cache_cost_saved_usd_total gauge\n\
+         agentcontrol_cache_cost_saved_usd_total {}\n\
+         # HELP agentcontrol_provider_cache_hits_total Upstream provider prompt prefix cache hits.\n\
+         # TYPE agentcontrol_provider_cache_hits_total counter\n\
+         agentcontrol_provider_cache_hits_total {}\n\
+         # HELP agentcontrol_provider_cached_tokens_total Upstream provider cached prompt tokens.\n\
+         # TYPE agentcontrol_provider_cached_tokens_total counter\n\
+         agentcontrol_provider_cached_tokens_total {}\n",
+        state.semantic_cache.metrics.exact_hits.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.semantic_hits.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.misses.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.gateway_tokens_saved_prompt.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.gateway_tokens_saved_completion.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.gateway_cost_saved_microcents.load(Ordering::Relaxed) as f64 / 100_000_000.0,
+        state.semantic_cache.metrics.provider_cache_hits.load(Ordering::Relaxed),
+        state.semantic_cache.metrics.provider_cached_tokens.load(Ordering::Relaxed),
     );
 
     Response::builder()
@@ -2394,5 +2485,55 @@ mod tests {
             false,
         );
         assert_eq!(result.unwrap().0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn is_loopback_recognizes_all_loopback_variants() {
+        // Standard IPv4 loopbacks (all OSes, RFC 1122 127.0.0.0/8)
+        assert!(is_loopback("127.0.0.1"));
+        assert!(is_loopback("127.0.0.2"));
+        assert!(is_loopback("127.0.0.53")); // Linux systemd-resolved
+        assert!(is_loopback("127.255.255.254"));
+
+        // Hostnames across Linux, macOS, Windows (/etc/hosts)
+        assert!(is_loopback("localhost"));
+        assert!(is_loopback("LOCALHOST"));
+        assert!(is_loopback("ip6-localhost")); // Debian / Ubuntu / Alpine
+        assert!(is_loopback("localhost6"));     // RHEL / CentOS / Fedora
+
+        // Standard IPv6 loopback (RFC 4291)
+        assert!(is_loopback("::1"));
+        assert!(is_loopback("[::1]"));
+
+        // OS-specific scoped IPv6 loopbacks (RFC 4007)
+        assert!(is_loopback("::1%lo"));   // Linux
+        assert!(is_loopback("::1%lo0"));  // macOS / BSD
+        assert!(is_loopback("::1%1"));    // Windows
+        assert!(is_loopback("[::1%lo0]"));
+
+        // Dual-stack IPv4-mapped IPv6 loopbacks (Windows, Linux, macOS)
+        assert!(is_loopback("::ffff:127.0.0.1"));
+        assert!(is_loopback("[::ffff:127.0.0.1]"));
+        assert!(is_loopback("::FFFF:127.0.0.1")); // Case-insensitive hex
+        assert!(is_loopback("::ffff:7f00:1"));     // BSD / Unix raw hex notation
+        assert!(is_loopback("::127.0.0.1"));       // IPv4-compatible (legacy Unix)
+
+        // Addresses with ports (e.g. SocketAddr strings from proxies/clients)
+        assert!(is_loopback("127.0.0.1:8080"));
+        assert!(is_loopback("[::1]:8080"));
+        assert!(is_loopback("[::ffff:127.0.0.1]:8080"));
+        assert!(is_loopback("localhost:8080"));
+
+        // Non-loopback addresses and attack vectors MUST be rejected
+        assert!(!is_loopback("192.168.1.1"));
+        assert!(!is_loopback("10.0.0.1"));
+        assert!(!is_loopback("172.17.0.1"));
+        assert!(!is_loopback("8.8.8.8"));
+        assert!(!is_loopback("2001:db8::1"));
+        assert!(!is_loopback("example.com"));
+        assert!(!is_loopback("::ffff:192.168.1.1")); // Non-loopback IPv4-mapped IPv6
+        assert!(!is_loopback("127.0.0.1.attacker.com")); // Subdomain prefix spoofing
+        assert!(!is_loopback("127.attacker.com"));
+        assert!(!is_loopback("192.168.1.1:8080"));
     }
 }

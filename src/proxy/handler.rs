@@ -141,7 +141,7 @@ pub struct ProxyState {
     /// Gateway process start time for uptime reporting via GET /gateway/status.
     pub gateway_start_time: std::time::Instant,
 
-    /// FR-23: Optional client for sending redacted events to the SaaS dashboard-api.
+    /// FR-23: Optional client for sending redacted events to the dashboard-api.
     pub dashboard_client: Option<Arc<crate::control_plane_client::client::DashboardClient>>,
 
     /// Whether the listen address is loopback-only (127.0.0.1 / ::1).
@@ -180,6 +180,8 @@ pub struct ProxyState {
     pub spend_only: bool,
     /// Exact prompt cache (Pillar 1)
     pub prompt_cache: Arc<super::prompt_cache::PromptCache>,
+    /// Semantic vector cache (Pillar 1)
+    pub semantic_cache: Arc<super::semantic_cache::SemanticCache>,
     /// Sub-millisecond Virtual Key cache (Pillar 1)
     pub local_key_cache: Arc<super::local_key_cache::LocalKeyCache>,
     /// In-flight request coalescer (thundering herd protection)
@@ -284,6 +286,7 @@ impl ProxyState {
             min_tokens: 0,
             spend_only: false,
             prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            semantic_cache: Arc::new(super::semantic_cache::SemanticCache::default()),
             local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
             request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
@@ -380,6 +383,7 @@ impl ProxyState {
             min_tokens: 0,
             spend_only: false,
             prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            semantic_cache: Arc::new(super::semantic_cache::SemanticCache::default()),
             local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
             request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),
@@ -476,6 +480,7 @@ impl ProxyState {
             min_tokens: 0,
             spend_only: false,
             prompt_cache: Arc::new(super::prompt_cache::PromptCache::default()),
+            semantic_cache: Arc::new(super::semantic_cache::SemanticCache::default()),
             local_key_cache: Arc::new(super::local_key_cache::LocalKeyCache::default()),
             request_coalescer: Arc::new(super::request_coalescer::RequestCoalescer::default()),
             adaptive_timeout: Arc::new(super::adaptive_timeout::AdaptiveTimeoutManager::default()),

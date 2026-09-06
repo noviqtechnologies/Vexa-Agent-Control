@@ -208,7 +208,7 @@ describe('FleetOverview', () => {
     })
   })
 
-  it('opens Test Gateway Proxy modal and allows switching OS tabs', async () => {
+  it('renders hero banner with View Coverage Matrix action button', async () => {
     vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
     vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
     vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
@@ -220,20 +220,76 @@ describe('FleetOverview', () => {
       expect(screen.getByText('5')).toBeInTheDocument()
     })
 
-    const testBtn = screen.getByText(/Test Gateway Proxy/i)
-    fireEvent.click(testBtn)
+    const matrixBtn = screen.getByRole('button', { name: /View Coverage Matrix/i })
+    expect(matrixBtn).toBeInTheDocument()
+    fireEvent.click(matrixBtn)
+  })
 
-    expect(screen.getByText(/Test Gateway Proxy & Generate Telemetry/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /🪟 Windows \(PowerShell\)/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /🍎\/🐧 macOS \/ Linux \(cURL\)/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /💻 Windows \(CMD\)/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /🐍 Python \(requests\)/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /🌐 TypeScript \/ Node \(fetch\)/i })).toBeInTheDocument()
+  it('renders dynamic living capability snapshot cards', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
 
-    // Switch to cURL tab
-    const curlTab = screen.getByRole('button', { name: /🍎\/🐧 macOS \/ Linux \(cURL\)/i })
-    fireEvent.click(curlTab)
+    renderView()
 
-    expect(screen.getByText(/Copy macOS \/ Linux \(cURL\)/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+
+    // Assert all 4 capability cards are rendered
+    expect(screen.getByText('Device Governance')).toBeInTheDocument()
+    expect(screen.getByText('OTET & Seats')).toBeInTheDocument()
+
+    expect(screen.getByText('Policy Hub')).toBeInTheDocument()
+    expect(screen.getByText('DLP & Guardrails')).toBeInTheDocument()
+
+    expect(screen.getByText('Virtual Keys')).toBeInTheDocument()
+    expect(screen.getByText('LLM Providers')).toBeInTheDocument()
+
+    expect(screen.getByText('Spend Limits')).toBeInTheDocument()
+    expect(screen.getByText('Budgets & Caps')).toBeInTheDocument()
+  })
+
+  it('renders AI gateway mesh ribbon with provider badges', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('GATEWAY MESH')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('OpenAI')).toBeInTheDocument()
+    expect(screen.getByText('Claude')).toBeInTheDocument()
+    expect(screen.getByText('Gemini')).toBeInTheDocument()
+    expect(screen.getByText('Bedrock')).toBeInTheDocument()
+    expect(screen.getByText('Local / Ollama')).toBeInTheDocument()
+    expect(screen.getByText(/Semantic Cache: Active/i)).toBeInTheDocument()
+  })
+
+  it('toggles composite security posture breakdown popover', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+
+    const factorBtn = screen.getByText(/Score Factors/i)
+    fireEvent.click(factorBtn)
+
+    expect(screen.getByText(/Composite Security & Governance Index Breakdown/i)).toBeInTheDocument()
+    expect(screen.getByText(/Workstations & Sentry Compliance/i)).toBeInTheDocument()
+    expect(screen.getByText(/Active Guardrails & 21 DLP Wire Rules/i)).toBeInTheDocument()
+    expect(screen.getByText(/Universal AI Gateway & Key Custody/i)).toBeInTheDocument()
+    expect(screen.getByText(/Spend Boundaries & Preflight Settlement/i)).toBeInTheDocument()
   })
 })

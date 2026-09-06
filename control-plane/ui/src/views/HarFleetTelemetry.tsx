@@ -20,8 +20,8 @@ export const HarFleetTelemetry: React.FC = () => {
       p95Latency: '1.8 ms',
     },
     {
-      podId: 'agentcontrol-har-obot-02',
-      environment: 'Obot Agent Platform',
+      podId: 'agentcontrol-har-node-02',
+      environment: 'Container Runtime / Docker',
       imageSize: '91.0 MB (Distroless)',
       status: 'Healthy',
       policySync: 'Synced (v2.0)',

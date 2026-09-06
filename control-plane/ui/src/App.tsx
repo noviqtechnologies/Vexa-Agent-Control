@@ -334,6 +334,27 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
 
       {/* Footer / Logout */}
       <div className="sidebar-footer">
+        <div style={{
+          padding: '10px 12px',
+          marginBottom: '10px',
+          background: 'rgba(59, 130, 246, 0.08)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+          borderRadius: '6px',
+          fontSize: '11.5px',
+        }}>
+          <div style={{ fontWeight: 600, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>🚀</span> Early Access Beta
+          </div>
+          <div style={{ color: 'var(--text-muted)', margin: '4px 0 6px', lineHeight: 1.3, fontSize: '11px' }}>
+            Feedback or edge-case support:
+          </div>
+          <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
+            <a href="https://discord.gg/vexasec" target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>Discord</a>
+            <span style={{ color: 'var(--text-muted)' }}>•</span>
+            <a href="https://github.com/noviqtechnologies/Vexa-Agent-Control/issues" target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>GitHub Issues</a>
+          </div>
+        </div>
+
         <button type="button" className="sidebar-logout-btn" onClick={onLogout} title="Sign Out">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

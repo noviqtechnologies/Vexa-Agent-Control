@@ -103,6 +103,37 @@ export const LicenseSettings: React.FC = () => {
         </div>
       )}
 
+      {/* Early Access Preview Banner */}
+      <div style={{
+        padding: '16px 20px',
+        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%)',
+        border: '1px solid rgba(59, 130, 246, 0.3)',
+        borderRadius: 'var(--radius-md, 8px)',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '14px'
+      }}>
+        <div style={{ fontSize: '24px', lineHeight: 1 }}>🚀</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Early Access Preview
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
+            Vexa Team Hub is currently in unrestricted Early Access. Team and fleet governance features are fully unlocked for evaluation. Commercial enterprise licensing applies post-v1.0.
+          </div>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '12.5px' }}>
+            <a href="https://discord.gg/vexasec" target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+              Join Community Discord ➔
+            </a>
+            <span style={{ color: 'var(--text-muted)' }}>•</span>
+            <a href="mailto:early-access@vexasec.io" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+              Request Quota Expansion (early-access@vexasec.io) ➔
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* Organization Details Card */}
       <div className="card soc-panel">
         <div className="soc-card-header">
@@ -154,7 +185,7 @@ export const LicenseSettings: React.FC = () => {
           <div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>License Status</div>
             <div style={{ fontSize: '16px', fontWeight: 600, marginTop: '6px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>●</span> Active
+              <span>●</span> Active (Early Access)
             </div>
             {org?.days_remaining !== undefined && org.days_remaining > 0 && (
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -169,8 +200,8 @@ export const LicenseSettings: React.FC = () => {
               {tier === 'enterprise'
                 ? 'Unlimited Devices, OIDC SSO, Spend Caps, SIEM Streaming, Deep DLP'
                 : tier === 'team'
-                ? 'Up to 25 Devices, Spend Caps, Group Policies, OTET Enrollment, Alerts'
-                : '1 Device, Local Gateway, Prompt Redaction, Basic JSONL Logging'}
+                ? 'Up to 50 Devices (Early Access), Spend Caps, Group Policies, OTET Enrollment, Real-Time SSE Policy Push, Alerts'
+                : 'Up to 5 Devices, Local Gateway, Prompt Redaction, Basic JSONL Logging'}
             </div>
           </div>
         </div>
@@ -180,8 +211,8 @@ export const LicenseSettings: React.FC = () => {
       <div className="card soc-panel">
         <div className="soc-card-header">
           <div>
-            <div className="card-title">Activate License Key</div>
-            <div className="soc-card-subtitle">Paste your cryptographically-signed Ed25519 license JWT below to unlock Team or Enterprise capabilities</div>
+            <div className="card-title">Activate Design Partner / Enterprise License</div>
+            <div className="soc-card-subtitle">Have an Enterprise Pilot or Design Partner token? Paste your Ed25519 license JWT below to activate custom SLA and dedicated support</div>
           </div>
         </div>
 
