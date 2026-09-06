@@ -16,14 +16,16 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
-$ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
+$FallbackVersion = "v1.0.77"
+$Version = $null
 try {
     $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentWall-Installer" }
     $Version = $ReleaseJson[0].tag_name
 } catch {
-    Write-Host "[!] Failed to fetch version info: $_" -ForegroundColor $ColorRed
-    exit 1
+    Write-Host "[!] Notice: GitHub API resolution failed. Falling back to: $FallbackVersion" -ForegroundColor $ColorYellow
+    $Version = $FallbackVersion
 }
+if (-not $Version) { $Version = $FallbackVersion }
 
 Write-Host "[*] Using version: $Version" -ForegroundColor $ColorGreen
 

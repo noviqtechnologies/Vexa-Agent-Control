@@ -15,12 +15,17 @@ export default function Login() {
   const queryParams = new URLSearchParams(location.search)
   const isIdleTimeout = queryParams.get('reason') === 'idle_timeout'
 
+  const [authMode, setAuthMode] = useState<'password' | 'sso' | 'token'>('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [token, setToken] = useState('')
+  const [ssoDomain, setSsoDomain] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberDevice, setRememberDevice] = useState(true)
+  const [rememberDevice, setRememberDevice] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [showSecurityModal, setShowSecurityModal] = useState(false)
+  const [mobileCapOpen, setMobileCapOpen] = useState(false)
   
   const [providers, setProviders] = useState<PublicProvider[]>([])
   const [loadingProviders, setLoadingProviders] = useState(true)
@@ -46,345 +51,703 @@ export default function Login() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      await login(email, password)
+      const secretToSubmit = authMode === 'token' ? token : password
+      await login(email, secretToSubmit)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleSsoDomainSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ssoDomain.trim()) return
+    // Route to domain-specific SSO initiate endpoint
+    const cleanDomain = encodeURIComponent(ssoDomain.trim().toLowerCase())
+    window.location.href = `/api/v1/auth/sso/lookup?domain=${cleanDomain}`
   }
 
   const oauthProviders = providers.filter(p => p.type !== 'local')
 
   return (
     <div className="soc-login-viewport">
-      {/* Ambient cyber grid, dynamic scanlines & radial glow */}
-      <div className="soc-login-ambient-glow" />
-      <div className="soc-login-ambient-secondary" />
-      <div className="soc-login-grid-overlay" />
+      {/* Refined ambient atmosphere */}
+      <div className="soc-login-ambient-glow" aria-hidden="true" />
+      <div className="soc-login-ambient-secondary" aria-hidden="true" />
+      <div className="soc-login-grid-overlay" aria-hidden="true" />
 
-      <div className="soc-login-card-wrapper">
-        {/* Brand Shield & Header */}
-        <header className="soc-login-brand">
-          <a
-            href="https://vexasec.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="soc-brand-pill"
-            title="Visit Vexa Security Official Website"
-          >
-            <span className="soc-brand-pill-dot" />
-            <span>vexasec.io</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <path d="M7 17L17 7M7 7h10v10" />
-            </svg>
-          </a>
-
-          <div className="soc-brand-icon-wrapper" aria-hidden="true">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="soc-shield-svg">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" className="shield-outline" />
-              <path d="M9 12l2 2 4-4" className="shield-check" />
-            </svg>
-            <span className="soc-icon-glow" />
-          </div>
-          <h1 className="soc-brand-title">
-            <span className="brand-accent">Vexa</span> <span>Agent Control</span>
-          </h1>
-          <p className="soc-brand-tagline">Autonomous AI Security Gateway &amp; Control Plane</p>
-        </header>
-
-        {/* Major Platform Capabilities Highlights */}
-        <section className="soc-capabilities-container" aria-label="Core Governance Capabilities">
-          <div className="soc-capabilities-header">
-            <span className="soc-cap-line" />
-            <span className="soc-cap-title">CORE AI GOVERNANCE CAPABILITIES</span>
-            <span className="soc-cap-line" />
-          </div>
-          <div className="soc-capabilities-grid">
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">🛡️</div>
-              <div className="soc-cap-text">
-                <strong>Zero-Trust MCP Firewall</strong>
-                <p>Schema validation, loop defense &amp; tool parameter sanitization</p>
-              </div>
-            </div>
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">🔒</div>
-              <div className="soc-cap-text">
-                <strong>Dual-Pass Inline DLP</strong>
-                <p>21-pattern real-time credential, token &amp; private key redacting</p>
-              </div>
-            </div>
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">🧠</div>
-              <div className="soc-cap-text">
-                <strong>Prompt Injection Shield</strong>
-                <p>Multi-layer defense for jailbreaks, covert directives &amp; overrides</p>
-              </div>
-            </div>
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">⚡</div>
-              <div className="soc-cap-text">
-                <strong>Semantic Vector Cache</strong>
-                <p>Sub-3ms exact SHA-256 + cosine similarity token cost reduction</p>
-              </div>
-            </div>
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">💰</div>
-              <div className="soc-cap-text">
-                <strong>Fail-Closed Spend Caps</strong>
-                <p>Atomic balance preflight reservations &amp; exact stream settlements</p>
-              </div>
-            </div>
-            <div className="soc-capability-item">
-              <div className="soc-cap-icon-box">👁️</div>
-              <div className="soc-cap-text">
-                <strong>HMAC-SHA256 Forensics</strong>
-                <p>Cryptographically signed audit logs &amp; non-blocking SIEM export</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Glassmorphic Login Card */}
-        <main className="soc-login-card" role="main">
-          <div className="soc-login-header">
-            <div className="soc-portal-mode-badge tenant">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <div className="soc-login-container">
+        {/* Left Column: Brand Identity, Value Proposition & Capabilities (Desktop) */}
+        <aside className="soc-brand-column">
+          <div className="soc-brand-top">
+            <a
+              href="https://vexasec.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="soc-brand-pill"
+              title="Visit Vexa Security Official Website"
+            >
+              <span className="soc-brand-pill-dot" />
+              <span>vexasec.io</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M7 17L17 7M7 7h10v10" />
               </svg>
-              <span>Customer Workspace Mode</span>
+            </a>
+
+            <div className="soc-brand-badge-row">
+              <div className="soc-brand-icon-wrapper" aria-hidden="true">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="soc-shield-svg">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" className="shield-outline" />
+                  <path d="M9 12l2 2 4-4" className="shield-check" />
+                </svg>
+                <span className="soc-icon-glow" />
+              </div>
+              <div className="soc-brand-headings">
+                <h1 className="soc-brand-title">
+                  <span className="brand-accent">Vexa</span> <span>Agent Control</span>
+                </h1>
+                <p className="soc-brand-tagline">Autonomous AI Security Gateway &amp; Control Plane</p>
+              </div>
             </div>
-            <h2>Customer Organization Console</h2>
-            <p>Sign in to govern your AI developers, IDE workstations, policies, and spend limits.</p>
+
+            <p className="soc-brand-mission">
+              Secure access to your organization’s AI control plane. Real-time MCP firewalling, data loss prevention, and atomic spend controls for autonomous agents and developer workspaces.
+            </p>
           </div>
 
-          {isIdleTimeout && !authError && (
-            <div className="soc-login-idle-alert" role="alert">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              <span>Your session expired due to 15 minutes of inactivity. Please sign in again.</span>
+          {/* Core AI Governance Capabilities Grid */}
+          <section className="soc-capabilities-container" aria-label="Core Governance Capabilities">
+            <div className="soc-capabilities-header">
+              <span className="soc-cap-line" />
+              <h2 className="soc-cap-title">CORE AI GOVERNANCE CAPABILITIES</h2>
+              <span className="soc-cap-line" />
             </div>
-          )}
-
-          {authError && (
-            <div className="soc-login-error" role="alert">
-              <div className="error-icon" aria-hidden="true">⚠️</div>
-              <div className="error-text">{authError}</div>
-            </div>
-          )}
-
-          {loadingProviders ? (
-            <div className="soc-login-loading">
-              <div className="soc-spinner" />
-              <span>Verifying authentication providers...</span>
-            </div>
-          ) : (
-            <div className="login-methods">
-              <form onSubmit={handleSubmit} className="local-login-form">
-                <div className="form-group">
-                  <label htmlFor="login-email">
-                    Organization Email or Username
-                  </label>
-                  <div className="soc-input-wrapper">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                    <input
-                      id="login-email"
-                      type="text"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="name@company.com or username"
-                      required
-                      autoFocus
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      spellCheck="false"
-                    />
-                  </div>
+            <div className="soc-capabilities-grid">
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">🛡️</div>
+                <div className="soc-cap-text">
+                  <strong>Zero-Trust MCP Firewall</strong>
+                  <p>Schema validation, loop defense &amp; tool parameter sanitization</p>
                 </div>
+              </div>
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">🔒</div>
+                <div className="soc-cap-text">
+                  <strong>Dual-Pass Inline DLP</strong>
+                  <p>21-pattern real-time credential, token &amp; private key redacting</p>
+                </div>
+              </div>
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">🧠</div>
+                <div className="soc-cap-text">
+                  <strong>Prompt Injection Shield</strong>
+                  <p>Multi-layer defense for jailbreaks, covert directives &amp; overrides</p>
+                </div>
+              </div>
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">⚡</div>
+                <div className="soc-cap-text">
+                  <strong>Semantic Vector Cache</strong>
+                  <p>Sub-3ms exact SHA-256 + cosine similarity token cost reduction</p>
+                </div>
+              </div>
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">💰</div>
+                <div className="soc-cap-text">
+                  <strong>Fail-Closed Spend Caps</strong>
+                  <p>Atomic balance preflight reservations &amp; exact stream settlements</p>
+                </div>
+              </div>
+              <div className="soc-capability-item">
+                <div className="soc-cap-icon-box" aria-hidden="true">👁️</div>
+                <div className="soc-cap-text">
+                  <strong>HMAC-SHA256 Forensics</strong>
+                  <p>Cryptographically signed audit logs &amp; non-blocking SIEM export</p>
+                </div>
+              </div>
+            </div>
+          </section>
 
-                <div className="form-group">
-                  <div className="label-row">
-                    <label htmlFor="login-password">
-                      Password or SSO Token
-                    </label>
-                    <button
-                      type="button"
-                      className="help-link-btn"
-                      onClick={() => setShowHelpModal(true)}
-                      tabIndex={0}
-                    >
-                      Need help?
-                    </button>
-                  </div>
-                  <div className="soc-input-wrapper">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+          {/* Left Column Security Reassurance */}
+          <div className="soc-side-trust-banner">
+            <div className="trust-pill">
+              <span className="trust-dot" />
+              <span>TLS 1.3 Strict</span>
+            </div>
+            <div className="trust-pill">
+              <span className="trust-shield">🛡️</span>
+              <span>FIPS 140-3 Cryptographic Integrity</span>
+            </div>
+          </div>
+        </aside>
+
+        {/* Right Column: Dominant Login Authentication Card */}
+        <div className="soc-auth-column">
+          {/* Compact brand header visible on smaller viewports */}
+          <div className="soc-mobile-brand-header">
+            <div className="soc-brand-icon-wrapper small" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="soc-shield-svg">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" className="shield-outline" />
+                <path d="M9 12l2 2 4-4" className="shield-check" />
+              </svg>
+            </div>
+            <div>
+              <span className="mobile-brand-title"><strong>Vexa</strong> Agent Control</span>
+              <span className="mobile-brand-sub">Autonomous AI Security Gateway</span>
+            </div>
+          </div>
+
+          <main className="soc-login-card" role="main" aria-labelledby="login-title">
+            {/* Header with Mode Badge & High-Contrast Typography */}
+            <div className="soc-login-header">
+              <div className="soc-portal-mode-badge tenant">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <span>Customer Workspace Mode</span>
+              </div>
+              <h2 id="login-title" className="soc-card-title" aria-label="Customer Organization Console: Sign in to your organization">
+                <span>Sign in to your organization</span>
+                <span className="soc-card-title-subtitle">Customer Organization Console</span>
+              </h2>
+              <p className="soc-card-desc">
+                Use your organization account to manage AI developers, workspaces, policies, and spending limits.
+              </p>
+            </div>
+
+            {/* Session Expired / Inactivity Banner */}
+            {isIdleTimeout && !authError && (
+              <div className="soc-login-idle-alert" role="alert">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <div className="alert-text-group">
+                  <strong>Session Expired</strong>
+                  <span>Your session expired due to 15 minutes of inactivity. Please sign in again.</span>
+                </div>
+              </div>
+            )}
+
+            {/* Authentication Failure Banner */}
+            {authError && (
+              <div className="soc-login-error" role="alert">
+                <div className="error-icon" aria-hidden="true">⚠️</div>
+                <div className="alert-text-group">
+                  <strong>Authentication Failed</strong>
+                  <span className="error-text">{authError}</span>
+                </div>
+              </div>
+            )}
+
+            {loadingProviders ? (
+              <div className="soc-login-loading">
+                <div className="soc-spinner" />
+                <span>Verifying authentication providers...</span>
+              </div>
+            ) : (
+              <div className="login-methods">
+                {/* Method Navigation Tabs: Password, SSO, Token */}
+                <div className="soc-auth-nav" role="tablist" aria-label="Authentication Options">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="tab-password"
+                    aria-selected={authMode === 'password'}
+                    aria-controls="panel-password"
+                    className={`soc-tab-btn ${authMode === 'password' ? 'active' : ''}`}
+                    onClick={() => setAuthMode('password')}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    <input
-                      id="login-password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      required
-                      autoComplete="current-password"
-                    />
+                    <span>Sign in with password</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="tab"
+                    id="tab-sso"
+                    aria-selected={authMode === 'sso'}
+                    aria-controls="panel-sso"
+                    className={`soc-tab-btn ${authMode === 'sso' ? 'active' : ''}`}
+                    onClick={() => setAuthMode('sso')}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="8.5" cy="7" r="4" />
+                      <line x1="20" y1="8" x2="20" y2="14" />
+                      <line x1="23" y1="11" x2="17" y2="11" />
+                    </svg>
+                    <span>Continue with SSO</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="tab"
+                    id="tab-token"
+                    aria-selected={authMode === 'token'}
+                    aria-controls="panel-token"
+                    className={`soc-tab-btn ${authMode === 'token' ? 'active' : ''}`}
+                    onClick={() => setAuthMode('token')}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <polyline points="4 17 10 11 4 5" />
+                      <line x1="12" y1="19" x2="20" y2="19" />
+                    </svg>
+                    <span>Use access token</span>
+                  </button>
+                </div>
+
+                {/* TAB PANEL: Password Sign-in */}
+                {authMode === 'password' && (
+                  <form onSubmit={handleSubmit} className="local-login-form" id="panel-password" role="tabpanel" aria-labelledby="tab-password">
+                    <div className="form-group">
+                      <label htmlFor="login-email">
+                        Work email or username
+                      </label>
+                      <div className="soc-input-wrapper">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <input
+                          id="login-email"
+                          type="text"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="name@company.com or username"
+                          required
+                          autoFocus
+                          autoComplete="username"
+                          autoCapitalize="none"
+                          spellCheck="false"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <div className="label-row">
+                        <label htmlFor="login-password">
+                          Password
+                        </label>
+                        <button
+                          type="button"
+                          className="help-link-btn"
+                          onClick={() => setShowHelpModal(true)}
+                          aria-label="Need help? Forgot password?"
+                        >
+                          Forgot password? <span className="help-subtext">(Need help?)</span>
+                        </button>
+                      </div>
+                      <div className="soc-input-wrapper">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        <input
+                          id="login-password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="••••••••••••"
+                          required
+                          autoComplete="current-password"
+                        />
+                        <button
+                          type="button"
+                          className="soc-pwd-toggle"
+                          onClick={() => setShowPassword(prev => !prev)}
+                          title={showPassword ? 'Hide password' : 'Show password'}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                              <line x1="1" y1="1" x2="23" y2="23" />
+                            </svg>
+                          ) : (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Trust Device Option - Unchecked by Default with Helper Guidance */}
+                    <div className="soc-form-options">
+                      <label className="soc-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={rememberDevice}
+                          onChange={e => setRememberDevice(e.target.checked)}
+                          className="soc-checkbox-input"
+                        />
+                        <div className="soc-checkbox-content">
+                          <span className="soc-checkbox-text">Trust this device for 30 days</span>
+                          <span className="soc-checkbox-hint">Do not select on shared or public computers.</span>
+                        </div>
+                      </label>
+                    </div>
+
                     <button
-                      type="button"
-                      className="soc-pwd-toggle"
-                      onClick={() => setShowPassword(prev => !prev)}
-                      title={showPassword ? 'Hide password' : 'Show password'}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      type="submit"
+                      className="soc-login-submit-btn"
+                      disabled={submitting}
                     >
-                      {showPassword ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                          <line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
+                      {submitting ? (
+                        <span className="btn-loading-content">
+                          <span className="btn-spinner" />
+                          <span>Authenticating...</span>
+                        </span>
                       ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
+                        <span>Sign In to Customer Workspace →</span>
                       )}
                     </button>
-                  </div>
-                </div>
+                  </form>
+                )}
 
-                {/* Remember Workstation & Security Options */}
-                <div className="soc-form-options">
-                  <label className="soc-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={rememberDevice}
-                      onChange={e => setRememberDevice(e.target.checked)}
-                      className="soc-checkbox-input"
-                    />
-                    <span className="soc-checkbox-text">Trust this workstation (30 days)</span>
-                  </label>
-                  <span className="soc-auth-protocol">TLS 1.3 • Strict</span>
-                </div>
+                {/* TAB PANEL: Dedicated Enterprise SSO */}
+                {authMode === 'sso' && (
+                  <div className="soc-sso-panel" id="panel-sso" role="tabpanel" aria-labelledby="tab-sso">
+                    <div className="sso-panel-intro">
+                      <p>
+                        Federated enterprise single sign-on with multi-factor authentication (MFA) governed by your company IdP.
+                      </p>
+                    </div>
 
-                <button
-                  type="submit"
-                  className="soc-login-submit-btn"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <span className="btn-loading-content">
-                      <span className="btn-spinner" />
-                      <span>Authenticating...</span>
-                    </span>
-                  ) : (
-                    <span>Sign In to Customer Workspace →</span>
-                  )}
-                </button>
-              </form>
+                    {oauthProviders.length > 0 ? (
+                      <div className="oauth-buttons">
+                        {oauthProviders.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className={`oauth-btn oauth-btn-${p.type}`}
+                            onClick={() => { window.location.href = `/api/v1/auth/oauth/${p.id}/login` }}
+                          >
+                            <ProviderIcon type={p.type} />
+                            <span>Continue with {p.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="soc-empty-sso-notice">
+                        <p>No OAuth providers are configured yet.</p>
+                      </div>
+                    )}
 
-              {oauthProviders.length > 0 && (
-                <>
-                  <div className="soc-login-divider">
-                    <span>OR CONTINUE WITH ENTERPRISE SSO</span>
-                  </div>
-                  <div className="oauth-buttons">
-                    {oauthProviders.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={`oauth-btn oauth-btn-${p.type}`}
-                        onClick={() => { window.location.href = `/api/v1/auth/oauth/${p.id}/login` }}
-                      >
-                        <ProviderIcon type={p.type} />
-                        <span>Continue with {p.name}</span>
+                    <div className="soc-login-divider">
+                      <span>OR SIGN IN WITH COMPANY DOMAIN</span>
+                    </div>
+
+                    <form onSubmit={handleSsoDomainSubmit} className="sso-domain-form">
+                      <div className="form-group">
+                        <label htmlFor="sso-domain-input">Organization domain or work email</label>
+                        <div className="soc-input-wrapper">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                            <line x1="8" y1="21" x2="16" y2="21" />
+                            <line x1="12" y1="17" x2="12" y2="21" />
+                          </svg>
+                          <input
+                            id="sso-domain-input"
+                            type="text"
+                            value={ssoDomain}
+                            onChange={e => setSsoDomain(e.target.value)}
+                            placeholder="acme.com or you@company.com"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <button type="submit" className="soc-btn-domain-submit">
+                        Continue with Organization SSO →
                       </button>
-                    ))}
+                    </form>
                   </div>
-                </>
-              )}
-            </div>
-          )}
-        </main>
+                )}
 
-        {/* Security Attestation & Enterprise Links Footer */}
-        <footer className="soc-login-footer">
-          <div className="footer-tier-primary">
-            <div className="footer-status-badge">
-              <span className="status-beacon" />
-              <span className="status-text">Operational</span>
-            </div>
-            <span className="footer-divider">&bull;</span>
-            <span className="footer-compliance">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="footer-lock-icon">
+                {/* TAB PANEL: Access Token Sign-in */}
+                {authMode === 'token' && (
+                  <form onSubmit={handleSubmit} className="local-login-form" id="panel-token" role="tabpanel" aria-labelledby="tab-token">
+                    <div className="soc-token-notice">
+                      <div className="token-icon">🔒</div>
+                      <div>
+                        <strong>Zero-Trust Access Token</strong>
+                        <p>Tokens are treated with high-security policy. Never share access tokens or store them in public repositories.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="token-email">
+                        Work email or service account ID
+                      </label>
+                      <div className="soc-input-wrapper">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <input
+                          id="token-email"
+                          type="text"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="name@company.com or username"
+                          required
+                          autoComplete="username"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <div className="label-row">
+                        <label htmlFor="login-token">
+                          Personal or Service Access Token
+                        </label>
+                        <button
+                          type="button"
+                          className="help-link-btn"
+                          onClick={() => setShowHelpModal(true)}
+                        >
+                          Need help?
+                        </button>
+                      </div>
+                      <div className="soc-input-wrapper">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                          <path d="M21 2l-2 2m-1.5 1.5L14 9l-3-3 1.5-1.5M3 21l9-9" />
+                        </svg>
+                        <input
+                          id="login-token"
+                          type="password"
+                          value={token}
+                          onChange={e => setToken(e.target.value)}
+                          placeholder="vex_pat_••••••••••••••••"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="soc-login-submit-btn"
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <span className="btn-loading-content">
+                          <span className="btn-spinner" />
+                          <span>Verifying Token...</span>
+                        </span>
+                      ) : (
+                        <span>Verify Token &amp; Sign In →</span>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {/* Quick Enterprise SSO buttons visible below Password form for instant access */}
+                {authMode === 'password' && oauthProviders.length > 0 && (
+                  <div className="soc-quick-sso-section">
+                    <div className="soc-login-divider">
+                      <span>OR CONTINUE WITH ENTERPRISE SSO</span>
+                    </div>
+                    <div className="oauth-buttons">
+                      {oauthProviders.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`oauth-btn oauth-btn-${p.type}`}
+                          onClick={() => { window.location.href = `/api/v1/auth/oauth/${p.id}/login` }}
+                        >
+                          <ProviderIcon type={p.type} />
+                          <span>Continue with {p.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Concise Security Reassurance Near Form */}
+            <div className="soc-form-security-reassurance">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="reassurance-lock" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
-              FIPS 140-3 &amp; HMAC Audit Chain Verified
-            </span>
-            <span className="footer-divider">&bull;</span>
-            <span className="footer-version">Control Plane v1.0.72</span>
+              <span>Encrypted connection (TLS 1.3) &bull; Session activity is audit logged &bull; </span>
+              <button
+                type="button"
+                className="reassurance-link"
+                onClick={() => setShowSecurityModal(true)}
+              >
+                View security details
+              </button>
+            </div>
+          </main>
+
+          {/* Mobile Collapsible Capabilities Section */}
+          <div className="soc-mobile-capabilities-wrapper">
+            <button
+              type="button"
+              className="soc-mobile-cap-toggle"
+              onClick={() => setMobileCapOpen(prev => !prev)}
+              aria-expanded={mobileCapOpen}
+            >
+              <span>About Vexa Agent Control &bull; Core Capabilities</span>
+              <span className={`toggle-arrow ${mobileCapOpen ? 'open' : ''}`}>▾</span>
+            </button>
+
+            {mobileCapOpen && (
+              <div className="soc-mobile-cap-content">
+                <div className="soc-capabilities-grid mobile">
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">🛡️</div>
+                    <div className="soc-cap-text">
+                      <strong>Zero-Trust MCP Firewall</strong>
+                      <p>Schema validation, loop defense &amp; tool parameter sanitization</p>
+                    </div>
+                  </div>
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">🔒</div>
+                    <div className="soc-cap-text">
+                      <strong>Dual-Pass Inline DLP</strong>
+                      <p>21-pattern real-time credential, token &amp; private key redacting</p>
+                    </div>
+                  </div>
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">🧠</div>
+                    <div className="soc-cap-text">
+                      <strong>Prompt Injection Shield</strong>
+                      <p>Multi-layer defense for jailbreaks, covert directives &amp; overrides</p>
+                    </div>
+                  </div>
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">⚡</div>
+                    <div className="soc-cap-text">
+                      <strong>Semantic Vector Cache</strong>
+                      <p>Sub-3ms exact SHA-256 + cosine similarity token cost reduction</p>
+                    </div>
+                  </div>
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">💰</div>
+                    <div className="soc-cap-text">
+                      <strong>Fail-Closed Spend Caps</strong>
+                      <p>Atomic balance preflight reservations &amp; exact stream settlements</p>
+                    </div>
+                  </div>
+                  <div className="soc-capability-item">
+                    <div className="soc-cap-icon-box">👁️</div>
+                    <div className="soc-cap-text">
+                      <strong>HMAC-SHA256 Forensics</strong>
+                      <p>Cryptographically signed audit logs &amp; non-blocking SIEM export</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="footer-tier-secondary">
-            <a
-              href="https://vexasec.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="footer-link"
-              title="Vexa Security Official Website"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-              <span>vexasec.io</span>
-            </a>
-            <span className="footer-divider">&bull;</span>
-            <a
-              href="mailto:contact@vexasec.io"
-              className="footer-link"
-              title="Contact Vexa Security Support & Inquiries"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <rect x="2" y="4" width="20" height="16" rx="2" />
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-              </svg>
-              <span>contact@vexasec.io</span>
-            </a>
-            <span className="footer-divider">&bull;</span>
-            <span className="footer-copyright">&copy; {new Date().getFullYear()} Vexa Security</span>
-          </div>
-        </footer>
+          {/* Security Attestation & Enterprise Links Footer */}
+          <footer className="soc-login-footer">
+            <div className="footer-tier-primary">
+              <div className="footer-status-badge">
+                <span className="status-beacon" />
+                <span className="status-text">Operational</span>
+              </div>
+              <span className="footer-divider">&bull;</span>
+              <button
+                type="button"
+                className="footer-compliance-btn"
+                onClick={() => setShowSecurityModal(true)}
+                title="View compliance details"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="footer-lock-icon" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>FIPS 140-3 &amp; HMAC Audit Chain Verified</span>
+              </button>
+              <span className="footer-divider">&bull;</span>
+              <span className="footer-version">Control Plane v1.0.72</span>
+            </div>
+
+            <div className="footer-tier-secondary">
+              <a
+                href="https://vexasec.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-link"
+                title="Vexa Security Official Website"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+                <span>vexasec.io</span>
+              </a>
+              <span className="footer-divider">&bull;</span>
+              <a
+                href="mailto:contact@vexasec.io"
+                className="footer-link"
+                title="Contact Vexa Security Support & Inquiries"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                </svg>
+                <span>contact@vexasec.io</span>
+              </a>
+              <span className="footer-divider">&bull;</span>
+              <button
+                type="button"
+                className="footer-link-btn"
+                onClick={() => setShowSecurityModal(true)}
+              >
+                Security Center
+              </button>
+              <span className="footer-divider">&bull;</span>
+              <span className="footer-copyright">&copy; {new Date().getFullYear()} Vexa Security</span>
+            </div>
+          </footer>
+        </div>
       </div>
 
       {/* Help & Credential Recovery Modal */}
       {showHelpModal && (
-        <div className="soc-modal-backdrop" onClick={() => setShowHelpModal(false)}>
+        <div className="soc-modal-backdrop" onClick={() => setShowHelpModal(false)} role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
           <div className="soc-help-modal" onClick={e => e.stopPropagation()}>
             <div className="help-modal-header">
               <div className="help-modal-title-row">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #6366f1)" strokeWidth="2" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                   <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
-                <h3>Console Access Assistance</h3>
+                <h3 id="help-modal-title">Console Access Assistance</h3>
               </div>
-              <button type="button" className="help-modal-close" onClick={() => setShowHelpModal(false)}>✕</button>
+              <button
+                type="button"
+                className="help-modal-close"
+                onClick={() => setShowHelpModal(false)}
+                aria-label="Close help modal"
+              >
+                ✕
+              </button>
             </div>
             <div className="help-modal-body">
               <p>
-                Access to <strong>Vexa Agent Control</strong> is governed by enterprise zero-trust policy.
+                Access to <strong>Vexa Agent Control</strong> is governed by enterprise zero-trust policy. If you cannot sign in, review the recovery channels below:
               </p>
               <div className="help-guidance-box">
                 <div className="guidance-item">
                   <strong>🏢 Customer Workspace Administrators</strong>
-                  <p>Contact your designated SecOps or Identity administrator to reset credentials or verify your enterprise SSO federation.</p>
+                  <p>Contact your designated SecOps or Identity administrator to reset credentials, unlock your account, or verify your enterprise SSO federation.</p>
+                </div>
+                <div className="guidance-item">
+                  <strong>🔑 Enterprise SSO &amp; IdP Issues</strong>
+                  <p>If your organization uses Microsoft Entra ID, Okta, or Google Workspace, confirm your organizational account status with your IT identity provider team.</p>
                 </div>
                 <div className="guidance-item">
                   <strong>✉️ Enterprise Technical Support</strong>
@@ -400,6 +763,54 @@ export default function Login() {
             <div className="help-modal-footer">
               <button type="button" className="soc-btn-secondary" onClick={() => setShowHelpModal(false)}>
                 Return to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Architecture & Trust Details Modal */}
+      {showSecurityModal && (
+        <div className="soc-modal-backdrop" onClick={() => setShowSecurityModal(false)} role="dialog" aria-modal="true" aria-labelledby="sec-modal-title">
+          <div className="soc-help-modal" onClick={e => e.stopPropagation()}>
+            <div className="help-modal-header">
+              <div className="help-modal-title-row">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <h3 id="sec-modal-title">Vexa Security &amp; Compliance Center</h3>
+              </div>
+              <button
+                type="button"
+                className="help-modal-close"
+                onClick={() => setShowSecurityModal(false)}
+                aria-label="Close security details modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="help-modal-body">
+              <p>
+                Vexa Agent Control enforces defense-in-depth protection across all authentication endpoints and telemetry pipelines:
+              </p>
+              <div className="help-guidance-box">
+                <div className="guidance-item">
+                  <strong>🔒 TLS 1.3 Strict Transport Encryption</strong>
+                  <p>All ingress traffic is negotiated using modern cryptographic cipher suites with forward secrecy. Deprecated TLS 1.0/1.1 and insecure ciphers are rejected at gateway edge.</p>
+                </div>
+                <div className="guidance-item">
+                  <strong>🛡️ FIPS 140-3 &amp; HMAC Audit Chain Forensics</strong>
+                  <p>Audit entries are cryptographically chained using HMAC-SHA256 digests. Any log alteration is immediately detected and flagged across downstream SIEM collectors.</p>
+                </div>
+                <div className="guidance-item">
+                  <strong>⚡ Fail-Closed Policy Engine</strong>
+                  <p>In the event of network disruption or gateway evaluation timeout, agent transactions fail safely to prevent unauthorized execution or sensitive data leaks.</p>
+                </div>
+              </div>
+            </div>
+            <div className="help-modal-footer">
+              <button type="button" className="soc-btn-secondary" onClick={() => setShowSecurityModal(false)}>
+                Close Security Center
               </button>
             </div>
           </div>

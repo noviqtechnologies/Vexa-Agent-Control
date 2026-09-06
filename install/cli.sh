@@ -25,14 +25,14 @@ echo "[*] Target OS: $OS | Arch: $ARCH"
 REPO="noviqtechnologies/Vexa-Agent-Control"
 
 echo "[*] Fetching latest release version..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" \
+VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
   | grep '"tag_name"' \
   | head -1 \
-  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
 if [[ -z "$VERSION" ]]; then
-  echo "[!] Failed to determine the latest release version."
-  exit 1
+  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.77"
+  VERSION="v1.0.77"
 fi
 
 echo "[*] Using version: $VERSION"

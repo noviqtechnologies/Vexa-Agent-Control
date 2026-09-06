@@ -46,10 +46,10 @@ describe('Login View', () => {
   it('renders brand identity, major capabilities, and customer workspace console', async () => {
     await renderLogin()
 
-    // Check brand header
-    expect(screen.getByText('Vexa')).toBeDefined()
-    expect(screen.getByText('Agent Control')).toBeDefined()
-    expect(screen.getByText(/Autonomous AI Security Gateway/i)).toBeDefined()
+    // Check brand header (may appear in both desktop brand column and mobile header)
+    expect(screen.getAllByText('Vexa').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Agent Control').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/Autonomous AI Security Gateway/i).length).toBeGreaterThanOrEqual(1)
 
     // Check core capabilities in pills & highlights
     expect(screen.getAllByText(/CORE AI GOVERNANCE CAPABILITIES/i).length).toBeGreaterThanOrEqual(1)
