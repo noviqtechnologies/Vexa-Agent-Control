@@ -206,12 +206,25 @@ func GatewayAuth(secret string, validator DeviceValidator, legacyAuth ...LegacyA
 
 			// 2. Check gateway shared secret
 			if secret != "" && subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+				orgID := DefaultOrganizationID
+				if len(legacyAuth) > 0 && legacyAuth[0].LegacySingleTenantMode && legacyAuth[0].LegacyTenantID != "" {
+					orgID = legacyAuth[0].LegacyTenantID
+				}
 				principal := &RequestPrincipal{
-					OrganizationID: DefaultOrganizationID,
-					TenantID:       DefaultOrganizationID,
+					OrganizationID: orgID,
+					TenantID:       orgID,
 					AuthnType:      AuthnTypeLegacySecret,
+					Capabilities:   []string{"broker.llm", "spend.authorize"},
+				}
+				devPrincipal := &model.DevicePrincipal{
+					OrganizationID:   orgID,
+					DeviceID:         "gateway-shared-secret",
+					CredentialStatus: model.CredentialStatusActive,
+					DeviceState:      model.DeviceStateCompliant,
+					Capabilities:     []string{"broker.llm", "spend.authorize"},
 				}
 				ctx := context.WithValue(r.Context(), RequestPrincipalKey, principal)
+				ctx = context.WithValue(ctx, DevicePrincipalKey, devPrincipal)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

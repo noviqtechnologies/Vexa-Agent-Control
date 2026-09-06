@@ -1,17 +1,17 @@
 # ─── Public Service Endpoints (Free Auto-Issued HTTPS / TLS) ───────────────────
 
 output "gateway_url" {
-  description = "Public HTTPS endpoint for the AgentWall Gateway proxy."
+  description = "Public HTTPS endpoint for the AgentControl Gateway proxy."
   value       = "https://${azurerm_container_app.gateway.ingress[0].fqdn}"
 }
 
 output "control_plane_ui_url" {
-  description = "Public HTTPS endpoint for the AgentWall Enterprise Control Plane UI."
+  description = "Public HTTPS endpoint for the AgentControl Enterprise Control Plane UI."
   value       = "https://${azurerm_container_app.ui.ingress[0].fqdn}"
 }
 
 output "control_plane_url" {
-  description = "Alias for control_plane_ui_url — matches AWS ECS output naming convention for cross-platform consistency."
+  description = "Alias for control_plane_ui_url — matches cross-platform consistency."
   value       = "https://${azurerm_container_app.ui.ingress[0].fqdn}"
 }
 
@@ -21,7 +21,7 @@ output "dashboard_api_url" {
 }
 
 output "health_check_url" {
-  description = "Direct health check URL for the AgentWall Gateway."
+  description = "Direct health check URL for the AgentControl Gateway."
   value       = "https://${azurerm_container_app.gateway.ingress[0].fqdn}/healthz"
 }
 
@@ -60,6 +60,6 @@ output "quick_verify_command" {
 }
 
 output "view_gateway_logs_command" {
-  description = "Azure CLI command to stream live logs from the AgentWall Gateway container app."
+  description = "Azure CLI command to stream live logs from the AgentControl Gateway container app."
   value       = "az containerapp logs show --name ${azurerm_container_app.gateway.name} --resource-group ${azurerm_resource_group.rg.name} --follow"
 }

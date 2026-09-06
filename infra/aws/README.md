@@ -1,6 +1,6 @@
-# 🛡️ AgentWall on AWS (ECS Fargate) — Stage & Serverless Deployment
+# 🛡️ AgentControl on AWS (ECS Fargate) — Stage & Cost-Optimized Deployment
 
-Cost-effective (**~$15–$25/month**) containerized deployment of **AgentWall** and its Enterprise Control Plane on **Amazon Web Services (AWS)** using **AWS ECS Fargate** and an Application Load Balancer (ALB).
+Cost-effective (**~$15–$25/month**) containerized deployment of **AgentControl** and its Enterprise Control Plane on **Amazon Web Services (AWS)** using **AWS ECS Fargate** and an Application Load Balancer (ALB).
 
 ---
 
@@ -30,7 +30,7 @@ flowchart TD
         end
 
         subgraph Observability ["📊 AWS CloudWatch"]
-            CW["Log Group: /ecs/agentwall-stage\n(3-Day Retention for Staging)"]
+            CW["Log Group: /ecs/agentcontrol-stage\n(3-Day Retention for Staging)"]
         end
     end
 
@@ -88,10 +88,10 @@ Once `terraform apply` finishes, the outputs display the ALB endpoints:
 Apply complete! Resources: 18 added, 0 changed, 0 destroyed.
 
 Outputs:
-control_plane_ui_url = "http://agentwall-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8081"
-gateway_url          = "http://agentwall-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080"
-health_check_url     = "http://agentwall-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080/healthz"
-quick_verify_command = "curl -i http://agentwall-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080/healthz"
+control_plane_ui_url = "http://agentcontrol-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8081"
+gateway_url          = "http://agentcontrol-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080"
+health_check_url     = "http://agentcontrol-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080/healthz"
+quick_verify_command = "curl -i http://agentcontrol-stage-alb-xxxxxx.eu-west-1.elb.amazonaws.com:8080/healthz"
 ```
 
 ### 1. Verify Gateway Health Check
@@ -101,7 +101,7 @@ curl -i http://<alb-dns-name>:8080/healthz
 
 ### 2. Stream Live Gateway Logs (AWS CLI)
 ```bash
-aws logs tail /ecs/agentwall-stage --follow --filter-pattern "gateway"
+aws logs tail /ecs/agentcontrol-stage --follow --filter-pattern "gateway"
 ```
 
 ### 3. Teardown Stage Environment

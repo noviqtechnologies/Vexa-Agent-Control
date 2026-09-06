@@ -38,8 +38,8 @@ resource "random_id" "encryption_secret" {
 }
 
 locals {
-  resource_group_name = var.resource_group_name != "" ? var.resource_group_name : "rg-agentwall-${var.environment}-${var.azure_region}"
-  name_prefix         = "agentwall-${var.environment}"
+  resource_group_name = var.resource_group_name != "" ? var.resource_group_name : "rg-agentcontrol-${var.environment}-${var.azure_region}"
+  name_prefix         = "agentcontrol-${var.environment}"
 
   gateway_secret     = var.gateway_secret != "" ? var.gateway_secret : random_password.gateway_secret.result
   policy_read_secret = var.policy_read_secret != "" ? var.policy_read_secret : random_password.policy_read_secret.result
@@ -47,8 +47,12 @@ locals {
   encryption_secret  = var.encryption_secret != "" ? var.encryption_secret : random_id.encryption_secret.hex
   session_secret     = var.session_secret != "" ? var.session_secret : random_password.session_secret.result
 
+  effective_database_url = var.database_url != "" ? var.database_url : (
+    var.enable_azure_postgres ? "postgres://${var.postgres_user}:${random_password.azure_postgres_password[0].result}@${azurerm_postgresql_flexible_server.postgres[0].fqdn}:5432/${var.postgres_db}?sslmode=require" : "postgres://${var.postgres_user}:${local.postgres_password}@agentcontrol-db:5432/${var.postgres_db}?sslmode=disable"
+  )
+
   default_tags = merge({
-    Project     = "agentwall"
+    Project     = "agentcontrol"
     Environment = var.environment
     ManagedBy   = "terraform"
   }, var.tags)

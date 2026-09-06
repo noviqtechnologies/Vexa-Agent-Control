@@ -1,14 +1,7 @@
 # ─── ECS Task Definition (Full Control Plane Stack) ───────────────────────────
 
-resource "aws_ecs_task_definition" "agentwall" {
-  family                   = "${local.name_prefix}-gateway"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = var.task_cpu
-  memory                   = var.task_memory
-  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
-
-  container_definitions = jsonencode([
+locals {
+  postgres_container = (var.database_url == "" && !var.enable_rds) ? [
     {
       name      = "postgres"
       image     = var.control_plane_db_image
@@ -39,7 +32,10 @@ resource "aws_ecs_task_definition" "agentwall" {
           "awslogs-stream-prefix" = "postgres"
         }
       }
-    },
+    }
+  ] : []
+
+  core_containers = [
     {
       name      = "valkey"
       image     = "valkey/valkey:7.2-alpine"
@@ -70,7 +66,7 @@ resource "aws_ecs_task_definition" "agentwall" {
         }
       ]
       environment = [
-        { name = "DATABASE_URL", value = "postgres://${var.postgres_user}:${local.postgres_password}@127.0.0.1:5432/${var.postgres_db}?sslmode=disable" },
+        { name = "DATABASE_URL", value = local.effective_database_url },
         { name = "VALKEY_URL", value = "127.0.0.1:6379" },
         { name = "DASHBOARD_PORT", value = "8400" },
         { name = "ENVIRONMENT", value = var.environment },
@@ -85,16 +81,20 @@ resource "aws_ecs_task_definition" "agentwall" {
         { name = "DIRECT_TLS_ENABLED", value = "true" },
         { name = "INGRESS_AUTH_SECRET", value = local.gateway_secret }
       ]
-      dependsOn = [
-        {
-          containerName = "postgres"
-          condition     = "HEALTHY"
-        },
-        {
-          containerName = "valkey"
-          condition     = "START"
-        }
-      ]
+      dependsOn = concat(
+        (var.database_url == "" && !var.enable_rds) ? [
+          {
+            containerName = "postgres"
+            condition     = "HEALTHY"
+          }
+        ] : [],
+        [
+          {
+            containerName = "valkey"
+            condition     = "START"
+          }
+        ]
+      )
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -115,8 +115,9 @@ resource "aws_ecs_task_definition" "agentwall" {
         }
       ]
       environment = [
-        { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" },
-        { name = "AGENTCONTROL_API_URL", value = "http://127.0.0.1:8400" }
+        { name = "AGENTCONTROL_API_URL", value = "http://127.0.0.1:8400" },
+        { name = "AGENTCONTROL_API_UPSTREAM", value = "127.0.0.1:8400" },
+        { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" }
       ]
       dependsOn = [
         {
@@ -172,16 +173,27 @@ resource "aws_ecs_task_definition" "agentwall" {
         }
       }
     }
-  ])
+  ]
+}
+
+resource "aws_ecs_task_definition" "agentcontrol" {
+  family                   = "${local.name_prefix}-gateway"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+
+  container_definitions = jsonencode(concat(local.postgres_container, local.core_containers))
 }
 
 # ─── ECS Service ──────────────────────────────────────────────────────────────
 
-resource "aws_ecs_service" "agentwall" {
+resource "aws_ecs_service" "agentcontrol" {
   name            = "${local.name_prefix}-service"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.agentwall.arn
-  desired_count   = 1
+  task_definition = aws_ecs_task_definition.agentcontrol.arn
+  desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
   network_configuration {

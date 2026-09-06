@@ -2,7 +2,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = merge({
-      Project     = "agentwall"
+      Project     = "agentcontrol"
       Environment = var.environment
       ManagedBy   = "terraform"
     }, var.tags)
@@ -10,7 +10,7 @@ provider "aws" {
 }
 
 locals {
-  name_prefix = "agentwall-${var.environment}"
+  name_prefix = "agentcontrol-${var.environment}"
 }
 
 # ─── VPC & Public Subnets ─────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ resource "aws_route_table_association" "b" {
 
 resource "aws_security_group" "ecs" {
   name        = "${local.name_prefix}-sg"
-  description = "Allow HTTP inbound to AgentWall Gateway (8080) and Control Plane UI (8081)"
+  description = "Allow HTTP inbound to AgentControl Gateway (8080) and Control Plane UI (8081)"
   vpc_id      = aws_vpc.main.id
 
   ingress {

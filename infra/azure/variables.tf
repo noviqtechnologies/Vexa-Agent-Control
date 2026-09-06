@@ -13,7 +13,7 @@ variable "environment" {
 }
 
 variable "resource_group_name" {
-  description = "Name of the Azure Resource Group. If left empty, it defaults to rg-agentwall-<environment>-<region>."
+  description = "Name of the Azure Resource Group. If left empty, it defaults to rg-agentcontrol-<environment>-<region>."
   type        = string
   default     = ""
 }
@@ -21,27 +21,27 @@ variable "resource_group_name" {
 # ─── Container Images ─────────────────────────────────────────────────────────
 
 variable "container_image" {
-  description = "Container image for the AgentWall Gateway proxy."
+  description = "Container image for the AgentControl Gateway proxy."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol:latest"
 }
 
 variable "control_plane_ui_image" {
-  description = "Container image for the AgentWall Enterprise Control Plane Frontend UI."
+  description = "Container image for the AgentControl Enterprise Control Plane Frontend UI."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
 }
 
 variable "control_plane_api_image" {
-  description = "Container image for the AgentWall Enterprise Control Plane Dashboard API."
+  description = "Container image for the AgentControl Enterprise Control Plane Dashboard API."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
 }
 
 variable "control_plane_db_image" {
-  description = "Container image for the AgentWall PostgreSQL Database with initial migrations."
+  description = "Container image for the AgentControl PostgreSQL Database with initial migrations."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 }
 
 # ─── Networking & VNet Integration ────────────────────────────────────────────
@@ -178,9 +178,34 @@ variable "postgres_password" {
 }
 
 variable "postgres_db" {
-  description = "PostgreSQL database name for AgentWall."
+  description = "PostgreSQL database name for AgentControl."
   type        = string
-  default     = "agentwall"
+  default     = "agentcontrol"
+}
+
+variable "database_url" {
+  description = "Optional connection string for a persistent external PostgreSQL database (e.g. Azure Flexible Server, Neon, Supabase, RDS). When provided, the dashboard API connects to this persistent database."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "enable_azure_postgres" {
+  description = "When true, provisions an Azure Database for PostgreSQL Flexible Server instance. Default is false to minimize stage cost ($0 compute / ACA internal DB)."
+  type        = bool
+  default     = false
+}
+
+variable "azure_postgres_sku" {
+  description = "SKU name for Azure PostgreSQL Flexible Server (e.g. 'B_Standard_B1ms')."
+  type        = string
+  default     = "B_Standard_B1ms"
+}
+
+variable "azure_postgres_storage_mb" {
+  description = "Storage size in MB for Azure PostgreSQL Flexible Server."
+  type        = number
+  default     = 32768
 }
 
 # ─── Custom Resource Tags ─────────────────────────────────────────────────────

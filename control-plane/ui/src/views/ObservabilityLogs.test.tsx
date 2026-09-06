@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import ObservabilityLogs from './ObservabilityLogs'
+import { api } from '../api/client'
 
 vi.mock('../api/client', () => ({
   api: {
@@ -165,6 +166,7 @@ describe('ObservabilityLogs View', () => {
     await waitFor(() => {
       expect(screen.getByText('virtual_keys')).toBeInTheDocument()
       expect(screen.getByText('admin@vexa.ai')).toBeInTheDocument()
+      expect(screen.getByText('admin')).toBeInTheDocument()
       expect(screen.getByText('vk-12345')).toBeInTheDocument()
     })
 
@@ -174,6 +176,44 @@ describe('ObservabilityLogs View', () => {
 
     expect(screen.getByText('Before Value:')).toBeInTheDocument()
     expect(screen.getByText('Updated Value:')).toBeInTheDocument()
+  })
+
+  it('renders actor without duplicate role pill when changed_by matches actor_role', async () => {
+    vi.mocked(api.listAuditLogs).mockResolvedValueOnce({
+      organization_id: 'tenant-1',
+      audit_logs: [
+        {
+          id: 'audit-2',
+          tenant_id: 'tenant-1',
+          timestamp: '2026-08-31T15:00:00Z',
+          table_name: 'virtual_keys',
+          action: 'created',
+          changed_by: 'admin',
+          actor_role: 'admin',
+          affected_item_id: 'vk-99999',
+          before_value: null,
+          updated_value: { name: 'Admin Key' },
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 50,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/observability/logs?tab=audit']}>
+        <ObservabilityLogs />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      const actorName = screen.getByText('admin')
+      expect(actorName).toBeInTheDocument()
+      expect(actorName.className).toBe('obs-actor-name')
+      expect(screen.queryByText('adminadmin')).not.toBeInTheDocument()
+      // Should not have a separate role pill since actor_role === changed_by
+      expect(document.querySelector('.obs-role-pill')).not.toBeInTheDocument()
+    })
   })
 
   it('switches to Deleted Keys tab and displays tombstoned key compliance records', async () => {

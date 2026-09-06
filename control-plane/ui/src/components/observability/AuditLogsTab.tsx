@@ -211,7 +211,9 @@ export default function AuditLogsTab() {
                       <td className="obs-col-actor">
                         <div className="obs-actor-info">
                           <span className="obs-actor-name">{item.changed_by}</span>
-                          {item.actor_role && <span className="obs-role-pill">{item.actor_role}</span>}
+                          {item.actor_role && item.actor_role.toLowerCase() !== (item.changed_by || '').toLowerCase() && (
+                            <span className="obs-role-pill">{item.actor_role}</span>
+                          )}
                         </div>
                       </td>
                       <td className="obs-col-mono">{item.affected_item_id || item.id}</td>

@@ -1,6 +1,6 @@
-# 🛡️ AgentWall on Azure Container Apps (ACA) — Stage & Serverless Deployment
+# 🛡️ AgentControl on Azure Container Apps (ACA) — Stage & Serverless Deployment
 
-Ultra cost-effective (**~$0–$5/month** for Staging / **~$15–$20/month** for Production) serverless deployment of **AgentWall** and its Enterprise Control Plane on **Microsoft Azure** using **Azure Container Apps (ACA)** with scale-to-zero microservices and PostgreSQL engine.
+Ultra cost-effective (**~$0–$5/month** for Staging / **~$15–$20/month** for Production) serverless deployment of **AgentControl** and its Enterprise Control Plane on **Microsoft Azure** using **Azure Container Apps (ACA)** with scale-to-zero microservices and PostgreSQL engine.
 
 ---
 
@@ -15,23 +15,23 @@ flowchart TD
 
     subgraph Azure ["☁️ Microsoft Azure (Serverless ACA Environment)"]
         subgraph ACAEnv ["⚡ Azure Container Apps Managed Environment ($0 Control Plane)"]
-            subgraph GatewayApp ["🛡️ App: agentwall-gateway (Public Ingress)"]
-                GW["agentwall-gateway (Rust Proxy)\nPort: 8080 | 0.25 vCPU, 0.5 GiB | min=0"]
+            subgraph GatewayApp ["🛡️ App: agentcontrol-gateway (Public Ingress)"]
+                GW["agentcontrol-gateway (Rust Proxy)\nPort: 8080 | 0.25 vCPU, 0.5 GiB | min=0"]
             end
 
-            subgraph UIApp ["📊 App: agentwall-ui (Public Ingress)"]
+            subgraph UIApp ["📊 App: agentcontrol-ui (Public Ingress)"]
                 UI["control-plane-ui (Frontend Portal)\nPort: 80 | 0.25 vCPU, 0.5 GiB | min=0"]
             end
 
-            subgraph APIApp ["⚙️ App: agentwall-api (Public Ingress)"]
+            subgraph APIApp ["⚙️ App: agentcontrol-api (Public Ingress)"]
                 API["dashboard-api (Backend REST API)\nPort: 8400 | 0.25 vCPU, 0.5 GiB | min=0"]
             end
 
-            subgraph DBApp ["🗄️ App: agentwall-db (Internal TCP)"]
-                DB["postgres (agentwall-db Engine)\nPort: 5432 (Internal Only) | min=0"]
+            subgraph DBApp ["🗄️ App: agentcontrol-db (Internal TCP)"]
+                DB["postgres (agentcontrol-db Engine)\nPort: 5432 (Internal Only) | min=0"]
             end
 
-            subgraph ValkeyApp ["⚡ App: agentwall-valkey (Internal TCP)"]
+            subgraph ValkeyApp ["⚡ App: agentcontrol-valkey (Internal TCP)"]
                 Cache["valkey (Caching Engine)\nPort: 6379 (Internal Only) | min=0"]
             end
         end
@@ -108,11 +108,11 @@ Once `terraform apply` finishes, the outputs display public HTTPS endpoints:
 Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
 
 Outputs:
-control_plane_ui_url = "https://agentwall-ui.xxxxxx.westeurope.azurecontainerapps.io"
-gateway_url          = "https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io"
-dashboard_api_url    = "https://agentwall-api.xxxxxx.westeurope.azurecontainerapps.io"
-health_check_url     = "https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
-quick_verify_command = "curl -i https://agentwall-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
+control_plane_ui_url = "https://agentcontrol-ui.xxxxxx.westeurope.azurecontainerapps.io"
+gateway_url          = "https://agentcontrol-gateway.xxxxxx.westeurope.azurecontainerapps.io"
+dashboard_api_url    = "https://agentcontrol-api.xxxxxx.westeurope.azurecontainerapps.io"
+health_check_url     = "https://agentcontrol-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
+quick_verify_command = "curl -i https://agentcontrol-gateway.xxxxxx.westeurope.azurecontainerapps.io/healthz"
 ```
 
 ### 1. Verify Gateway Health Check
@@ -122,7 +122,7 @@ curl -i https://<gateway-url>/healthz
 
 ### 2. Stream Live Staging Logs
 ```bash
-az containerapp logs show --name agentwall-gateway --resource-group rg-agentwall-stage-westeurope --follow
+az containerapp logs show --name agentcontrol-gateway --resource-group rg-agentcontrol-stage-westeurope --follow
 ```
 
 ### 3. Teardown Stage Environment

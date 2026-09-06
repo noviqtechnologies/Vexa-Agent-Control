@@ -1,8 +1,10 @@
 # ─── 1. Control Plane Database (PostgreSQL) ───────────────────────────────────
 # Internal service accessible only within the Azure Container Apps Environment.
+# Deployed when no external database_url or managed PostgreSQL instance is specified.
 
 resource "azurerm_container_app" "db" {
-  name                         = "agentwall-db"
+  count                        = (var.database_url == "" && !var.enable_azure_postgres) ? 1 : 0
+  name                         = "agentcontrol-db"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -75,8 +77,9 @@ resource "azurerm_container_app" "db" {
 }
 
 # ─── 1b. Valkey Distributed Cache & Rate Limiting Engine ────────────────────────
+
 resource "azurerm_container_app" "valkey" {
-  name                         = "agentwall-valkey"
+  name                         = "agentcontrol-valkey"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -118,7 +121,7 @@ resource "azurerm_container_app" "valkey" {
 # Exposes the management REST API and policy distribution endpoint.
 
 resource "azurerm_container_app" "api" {
-  name                         = "agentwall-api"
+  name                         = "agentcontrol-api"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -126,7 +129,7 @@ resource "azurerm_container_app" "api" {
 
   secret {
     name  = "database-url"
-    value = "postgres://${var.postgres_user}:${local.postgres_password}@agentwall-db:5432/${var.postgres_db}?sslmode=disable"
+    value = local.effective_database_url
   }
   secret {
     name  = "gateway-secret"
@@ -161,7 +164,7 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "VALKEY_URL"
-        value = "agentwall-valkey:6379"
+        value = "agentcontrol-valkey:6379"
       }
       env {
         name  = "DASHBOARD_PORT"
@@ -189,7 +192,7 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "GATEWAY_URL"
-        value = "http://agentwall-gateway:8080"
+        value = "http://agentcontrol-gateway:8080"
       }
       env {
         name        = "PROVIDER_KEY_ENCRYPTION_SECRET"
@@ -203,8 +206,6 @@ resource "azurerm_container_app" "api" {
         name        = "AGENTCONTROL_SESSION_SECRET"
         secret_name = "session-secret"
       }
-      # Required by Go config.Load() in production: tells the API it runs behind
-      # a TLS-terminating ingress (ACA) so INGRESS_AUTH_SECRET is not enforced.
       env {
         name  = "DIRECT_TLS_ENABLED"
         value = "true"
@@ -245,14 +246,17 @@ resource "azurerm_container_app" "api" {
     }
   }
 
-  depends_on = [azurerm_container_app.db]
+  depends_on = [
+    azurerm_container_app.db,
+    azurerm_container_app.valkey
+  ]
 }
 
 # ─── 3. Enterprise Control Plane Frontend UI ──────────────────────────────────
 # Web portal for SOC teams, policy management, and telemetry dashboards.
 
 resource "azurerm_container_app" "ui" {
-  name                         = "agentwall-ui"
+  name                         = "agentcontrol-ui"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -267,6 +271,16 @@ resource "azurerm_container_app" "ui" {
       image  = var.control_plane_ui_image
       cpu    = var.ui_cpu
       memory = var.ui_memory
+
+      env {
+        name  = "AGENTCONTROL_API_URL"
+        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
+
+      env {
+        name  = "AGENTCONTROL_API_UPSTREAM"
+        value = azurerm_container_app.api.ingress[0].fqdn
+      }
 
       env {
         name  = "DASHBOARD_API_URL"
@@ -307,11 +321,11 @@ resource "azurerm_container_app" "ui" {
   depends_on = [azurerm_container_app.api]
 }
 
-# ─── 4. AgentWall Gateway Proxy (Core Enforcement Engine) ─────────────────────
+# ─── 4. AgentControl Gateway Proxy (Core Enforcement Engine) ───────────────────
 # High-performance Rust reverse proxy intercepting & policy-checking MCP calls.
 
 resource "azurerm_container_app" "gateway" {
-  name                         = "agentwall-gateway"
+  name                         = "agentcontrol-gateway"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -336,9 +350,6 @@ resource "azurerm_container_app" "gateway" {
       cpu    = var.gateway_cpu
       memory = var.gateway_memory
 
-      # AGENTCONTROL_LISTEN must be set — the Rust binary reads this env var first.
-      # Without it, the default is 127.0.0.1:8080 (loopback), which triggers a
-      # fatal security error when binding 0.0.0.0 without identity auth.
       env {
         name  = "AGENTCONTROL_LISTEN"
         value = "0.0.0.0:8080"
@@ -347,8 +358,6 @@ resource "azurerm_container_app" "gateway" {
         name  = "AGENTWALL_LISTEN"
         value = "0.0.0.0:8080"
       }
-      # AGENTCONTROL_CENTRALIZED=true + AGENTCONTROL_ADMIN_TOKEN are REQUIRED to
-      # pass the non-loopback bind security guard in src/main.rs.
       env {
         name  = "AGENTCONTROL_CENTRALIZED"
         value = "true"

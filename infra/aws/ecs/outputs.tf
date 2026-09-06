@@ -1,50 +1,55 @@
 # ─── Public Service Endpoints ─────────────────────────────────────────────────
 
 output "gateway_url" {
-  description = "AgentWall Local Observability Proxy Endpoint (Port 8080)"
+  description = "AgentControl Gateway Proxy Endpoint (Port 8080)"
   value       = "http://${aws_lb.alb.dns_name}:8080"
 }
 
-output "control_plane_url" {
-  description = "AgentWall Enterprise Control Plane & SOC Dashboard (Port 8081)"
+output "control_plane_ui_url" {
+  description = "AgentControl Enterprise Control Plane & SOC Dashboard (Port 8081)"
   value       = "http://${aws_lb.alb.dns_name}:8081"
 }
 
-output "control_plane_ui_url" {
-  description = "Alias for control_plane_url — matches cross-platform consistency"
+output "control_plane_url" {
+  description = "Alias for control_plane_ui_url — matches cross-platform consistency"
   value       = "http://${aws_lb.alb.dns_name}:8081"
 }
 
 output "dashboard_api_url" {
-  description = "AgentWall Dashboard API internal endpoint (Port 8400 — container-internal only, no public ALB listener). Gateway and UI communicate with this via 127.0.0.1:8400 inside the task."
+  description = "AgentControl Dashboard API internal endpoint (Port 8400 — container-internal only, no public ALB listener). Gateway and UI communicate with this via 127.0.0.1:8400 inside the task."
   value       = "http://127.0.0.1:8400"
 }
 
 output "health_check_url" {
-  description = "Health check endpoint URL"
+  description = "Direct health check URL for the AgentControl Gateway"
   value       = "http://${aws_lb.alb.dns_name}:8080/healthz"
 }
 
 # ─── Resource & Environment Identifiers ───────────────────────────────────────
 
 output "aws_region" {
-  value = var.aws_region
+  description = "AWS deployment region."
+  value       = var.aws_region
 }
 
 output "environment" {
-  value = var.environment
+  description = "Deployed environment stage identifier."
+  value       = var.environment
 }
 
 output "ecs_cluster_name" {
-  value = aws_ecs_cluster.main.name
+  description = "Name of the provisioned ECS cluster."
+  value       = aws_ecs_cluster.main.name
 }
 
 output "ecs_service_name" {
-  value = aws_ecs_service.agentwall.name
+  description = "Name of the deployed AgentControl ECS service."
+  value       = aws_ecs_service.agentcontrol.name
 }
 
 output "container_image_in_use" {
-  value = var.container_image
+  description = "Container image for the Gateway proxy."
+  value       = var.container_image
 }
 
 output "ecr_repository_urls" {

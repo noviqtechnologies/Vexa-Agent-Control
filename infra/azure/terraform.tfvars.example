@@ -10,10 +10,10 @@ azure_region = "westeurope"
 environment = "stage"
 
 # Container Images (defaults to latest official GHCR releases)
-container_image         = "ghcr.io/noviqtechnologies/agentwall:latest"
-control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
-control_plane_api_image = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
-control_plane_db_image  = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+container_image         = "ghcr.io/noviqtechnologies/agentcontrol:latest"
+control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
+control_plane_api_image = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
+control_plane_db_image  = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 
 # Sizing & Scaling (Cost-Optimized Scale-to-Zero for Stage: ~$0–$5/month)
 min_replicas = 0 # 0 for scale-to-zero / $0 idle compute
@@ -28,6 +28,11 @@ ui_cpu         = 0.25
 ui_memory      = "0.5Gi"
 db_cpu         = 0.25
 db_memory      = "0.5Gi"
+
+# Database Persistence Options
+# Set enable_azure_postgres = true to provision an Azure Database for PostgreSQL Flexible Server, or provide database_url
+enable_azure_postgres = false
+# database_url        = "postgres://..."
 
 # Networking: Set to true only if custom VNet and delegated subnet are required
 enable_vnet_integration = false
@@ -46,7 +51,7 @@ acr_enabled = false
 
 # Custom Azure Resource Tags
 tags = {
-  Project     = "agentwall"
+  Project     = "agentcontrol"
   Environment = "stage"
   ManagedBy   = "terraform"
 }

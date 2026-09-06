@@ -15,27 +15,27 @@ variable "environment" {
 # ─── Container Images ─────────────────────────────────────────────────────────
 
 variable "container_image" {
-  description = "Container image for the AgentWall Gateway proxy."
+  description = "Container image for the AgentControl Gateway proxy."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol:latest"
 }
 
 variable "control_plane_ui_image" {
   description = "Enterprise Control Plane UI container image."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-frontend:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
 }
 
 variable "control_plane_api_image" {
   description = "Enterprise Control Plane API container image."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-dashboard-api:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
 }
 
 variable "control_plane_db_image" {
   description = "Control Plane PostgreSQL Database container image with migrations."
   type        = string
-  default     = "ghcr.io/noviqtechnologies/agentwall-db:latest"
+  default     = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 }
 
 # ─── Task Sizing & Resources ──────────────────────────────────────────────────
@@ -50,6 +50,12 @@ variable "task_memory" {
   description = "Fargate task memory in MiB (2048 = 2 GiB, 1024 = 1 GiB)."
   type        = string
   default     = "2048"
+}
+
+variable "desired_count" {
+  description = "Desired number of ECS service task replicas."
+  type        = number
+  default     = 1
 }
 
 # ─── Secrets & Credentials ────────────────────────────────────────────────────
@@ -98,7 +104,32 @@ variable "postgres_password" {
 variable "postgres_db" {
   description = "PostgreSQL database name."
   type        = string
-  default     = "agentwall"
+  default     = "agentcontrol"
+}
+
+variable "database_url" {
+  description = "Optional connection string for a persistent external PostgreSQL database (e.g. RDS, Neon, Supabase). When set, the dashboard API connects directly to this database."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "enable_rds" {
+  description = "When true, provisions an Amazon RDS PostgreSQL instance. Default is false to minimize staging deployment cost."
+  type        = bool
+  default     = false
+}
+
+variable "rds_instance_class" {
+  description = "Database instance class for managed RDS PostgreSQL (e.g. 'db.t4g.micro')."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "rds_allocated_storage" {
+  description = "Initial allocated storage in GB for RDS PostgreSQL."
+  type        = number
+  default     = 20
 }
 
 # ─── Amazon Elastic Container Registry (ECR) ──────────────────────────────────
@@ -116,4 +147,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-

@@ -1,6 +1,6 @@
-# 🌐 AgentWall Multi-Cloud Infrastructure (Terraform)
+# 🌐 AgentControl Multi-Cloud Infrastructure (Terraform)
 
-Welcome to the **AgentWall** Multi-Cloud Infrastructure suite. This directory contains production-ready, highly cost-effective (~$0–$25/month), and cross-platform **Terraform modules** for deploying AgentWall and its full Enterprise Control Plane stack across the leading public cloud providers:
+Welcome to the **AgentControl** Multi-Cloud Infrastructure suite. This directory contains production-ready, highly cost-effective (~$0–$25/month), and cross-platform **Terraform modules** for deploying AgentControl and its full Enterprise Control Plane stack across the leading public cloud providers:
 
 - **[Amazon Web Services (AWS)](aws/README.md)** — AWS ECS Fargate & Application Load Balancer
 - **[Microsoft Azure](azure/README.md)** — Azure Container Apps (ACA) with Built-in Envoy Ingress & Scale-to-Zero
@@ -10,7 +10,7 @@ Welcome to the **AgentWall** Multi-Cloud Infrastructure suite. This directory co
 
 ## 📊 Cloud Architecture Comparison Matrix
 
-All three deployments provision the complete, self-contained AgentWall system:
+All three deployments provision the complete, self-contained AgentControl system:
 1. **🛡️ Gateway Proxy** (`port 8080`) — Rust proxy enforcing default-deny, safe-mode guardrails, and DLP.
 2. **📊 Control Plane UI** (`port 80 / 8081`) — React/TypeScript administrative management portal.
 3. **⚙️ Dashboard REST API** (`port 8400`) — Centralized Go backend managing policies and telemetry.
@@ -110,8 +110,8 @@ Before deploying to any cloud provider, ensure you have **Terraform** and the re
 ```bash
 cd infra/aws/ecs
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="terraform.stage.tfvars"
+terraform apply -var-file="terraform.stage.tfvars"
 ```
 * **Documentation & Details:** → [AWS ECS Deployment Guide](aws/README.md)
 
@@ -121,17 +121,15 @@ terraform apply
 ```bash
 # Windows PowerShell
 cd infra/azure
-Copy-Item terraform.tfvars.example terraform.tfvars
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="terraform.stage.tfvars"
+terraform apply -var-file="terraform.stage.tfvars"
 
 # Linux / macOS
 cd infra/azure
-cp terraform.tfvars.example terraform.tfvars
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="terraform.stage.tfvars"
+terraform apply -var-file="terraform.stage.tfvars"
 ```
 * **Documentation & Details:** → [Azure Container Apps Guide](azure/README.md)
 
@@ -141,23 +139,17 @@ terraform apply
 ```bash
 # Windows PowerShell
 cd infra/gcp
-Copy-Item terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="terraform.stage.tfvars"
+terraform apply -var-file="terraform.stage.tfvars"
 
 # Linux / macOS
 cd infra/gcp
-cp terraform.tfvars.example terraform.tfvars
-# Update gcp_project_id in terraform.tfvars
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file="terraform.stage.tfvars"
+terraform apply -var-file="terraform.stage.tfvars"
 ```
 * **Documentation & Details:** → [Google Cloud Run Guide](gcp/README.md)
-
----
 
 ---
 
@@ -239,17 +231,17 @@ Validate that audit logs and system telemetry are actively ingesting into your c
 
 * **AWS CloudWatch Logs (Windows / macOS / Linux):**
   ```bash
-  aws logs tail /ecs/agentwall --follow --format short
+  aws logs tail /ecs/agentcontrol-stage --follow --format short
   ```
 
 * **Azure Container Apps (Windows / macOS / Linux):**
   ```bash
-  az containerapp logs show --name agentwall-gateway --resource-group <resource-group-name> --follow
+  az containerapp logs show --name agentcontrol-gateway --resource-group rg-agentcontrol-stage-westeurope --follow
   ```
 
 * **Google Cloud Run (Windows / macOS / Linux):**
   ```bash
-  gcloud run services logs tail agentwall-dev-gateway --region <region>
+  gcloud run services logs tail agentcontrol-stage-gateway --region europe-west1
   ```
 
 ---
@@ -260,5 +252,5 @@ To destroy all provisioned cloud resources and avoid any recurring charges:
 
 ```bash
 # From within the respective infra directory (infra/aws/ecs, infra/azure, or infra/gcp)
-terraform destroy
+terraform destroy -var-file="terraform.stage.tfvars"
 ```
