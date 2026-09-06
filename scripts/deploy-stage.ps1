@@ -22,6 +22,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
+    [switch]$UseGhcr,
     [switch]$AutoApprove,
     [int]$Parallelism = 3,
     [string]$ProjectId = $env:GCP_PROJECT_ID
@@ -140,7 +141,7 @@ if (-not $HasPersistentDb) {
 }
 
 # 2. Build Container Images (if not skipped)
-if (-not $SkipBuild) {
+if (-not $SkipBuild -and -not $UseGhcr) {
     Write-Host "`n[2/4] Checking image registry & submitting builds (Workers: $MachineType)..." -ForegroundColor Yellow
 
     if ($HasPersistentDb) {
@@ -204,7 +205,7 @@ if (-not $SkipBuild) {
     }
 }
 else {
-    Write-Host "`n[2/4] Skipping container build step (-SkipBuild specified)." -ForegroundColor DarkGray
+    Write-Host "`n[2/4] Skipping container build step (using GHCR / pre-built images)." -ForegroundColor DarkGray
 }
 
 # 3. Apply Terraform Infrastructure
@@ -212,8 +213,10 @@ Write-Host "`n[3/4] Applying Terraform (Parallelism: $Parallelism)..." -Foregrou
 
 $GcpHosts = @(
     "oauth2.googleapis.com",
-    "iam.googleapis.com",
+    "cloudbilling.googleapis.com",
+    "serviceusage.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
@@ -221,7 +224,7 @@ $GcpHosts = @(
     "monitoring.googleapis.com",
     "cloudbuild.googleapis.com",
     "sqladmin.googleapis.com",
-    "serviceusage.googleapis.com"
+    "storage.googleapis.com"
 )
 foreach ($h in $GcpHosts) {
     $null = Resolve-DnsName -Name $h -Type A -ErrorAction SilentlyContinue
@@ -239,13 +242,17 @@ try {
     $TfArgs = @(
         "apply",
         "-var-file=terraform.stage.tfvars",
-        "-var=container_image=$GwImage",
-        "-var=control_plane_api_image=$ApiImage",
-        "-var=control_plane_ui_image=$UiImage",
         "-parallelism=$Parallelism"
     )
-    if ($DbImage) {
-        $TfArgs += "-var=control_plane_db_image=$DbImage"
+    if (-not $SkipBuild -and -not $UseGhcr) {
+        $TfArgs += @(
+            "-var=container_image=$GwImage",
+            "-var=control_plane_api_image=$ApiImage",
+            "-var=control_plane_ui_image=$UiImage"
+        )
+        if ($DbImage) {
+            $TfArgs += "-var=control_plane_db_image=$DbImage"
+        }
     }
     if ($AutoApprove) {
         $TfArgs += "-auto-approve"
