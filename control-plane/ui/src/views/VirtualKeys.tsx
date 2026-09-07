@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import {
   api,
   type VirtualKey,
-  type CreateVirtualKeyRequest
+  type CreateVirtualKeyRequest,
+  type UpdateVirtualKeyRequest
 } from '../api/client'
 import './VirtualKeys.css'
 
@@ -80,10 +81,116 @@ export default function VirtualKeys() {
   const [deleting, setDeleting] = useState(false)
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null)
 
+  // Edit Governance Policy Modal
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editModalError, setEditModalError] = useState<string | null>(null)
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({})
+  const [editTargetKey, setEditTargetKey] = useState<VirtualKey | null>(null)
+  const [editFormName, setEditFormName] = useState('')
+  const [editFormBudgetUSD, setEditFormBudgetUSD] = useState('50.00')
+  const [editFormMaxRPM, setEditFormMaxRPM] = useState('60')
+  const [editFormMaxTPM, setEditFormMaxTPM] = useState('100000')
+  const [editFormMaxConcurrent, setEditFormMaxConcurrent] = useState('10')
+  const [editFormAllowedModels, setEditFormAllowedModels] = useState('')
+  const [editFormAllowedRoutes, setEditFormAllowedRoutes] = useState('')
+  const [editFormAllowedIPs, setEditFormAllowedIPs] = useState('')
+
   const openCreateModal = () => {
     setCreateModalError(null)
     setFieldErrors({})
     setCreateModalOpen(true)
+  }
+
+  const openEditModal = (key: VirtualKey) => {
+    setEditTargetKey(key)
+    setEditModalError(null)
+    setEditFieldErrors({})
+    setEditFormName(key.name || '')
+    setEditFormBudgetUSD(microcentsToUSD(key.monthly_budget_microcents).toFixed(2))
+    setEditFormMaxRPM(key.max_rpm > 0 ? String(key.max_rpm) : '0')
+    setEditFormMaxTPM(key.max_tpm > 0 ? String(key.max_tpm) : '0')
+    setEditFormMaxConcurrent(key.max_concurrent_requests > 0 ? String(key.max_concurrent_requests) : '0')
+    setEditFormAllowedModels((key.allowed_models || []).join(', '))
+    setEditFormAllowedRoutes((key.allowed_routes || []).join(', '))
+    setEditFormAllowedIPs((key.allowed_ips || []).join(', '))
+    setEditModalOpen(true)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editTargetKey) return
+
+    const errors: Record<string, string> = {}
+    if (!editFormName.trim()) {
+      errors.name = 'Key Name is required'
+    }
+    const budgetNum = parseFloat(editFormBudgetUSD)
+    if (isNaN(budgetNum) || budgetNum < 0) {
+      errors.budget = 'Spend budget must be 0 or greater'
+    }
+    const rpmNum = parseInt(editFormMaxRPM)
+    if (isNaN(rpmNum) || rpmNum < 0) {
+      errors.rpm = 'Max RPM must be 0 or greater'
+    }
+    const tpmNum = parseInt(editFormMaxTPM)
+    if (isNaN(tpmNum) || tpmNum < 0) {
+      errors.tpm = 'Max TPM must be 0 or greater'
+    }
+    const concNum = parseInt(editFormMaxConcurrent)
+    if (isNaN(concNum) || concNum < 0) {
+      errors.concurrent = 'Max concurrent requests must be 0 or greater'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditFieldErrors(errors)
+      setEditModalError(Object.values(errors)[0])
+      return
+    }
+
+    try {
+      setEditing(true)
+      setEditModalError(null)
+      setEditFieldErrors({})
+
+      const allowedModels = editFormAllowedModels
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const allowedRoutes = editFormAllowedRoutes
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const allowedIPs = editFormAllowedIPs
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const req: UpdateVirtualKeyRequest = {
+        name: editFormName.trim(),
+        team_id: editTargetKey.team_id,
+        owner_type: editTargetKey.owner_type,
+        budget_period: editTargetKey.budget_period,
+        monthly_budget_microcents: usdToMicrocents(parseFloat(editFormBudgetUSD) || 0),
+        max_rpm: parseInt(editFormMaxRPM) || 0,
+        max_tpm: parseInt(editFormMaxTPM) || 0,
+        max_concurrent_requests: parseInt(editFormMaxConcurrent) || 0,
+        allowed_models: allowedModels,
+        allowed_routes: allowedRoutes,
+        allowed_ips: allowedIPs,
+      }
+
+      await api.updateVirtualKey(editTargetKey.id, req)
+      setEditModalOpen(false)
+      setSuccessMsg(`Virtual Key '${editFormName.trim()}' governance policy updated successfully.`)
+      await loadKeys()
+    } catch (err: any) {
+      setEditModalError(formatErrorMessage(err))
+    } finally {
+      setEditing(false)
+    }
   }
 
   const loadKeys = async () => {
@@ -581,6 +688,16 @@ async function main() {
                     <td>
                       <div className="vk-actions-cell">
                         <button
+                          className="vk-action-icon-btn edit"
+                          title="Edit Governance Policy & Limits"
+                          onClick={() => openEditModal(key)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                        </button>
+                        <button
                           className="vk-action-icon-btn rotate"
                           title="Rotate Key (Zero Downtime)"
                           onClick={() => {
@@ -889,6 +1006,254 @@ async function main() {
                   disabled={creating}
                 >
                   {creating ? 'Generating Key...' : 'Generate Virtual Key'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT VIRTUAL KEY GOVERNANCE MODAL */}
+      {editModalOpen && editTargetKey && (
+        <div className="vk-modal-backdrop" onClick={() => setEditModalOpen(false)}>
+          <div className="vk-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="vk-modal-header">
+              <h2>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                Edit Virtual Key Governance
+              </h2>
+              <button className="vk-modal-close-btn" onClick={() => setEditModalOpen(false)}>✕</button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} noValidate>
+              <div className="vk-modal-body">
+                {editModalError && (
+                  <div className="vk-modal-alert error" role="alert">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>{editModalError}</span>
+                    <button type="button" className="vk-copy-btn" onClick={() => setEditModalError(null)}>✕</button>
+                  </div>
+                )}
+
+                <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '10px 14px', borderRadius: 8, marginBottom: 16, border: '1px solid rgba(148, 163, 184, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Prefix: </span>
+                    <code style={{ color: '#38bdf8', fontWeight: 600 }}>{editTargetKey.key_prefix}</code>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    Token secrets are immutable. Use Rotate to refresh tokens.
+                  </span>
+                </div>
+
+                <div className="vk-form-grid">
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Key Ownership Persona</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                      <span
+                        className={`badge ${editTargetKey.owner_type === 'agent' ? 'badge-warning' : editTargetKey.owner_type === 'service_account' ? 'badge-info' : 'badge-neutral'}`}
+                        style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >
+                        {editTargetKey.owner_type === 'agent' ? '🤖 Autonomous AI Agent' : editTargetKey.owner_type === 'service_account' ? '⚙️ Service Account (CI/CD)' : '🧑 User / Developer'}
+                      </span>
+                      <span className="vk-form-help" style={{ marginTop: 0 }}>
+                        🔒 Identity persona is immutable for audit compliance & risk attribution.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="vk-form-group">
+                    <label className="vk-form-label">Key Name *</label>
+                    <input
+                      type="text"
+                      className={`vk-form-input ${editFieldErrors.name ? 'has-error' : ''}`}
+                      placeholder="e.g. cursor-ide-team, release-agent"
+                      value={editFormName}
+                      onChange={(e) => {
+                        setEditFormName(e.target.value)
+                        if (editFieldErrors.name) {
+                          setEditFieldErrors((prev) => ({ ...prev, name: '' }))
+                          setEditModalError(null)
+                        }
+                      }}
+                      required
+                    />
+                    {editFieldErrors.name ? (
+                      <span className="vk-field-error">{editFieldErrors.name}</span>
+                    ) : (
+                      <span className="vk-form-help">Human-readable identifier for audit trails</span>
+                    )}
+                  </div>
+
+                  <div className="vk-form-group">
+                    <label className="vk-form-label">Team / Developer ID</label>
+                    <input
+                      type="text"
+                      className="vk-form-input"
+                      value={editTargetKey.team_id || 'default'}
+                      disabled
+                      style={{ opacity: 0.65, cursor: 'not-allowed', background: 'rgba(15, 23, 42, 0.6)' }}
+                    />
+                    <span className="vk-form-help">🔒 Team attribution is fixed to preserve billing & cost allocation.</span>
+                  </div>
+
+                  <div className="vk-form-group">
+                    <label className="vk-form-label">Spend Budget ($ USD)</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className={`vk-form-input ${editFieldErrors.budget ? 'has-error' : ''}`}
+                        placeholder="50.00"
+                        value={editFormBudgetUSD}
+                        onChange={(e) => {
+                          setEditFormBudgetUSD(e.target.value)
+                          if (editFieldErrors.budget) {
+                            setEditFieldErrors((prev) => ({ ...prev, budget: '' }))
+                            setEditModalError(null)
+                          }
+                        }}
+                        style={{ flex: 1 }}
+                      />
+                      <div
+                        style={{
+                          padding: '8px 14px',
+                          background: 'rgba(30, 41, 59, 0.6)',
+                          borderRadius: 6,
+                          border: '1px solid rgba(148, 163, 184, 0.15)',
+                          color: '#94a3b8',
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap',
+                          userSelect: 'none'
+                        }}
+                        title="Cadence is locked to prevent billing ledger discrepancies"
+                      >
+                        / {editTargetKey.budget_period === 'daily' ? 'Daily' : editTargetKey.budget_period === 'weekly' ? 'Weekly' : 'Monthly'}
+                      </div>
+                    </div>
+                    {editFieldErrors.budget ? (
+                      <span className="vk-field-error">{editFieldErrors.budget}</span>
+                    ) : (
+                      <span className="vk-form-help">Adjustable spend ceiling. Cadence is locked to avoid mid-cycle ledger splits.</span>
+                    )}
+                  </div>
+
+                  <div className="vk-form-group">
+                    <label className="vk-form-label">Max RPM (Req / Min)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className={`vk-form-input ${editFieldErrors.rpm ? 'has-error' : ''}`}
+                      placeholder="60"
+                      value={editFormMaxRPM}
+                      onChange={(e) => {
+                        setEditFormMaxRPM(e.target.value)
+                        if (editFieldErrors.rpm) {
+                          setEditFieldErrors((prev) => ({ ...prev, rpm: '' }))
+                          setEditModalError(null)
+                        }
+                      }}
+                    />
+                    {editFieldErrors.rpm && <span className="vk-field-error">{editFieldErrors.rpm}</span>}
+                  </div>
+
+                  <div className="vk-form-group">
+                    <label className="vk-form-label">Max TPM (Tokens / Min)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className={`vk-form-input ${editFieldErrors.tpm ? 'has-error' : ''}`}
+                      placeholder="100000"
+                      value={editFormMaxTPM}
+                      onChange={(e) => {
+                        setEditFormMaxTPM(e.target.value)
+                        if (editFieldErrors.tpm) {
+                          setEditFieldErrors((prev) => ({ ...prev, tpm: '' }))
+                          setEditModalError(null)
+                        }
+                      }}
+                    />
+                    {editFieldErrors.tpm && <span className="vk-field-error">{editFieldErrors.tpm}</span>}
+                  </div>
+
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Max Concurrent In-Flight Requests</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className={`vk-form-input ${editFieldErrors.concurrent ? 'has-error' : ''}`}
+                      placeholder="10"
+                      value={editFormMaxConcurrent}
+                      onChange={(e) => {
+                        setEditFormMaxConcurrent(e.target.value)
+                        if (editFieldErrors.concurrent) {
+                          setEditFieldErrors((prev) => ({ ...prev, concurrent: '' }))
+                          setEditModalError(null)
+                        }
+                      }}
+                    />
+                    {editFieldErrors.concurrent && <span className="vk-field-error">{editFieldErrors.concurrent}</span>}
+                  </div>
+
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Allowed Models (Comma-separated)</label>
+                    <input
+                      type="text"
+                      className="vk-form-input"
+                      placeholder="claude-3-5-sonnet*, gpt-4o, gpt-4o-mini"
+                      value={editFormAllowedModels}
+                      onChange={(e) => setEditFormAllowedModels(e.target.value)}
+                    />
+                    <span className="vk-form-help">Wildcards supported (e.g. claude-*). Empty means all models allowed.</span>
+                  </div>
+
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Allowed Routes</label>
+                    <input
+                      type="text"
+                      className="vk-form-input"
+                      placeholder="/v1/chat/completions, /v1/messages"
+                      value={editFormAllowedRoutes}
+                      onChange={(e) => setEditFormAllowedRoutes(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="vk-form-group full-width">
+                    <label className="vk-form-label">Allowed Client IP CIDRs (Optional)</label>
+                    <input
+                      type="text"
+                      className="vk-form-input"
+                      placeholder="e.g. 10.0.0.0/8, 192.168.1.100"
+                      value={editFormAllowedIPs}
+                      onChange={(e) => setEditFormAllowedIPs(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="vk-modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setEditModalOpen(false)}
+                  disabled={editing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary-gradient"
+                  disabled={editing}
+                >
+                  {editing ? 'Saving Changes...' : 'Save Policy Changes'}
                 </button>
               </div>
             </form>

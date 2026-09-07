@@ -8,6 +8,7 @@ vi.mock('../api/client', () => ({
   api: {
     listVirtualKeys: vi.fn(),
     createVirtualKey: vi.fn(),
+    updateVirtualKey: vi.fn(),
     deleteVirtualKey: vi.fn(),
     rotateVirtualKey: vi.fn(),
     resetVirtualKeySpend: vi.fn(),
@@ -269,6 +270,58 @@ describe('VirtualKeys View', () => {
       expect(screen.getByText(/malformed array literal/i)).toBeInTheDocument()
       // Modal should still be open
       expect(screen.getByText('Issue Scoped Virtual Key')).toBeInTheDocument()
+    })
+  })
+
+  it('opens edit modal and updates scoped models and rate limits', async () => {
+    vi.mocked(api.updateVirtualKey).mockResolvedValue({
+      ...mockKeys[0],
+      name: 'Cursor Team Lead',
+      max_rpm: 120,
+      allowed_models: ['claude-3-5-sonnet*', 'gpt-4o', 'claude-3-7-sonnet'],
+    })
+
+    render(
+      <MemoryRouter>
+        <VirtualKeys />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Cursor Team Lead')).toBeInTheDocument()
+    })
+
+    // Find and click Edit button for Cursor Team Lead
+    const editBtns = screen.getAllByTitle('Edit Governance Policy & Limits')
+    expect(editBtns.length).toBeGreaterThan(0)
+    fireEvent.click(editBtns[0])
+
+    // Edit modal should be open with title
+    expect(screen.getByText('Edit Virtual Key Governance')).toBeInTheDocument()
+
+    // Form inputs should be pre-filled
+    expect(screen.getByDisplayValue('Cursor Team Lead')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('60')).toBeInTheDocument()
+
+    // Update max RPM and allowed models
+    const rpmInput = screen.getByDisplayValue('60')
+    fireEvent.change(rpmInput, { target: { value: '120' } })
+
+    const modelsInput = screen.getByDisplayValue('claude-3-5-sonnet*, gpt-4o')
+    fireEvent.change(modelsInput, { target: { value: 'claude-3-5-sonnet*, gpt-4o, claude-3-7-sonnet' } })
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: /Save Policy Changes/i }))
+
+    await waitFor(() => {
+      expect(api.updateVirtualKey).toHaveBeenCalledWith(
+        'vk-1',
+        expect.objectContaining({
+          name: 'Cursor Team Lead',
+          max_rpm: 120,
+          allowed_models: ['claude-3-5-sonnet*', 'gpt-4o', 'claude-3-7-sonnet'],
+        })
+      )
     })
   })
 })

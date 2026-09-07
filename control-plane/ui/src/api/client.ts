@@ -492,6 +492,23 @@ export interface RotateVirtualKeyRequest {
   grace_period_seconds?: number
 }
 
+export interface UpdateVirtualKeyRequest {
+  name?: string
+  team_id?: string
+  expires_at?: string
+  allowed_ips?: string[]
+  max_rpm?: number
+  max_tpm?: number
+  max_concurrent_requests?: number
+  monthly_budget_microcents?: number
+  allowed_models?: string[]
+  allowed_routes?: string[]
+  tags?: Record<string, string>
+  owner_type?: string
+  budget_period?: string
+  status?: string
+}
+
 export const api = {
   // Virtual Keys (Pillar 1)
   listVirtualKeys: async () => {
@@ -547,6 +564,18 @@ export const api = {
       throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
     }
     return res.json() as Promise<{ status: string; id: string }>
+  },
+  updateVirtualKey: async (id: string, data: UpdateVirtualKeyRequest) => {
+    const res = await fetch(`/api/v1/virtual-keys/${id}`, {
+      method: 'PATCH',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+    }
+    return res.json() as Promise<VirtualKey>
   },
   // Spend V2 (Authoritative PostgreSQL Ledger)
   getEffectiveSpendV2: async () => {

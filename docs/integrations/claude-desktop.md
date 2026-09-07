@@ -1,24 +1,39 @@
 # Claude Desktop Integration Guide
 
-This guide details how Vexa Agent Control intercepts, sandboxes, and audits Model Context Protocol (MCP) server invocations inside Anthropic's Claude Desktop application.
+This guide details how Vexa Agent Control intercepts, sandboxes, and audits Model Context Protocol (MCP) server invocations and governs LLM traffic within Anthropic's Claude Desktop application across macOS, Linux, and Windows.
 
 ---
 
-## How It Works
+## Configuration File Locations
 
-Claude Desktop defines MCP servers in `claude_desktop_config.json`:
+Claude Desktop defines its configuration and MCP servers in `claude_desktop_config.json`:
+
+| Operating System | Configuration File Path |
+|---|---|
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` (e.g. `C:\Users\<username>\AppData\Roaming\Claude\claude_desktop_config.json`) |
+| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Linux** | `~/.config/Claude/claude_desktop_config.json` |
+
+---
+
+## 1. MCP Tool Sentry Wrapping
+
+When Claude Desktop invokes tools via the Model Context Protocol, Agent Control intercepts each call via `stdio-proxy`.
+
+### Original Configuration
 ```json
 {
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/alice/projects"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Projects"]
     }
   }
 }
 ```
 
-When you run `agentcontrol wrap claude` or `agentcontrol protect`, Vexa transforms the configuration into:
+### Wrapped Configuration
+Running `agentcontrol wrap claude` automatically transforms the configuration into:
 ```json
 {
   "mcpServers": {
@@ -30,18 +45,50 @@ When you run `agentcontrol wrap claude` or `agentcontrol protect`, Vexa transfor
         "npx",
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/Users/alice/projects"
+        "C:\\Projects"
       ]
     }
   }
 }
 ```
 
-All tool calls from Claude Desktop now pass through Vexa's local stdio proxy where they are evaluated against DLP patterns, rate limits, and prompt injection rules before execution.
+All tool calls pass through the local proxy where they are evaluated against Data Loss Prevention (DLP) patterns, prompt injection checks, rate limits, and approval policies.
 
 ---
 
-## Step-by-Step Setup
+## 2. Configuring Virtual Keys in MCP Server Environments
+
+If your Claude Desktop MCP servers (e.g., custom code execution engines, autonomous sub-agents, or database query runners) make outbound LLM calls, you can inject Agent Control **Virtual Keys** (`sk-vex-...`) and redirect calls to the local gateway using the `env` block in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "code-agent": {
+      "command": "agentcontrol",
+      "args": [
+        "stdio-proxy",
+        "--",
+        "node",
+        "C:\\tools\\agent-runner.js"
+      ],
+      "env": {
+        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
+        "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY_HERE",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080/v1",
+        "HTTP_PROXY": "http://127.0.0.1:8080",
+        "HTTPS_PROXY": "http://127.0.0.1:8080"
+      }
+    }
+  }
+}
+```
+
+> [!NOTE]
+> The Agent Control gateway accepts both Anthropic and OpenAI protocols on port `8080`. When passing an Agent Control Virtual Key (`sk-vex-...`), the gateway enforces your spend cap, rates, and allowed models, then securely injects the real provider key before dispatching upstream.
+
+---
+
+## 3. Step-by-Step Setup
 
 1. **Verify Claude Desktop Config Exists:**
    ```bash
@@ -49,32 +96,36 @@ All tool calls from Claude Desktop now pass through Vexa's local stdio proxy whe
    ```
    Confirm `Claude Desktop` shows `[verified]` and `EXISTS: ✔`.
 
-2. **Wrap Claude Desktop:**
+2. **Wrap Claude Desktop Configuration:**
    ```bash
    agentcontrol wrap claude
    ```
-   - Timestamped backup created: `claude_desktop_config.json.bak.<timestamp>`.
+   - An atomic, timestamped backup is automatically created: `claude_desktop_config.json.bak.<timestamp>`.
 
 3. **Start Local Security Gateway:**
    ```bash
    agentcontrol protect
+   # Or run with a custom policy:
+   agentcontrol start --listen 127.0.0.1:8080 --policy agentcontrol-policy.yaml
    ```
 
 4. **Restart Claude Desktop:**
-   Quit Claude Desktop completely (`Cmd+Q` on macOS, or close from taskbar on Windows) and relaunch it.
+   - **Windows:** Exit Claude Desktop completely from the system tray/taskbar and relaunch.
+   - **macOS:** Press `Cmd+Q` and relaunch from Applications.
+   - **Linux:** Terminate process and relaunch.
 
 5. **Verify Live Traffic:**
-   Invoke any tool in Claude Desktop. Inspect live events in the Local Dashboard at `http://127.0.0.1:8080`.
+   Invoke any tool in Claude Desktop. Inspect live events in the Web Console at `http://localhost:3000` or the Local Dashboard at `http://127.0.0.1:8080`.
 
 ---
 
-## Reversion
+## 4. Reversion
 
 To restore the original Claude Desktop configuration:
 ```bash
 agentcontrol unwrap claude
 ```
-Or restore all targets:
+Or restore all wrapped targets across the workstation:
 ```bash
 agentcontrol unprotect
 ```

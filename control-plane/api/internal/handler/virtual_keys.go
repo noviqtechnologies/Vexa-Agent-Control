@@ -43,6 +43,22 @@ type CreateVirtualKeyRequest struct {
 	BudgetPeriod            string            `json:"budget_period,omitempty"`
 }
 
+type UpdateVirtualKeyRequest struct {
+	Name                    *string           `json:"name,omitempty"`
+	TeamID                  *string           `json:"team_id,omitempty"`
+	OwnerType               *string           `json:"owner_type,omitempty"`
+	BudgetPeriod            *string           `json:"budget_period,omitempty"`
+	MonthlyBudgetMicrocents *int64            `json:"monthly_budget_microcents,omitempty"`
+	MaxRPM                  *int              `json:"max_rpm,omitempty"`
+	MaxTPM                  *int              `json:"max_tpm,omitempty"`
+	MaxConcurrentRequests   *int              `json:"max_concurrent_requests,omitempty"`
+	AllowedModels           *[]string         `json:"allowed_models,omitempty"`
+	AllowedRoutes           *[]string         `json:"allowed_routes,omitempty"`
+	AllowedIPs              *[]string         `json:"allowed_ips,omitempty"`
+	Status                  *string           `json:"status,omitempty"`
+	Tags                    map[string]string `json:"tags,omitempty"`
+}
+
 type CreateVirtualKeyResponse struct {
 	Key      store.VirtualKey `json:"virtual_key"`
 	RawSecret string          `json:"raw_secret"` // Returned ONLY upon creation
@@ -282,6 +298,82 @@ func (h *VirtualKeyHandler) Reset(w http.ResponseWriter, r *http.Request) {
 		"status": "reset",
 		"id":     id,
 	})
+}
+
+func (h *VirtualKeyHandler) Update(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	if tenantID == "" {
+		http.Error(w, `{"error":"unauthorized","message":"missing tenant context"}`, http.StatusUnauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, `{"error":"bad_request","message":"missing key id"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateVirtualKeyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"bad_request","message":"invalid json payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		http.Error(w, `{"error":"bad_request","message":"name cannot be empty"}`, http.StatusBadRequest)
+		return
+	}
+	if req.MonthlyBudgetMicrocents != nil && *req.MonthlyBudgetMicrocents < 0 {
+		http.Error(w, `{"error":"bad_request","message":"monthly budget cannot be negative"}`, http.StatusBadRequest)
+		return
+	}
+	if req.MaxRPM != nil && *req.MaxRPM < 0 {
+		http.Error(w, `{"error":"bad_request","message":"max rpm cannot be negative"}`, http.StatusBadRequest)
+		return
+	}
+	if req.MaxTPM != nil && *req.MaxTPM < 0 {
+		http.Error(w, `{"error":"bad_request","message":"max tpm cannot be negative"}`, http.StatusBadRequest)
+		return
+	}
+	if req.MaxConcurrentRequests != nil && *req.MaxConcurrentRequests < 0 {
+		http.Error(w, `{"error":"bad_request","message":"max concurrent requests cannot be negative"}`, http.StatusBadRequest)
+		return
+	}
+
+	updated, err := h.store.UpdateVirtualKey(r.Context(), tenantID, id, store.UpdateVirtualKeyParams{
+		Name:                    req.Name,
+		TeamID:                  req.TeamID,
+		OwnerType:               req.OwnerType,
+		BudgetPeriod:            req.BudgetPeriod,
+		MonthlyBudgetMicrocents: req.MonthlyBudgetMicrocents,
+		MaxRPM:                  req.MaxRPM,
+		MaxTPM:                  req.MaxTPM,
+		MaxConcurrentRequests:   req.MaxConcurrentRequests,
+		AllowedModels:           req.AllowedModels,
+		AllowedRoutes:           req.AllowedRoutes,
+		AllowedIPs:              req.AllowedIPs,
+		Status:                  req.Status,
+		Tags:                    req.Tags,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrVirtualKeyNotFound) {
+			http.Error(w, `{"error":"not_found","message":"virtual key not found"}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error":"internal","message":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// Broadcast eviction event so edge proxies evict stale cache entries and load updated governance policies
+	if h.broadcaster != nil {
+		h.broadcaster.Broadcast(InvalidationEvent{
+			Action:   "evict_key",
+			KeyHash:  updated.KeyHash,
+			TenantID: tenantID,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(updated)
 }
 
 // Resolve is the internal endpoint called by Rust edge proxy to resolve metadata by key hash.

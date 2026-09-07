@@ -51,6 +51,9 @@ type Config struct {
 	// SessionSecret is the cookie-signing secret for dashboard sessions.
 	SessionSecret string
 
+	// AdminPassword is the optional platform administrator initial password.
+	AdminPassword string
+
 	// SaaSOperatorEmail is the platform operator administrator email.
 	SaaSOperatorEmail string
 
@@ -115,6 +118,7 @@ func Load() (*Config, error) {
 	if sessionSecret == "" {
 		sessionSecret = os.Getenv("AGENTWALL_SESSION_SECRET")
 	}
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
 	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
 	legacySingleTenant := os.Getenv("LEGACY_SINGLE_TENANT_MODE") == "true"
@@ -162,6 +166,10 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("POLICY_READ_SECRET must not use a known placeholder in production")
 		}
 
+		if adminPassword != "" && isPlaceholder(adminPassword) {
+			return nil, fmt.Errorf("ADMIN_PASSWORD must not use a known default password in production")
+		}
+
 		if saasOpPassword != "" && isPlaceholder(saasOpPassword) {
 			return nil, fmt.Errorf("SAAS_OPERATOR_PASSWORD must not use a known default password in production")
 		}
@@ -188,6 +196,7 @@ func Load() (*Config, error) {
 		ProviderKeyEncryptionSecret: encryptionSecret,
 		IngressAuthSecret:           ingressAuthSecret,
 		SessionSecret:               sessionSecret,
+		AdminPassword:               adminPassword,
 		SaaSOperatorEmail:           saasOpEmail,
 		SaaSOperatorPassword:        saasOpPassword,
 		LicenseKey:                  licenseKey,

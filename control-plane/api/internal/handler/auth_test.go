@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 )
 
 func TestSetupInitialPassword_ShortPasswordValidation(t *testing.T) {
@@ -102,6 +104,89 @@ func TestAuthHandler_PasswordVerificationFlow(t *testing.T) {
 	}
 	if wrongOk {
 		t.Errorf("expected VerifyPassword to return false for wrong password")
+	}
+}
+
+func TestAuthHandler_ProductionBlocksDefaultCredentials(t *testing.T) {
+	prodCfg := &config.Config{
+		DevMode: false,
+	}
+	h := NewAuthHandler(nil, prodCfg)
+
+	testCases := []struct {
+		email    string
+		password string
+	}{
+		{"admin", "admin123!"},
+		{"admin", "admin"},
+		{"admin@agentcontrol.local", "admin123!"},
+		{"admin@agentcontrol.local", "admin"},
+	}
+
+	for _, tc := range testCases {
+		body, _ := json.Marshal(LoginReq{
+			Email:    tc.email,
+			Password: tc.password,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+
+		h.Login(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 Unauthorized for default credentials in production (%s:%s), got %d", tc.email, tc.password, w.Code)
+		}
+
+		if !strings.Contains(w.Body.String(), "insecure_default_credentials_blocked") {
+			t.Errorf("expected error message to contain 'insecure_default_credentials_blocked', got: %s", w.Body.String())
+		}
+	}
+}
+
+func TestAuthHandler_ConfiguredAdminPassword(t *testing.T) {
+	prodCfg := &config.Config{
+		DevMode:       false,
+		AdminPassword: "CustomSuperSecret2026!#",
+	}
+	h := NewAuthHandler(nil, prodCfg)
+
+	// 1. Correct custom password succeeds
+	body, _ := json.Marshal(LoginReq{
+		Email:    "admin@agentcontrol.local",
+		Password: "CustomSuperSecret2026!#",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.Login(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for configured AdminPassword, got %d", w.Code)
+	}
+
+	// 2. Default password still blocked even if AdminPassword is configured
+	bodyDef, _ := json.Marshal(LoginReq{
+		Email:    "admin",
+		Password: "admin123!",
+	})
+	reqDef := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyDef))
+	wDef := httptest.NewRecorder()
+
+	h.Login(wDef, reqDef)
+	if wDef.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for default password, got %d", wDef.Code)
+	}
+
+	// 3. Wrong password fails
+	bodyWrong, _ := json.Marshal(LoginReq{
+		Email:    "admin",
+		Password: "wrong_password",
+	})
+	reqWrong := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyWrong))
+	wWrong := httptest.NewRecorder()
+
+	h.Login(wWrong, reqWrong)
+	if wWrong.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for wrong password, got %d", wWrong.Code)
 	}
 }
 

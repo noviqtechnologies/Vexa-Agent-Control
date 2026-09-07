@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,6 +45,23 @@ type VirtualKey struct {
 	DeletedAt               *time.Time        `json:"deleted_at,omitempty" db:"deleted_at"`
 	DeletedBy               string            `json:"deleted_by,omitempty" db:"deleted_by"`
 	DeletedReason           string            `json:"deleted_reason,omitempty" db:"deleted_reason"`
+}
+
+// UpdateVirtualKeyParams contains optional fields for editing virtual key governance policy and metadata.
+type UpdateVirtualKeyParams struct {
+	Name                    *string           `json:"name,omitempty"`
+	TeamID                  *string           `json:"team_id,omitempty"`
+	OwnerType               *string           `json:"owner_type,omitempty"`
+	BudgetPeriod            *string           `json:"budget_period,omitempty"`
+	MonthlyBudgetMicrocents *int64            `json:"monthly_budget_microcents,omitempty"`
+	MaxRPM                  *int              `json:"max_rpm,omitempty"`
+	MaxTPM                  *int              `json:"max_tpm,omitempty"`
+	MaxConcurrentRequests   *int              `json:"max_concurrent_requests,omitempty"`
+	AllowedModels           *[]string         `json:"allowed_models,omitempty"`
+	AllowedRoutes           *[]string         `json:"allowed_routes,omitempty"`
+	AllowedIPs              *[]string         `json:"allowed_ips,omitempty"`
+	Status                  *string           `json:"status,omitempty"`
+	Tags                    map[string]string `json:"tags,omitempty"`
 }
 
 // EnsureVirtualKeysSchema idempotently creates the virtual_keys table in PostgreSQL.
@@ -360,6 +378,152 @@ func (s *Store) RotateVirtualKey(ctx context.Context, organizationID, id string,
 	})
 
 	return rotated, nil
+}
+
+// UpdateVirtualKey updates mutable governance policies and metadata for an existing virtual key.
+func (s *Store) UpdateVirtualKey(ctx context.Context, organizationID, id string, p UpdateVirtualKeyParams) (*VirtualKey, error) {
+	if s.pool == nil {
+		return nil, ErrVirtualKeyNotFound
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+
+	existing, err := s.GetVirtualKeyByID(ctx, organizationID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	name := existing.Name
+	if p.Name != nil && strings.TrimSpace(*p.Name) != "" {
+		name = strings.TrimSpace(*p.Name)
+	}
+
+	teamID := existing.TeamID
+	if p.TeamID != nil {
+		teamID = strings.TrimSpace(*p.TeamID)
+	}
+
+	ownerType := existing.OwnerType
+	if p.OwnerType != nil && *p.OwnerType != "" {
+		ownerType = *p.OwnerType
+	}
+
+	budgetPeriod := existing.BudgetPeriod
+	if p.BudgetPeriod != nil && *p.BudgetPeriod != "" {
+		budgetPeriod = *p.BudgetPeriod
+	}
+
+	budgetMicrocents := existing.MonthlyBudgetMicrocents
+	if p.MonthlyBudgetMicrocents != nil && *p.MonthlyBudgetMicrocents >= 0 {
+		budgetMicrocents = *p.MonthlyBudgetMicrocents
+	}
+
+	maxRPM := existing.MaxRPM
+	if p.MaxRPM != nil && *p.MaxRPM >= 0 {
+		maxRPM = *p.MaxRPM
+	}
+
+	maxTPM := existing.MaxTPM
+	if p.MaxTPM != nil && *p.MaxTPM >= 0 {
+		maxTPM = *p.MaxTPM
+	}
+
+	maxConcurrent := existing.MaxConcurrentRequests
+	if p.MaxConcurrentRequests != nil && *p.MaxConcurrentRequests >= 0 {
+		maxConcurrent = *p.MaxConcurrentRequests
+	}
+
+	allowedModels := existing.AllowedModels
+	if p.AllowedModels != nil {
+		allowedModels = *p.AllowedModels
+	}
+	if allowedModels == nil {
+		allowedModels = []string{}
+	}
+
+	allowedRoutes := existing.AllowedRoutes
+	if p.AllowedRoutes != nil {
+		allowedRoutes = *p.AllowedRoutes
+	}
+	if allowedRoutes == nil {
+		allowedRoutes = []string{}
+	}
+
+	allowedIPs := existing.AllowedIPs
+	if p.AllowedIPs != nil {
+		allowedIPs = *p.AllowedIPs
+	}
+	if allowedIPs == nil {
+		allowedIPs = []string{}
+	}
+
+	status := existing.Status
+	if p.Status != nil && *p.Status != "" {
+		status = *p.Status
+	}
+
+	tagsJSON, _ := json.Marshal(existing.Tags)
+	if p.Tags != nil {
+		tagsJSON, _ = json.Marshal(p.Tags)
+	}
+
+	query := `UPDATE virtual_keys
+	SET name = $1,
+	    team_id = $2,
+	    owner_type = $3,
+	    budget_period = $4,
+	    monthly_budget_microcents = $5,
+	    max_rpm = $6,
+	    max_tpm = $7,
+	    max_concurrent_requests = $8,
+	    allowed_models = $9,
+	    allowed_routes = $10,
+	    allowed_ips = $11,
+	    status = $12,
+	    tags = $13
+	WHERE id::text = $14
+	RETURNING ` + virtualKeySelectColumns
+
+	updated, err := scanVirtualKey(s.pool.QueryRow(ctx, query,
+		name, teamID, ownerType, budgetPeriod, budgetMicrocents,
+		maxRPM, maxTPM, maxConcurrent, allowedModels, allowedRoutes, allowedIPs,
+		status, tagsJSON, id,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrVirtualKeyNotFound
+		}
+		return nil, err
+	}
+
+	_ = s.InsertAuditEvent(ctx, organizationID, &AuditEvent{
+		OrganizationID: organizationID,
+		TenantID:       organizationID,
+		TableName:      "virtual_keys",
+		Action:         "updated",
+		ChangedBy:      "admin",
+		ActorRole:      "admin",
+		AffectedItemID: id,
+		UpdatedValue: map[string]interface{}{
+			"id":                        updated.ID,
+			"name":                      updated.Name,
+			"team_id":                   updated.TeamID,
+			"owner_type":                updated.OwnerType,
+			"budget_period":             updated.BudgetPeriod,
+			"monthly_budget_microcents": updated.MonthlyBudgetMicrocents,
+			"max_rpm":                   updated.MaxRPM,
+			"max_tpm":                   updated.MaxTPM,
+			"max_concurrent_requests":   updated.MaxConcurrentRequests,
+			"allowed_models":            updated.AllowedModels,
+			"allowed_routes":            updated.AllowedRoutes,
+			"allowed_ips":               updated.AllowedIPs,
+			"status":                    updated.Status,
+		},
+		Outcome: "SUCCESS",
+	})
+
+	return updated, nil
 }
 
 func (s *Store) DeleteVirtualKey(ctx context.Context, organizationID, id string) error {

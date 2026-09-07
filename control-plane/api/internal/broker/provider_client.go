@@ -53,13 +53,16 @@ func NewGenericProviderClient() *GenericProviderClient {
 	}
 }
 
-func resolveProviderEndpoint(provider string) (string, http.Header, error) {
+func resolveProviderEndpoint(provider string, payload json.RawMessage) (string, http.Header, error) {
 	lowerProv := strings.ToLower(provider)
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/json")
 
 	switch lowerProv {
 	case "openai":
+		if len(payload) > 0 && bytes.Contains(payload, []byte("\"input\"")) && !bytes.Contains(payload, []byte("\"messages\"")) {
+			return "https://api.openai.com/v1/responses", headers, nil
+		}
 		return "https://api.openai.com/v1/chat/completions", headers, nil
 	case "anthropic":
 		headers.Set("anthropic-version", "2023-06-01")
@@ -129,7 +132,7 @@ func (c *GenericProviderClient) ForwardLLMRequest(ctx context.Context, provider,
 		}, usageRep, nil
 	}
 
-	targetURL, reqHeaders, err := resolveProviderEndpoint(provider)
+	targetURL, reqHeaders, err := resolveProviderEndpoint(provider, payload)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -233,7 +236,7 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 		}, nil
 	}
 
-	targetURL, reqHeaders, err := resolveProviderEndpoint(provider)
+	targetURL, reqHeaders, err := resolveProviderEndpoint(provider, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +267,8 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 	var inputTokens, outputTokens, cachedTokens int64
 	var foundProviderUsage bool
 	var accumulatedChars int
+	// Track the current SSE event type line (for Responses API: "event: response.completed" etc.)
+	var currentEventType string
 
 	for {
 		line, readErr := reader.ReadBytes('\n')
@@ -273,11 +278,20 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 			}
 
 			lineStr := strings.TrimSpace(string(line))
+
+			// Track SSE event type header (Responses API emits "event: <type>" lines)
+			if strings.HasPrefix(lineStr, "event:") {
+				currentEventType = strings.TrimSpace(strings.TrimPrefix(lineStr, "event:"))
+			}
+
 			if strings.HasPrefix(lineStr, "data: ") {
 				dataStr := strings.TrimPrefix(lineStr, "data: ")
-				if dataStr != "[DONE]" {
+				if dataStr == "[DONE]" {
+					currentEventType = ""
+				} else {
 					var chunkJSON map[string]interface{}
 					if err := json.Unmarshal([]byte(dataStr), &chunkJSON); err == nil {
+						// --- Chat Completions API usage (in final chunk or usage field) ---
 						if u, ok := chunkJSON["usage"].(map[string]interface{}); ok {
 							foundProviderUsage = true
 							if pt, ok := u["prompt_tokens"].(float64); ok {
@@ -296,6 +310,29 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 								}
 							}
 						}
+
+						// --- Responses API: extract usage from response.completed event ---
+						// Event type is "response.completed"; payload has {"response":{"usage":{...}}}
+						if currentEventType == "response.completed" {
+							if respObj, ok := chunkJSON["response"].(map[string]interface{}); ok {
+								if u, ok := respObj["usage"].(map[string]interface{}); ok {
+									foundProviderUsage = true
+									if it, ok := u["input_tokens"].(float64); ok {
+										inputTokens = int64(it)
+									}
+									if ot, ok := u["output_tokens"].(float64); ok {
+										outputTokens = int64(ot)
+									}
+									if ptd, ok := u["input_tokens_details"].(map[string]interface{}); ok {
+										if ct, ok := ptd["cached_tokens"].(float64); ok {
+											cachedTokens = int64(ct)
+										}
+									}
+								}
+							}
+						}
+
+						// --- Chat Completions: accumulate output chars for estimation ---
 						if choices, ok := chunkJSON["choices"].([]interface{}); ok {
 							for _, c := range choices {
 								if cMap, ok := c.(map[string]interface{}); ok {
@@ -307,8 +344,15 @@ func (c *GenericProviderClient) ForwardLLMRequestStream(ctx context.Context, pro
 								}
 							}
 						}
+
+						// --- Responses API: accumulate delta text for estimation ---
+						// Events like response.output_text.delta have {"delta": "...", "type": "response.output_text.delta"}
+						if delta, ok := chunkJSON["delta"].(string); ok {
+							accumulatedChars += len(delta)
+						}
 					}
 				}
+				currentEventType = ""
 			}
 		}
 

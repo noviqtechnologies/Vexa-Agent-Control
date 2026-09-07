@@ -256,6 +256,8 @@ func main() {
 		r.Post("/", virtualKeyH.Create)
 		r.Get("/", virtualKeyH.List)
 		r.Get("/deleted", virtualKeyH.ListDeleted)
+		r.Patch("/{id}", virtualKeyH.Update)
+		r.Put("/{id}", virtualKeyH.Update)
 		r.Delete("/{id}", virtualKeyH.Delete)
 		r.Post("/{id}/rotate", virtualKeyH.Rotate)
 		r.Post("/{id}/reset-spend", virtualKeyH.Reset)

@@ -524,6 +524,36 @@ Agent Request (Loopback) ──► [ Local Edge Gateway ] ──► [ Central Br
 - **Staged Key Rotation:** Add new key versions (`ACTIVE`) while gracefully retiring older versions (`RETIRING`) with overlap windows.
 - **Sanitized Validation:** `POST /api/v1/providers/keys/{id}/validate` verifies upstream credential validity with zero error leakage.
 
+### Virtual Keys & Client Configuration (Cross-Platform)
+
+Agent Control provides **Virtual Keys** (`sk-vex-...`) managed through the Web Console (`/virtual-keys`). Rather than distributing sensitive, unrestricted provider API keys (OpenAI, Anthropic, Google) to developer workstations, operators generate scoped Virtual Keys with strict boundaries:
+
+- **Monthly Budget Cap ($ USD):** Hard or soft ceiling converted to integer microcents.
+- **Throughput Rate Limits:** Maximum Requests Per Minute (RPM) and Tokens Per Minute (TPM).
+- **Concurrency Ceilings:** Limit simultaneous in-flight completions.
+- **Model Allowlisting:** Restrict developer usage to approved models (e.g., `o3-mini`, `gpt-4o-mini`).
+- **Route & CIDR Restrictions:** Restrict API routes and source IP subnets.
+
+When developers use a Virtual Key, the Agent Control Gateway validates the key, enforces spend reservations, strips the virtual token, and injects the authoritative upstream key from key custody.
+
+#### Cross-Platform Client Configuration Matrix
+
+| AI Tool / IDE | Operating System | Configuration File Location | Configuration Snippet |
+|---|---|---|---|
+| **ChatGPT Codex** | **Windows** | `%USERPROFILE%\.codex\config.toml` | ```toml<br>[shell_environment_policy.set]<br>OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY"<br>OPENAI_MODEL = "o3-mini"<br>HTTP_PROXY = "http://127.0.0.1:8080"<br>HTTPS_PROXY = "http://127.0.0.1:8080"<br>``` |
+| | **macOS / Linux** | `~/.codex/config.toml` | Same `[shell_environment_policy.set]` block |
+| **Claude Desktop** | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | ```json<br>{<br>  "mcpServers": {<br>    "agent": {<br>      "command": "agentcontrol",<br>      "args": ["stdio-proxy", "--", "node", "runner.js"],<br>      "env": {<br>        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",<br>        "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY"<br>      }<br>    }<br>  }<br>}<br>``` |
+| | **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Same JSON schema |
+| | **Linux** | `~/.config/Claude/claude_desktop_config.json` | Same JSON schema |
+| **Cursor IDE** | **Windows** | `%APPDATA%\Cursor\User\settings.json` | ```json<br>{<br>  "cursor.openAI.baseUrl": "http://127.0.0.1:8080/v1",<br>  "cursor.openAI.apiKey": "sk-vex-YOUR_VIRTUAL_KEY",<br>  "cursor.openAI.model": "gpt-4o"<br>}<br>``` |
+| | **macOS** | `~/Library/Application Support/Cursor/User/settings.json` | Same JSON settings |
+| | **Linux** | `~/.config/Cursor/User/settings.json` | Same JSON settings |
+| **Terminal / CLI** (Aider, SDKs) | **Windows (PowerShell)** | `$PROFILE` or session env | ```powershell<br>$env:OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>$env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
+| | **macOS / Linux** | `~/.bashrc` or `~/.zshrc` | ```bash<br>export OPENAI_BASE_URL="http://127.0.0.1:8080/v1"<br>export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
+
+> [!CAUTION]
+> **Codex TOML `config_load` Warning:** In `~/.codex/config.toml`, do NOT add `openai_api_key` or `model` at the root level or under `[features]`. The ChatGPT Desktop application strictly validates its TOML schema on boot; adding unknown keys outside `[shell_environment_policy.set]` triggers the fatal `Windows setup didn't finish • config_load` error.
+
 ### 3-Tier Integration Architecture for IDEs & SDKs
 
 Agent Control provides a 3-tier architecture for governing LLM spend and security across all developer environments:

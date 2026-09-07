@@ -31,8 +31,8 @@ VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2
   | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
 if [[ -z "$VERSION" ]]; then
-  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.77"
-  VERSION="v1.0.77"
+  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.78"
+  VERSION="v1.0.78"
 fi
 
 echo "[*] Using version: $VERSION"

@@ -38,6 +38,7 @@ type mockStore struct {
 	countDistinctAgentsFunc  func(ctx context.Context, tenantID string) (int, error)
 	agentExistsFunc          func(ctx context.Context, tenantID, agentID string) (bool, error)
 	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
+	updateVirtualKeyFunc         func(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error)
 }
 
 func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error) {
@@ -212,6 +213,12 @@ func (m *mockStore) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*s
 	return nil, store.ErrVirtualKeyNotFound
 }
 func (m *mockStore) RotateVirtualKey(ctx context.Context, tenantID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*store.VirtualKey, error) {
+	return nil, store.ErrVirtualKeyNotFound
+}
+func (m *mockStore) UpdateVirtualKey(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error) {
+	if m.updateVirtualKeyFunc != nil {
+		return m.updateVirtualKeyFunc(ctx, tenantID, id, params)
+	}
 	return nil, store.ErrVirtualKeyNotFound
 }
 func (m *mockStore) DeleteVirtualKey(ctx context.Context, tenantID, id string) error {
@@ -912,5 +919,67 @@ func TestPasswordHashingAndVerification(t *testing.T) {
 	ok, err = VerifyPassword("wrongPassword", hash)
 	if ok {
 		t.Errorf("VerifyPassword succeeded for wrong password!")
+	}
+}
+
+func TestVirtualKeyHandler_Update(t *testing.T) {
+	updatedName := "Updated Key Name"
+	updatedRPM := 120
+	updatedModels := []string{"gpt-4o", "claude-3-7-sonnet"}
+
+	ms := &mockStore{
+		updateVirtualKeyFunc: func(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error) {
+			if id != "vk-test-1" {
+				return nil, store.ErrVirtualKeyNotFound
+			}
+			return &store.VirtualKey{
+				ID:            id,
+				Name:          *params.Name,
+				MaxRPM:        *params.MaxRPM,
+				AllowedModels: *params.AllowedModels,
+				KeyHash:       "hash123",
+				Status:        "active",
+			}, nil
+		},
+	}
+
+	h := NewVirtualKeyHandler(ms, nil)
+
+	body := `{"name":"Updated Key Name","max_rpm":120,"allowed_models":["gpt-4o","claude-3-7-sonnet"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/virtual-keys/vk-test-1", strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "vk-test-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	h.Update(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var res store.VirtualKey
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if res.Name != updatedName {
+		t.Errorf("expected name %q, got %q", updatedName, res.Name)
+	}
+	if res.MaxRPM != updatedRPM {
+		t.Errorf("expected max_rpm %d, got %d", updatedRPM, res.MaxRPM)
+	}
+	if len(res.AllowedModels) != 2 || res.AllowedModels[1] != "claude-3-7-sonnet" {
+		t.Errorf("expected allowed_models %v, got %v", updatedModels, res.AllowedModels)
+	}
+
+	// Test validation error: negative max_rpm
+	badBody := `{"max_rpm": -5}`
+	badReq := httptest.NewRequest(http.MethodPatch, "/api/v1/virtual-keys/vk-test-1", strings.NewReader(badBody))
+	badReq = badReq.WithContext(context.WithValue(badReq.Context(), chi.RouteCtxKey, rctx))
+	badRR := httptest.NewRecorder()
+	h.Update(badRR, badReq)
+	if badRR.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for negative max_rpm, got %d", badRR.Code)
 	}
 }

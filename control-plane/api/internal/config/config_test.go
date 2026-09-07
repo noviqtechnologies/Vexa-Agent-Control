@@ -183,3 +183,15 @@ func TestLoad_InvalidPort(t *testing.T) {
 		t.Fatal("expected error for invalid port")
 	}
 }
+
+func TestLoad_RejectsPlaceholderAdminPasswordInProduction(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["ADMIN_PASSWORD"] = "admin123!"
+	setEnv(t, env)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when ADMIN_PASSWORD uses placeholder 'admin123!' in production")
+	}
+}

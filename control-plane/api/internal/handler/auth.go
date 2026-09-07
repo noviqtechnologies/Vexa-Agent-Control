@@ -63,8 +63,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.TrimSpace(req.Email)
 	req.Password = strings.TrimSpace(req.Password)
 
-	// 1. DevMode login bypass
-	if h.cfg != nil && h.cfg.DevMode && (req.Email == "admin" || req.Email == "admin@agentcontrol.local") {
+	isDevMode := h.cfg != nil && h.cfg.DevMode
+	isAdminUser := req.Email == "admin" || req.Email == "admin@agentcontrol.local"
+	isDefaultPassword := req.Password == "admin123!" || req.Password == "admin"
+
+	// 1. In production / cloud deployments (DevMode == false), block default credentials (admin / admin123!)
+	if !isDevMode && isAdminUser && isDefaultPassword {
+		http.Error(w, `{"error":"insecure_default_credentials_blocked","message":"Default credentials (admin / admin123!) are blocked in production cloud deployments. Please configure a secure password via ADMIN_PASSWORD or authenticate via your Identity Provider."}`, http.StatusUnauthorized)
+		return
+	}
+
+	// 2. DevMode login bypass
+	if isDevMode && isAdminUser {
 		h.setSessionCookie(w, r, middleware.DefaultOrganizationID, req.Email, true)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -79,8 +89,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Default Admin fallback for fresh installations (admin@agentcontrol.local / admin123! or admin / admin)
-	if (req.Email == "admin@agentcontrol.local" || req.Email == "admin") && (req.Password == "admin123!" || req.Password == "admin") {
+	// 3. Optional configured Admin Password (ADMIN_PASSWORD)
+	if h.cfg != nil && h.cfg.AdminPassword != "" && isAdminUser && req.Password == h.cfg.AdminPassword {
 		h.setSessionCookie(w, r, middleware.DefaultOrganizationID, "admin@agentcontrol.local", true)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

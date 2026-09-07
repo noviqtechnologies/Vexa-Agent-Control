@@ -600,10 +600,13 @@ INSERT INTO price_book_items (price_book_version_id, provider, model_selector, i
 VALUES
     ('pb_default_2026_01', 'openai', 'gpt-4o', 250000000, 1000000000, 125000000),
     ('pb_default_2026_01', 'openai', 'gpt-4o-mini', 15000000, 60000000, 7500000),
+    ('pb_default_2026_01', 'openai', '*', 250000000, 1000000000, 125000000),
     ('pb_default_2026_01', 'anthropic', 'claude-3-5-sonnet', 300000000, 1500000000, 150000000),
     ('pb_default_2026_01', 'anthropic', 'claude-3-haiku', 25000000, 125000000, 12500000),
+    ('pb_default_2026_01', 'anthropic', '*', 300000000, 1500000000, 150000000),
     ('pb_default_2026_01', 'google', 'gemini-1.5-pro', 350000000, 1050000000, 87500000),
-    ('pb_default_2026_01', 'google', 'gemini-1.5-flash', 35000000, 105000000, 8750000)
+    ('pb_default_2026_01', 'google', 'gemini-1.5-flash', 35000000, 105000000, 8750000),
+    ('pb_default_2026_01', 'google', '*', 350000000, 1050000000, 87500000)
 ON CONFLICT (price_book_version_id, provider, model_selector) DO NOTHING;
 
 INSERT INTO spend_policies (
