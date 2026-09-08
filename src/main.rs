@@ -492,7 +492,24 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 0
             }
         },
-        Commands::Verify { gateway, json } => agentcontrol::verify::run_verification_probe(&gateway, json).await,
+        Commands::Verify {
+            gateway,
+            json,
+            hub,
+            user_id,
+            assignment_id,
+            token,
+        } => {
+            agentcontrol::verify::run_verification_probe(
+                &gateway,
+                json,
+                hub.as_deref(),
+                user_id.as_deref(),
+                assignment_id.as_deref(),
+                token.as_deref(),
+            )
+            .await
+        }
         Commands::Cache { command } => match command {
             cli::CacheCommands::Status { gateway, json } => {
                 let url = format!("{}/api/v1/cache/stats", gateway.trim_end_matches('/'));
@@ -1571,6 +1588,22 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     tokio::spawn(async move {
         agentcontrol::control_plane_client::heartbeat::start_heartbeat_loop(60).await;
     });
+
+    // Background provider keys and routing reconciler (REQ-DSM-004 / REQ-DSM-005)
+    // 60-second pull convergence loop ensuring eventually consistent desired-state
+    {
+        let poll_hub_url = agentcontrol::identity::device::load_hub_url();
+        if let Some(hub_url) = poll_hub_url {
+            let poll_state = state.clone();
+            let (_wake_tx, wake_rx) = tokio::sync::mpsc::channel(16);
+            tokio::spawn(async move {
+                agentcontrol::policy::remote_keys::start_provider_keys_poll(
+                    poll_state, hub_url, 60, wake_rx,
+                )
+                .await;
+            });
+        }
+    }
 
     if shadow_mode {
         println!(

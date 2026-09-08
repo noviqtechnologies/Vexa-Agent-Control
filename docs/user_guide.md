@@ -20,6 +20,10 @@
 11. [Tamper-Evident Audit Logging & Compliance Reporting](#11-tamper-evident-audit-logging--compliance-reporting)
 12. [Master CLI Command Reference](#12-master-cli-command-reference)
 13. [Specialist Documentation Links](#13-specialist-documentation-links)
+14. [Run Explorer & Forensic Dossiers](#14-run-explorer--forensic-dossiers)
+15. [Effective Policy Explorer](#15-effective-policy-explorer-5-level-hierarchical-resolution)
+16. [Spend Analytics & Ledger Observatory](#16-spend-analytics--ledger-observatory)
+17. [Desired-State Routing & Verification Architecture](#17-desired-state-routing--verification-architecture)
 
 ---
 
@@ -540,8 +544,8 @@ When developers use a Virtual Key, the Agent Control Gateway validates the key, 
 
 | AI Tool / IDE | Operating System | Configuration File Location | Configuration Snippet |
 |---|---|---|---|
-| **ChatGPT Codex** | **Windows** | `%USERPROFILE%\.codex\config.toml` | ```toml<br>[shell_environment_policy.set]<br>OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY"<br>OPENAI_MODEL = "o3-mini"<br>HTTP_PROXY = "http://127.0.0.1:8080"<br>HTTPS_PROXY = "http://127.0.0.1:8080"<br>``` |
-| | **macOS / Linux** | `~/.codex/config.toml` | Same `[shell_environment_policy.set]` block |
+| **ChatGPT Codex** | **Windows** | `%USERPROFILE%\.codex\config.toml` | ```toml<br>openai_base_url = "http://127.0.0.1:8080/v1"<br>model = "gpt-4o"<br><br>[shell_environment_policy.set]<br>OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY"<br>OPENAI_MODEL = "gpt-4o"<br>HTTP_PROXY = "http://127.0.0.1:8080"<br>HTTPS_PROXY = "http://127.0.0.1:8080"<br>``` |
+| | **macOS / Linux** | `~/.codex/config.toml` | Same top-level routing and `[shell_environment_policy.set]` block |
 | **Claude Desktop** | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | ```json<br>{<br>  "mcpServers": {<br>    "agent": {<br>      "command": "agentcontrol",<br>      "args": ["stdio-proxy", "--", "node", "runner.js"],<br>      "env": {<br>        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",<br>        "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY"<br>      }<br>    }<br>  }<br>}<br>``` |
 | | **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Same JSON schema |
 | | **Linux** | `~/.config/Claude/claude_desktop_config.json` | Same JSON schema |
@@ -551,8 +555,8 @@ When developers use a Virtual Key, the Agent Control Gateway validates the key, 
 | **Terminal / CLI** (Aider, SDKs) | **Windows (PowerShell)** | `$PROFILE` or session env | ```powershell<br>$env:OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>$env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
 | | **macOS / Linux** | `~/.bashrc` or `~/.zshrc` | ```bash<br>export OPENAI_BASE_URL="http://127.0.0.1:8080/v1"<br>export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
 
-> [!CAUTION]
-> **Codex TOML `config_load` Warning:** In `~/.codex/config.toml`, do NOT add `openai_api_key` or `model` at the root level or under `[features]`. The ChatGPT Desktop application strictly validates its TOML schema on boot; adding unknown keys outside `[shell_environment_policy.set]` triggers the fatal `Windows setup didn't finish • config_load` error.
+> [!IMPORTANT]
+> **Codex Desktop & CLI Routing:** In `~/.codex/config.toml`, always set `openai_base_url = "http://127.0.0.1:8080/v1"` and `model = "gpt-4o"` at the **top level** of the file so the Codex chat engine routes completions to AgentControl. `[shell_environment_policy.set]` configures child tools and subprocesses. Do not place custom keys under sections like `[features]`.
 
 ### 3-Tier Integration Architecture for IDEs & SDKs
 
@@ -722,6 +726,7 @@ agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format j
 | `agentcontrol test` | `--policy <PATH>`, `--gateway <URL>`, `--oidc-token <JWT>`, `<FIXTURE>` | Validates policy test fixtures in CI/CD pipeline against gateway |
 | `agentcontrol license keygen` | `--output <DIR>` | Generates Ed25519 keypair for enterprise license generation |
 | `agentcontrol license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
+| `agentcontrol verify` | `--gateway <URL>`, `--json`, `--hub <URL>`, `--user-id <ID>`, `--assignment-id <ASGN_ID>` | Executes 5-point verification probe asserting effective routing and Control Hub identity correlation |
 
 ---
 
@@ -793,4 +798,83 @@ The **Spend Observatory** (`/spend/visualization`) replaces client-side approxim
 - **Hourly Spend Velocity:** Real-time visual trend lines for settled spend and active reservations.
 - **Dimensional Breakdown:** Instant grouping by `provider`, `device`, `model`, or `project`.
 - **Data Freshness & Provenance:** Explicit timestamps and confidence tiers on all telemetry widgets.
+
+---
+
+## 17. Desired-State Routing & Verification Architecture
+
+Vexa Agent Control implements a deterministic **Desired-State Assignment Model** and **Identity Attribution Pipeline** to guarantee that routing configurations and provider keys delivered from the Control Hub are reliably applied, cryptographically acknowledged, and verified against authenticated identities.
+
+### Desired-State Assignment Lifecycle
+
+Assignments replace fire-and-forget push channels with a formal 9-state state machine:
+
+```
+  [desired] ──► [eligible] ──► [delivered] ──► [applied] ──► [verified]
+      │             │               │              │
+      │             ▼               ▼              ▼
+      ├────────► [stale] ◄──────── [failed] ◄──────┘
+      │
+      ▼
+  [revoked] ──► [rolled_back]
+```
+
+| State | Description |
+|---|---|
+| `desired` | Initial target state configured in Control Hub policy editor or API. |
+| `eligible` | Device identity and posture verified; ready for transmission. |
+| `delivered`| Sent to endpoint over SSE push or retrieved via periodic pull poll. |
+| `applied`  | Endpoint in-memory proxy state and IDE configuration updated (`apply_centralized_cursor_config`). |
+| `verified` | Active end-to-end routing asserted via `agentcontrol verify` probe and authenticated Control Hub correlation. |
+| `failed`   | Endpoint was unable to apply or verify assignment within threshold. |
+| `stale`    | Superseded by a newer assignment or unacknowledged past timeout (`AssignmentStaleSweepJob`). |
+| `revoked`  | Explicitly invalidated by security administrator or key rotation. |
+| `rolled_back` | Automatically reverted to the previous known good assignment. |
+
+### Hybrid Push / Pull Convergence Model
+
+1. **Instant SSE Push (Fast Path):** The endpoint subscribes to `GET /api/v2/device/policy/subscribe`. When an assignment update is published, the proxy hot-swaps provider keys and model routing rules in memory, updates local IDE configs, and immediately fires an acknowledgment (`POST /api/v2/device/assignments/:id/ack`).
+2. **60-Second Pull Reconciler (Safety Net):** A background task (`start_provider_keys_poll`) polls `GET /api/v2/device/provider-keys/active` every 60 seconds. This catches up after laptop sleep/wake cycles, network interruptions, or missed SSE packets.
+
+### Two-Tier Identity Model (REQ-VER-002)
+
+Every LLM request and verification probe is stamped with an identity tier:
+
+- **Verified Identity (`oidc`):** Bound to an authenticated IdP identity (Okta, Azure AD, Google Workspace) via mTLS client certificates or OIDC Bearer tokens. Stored with `identity_verified = true`.
+- **Unverified Identity (`local_os`):** Falling back to local OS username / environment variables when offline or un-enrolled. Stored with `identity_verified = false`.
+
+### Verification Probe (REQ-VER-004)
+
+Operators and automated CI/CD pipelines can run the 5-point verification probe to assert that local IDE routing, DLP filters, injection defenses, and Control Hub correlation are active:
+
+```bash
+# Basic local gateway verification
+agentcontrol verify --gateway http://127.0.0.1:8080
+
+# Full end-to-end verification with Control Hub correlation (REQ-VER-004)
+agentcontrol verify \
+  --gateway http://127.0.0.1:8080 \
+  --hub https://console.vexasec.io \
+  --user-id dev-user-42 \
+  --assignment-id asgn-01918a2b-c3d4-7e8f-9a0b-1c2d3e4f5a6b
+
+# Output structured JSON report
+agentcontrol verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --json
+```
+
+The probe verifies:
+1. Gateway health and uptime (`/healthz`).
+2. Safe tool execution without false positives (`echo` command pass-through).
+3. DLP secret redaction (AWS API key simulation blocked/redacted).
+4. Prompt injection detection (delimiter extraction attack blocked).
+5. **Control Hub Identity Correlation (`/api/v2/device/verify-probe`):** Validates device identity, user ID, and active assignment hash against Control Hub records.
+
+### Correlated Request Attribution (REQ-VER-008 Guarantee)
+
+At the Control Hub broker layer (`POST /api/v3/gateway-broker/chat/completions`), every incoming LLM request is recorded in PostgreSQL `request_attributions` with:
+- `device_id` and `user_id`
+- `identity_source` (`oidc` vs `local_os`) and `identity_verified`
+- Active `assignment_id`
+- `model`, `provider`, prompt/completion token counts, and microcent cost.
+
 

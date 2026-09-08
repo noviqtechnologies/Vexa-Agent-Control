@@ -286,9 +286,17 @@ fn ensure_toml_codex_setting(path: &Path, proxy_url: &str) -> Result<bool, Strin
     let base_url = format!("{}/v1", proxy_url.trim_end_matches('/'));
     let mut updated = false;
 
-    let sep = toml_val
+    let root_tbl = toml_val
         .as_table_mut()
-        .ok_or_else(|| "Root TOML is not a table".to_string())?
+        .ok_or_else(|| "Root TOML is not a table".to_string())?;
+
+    let cur_root_base = root_tbl.get("openai_base_url").and_then(|v| v.as_str());
+    if cur_root_base != Some(&base_url) {
+        root_tbl.insert("openai_base_url".to_string(), toml::Value::String(base_url.clone()));
+        updated = true;
+    }
+
+    let sep = root_tbl
         .entry("shell_environment_policy".to_string())
         .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
 

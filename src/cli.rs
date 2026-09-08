@@ -401,6 +401,22 @@ pub enum Commands {
         /// Output results as JSON
         #[arg(long, default_value_t = false)]
         json: bool,
+
+        /// Optional Control Hub URL for authenticated effective-routing verification (REQ-VER-004)
+        #[arg(long)]
+        hub: Option<String>,
+
+        /// Optional User ID to correlate verification against (defaults to OIDC claim or local OS user)
+        #[arg(long)]
+        user_id: Option<String>,
+
+        /// Optional Assignment ID to verify
+        #[arg(long)]
+        assignment_id: Option<String>,
+
+        /// Optional Gateway Auth Token / Secret (defaults to GATEWAY_SECRET or AGENTCONTROL_ADMIN_TOKEN env vars)
+        #[arg(long)]
+        token: Option<String>,
     },
 
     /// Manage local Root Certificate Authority (CA) for LLM interception and spend tracking

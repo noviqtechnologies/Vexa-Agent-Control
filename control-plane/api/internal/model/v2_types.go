@@ -52,6 +52,9 @@ type StandardErrorEnvelope struct {
 type DevicePrincipal struct {
 	OrganizationID         string           `json:"organization_id"`
 	DeviceID               string           `json:"device_id"`
+	UserID                 string           `json:"user_id,omitempty"`
+	IdentitySource         string           `json:"identity_source,omitempty"` // "local_os" vs "oidc"
+	IdentityVerified       bool             `json:"identity_verified"`
 	CertificateID          string           `json:"certificate_id"`
 	CertificateSerial      string           `json:"certificate_serial"`
 	CertificateFingerprint string           `json:"certificate_fingerprint"`

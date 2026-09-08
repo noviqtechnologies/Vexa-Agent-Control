@@ -20,37 +20,39 @@ Codex stores user and agent runtime configurations in a TOML configuration file:
 
 Agent Control allows you to route all Codex completions through the local edge gateway (`http://127.0.0.1:8080/v1`) to enforce authoritative token spend caps, rate limits (RPM/TPM), model governance, and DLP without exposing raw upstream OpenAI secrets.
 
-### Recommended: Configuring via `[shell_environment_policy.set]`
+### Recommended Configuration (`config.toml`)
 
-In your `config.toml`, configure the shell environment policy to inject the Agent Control proxy URL, your **Virtual Key** (`sk-vex-...`), and preferred model into child processes and tool executions:
+In `%USERPROFILE%\.codex\config.toml` (Windows) or `~/.codex/config.toml` (macOS/Linux), configure the top-level `openai_base_url` and the child tool environment:
 
 ```toml
+# ── Top-Level Core Routing (Directs Codex Desktop & CLI Chat Engine) ────────
+openai_base_url = "http://127.0.0.1:8080/v1"
+model = "gpt-4o"
+
+# ── Subprocess / MCP Shell Policy (Directs Child Tools & Agents) ────────────
 [shell_environment_policy]
 inherit = "core"
 
 [shell_environment_policy.set]
-# Route LLM completion traffic through AgentControl Local Gateway
+# Route tool LLM completions through AgentControl Gateway
 OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
 
-# Virtual Key issued from the AgentControl Web Console (/virtual-keys)
+# Virtual Key issued from AgentControl Web Console (/virtual-keys) or Hub profile
 OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
 
-# Preferred reasoning / coding model
-OPENAI_MODEL = "o3-mini"
+# Preferred model for spawned subprocess tools
+OPENAI_MODEL = "gpt-4o"
 
-# Route child network connections through AgentControl Proxy
+# Proxy child network requests through AgentControl Gateway
 HTTP_PROXY = "http://127.0.0.1:8080"
 HTTPS_PROXY = "http://127.0.0.1:8080"
 ```
 
-> [!CAUTION]
-> **Avoid the `config_load` Schema Violation Error**:
-> Do **NOT** place `model`, `openai_api_key`, or `base_url` directly at the top level or beneath sections like `[features]` in `config.toml`. 
->
-> The official ChatGPT Desktop application strictly validates its TOML schema on startup. Adding unrecognized string fields under `[features]` will cause the application to crash on boot with:
-> `Windows setup didn't finish • config_load`
->
-> Always place environment variables under `[shell_environment_policy.set]` where string values are officially supported.
+> [!IMPORTANT]
+> **Top-Level `openai_base_url` vs `[shell_environment_policy.set]`**:
+> - **Top-Level `openai_base_url`**: Directs the **Codex Desktop App** and **Codex CLI** chat engines to route their completions (e.g. `/v1/responses` and `/v1/chat/completions`) through the AgentControl gateway. If omitted, Codex defaults to `https://api.openai.com` directly, causing virtual keys (`sk-vex-...`) to be rejected upstream with `401 Unauthorized`.
+> - **`[shell_environment_policy.set]`**: Injects environment variables into **child tools and subprocesses** spawned by Codex (such as Python scripts, Node REPL, and CLI commands).
+> - **Caution on Keys**: Only use recognized top-level configuration keys (`openai_base_url`, `model`). Do not place arbitrary custom keys directly under sections like `[features]`.
 
 ### Alternative: Configuring via Operating System Environment Variables
 

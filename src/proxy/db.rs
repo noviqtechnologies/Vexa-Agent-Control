@@ -153,6 +153,9 @@ impl DbManager {
             [],
         );
 
+        // Prune dead prototype / test tables if present
+        let _ = conn.execute("DROP TABLE IF EXISTS spend_latency_test", []);
+
         // Bounded channel for commands to prevent memory exhaustion under high load
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<DbCmd>(10000);
         let dropped_events = Arc::new(std::sync::atomic::AtomicU64::new(0));

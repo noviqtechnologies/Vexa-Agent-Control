@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.78-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.79-10B981.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![OWASP](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
@@ -37,6 +37,7 @@
   - [5. Multi-Cloud OpenTofu Deployments](#5-multi-cloud-opentofu-deployments)
   - [6. Pluggable Routing Engine & Pipeline Hooks](#6-pluggable-routing-engine--pipeline-hooks)
   - [7. Enterprise Semantic Vector Caching](#7-enterprise-semantic-vector-caching)
+  - [8. Desired-State Routing & Verification Probe](#8-desired-state-routing--verification-probe)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -425,6 +426,25 @@ Open `http://localhost:8080/dashboard` and navigate to **Token Economics & Cache
 
 </details>
 
+<details>
+<summary><b>8. Desired-State Routing & Verification Probe</b> — Convergence Reconciler & Attributed Governance</summary>
+
+Replace fragile fire-and-forget push channels with a formal 9-state desired-state reconciler and authenticated identity verification:
+
+- **State Machine Lifecycle:** Assignments transition deterministically: `desired` → `eligible` → `delivered` → `applied` → `verified` (with explicit `stale`, `failed`, `revoked`, and `rolled_back` safety states).
+- **Hybrid Push / Pull Model:** Real-time SSE push for instant in-memory key hot-swapping backed by a 60-second pull reconciler ensuring eventual consistency across sleep/wake and offline cycles.
+- **Two-Tier Identity (REQ-VER-002):** Cryptographically distinguishes IdP-verified users (`oidc`) from unverified local machine identities (`local_os`).
+- **5-Point Verification Probe (REQ-VER-004):**
+  ```bash
+  # Assert effective routing, injection safety, DLP redaction, and Hub identity correlation
+  agentcontrol verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --user-id $(whoami)
+  ```
+- **Correlated Request Attribution (REQ-VER-008):** Centralized broker permanently stamps every routed LLM request with authenticated device ID, user ID, active assignment hash, and token usage metrics.
+
+[**Read the Desired-State & Verification Guide →**](docs/user_guide.md#17-desired-state-routing--verification-architecture)
+
+</details>
+
 ---
 
 ## Choose Your Deployment Path
@@ -556,7 +576,7 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.78`.
+- **Expected Result:** Prints `agentcontrol 1.0.79`.
 - **Troubleshooting:** Check platform-specific guides: [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md).
 
 ### Step 2: Inspect Discovered Clients (Safe Dry-Run)
@@ -724,7 +744,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.78_checksums.txt
+sha256sum -c agentcontrol_1.0.79_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe

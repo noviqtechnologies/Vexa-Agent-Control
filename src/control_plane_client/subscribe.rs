@@ -191,6 +191,15 @@ pub async fn start_policy_subscriber(
                                         let _ = crate::wrap::generic_ide::apply_centralized_cursor_config(true);
                                     }
 
+                                    // Acknowledge assignment delivery/applied state (REQ-DSM-006)
+                                    if let Some(asgn_id) = payload.get("assignment_id").and_then(|v| v.as_str()) {
+                                        let hub_clone = clean_base.to_string();
+                                        let asgn_clone = asgn_id.to_string();
+                                        tokio::spawn(async move {
+                                            let _ = crate::policy::remote_keys::send_assignment_ack(&hub_clone, &asgn_clone, "applied", "").await;
+                                        });
+                                    }
+
                                     logging::log_event(
                                         Level::Info,
                                         "provider_keys_synced",

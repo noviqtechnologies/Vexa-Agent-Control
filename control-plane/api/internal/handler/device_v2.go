@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
@@ -153,3 +155,197 @@ func (h *DeviceV2Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request
 		"timestamp":          time.Now().UTC(),
 	})
 }
+
+// ActiveProviderKeysResponse represents the desired routing and keys payload for an endpoint (REQ-DSM-004).
+type ActiveProviderKeysResponse struct {
+	AssignmentID     string            `json:"assignment_id,omitempty"`
+	PayloadHash      string            `json:"payload_hash"`
+	CursorMode       string            `json:"cursor_mode"`
+	VirtualKey       string            `json:"virtual_key,omitempty"`
+	DefaultModel     string            `json:"default_model"`
+	AllowedModels    []string          `json:"allowed_models"`
+	ModelEnforcement bool              `json:"model_enforcement"`
+	ProviderKeys     map[string]string `json:"provider_keys"`
+}
+
+// GET /api/v2/device/provider-keys/active
+func (h *DeviceV2Handler) GetActiveProviderKeys(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.GetDevicePrincipal(r.Context())
+	if !ok {
+		http.Error(w, `{"error":{"code":"device_auth_required"}}`, http.StatusUnauthorized)
+		return
+	}
+
+	orgID := principal.OrganizationID
+	if orgID == "" {
+		orgID = store.DefaultOrgID
+	}
+
+	resp := ActiveProviderKeysResponse{
+		CursorMode:       "byok",
+		DefaultModel:     "gpt-4o",
+		AllowedModels:    []string{"gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro"},
+		ModelEnforcement: true,
+		ProviderKeys:     make(map[string]string),
+	}
+
+	// 1. Check for active desired-state assignment
+	asgn, err := h.Store.GetActiveAssignmentForTarget(r.Context(), orgID, "device", principal.DeviceID, model.AssignmentKindProviderKeys)
+	if err != nil || asgn == nil {
+		asgn, _ = h.Store.GetActiveAssignmentForTarget(r.Context(), orgID, "group", "default", model.AssignmentKindProviderKeys)
+	}
+	if asgn != nil {
+		resp.AssignmentID = asgn.ID
+	}
+
+	// 2. Resolve configured provider keys
+	keys, err := h.Store.ListProviderKeys(r.Context(), orgID)
+	if err == nil {
+		for _, k := range keys {
+			if k.Status == "ACTIVE" && k.APIKeyMasked != "" {
+				resp.ProviderKeys[k.Provider] = k.APIKeyMasked
+			}
+		}
+	}
+
+	// 3. Compute deterministic payload hash (SHA-256)
+	rawBytes, _ := json.Marshal(struct {
+		CursorMode    string            `json:"cursor_mode"`
+		DefaultModel  string            `json:"default_model"`
+		AllowedModels []string          `json:"allowed_models"`
+		ProviderKeys  map[string]string `json:"provider_keys"`
+	}{
+		CursorMode:    resp.CursorMode,
+		DefaultModel:  resp.DefaultModel,
+		AllowedModels: resp.AllowedModels,
+		ProviderKeys:  resp.ProviderKeys,
+	})
+	hash := sha256.Sum256(rawBytes)
+	resp.PayloadHash = hex.EncodeToString(hash[:])
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// POST /api/v2/device/assignments/{id}/ack
+func (h *DeviceV2Handler) AcknowledgeAssignment(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.GetDevicePrincipal(r.Context())
+	if !ok {
+		http.Error(w, `{"error":{"code":"device_auth_required"}}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req model.AssignmentAckRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":{"code":"invalid_schema"}}`, http.StatusBadRequest)
+		return
+	}
+
+	assignmentID := chi.URLParam(r, "id")
+	if assignmentID != "" {
+		req.AssignmentID = assignmentID
+	}
+	if req.AssignmentID == "" {
+		http.Error(w, `{"error":{"code":"missing_assignment_id"}}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := principal.OrganizationID
+	if orgID == "" {
+		orgID = store.DefaultOrgID
+	}
+
+	updated, err := h.Store.AcknowledgeAssignment(r.Context(), orgID, &req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"ack_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+// POST /api/v2/device/verify-probe
+func (h *DeviceV2Handler) SubmitVerificationProbe(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.GetDevicePrincipal(r.Context())
+	if !ok {
+		http.Error(w, `{"error":{"code":"device_auth_required"}}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req model.VerifyProbeSubmission
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":{"code":"invalid_schema"}}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := principal.OrganizationID
+	if orgID == "" {
+		orgID = store.DefaultOrgID
+	}
+
+	if req.DeviceID == "" {
+		req.DeviceID = principal.DeviceID
+	}
+	if req.UserID == "" {
+		req.UserID = principal.UserID
+	}
+
+	targetState := model.AssignmentStateVerified
+	reason := fmt.Sprintf("Hub-correlated effective-routing probe passed (type: %s)", req.ProbeType)
+	if !req.Success {
+		targetState = model.AssignmentStateFailed
+		reason = fmt.Sprintf("Hub-correlated effective-routing probe failed (type: %s)", req.ProbeType)
+	}
+
+	var updatedAsgn *model.Assignment
+	var err error
+	if req.AssignmentID != "" {
+		updatedAsgn, err = h.Store.UpdateAssignmentState(r.Context(), orgID, req.AssignmentID, targetState, reason, "verify-probe-client")
+		if err != nil {
+			log.Printf("[verify-probe] warning: failed to update assignment %s: %v", req.AssignmentID, err)
+		}
+	}
+
+	currentState := targetState
+	if updatedAsgn != nil {
+		currentState = updatedAsgn.State
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"verified":      req.Success,
+		"device_id":     principal.DeviceID,
+		"user_id":       req.UserID,
+		"assignment_id": req.AssignmentID,
+		"state":         currentState,
+		"reason":        reason,
+		"timestamp":     time.Now().UTC(),
+	})
+}
+
+// GET /api/v2/device/assignments
+func (h *DeviceV2Handler) ListDeviceAssignments(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.GetDevicePrincipal(r.Context())
+	if !ok {
+		http.Error(w, `{"error":{"code":"device_auth_required"}}`, http.StatusUnauthorized)
+		return
+	}
+
+	orgID := principal.OrganizationID
+	if orgID == "" {
+		orgID = store.DefaultOrgID
+	}
+
+	assignments, err := h.Store.ListAssignmentsForDevice(r.Context(), orgID, principal.DeviceID, principal.UserID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"list_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"assignments": assignments,
+	})
+}
+

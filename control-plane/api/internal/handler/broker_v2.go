@@ -357,6 +357,49 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 		_, _ = h.Store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, settledMicrocents)
 	}
 
+	// 5. Record Request Attribution for Identity Verification (REQ-VER-003)
+	if h.Store != nil {
+		devID := principal.DeviceID
+		userID := principal.UserID
+		if userID == "" {
+			userID = r.Header.Get("X-AgentControl-User-Id")
+		}
+		if userID == "" {
+			userID = "local-workstation"
+		}
+		idSource := principal.IdentitySource
+		if idSource == "" {
+			idSource = "local_os"
+		}
+		asgnID := r.Header.Get("X-AgentControl-Assignment-Id")
+		if asgnID == "" {
+			asgnID = r.Header.Get("X-Assignment-ID")
+		}
+		var asgnIDPtr *string
+		if asgnID != "" {
+			asgnIDPtr = &asgnID
+		}
+		var inToks, outToks int64
+		if usageRep != nil {
+			inToks = usageRep.InputTokens
+			outToks = usageRep.OutputTokens
+		}
+		_ = h.Store.RecordRequestAttribution(r.Context(), &model.RequestAttribution{
+			RequestID:        reqID,
+			OrganizationID:   tenantID,
+			DeviceID:         devID,
+			UserID:           userID,
+			IdentitySource:   idSource,
+			IdentityVerified: principal.IdentityVerified,
+			AssignmentID:     asgnIDPtr,
+			Provider:         req.Provider,
+			Model:            req.Model,
+			StatusCode:       http.StatusOK,
+			InputTokens:      inToks,
+			OutputTokens:     outToks,
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(llmResp)
 }
@@ -679,5 +722,54 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 	}
 	if vk != nil && settledMicrocents > 0 && h.Store != nil {
 		_, _ = h.Store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, settledMicrocents)
+	}
+
+	// Record Request Attribution for Identity Verification (REQ-VER-003)
+	if h.Store != nil {
+		principal, _ := middleware.GetDevicePrincipal(r.Context())
+		devID := "unknown"
+		userID := "local-workstation"
+		idSource := "local_os"
+		idVerified := false
+		if principal != nil {
+			devID = principal.DeviceID
+			if principal.UserID != "" {
+				userID = principal.UserID
+			}
+			if principal.IdentitySource != "" {
+				idSource = principal.IdentitySource
+			}
+			idVerified = principal.IdentityVerified
+		}
+		if u := r.Header.Get("X-AgentControl-User-Id"); u != "" {
+			userID = u
+		}
+		assignmentID := r.Header.Get("X-AgentControl-Assignment-Id")
+		if assignmentID == "" {
+			assignmentID = r.Header.Get("X-Assignment-ID")
+		}
+		var asgnIDPtr *string
+		if assignmentID != "" {
+			asgnIDPtr = &assignmentID
+		}
+		var inToks, outToks int64
+		if usageRep != nil {
+			inToks = usageRep.InputTokens
+			outToks = usageRep.OutputTokens
+		}
+		_ = h.Store.RecordRequestAttribution(r.Context(), &model.RequestAttribution{
+			RequestID:        reqID,
+			OrganizationID:   tenantID,
+			DeviceID:         devID,
+			UserID:           userID,
+			IdentitySource:   idSource,
+			IdentityVerified: idVerified,
+			AssignmentID:     asgnIDPtr,
+			Provider:         req.Provider,
+			Model:            req.Model,
+			StatusCode:       http.StatusOK,
+			InputTokens:      inToks,
+			OutputTokens:     outToks,
+		})
 	}
 }

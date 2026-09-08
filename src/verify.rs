@@ -22,8 +22,15 @@ pub struct ProbeReport {
     pub details: String,
 }
 
-/// Executes the 3-point live security verification probe.
-pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32 {
+/// Executes the live security verification probe with optional Control Hub identity correlation (REQ-VER-004).
+pub async fn run_verification_probe(
+    gateway_url: &str,
+    json_output: bool,
+    hub_opt: Option<&str>,
+    user_id_opt: Option<&str>,
+    assignment_id_opt: Option<&str>,
+    gateway_token_opt: Option<&str>,
+) -> i32 {
     let start = Instant::now();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -31,6 +38,29 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         .unwrap_or_else(|_| reqwest::Client::new());
 
     let normalized_gw = gateway_url.trim_end_matches('/');
+
+    let effective_hub = hub_opt.filter(|s| !s.trim().is_empty()).map(|s| s.to_string());
+
+    let effective_device_id = crate::identity::device::DeviceIdentity::load_or_create()
+        .map(|d| d.device_id)
+        .unwrap_or_else(|_| "local-device".to_string());
+
+    let effective_user_id = user_id_opt.map(|s| s.to_string()).unwrap_or_else(|| {
+        std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .or_else(|_| std::env::var("LOGNAME"))
+            .unwrap_or_else(|_| "local-user".to_string())
+    });
+
+    let effective_assignment_id = assignment_id_opt.map(|s| s.to_string());
+
+    // Resolve the local gateway auth token (used if the gateway has GATEWAY_SECRET / enrollment active)
+    // Priority: explicit CLI token → GATEWAY_SECRET env var → AGENTCONTROL_ADMIN_TOKEN env var → enrolled device_token → empty
+    let gateway_token: Option<String> = gateway_token_opt
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("GATEWAY_SECRET").ok().filter(|s| !s.is_empty()))
+        .or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok().filter(|s| !s.is_empty()))
+        .or_else(crate::identity::device::load_device_token);
 
     // 1. Health check pre-flight
     let health_url = format!("{}/healthz", normalized_gw);
@@ -59,6 +89,10 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         println!("{}", "┌────────────────────────────────────────────────────────────────────────┐".cyan());
         println!("│  {} Vexa Agent Control — Canonical Security Verification Suite        │", "🛡️".cyan());
         println!("│  Target Gateway: {:<53} │", gateway_url.green());
+        if let Some(ref hub) = effective_hub {
+            println!("│  Control Hub:    {:<53} │", hub.yellow());
+        }
+        println!("│  Identity:       {:<53} │", format!("{}:{}", effective_user_id, effective_device_id).magenta());
         println!("{}", "└────────────────────────────────────────────────────────────────────────┘".cyan());
         println!();
     }
@@ -78,12 +112,18 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             "arguments": { "path": "README.md" }
         }
     });
-    let res1 = client
+    let mut req1 = client
         .post(normalized_gw)
         .header("X-AgentControl-Source", "verification")
-        .json(&p1_body)
-        .send()
-        .await;
+        .header("X-AgentControl-Device-Id", &effective_device_id)
+        .header("X-AgentControl-User-Id", &effective_user_id);
+    if let Some(ref tok) = gateway_token {
+        req1 = req1.header("Authorization", format!("Bearer {}", tok));
+    }
+    if let Some(ref asgn) = effective_assignment_id {
+        req1 = req1.header("X-AgentControl-Assignment-Id", asgn);
+    }
+    let res1 = req1.json(&p1_body).send().await;
     let lat1 = t1.elapsed().as_millis();
 
     let (pass1, actual_status1, status1, req_id1, rule1, details1) = match res1 {
@@ -100,9 +140,29 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                 }
             });
 
-            if let Some(err) = json_body.get("error") {
-                let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
-                if msg.contains("Upstream error") || msg.contains("Connection refused") {
+            let err_msg = if let Some(err) = json_body.get("error") {
+                if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
+                    m.to_string()
+                } else if let Some(s) = err.as_str() {
+                    s.to_string()
+                } else {
+                    "".to_string()
+                }
+            } else {
+                "".to_string()
+            };
+
+            if status == 401 || status == 403 {
+                (
+                    false,
+                    status,
+                    format!("HTTP {}", status),
+                    req_id,
+                    None,
+                    format!("Gateway rejected request with HTTP {}: {}", status, if err_msg.is_empty() { "Unauthorized" } else { &err_msg }),
+                )
+            } else if !err_msg.is_empty() {
+                if err_msg.contains("Upstream error") || err_msg.contains("Connection refused") {
                     (
                         true,
                         status,
@@ -111,23 +171,23 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                         Some("default_allowlist".to_string()),
                         "Tool operation affirmatively allowed by policy; upstream handled gracefully".to_string(),
                     )
-                } else if msg.contains("Policy violation") {
+                } else if err_msg.contains("Policy violation") {
                     (
                         false,
                         status,
                         "BLOCKED".to_string(),
                         req_id,
                         None,
-                        format!("Unexpected policy rejection for safe tool: {}", msg),
+                        format!("Unexpected policy rejection for safe tool: {}", err_msg),
                     )
                 } else {
                     (
-                        true,
+                        status == 200,
                         status,
-                        "ALLOWED & RECORDED".to_string(),
+                        if status == 200 { "ALLOWED & RECORDED".to_string() } else { format!("HTTP {}", status) },
                         req_id,
                         Some("default_allowlist".to_string()),
-                        "Valid baseline developer tool operation".to_string(),
+                        err_msg,
                     )
                 }
             } else if status == 200 {
@@ -183,12 +243,18 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             }
         }
     });
-    let res2 = client
+    let mut req2 = client
         .post(normalized_gw)
         .header("X-AgentControl-Source", "verification")
-        .json(&p2_body)
-        .send()
-        .await;
+        .header("X-AgentControl-Device-Id", &effective_device_id)
+        .header("X-AgentControl-User-Id", &effective_user_id);
+    if let Some(ref tok) = gateway_token {
+        req2 = req2.header("Authorization", format!("Bearer {}", tok));
+    }
+    if let Some(ref asgn) = effective_assignment_id {
+        req2 = req2.header("X-AgentControl-Assignment-Id", asgn);
+    }
+    let res2 = req2.json(&p2_body).send().await;
     let lat2 = t2.elapsed().as_millis();
 
     let (pass2, actual_status2, status2, req_id2, rule2, details2) = match res2 {
@@ -204,11 +270,17 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                     None
                 }
             });
-            let err_msg = json_body
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .unwrap_or("");
+            let err_msg = if let Some(err) = json_body.get("error") {
+                if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
+                    m.to_string()
+                } else if let Some(s) = err.as_str() {
+                    s.to_string()
+                } else {
+                    "".to_string()
+                }
+            } else {
+                "".to_string()
+            };
 
             // Gateway returns HTTP 400 (or HTTP 403) with "Policy violation: dlp: ..."
             if (status == 400 || status == 403) && (err_msg.contains("dlp:") || err_msg.contains("Policy violation")) {
@@ -282,12 +354,18 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
             }
         }
     });
-    let res3 = client
+    let mut req3 = client
         .post(normalized_gw)
         .header("X-AgentControl-Source", "verification")
-        .json(&p3_body)
-        .send()
-        .await;
+        .header("X-AgentControl-Device-Id", &effective_device_id)
+        .header("X-AgentControl-User-Id", &effective_user_id);
+    if let Some(ref tok) = gateway_token {
+        req3 = req3.header("Authorization", format!("Bearer {}", tok));
+    }
+    if let Some(ref asgn) = effective_assignment_id {
+        req3 = req3.header("X-AgentControl-Assignment-Id", asgn);
+    }
+    let res3 = req3.json(&p3_body).send().await;
     let lat3 = t3.elapsed().as_millis();
 
     let (pass3, actual_status3, status3, req_id3, rule3, details3) = match res3 {
@@ -303,11 +381,17 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                     None
                 }
             });
-            let err_msg = json_body
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .unwrap_or("");
+            let err_msg = if let Some(err) = json_body.get("error") {
+                if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
+                    m.to_string()
+                } else if let Some(s) = err.as_str() {
+                    s.to_string()
+                } else {
+                    "".to_string()
+                }
+            } else {
+                "".to_string()
+            };
 
             if (status == 400 || status == 403)
                 && (err_msg.contains("injection")
@@ -412,6 +496,96 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         reason: reason4,
         details: details4,
     });
+
+    // -------------------------------------------------------------
+    // Probe 5: Hub-Correlated Identity Verification (REQ-VER-004 / REQ-VER-005)
+    // -------------------------------------------------------------
+    let all_local_passed = reports.iter().all(|r| r.passed);
+    if let Some(ref hub_url) = effective_hub {
+        let t5 = Instant::now();
+        let clean_hub = hub_url.trim_end_matches('/');
+        let hub_client = crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(10));
+        let device_token = crate::identity::device::load_device_token()
+            .or_else(|| std::env::var("GATEWAY_SECRET").ok())
+            .unwrap_or_default();
+
+        let probe_submission = json!({
+            "device_id": effective_device_id,
+            "user_id": effective_user_id,
+            "assignment_id": effective_assignment_id.clone().unwrap_or_default(),
+            "probe_type": "security_assertions_v2",
+            "success": all_local_passed,
+            "findings_count": 0,
+            "details": {
+                "local_gateway": gateway_url,
+                "local_assertions_passed": all_local_passed,
+            }
+        });
+
+        let probe_url = format!("{}/api/v2/device/verify-probe", clean_hub);
+        let mut req = hub_client
+            .post(&probe_url)
+            .header("Content-Type", "application/json")
+            .json(&probe_submission);
+        if !device_token.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", device_token));
+        }
+
+        let hub_res = match req.send().await {
+            Ok(resp) if resp.status().is_success() => {
+                let resp_val: Value = resp.json().await.unwrap_or(Value::Null);
+                let verified = resp_val.get("verified").and_then(|v| v.as_bool()).unwrap_or(false);
+                let state = resp_val.get("state").and_then(|s| s.as_str()).unwrap_or("verified");
+                (
+                    verified,
+                    format!("VERIFIED ({})", state.to_uppercase()),
+                    format!("Control Hub acknowledged probe; assignment promoted to '{}'", state),
+                    format!("Device {} verified for user {}", effective_device_id, effective_user_id),
+                )
+            }
+            Ok(resp) => {
+                let fb_url = format!("{}/api/v3/gateway-broker/verify-probe", clean_hub);
+                let mut fb_req = hub_client
+                    .post(&fb_url)
+                    .header("Content-Type", "application/json")
+                    .json(&probe_submission);
+                if !device_token.is_empty() {
+                    fb_req = fb_req.header("Authorization", format!("Bearer {}", device_token));
+                }
+                if let Ok(fb_resp) = fb_req.send().await {
+                    if fb_resp.status().is_success() {
+                        let resp_val: Value = fb_resp.json().await.unwrap_or(Value::Null);
+                        let verified = resp_val.get("verified").and_then(|v| v.as_bool()).unwrap_or(false);
+                        let state = resp_val.get("state").and_then(|s| s.as_str()).unwrap_or("verified");
+                        (
+                            verified,
+                            format!("VERIFIED ({})", state.to_uppercase()),
+                            format!("Control Hub acknowledged probe; assignment promoted to '{}'", state),
+                            format!("Device {} verified for user {}", effective_device_id, effective_user_id),
+                        )
+                    } else {
+                        (false, format!("HTTP {}", fb_resp.status()), "Hub rejected verification probe".to_string(), format!("Status: {}", fb_resp.status()))
+                    }
+                } else {
+                    (false, format!("HTTP {}", resp.status()), "Hub rejected verification probe".to_string(), format!("Status: {}", resp.status()))
+                }
+            }
+            Err(e) => (false, "UNREACHABLE".to_string(), format!("Failed to reach Control Hub at {}: {}", clean_hub, e), e.to_string()),
+        };
+
+        reports.push(ProbeReport {
+            name: "5. Control Hub Identity Correlation".to_string(),
+            passed: hub_res.0,
+            http_status: 200,
+            verdict: hub_res.1,
+            expected: "VERIFIED (STATE: VERIFIED)".to_string(),
+            request_id: None,
+            policy_rule: Some("identity_effective_routing".to_string()),
+            latency_ms: t5.elapsed().as_millis(),
+            reason: hub_res.2,
+            details: hub_res.3,
+        });
+    }
 
     let total_elapsed = start.elapsed().as_millis();
     let all_passed = reports.iter().all(|r| r.passed);

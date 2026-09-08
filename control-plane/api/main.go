@@ -107,6 +107,7 @@ func main() {
 	// Centralized Background Daemon Job Scheduler
 	sched := scheduler.New(
 		spend.NewSweepJob(spendStore, 30*time.Second),
+		scheduler.NewAssignmentStaleSweepJob(db, 60*time.Second, 180*time.Second),
 	)
 	sched.Start(ctx)
 	defer func() {
@@ -232,6 +233,10 @@ func main() {
 		r.Get("/status", deviceV2H.GetDeviceStatus)
 		r.Get("/policy/active", policyMgmtH.GetActive)
 		r.Get("/policy/subscribe", policyMgmtH.Subscribe)
+		r.Get("/provider-keys/active", deviceV2H.GetActiveProviderKeys)
+		r.Post("/assignments/{id}/ack", deviceV2H.AcknowledgeAssignment)
+		r.Post("/verify-probe", deviceV2H.SubmitVerificationProbe)
+		r.Get("/assignments", deviceV2H.ListDeviceAssignments)
 	})
 
 	// 4. Provider LLM Broker v2 & v3
@@ -278,6 +283,10 @@ func main() {
 		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
+		r.Get("/provider-keys/active", deviceV2H.GetActiveProviderKeys)
+		r.Post("/assignments/{id}/ack", deviceV2H.AcknowledgeAssignment)
+		r.Post("/verify-probe", deviceV2H.SubmitVerificationProbe)
+		r.Get("/assignments", deviceV2H.ListDeviceAssignments)
 	})
 
 	// 5. Authoritative Central Spend Ledger API v2

@@ -407,10 +407,21 @@ pub(crate) fn normalize_inbound_openai_messages(body: &mut Value) {
     *messages = normalized;
 }
 
-/// Helper to construct a standardized error response adhering to protocol specification (OpenAI vs Anthropic)
+/// Helper function to detect if a model supports reasoning parameters (o1, o3, o4, etc.)
+pub(crate) fn is_reasoning_capable_model(model: &str) -> bool {
+    let lower = model.to_lowercase();
+    lower.starts_with("o1")
+        || lower.starts_with("o3")
+        || lower.starts_with("o4")
+        || lower.contains("reasoner")
+        || lower.contains("reasoning")
+        || lower.contains("r1")
+}
+
+/// Helper to construct a standardized error response adhering to protocol specification (OpenAI vs Anthropic vs Responses API)
 /// with clear origin tagging ("agentcontrol" vs "upstream_provider") and streaming error framing so IDE
-/// clients (Roo Code, Cursor, Cline) display the diagnostic error directly in chat instead of failing with
-/// "The model returned no assistant messages".
+/// clients (Roo Code, Cursor, Cline, Codex Desktop) display the diagnostic error directly in chat instead of failing with
+/// "The model returned no assistant messages" or "stream closed before response.completed".
 pub(crate) fn make_error_response_with_protocol(
     status: StatusCode,
     origin: &'static str, // "agentcontrol" or "upstream_provider"
@@ -420,6 +431,7 @@ pub(crate) fn make_error_response_with_protocol(
     is_streaming: bool,
     req_id: &str,
     is_anthropic_protocol: bool,
+    is_responses_protocol: bool,
 ) -> Response<BoxBody> {
     let mut err_obj = serde_json::json!({
         "origin": origin,
@@ -480,6 +492,117 @@ pub(crate) fn make_error_response_with_protocol(
                 serde_json::to_string(&block_stop).unwrap_or_default(),
                 serde_json::to_string(&msg_delta).unwrap_or_default(),
                 serde_json::to_string(&msg_stop).unwrap_or_default()
+            );
+
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(2);
+            let _ = tx.try_send(Ok(hyper::body::Frame::data(Bytes::from(payload))));
+            let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx)));
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(hyper::header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                .header(hyper::header::CACHE_CONTROL, "no-cache, no-transform")
+                .header(hyper::header::CONNECTION, "keep-alive")
+                .header("X-Accel-Buffering", "no")
+                .header("X-AgentControl-Origin", origin)
+                .header("X-AgentControl-Verdict", if origin == "agentcontrol" { "blocked" } else { "upstream_error" })
+                .header("X-AgentControl-Request-ID", req_id)
+                .body(stream_body)
+                .unwrap()
+        } else if is_responses_protocol {
+            let now = chrono::Utc::now().timestamp();
+            let err_resp_id = format!("resp_err_{}", req_id);
+            let err_msg_id = format!("msg_err_{}", req_id);
+            let payload = format!(
+                "event: response.created\ndata: {}\n\nevent: response.output_item.added\ndata: {}\n\nevent: response.content_part.added\ndata: {}\n\nevent: response.output_text.delta\ndata: {}\n\nevent: response.output_text.done\ndata: {}\n\nevent: response.content_part.done\ndata: {}\n\nevent: response.output_item.done\ndata: {}\n\nevent: response.completed\ndata: {}\n\n",
+                serde_json::json!({
+                    "response": {
+                        "id": err_resp_id,
+                        "object": "response",
+                        "status": "in_progress",
+                        "created_at": now,
+                        "model": "agentcontrol-error",
+                        "output": []
+                    }
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "item": {
+                        "id": err_msg_id,
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [],
+                        "status": "in_progress"
+                    }
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "content_index": 0,
+                    "item_id": err_msg_id,
+                    "part": {
+                        "type": "output_text",
+                        "text": ""
+                    }
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "content_index": 0,
+                    "item_id": err_msg_id,
+                    "delta": sse_content
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "content_index": 0,
+                    "item_id": err_msg_id,
+                    "text": sse_content
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "content_index": 0,
+                    "item_id": err_msg_id,
+                    "part": {
+                        "type": "output_text",
+                        "text": sse_content
+                    }
+                }),
+                serde_json::json!({
+                    "output_index": 0,
+                    "item": {
+                        "id": err_msg_id,
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{
+                            "type": "output_text",
+                            "text": sse_content
+                        }],
+                        "status": "completed"
+                    }
+                }),
+                serde_json::json!({
+                    "response": {
+                        "id": err_resp_id,
+                        "object": "response",
+                        "status": "completed",
+                        "completed_at": now,
+                        "created_at": now,
+                        "model": "agentcontrol-error",
+                        "output": [{
+                            "id": err_msg_id,
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{
+                                "type": "output_text",
+                                "text": sse_content
+                            }],
+                            "status": "completed"
+                        }],
+                        "usage": {
+                            "input_tokens": 0,
+                            "output_tokens": 0,
+                            "total_tokens": 0
+                        }
+                    }
+                })
             );
 
             let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(2);
@@ -570,7 +693,7 @@ pub(crate) fn make_error_response(
     is_streaming: bool,
     req_id: &str,
 ) -> Response<BoxBody> {
-    make_error_response_with_protocol(status, origin, error_code, message, details, is_streaming, req_id, false)
+    make_error_response_with_protocol(status, origin, error_code, message, details, is_streaming, req_id, false, false)
 }
 
 /// Returns true if the token is an AgentControl Virtual Key, sentinel token, or gateway-internal secret.
@@ -713,6 +836,7 @@ pub async fn handle_request(
         || req_path.starts_with("/v1/messages/")
         || req_path.starts_with("/messages/")
         || req.headers().contains_key("anthropic-version");
+    let is_responses_protocol = req_path == "/v1/responses";
 
     let auth_header = req
         .headers()
@@ -753,6 +877,7 @@ pub async fn handle_request(
                 false,
                 &uuid::Uuid::new_v4().to_string(),
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
@@ -767,6 +892,7 @@ pub async fn handle_request(
             false,
             &uuid::Uuid::new_v4().to_string(),
             is_anthropic_protocol,
+            is_responses_protocol,
         ));
     }
 
@@ -783,6 +909,7 @@ pub async fn handle_request(
                 false,
                 &uuid::Uuid::new_v4().to_string(),
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
@@ -799,11 +926,12 @@ pub async fn handle_request(
                 false,
                 &uuid::Uuid::new_v4().to_string(),
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
 
-    if !is_anthropic_protocol {
+    if !is_anthropic_protocol && !is_responses_protocol {
         normalize_inbound_openai_messages(&mut body);
     }
 
@@ -822,9 +950,19 @@ pub async fn handle_request(
                 is_streaming,
                 &req_uuid,
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
+
+    // Sanitize reasoning parameter for models that do not support reasoning effort
+    // (e.g. gpt-4o, gpt-4o-mini, gpt-4, etc.)
+    if !is_reasoning_capable_model(&model) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("reasoning");
+            obj.remove("reasoning_effort");
+        }
+    }
 
     // Evaluate LLM policy — resolve from session scope, active global state, or JIT disk policy
     let global_policy = state.policy.read().ok().and_then(|g| g.clone());
@@ -875,6 +1013,7 @@ pub async fn handle_request(
                                 is_streaming,
                                 &req_uuid,
                                 is_anthropic_protocol,
+                                is_responses_protocol,
                             ));
                         }
                     }
@@ -888,6 +1027,7 @@ pub async fn handle_request(
                         is_streaming,
                         &req_uuid,
                         is_anthropic_protocol,
+                        is_responses_protocol,
                     ));
                 }
             } else {
@@ -957,6 +1097,7 @@ pub async fn handle_request(
                                     is_streaming,
                                     &req_uuid,
                                     is_anthropic_protocol,
+                                    is_responses_protocol,
                                 ));
                             }
                         }
@@ -970,6 +1111,7 @@ pub async fn handle_request(
                             is_streaming,
                             &req_uuid,
                             is_anthropic_protocol,
+                            is_responses_protocol,
                         ));
                     }
                 } else {
@@ -995,6 +1137,7 @@ pub async fn handle_request(
                     is_streaming,
                     &req_uuid,
                     is_anthropic_protocol,
+                    is_responses_protocol,
                 ));
             }
         }
@@ -1027,6 +1170,7 @@ pub async fn handle_request(
             is_streaming,
             &req_uuid,
             is_anthropic_protocol,
+            is_responses_protocol,
         ));
     }
 
@@ -1062,6 +1206,7 @@ pub async fn handle_request(
                         is_streaming,
                         &req_uuid,
                         is_anthropic_protocol,
+                        is_responses_protocol,
                     ));
                 }
             }
@@ -1103,6 +1248,8 @@ pub async fn handle_request(
             model: model.clone(),
             protocol: if is_anthropic_protocol || provider_name == "anthropic" {
                 "anthropic_messages".to_string()
+            } else if is_responses_protocol {
+                "openai_responses".to_string()
             } else {
                 "openai_chat_completions".to_string()
             },
@@ -1146,6 +1293,7 @@ pub async fn handle_request(
                             is_streaming,
                             &req_uuid,
                             is_anthropic_protocol,
+                            is_responses_protocol,
                         ));
                     }
 
@@ -1154,6 +1302,7 @@ pub async fn handle_request(
                     let (tx, rx) = tokio::sync::mpsc::channel::<Result<hyper::body::Frame<Bytes>, hyper::Error>>(64);
                     let req_uuid_for_broker_stream = req_uuid.clone();
                     let is_anthropic_for_broker_stream = is_anthropic_protocol;
+                    let is_responses_for_broker_stream = is_responses_protocol;
                     tokio::spawn(async move {
                         let mut byte_buffer = Vec::<u8>::new();
                         let mut has_emitted_content = false;
@@ -1183,7 +1332,7 @@ pub async fn handle_request(
                                 let _ = tx.send(Ok(hyper::body::Frame::data(Bytes::from(clean_event)))).await;
                             }
                         }
-                        if !has_emitted_content {
+                        if !has_emitted_content && !is_responses_for_broker_stream {
                             let payload = if is_anthropic_for_broker_stream {
                                 let err_chunk = serde_json::json!({
                                     "type": "error",
@@ -1228,6 +1377,7 @@ pub async fn handle_request(
                         is_streaming,
                         &req_uuid,
                         is_anthropic_protocol,
+                        is_responses_protocol,
                     ));
                 }
             }
@@ -1250,6 +1400,7 @@ pub async fn handle_request(
                         is_streaming,
                         &req_uuid,
                         is_anthropic_protocol,
+                        is_responses_protocol,
                     ));
                 }
             }
@@ -1318,6 +1469,7 @@ pub async fn handle_request(
                 is_streaming,
                 &req_uuid,
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
@@ -1469,6 +1621,7 @@ pub async fn handle_request(
                     is_streaming,
                     &req_uuid,
                     is_anthropic_protocol,
+                    is_responses_protocol,
                 ));
             }
         } else if let Some(ref hub_base) = hub_url {
@@ -1560,6 +1713,7 @@ pub async fn handle_request(
                             is_streaming,
                             &req_uuid,
                             is_anthropic_protocol,
+                            is_responses_protocol,
                         ));
                     } else if resp.status().is_success() {
                         if let Ok(allow_resp) =
@@ -1578,6 +1732,7 @@ pub async fn handle_request(
                             is_streaming,
                             &req_uuid,
                             is_anthropic_protocol,
+                            is_responses_protocol,
                         ));
                     }
                 }
@@ -1593,6 +1748,7 @@ pub async fn handle_request(
                             is_streaming,
                             &req_uuid,
                             is_anthropic_protocol,
+                            is_responses_protocol,
                         ));
                     }
                 }
@@ -1693,6 +1849,7 @@ pub async fn handle_request(
                     is_streaming,
                     &req_uuid,
                     is_anthropic_protocol,
+                    is_responses_protocol,
                 ));
             }
         };
@@ -1711,6 +1868,7 @@ pub async fn handle_request(
                     is_streaming,
                     &req_uuid,
                     is_anthropic_protocol,
+                    is_responses_protocol,
                 ));
             }
         }
@@ -1780,6 +1938,8 @@ pub async fn handle_request(
         };
         let ep = if let Some(routed) = routed_endpoint {
             routed
+        } else if is_responses_protocol {
+            format!("{}/v1/responses", base_url.trim_end_matches('/'))
         } else {
             format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
         };
@@ -1807,6 +1967,7 @@ pub async fn handle_request(
                 is_streaming,
                 &req_uuid,
                 is_anthropic_protocol,
+                is_responses_protocol,
             ));
         }
     };
@@ -1871,6 +2032,7 @@ pub async fn handle_request(
                     is_streaming,
                     &req_uuid,
                     is_anthropic_protocol,
+                    is_responses_protocol,
                 ));
             }
 
@@ -1889,6 +2051,7 @@ pub async fn handle_request(
                 let body_clone = body.clone();
                 let start_time_clone = start_time;
                 let is_anthropic_protocol_clone = is_anthropic_protocol;
+                let is_responses_protocol_clone = is_responses_protocol;
                 let prompt_text_clone = prompt_text.clone();
                 let tenant_id_clone = tenant_id.clone();
 
@@ -2064,8 +2227,10 @@ pub async fn handle_request(
                     }
 
                     // Empty assistant message defense:
-                    // If stream completed and 0 text deltas and 0 tool calls were emitted, inject explicit error
-                    if !has_emitted_content_or_tool {
+                    // If stream completed and 0 text deltas and 0 tool calls were emitted, inject explicit error.
+                    // Skip for is_responses_protocol: the upstream OpenAI Responses API sends its own
+                    // response.completed event and manages its own stream lifecycle.
+                    if !has_emitted_content_or_tool && !is_responses_protocol_clone {
                         if is_anthropic_protocol_clone {
                             let err_event = format!(
                                 "event: error\ndata: {}\n\n",
@@ -2463,6 +2628,7 @@ pub async fn handle_request(
                 is_streaming,
                 &req_uuid,
                 is_anthropic_protocol,
+                is_responses_protocol,
             ))
         }
     }
@@ -2560,6 +2726,7 @@ mod tests {
             true,
             "req-anthropic-err",
             true, // is_anthropic_protocol
+            false, // is_responses_protocol
         );
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(resp.headers().get("Content-Type").unwrap(), "text/event-stream; charset=utf-8");

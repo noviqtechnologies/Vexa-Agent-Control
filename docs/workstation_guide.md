@@ -33,6 +33,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
    - [Step 4 — Auto-Generate Security Policy](#step-4--auto-generate-security-policy)
    - [Step 5 — Run ADR Security Benchmark](#step-5--run-adr-security-benchmark)
    - [Step 6 — Run MCP Security Scan](#step-6--run-mcp-security-scan)
+   - [Step 7 — Run Verification Probe & Assert Effective Routing](#step-7--run-verification-probe--assert-effective-routing)
 4. [Safe Mode & Default-Deny Guardrails](#4-safe-mode--default-deny-guardrails)
 5. [Prompt Injection Protection](#5-prompt-injection-protection)
 6. [Shadow AI Discovery & Risk Delta Reports](#6-shadow-ai-discovery--risk-delta-reports)
@@ -411,6 +412,41 @@ A scored security report flagging risky tool definitions, missing parameter cons
 
 **What You Achieve:**
 A Vexa Security Score you can use as a CI/CD quality gate to prevent insecure MCP server configurations from reaching production.
+
+---
+
+### Step 7 — Run Verification Probe & Assert Effective Routing
+
+Execute the automated verification smoke test against your running gateway to verify that proxy interception, DLP redaction, injection defenses, and Control Hub identity correlation are active:
+
+**Linux / macOS (Bash / Zsh):**
+```bash
+# Basic gateway smoke test
+agentcontrol verify --gateway http://127.0.0.1:8080
+
+# With Control Hub identity correlation and desired-state assertion (REQ-VER-004)
+agentcontrol verify \
+  --gateway http://127.0.0.1:8080 \
+  --hub https://console.vexasec.io \
+  --user-id $(whoami) \
+  --json
+```
+
+**Windows (PowerShell):**
+```powershell
+agentcontrol.exe verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --user-id $env:USERNAME
+```
+
+**What You Will See:**
+A 5-point verification report confirming:
+1. `[PASS]` Gateway Health Pre-flight (`/healthz`)
+2. `[PASS]` Safe Tool Execution (`echo` pass-through)
+3. `[PASS]` DLP Secret Leakage Redaction (AWS Key simulation redacted)
+4. `[PASS]` Prompt Injection Defense (Delimiter extraction blocked)
+5. `[PASS]` Control Hub Identity Correlation (Device ID & user verified in Control Hub)
+
+**What You Achieve:**
+Proof of compliance that your local workstation is securely wrapped, intercepting traffic, and correlated with your authenticated identity.
 
 ---
 

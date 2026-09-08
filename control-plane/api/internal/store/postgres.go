@@ -130,9 +130,17 @@ func (s *Store) EnsureCoreSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			CONSTRAINT uq_mcp_servers_agent_ide_server UNIQUE (organization_id, agent_id, ide_target, server_name)
 		);
+
+		-- Dead schema cleanup: drop unreferenced legacy price_books table
+		DROP TABLE IF EXISTS price_books CASCADE;
 	`
 	_, err := s.pool.Exec(ctx, q)
-	return err
+	if err != nil {
+		return err
+	}
+	_ = s.EnsureAssignmentsSchema(ctx)
+	_ = s.EnsureAttributionsSchema(ctx)
+	return nil
 }
 
 // UpsertAgent ensures the agent exists within an organization.

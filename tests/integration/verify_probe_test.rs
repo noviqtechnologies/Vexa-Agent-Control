@@ -104,7 +104,7 @@ async fn test_verification_probe_suite_all_pass() {
         }
     });
 
-    let exit_code = run_verification_probe(&gateway_url, true).await;
+    let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
     assert_eq!(exit_code, 0, "Expected verify suite to pass 3/3 on compliant gateway");
 }
 
@@ -164,6 +164,6 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
         }
     });
 
-    let exit_code = run_verification_probe(&gateway_url, true).await;
+    let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
     assert_eq!(exit_code, 1, "Expected verify suite to fail (exit 1) when injection is forwarded upstream instead of blocked");
 }
