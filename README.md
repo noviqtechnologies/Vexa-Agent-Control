@@ -158,8 +158,8 @@ agentcontrol protect --dry-run
 agentcontrol protect
 ```
 
-### Automated 3-Point Live Verification Probe
-Test that DLP exfiltration blocks and prompt-injection filters are actively protecting your workstation:
+### Automated 4-Point Live Verification Suite
+Test that DLP exfiltration blocks, prompt-injection filters, and workstation IDE client interception are active:
 
 ```bash
 agentcontrol verify
@@ -167,9 +167,10 @@ agentcontrol verify
 
 **Expected Live Probe Output:**
 ```text
-✔ [1/3] Safe Tool Execution (read_file)      ➔ ALLOWED
-✔ [2/3] DLP Exfiltration Guard (AWS Secret) ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
-✔ [3/3] Prompt Injection (System Override)  ➔ BLOCKED [INJ-04-OVERRIDE]
+✔ [1/4] Safe Tool Execution (read_file)         ➔ POLICY ALLOWED
+✔ [2/4] DLP Exfiltration Guard (AWS Secret)    ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
+✔ [3/4] Prompt Injection (System Override)     ➔ BLOCKED [INJ-04-OVERRIDE]
+✔ [4/4] Workstation Client Sentry (IDE Config)  ➔ PROTECTED
 ```
 
 [**Read the Cursor Governance Guide →**](docs/guides/cursor_governance_guide.md) · [**Claude Desktop Guide →**](docs/integrations/claude-desktop.md)
@@ -677,7 +678,7 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 ### LLM Key & Spend Governance Modes (`llm_mode`)
 - **`local_compat` (Default):** Standalone local developer compatibility. Dispatches upstream LLM traffic directly using workstation environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `AWS_REGION`) or client request headers.
 - **`central_shadow`:** Enterprise observation mode. Upstream requests are routed through the Control Plane with centralized key custody. Evaluates price books and logs would-deny events without blocking execution.
-- **`central_enforce`:** Authoritative enterprise governance. Zero provider keys on workstations. Enforces preflight row-locked budget reservations, pinned active price books, and fail-closed budget caps before dispatch.
+- **`central_enforce`:** Authoritative enterprise governance. Zero upstream provider keys on workstations (isolated in Control Plane vault). Enforces preflight row-locked budget reservations, pinned active price books, and fail-closed budget caps before dispatch. Workstations authenticate to the broker via scoped device PKI.
 
 ---
 
@@ -701,7 +702,7 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 |---|---|---|---|
 | **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported ([Guide](docs/integrations/claude-desktop.md)) |
 | **Verified** | **Cursor** | `~/.cursor/mcp.json` & `User/settings.json` | Tested & fully supported ([Cursor Guide](docs/guides/cursor_governance_guide.md)) |
-| **Verified** | **Codex** | `~/.codex/config.toml` | Tested & fully supported ([Guide](docs/integrations/codex.md)) |
+| **Verified** | **Codex** | `~/.codex/config.toml` | Supported ([Guide](docs/integrations/codex.md)) — wraps MCP tools & injects shell environment policy |
 | **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported ([Guide](docs/integrations/antigravity.md)) |
 | **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
 | **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080` | Manual proxy routing ([Guide](docs/guides/custom-agent-http.md)) |
@@ -770,7 +771,7 @@ npm run dev
    agentcontrol protect --listen 127.0.0.1:9090
    ```
 2. **IDE tool calls not intercepted:** Restart your IDE after running `agentcontrol protect` so it reloads its configuration.
-3. **Backup restoration warning:** Run `agentcontrol unprotect --force` to inspect or force rollback.
+3. **Configuration rollback:** Run `agentcontrol unprotect` to non-destructively unwrap MCP tools in-place, or `agentcontrol unprotect --force` to force restore from raw backup files.
 
 ### Automated Clean Uninstall
 To remove the binary, service daemons, and purge state files:

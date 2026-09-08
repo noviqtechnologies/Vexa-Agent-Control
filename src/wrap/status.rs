@@ -143,11 +143,14 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
         let wrapped = servers
             .values()
             .filter(|v| {
-                if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
-                    cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall")
-                } else {
-                    false
-                }
+                let cmd_wrapped = v.get("command").and_then(|c| c.as_str())
+                    .map(|cmd| cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall"))
+                    .unwrap_or(false);
+                let args_wrapped = v.get("args").and_then(|a| a.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|f| f.as_str())
+                    == Some("stdio-proxy");
+                cmd_wrapped || args_wrapped
             })
             .count();
         Ok((total, wrapped))

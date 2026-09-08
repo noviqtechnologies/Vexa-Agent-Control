@@ -106,10 +106,10 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
                     (
                         true,
                         status,
-                        "ALLOWED (STANDALONE MOCK)".to_string(),
+                        "POLICY ALLOWED (NO UPSTREAM TOOL)".to_string(),
                         req_id,
                         Some("default_allowlist".to_string()),
-                        "Tool operation allowed by policy; upstream handled gracefully".to_string(),
+                        "Tool operation affirmatively allowed by policy; upstream handled gracefully".to_string(),
                     )
                 } else if msg.contains("Policy violation") {
                     (
@@ -366,8 +366,56 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
         details: details3,
     });
 
+    // -------------------------------------------------------------
+    // Probe 4: Workstation Client Interception & Sentry Check
+    // -------------------------------------------------------------
+    let t4 = Instant::now();
+    let installed_ides = crate::wrap::ide_config::scan_all_ides(normalized_gw);
+    let lat4 = t4.elapsed().as_millis();
+
+    let any_installed = installed_ides.iter().any(|s| s.installed);
+    let total_installed = installed_ides.iter().filter(|s| s.installed).count();
+    let total_protected = installed_ides.iter().filter(|s| s.installed && (s.mcp_wrapped || s.proxy_configured)).count();
+
+    let (pass4, verdict4, reason4, details4) = if !any_installed {
+        (
+            true,
+            "PASS (STANDALONE GATEWAY)".to_string(),
+            "No client IDE configurations detected on workstation; standalone gateway operational".to_string(),
+            "0 IDE targets discovered".to_string(),
+        )
+    } else if total_protected == total_installed {
+        (
+            true,
+            format!("PROTECTED ({}/{})", total_protected, total_installed),
+            "All discovered workstation IDE configs are actively routed through gateway".to_string(),
+            format!("{} client IDE(s) compliant", total_protected),
+        )
+    } else {
+        (
+            false,
+            format!("PARTIAL ({}/{} PROTECTED)", total_protected, total_installed),
+            "Some installed client IDEs are not wrapped or configured to route through gateway".to_string(),
+            format!("{}/{} IDE configs protected; run 'agentcontrol protect' to heal", total_protected, total_installed),
+        )
+    };
+
+    reports.push(ProbeReport {
+        name: "4. Workstation Client Sentry (IDE Config)".to_string(),
+        passed: pass4,
+        http_status: 200,
+        verdict: verdict4,
+        expected: "PROTECTED / ROUTED".to_string(),
+        request_id: None,
+        policy_rule: Some("client_routing_verification".to_string()),
+        latency_ms: lat4,
+        reason: reason4,
+        details: details4,
+    });
+
     let total_elapsed = start.elapsed().as_millis();
     let all_passed = reports.iter().all(|r| r.passed);
+    let total_probes = reports.len();
 
     if json_output {
         let json_res = json!({
@@ -383,7 +431,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
     for (i, p) in reports.iter().enumerate() {
         let icon = if p.passed { "✔".green().bold() } else { "✖".red().bold() };
         let status_colored = if p.passed { p.verdict.green().bold() } else { p.verdict.red().bold() };
-        println!("  {} [{}/3] {:<38} ➔ {} ({}ms)", icon, i + 1, p.name.bold(), status_colored, p.latency_ms);
+        println!("  {} [{}/{}] {:<38} ➔ {} ({}ms)", icon, i + 1, total_probes, p.name.bold(), status_colored, p.latency_ms);
         println!("        Expected : {}", p.expected.dimmed());
         println!("        Security : {}", p.reason.dimmed());
         if let Some(ref rule) = p.policy_rule {
@@ -394,7 +442,7 @@ pub async fn run_verification_probe(gateway_url: &str, json_output: bool) -> i32
 
     println!("{}", "────────────────────────────────────────────────────────────────────────".cyan());
     if all_passed {
-        println!("  {} All 3 Security Assertions Verified in {}ms!", "✨".green().bold(), total_elapsed);
+        println!("  {} All {} Security Assertions Verified in {}ms!", "✨".green().bold(), total_probes, total_elapsed);
         println!("  📊 Real-time telemetry recorded in Dashboard: {}", gateway_url.cyan().underline());
         println!();
         0

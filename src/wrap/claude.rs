@@ -115,7 +115,7 @@ pub fn wrap_claude(dry_run: bool, scan_responses: bool) -> Result<WrapResult, Wr
     })
 }
 
-/// Restore Claude Desktop config from the most recent AgentControl backup (FR-304).
+/// Restore Claude Desktop config from the most recent AgentControl backup or unwrap in-place (FR-304).
 pub fn unwrap_claude(force: bool) -> Result<UnwrapResult, WrapError> {
     let config_path = config_path::claude_config_path()?;
 
@@ -125,24 +125,80 @@ pub fn unwrap_claude(force: bool) -> Result<UnwrapResult, WrapError> {
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
-    match backup::find_latest_backup(config_dir) {
-        Some(backup_path) => {
-            if !force {
-                backup::verify_backup_integrity(&backup_path)?;
-            }
-            fs::copy(&backup_path, &config_path)?;
-            fs::remove_file(&backup_path)?;
-            Ok(UnwrapResult {
-                config_path,
-                backup_path,
-            })
+    let latest_backup = backup::find_latest_backup(config_dir);
+    if let Some(ref backup_path) = latest_backup {
+        if !force {
+            backup::verify_backup_integrity(backup_path)?;
         }
-        None if force => {
-            print_force_unwrap_instructions(&config_path);
-            Err(WrapError::NoBackupFound)
-        }
-        None => Err(WrapError::NoBackupFound),
     }
+
+    if force {
+        match latest_backup {
+            Some(backup_path) => {
+                fs::copy(&backup_path, &config_path)?;
+                fs::remove_file(&backup_path)?;
+                return Ok(UnwrapResult {
+                    config_path,
+                    backup_path,
+                });
+            }
+            None => {
+                print_force_unwrap_instructions(&config_path);
+                return Err(WrapError::NoBackupFound);
+            }
+        }
+    }
+
+    let raw = fs::read_to_string(&config_path)?;
+    let mut config: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = super::strip_json_comments(&raw);
+            serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+        }
+    };
+
+    let mut user_added_servers = false;
+    if let Some(ref backup_path) = latest_backup {
+        if let Ok(bak_raw) = fs::read_to_string(backup_path) {
+            let bak_stripped = super::strip_json_comments(&bak_raw);
+            if let Ok(bak_json) = serde_json::from_str::<serde_json::Value>(&bak_stripped) {
+                let get_keys = |v: &serde_json::Value| -> std::collections::BTreeSet<String> {
+                    v.get("mcpServers")
+                        .or_else(|| v.get("context_servers"))
+                        .or_else(|| v.get("experimental.context_servers"))
+                        .and_then(|s| s.as_object())
+                        .map(|m| m.keys().cloned().collect())
+                        .unwrap_or_default()
+                };
+                if get_keys(&config) != get_keys(&bak_json) {
+                    user_added_servers = true;
+                }
+            }
+        }
+    }
+
+    if !user_added_servers && latest_backup.is_some() {
+        let backup_path = latest_backup.unwrap();
+        fs::copy(&backup_path, &config_path)?;
+        fs::remove_file(&backup_path)?;
+        return Ok(UnwrapResult {
+            config_path,
+            backup_path,
+        });
+    }
+
+    let _ = transformer::unwrap_all_servers(&mut config)?;
+
+    let output_str = serde_json::to_string_pretty(&config)
+        .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+    atomic_write(&config_path, &output_str)?;
+
+    let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
+    Ok(UnwrapResult {
+        config_path,
+        backup_path,
+    })
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

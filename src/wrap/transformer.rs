@@ -201,7 +201,9 @@ pub fn unwrap_all_servers(config: &mut Value) -> Result<usize, WrapError> {
 
     let mut count = 0;
     for (_name, entry) in servers.iter_mut() {
-        if entry.get("command").and_then(|c| c.as_str()).is_some() {
+        let has_cmd = entry.get("command").and_then(|c| c.as_str()).is_some()
+            || entry.get("command").and_then(|c| c.as_object()).is_some();
+        if has_cmd && is_already_wrapped(entry) {
             unwrap_entry(entry)?;
             count += 1;
         }
@@ -369,4 +371,37 @@ mod tests {
         let result = wrap_all_servers(&mut config, "/bin/agentwall");
         assert!(matches!(result, Err(WrapError::NoMcpServers)));
     }
+
+    #[test]
+    fn test_unwrap_all_servers_preserves_added_servers() {
+        let mut config = json!({
+            "mcpServers": {
+                "server1": { "command": "npx", "args": ["-y", "s1"] },
+                "server2": { "command": "node", "args": ["server.js"] }
+            }
+        });
+        let (wrapped, _) = wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
+        assert_eq!(wrapped, 2);
+
+        // Simulate user adding a third server while AgentControl was active
+        config["mcpServers"]["server3"] = json!({
+            "command": "python",
+            "args": ["custom_tool.py"]
+        });
+
+        // Unwrap
+        let unwrapped = unwrap_all_servers(&mut config).unwrap();
+        assert_eq!(unwrapped, 2);
+
+        // Check server 1 and 2 restored
+        assert_eq!(config["mcpServers"]["server1"]["command"], "npx");
+        assert_eq!(config["mcpServers"]["server1"]["args"], json!(["-y", "s1"]));
+        assert_eq!(config["mcpServers"]["server2"]["command"], "node");
+        assert_eq!(config["mcpServers"]["server2"]["args"], json!(["server.js"]));
+
+        // Check server 3 completely preserved
+        assert_eq!(config["mcpServers"]["server3"]["command"], "python");
+        assert_eq!(config["mcpServers"]["server3"]["args"], json!(["custom_tool.py"]));
+    }
 }
+

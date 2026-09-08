@@ -271,6 +271,57 @@ pub fn ensure_json_proxy_setting(
     Ok(false)
 }
 
+/// Ensures Codex config.toml has shell_environment_policy configuring AgentControl proxy
+fn ensure_toml_codex_setting(path: &Path, proxy_url: &str) -> Result<bool, String> {
+    let mut toml_val: toml::Value = if path.exists() {
+        let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
+        toml::from_str(&raw).unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+    } else {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        toml::Value::Table(toml::map::Map::new())
+    };
+
+    let base_url = format!("{}/v1", proxy_url.trim_end_matches('/'));
+    let mut updated = false;
+
+    let sep = toml_val
+        .as_table_mut()
+        .ok_or_else(|| "Root TOML is not a table".to_string())?
+        .entry("shell_environment_policy".to_string())
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+
+    if let Some(sep_tbl) = sep.as_table_mut() {
+        if !sep_tbl.contains_key("inherit") {
+            sep_tbl.insert("inherit".to_string(), toml::Value::String("core".to_string()));
+            updated = true;
+        }
+        let set_tbl = sep_tbl
+            .entry("set".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        if let Some(set_m) = set_tbl.as_table_mut() {
+            let cur_base = set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str());
+            if cur_base != Some(&base_url) {
+                set_m.insert("OPENAI_BASE_URL".to_string(), toml::Value::String(base_url.clone()));
+                updated = true;
+            }
+            let cur_proxy = set_m.get("HTTP_PROXY").and_then(|v| v.as_str());
+            if cur_proxy != Some(proxy_url) {
+                set_m.insert("HTTP_PROXY".to_string(), toml::Value::String(proxy_url.to_string()));
+                updated = true;
+            }
+        }
+    }
+
+    if updated {
+        let out = toml::to_string_pretty(&toml_val).map_err(|e| e.to_string())?;
+        crate::wrap::generic_ide::atomic_write(path, &out).map_err(|e| e.to_string())?;
+    }
+
+    Ok(updated)
+}
+
 /// Checks if an MCP config file contains wrapped servers (or has 0 servers / compliant)
 fn check_mcp_config_wrapped(path: &Path) -> bool {
     if !path.exists() {
@@ -447,9 +498,15 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                 status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
+                    let updated = ensure_toml_codex_setting(&path, proxy_url)?;
+                    if updated {
+                        status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
+                    }
+
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
                     status.proxy_configured = true;
-                    status.configured_base_url = Some(proxy_url.to_string());
+                    let base_url = format!("{}/v1", proxy_url.trim_end_matches('/'));
+                    status.configured_base_url = Some(base_url);
                     status.compliance_state = "COMPLIANT".to_string();
                 }
             }

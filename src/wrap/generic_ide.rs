@@ -32,51 +32,83 @@ pub fn wrap_generic(
         let mut toml_val: toml::Value = toml::from_str(&raw)
             .map_err(|e| WrapError::InvalidJson(format!("invalid TOML: {}", e)))?;
 
-        let table = toml_val
-            .get_mut("mcp_servers")
-            .and_then(|v| v.as_table_mut())
-            .ok_or(WrapError::NoMcpServers)?;
-
-        if table.is_empty() {
-            return Err(WrapError::NoMcpServers);
-        }
-
         let mut wrapped_count = 0;
-        for (_name, server) in table.iter_mut() {
-            if let Some(srv_table) = server.as_table_mut() {
-                let current_cmd = srv_table
-                    .get("command")
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("");
-                if current_cmd.to_lowercase().contains("agentcontrol") || current_cmd.to_lowercase().contains("agentwall") {
-                    continue; // already wrapped
-                }
+        let mut env_policy_updated = false;
 
-                let orig_args = srv_table
-                    .get("args")
-                    .and_then(|a| a.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                let mut new_args = vec![
-                    toml::Value::String("stdio-proxy".to_string()),
-                    toml::Value::String("--".to_string()),
-                    toml::Value::String(current_cmd.to_string()),
-                ];
-                for arg in orig_args {
-                    new_args.push(arg);
-                }
+        if ide_name == "Codex" {
+            let sep = toml_val
+                .as_table_mut()
+                .map(|t| {
+                    t.entry("shell_environment_policy".to_string())
+                        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
+                })
+                .and_then(|v| v.as_table_mut());
 
-                srv_table.insert(
-                    "command".to_string(),
-                    toml::Value::String(agentcontrol_bin.clone()),
-                );
-                srv_table.insert("args".to_string(), toml::Value::Array(new_args));
-                wrapped_count += 1;
+            if let Some(sep_tbl) = sep {
+                if !sep_tbl.contains_key("inherit") {
+                    sep_tbl.insert("inherit".to_string(), toml::Value::String("core".to_string()));
+                    env_policy_updated = true;
+                }
+                let set_tbl = sep_tbl
+                    .entry("set".to_string())
+                    .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
+                    .as_table_mut();
+                if let Some(set_m) = set_tbl {
+                    if set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str()) != Some("http://127.0.0.1:8080/v1") {
+                        set_m.insert("OPENAI_BASE_URL".to_string(), toml::Value::String("http://127.0.0.1:8080/v1".to_string()));
+                        env_policy_updated = true;
+                    }
+                    if set_m.get("HTTP_PROXY").and_then(|v| v.as_str()) != Some("http://127.0.0.1:8080") {
+                        set_m.insert("HTTP_PROXY".to_string(), toml::Value::String("http://127.0.0.1:8080".to_string()));
+                        env_policy_updated = true;
+                    }
+                }
             }
         }
 
-        if wrapped_count == 0 {
-            return Err(WrapError::AlreadyWrapped);
+        if let Some(table) = toml_val.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
+            for (_name, server) in table.iter_mut() {
+                if let Some(srv_table) = server.as_table_mut() {
+                    let current_cmd = srv_table
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("");
+                    if current_cmd.to_lowercase().contains("agentcontrol") || current_cmd.to_lowercase().contains("agentwall") {
+                        continue; // already wrapped
+                    }
+
+                    let orig_args = srv_table
+                        .get("args")
+                        .and_then(|a| a.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut new_args = vec![
+                        toml::Value::String("stdio-proxy".to_string()),
+                        toml::Value::String("--".to_string()),
+                        toml::Value::String(current_cmd.to_string()),
+                    ];
+                    for arg in orig_args {
+                        new_args.push(arg);
+                    }
+
+                    srv_table.insert(
+                        "command".to_string(),
+                        toml::Value::String(agentcontrol_bin.clone()),
+                    );
+                    srv_table.insert("args".to_string(), toml::Value::Array(new_args));
+                    wrapped_count += 1;
+                }
+            }
+        }
+
+        if wrapped_count == 0 && !env_policy_updated {
+            if toml_val.get("mcp_servers").and_then(|v| v.as_table()).map(|t| !t.is_empty()).unwrap_or(false) {
+                return Err(WrapError::AlreadyWrapped);
+            } else if ide_name != "Codex" {
+                return Err(WrapError::NoMcpServers);
+            } else {
+                return Err(WrapError::AlreadyWrapped);
+            }
         }
 
         if dry_run {
@@ -209,31 +241,169 @@ pub fn unwrap_generic(
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
-    match backup::find_latest_backup(config_dir) {
-        Some(backup_path) => {
-            if !force {
-                backup::verify_backup_integrity(&backup_path)?;
+    let latest_backup = backup::find_latest_backup(config_dir);
+    if let Some(ref backup_path) = latest_backup {
+        if !force {
+            backup::verify_backup_integrity(backup_path)?;
+        }
+    }
+
+    if force {
+        match latest_backup {
+            Some(backup_path) => {
+                fs::copy(&backup_path, &config_path)?;
+                fs::remove_file(&backup_path)?;
+                return Ok(UnwrapResult {
+                    config_path,
+                    backup_path,
+                });
             }
+            None => {
+                println!(
+                    "{} No backup found for {}. Manual cleanup instructions:",
+                    "⚠".yellow().bold(),
+                    ide_name
+                );
+                println!(
+                    "\nEdit {} and restore each mcpServer entry.",
+                    config_path.display().to_string().cyan()
+                );
+                return Err(WrapError::NoBackupFound);
+            }
+        }
+    }
+
+    // Non-destructive field-level unwrap
+    let is_toml = config_path.extension().and_then(|e| e.to_str()) == Some("toml");
+    let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
+
+    if is_toml {
+        let mut toml_val: toml::Value = toml::from_str(&raw)
+            .map_err(|e| WrapError::InvalidJson(format!("invalid TOML: {}", e)))?;
+
+        let mut user_added_servers = false;
+        if let Some(ref backup_path) = latest_backup {
+            if let Ok(bak_raw) = fs::read_to_string(backup_path) {
+                if let Ok(bak_val) = toml::from_str::<toml::Value>(&bak_raw) {
+                    let get_keys = |v: &toml::Value| -> std::collections::BTreeSet<String> {
+                        v.get("mcp_servers")
+                            .and_then(|s| s.as_table())
+                            .map(|m| m.keys().cloned().collect())
+                            .unwrap_or_default()
+                    };
+                    if get_keys(&toml_val) != get_keys(&bak_val) {
+                        user_added_servers = true;
+                    }
+                }
+            }
+        }
+
+        if !user_added_servers && latest_backup.is_some() {
+            let backup_path = latest_backup.unwrap();
             fs::copy(&backup_path, &config_path)?;
             fs::remove_file(&backup_path)?;
-            Ok(UnwrapResult {
+            return Ok(UnwrapResult {
                 config_path,
                 backup_path,
-            })
+            });
         }
-        None if force => {
-            println!(
-                "{} No backup found for {}. Manual cleanup instructions:",
-                "⚠".yellow().bold(),
-                ide_name
-            );
-            println!(
-                "\nEdit {} and restore each mcpServer entry.",
-                config_path.display().to_string().cyan()
-            );
-            Err(WrapError::NoBackupFound)
+
+        if let Some(table) = toml_val.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
+            for (_name, server) in table.iter_mut() {
+                if let Some(srv_table) = server.as_table_mut() {
+                    let orig_args = srv_table
+                        .get("args")
+                        .and_then(|a| a.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+
+                    if orig_args.len() >= 3
+                        && orig_args[0].as_str() == Some("stdio-proxy")
+                        && orig_args[1].as_str() == Some("--")
+                    {
+                        if let Some(original_cmd) = orig_args[2].as_str() {
+                            let rest_args: Vec<toml::Value> = orig_args[3..].to_vec();
+                            srv_table.insert("command".to_string(), toml::Value::String(original_cmd.to_string()));
+                            srv_table.insert("args".to_string(), toml::Value::Array(rest_args));
+                        }
+                    }
+                }
+            }
         }
-        None => Err(WrapError::NoBackupFound),
+
+        if let Some(sep) = toml_val.get_mut("shell_environment_policy").and_then(|v| v.as_table_mut()) {
+            if let Some(set_tbl) = sep.get_mut("set").and_then(|v| v.as_table_mut()) {
+                if set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080/v1") {
+                    set_tbl.remove("OPENAI_BASE_URL");
+                }
+                if set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                    set_tbl.remove("HTTP_PROXY");
+                }
+                if set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                    set_tbl.remove("HTTPS_PROXY");
+                }
+            }
+        }
+
+        let output_str = toml::to_string_pretty(&toml_val)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        atomic_write(&config_path, &output_str)?;
+
+        let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
+        Ok(UnwrapResult {
+            config_path,
+            backup_path,
+        })
+    } else {
+        let mut config: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => {
+                let stripped = super::strip_json_comments(&raw);
+                serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+            }
+        };
+
+        let mut user_added_servers = false;
+        if let Some(ref backup_path) = latest_backup {
+            if let Ok(bak_raw) = fs::read_to_string(backup_path) {
+                let bak_stripped = super::strip_json_comments(&bak_raw);
+                if let Ok(bak_json) = serde_json::from_str::<serde_json::Value>(&bak_stripped) {
+                    let get_keys = |v: &serde_json::Value| -> std::collections::BTreeSet<String> {
+                        v.get("mcpServers")
+                            .or_else(|| v.get("context_servers"))
+                            .or_else(|| v.get("experimental.context_servers"))
+                            .and_then(|s| s.as_object())
+                            .map(|m| m.keys().cloned().collect())
+                            .unwrap_or_default()
+                    };
+                    if get_keys(&config) != get_keys(&bak_json) {
+                        user_added_servers = true;
+                    }
+                }
+            }
+        }
+
+        if !user_added_servers && latest_backup.is_some() {
+            let backup_path = latest_backup.unwrap();
+            fs::copy(&backup_path, &config_path)?;
+            fs::remove_file(&backup_path)?;
+            return Ok(UnwrapResult {
+                config_path,
+                backup_path,
+            });
+        }
+
+        let _ = transformer::unwrap_all_servers(&mut config)?;
+
+        let output_str = serde_json::to_string_pretty(&config)
+            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        atomic_write(&config_path, &output_str)?;
+
+        let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
+        Ok(UnwrapResult {
+            config_path,
+            backup_path,
+        })
     }
 }
 
@@ -282,7 +452,7 @@ pub fn print_unwrap_summary_generic(ide_name: &str, result: &UnwrapResult) {
     println!("\n  {} Restart {} to apply changes.", "ℹ".blue(), ide_name);
 }
 
-fn atomic_write(path: &Path, content: &str) -> Result<(), WrapError> {
+pub(crate) fn atomic_write(path: &Path, content: &str) -> Result<(), WrapError> {
     let tmp_path = path.with_extension("agentwall-tmp");
     {
         let mut f = fs::File::create(&tmp_path)?;
@@ -405,17 +575,47 @@ pub fn apply_centralized_cursor_config(has_openai_key: bool) -> Result<(), WrapE
     Ok(())
 }
 
-/// Restores Cursor's User/settings.json from backup
+/// Restores Cursor's User/settings.json from backup or removes injected settings in-place
 pub fn unwrap_cursor_settings(force: bool) -> Result<(), WrapError> {
     if let Ok(settings_path) = super::config_path::cursor_settings_path() {
         if settings_path.exists() {
             let config_dir = settings_path.parent().unwrap_or(Path::new("."));
-            if let Some(backup_path) = backup::find_latest_backup(config_dir) {
-                if !force {
+            if force {
+                if let Some(backup_path) = backup::find_latest_backup(config_dir) {
                     let _ = backup::verify_backup_integrity(&backup_path);
+                    let _ = fs::copy(&backup_path, &settings_path);
+                    let _ = fs::remove_file(&backup_path);
                 }
-                let _ = fs::copy(&backup_path, &settings_path);
-                let _ = fs::remove_file(&backup_path);
+                return Ok(());
+            }
+
+            if let Ok(raw) = fs::read_to_string(&settings_path) {
+                let parsed: Result<serde_json::Value, _> = serde_json::from_str(&raw).or_else(|_| {
+                    let stripped = super::strip_json_comments(&raw);
+                    serde_json::from_str(&stripped)
+                });
+                if let Ok(mut settings) = parsed {
+                    if let Some(map) = settings.as_object_mut() {
+                        let mut modified = false;
+                        if map.get("http.proxy").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                            map.remove("http.proxy");
+                            modified = true;
+                        }
+                        if map.get("cursor.general.disableHttp2").and_then(|v| v.as_bool()) == Some(true) {
+                            map.remove("cursor.general.disableHttp2");
+                            modified = true;
+                        }
+                        if map.get("cursor.general.openaiApiKey").and_then(|v| v.as_str()) == Some("sk-agentcontrol-managed") {
+                            map.remove("cursor.general.openaiApiKey");
+                            modified = true;
+                        }
+                        if modified {
+                            if let Ok(out) = serde_json::to_string_pretty(&settings) {
+                                let _ = atomic_write(&settings_path, &out);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

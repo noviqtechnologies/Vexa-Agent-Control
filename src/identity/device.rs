@@ -260,13 +260,13 @@ pub fn save_device_token(token: &str) -> Result<(), String> {
     if let Some(home) = dirs::home_dir() {
         let dir = home.join(".agentcontrol");
         let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(dir.join("device_token"), token);
+        let _ = save_fallback_file(&dir.join("device_token"), token);
     }
     #[cfg(windows)]
     {
         let program_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
         let _ = fs::create_dir_all(&program_data);
-        let _ = fs::write(program_data.join("device_token"), token);
+        let _ = save_fallback_file(&program_data.join("device_token"), token);
     }
     Ok(())
 }
