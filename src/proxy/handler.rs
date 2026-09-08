@@ -213,6 +213,8 @@ impl ProxyState {
         let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
         let db_manager = Arc::new(DbManager::init());
 
+        let scanners = crate::policy::SharedScanners::default_compiled();
+
         Arc::new(Self {
             policy: std::sync::RwLock::new(None),
             audit_logger,
@@ -225,32 +227,17 @@ impl ProxyState {
             policy_loaded: std::sync::atomic::AtomicBool::new(true),
             rate_limiter: RateLimiter::new(0),
             http_client: reqwest::Client::new(),
-            safe_mode_scanner: Arc::new(
-                crate::policy::safe_mode::SafeModeScanner::new()
-                    .expect("Failed to initialize SafeModeScanner"),
-            ),
+            safe_mode_scanner: scanners.safe_mode_scanner.clone(),
             ready: true,
             db_manager,
-            response_scanner: Arc::new(
-                crate::policy::response_scanner::ResponseScanner::new()
-                    .expect("Failed to initialize ResponseScanner"),
-            ),
+            response_scanner: scanners.response_scanner.clone(),
             response_scan_config: std::sync::RwLock::new(
                 crate::policy::response_scanner::ResponseScanConfig::default(),
             ),
-            dlp_scanner: Arc::new(
-                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-            ),
-            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
-                crate::policy::semantic::SemanticConfig::default(),
-            )),
-            injection_scanner: Arc::new(
-                crate::policy::injection::InjectionScanner::new()
-                    .expect("Failed to compile Injection regexes"),
-            ),
-            schema_drift_detector: Arc::new(
-                crate::policy::schema_drift::SchemaDriftDetector::new(None),
-            ),
+            dlp_scanner: scanners.dlp_scanner.clone(),
+            semantic_scanner: scanners.semantic_scanner.clone(),
+            injection_scanner: scanners.injection_scanner.clone(),
+            schema_drift_detector: scanners.schema_drift_detector.clone(),
             tool_history: std::sync::Mutex::new(Vec::new()),
             event_tx: tokio::sync::broadcast::channel(16).0,
             spend_ledger: None,
@@ -312,6 +299,8 @@ impl ProxyState {
         let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
         let db_manager = Arc::new(DbManager::init());
 
+        let scanners = crate::policy::SharedScanners::default_compiled();
+
         Arc::new(Self {
             policy: std::sync::RwLock::new(None),
             audit_logger,
@@ -324,29 +313,16 @@ impl ProxyState {
             policy_loaded: std::sync::atomic::AtomicBool::new(true),
             rate_limiter: RateLimiter::new(0),
             http_client: reqwest::Client::new(),
-            safe_mode_scanner: Arc::new(
-                crate::policy::safe_mode::SafeModeScanner::new()
-                    .expect("Failed to initialize SafeModeScanner"),
-            ),
+            safe_mode_scanner: scanners.safe_mode_scanner.clone(),
             ready: true,
             db_manager,
-            response_scanner: Arc::new(
-                crate::policy::response_scanner::ResponseScanner::new()
-                    .expect("Failed to initialize ResponseScanner"),
-            ),
+            response_scanner: scanners.response_scanner.clone(),
             response_scan_config: std::sync::RwLock::new(
                 crate::policy::response_scanner::ResponseScanConfig::default(),
             ),
-            dlp_scanner: Arc::new(
-                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-            ),
-            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
-                crate::policy::semantic::SemanticConfig::default(),
-            )),
-            injection_scanner: Arc::new(
-                crate::policy::injection::InjectionScanner::new()
-                    .expect("Failed to compile Injection regexes"),
-            ),
+            dlp_scanner: scanners.dlp_scanner.clone(),
+            semantic_scanner: scanners.semantic_scanner.clone(),
+            injection_scanner: scanners.injection_scanner.clone(),
             schema_drift_detector: detector,
             tool_history: std::sync::Mutex::new(Vec::new()),
             event_tx: tokio::sync::broadcast::channel(16).0,
@@ -407,6 +383,8 @@ impl ProxyState {
         let audit_logger = Arc::new(AuditLogger::new(audit_config).unwrap());
         let db_manager = Arc::new(DbManager::init());
 
+        let scanners = crate::policy::SharedScanners::default_compiled();
+
         Arc::new(Self {
             policy: std::sync::RwLock::new(None),
             audit_logger,
@@ -419,32 +397,17 @@ impl ProxyState {
             policy_loaded: std::sync::atomic::AtomicBool::new(true),
             rate_limiter: RateLimiter::new(0),
             http_client: reqwest::Client::new(),
-            safe_mode_scanner: Arc::new(
-                crate::policy::safe_mode::SafeModeScanner::new()
-                    .expect("Failed to initialize SafeModeScanner"),
-            ),
+            safe_mode_scanner: scanners.safe_mode_scanner.clone(),
             ready: true,
             db_manager,
-            response_scanner: Arc::new(
-                crate::policy::response_scanner::ResponseScanner::new()
-                    .expect("Failed to initialize ResponseScanner"),
-            ),
+            response_scanner: scanners.response_scanner.clone(),
             response_scan_config: std::sync::RwLock::new(
                 crate::policy::response_scanner::ResponseScanConfig::default(),
             ),
-            dlp_scanner: Arc::new(
-                crate::policy::dlp::DlpScanner::new(None).expect("Failed to compile DLP regexes"),
-            ),
-            semantic_scanner: Arc::new(crate::policy::semantic::SemanticScanner::new(
-                crate::policy::semantic::SemanticConfig::default(),
-            )),
-            injection_scanner: Arc::new(
-                crate::policy::injection::InjectionScanner::new()
-                    .expect("Failed to compile Injection regexes"),
-            ),
-            schema_drift_detector: Arc::new(
-                crate::policy::schema_drift::SchemaDriftDetector::new(None),
-            ),
+            dlp_scanner: scanners.dlp_scanner.clone(),
+            semantic_scanner: scanners.semantic_scanner.clone(),
+            injection_scanner: scanners.injection_scanner.clone(),
+            schema_drift_detector: scanners.schema_drift_detector.clone(),
             tool_history: std::sync::Mutex::new(Vec::new()),
             event_tx: tokio::sync::broadcast::channel(16).0,
             spend_ledger: None,

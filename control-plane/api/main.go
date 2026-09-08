@@ -2,17 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"encoding/json"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
@@ -99,11 +101,15 @@ func main() {
 		log.Printf("schema initialization warning: %v", err)
 	}
 
-	// Initialize Spend v2 Store and Sweeper
+	// Initialize Spend v2 Store, Writer, and Sweeper (AR-3, AR-4)
 	spendStore := spend.NewStore(db.Pool())
 	if err := spendStore.EnsureSchema(ctx); err != nil {
 		log.Printf("[spend] schema initialization warning: %v", err)
 	}
+	spendWriter := spend.NewSpendEventWriter(spendStore, 100*time.Millisecond, 10000, 256)
+	spendStore.SetEventWriter(spendWriter)
+	spendWriter.Start(ctx)
+
 	// Centralized Background Daemon Job Scheduler
 	sched := scheduler.New(
 		spend.NewSweepJob(spendStore, 30*time.Second),
@@ -113,12 +119,30 @@ func main() {
 	defer func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stopCancel()
+		_ = spendWriter.Stop(stopCtx)
 		_ = sched.Stop(stopCtx)
 	}()
 	spendV2H := handler.NewSpendV2Handler(spendStore)
 
-	// Expose background scheduler introspection
+	// Expose background scheduler introspection (loopback or admin-authorized)
 	r.Get("/internal/jobs", func(w http.ResponseWriter, r *http.Request) {
+		remoteHost := r.RemoteAddr
+		if host, _, err := net.SplitHostPort(remoteHost); err == nil {
+			remoteHost = host
+		}
+		isLoopback := remoteHost == "127.0.0.1" || remoteHost == "::1" || remoteHost == "localhost"
+		adminToken := os.Getenv("AGENTCONTROL_ADMIN_TOKEN")
+		clientToken := r.Header.Get("X-Admin-Token")
+		if clientToken == "" {
+			clientToken = r.Header.Get("Authorization")
+			clientToken = strings.TrimPrefix(clientToken, "Bearer ")
+		}
+
+		if !isLoopback && (adminToken == "" || clientToken != adminToken) {
+			http.Error(w, `{"error":{"code":"forbidden","message":"access restricted to loopback or authenticated admin"}}`, http.StatusForbidden)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(sched.Statuses())
 	})

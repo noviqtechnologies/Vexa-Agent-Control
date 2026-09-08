@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.79-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.80-10B981.svg?style=flat-square)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![OWASP](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
@@ -333,17 +333,18 @@ Model groups support 4 dynamic selection strategies:
 * **`priority` (Default):** Deterministic failover based on ascending deployment priority with health check circuit breakers.
 * **`lowest_latency`:** Automatically dispatches incoming requests to the deployment exhibiting the lowest rolling exponential moving average (EMA) response latency.
 * **`weighted_random`:** Proportional distribution based on configured traffic weights (e.g. 80% primary, 20% canary).
-* **`region_affinity`:** Strict sovereign data residency compliance. Fails closed immediately (HTTP 503 `routing_policy_violation`) if the target deployment resides in an unapproved jurisdiction.
+* **`region_affinity`:** Strict sovereign data residency compliance. Evaluates authoritative typed deployment `region` metadata (with strict delimiter-bounded fallback) and fails closed immediately (HTTP 503 `routing_policy_violation`) if the target deployment resides in an unapproved jurisdiction.
 
-### Extensible Pipeline Hook Lifecycle (AR-1)
+### Extensible Pipeline Hook Lifecycle & Unified Scanners (AR-1)
 Intercept and mutate traffic at each processing phase across both raw HTTP and structured MCP tool calls:
 * **`PreRoute` Stage:** Intercept raw HTTP requests, inject custom audit headers, and redact wire payloads.
 * **`PreExecute` Stage:** Inspect structured MCP tool calls (`serde_json::Value`), enforcing in-place parameter redaction (`ModifyJson`) or blocking dangerous actions (`Block`).
 * **`PostExecute` Stage:** Inspect downstream response chunks and streaming SSE token frames (`ModifyBytes`) to prevent data exfiltration.
+* **`SharedScanners` Construction:** Security detectors (SafeMode, DLP, Prompt Injection, Schema Drift) are compiled once at gateway startup inside a unified `SharedScanners` suite, eliminating duplicate RegexSet compilations across proxy handlers and pipeline hooks.
 
 ### High-Throughput Asynchronous Control Plane (AR-3, AR-4, AR-5)
-* **`SpendEventWriter`:** Bounded in-memory event buffer with PostgreSQL batch ingestion (`pgx.Batch`), graceful shutdown draining, and 2-second backpressure shed protection.
-* **Centralized `Scheduler`:** Deterministic background daemon managing periodic database sweeps (e.g. expiring stale reservation holds) with live introspection at `/internal/jobs`.
+* **`SpendEventWriter`:** Bounded in-memory event buffer with PostgreSQL batch ingestion (`pgx.Batch`), exponential backoff retry on transient errors, in-memory replay buffer, graceful shutdown draining, and backpressure shed protection. Production-wired directly to transactional `Store.Authorize`, `Store.Settle`, and `Store.Release` commit flows.
+* **Centralized `Scheduler`:** Deterministic background daemon managing periodic database sweeps (e.g. expiring stale reservation holds, stale assignment convergence) with authenticated live introspection at `/internal/jobs`.
 
 </details>
 
@@ -576,7 +577,7 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.79`.
+- **Expected Result:** Prints `agentcontrol 1.0.80`.
 - **Troubleshooting:** Check platform-specific guides: [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md).
 
 ### Step 2: Inspect Discovered Clients (Safe Dry-Run)
@@ -744,7 +745,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.79_checksums.txt
+sha256sum -c agentcontrol_1.0.80_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe

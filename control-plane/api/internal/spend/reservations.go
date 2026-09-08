@@ -307,6 +307,20 @@ func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeReq
 		return nil, fmt.Errorf("failed to commit authorization tx: %w", err)
 	}
 
+	if s.writer != nil {
+		_ = s.writer.Enqueue(context.Background(), SpendEvent{
+			OrganizationID:   orgID,
+			ReservationID:    reservationID,
+			RequestID:        req.RequestID,
+			EventType:        "AUTHORIZED",
+			AmountMicrocents: reserveMicrocents,
+			Currency:         CurrencyUSD,
+			Actor:            req.GatewayID,
+			ReasonCode:       "authorized",
+			OccurredAt:       now,
+		})
+	}
+
 	return allowResp, nil
 }
 
@@ -514,6 +528,22 @@ func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *
 		return nil, fmt.Errorf("failed to commit settlement tx: %w", err)
 	}
 
+	if s.writer != nil {
+		_ = s.writer.Enqueue(context.Background(), SpendEvent{
+			OrganizationID:    orgID,
+			ReservationID:     reservationID,
+			RequestID:         res.RequestID,
+			EventType:         "SETTLED",
+			AmountMicrocents:  actualCost,
+			Currency:          CurrencyUSD,
+			UsageJSON:         string(usageBytes),
+			ProviderRequestID: provReqID,
+			Actor:             res.GatewayID,
+			ReasonCode:        "settled",
+			OccurredAt:        now,
+		})
+	}
+
 	return resp, nil
 }
 
@@ -668,6 +698,20 @@ func (s *Store) releaseTx(ctx context.Context, orgID, reservationID string, req 
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit release tx: %w", err)
+	}
+
+	if s.writer != nil {
+		_ = s.writer.Enqueue(context.Background(), SpendEvent{
+			OrganizationID:   orgID,
+			ReservationID:    reservationID,
+			RequestID:        res.RequestID,
+			EventType:        "RELEASED",
+			AmountMicrocents: res.ReservedMicrocents,
+			Currency:         CurrencyUSD,
+			Actor:            res.GatewayID,
+			ReasonCode:       reason,
+			OccurredAt:       now,
+		})
 	}
 
 	return resp, nil

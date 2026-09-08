@@ -16,7 +16,7 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
-$FallbackVersion = "v1.0.79"
+$FallbackVersion = "v1.0.80"
 $Version = $null
 try {
     $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentWall-Installer" }

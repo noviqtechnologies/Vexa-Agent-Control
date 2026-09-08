@@ -15,6 +15,7 @@ fn make_deployments() -> Vec<Deployment> {
             credential_ref: None,
             priority: 1,
             weight: 80,
+            region: Some("us-east-1".to_string()),
         },
         Deployment {
             id: "dep-secondary-eu".to_string(),
@@ -24,6 +25,7 @@ fn make_deployments() -> Vec<Deployment> {
             credential_ref: None,
             priority: 2,
             weight: 20,
+            region: Some("eu-west-1".to_string()),
         },
     ]
 }

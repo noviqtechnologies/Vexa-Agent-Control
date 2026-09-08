@@ -20,6 +20,7 @@ pub struct Deployment {
     pub credential_ref: Option<String>,
     pub priority: u32,
     pub weight: u32,
+    pub region: Option<String>,
 }
 
 #[derive(Clone, Debug)]

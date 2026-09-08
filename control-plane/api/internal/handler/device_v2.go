@@ -255,6 +255,21 @@ func (h *DeviceV2Handler) AcknowledgeAssignment(w http.ResponseWriter, r *http.R
 		orgID = store.DefaultOrgID
 	}
 
+	// Verify target authorization: authenticated device must match assignment target
+	targetAsgn, err := h.Store.GetAssignment(r.Context(), orgID, req.AssignmentID)
+	if err != nil {
+		http.Error(w, `{"error":{"code":"assignment_not_found","message":"assignment not found"}}`, http.StatusNotFound)
+		return
+	}
+	if targetAsgn.TargetType == "device" && targetAsgn.TargetID != principal.DeviceID {
+		http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated device is not the target of this assignment"}}`, http.StatusForbidden)
+		return
+	}
+	if targetAsgn.TargetType == "user" && principal.UserID != "" && targetAsgn.TargetID != principal.UserID {
+		http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated user is not the target of this assignment"}}`, http.StatusForbidden)
+		return
+	}
+
 	updated, err := h.Store.AcknowledgeAssignment(r.Context(), orgID, &req)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":{"code":"ack_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
@@ -289,6 +304,19 @@ func (h *DeviceV2Handler) SubmitVerificationProbe(w http.ResponseWriter, r *http
 	}
 	if req.UserID == "" {
 		req.UserID = principal.UserID
+	}
+
+	if req.AssignmentID != "" {
+		if asgn, err := h.Store.GetAssignment(r.Context(), orgID, req.AssignmentID); err == nil && asgn != nil {
+			if asgn.TargetType == "device" && asgn.TargetID != principal.DeviceID {
+				http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated device is not the target of verified assignment"}}`, http.StatusForbidden)
+				return
+			}
+			if asgn.TargetType == "user" && principal.UserID != "" && asgn.TargetID != principal.UserID {
+				http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated user is not the target of verified assignment"}}`, http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	targetState := model.AssignmentStateVerified

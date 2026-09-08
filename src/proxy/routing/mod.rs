@@ -181,12 +181,32 @@ impl RegionAffinityStrategy {
             return true;
         }
 
+        // 1. Authoritative check: deployment has an explicit typed region
+        if let Some(ref reg) = d.region {
+            let reg_lower = reg.to_lowercase();
+            if self.allowed_regions.iter().any(|r| {
+                r == &reg_lower
+                    || reg_lower.starts_with(&format!("{}-", r))
+                    || reg_lower.starts_with(&format!("{}_", r))
+            }) {
+                return true;
+            }
+        }
+
+        // 2. Strict boundary fallback: match with delimiter boundaries on ID or URL
+        // (prevents 'us-east' accidentally matching 'us-east-1' or other arbitrary collisions)
         let id_lower = d.id.to_lowercase();
         let url_lower = d.endpoint_url.to_lowercase();
 
-        self.allowed_regions
-            .iter()
-            .any(|r| id_lower.contains(r) || url_lower.contains(r))
+        self.allowed_regions.iter().any(|r| {
+            id_lower == *r
+                || id_lower.starts_with(&format!("{}-", r))
+                || id_lower.ends_with(&format!("-{}", r))
+                || id_lower.contains(&format!("-{}-", r))
+                || url_lower.contains(&format!(".{}.", r))
+                || url_lower.contains(&format!("/{}/", r))
+                || url_lower.contains(&format!("{}.", r))
+        })
     }
 }
 
@@ -284,6 +304,7 @@ mod tests {
                 credential_ref: None,
                 priority: 2,
                 weight: 10,
+                region: Some("us-east-1".to_string()),
             },
             Deployment {
                 id: "dep-eu-west-1".to_string(),
@@ -293,6 +314,7 @@ mod tests {
                 credential_ref: None,
                 priority: 1,
                 weight: 90,
+                region: Some("eu-west-1".to_string()),
             },
         ]
     }

@@ -1795,6 +1795,7 @@ pub async fn handle_request(
                                     credential_ref: d.credential_ref.clone(),
                                     priority: d.priority.unwrap_or(1),
                                     weight: d.weight.unwrap_or(1),
+                                    region: d.region.clone(),
                                 })
                                 .collect();
 

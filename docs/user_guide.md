@@ -609,22 +609,24 @@ When defining upstream model providers in `agentcontrol-policy.yaml`, operators 
 - **`priority`:** Fallback ladder prioritizing primary deployments and shifting to backup endpoints upon failure.
 - **`lowest_latency`:** Dynamically dispatches queries to whichever deployment exhibits the lowest exponential moving average (EMA) response latency.
 - **`weighted_random`:** Proportional traffic routing across deployments based on assigned weights.
-- **`region_affinity`:** Strict sovereign data residency compliance. If the resolved deployment violates `allowed_regions`, Agent Control deterministically rejects the request with HTTP 503 `routing_policy_violation` to prevent cross-border data leakage.
+- **`region_affinity`:** Strict sovereign data residency compliance. Matches against authoritative typed deployment `region` metadata (with delimiter-bounded fallback). If the candidate deployments violate `allowed_regions`, Agent Control deterministically rejects the request with HTTP 503 `routing_policy_violation` to prevent cross-border data leakage.
 
 ### High-Throughput Asynchronous Spend Event Writer (AR-3, AR-5)
 
 In high-concurrency enterprise deployments, logging individual token spend events synchronously can bottleneck database transaction pools. Agent Control decouples spend event recording via an asynchronous `SpendEventWriter`:
-- **Bounded In-Memory Ring Buffer:** Holds up to 50,000 pending spend events.
-- **Multi-Row Batch Flushing:** Batches flushes into PostgreSQL using `pgx.Batch` every 100ms or 1,000 records.
-- **Backpressure Shed Protection:** Under extreme database saturation, write attempts block for up to 2 seconds before shedding load with critical audit alerts, shielding request proxies from unbounded latencies.
+- **Production Wiring:** Bound directly to `spend.Store` and triggered post-commit upon `Authorize`, `Settle`, and `Release` lifecycle operations.
+- **Bounded In-Memory Ring Buffer:** Holds up to 10,000 pending spend events.
+- **Multi-Row Batch Flushing:** Batches flushes into PostgreSQL using `pgx.Batch` every 100ms or 256 records.
+- **Exponential Backoff Retry & Replay:** Automatically retries failed batch flushes up to 3 times with exponential backoff, storing uncommitted events in a dedicated replay buffer to prevent data loss during transient database outages.
+- **Backpressure Shed Protection:** Under extreme database saturation, write attempts wait up to 2 seconds before shedding load with critical audit alerts, shielding request proxies from unbounded latencies.
 - **Graceful Shutdown Drain:** Flushes all buffered events to durable storage upon SIGTERM/SIGINT.
 - **Decoupled Execution Runs (`runs.Store`):** Analytical run queries (`ListRuns`, `GetRunDossier`) are isolated from transactional ledger updates, preventing dashboard queries from degrading active agent execution.
 
 ### Centralized Daemon Job Scheduler (AR-4)
 
 The Go Control Plane manages true background daemons using a centralized, context-aware `Scheduler`:
-- **Deterministic Sweeper Registration:** Periodic maintenance jobs (e.g. `SweepJob` for cleaning expired reservation holds) register with specific intervals and jitter.
-- **Live Introspection Endpoint:** Operators can inspect active jobs, execution schedules, and run statistics via `GET /internal/jobs`.
+- **Deterministic Sweeper Registration:** Periodic maintenance jobs (e.g. `SweepJob` for cleaning expired reservation holds, `AssignmentStaleSweepJob` for stale endpoint convergence) register with specific intervals.
+- **Authenticated Live Introspection:** Operators can inspect active jobs, execution schedules, and run statistics via `GET /internal/jobs` (restricted to loopback or authenticated admin token).
 - **Graceful Cancellation:** All daemon jobs link directly to the application termination context, guaranteeing clean cancellation on service shutdown.
 
 ---

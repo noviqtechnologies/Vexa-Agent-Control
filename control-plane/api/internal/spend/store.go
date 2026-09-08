@@ -25,11 +25,22 @@ func isSerializationError(err error) bool {
 }
 
 type Store struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	writer *SpendEventWriter
 }
 
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
+}
+
+// SetEventWriter configures the asynchronous batched SpendEventWriter.
+func (s *Store) SetEventWriter(w *SpendEventWriter) {
+	s.writer = w
+}
+
+// EventWriter returns the configured SpendEventWriter if any.
+func (s *Store) EventWriter() *SpendEventWriter {
+	return s.writer
 }
 
 // Pool returns the underlying pgxpool.Pool.

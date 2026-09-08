@@ -182,6 +182,7 @@ pub struct ModelDeploymentConfig {
     pub priority: Option<u32>,
     pub weight: Option<u32>,
     pub credential_ref: Option<String>,
+    pub region: Option<String>,
 }
 
 /// LLM Provider access rule.

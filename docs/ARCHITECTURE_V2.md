@@ -146,7 +146,7 @@ The gateway features a pluggable routing layer supporting diverse multi-model se
 * **`PriorityStrategy`:** Primary/secondary fallback sequence honoring explicit deployment priority ordinals.
 * **`LowestLatencyStrategy`:** Evaluates exponential moving average (EMA) response latency metrics reported by `StatsProvider` to route to the fastest available deployment.
 * **`WeightedRandomStrategy`:** Proportional distribution based on deployment traffic weights for canary and load distribution scenarios.
-* **`RegionAffinityStrategy`:** Strict data residency compliance. If the chosen deployment region violates `allowed_regions`, the engine deterministically fails closed with HTTP 503 `routing_policy_violation` rather than silently leaking data across borders.
+* **`RegionAffinityStrategy`:** Strict data residency compliance. Evaluates authoritative typed deployment `region` metadata (with delimiter-bounded fallback) and deterministically fails closed with HTTP 503 `routing_policy_violation` if no eligible compliant deployment exists.
 
 ---
 
@@ -156,7 +156,7 @@ A unified hook system provides lifecycle interception across three distinct stag
 * **`PreRoute`:** Intercepts raw HTTP requests before routing decisions or payload parsing. Supports header injection and raw byte mutations (`ModifyBytes`).
 * **`PreExecute`:** Intercepts structured MCP tool calls (`serde_json::Value`), executing content sanitizers, inline DLP redactions (`ModifyJson`), and security blocks (`Block`).
 * **`PostExecute`:** Intercepts outbound downstream responses and streaming token chunks (`ModifyBytes`).
-* **Unified Scanner Construction:** Detectors (DLP, Prompt Injection, Safe Mode) are compiled once at gateway startup inside `ProxyState` and shared cleanly across pipeline hooks and request handlers.
+* **Unified `SharedScanners` Construction:** Detectors (SafeMode, DLP, Prompt Injection, Schema Drift) are compiled once at gateway startup inside a centralized `SharedScanners` suite and shared cleanly across proxy handlers, avoiding redundant multi-block regex compilations.
 
 ---
 
@@ -164,7 +164,8 @@ A unified hook system provides lifecycle interception across three distinct stag
 
 The Go Control Plane separates monolithic spend database operations into specialized, high-throughput components:
 * **`runs.Store`:** Decoupled execution history and forensic run dossiers (`ListRuns`, `GetRunDossier`), preventing analytical queries from interfering with transaction hot paths.
-* **`SpendEventWriter`:** Asynchronous bounded queue with batch ingestion via `pgx.Batch`. Incorporates a 2-second backpressure timeout to drop-and-alert instead of exhausting memory or stalling proxies, with clean shutdown drain guarantees.
-* **Centralized `Scheduler`:** Deterministic background daemon managing periodic tasks (e.g. `SweepJob` for expired reservation holds) with graceful cancellation context and live introspection endpoint at `/internal/jobs`.
+* **`SpendEventWriter`:** Asynchronous bounded queue with batch ingestion via `pgx.Batch`, exponential backoff retry on transient DB errors, in-memory replay buffer, and graceful shutdown draining. Production-wired to transactional `Store.Authorize`, `Store.Settle`, and `Store.Release` commit flows.
+* **Centralized `Scheduler`:** Deterministic background daemon managing periodic tasks (e.g. `SweepJob` for expired reservation holds, `AssignmentStaleSweepJob`) with graceful cancellation and loopback/admin-authenticated live introspection at `/internal/jobs`.
+
 
 
