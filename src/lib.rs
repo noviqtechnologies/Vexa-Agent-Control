@@ -27,8 +27,8 @@ pub mod wrap;
 
 pub mod compliance;
 pub mod license;
-pub mod spend;
 pub mod sentry;
+pub mod spend;
 
 pub mod bench;
 pub mod detector;
@@ -41,4 +41,3 @@ pub mod sync;
 
 #[cfg(feature = "enterprise")]
 pub mod enterprise;
-

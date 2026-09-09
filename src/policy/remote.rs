@@ -32,9 +32,7 @@ pub struct RemotePolicy {
 
 /// Helper to construct a Reqwest client with mTLS device identity if available.
 pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(timeout);
+    let mut builder = reqwest::Client::builder().no_proxy().timeout(timeout);
 
     // Look for device cert and key in ~/.agentcontrol, ~/.agentwall, or Windows ProgramData
     let mut candidate_dirs = Vec::new();
@@ -51,7 +49,9 @@ pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client
         let cert_path = dir.join("device_cert.pem");
         let key_path = dir.join("device_key.pem");
         if cert_path.exists() && key_path.exists() {
-            if let (Ok(cert_bytes), Ok(key_bytes)) = (std::fs::read(&cert_path), std::fs::read(&key_path)) {
+            if let (Ok(cert_bytes), Ok(key_bytes)) =
+                (std::fs::read(&cert_path), std::fs::read(&key_path))
+            {
                 let mut combined = cert_bytes;
                 combined.extend_from_slice(b"\n");
                 combined.extend_from_slice(&key_bytes);
@@ -79,8 +79,8 @@ pub async fn fetch_policy_yaml(
     let client = build_device_http_client(std::time::Duration::from_secs(10));
 
     // 1. Try device-authenticated endpoint (/api/v2/device/policy/active)
-    let device_token_opt = crate::identity::device::load_device_token()
-        .or_else(|| std::env::var("AGENT_ID").ok());
+    let device_token_opt =
+        crate::identity::device::load_device_token().or_else(|| std::env::var("AGENT_ID").ok());
 
     let v2_url = format!("{}/api/v2/device/policy/active", clean_base);
     let mut req_v2 = client.get(&v2_url);
@@ -99,9 +99,13 @@ pub async fn fetch_policy_yaml(
                 Some(yaml) if !yaml.trim().is_empty() => Ok(Some(yaml)),
                 _ => Ok(None),
             };
-        } else if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
+        } else if status == reqwest::StatusCode::NOT_FOUND
+            || status == reqwest::StatusCode::NO_CONTENT
+        {
             return Ok(None);
-        } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        } else if status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::FORBIDDEN
+        {
             // Log typed auth failure if device credentials were tried
             if device_token_opt.is_some() {
                 let body = resp_v2.text().await.unwrap_or_default();

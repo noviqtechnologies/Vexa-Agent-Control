@@ -197,7 +197,10 @@ impl LocalKeyCache {
             .or_insert_with(|| Arc::new(RateBucket::default()))
             .clone();
 
-        let mut start_guard = bucket.window_start.lock().unwrap_or_else(|e| e.into_inner());
+        let mut start_guard = bucket
+            .window_start
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let is_expired = match *start_guard {
             Some(start) => start.elapsed() >= Duration::from_secs(60),
             None => true,

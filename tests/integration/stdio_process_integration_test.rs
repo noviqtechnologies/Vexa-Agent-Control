@@ -85,7 +85,9 @@ fn send_and_recv(
     msg: serde_json::Value,
 ) -> serde_json::Value {
     let line = serde_json::to_string(&msg).unwrap() + "\n";
-    stdin.write_all(line.as_bytes()).expect("write to proxy stdin");
+    stdin
+        .write_all(line.as_bytes())
+        .expect("write to proxy stdin");
     stdin.flush().expect("flush proxy stdin");
     let mut resp = String::new();
     stdout.read_line(&mut resp).expect("read from proxy stdout");

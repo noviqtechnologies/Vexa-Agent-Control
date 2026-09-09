@@ -33,7 +33,9 @@ fn test_groq_endpoint_and_auth() {
 fn test_groq_custom_base_url() {
     let t = get_transformer("groq").unwrap();
     let req = make_groq_request("llama-3.1-8b-instant");
-    let (url, _, _) = t.transform_request(&req, "gsk_key", Some("https://groq.internal.corp")).unwrap();
+    let (url, _, _) = t
+        .transform_request(&req, "gsk_key", Some("https://groq.internal.corp"))
+        .unwrap();
     assert_eq!(url, "https://groq.internal.corp/openai/v1/chat/completions");
 }
 
@@ -74,7 +76,8 @@ fn test_groq_tools_support() {
 fn test_groq_extra_params() {
     let t = get_transformer("groq").unwrap();
     let mut req = make_groq_request("llama-3.3-70b-versatile");
-    req.extra_params.insert("top_p".to_string(), serde_json::json!(0.95));
+    req.extra_params
+        .insert("top_p".to_string(), serde_json::json!(0.95));
     let (_, _, body) = t.transform_request(&req, "gsk_key", None).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["top_p"], 0.95);
@@ -93,7 +96,9 @@ fn test_groq_normalize_response_success() {
         "usage": { "prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18 }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let res = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let res = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(res["choices"][0]["message"]["content"], "Fast LPU answer");
 }
 

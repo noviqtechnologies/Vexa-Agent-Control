@@ -190,8 +190,8 @@ pub fn unwrap_claude(force: bool) -> Result<UnwrapResult, WrapError> {
 
     let _ = transformer::unwrap_all_servers(&mut config)?;
 
-    let output_str = serde_json::to_string_pretty(&config)
-        .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+    let output_str =
+        serde_json::to_string_pretty(&config).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
     atomic_write(&config_path, &output_str)?;
 
     let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());

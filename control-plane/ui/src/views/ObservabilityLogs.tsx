@@ -4,21 +4,22 @@ import RequestLogsTab from '../components/observability/RequestLogsTab'
 import AuditLogsTab from '../components/observability/AuditLogsTab'
 import DeletedKeysTab from '../components/observability/DeletedKeysTab'
 import DeletedTeamsTab from '../components/observability/DeletedTeamsTab'
+import AuditLogs from './AuditLogs'
 import './ObservabilityLogs.css'
 
-type TabType = 'request_logs' | 'audit' | 'deleted_keys' | 'deleted_teams'
+type TabType = 'security_logs' | 'request_logs' | 'audit' | 'deleted_keys' | 'deleted_teams'
 
 export default function ObservabilityLogs() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as TabType | null
   const [activeTab, setActiveTab] = useState<TabType>(
-    tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams'
+    tabParam === 'security_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams'
       ? tabParam
       : 'request_logs'
   )
 
   useEffect(() => {
-    if (tabParam && (tabParam === 'request_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams')) {
+    if (tabParam && (tabParam === 'security_logs' || tabParam === 'request_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams')) {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -39,6 +40,13 @@ export default function ObservabilityLogs() {
 
       {/* Primary Tab Navigation */}
       <nav className="obs-tabs-nav" aria-label="Observability Tabs">
+        <button
+          type="button"
+          className={`obs-tab-btn ${activeTab === 'security_logs' ? 'active' : ''}`}
+          onClick={() => handleTabChange('security_logs')}
+        >
+          Security & DLP Logs
+        </button>
         <button
           type="button"
           className={`obs-tab-btn ${activeTab === 'request_logs' ? 'active' : ''}`}
@@ -71,6 +79,7 @@ export default function ObservabilityLogs() {
 
       {/* Tab Panels */}
       <div className="obs-tab-content">
+        {activeTab === 'security_logs' && <AuditLogs />}
         {activeTab === 'request_logs' && <RequestLogsTab />}
         {activeTab === 'audit' && <AuditLogsTab />}
         {activeTab === 'deleted_keys' && <DeletedKeysTab />}

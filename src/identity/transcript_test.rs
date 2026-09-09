@@ -46,6 +46,8 @@ mod tests {
 
         let canonical = builder.build_canonical_string();
         let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
-        assert!(verifying_key.verify_strict(canonical.as_bytes(), &sig).is_ok());
+        assert!(verifying_key
+            .verify_strict(canonical.as_bytes(), &sig)
+            .is_ok());
     }
 }

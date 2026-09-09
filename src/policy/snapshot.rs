@@ -4,10 +4,10 @@
 //! Eliminates RwLock write stalls during hot-reloads and ensures that any in-flight
 //! request executes against a consistent, immutable policy snapshot.
 
-use std::sync::{Arc, RwLock};
+use super::engine::CompiledPolicy;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
-use super::engine::CompiledPolicy;
+use std::sync::{Arc, RwLock};
 
 /// An immutable point-in-time snapshot of the active security policy.
 #[derive(Clone, Debug)]

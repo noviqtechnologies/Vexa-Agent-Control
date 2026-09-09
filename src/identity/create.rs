@@ -92,7 +92,8 @@ pub fn run_identity_create(
             );
             eprintln!(
                 "{}",
-                "  Or set AGENTCONTROL_IDENTITY_BACKEND=aws-secrets-manager to use AWS SM.".yellow()
+                "  Or set AGENTCONTROL_IDENTITY_BACKEND=aws-secrets-manager to use AWS SM."
+                    .yellow()
             );
             return 1;
         }

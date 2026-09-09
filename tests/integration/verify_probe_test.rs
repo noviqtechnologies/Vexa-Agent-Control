@@ -28,7 +28,10 @@ async fn mock_gateway_handler(
         let id = body.get("id").cloned().unwrap_or(json!("1"));
         let params = body.get("params").cloned().unwrap_or(json!({}));
         let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-        let args_str = params.get("arguments").map(|a| a.to_string()).unwrap_or_default();
+        let args_str = params
+            .get("arguments")
+            .map(|a| a.to_string())
+            .unwrap_or_default();
 
         if tool_name == "read_file" && args_str.contains("SYSTEM PROMPT OVERRIDE") {
             // Prompt injection block
@@ -43,7 +46,9 @@ async fn mock_gateway_handler(
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .header("Content-Type", "application/json")
-                .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                .body(http_body_util::Full::new(bytes::Bytes::from(
+                    resp_body.to_string(),
+                )))
                 .unwrap());
         }
 
@@ -60,7 +65,9 @@ async fn mock_gateway_handler(
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .header("Content-Type", "application/json")
-                .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                .body(http_body_util::Full::new(bytes::Bytes::from(
+                    resp_body.to_string(),
+                )))
                 .unwrap());
         }
 
@@ -75,7 +82,9 @@ async fn mock_gateway_handler(
         return Ok(Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json")
-            .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+            .body(http_body_util::Full::new(bytes::Bytes::from(
+                resp_body.to_string(),
+            )))
             .unwrap());
     }
 
@@ -105,7 +114,10 @@ async fn test_verification_probe_suite_all_pass() {
     });
 
     let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
-    assert_eq!(exit_code, 0, "Expected verify suite to pass 3/3 on compliant gateway");
+    assert_eq!(
+        exit_code, 0,
+        "Expected verify suite to pass 3/3 on compliant gateway"
+    );
 }
 
 #[tokio::test]

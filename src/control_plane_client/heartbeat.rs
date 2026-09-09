@@ -73,7 +73,8 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                                                 .and_then(|c| c.as_str())
                                                 .map(|cmd| {
                                                     let cl = cmd.to_lowercase();
-                                                    cl.contains("agentwall") || cl.contains("agentcontrol")
+                                                    cl.contains("agentwall")
+                                                        || cl.contains("agentcontrol")
                                                 })
                                                 .unwrap_or(false)
                                         })
@@ -81,7 +82,8 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                                 }
                             }
                         } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                            let servers = v.get("mcpServers")
+                            let servers = v
+                                .get("mcpServers")
                                 .or_else(|| v.get("mcp_servers"))
                                 .or_else(|| v.get("context_servers"))
                                 .or_else(|| v.get("experimental.context_servers"))
@@ -178,7 +180,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
+            if !s.is_empty()
+                && s != "local-dev-shared-secret-change-me"
+                && s != "vexa_team_gateway_secret_key_12345"
+            {
                 s
             } else {
                 device_id.clone()
@@ -193,7 +198,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             Ok(res) if res.status().is_success() => {
                 crate::service::eventlog::log_info(
                     1001,
-                    &format!("Heartbeat accepted cleanly by Hub ({}) for device {}", base_url, device_id),
+                    &format!(
+                        "Heartbeat accepted cleanly by Hub ({}) for device {}",
+                        base_url, device_id
+                    ),
                 );
             }
             Ok(res) => {
@@ -205,7 +213,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
                 );
                 crate::service::eventlog::log_warn(
                     1002,
-                    &format!("Heartbeat rejected by Hub ({}) with HTTP status: {}", base_url, status),
+                    &format!(
+                        "Heartbeat rejected by Hub ({}) with HTTP status: {}",
+                        base_url, status
+                    ),
                 );
             }
             Err(e) => {
@@ -217,7 +228,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
                 );
                 crate::service::eventlog::log_error(
                     1003,
-                    &format!("Failed to connect to Hub ({}) for heartbeat: {}", base_url, err_str),
+                    &format!(
+                        "Failed to connect to Hub ({}) for heartbeat: {}",
+                        base_url, err_str
+                    ),
                 );
             }
         }
@@ -228,7 +242,10 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
 
         let ide_statuses = crate::wrap::ide_config::scan_all_ides(&proxy_url);
-        let overall = if ide_statuses.iter().any(|s| s.compliance_state == "BYPASSED" || s.compliance_state == "NON_COMPLIANT") {
+        let overall = if ide_statuses
+            .iter()
+            .any(|s| s.compliance_state == "BYPASSED" || s.compliance_state == "NON_COMPLIANT")
+        {
             "NON_COMPLIANT"
         } else {
             "COMPLIANT"
@@ -244,14 +261,21 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        let telemetry_url = format!("{}/api/v1/devices/{}/telemetry", base_url.trim_end_matches('/'), device_id);
+        let telemetry_url = format!(
+            "{}/api/v1/devices/{}/telemetry",
+            base_url.trim_end_matches('/'),
+            device_id
+        );
         let mut tel_req = client.post(&telemetry_url).json(&telemetry_payload);
         tel_req = tel_req.header("Authorization", format!("Bearer {}", auth_token));
         if let Ok(res) = tel_req.send().await {
             if res.status().is_success() {
                 crate::service::eventlog::log_info(
                     1004,
-                    &format!("Granular IDE telemetry synced cleanly with Hub ({})", base_url),
+                    &format!(
+                        "Granular IDE telemetry synced cleanly with Hub ({})",
+                        base_url
+                    ),
                 );
             }
         }

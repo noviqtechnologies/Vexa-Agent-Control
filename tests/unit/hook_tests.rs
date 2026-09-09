@@ -89,9 +89,18 @@ async fn test_hook_chaining_sequential_json_mutation() {
     struct PrefixHook;
     #[async_trait]
     impl PipelineHook for PrefixHook {
-        fn name(&self) -> &'static str { "prefix" }
-        fn stage(&self) -> HookStage { HookStage::PreExecute }
-        async fn on_mcp_tool_call(&self, _: &str, p: &mut Value, _: &mut RequestContext) -> HookOutcome {
+        fn name(&self) -> &'static str {
+            "prefix"
+        }
+        fn stage(&self) -> HookStage {
+            HookStage::PreExecute
+        }
+        async fn on_mcp_tool_call(
+            &self,
+            _: &str,
+            p: &mut Value,
+            _: &mut RequestContext,
+        ) -> HookOutcome {
             if let Some(text) = p.get("text").and_then(|v| v.as_str()) {
                 p["text"] = json!(format!("prefixed: {}", text));
                 HookOutcome::ModifyJson(p.clone())
@@ -104,9 +113,18 @@ async fn test_hook_chaining_sequential_json_mutation() {
     struct SuffixHook;
     #[async_trait]
     impl PipelineHook for SuffixHook {
-        fn name(&self) -> &'static str { "suffix" }
-        fn stage(&self) -> HookStage { HookStage::PreExecute }
-        async fn on_mcp_tool_call(&self, _: &str, p: &mut Value, _: &mut RequestContext) -> HookOutcome {
+        fn name(&self) -> &'static str {
+            "suffix"
+        }
+        fn stage(&self) -> HookStage {
+            HookStage::PreExecute
+        }
+        async fn on_mcp_tool_call(
+            &self,
+            _: &str,
+            p: &mut Value,
+            _: &mut RequestContext,
+        ) -> HookOutcome {
             if let Some(text) = p.get("text").and_then(|v| v.as_str()) {
                 p["text"] = json!(format!("{} :suffixed", text));
                 HookOutcome::ModifyJson(p.clone())

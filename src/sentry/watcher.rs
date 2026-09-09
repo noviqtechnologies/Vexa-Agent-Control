@@ -27,9 +27,18 @@ impl SentryWatcher {
         // 1. Initial enforcement sweep across all registered targets
         for (name, _) in &self.watched_paths {
             if let Err(e) = enforce_ide_target(name, &self.proxy_url) {
-                eprintln!("{} [sentry] Initial enforcement for {} warning: {}", "⚠".yellow(), name, e);
+                eprintln!(
+                    "{} [sentry] Initial enforcement for {} warning: {}",
+                    "⚠".yellow(),
+                    name,
+                    e
+                );
             } else {
-                eprintln!("{} [sentry] Verified and locked proxy configuration for {}", "✔".green(), name);
+                eprintln!(
+                    "{} [sentry] Verified and locked proxy configuration for {}",
+                    "✔".green(),
+                    name
+                );
             }
         }
 
@@ -50,7 +59,12 @@ impl SentryWatcher {
             if let Some(parent) = path.parent() {
                 if parent.exists() {
                     let _ = watcher.watch(parent, RecursiveMode::NonRecursive);
-                    eprintln!("{} [sentry] Watching directory for {}: {}", "ℹ".blue(), name, parent.display());
+                    eprintln!(
+                        "{} [sentry] Watching directory for {}: {}",
+                        "ℹ".blue(),
+                        name,
+                        parent.display()
+                    );
                 }
             }
         }
@@ -65,10 +79,20 @@ impl SentryWatcher {
                                 eprintln!("{} [sentry] Detected modification in {} config. Executing self-healing...", "⚡".cyan(), name);
                                 match enforce_ide_target(name, &self.proxy_url) {
                                     Ok(_) => {
-                                        eprintln!("{} [sentry] {} auto-healed successfully (proxy={})", "✔".green(), name, self.proxy_url);
+                                        eprintln!(
+                                            "{} [sentry] {} auto-healed successfully (proxy={})",
+                                            "✔".green(),
+                                            name,
+                                            self.proxy_url
+                                        );
                                     }
                                     Err(e) => {
-                                        eprintln!("{} [sentry] Failed to auto-heal {}: {}", "✖".red(), name, e);
+                                        eprintln!(
+                                            "{} [sentry] Failed to auto-heal {}: {}",
+                                            "✖".red(),
+                                            name,
+                                            e
+                                        );
                                     }
                                 }
                                 crate::wrap::status::gather_and_send_mcp_servers_snapshot();

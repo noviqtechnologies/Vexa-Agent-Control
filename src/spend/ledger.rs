@@ -98,7 +98,8 @@ impl SpendLedger {
         .ok();
         conn.execute("INSERT INTO spend_latency_test (id) VALUES (1)", [])
             .ok();
-        conn.execute("DROP TABLE IF EXISTS spend_latency_test", []).ok();
+        conn.execute("DROP TABLE IF EXISTS spend_latency_test", [])
+            .ok();
         let write_latency_ms = start.elapsed().as_millis();
 
         if write_latency_ms > 50 {

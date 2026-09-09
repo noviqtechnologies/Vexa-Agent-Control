@@ -93,7 +93,9 @@ pub fn install_ca_to_trust_store(ca_cert_path: &Path) -> Result<(), TrustStoreEr
             }
             return Ok(());
         }
-        return Err(TrustStoreError::UnsupportedOs("Cannot resolve macOS home directory".to_string()));
+        return Err(TrustStoreError::UnsupportedOs(
+            "Cannot resolve macOS home directory".to_string(),
+        ));
     }
 
     #[cfg(target_os = "linux")]
@@ -133,7 +135,9 @@ pub fn install_ca_to_trust_store(ca_cert_path: &Path) -> Result<(), TrustStoreEr
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        Err(TrustStoreError::UnsupportedOs(std::env::consts::OS.to_string()))
+        Err(TrustStoreError::UnsupportedOs(
+            std::env::consts::OS.to_string(),
+        ))
     }
 }
 
@@ -201,7 +205,9 @@ pub fn uninstall_ca_from_trust_store() -> Result<(), TrustStoreError> {
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        Err(TrustStoreError::UnsupportedOs(std::env::consts::OS.to_string()))
+        Err(TrustStoreError::UnsupportedOs(
+            std::env::consts::OS.to_string(),
+        ))
     }
 }
 

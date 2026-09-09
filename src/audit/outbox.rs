@@ -5,12 +5,12 @@
 //! Prevents slow or unreachable remote network endpoints from stalling the local
 //! security gateway execution loop.
 
+use super::logger::AuditEntry;
+use super::siem::{try_export, SiemExporter};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use super::logger::AuditEntry;
-use super::siem::{try_export, SiemExporter};
 
 /// An outbox delivery unit for asynchronous SIEM / dashboard export.
 #[derive(Clone, Debug, Serialize, Deserialize)]

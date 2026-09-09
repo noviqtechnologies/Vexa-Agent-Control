@@ -18,7 +18,11 @@ pub struct ReplayGuard;
 
 impl ReplayGuard {
     /// Evaluate whether a failed operation can be safely retried.
-    pub fn classify(kind: &OperationKind, stream_started: bool, http_status: Option<u16>) -> ReplayClassification {
+    pub fn classify(
+        kind: &OperationKind,
+        stream_started: bool,
+        http_status: Option<u16>,
+    ) -> ReplayClassification {
         // If SSE streaming has already delivered data chunks to the client,
         // we cannot seamlessly rewind or retry the request.
         if stream_started {
@@ -37,7 +41,9 @@ impl ReplayGuard {
         }
 
         match kind {
-            OperationKind::LlmCompletion { .. } => ReplayClassification::CanRetry { max_attempts: 3 },
+            OperationKind::LlmCompletion { .. } => {
+                ReplayClassification::CanRetry { max_attempts: 3 }
+            }
             OperationKind::Embedding { .. } => ReplayClassification::CanRetry { max_attempts: 3 },
             OperationKind::McpToolCall { is_idempotent, .. } => {
                 if *is_idempotent {

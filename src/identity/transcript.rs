@@ -53,10 +53,7 @@ impl<'a> TranscriptBuilder<'a> {
     }
 
     /// Signs the canonical transcript using the Ed25519 private key
-    pub fn sign(
-        &self,
-        signing_key: &SigningKey,
-    ) -> (String, String) {
+    pub fn sign(&self, signing_key: &SigningKey) -> (String, String) {
         let canonical = self.build_canonical_string();
         let hash_hex = self.compute_sha256_hex();
         let signature = signing_key.sign(canonical.as_bytes());

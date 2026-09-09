@@ -263,7 +263,14 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
                     "    ↳ {:<16} {} [{}]",
                     name.bold(),
                     path_str.dimmed(),
-                    if dry_run { "READY TO WRAP".yellow().to_string() } else { format!("WRAPPED & PROTECTED ({})", r.servers_wrapped).green().bold().to_string() }
+                    if dry_run {
+                        "READY TO WRAP".yellow().to_string()
+                    } else {
+                        format!("WRAPPED & PROTECTED ({})", r.servers_wrapped)
+                            .green()
+                            .bold()
+                            .to_string()
+                    }
                 );
             }
             Err(WrapError::AlreadyWrapped) => {
@@ -367,7 +374,9 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
         "●".cyan().bold()
     );
     if dry_run {
-        println!("  ℹ [DRY RUN] Previewing unprotect across all IDE targets (no disk modifications).");
+        println!(
+            "  ℹ [DRY RUN] Previewing unprotect across all IDE targets (no disk modifications)."
+        );
     }
 
     let targets = vec![
@@ -388,7 +397,10 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
 
     for (name, target) in targets {
         if dry_run {
-            println!("  ℹ {}: Would attempt unwrap and restore backup", name.bold());
+            println!(
+                "  ℹ {}: Would attempt unwrap and restore backup",
+                name.bold()
+            );
             restored_count += 1;
             continue;
         }
@@ -467,7 +479,11 @@ pub fn open_browser(url: &str) -> std::io::Result<()> {
         if let Ok(version) = std::fs::read_to_string("/proc/version") {
             let v_lower = version.to_lowercase();
             if v_lower.contains("microsoft") || v_lower.contains("wsl") {
-                if std::process::Command::new("wslview").arg(url).spawn().is_ok() {
+                if std::process::Command::new("wslview")
+                    .arg(url)
+                    .spawn()
+                    .is_ok()
+                {
                     return Ok(());
                 }
                 if std::process::Command::new("/mnt/c/Windows/System32/cmd.exe")
@@ -481,7 +497,8 @@ pub fn open_browser(url: &str) -> std::io::Result<()> {
         }
 
         // Headless container check: if DISPLAY and WAYLAND_DISPLAY are empty, skip browser launch silently
-        let is_headless = std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err();
+        let is_headless =
+            std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err();
         if is_headless {
             return Ok(());
         }
@@ -505,12 +522,16 @@ pub fn run_protect_orchestration(
     if !policy_path.exists() {
         if !dry_run {
             let default_policy_str = crate::generate_policy::generate_default_baseline_policy();
-            
+
             // Validate that generated policy compiles
             if let crate::policy::loader::PolicyLoadResult::Fatal { error } =
                 crate::policy::loader::load_policy_from_str(&default_policy_str, None)
             {
-                eprintln!("\n  {} Failed to compile baseline policy: {}", "✘".red().bold(), error);
+                eprintln!(
+                    "\n  {} Failed to compile baseline policy: {}",
+                    "✘".red().bold(),
+                    error
+                );
                 return 1;
             }
 
@@ -518,7 +539,12 @@ pub fn run_protect_orchestration(
             if let Some(parent) = policy_path.parent() {
                 if !parent.as_os_str().is_empty() && !parent.exists() {
                     if let Err(e) = std::fs::create_dir_all(parent) {
-                        eprintln!("\n  {} Failed to create policy directory {:?}: {}", "✘".red().bold(), parent, e);
+                        eprintln!(
+                            "\n  {} Failed to create policy directory {:?}: {}",
+                            "✘".red().bold(),
+                            parent,
+                            e
+                        );
                         return 1;
                     }
                 }
@@ -527,11 +553,21 @@ pub fn run_protect_orchestration(
             // Atomic write: write to temp file then rename
             let tmp_path = policy_path.with_extension("tmp");
             if let Err(e) = std::fs::write(&tmp_path, default_policy_str.as_bytes()) {
-                eprintln!("\n  {} Failed to write baseline policy to {:?}: {}", "✘".red().bold(), policy_path, e);
+                eprintln!(
+                    "\n  {} Failed to write baseline policy to {:?}: {}",
+                    "✘".red().bold(),
+                    policy_path,
+                    e
+                );
                 return 1;
             }
             if let Err(e) = std::fs::rename(&tmp_path, policy_path) {
-                eprintln!("\n  {} Failed to atomically commit policy to {:?}: {}", "✘".red().bold(), policy_path, e);
+                eprintln!(
+                    "\n  {} Failed to atomically commit policy to {:?}: {}",
+                    "✘".red().bold(),
+                    policy_path,
+                    e
+                );
                 let _ = std::fs::remove_file(&tmp_path);
                 return 1;
             }
@@ -543,18 +579,31 @@ pub fn run_protect_orchestration(
                 if let crate::policy::loader::PolicyLoadResult::Fatal { error } =
                     crate::policy::loader::load_policy_from_str(&content, None)
                 {
-                    eprintln!("\n  {} Existing policy at {:?} is invalid: {}", "✘".red().bold(), policy_path, error);
+                    eprintln!(
+                        "\n  {} Existing policy at {:?} is invalid: {}",
+                        "✘".red().bold(),
+                        policy_path,
+                        error
+                    );
                     return 1;
                 }
             }
             Err(e) => {
-                eprintln!("\n  {} Failed to read existing policy at {:?}: {}", "✘".red().bold(), policy_path, e);
+                eprintln!(
+                    "\n  {} Failed to read existing policy at {:?}: {}",
+                    "✘".red().bold(),
+                    policy_path,
+                    e
+                );
                 return 1;
             }
         }
     }
 
-    println!("\n  {} Discovered & Wrapped MCP Configurations:", "✔".green().bold());
+    println!(
+        "\n  {} Discovered & Wrapped MCP Configurations:",
+        "✔".green().bold()
+    );
     run_wrap_all(dry_run, false);
 
     // Initialize local Root CA for LLM interception
@@ -583,17 +632,39 @@ pub fn run_protect_orchestration(
     }
 
     println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());
-    println!("    • Mode: {}", if enforce { "Active Enforcement (Default Deny / DLP / Injection Blocking)".green().bold() } else { "Observation / Shadow Mode (Audit Only)".yellow().bold() });
+    println!(
+        "    • Mode: {}",
+        if enforce {
+            "Active Enforcement (Default Deny / DLP / Injection Blocking)"
+                .green()
+                .bold()
+        } else {
+            "Observation / Shadow Mode (Audit Only)".yellow().bold()
+        }
+    );
     println!("    • Policy: {}", policy.cyan());
-    println!("    • Live Dashboard: {}", format!("http://{}", listen).cyan().underline());
-    println!("    • Verification: Run '{}' in another terminal to perform live smoke tests", "agentcontrol verify".bold().cyan());
+    println!(
+        "    • Live Dashboard: {}",
+        format!("http://{}", listen).cyan().underline()
+    );
+    println!(
+        "    • Verification: Run '{}' in another terminal to perform live smoke tests",
+        "agentcontrol verify".bold().cyan()
+    );
 
     if dry_run {
-        println!("\n  {} Dry run completed. No files modified and gateway not started.\n", "ℹ".blue().bold());
+        println!(
+            "\n  {} Dry run completed. No files modified and gateway not started.\n",
+            "ℹ".blue().bold()
+        );
         return 0;
     }
 
-    println!("\n  {} Starting Local Security Gateway on {}...\n", "⚡".yellow().bold(), listen);
+    println!(
+        "\n  {} Starting Local Security Gateway on {}...\n",
+        "⚡".yellow().bold(),
+        listen
+    );
 
     if !no_browser {
         let dash_url = format!("http://{}", listen);
@@ -631,12 +702,17 @@ mod tests {
 }"#;
         let cleaned = strip_json_comments(raw);
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(&cleaned);
-        assert!(parsed.is_ok(), "Failed to parse stripped JSONC: {:?}", parsed.err());
+        assert!(
+            parsed.is_ok(),
+            "Failed to parse stripped JSONC: {:?}",
+            parsed.err()
+        );
         let val = parsed.unwrap();
         assert_eq!(val["context_servers"]["mcp-server-github"]["enabled"], true);
-        assert_eq!(val["context_servers"]["mcp-server-github"]["settings"]["token"], "secret//not-a-comment");
+        assert_eq!(
+            val["context_servers"]["mcp-server-github"]["settings"]["token"],
+            "secret//not-a-comment"
+        );
         assert_eq!(val["theme"]["mode"], "dark");
     }
 }
-
-

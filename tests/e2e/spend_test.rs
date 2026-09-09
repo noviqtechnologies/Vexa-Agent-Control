@@ -27,7 +27,9 @@ async fn test_spend_ledger_basic() {
 
 #[test]
 fn test_money_microcents_math_and_serde() {
-    use agentcontrol::spend::types::{MoneyMicrocents, InputTokens, OutputTokens, SpendV2AuthorizeReq};
+    use agentcontrol::spend::types::{
+        InputTokens, MoneyMicrocents, OutputTokens, SpendV2AuthorizeReq,
+    };
 
     let ten_dollars = MoneyMicrocents::from_dollars(10.0);
     assert_eq!(ten_dollars.as_microcents(), 1_000_000_000);
@@ -61,7 +63,8 @@ fn test_money_microcents_math_and_serde() {
     };
 
     let json_str = serde_json::to_string(&req).expect("serialize req");
-    let deserialized: SpendV2AuthorizeReq = serde_json::from_str(&json_str).expect("deserialize req");
+    let deserialized: SpendV2AuthorizeReq =
+        serde_json::from_str(&json_str).expect("deserialize req");
     assert_eq!(deserialized.request_id, "req-123");
     assert_eq!(deserialized.model, "gpt-4o");
     assert_eq!(deserialized.max_output_tokens, 1000);

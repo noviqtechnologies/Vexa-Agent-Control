@@ -119,6 +119,21 @@ vi.mock('../api/client', () => ({
       deleted_teams: [],
       total: 0,
     }),
+    listEvents: vi.fn().mockResolvedValue([
+      {
+        event_id: 'ev-test-1',
+        timestamp_ms: Date.now(),
+        session_id: 'sess-test-1',
+        agent_id: 'agent-test-1',
+        tool_name: 'send_email',
+        decision: 'denied',
+        dlp_findings: [
+          { category: 'aws_access_key', pattern_name: 'AWS Access Key (AKIA)', count: 1 },
+        ],
+        injection_findings: [],
+        semantic_findings: [],
+      },
+    ]),
   },
 }))
 
@@ -233,4 +248,21 @@ describe('ObservabilityLogs View', () => {
       expect(screen.getByText('manual_revocation')).toBeInTheDocument()
     })
   })
+
+  it('switches to Security & DLP Logs tab and displays DLP violation events', async () => {
+    render(
+      <MemoryRouter initialEntries={['/observability/logs']}>
+        <ObservabilityLogs />
+      </MemoryRouter>
+    )
+
+    const secTabBtn = screen.getByRole('button', { name: 'Security & DLP Logs' })
+    fireEvent.click(secTabBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('send_email')).toBeInTheDocument()
+      expect(screen.getByText('1 finding')).toBeInTheDocument()
+    })
+  })
 })
+

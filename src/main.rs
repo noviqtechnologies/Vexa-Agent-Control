@@ -432,14 +432,25 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             )
             .await
         }
-        Commands::Unprotect { dry_run, force } => agentcontrol::wrap::run_unprotect_all(dry_run, force),
+        Commands::Unprotect { dry_run, force } => {
+            agentcontrol::wrap::run_unprotect_all(dry_run, force)
+        }
         Commands::Ca { command } => match command {
             cli::CaCommands::Generate { dir } => {
                 match agentcontrol::ca::CaManager::init_or_load(dir) {
                     Ok(mgr) => {
-                        println!("✓ Root CA generated successfully at: {}", mgr.ca_dir.display());
-                        println!("  Cert: {}", mgr.ca_dir.join("agentcontrol-ca.pem").display());
-                        println!("  Key:  {}", mgr.ca_dir.join("agentcontrol-ca.key").display());
+                        println!(
+                            "✓ Root CA generated successfully at: {}",
+                            mgr.ca_dir.display()
+                        );
+                        println!(
+                            "  Cert: {}",
+                            mgr.ca_dir.join("agentcontrol-ca.pem").display()
+                        );
+                        println!(
+                            "  Key:  {}",
+                            mgr.ca_dir.join("agentcontrol-ca.key").display()
+                        );
                         0
                     }
                     Err(e) => {
@@ -448,47 +459,53 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     }
                 }
             }
-            cli::CaCommands::Install => {
-                match agentcontrol::ca::CaManager::init_or_load(None) {
-                    Ok(mgr) => {
-                        let cert_path = mgr.ca_dir.join("agentcontrol-ca.pem");
-                        match agentcontrol::ca::install_ca_to_trust_store(&cert_path) {
-                            Ok(()) => {
-                                println!("✓ Local Root CA successfully installed in OS trust store.");
-                                0
-                            }
-                            Err(e) => {
-                                eprintln!("✖ Failed to install Root CA into OS trust store: {}", e);
-                                1
-                            }
+            cli::CaCommands::Install => match agentcontrol::ca::CaManager::init_or_load(None) {
+                Ok(mgr) => {
+                    let cert_path = mgr.ca_dir.join("agentcontrol-ca.pem");
+                    match agentcontrol::ca::install_ca_to_trust_store(&cert_path) {
+                        Ok(()) => {
+                            println!("✓ Local Root CA successfully installed in OS trust store.");
+                            0
+                        }
+                        Err(e) => {
+                            eprintln!("✖ Failed to install Root CA into OS trust store: {}", e);
+                            1
                         }
                     }
-                    Err(e) => {
-                        eprintln!("✖ Failed to initialize Root CA: {}", e);
-                        1
-                    }
                 }
-            }
-            cli::CaCommands::Uninstall => {
-                match agentcontrol::ca::uninstall_ca_from_trust_store() {
-                    Ok(()) => {
-                        println!("✓ Local Root CA removed from OS trust store.");
-                        0
-                    }
-                    Err(e) => {
-                        eprintln!("✖ Failed to remove Root CA from trust store: {}", e);
-                        1
-                    }
+                Err(e) => {
+                    eprintln!("✖ Failed to initialize Root CA: {}", e);
+                    1
                 }
-            }
+            },
+            cli::CaCommands::Uninstall => match agentcontrol::ca::uninstall_ca_from_trust_store() {
+                Ok(()) => {
+                    println!("✓ Local Root CA removed from OS trust store.");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("✖ Failed to remove Root CA from trust store: {}", e);
+                    1
+                }
+            },
             cli::CaCommands::Status => {
                 let installed = agentcontrol::ca::is_ca_installed();
                 let dir = agentcontrol::ca::CaManager::default_ca_dir();
                 let exists = dir.join("agentcontrol-ca.pem").exists();
                 println!("Local CA Status:");
                 println!("  Storage Directory: {}", dir.display());
-                println!("  CA Files Exist:    {}", if exists { "YES".green() } else { "NO".yellow() });
-                println!("  OS Trust Store:    {}", if installed { "INSTALLED & TRUSTED".green() } else { "NOT INSTALLED".yellow() });
+                println!(
+                    "  CA Files Exist:    {}",
+                    if exists { "YES".green() } else { "NO".yellow() }
+                );
+                println!(
+                    "  OS Trust Store:    {}",
+                    if installed {
+                        "INSTALLED & TRUSTED".green()
+                    } else {
+                        "NOT INSTALLED".yellow()
+                    }
+                );
                 0
             }
         },
@@ -519,39 +536,115 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                         if resp.status().is_success() {
                             let stats: serde_json::Value = resp.json().await.unwrap_or_default();
                             if json {
-                                println!("{}", serde_json::to_string_pretty(&stats).unwrap_or_default());
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&stats).unwrap_or_default()
+                                );
                             } else {
                                 let gw = stats.get("gateway_cache");
                                 let prov = stats.get("provider_cache");
                                 let comp = stats.get("comparative_summary");
 
-                                println!("\n{}", "=== Vexa Gateway Semantic Cache Observatory ===".bright_green().bold());
-                                println!("  Exact Hits:          {}", gw.and_then(|g| g.get("exact_hits")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Semantic Vector Hits:{}", gw.and_then(|g| g.get("semantic_hits")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Cache Misses:        {}", gw.and_then(|g| g.get("misses")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Hit Ratio:           {}%", gw.and_then(|g| g.get("hit_ratio_pct")).unwrap_or(&serde_json::json!(0.0)));
-                                println!("  Tokens 100% Avoided: {}", gw.and_then(|g| g.get("tokens_saved")).and_then(|t| t.get("total")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Vexa Cost Saved:     ${}", gw.and_then(|g| g.get("cost_saved_usd")).unwrap_or(&serde_json::json!(0.0)));
-                                println!("  Avg Serving Latency: {} ms (vs ~1180ms upstream)", gw.and_then(|g| g.get("avg_serving_latency_ms")).unwrap_or(&serde_json::json!(2.4)));
+                                println!(
+                                    "\n{}",
+                                    "=== Vexa Gateway Semantic Cache Observatory ==="
+                                        .bright_green()
+                                        .bold()
+                                );
+                                println!(
+                                    "  Exact Hits:          {}",
+                                    gw.and_then(|g| g.get("exact_hits"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Semantic Vector Hits:{}",
+                                    gw.and_then(|g| g.get("semantic_hits"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Cache Misses:        {}",
+                                    gw.and_then(|g| g.get("misses"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Hit Ratio:           {}%",
+                                    gw.and_then(|g| g.get("hit_ratio_pct"))
+                                        .unwrap_or(&serde_json::json!(0.0))
+                                );
+                                println!(
+                                    "  Tokens 100% Avoided: {}",
+                                    gw.and_then(|g| g.get("tokens_saved"))
+                                        .and_then(|t| t.get("total"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Vexa Cost Saved:     ${}",
+                                    gw.and_then(|g| g.get("cost_saved_usd"))
+                                        .unwrap_or(&serde_json::json!(0.0))
+                                );
+                                println!(
+                                    "  Avg Serving Latency: {} ms (vs ~1180ms upstream)",
+                                    gw.and_then(|g| g.get("avg_serving_latency_ms"))
+                                        .unwrap_or(&serde_json::json!(2.4))
+                                );
 
-                                println!("\n{}", "--- Upstream Provider Prompt Cache ---".cyan().bold());
-                                println!("  Prefix Cache Hits:   {}", prov.and_then(|p| p.get("prefix_cache_hits")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Cached Tokens:       {}", prov.and_then(|p| p.get("cached_tokens")).unwrap_or(&serde_json::json!(0)));
-                                println!("  Provider Discount:   ${}", prov.and_then(|p| p.get("discount_usd")).unwrap_or(&serde_json::json!(0.0)));
+                                println!(
+                                    "\n{}",
+                                    "--- Upstream Provider Prompt Cache ---".cyan().bold()
+                                );
+                                println!(
+                                    "  Prefix Cache Hits:   {}",
+                                    prov.and_then(|p| p.get("prefix_cache_hits"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Cached Tokens:       {}",
+                                    prov.and_then(|p| p.get("cached_tokens"))
+                                        .unwrap_or(&serde_json::json!(0))
+                                );
+                                println!(
+                                    "  Provider Discount:   ${}",
+                                    prov.and_then(|p| p.get("discount_usd"))
+                                        .unwrap_or(&serde_json::json!(0.0))
+                                );
 
-                                println!("\n{}", "--- Enterprise ROI & Attribution ---".purple().bold());
-                                println!("  Total Cost Avoided:  ${}", comp.and_then(|c| c.get("total_savings_usd")).unwrap_or(&serde_json::json!(0.0)));
-                                println!("  Vexa Contribution:   {}%", comp.and_then(|c| c.get("vexa_contribution_pct")).unwrap_or(&serde_json::json!(0.0)));
-                                println!("  Vexa ROI Multiplier: {}x over provider cache\n", comp.and_then(|c| c.get("roi_multiplier")).unwrap_or(&serde_json::json!(1.0)));
+                                println!(
+                                    "\n{}",
+                                    "--- Enterprise ROI & Attribution ---".purple().bold()
+                                );
+                                println!(
+                                    "  Total Cost Avoided:  ${}",
+                                    comp.and_then(|c| c.get("total_savings_usd"))
+                                        .unwrap_or(&serde_json::json!(0.0))
+                                );
+                                println!(
+                                    "  Vexa Contribution:   {}%",
+                                    comp.and_then(|c| c.get("vexa_contribution_pct"))
+                                        .unwrap_or(&serde_json::json!(0.0))
+                                );
+                                println!(
+                                    "  Vexa ROI Multiplier: {}x over provider cache\n",
+                                    comp.and_then(|c| c.get("roi_multiplier"))
+                                        .unwrap_or(&serde_json::json!(1.0))
+                                );
                             }
                             0
                         } else {
-                            eprintln!("{} Failed to fetch cache stats: HTTP {}", "✖".red(), resp.status());
+                            eprintln!(
+                                "{} Failed to fetch cache stats: HTTP {}",
+                                "✖".red(),
+                                resp.status()
+                            );
                             1
                         }
                     }
                     Err(e) => {
-                        eprintln!("{} Failed to connect to gateway at {}: {}", "✖".red(), gateway, e);
+                        eprintln!(
+                            "{} Failed to connect to gateway at {}: {}",
+                            "✖".red(),
+                            gateway,
+                            e
+                        );
                         1
                     }
                 }
@@ -565,12 +658,21 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                             println!("{} Semantic vector cache and exact hash cache cleared successfully.", "✔".green());
                             0
                         } else {
-                            eprintln!("{} Failed to clear cache: HTTP {}", "✖".red(), resp.status());
+                            eprintln!(
+                                "{} Failed to clear cache: HTTP {}",
+                                "✖".red(),
+                                resp.status()
+                            );
                             1
                         }
                     }
                     Err(e) => {
-                        eprintln!("{} Failed to connect to gateway at {}: {}", "✖".red(), gateway, e);
+                        eprintln!(
+                            "{} Failed to connect to gateway at {}: {}",
+                            "✖".red(),
+                            gateway,
+                            e
+                        );
                         1
                     }
                 }
@@ -650,10 +752,15 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
 
 fn print_banner() {
     let version = env!("CARGO_PKG_VERSION");
-    println!("{}", "┌────────────────────────────────────────────────────────────────────────────────┐".cyan());
+    println!(
+        "{}",
+        "┌────────────────────────────────────────────────────────────────────────────────┐".cyan()
+    );
     println!(
         "│  {}  {} │",
-        "🛡️  VEXA AGENT CONTROL — Intelligent MCP Security Gateway".bold().cyan(),
+        "🛡️  VEXA AGENT CONTROL — Intelligent MCP Security Gateway"
+            .bold()
+            .cyan(),
         format!("(v{})", version).dimmed()
     );
     println!(
@@ -666,11 +773,16 @@ fn print_banner() {
         "stdio / HTTP proxy".yellow(),
         "ACTIVE (DLP + Injection Guard)".green().bold()
     );
-    println!("{}", "└────────────────────────────────────────────────────────────────────────────────┘".cyan());
+    println!(
+        "{}",
+        "└────────────────────────────────────────────────────────────────────────────────┘".cyan()
+    );
 }
 
 fn resolve_audit_log_path() -> std::path::PathBuf {
-    if let Ok(env_path) = std::env::var("AGENTCONTROL_LOG_PATH").or_else(|_| std::env::var("AGENTWALL_LOG_PATH")) {
+    if let Ok(env_path) =
+        std::env::var("AGENTCONTROL_LOG_PATH").or_else(|_| std::env::var("AGENTWALL_LOG_PATH"))
+    {
         let p = if env_path.starts_with("~/") || env_path.starts_with("~\\") {
             if let Some(home) = dirs::home_dir() {
                 home.join(&env_path[2..])
@@ -771,7 +883,12 @@ fn build_proxy_state(
         map
     };
 
-    let (initial_cursor_mode, initial_allowed_models, initial_default_model, initial_model_enforcement) = {
+    let (
+        initial_cursor_mode,
+        initial_allowed_models,
+        initial_default_model,
+        initial_model_enforcement,
+    ) = {
         let llm = compiled_policy.as_ref().and_then(|p| p.llm.as_ref());
         let mode = llm
             .and_then(|l| l.cursor_mode.clone())
@@ -786,44 +903,65 @@ fn build_proxy_state(
     };
 
     let semantic_cache = {
-        let sc_opt = compiled_policy.as_ref().and_then(|p| p.llm.as_ref()).and_then(|l| l.semantic_cache.as_ref());
+        let sc_opt = compiled_policy
+            .as_ref()
+            .and_then(|p| p.llm.as_ref())
+            .and_then(|l| l.semantic_cache.as_ref());
         if let Some(sc) = sc_opt {
             let threshold = sc.similarity_threshold.unwrap_or(0.88);
             let max_entries = sc.max_entries.unwrap_or(10_000);
             let ttl = std::time::Duration::from_secs(sc.ttl_seconds.unwrap_or(86400));
-            let embedder_engine = match sc.embedding_provider.as_deref() {
-                Some("openai") => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::OpenAi {
-                    api_key: sc.embedding_api_key.clone().unwrap_or_else(|| std::env::var("OPENAI_API_KEY").unwrap_or_default()),
-                    endpoint: sc.embedding_endpoint.clone().unwrap_or_default(),
-                    model: sc.embedding_model.clone().unwrap_or_else(|| "text-embedding-3-small".to_string()),
-                },
-                Some("ollama") => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::Ollama {
-                    endpoint: sc.embedding_endpoint.clone().unwrap_or_else(|| "http://localhost:11434".to_string()),
-                    model: sc.embedding_model.clone().unwrap_or_else(|| "nomic-embed-text".to_string()),
-                },
+            let embedder_engine = match sc.resolved_embedding_provider().as_deref() {
+                Some("openai") => {
+                    agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::OpenAi {
+                        api_key: sc
+                            .resolved_embedding_api_key()
+                            .unwrap_or_else(|| std::env::var("OPENAI_API_KEY").unwrap_or_default()),
+                        endpoint: sc.resolved_embedding_endpoint().unwrap_or_default(),
+                        model: sc
+                            .resolved_embedding_model()
+                            .unwrap_or_else(|| "text-embedding-3-small".to_string()),
+                    }
+                }
+                Some("ollama") => {
+                    agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::Ollama {
+                        endpoint: sc
+                            .resolved_embedding_endpoint()
+                            .unwrap_or_else(|| "http://localhost:11434".to_string()),
+                        model: sc
+                            .resolved_embedding_model()
+                            .unwrap_or_else(|| "nomic-embed-text".to_string()),
+                    }
+                }
                 _ => agentcontrol::proxy::semantic_cache::embedder::EmbedderEngine::Local,
             };
 
             if sc.backend.as_deref() == Some("qdrant") {
-                let url = sc.qdrant_url.clone().unwrap_or_else(|| "http://localhost:6333".to_string());
-                Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::new_qdrant(
-                    sc.enabled,
-                    threshold,
-                    max_entries,
-                    ttl,
-                    url,
-                    sc.qdrant_api_key.clone(),
-                    sc.qdrant_collection.clone(),
-                    embedder_engine,
-                ))
+                let url = sc
+                    .resolved_qdrant_url()
+                    .unwrap_or_else(|| "http://localhost:6333".to_string());
+                Arc::new(
+                    agentcontrol::proxy::semantic_cache::SemanticCache::new_qdrant(
+                        sc.enabled,
+                        threshold,
+                        max_entries,
+                        ttl,
+                        url,
+                        sc.resolved_qdrant_api_key(),
+                        sc.resolved_qdrant_collection(),
+                        embedder_engine,
+                    ),
+                )
             } else {
-                Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::new_in_memory(
-                    sc.enabled,
-                    threshold,
-                    max_entries,
-                    ttl,
-                    embedder_engine,
-                ))
+                Arc::new(
+                    agentcontrol::proxy::semantic_cache::SemanticCache::new_in_memory(
+                        sc.enabled,
+                        threshold,
+                        max_entries,
+                        ttl,
+                        embedder_engine,
+                    ),
+                )
             }
         } else {
             Arc::new(agentcontrol::proxy::semantic_cache::SemanticCache::default())
@@ -855,9 +993,11 @@ fn build_proxy_state(
         response_scanner,
         response_scan_config: std::sync::RwLock::new(response_scan_config),
         dlp_scanner: dlp_scanner_arc,
-        semantic_scanner: std::sync::Arc::new(agentcontrol::policy::semantic::SemanticScanner::new(
-            agentcontrol::policy::semantic::SemanticConfig::default(),
-        )),
+        semantic_scanner: std::sync::Arc::new(
+            agentcontrol::policy::semantic::SemanticScanner::new(
+                agentcontrol::policy::semantic::SemanticConfig::default(),
+            ),
+        ),
         injection_scanner: std::sync::Arc::new(
             agentcontrol::policy::injection::InjectionScanner::new()
                 .expect("Failed to compile Injection regexes"),
@@ -897,7 +1037,9 @@ fn build_proxy_state(
         connection_timeout_secs,
         max_frame_size,
         admin_token,
-        ca_manager: agentcontrol::ca::CaManager::init_or_load(None).ok().map(Arc::new),
+        ca_manager: agentcontrol::ca::CaManager::init_or_load(None)
+            .ok()
+            .map(Arc::new),
         cursor_mode: std::sync::RwLock::new(initial_cursor_mode),
         allowed_models: std::sync::RwLock::new(initial_allowed_models),
         default_model: std::sync::RwLock::new(initial_default_model),
@@ -907,9 +1049,15 @@ fn build_proxy_state(
         prompt_cache: Arc::new(agentcontrol::proxy::prompt_cache::PromptCache::default()),
         semantic_cache,
         local_key_cache: Arc::new(agentcontrol::proxy::local_key_cache::LocalKeyCache::default()),
-        request_coalescer: Arc::new(agentcontrol::proxy::request_coalescer::RequestCoalescer::default()),
-        adaptive_timeout: Arc::new(agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager::default()),
-        embedding_batcher: Arc::new(agentcontrol::proxy::embedding_batcher::EmbeddingBatcher::default()),
+        request_coalescer: Arc::new(
+            agentcontrol::proxy::request_coalescer::RequestCoalescer::default(),
+        ),
+        adaptive_timeout: Arc::new(
+            agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager::default(),
+        ),
+        embedding_batcher: Arc::new(
+            agentcontrol::proxy::embedding_batcher::EmbeddingBatcher::default(),
+        ),
         provider_router: Arc::new(agentcontrol::proxy::provider_router::ProviderRouter::default()),
         hook_registry,
     })
@@ -1004,7 +1152,9 @@ async fn run_stdio_proxy(
         safe_mode_scanner,
         response_scanner,
         response_scan_config,
-        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(
+            false,
+        )),
         None,
         None,
         agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
@@ -1538,7 +1688,9 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         args.max_concurrency,
         args.connection_timeout_secs,
         args.max_frame_size,
-        args.admin_token.clone().or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
+        args.admin_token
+            .clone()
+            .or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok()),
         false,
         0,
     );
@@ -1732,8 +1884,8 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                if agentcontrol::service::windows::service_dispatcher_handler::is_shutdown_requested()
-                {
+                if agentcontrol::service::windows::service_dispatcher_handler::is_shutdown_requested(
+                ) {
                     let _ = shutdown_tx_win.send(true);
                     break;
                 }
@@ -2218,7 +2370,9 @@ async fn run_wrap(
         safe_mode_scanner,
         response_scanner,
         response_scan_config,
-        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(
+            false,
+        )),
         None,
         None,
         agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
@@ -2306,11 +2460,19 @@ async fn run_dev(
         );
     }
     if dual_agent {
+        println!(
+            "{} {}",
+            "⚠️ [EXPERIMENTAL PREVIEW]".yellow().bold(),
+            "Opt-in Dual-Agent Threat Detector active (Advisory only — cannot override policy)"
+                .dimmed()
+        );
         let detector = agentcontrol::detector::LocalDualAgentDetector::new(
             agentcontrol::detector::DualAgentConfig {
                 enabled: true,
                 local_llm_url,
                 poll_interval_secs: 5,
+                max_trace_events: 20,
+                max_payload_bytes: 16 * 1024,
             },
         );
         detector.start();
@@ -2322,7 +2484,9 @@ async fn run_dev(
             let p = std::path::Path::new(path_str);
             if p.exists() {
                 match load_policy(p, None) {
-                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some(path_str.to_string())),
+                    PolicyLoadResult::Loaded { policy, .. } => {
+                        (Some(policy), true, Some(path_str.to_string()))
+                    }
                     _ => (None, false, None),
                 }
             } else {
@@ -2333,7 +2497,11 @@ async fn run_dev(
             let default_p = std::path::Path::new("agentcontrol-policy.yaml");
             if default_p.exists() {
                 match load_policy(default_p, None) {
-                    PolicyLoadResult::Loaded { policy, .. } => (Some(policy), true, Some("agentcontrol-policy.yaml".to_string())),
+                    PolicyLoadResult::Loaded { policy, .. } => (
+                        Some(policy),
+                        true,
+                        Some("agentcontrol-policy.yaml".to_string()),
+                    ),
                     _ => (None, false, None),
                 }
             } else {
@@ -2421,7 +2589,9 @@ async fn run_dev(
         safe_mode_scanner,
         response_scanner,
         response_scan_config,
-        Arc::new(policy::credential_scope::CredentialScopeValidator::new(false)),
+        Arc::new(policy::credential_scope::CredentialScopeValidator::new(
+            false,
+        )),
         policy_path_str,
         None,
         agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),

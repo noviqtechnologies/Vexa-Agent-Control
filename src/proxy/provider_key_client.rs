@@ -52,7 +52,11 @@ impl ProviderKeyClient {
     }
 
     /// Retrieve the decrypted provider key for a tenant and provider.
-    pub async fn get_provider_key(&self, tenant_id: &str, provider: &str) -> Result<String, String> {
+    pub async fn get_provider_key(
+        &self,
+        tenant_id: &str,
+        provider: &str,
+    ) -> Result<String, String> {
         let cache_key = format!("{}:{}", tenant_id, provider);
 
         // Check local cache

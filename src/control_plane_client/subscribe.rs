@@ -22,20 +22,30 @@ pub async fn start_policy_subscriber(
     state: Arc<crate::proxy::handler::ProxyState>,
 ) {
     let clean_base = dashboard_url.trim_end_matches('/');
-    let client = crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(30));
+    let client =
+        crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(30));
 
     loop {
-        let device_token_opt = crate::identity::device::load_device_token()
-            .or_else(|| std::env::var("AGENT_ID").ok());
+        let device_token_opt =
+            crate::identity::device::load_device_token().or_else(|| std::env::var("AGENT_ID").ok());
 
         // Determine effective endpoint and auth token
         let (url, auth_bearer) = if !secret.is_empty() {
-            (format!("{}/api/v1/policy/subscribe", clean_base), Some(secret.clone()))
+            (
+                format!("{}/api/v1/policy/subscribe", clean_base),
+                Some(secret.clone()),
+            )
         } else if let Some(tok) = device_token_opt {
-            (format!("{}/api/v2/device/policy/subscribe", clean_base), Some(tok))
+            (
+                format!("{}/api/v2/device/policy/subscribe", clean_base),
+                Some(tok),
+            )
         } else {
             // Attempt mTLS device endpoint
-            (format!("{}/api/v2/device/policy/subscribe", clean_base), None)
+            (
+                format!("{}/api/v2/device/policy/subscribe", clean_base),
+                None,
+            )
         };
 
         let mut req = client.get(&url);
@@ -48,7 +58,9 @@ pub async fn start_policy_subscriber(
         match resp_res {
             Ok(resp) => {
                 let status = resp.status();
-                if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                if status == reqwest::StatusCode::UNAUTHORIZED
+                    || status == reqwest::StatusCode::FORBIDDEN
+                {
                     let err_body = resp.text().await.unwrap_or_default();
                     logging::log_event(
                         Level::Error,
@@ -138,21 +150,31 @@ pub async fn start_policy_subscriber(
                                     serde_json::json!({}),
                                 );
 
-                                if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&message.data) {
-                                    if let Some(providers) = payload.get("providers").and_then(|v| v.as_object()) {
+                                if let Ok(payload) =
+                                    serde_json::from_str::<serde_json::Value>(&message.data)
+                                {
+                                    if let Some(providers) =
+                                        payload.get("providers").and_then(|v| v.as_object())
+                                    {
                                         for (provider, key_val) in providers {
                                             if let Some(key) = key_val.as_str() {
-                                                let prev_hash = state.provider_keys.get(provider).map(|k| {
-                                                    use sha2::{Digest, Sha256};
-                                                    let mut hasher = Sha256::new();
-                                                    hasher.update(k.value().as_bytes());
-                                                    format!("sha256:{}", hex::encode(hasher.finalize()))
-                                                });
+                                                let prev_hash =
+                                                    state.provider_keys.get(provider).map(|k| {
+                                                        use sha2::{Digest, Sha256};
+                                                        let mut hasher = Sha256::new();
+                                                        hasher.update(k.value().as_bytes());
+                                                        format!(
+                                                            "sha256:{}",
+                                                            hex::encode(hasher.finalize())
+                                                        )
+                                                    });
 
                                                 if key.is_empty() {
                                                     state.provider_keys.remove(provider);
                                                 } else {
-                                                    state.provider_keys.insert(provider.clone(), key.to_string());
+                                                    state
+                                                        .provider_keys
+                                                        .insert(provider.clone(), key.to_string());
                                                 }
 
                                                 logging::log_event(
@@ -169,34 +191,53 @@ pub async fn start_policy_subscriber(
                                         }
                                     }
 
-                                    if let Some(mode) = payload.get("cursor_mode").and_then(|v| v.as_str()) {
+                                    if let Some(mode) =
+                                        payload.get("cursor_mode").and_then(|v| v.as_str())
+                                    {
                                         *state.cursor_mode.write().unwrap() = mode.to_string();
                                     }
-                                    if let Some(models) = payload.get("allowed_models").and_then(|v| v.as_array()) {
+                                    if let Some(models) =
+                                        payload.get("allowed_models").and_then(|v| v.as_array())
+                                    {
                                         let model_list: Vec<String> = models
                                             .iter()
                                             .filter_map(|m| m.as_str().map(String::from))
                                             .collect();
                                         *state.allowed_models.write().unwrap() = Some(model_list);
                                     }
-                                    if let Some(dm) = payload.get("default_model").and_then(|v| v.as_str()) {
-                                        *state.default_model.write().unwrap() = Some(dm.to_string());
+                                    if let Some(dm) =
+                                        payload.get("default_model").and_then(|v| v.as_str())
+                                    {
+                                        *state.default_model.write().unwrap() =
+                                            Some(dm.to_string());
                                     }
-                                    if let Some(enf) = payload.get("model_enforcement").and_then(|v| v.as_str()) {
+                                    if let Some(enf) =
+                                        payload.get("model_enforcement").and_then(|v| v.as_str())
+                                    {
                                         *state.model_enforcement.write().unwrap() = enf.to_string();
                                     }
 
-                                    let is_byok = state.cursor_mode.read().unwrap().as_str() == "byok";
+                                    let is_byok =
+                                        state.cursor_mode.read().unwrap().as_str() == "byok";
                                     if is_byok && !state.provider_keys.is_empty() {
                                         let _ = crate::wrap::generic_ide::apply_centralized_cursor_config(true);
                                     }
 
                                     // Acknowledge assignment delivery/applied state (REQ-DSM-006)
-                                    if let Some(asgn_id) = payload.get("assignment_id").and_then(|v| v.as_str()) {
+                                    if let Some(asgn_id) =
+                                        payload.get("assignment_id").and_then(|v| v.as_str())
+                                    {
                                         let hub_clone = clean_base.to_string();
                                         let asgn_clone = asgn_id.to_string();
                                         tokio::spawn(async move {
-                                            let _ = crate::policy::remote_keys::send_assignment_ack(&hub_clone, &asgn_clone, "applied", "").await;
+                                            let _ =
+                                                crate::policy::remote_keys::send_assignment_ack(
+                                                    &hub_clone,
+                                                    &asgn_clone,
+                                                    "applied",
+                                                    "",
+                                                )
+                                                .await;
                                         });
                                     }
 

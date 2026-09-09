@@ -23,7 +23,10 @@ fn test_ca_generation_and_leaf_issuance() {
         .get_or_create_server_config("api2.cursor.sh")
         .expect("Should return cached ServerConfig");
 
-    assert!(Arc::ptr_eq(&config1, &config2), "Leaf config should be cached in memory");
+    assert!(
+        Arc::ptr_eq(&config1, &config2),
+        "Leaf config should be cached in memory"
+    );
 }
 
 #[test]
@@ -34,7 +37,10 @@ fn test_allowlisted_domain_interception() {
     assert!(is_interceptable_host("sub.api.cursor.sh", None));
     assert!(is_interceptable_host("api.openai.com", None));
     assert!(is_interceptable_host("api.anthropic.com", None));
-    assert!(is_interceptable_host("generativelanguage.googleapis.com", None));
+    assert!(is_interceptable_host(
+        "generativelanguage.googleapis.com",
+        None
+    ));
     assert!(is_interceptable_host("openrouter.ai", None));
 
     // Should NOT intercept (fast blind TCP tunneling preserved)
@@ -46,9 +52,18 @@ fn test_allowlisted_domain_interception() {
 
 #[test]
 fn test_custom_domain_interception() {
-    let custom = vec!["custom-ai.internal.corp".to_string(), "*.internal-llm.net".to_string()];
-    assert!(is_interceptable_host("custom-ai.internal.corp", Some(&custom)));
-    assert!(is_interceptable_host("gateway.internal-llm.net", Some(&custom)));
+    let custom = vec![
+        "custom-ai.internal.corp".to_string(),
+        "*.internal-llm.net".to_string(),
+    ];
+    assert!(is_interceptable_host(
+        "custom-ai.internal.corp",
+        Some(&custom)
+    ));
+    assert!(is_interceptable_host(
+        "gateway.internal-llm.net",
+        Some(&custom)
+    ));
     assert!(!is_interceptable_host("google.com", Some(&custom)));
 }
 
@@ -75,7 +90,8 @@ fn test_cursor_settings_lifecycle_mock() {
     let modified_str = serde_json::to_string_pretty(&parsed).unwrap();
     fs::write(&settings_path, &modified_str).unwrap();
 
-    let read_back: serde_json::Value = serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    let read_back: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
     assert_eq!(read_back["http.proxy"], "http://127.0.0.1:8080");
     assert_eq!(read_back["cursor.general.disableHttp2"], true);
     assert_eq!(read_back["editor.fontSize"], 14);

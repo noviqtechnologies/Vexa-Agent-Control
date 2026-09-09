@@ -9,6 +9,7 @@ mod unit {
     mod oidc_tests;
     mod outbox_test;
     mod p1_features_tests;
+    mod panic_safety_test;
     mod pipeline_test;
     mod policy_loader_tests;
     mod policy_tests;
@@ -21,6 +22,6 @@ mod unit {
     mod transformer;
     mod transformer_test;
     mod us003_us005_tests;
-    mod validator_tests;
     mod v1067_security_remediation_test;
+    mod validator_tests;
 }

@@ -72,7 +72,9 @@ impl LicenseValidator {
                     return Ok(Self::from_public_key_bytes(&bytes));
                 }
                 // If base64 encoded:
-                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(pub_key_str.trim()) {
+                if let Ok(bytes) =
+                    base64::engine::general_purpose::STANDARD.decode(pub_key_str.trim())
+                {
                     return Ok(Self::from_public_key_bytes(&bytes));
                 }
             }
@@ -128,11 +130,15 @@ impl LicenseValidator {
                 return true;
             }
             // Alias spend_caps and spend_v2
-            if (feature == "spend_caps" || feature == "spend_v2") && (f == "spend_caps" || f == "spend_v2") {
+            if (feature == "spend_caps" || feature == "spend_v2")
+                && (f == "spend_caps" || f == "spend_v2")
+            {
                 return true;
             }
             // Alias siem_aggregation and siem_export
-            if (feature == "siem_aggregation" || feature == "siem_export") && (f == "siem_aggregation" || f == "siem_export") {
+            if (feature == "siem_aggregation" || feature == "siem_export")
+                && (f == "siem_aggregation" || f == "siem_export")
+            {
                 return true;
             }
         }

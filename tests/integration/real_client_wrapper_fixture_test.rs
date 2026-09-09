@@ -35,7 +35,11 @@ async fn test_real_client_ide_config_wrapping_lifecycle() {
         }
     });
 
-    std::fs::write(&config_path, serde_json::to_string_pretty(&original_json).unwrap()).unwrap();
+    std::fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&original_json).unwrap(),
+    )
+    .unwrap();
 
     // 1. Wrap configuration
     let mut config_val = original_json.clone();
@@ -61,7 +65,10 @@ async fn test_real_client_ide_config_wrapping_lifecycle() {
 
     // 2. Test Idempotency (wrapping again returns AlreadyWrapped)
     let wrap_res = transformer::wrap_all_servers(&mut config_val, "/usr/local/bin/agentcontrol");
-    assert!(wrap_res.is_err(), "Expected AlreadyWrapped error on second wrap");
+    assert!(
+        wrap_res.is_err(),
+        "Expected AlreadyWrapped error on second wrap"
+    );
 
     // 3. Unwrap configuration
     let unwrapped_count = transformer::unwrap_all_servers(&mut config_val).unwrap();
@@ -89,8 +96,11 @@ async fn test_safe_mode_scanner_unit_interception() {
     let safe_tool = "read_file";
     let safe_params = json!({ "path": "src/main.rs" });
     let threat = scanner.scan_tool(safe_tool, &safe_params);
-    assert!(threat.is_none(), "Safe tool call must not trigger safe mode");
-    
+    assert!(
+        threat.is_none(),
+        "Safe tool call must not trigger safe mode"
+    );
+
     // Simulate forwarding to upstream
     upstream_hits.fetch_add(1, Ordering::SeqCst);
     assert_eq!(upstream_hits.load(Ordering::SeqCst), 1);
@@ -108,7 +118,10 @@ async fn test_safe_mode_scanner_unit_interception() {
     let destructive_tool = "exec_shell";
     let destructive_params = json!({ "command": "rm -rf / --no-preserve-root", "timeout_sec": 10 });
     let threat = scanner.scan_tool(destructive_tool, &destructive_params);
-    assert!(threat.is_some(), "Destructive wipe must be blocked by safe mode");
+    assert!(
+        threat.is_some(),
+        "Destructive wipe must be blocked by safe mode"
+    );
     assert_eq!(threat.unwrap().category, ThreatCategory::Destructive);
     // Upstream counter remains unchanged
     assert_eq!(upstream_hits.load(Ordering::SeqCst), 1);

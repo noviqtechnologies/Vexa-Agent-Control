@@ -132,7 +132,10 @@ mod backup_lifecycle_tests {
         let original = fs::read_to_string(&config).unwrap();
         let backup_path = backup::create_backup(&config).unwrap();
         let backed_up = fs::read_to_string(&backup_path).unwrap();
-        assert_eq!(original, backed_up, "Backup must be byte-for-byte copy of original");
+        assert_eq!(
+            original, backed_up,
+            "Backup must be byte-for-byte copy of original"
+        );
     }
 
     #[test]
@@ -142,11 +145,11 @@ mod backup_lifecycle_tests {
             let name = format!("config.json.agentcontrol-backup-{ts}");
             fs::write(dir.path().join(&name), r#"{"mcpServers":{}}"#).unwrap();
         }
-        let latest = backup::find_latest_backup(dir.path())
-            .expect("Should find the latest backup");
+        let latest = backup::find_latest_backup(dir.path()).expect("Should find the latest backup");
         assert!(
             latest.to_string_lossy().contains("120000"),
-            "Should pick the most recent timestamp (120000), got: {:?}", latest
+            "Should pick the most recent timestamp (120000), got: {:?}",
+            latest
         );
     }
 
@@ -176,14 +179,24 @@ mod dry_run_tests {
         let _ = generic_ide::wrap_generic("Cursor", config_path.clone(), /*dry_run=*/ true);
 
         let after_content = fs::read_to_string(&config_path).unwrap();
-        assert_eq!(original_content, after_content, "dry-run must not modify the config file");
+        assert_eq!(
+            original_content, after_content,
+            "dry-run must not modify the config file"
+        );
 
         let backups: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().contains("agentcontrol-backup-"))
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .contains("agentcontrol-backup-")
+            })
             .collect();
-        assert!(backups.is_empty(), "dry-run must not create any backup files");
+        assert!(
+            backups.is_empty(),
+            "dry-run must not create any backup files"
+        );
     }
 
     #[test]
@@ -195,9 +208,16 @@ mod dry_run_tests {
             let backups: Vec<_> = fs::read_dir(dir.path())
                 .unwrap()
                 .filter_map(|e| e.ok())
-                .filter(|e| e.file_name().to_string_lossy().contains("agentcontrol-backup-"))
+                .filter(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .contains("agentcontrol-backup-")
+                })
                 .collect();
-            assert!(!backups.is_empty(), "A successful wrap must create a timestamped backup (FR-1.2)");
+            assert!(
+                !backups.is_empty(),
+                "A successful wrap must create a timestamped backup (FR-1.2)"
+            );
         }
     }
 }
@@ -217,9 +237,14 @@ mod unprotect_tests {
         if generic_ide::wrap_generic("Cursor", config_path.clone(), false).is_err() {
             return; // Skip if env cannot wrap (e.g. no binary resolution)
         }
-        if let Ok(_) = generic_ide::unwrap_generic("Cursor", config_path.clone(), /*force=*/ false) {
+        if let Ok(_) =
+            generic_ide::unwrap_generic("Cursor", config_path.clone(), /*force=*/ false)
+        {
             let restored = fs::read_to_string(&config_path).unwrap();
-            assert_eq!(original, restored, "Unprotect must restore config to pre-wrap state");
+            assert_eq!(
+                original, restored,
+                "Unprotect must restore config to pre-wrap state"
+            );
         }
     }
 
@@ -229,7 +254,9 @@ mod unprotect_tests {
         let config_path = write_valid_mcp_config(dir.path(), "cursor.json");
 
         // Plant a corrupt backup file
-        let corrupt_backup = dir.path().join("cursor.json.agentcontrol-backup-20260811-120000");
+        let corrupt_backup = dir
+            .path()
+            .join("cursor.json.agentcontrol-backup-20260811-120000");
         fs::write(&corrupt_backup, b"CORRUPT DATA").unwrap();
 
         let result = generic_ide::unwrap_generic("Cursor", config_path, /*force=*/ false);
@@ -245,7 +272,9 @@ mod unprotect_tests {
         let config_path = write_valid_mcp_config(dir.path(), "cursor.json");
 
         // Plant a valid backup
-        let backup_path = dir.path().join("cursor.json.agentcontrol-backup-20260811-120000");
+        let backup_path = dir
+            .path()
+            .join("cursor.json.agentcontrol-backup-20260811-120000");
         fs::write(&backup_path, r#"{"mcpServers":{}}"#).unwrap();
 
         // --force should not panic regardless of outcome
@@ -271,10 +300,15 @@ mod api_mode_toggle_tests {
                 })
             })
             .collect();
-        for h in handles { h.join().unwrap(); }
+        for h in handles {
+            h.join().unwrap();
+        }
         let final_val = shadow_mode.load(Ordering::SeqCst);
         // Just assert no UB — value must be a valid bool
-        assert!(matches!(final_val, true | false), "AtomicBool must not be corrupted under concurrent writes");
+        assert!(
+            matches!(final_val, true | false),
+            "AtomicBool must not be corrupted under concurrent writes"
+        );
     }
 
     #[test]
@@ -316,7 +350,10 @@ tools:
           - path_traversal
 "#;
         let res = CompiledPolicy::from_yaml_str(valid_yaml);
-        assert!(res.is_ok(), "Valid wizard YAML policy must compile without errors");
+        assert!(
+            res.is_ok(),
+            "Valid wizard YAML policy must compile without errors"
+        );
     }
 
     #[test]
@@ -326,6 +363,9 @@ version: "INVALID_VERSION"
 default_action: unknown_action
 "#;
         let res = CompiledPolicy::from_yaml_str(invalid_yaml);
-        assert!(res.is_err(), "Invalid wizard YAML policy must fail compilation with descriptive error");
+        assert!(
+            res.is_err(),
+            "Invalid wizard YAML policy must fail compilation with descriptive error"
+        );
     }
 }

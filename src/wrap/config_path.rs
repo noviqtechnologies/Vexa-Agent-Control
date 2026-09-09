@@ -131,7 +131,9 @@ pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(".cursor/mcp.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor config path".to_string(),
+            ))
         }
         "linux" => {
             let candidates = vec![
@@ -146,7 +148,9 @@ pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(".cursor/mcp.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor config path".to_string(),
+            ))
         }
         "windows" => {
             #[cfg(windows)]
@@ -172,7 +176,9 @@ pub fn cursor_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(r".cursor\mcp.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor config path".to_string(),
+            ))
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -186,7 +192,9 @@ pub fn cursor_settings_path() -> Result<PathBuf, WrapError> {
                 let p = home.join("Library/Application Support/Cursor/User/settings.json");
                 return Ok(p);
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor settings path".to_string(),
+            ))
         }
         "linux" => {
             if let Some(config_dir) = dirs::config_dir() {
@@ -197,7 +205,9 @@ pub fn cursor_settings_path() -> Result<PathBuf, WrapError> {
                 let p = home.join(".config/Cursor/User/settings.json");
                 return Ok(p);
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor settings path".to_string(),
+            ))
         }
         "windows" => {
             #[cfg(windows)]
@@ -216,7 +226,9 @@ pub fn cursor_settings_path() -> Result<PathBuf, WrapError> {
             if let Some(data) = dirs::data_dir() {
                 return Ok(data.join(r"Cursor\User\settings.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Cursor settings path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Cursor settings path".to_string(),
+            ))
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -226,11 +238,15 @@ pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {
         "macos" => {
             let base = dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string())
+            })
         }
         "linux" => {
             let base = dirs::config_dir().map(|d| d.join("Code/User/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string())
+            })
         }
         "windows" => {
             #[cfg(windows)]
@@ -254,7 +270,9 @@ pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
                 }
             }
             let base = dirs::data_dir().map(|d| d.join(r"Code\User\globalStorage\rooveterinaryinc.roo-cline\settings\cline_mcp_settings.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve VS Code config path".to_string())
+            })
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -263,12 +281,17 @@ pub fn vscode_config_path() -> Result<PathBuf, WrapError> {
 pub fn jetbrains_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {
         "macos" => {
-            let base = dirs::home_dir().map(|h| h.join("Library/Application Support/JetBrains/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string()))
+            let base =
+                dirs::home_dir().map(|h| h.join("Library/Application Support/JetBrains/mcp.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string())
+            })
         }
         "linux" => {
             let base = dirs::config_dir().map(|d| d.join("JetBrains/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string())
+            })
         }
         "windows" => {
             #[cfg(windows)]
@@ -285,7 +308,9 @@ pub fn jetbrains_config_path() -> Result<PathBuf, WrapError> {
                 }
             }
             let base = dirs::data_dir().map(|d| d.join(r"JetBrains\mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve JetBrains config path".to_string())
+            })
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -295,11 +320,15 @@ pub fn zed_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {
         "macos" => {
             let base = dirs::config_dir().map(|d| d.join("zed/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string())
+            })
         }
         "linux" => {
             let base = dirs::config_dir().map(|d| d.join("zed/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string())
+            })
         }
         "windows" => {
             #[cfg(windows)]
@@ -322,7 +351,9 @@ pub fn zed_config_path() -> Result<PathBuf, WrapError> {
                 }
             }
             let base = dirs::data_local_dir().map(|d| d.join(r"Zed\mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve Zed config path".to_string())
+            })
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -335,12 +366,17 @@ pub fn cline_config_path() -> Result<PathBuf, WrapError> {
 pub fn opencode_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {
         "macos" => {
-            let base = dirs::home_dir().map(|h| h.join("Library/Application Support/OpenCode/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string()))
+            let base =
+                dirs::home_dir().map(|h| h.join("Library/Application Support/OpenCode/mcp.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string())
+            })
         }
         "linux" => {
             let base = dirs::config_dir().map(|d| d.join("opencode/mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string())
+            })
         }
         "windows" => {
             #[cfg(windows)]
@@ -362,7 +398,9 @@ pub fn opencode_config_path() -> Result<PathBuf, WrapError> {
                 }
             }
             let base = dirs::data_dir().map(|d| d.join(r"OpenCode\mcp.json"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve OpenCode config path".to_string())
+            })
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -373,7 +411,8 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
         "macos" => {
             let candidates = vec![
                 dirs::home_dir().map(|h| h.join(".gemini/config/mcp_config.json")),
-                dirs::home_dir().map(|h| h.join("Library/Application Support/Antigravity/mcp.json")),
+                dirs::home_dir()
+                    .map(|h| h.join("Library/Application Support/Antigravity/mcp.json")),
             ];
             for candidate in candidates.into_iter().flatten() {
                 if candidate.exists() {
@@ -383,7 +422,9 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(".gemini/config/mcp_config.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Antigravity config path".to_string(),
+            ))
         }
         "linux" => {
             let candidates = vec![
@@ -398,7 +439,9 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(".gemini/config/mcp_config.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Antigravity config path".to_string(),
+            ))
         }
         "windows" => {
             #[cfg(windows)]
@@ -423,7 +466,9 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
             if let Some(home) = dirs::home_dir() {
                 return Ok(home.join(r".gemini\config\mcp_config.json"));
             }
-            Err(WrapError::ConfigNotFound("Cannot resolve Antigravity config path".to_string()))
+            Err(WrapError::ConfigNotFound(
+                "Cannot resolve Antigravity config path".to_string(),
+            ))
         }
         other => Err(WrapError::UnsupportedOs(other.to_string())),
     }
@@ -446,7 +491,9 @@ pub fn codex_config_path() -> Result<PathBuf, WrapError> {
                 }
             }
             let base = dirs::home_dir().map(|h| h.join(r".codex\config.toml"));
-            base.ok_or_else(|| WrapError::ConfigNotFound("Cannot resolve Codex config path".to_string()))
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve Codex config path".to_string())
+            })
         }
         _ => {
             let base = dirs::home_dir().map(|h| h.join(".codex").join("config.toml"));
@@ -514,4 +561,3 @@ mod tests {
         assert!(dir.is_some());
     }
 }
-

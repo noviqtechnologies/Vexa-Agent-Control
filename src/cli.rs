@@ -84,7 +84,7 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         learn: bool,
 
-        /// Enable opt-in local dual-agent threat detector worker
+        /// [EXPERIMENTAL] Enable opt-in local dual-agent threat detector worker (asynchronous advisory preview, disabled by default)
         #[arg(long, default_value_t = false)]
         dual_agent: bool,
 
@@ -96,7 +96,7 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         min_tokens: u64,
 
-        /// Local LLM API endpoint for dual-agent threat reasoning
+        /// [EXPERIMENTAL] Local LLM API endpoint for dual-agent advisory threat reasoning
         #[arg(long, default_value = "http://localhost:11434")]
         local_llm_url: String,
 
@@ -319,7 +319,6 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         force: bool,
     },
-
 
     /// Internal command used by Claude Desktop to proxy tool calls
     #[command(name = "stdio-proxy", hide = true)]
@@ -801,7 +800,11 @@ pub struct StartArgs {
     pub listen: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTCONTROL_LOG_PATH", default_value = "~/.agentcontrol/audit.jsonl")]
+    #[arg(
+        long,
+        env = "AGENTCONTROL_LOG_PATH",
+        default_value = "~/.agentcontrol/audit.jsonl"
+    )]
     pub log_path: String,
 
     /// Upstream MCP server URL
@@ -1042,7 +1045,11 @@ pub struct WrapArgs {
     pub kill_mode: String,
 
     /// Audit log output path
-    #[arg(long, env = "AGENTCONTROL_LOG_PATH", default_value = "~/.agentcontrol/audit.jsonl")]
+    #[arg(
+        long,
+        env = "AGENTCONTROL_LOG_PATH",
+        default_value = "~/.agentcontrol/audit.jsonl"
+    )]
     pub log_path: String,
 
     /// Enable balanced security profile

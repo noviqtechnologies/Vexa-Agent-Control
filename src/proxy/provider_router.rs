@@ -98,7 +98,10 @@ impl ProviderRouter {
         stats.consecutive_failures.store(0, Ordering::Relaxed);
         stats.total_requests.fetch_add(1, Ordering::Relaxed);
 
-        let mut latencies = stats.rolling_latency_ms.lock().unwrap_or_else(|e| e.into_inner());
+        let mut latencies = stats
+            .rolling_latency_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if latencies.len() >= 50 {
             latencies.remove(0);
         }
@@ -145,7 +148,10 @@ impl ProviderRouter {
             strategy.select(&deps, self)
         } else {
             crate::proxy::routing::RoutingDecision::NoEligibleDeployment {
-                reason: format!("No deployment group registered for model alias '{}'", model_alias),
+                reason: format!(
+                    "No deployment group registered for model alias '{}'",
+                    model_alias
+                ),
             }
         }
     }
@@ -160,7 +166,10 @@ impl ProviderRouter {
             }
 
             let stats = self.get_or_create_stats(ep);
-            let latencies = stats.rolling_latency_ms.lock().unwrap_or_else(|e| e.into_inner());
+            let latencies = stats
+                .rolling_latency_ms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             let avg_latency = if latencies.is_empty() {
                 0
             } else {
@@ -187,7 +196,10 @@ impl crate::proxy::routing::StatsProvider for ProviderRouter {
 
     fn avg_latency_ms(&self, endpoint: &str) -> Option<u64> {
         let stats = self.get_or_create_stats(endpoint);
-        let latencies = stats.rolling_latency_ms.lock().unwrap_or_else(|e| e.into_inner());
+        let latencies = stats
+            .rolling_latency_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if latencies.is_empty() {
             None
         } else {
@@ -195,4 +207,3 @@ impl crate::proxy::routing::StatsProvider for ProviderRouter {
         }
     }
 }
-

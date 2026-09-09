@@ -132,7 +132,10 @@ impl DbManager {
             )",
             [],
         ) {
-            eprintln!("[db] warning: failed to initialize egress_events table: {}", e);
+            eprintln!(
+                "[db] warning: failed to initialize egress_events table: {}",
+                e
+            );
         }
 
         // Schema v2.0 migrations
@@ -144,14 +147,8 @@ impl DbManager {
             "ALTER TABLE egress_events ADD COLUMN identity_context TEXT",
             [],
         );
-        let _ = conn.execute(
-            "ALTER TABLE egress_events ADD COLUMN source TEXT",
-            [],
-        );
-        let _ = conn.execute(
-            "ALTER TABLE egress_events ADD COLUMN policy_rule TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE egress_events ADD COLUMN source TEXT", []);
+        let _ = conn.execute("ALTER TABLE egress_events ADD COLUMN policy_rule TEXT", []);
 
         // Prune dead prototype / test tables if present
         let _ = conn.execute("DROP TABLE IF EXISTS spend_latency_test", []);
@@ -246,12 +243,14 @@ impl DbManager {
                                         let _ = responder.send(Ok(events));
                                     }
                                     Err(e) => {
-                                        let _ = responder.send(Err(format!("Query execution failed: {}", e)));
+                                        let _ = responder
+                                            .send(Err(format!("Query execution failed: {}", e)));
                                     }
                                 }
                             }
                             Err(e) => {
-                                let _ = responder.send(Err(format!("Statement preparation failed: {}", e)));
+                                let _ = responder
+                                    .send(Err(format!("Statement preparation failed: {}", e)));
                             }
                         }
                     }
@@ -294,12 +293,14 @@ impl DbManager {
                                         let _ = responder.send(Ok(events));
                                     }
                                     Err(e) => {
-                                        let _ = responder.send(Err(format!("Query execution failed: {}", e)));
+                                        let _ = responder
+                                            .send(Err(format!("Query execution failed: {}", e)));
                                     }
                                 }
                             }
                             Err(e) => {
-                                let _ = responder.send(Err(format!("Statement preparation failed: {}", e)));
+                                let _ = responder
+                                    .send(Err(format!("Statement preparation failed: {}", e)));
                             }
                         }
                     }
@@ -338,11 +339,13 @@ impl DbManager {
                         let thirty_days_ago_ns = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
-                            .as_nanos() as i64 - (30 * 86400 * 1_000_000_000);
+                            .as_nanos() as i64
+                            - (30 * 86400 * 1_000_000_000);
                         conn.execute(
                             "DELETE FROM egress_events WHERE timestamp_ns < ?",
                             params![thirty_days_ago_ns],
-                        ).ok();
+                        )
+                        .ok();
 
                         // 2. Size-based pruning if file size > 500 MiB
                         if let Ok(metadata) = fs::metadata(&db_path) {
@@ -358,12 +361,20 @@ impl DbManager {
             }
         });
 
-        Self { cmd_tx, _shutdown, dropped_events }
+        Self {
+            cmd_tx,
+            _shutdown,
+            dropped_events,
+        }
     }
 
     /// Async insert of an event with priority handling for security decisions.
     pub async fn insert(&self, event: EgressEvent) -> Result<(), String> {
-        let is_security_decision = event.verdict.as_deref().map(|v| v.starts_with("BLOCK") || v.starts_with("DENY")).unwrap_or(false);
+        let is_security_decision = event
+            .verdict
+            .as_deref()
+            .map(|v| v.starts_with("BLOCK") || v.starts_with("DENY"))
+            .unwrap_or(false);
         if is_security_decision {
             self.cmd_tx
                 .send(DbCmd::Insert(event))
@@ -373,7 +384,8 @@ impl DbManager {
             match self.cmd_tx.try_send(DbCmd::Insert(event)) {
                 Ok(_) => Ok(()),
                 Err(mpsc::error::TrySendError::Full(_)) => {
-                    self.dropped_events.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    self.dropped_events
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     Ok(())
                 }
                 Err(e) => Err(format!("Failed to send insert cmd: {}", e)),

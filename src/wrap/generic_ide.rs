@@ -46,7 +46,10 @@ pub fn wrap_generic(
 
             if let Some(sep_tbl) = sep {
                 if !sep_tbl.contains_key("inherit") {
-                    sep_tbl.insert("inherit".to_string(), toml::Value::String("core".to_string()));
+                    sep_tbl.insert(
+                        "inherit".to_string(),
+                        toml::Value::String("core".to_string()),
+                    );
                     env_policy_updated = true;
                 }
                 let set_tbl = sep_tbl
@@ -54,26 +57,41 @@ pub fn wrap_generic(
                     .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
                     .as_table_mut();
                 if let Some(set_m) = set_tbl {
-                    if set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str()) != Some("http://127.0.0.1:8080/v1") {
-                        set_m.insert("OPENAI_BASE_URL".to_string(), toml::Value::String("http://127.0.0.1:8080/v1".to_string()));
+                    if set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
+                        != Some("http://127.0.0.1:8080/v1")
+                    {
+                        set_m.insert(
+                            "OPENAI_BASE_URL".to_string(),
+                            toml::Value::String("http://127.0.0.1:8080/v1".to_string()),
+                        );
                         env_policy_updated = true;
                     }
-                    if set_m.get("HTTP_PROXY").and_then(|v| v.as_str()) != Some("http://127.0.0.1:8080") {
-                        set_m.insert("HTTP_PROXY".to_string(), toml::Value::String("http://127.0.0.1:8080".to_string()));
+                    if set_m.get("HTTP_PROXY").and_then(|v| v.as_str())
+                        != Some("http://127.0.0.1:8080")
+                    {
+                        set_m.insert(
+                            "HTTP_PROXY".to_string(),
+                            toml::Value::String("http://127.0.0.1:8080".to_string()),
+                        );
                         env_policy_updated = true;
                     }
                 }
             }
         }
 
-        if let Some(table) = toml_val.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
+        if let Some(table) = toml_val
+            .get_mut("mcp_servers")
+            .and_then(|v| v.as_table_mut())
+        {
             for (_name, server) in table.iter_mut() {
                 if let Some(srv_table) = server.as_table_mut() {
                     let current_cmd = srv_table
                         .get("command")
                         .and_then(|c| c.as_str())
                         .unwrap_or("");
-                    if current_cmd.to_lowercase().contains("agentcontrol") || current_cmd.to_lowercase().contains("agentwall") {
+                    if current_cmd.to_lowercase().contains("agentcontrol")
+                        || current_cmd.to_lowercase().contains("agentwall")
+                    {
                         continue; // already wrapped
                     }
 
@@ -102,7 +120,12 @@ pub fn wrap_generic(
         }
 
         if wrapped_count == 0 && !env_policy_updated {
-            if toml_val.get("mcp_servers").and_then(|v| v.as_table()).map(|t| !t.is_empty()).unwrap_or(false) {
+            if toml_val
+                .get("mcp_servers")
+                .and_then(|v| v.as_table())
+                .map(|t| !t.is_empty())
+                .unwrap_or(false)
+            {
                 return Err(WrapError::AlreadyWrapped);
             } else if ide_name != "Codex" {
                 return Err(WrapError::NoMcpServers);
@@ -147,7 +170,8 @@ pub fn wrap_generic(
             Ok(v) => v,
             Err(_) => {
                 let stripped = super::strip_json_comments(&raw);
-                serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+                serde_json::from_str(&stripped)
+                    .map_err(|e| WrapError::InvalidJson(e.to_string()))?
             }
         };
 
@@ -167,7 +191,10 @@ pub fn wrap_generic(
             return Err(WrapError::NoMcpServers);
         }
 
-        if command_servers.iter().all(|v| transformer::is_already_wrapped(v)) {
+        if command_servers
+            .iter()
+            .all(|v| transformer::is_already_wrapped(v))
+        {
             return Err(WrapError::AlreadyWrapped);
         }
 
@@ -308,7 +335,10 @@ pub fn unwrap_generic(
             });
         }
 
-        if let Some(table) = toml_val.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
+        if let Some(table) = toml_val
+            .get_mut("mcp_servers")
+            .and_then(|v| v.as_table_mut())
+        {
             for (_name, server) in table.iter_mut() {
                 if let Some(srv_table) = server.as_table_mut() {
                     let orig_args = srv_table
@@ -323,7 +353,10 @@ pub fn unwrap_generic(
                     {
                         if let Some(original_cmd) = orig_args[2].as_str() {
                             let rest_args: Vec<toml::Value> = orig_args[3..].to_vec();
-                            srv_table.insert("command".to_string(), toml::Value::String(original_cmd.to_string()));
+                            srv_table.insert(
+                                "command".to_string(),
+                                toml::Value::String(original_cmd.to_string()),
+                            );
                             srv_table.insert("args".to_string(), toml::Value::Array(rest_args));
                         }
                     }
@@ -331,25 +364,35 @@ pub fn unwrap_generic(
             }
         }
 
-        if let Some(sep) = toml_val.get_mut("shell_environment_policy").and_then(|v| v.as_table_mut()) {
+        if let Some(sep) = toml_val
+            .get_mut("shell_environment_policy")
+            .and_then(|v| v.as_table_mut())
+        {
             if let Some(set_tbl) = sep.get_mut("set").and_then(|v| v.as_table_mut()) {
-                if set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080/v1") {
+                if set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:8080/v1")
+                {
                     set_tbl.remove("OPENAI_BASE_URL");
                 }
-                if set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                if set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:8080")
+                {
                     set_tbl.remove("HTTP_PROXY");
                 }
-                if set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                if set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:8080")
+                {
                     set_tbl.remove("HTTPS_PROXY");
                 }
             }
         }
 
-        let output_str = toml::to_string_pretty(&toml_val)
-            .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
+        let output_str =
+            toml::to_string_pretty(&toml_val).map_err(|e| WrapError::InvalidJson(e.to_string()))?;
         atomic_write(&config_path, &output_str)?;
 
-        let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
+        let backup_path =
+            backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
         Ok(UnwrapResult {
             config_path,
             backup_path,
@@ -359,7 +402,8 @@ pub fn unwrap_generic(
             Ok(v) => v,
             Err(_) => {
                 let stripped = super::strip_json_comments(&raw);
-                serde_json::from_str(&stripped).map_err(|e| WrapError::InvalidJson(e.to_string()))?
+                serde_json::from_str(&stripped)
+                    .map_err(|e| WrapError::InvalidJson(e.to_string()))?
             }
         };
 
@@ -399,7 +443,8 @@ pub fn unwrap_generic(
             .map_err(|e| WrapError::InvalidJson(e.to_string()))?;
         atomic_write(&config_path, &output_str)?;
 
-        let backup_path = backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
+        let backup_path =
+            backup::find_latest_backup(config_dir).unwrap_or_else(|| config_path.clone());
         Ok(UnwrapResult {
             config_path,
             backup_path,
@@ -411,7 +456,9 @@ pub fn print_wrap_summary_generic(ide_name: &str, result: &WrapResult) {
     println!(
         "{} {}",
         "✔".green().bold(),
-        format!("Vexa Agent Control wrapped {}.", ide_name).green().bold()
+        format!("Vexa Agent Control wrapped {}.", ide_name)
+            .green()
+            .bold()
     );
     println!(
         "  {} Config:            {}",
@@ -479,7 +526,8 @@ pub fn wrap_cursor_settings(dry_run: bool) -> Result<(), WrapError> {
                     "cursor.general.disableHttp2": true
                 });
                 if has_centralized_openai {
-                    initial["cursor.general.openaiApiKey"] = serde_json::json!("sk-agentcontrol-managed");
+                    initial["cursor.general.openaiApiKey"] =
+                        serde_json::json!("sk-agentcontrol-managed");
                 }
                 let _ = fs::write(
                     &settings_path,
@@ -590,22 +638,33 @@ pub fn unwrap_cursor_settings(force: bool) -> Result<(), WrapError> {
             }
 
             if let Ok(raw) = fs::read_to_string(&settings_path) {
-                let parsed: Result<serde_json::Value, _> = serde_json::from_str(&raw).or_else(|_| {
-                    let stripped = super::strip_json_comments(&raw);
-                    serde_json::from_str(&stripped)
-                });
+                let parsed: Result<serde_json::Value, _> =
+                    serde_json::from_str(&raw).or_else(|_| {
+                        let stripped = super::strip_json_comments(&raw);
+                        serde_json::from_str(&stripped)
+                    });
                 if let Ok(mut settings) = parsed {
                     if let Some(map) = settings.as_object_mut() {
                         let mut modified = false;
-                        if map.get("http.proxy").and_then(|v| v.as_str()) == Some("http://127.0.0.1:8080") {
+                        if map.get("http.proxy").and_then(|v| v.as_str())
+                            == Some("http://127.0.0.1:8080")
+                        {
                             map.remove("http.proxy");
                             modified = true;
                         }
-                        if map.get("cursor.general.disableHttp2").and_then(|v| v.as_bool()) == Some(true) {
+                        if map
+                            .get("cursor.general.disableHttp2")
+                            .and_then(|v| v.as_bool())
+                            == Some(true)
+                        {
                             map.remove("cursor.general.disableHttp2");
                             modified = true;
                         }
-                        if map.get("cursor.general.openaiApiKey").and_then(|v| v.as_str()) == Some("sk-agentcontrol-managed") {
+                        if map
+                            .get("cursor.general.openaiApiKey")
+                            .and_then(|v| v.as_str())
+                            == Some("sk-agentcontrol-managed")
+                        {
                             map.remove("cursor.general.openaiApiKey");
                             modified = true;
                         }
@@ -621,4 +680,3 @@ pub fn unwrap_cursor_settings(force: bool) -> Result<(), WrapError> {
     }
     Ok(())
 }
-

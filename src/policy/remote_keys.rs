@@ -51,7 +51,10 @@ pub async fn send_assignment_ack(
     };
 
     // Try primary device endpoint
-    let url = format!("{}/api/v2/device/assignments/{}/ack", clean_base, assignment_id);
+    let url = format!(
+        "{}/api/v2/device/assignments/{}/ack",
+        clean_base, assignment_id
+    );
     let mut req = client
         .post(&url)
         .header("Content-Type", "application/json")
@@ -65,7 +68,10 @@ pub async fn send_assignment_ack(
         Ok(resp) if resp.status().is_success() => Ok(()),
         Ok(resp) => {
             // Fallback to gateway-broker route if available
-            let fallback_url = format!("{}/api/v3/gateway-broker/assignments/{}/ack", clean_base, assignment_id);
+            let fallback_url = format!(
+                "{}/api/v3/gateway-broker/assignments/{}/ack",
+                clean_base, assignment_id
+            );
             let mut fb_req = client
                 .post(&fallback_url)
                 .header("Content-Type", "application/json")
@@ -78,7 +84,10 @@ pub async fn send_assignment_ack(
                     return Ok(());
                 }
             }
-            Err(format!("Assignment ACK failed with status: {}", resp.status()))
+            Err(format!(
+                "Assignment ACK failed with status: {}",
+                resp.status()
+            ))
         }
         Err(e) => Err(format!("Network error sending assignment ACK: {}", e)),
     }
@@ -116,16 +125,18 @@ pub async fn fetch_active_provider_keys(
             }
             if let Ok(fb_resp) = fb_req.send().await {
                 if fb_resp.status().is_success() {
-                    let payload: ActiveProviderKeysPayload = fb_resp
-                        .json()
-                        .await
-                        .map_err(|e| format!("Failed to parse fallback provider keys JSON: {}", e))?;
+                    let payload: ActiveProviderKeysPayload = fb_resp.json().await.map_err(|e| {
+                        format!("Failed to parse fallback provider keys JSON: {}", e)
+                    })?;
                     return Ok(Some(payload));
                 }
             }
             Ok(None)
         }
-        Ok(resp) => Err(format!("HTTP {} fetching active provider keys", resp.status())),
+        Ok(resp) => Err(format!(
+            "HTTP {} fetching active provider keys",
+            resp.status()
+        )),
         Err(e) => Err(format!("Failed to connect to Control Hub: {}", e)),
     }
 }
@@ -142,7 +153,11 @@ pub async fn start_provider_keys_poll(
     mut wake_rx: tokio::sync::mpsc::Receiver<()>,
 ) {
     let mut last_hash: Option<String> = None;
-    let sleep_dur = Duration::from_secs(if interval_secs == 0 { 60 } else { interval_secs });
+    let sleep_dur = Duration::from_secs(if interval_secs == 0 {
+        60
+    } else {
+        interval_secs
+    });
 
     loop {
         tokio::select! {
@@ -204,12 +219,9 @@ pub async fn start_provider_keys_poll(
 
                 // 4. Send Acknowledgment back to Control Hub (REQ-DSM-006)
                 if let Some(ref asgn_id) = payload.assignment_id {
-                    let ack_res = send_assignment_ack(
-                        &hub_url,
-                        asgn_id,
-                        "applied",
-                        &payload.payload_hash,
-                    ).await;
+                    let ack_res =
+                        send_assignment_ack(&hub_url, asgn_id, "applied", &payload.payload_hash)
+                            .await;
 
                     if let Err(ack_err) = ack_res {
                         logging::log_event(

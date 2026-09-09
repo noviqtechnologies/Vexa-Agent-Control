@@ -264,12 +264,17 @@ fn test_generate_default_baseline_policy() {
 
 #[test]
 fn test_multiline_string_value_escaping() {
-    let multiline_val = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
+    let multiline_val =
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
     let payload = serde_json::json!({
         "content": multiline_val,
         "path": "credentials.key"
     });
-    let events = vec![make_event("write_file", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let events = vec![make_event(
+        "write_file",
+        &payload.to_string(),
+        "2026-08-12T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
 
     // Verify CompiledPolicy can parse generated YAML without error
@@ -295,7 +300,11 @@ fn test_tool_and_param_name_with_colons_escaped() {
         "header:authorization": "Bearer token123",
         "user:id": "usr_456"
     });
-    let events = vec![make_event("api:call", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let events = vec![make_event(
+        "api:call",
+        &payload.to_string(),
+        "2026-08-12T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
 
     let compiled = agentcontrol::policy::engine::CompiledPolicy::from_yaml_str(&yaml);
@@ -308,12 +317,17 @@ fn test_tool_and_param_name_with_colons_escaped() {
 
 #[test]
 fn test_multiline_rsa_key_not_in_enum() {
-    let rsa_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
+    let rsa_key =
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3v...\n-----END RSA PRIVATE KEY-----";
     let payload = serde_json::json!({
         "content": rsa_key,
         "path": "/home/user/.ssh/id_rsa"
     });
-    let events = vec![make_event("write_file", &payload.to_string(), "2026-08-12T10:00:00Z")];
+    let events = vec![make_event(
+        "write_file",
+        &payload.to_string(),
+        "2026-08-12T10:00:00Z",
+    )];
     let yaml = generate_from_events(&events, 30);
 
     // Multiline RSA key must NOT be emitted under # enum:
@@ -329,7 +343,3 @@ fn test_multiline_rsa_key_not_in_enum() {
         compiled.err()
     );
 }
-
-
-
-

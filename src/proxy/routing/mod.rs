@@ -141,7 +141,10 @@ impl RoutingStrategy for WeightedRandomStrategy {
             healthy
         };
 
-        let total_weight: u32 = pool.iter().map(|d| if d.weight == 0 { 1 } else { d.weight }).sum();
+        let total_weight: u32 = pool
+            .iter()
+            .map(|d| if d.weight == 0 { 1 } else { d.weight })
+            .sum();
         if total_weight == 0 {
             return RoutingDecision::Selected((*pool[0]).clone());
         }
@@ -172,7 +175,10 @@ pub struct RegionAffinityStrategy {
 impl RegionAffinityStrategy {
     pub fn new(allowed_regions: Vec<String>) -> Self {
         Self {
-            allowed_regions: allowed_regions.into_iter().map(|r| r.to_lowercase()).collect(),
+            allowed_regions: allowed_regions
+                .into_iter()
+                .map(|r| r.to_lowercase())
+                .collect(),
         }
     }
 
@@ -265,9 +271,9 @@ pub fn get_strategy(name: &str, allowed_regions: Option<Vec<String>>) -> Box<dyn
     match name.to_lowercase().as_str() {
         "lowest_latency" | "latency" => Box::new(LowestLatencyStrategy),
         "weighted_random" | "weighted" => Box::new(WeightedRandomStrategy),
-        "region_affinity" | "regional" => {
-            Box::new(RegionAffinityStrategy::new(allowed_regions.unwrap_or_default()))
-        }
+        "region_affinity" | "regional" => Box::new(RegionAffinityStrategy::new(
+            allowed_regions.unwrap_or_default(),
+        )),
         _ => Box::new(PriorityStrategy),
     }
 }

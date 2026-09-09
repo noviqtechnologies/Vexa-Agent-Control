@@ -47,7 +47,7 @@ Vexa Agent Control introduces **Dual-Tier Token Economics**, explicitly differen
 | **Network Egress** | **0 Bytes (Eliminated)** — resolved in local memory / private cluster | Full prompt payload egressed across Internet WAN |
 | **Execution Latency** | **~2.4 ms** (Sub-millisecond retrieval) | ~450 ms – 1,500 ms (WAN network roundtrip) |
 | **Portability** | **Cross-Model & Cross-Provider** (unified gateway layer) | Vendor-locked (isolated per provider account) |
-| **Storage Tiering** | In-Memory HNSW vector index + Enterprise Qdrant clusters | Ephemeral in-memory provider cache (5 min to 1 hr TTL) |
+| **Storage Tiering** | Partitioned in-memory vector store + Optional enterprise Qdrant clusters | Ephemeral in-memory provider cache (5 min to 1 hr TTL) |
 
 ### Vector Backends & Embedder Options
 

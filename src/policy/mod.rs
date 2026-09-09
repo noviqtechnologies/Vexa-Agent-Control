@@ -10,14 +10,14 @@ pub mod identity;
 pub mod injection;
 pub mod loader;
 pub mod mcp_score;
+/// File-system watcher that hot-reloads the `--policy` YAML file when it changes
+/// on disk, without requiring a daemon restart.
+pub mod policy_file_watcher;
 /// Remote policy loader: fetches active policy from the dashboard API (PostgreSQL)
 /// and provides a background polling task for automatic hot-reload.
 pub mod remote;
 /// Remote provider keys & desired state reconciler (REQ-DSM-004)
 pub mod remote_keys;
-/// File-system watcher that hot-reloads the `--policy` YAML file when it changes
-/// on disk, without requiring a daemon restart.
-pub mod policy_file_watcher;
 pub mod response_scanner;
 pub mod safe_mode;
 pub mod schema;
@@ -60,12 +60,10 @@ impl SharedScanners {
             injection::InjectionScanner::new()
                 .map_err(|e| format!("Failed to compile Injection regexes: {}", e))?,
         );
-        let semantic_scanner = Arc::new(
-            semantic::SemanticScanner::new(semantic::SemanticConfig::default()),
-        );
-        let schema_drift_detector = Arc::new(
-            schema_drift::SchemaDriftDetector::new(None),
-        );
+        let semantic_scanner = Arc::new(semantic::SemanticScanner::new(
+            semantic::SemanticConfig::default(),
+        ));
+        let schema_drift_detector = Arc::new(schema_drift::SchemaDriftDetector::new(None));
 
         Ok(Self {
             safe_mode_scanner,
@@ -85,4 +83,3 @@ impl SharedScanners {
 
 #[cfg(test)]
 mod group_policy_test;
-

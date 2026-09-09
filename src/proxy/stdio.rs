@@ -292,8 +292,12 @@ fn resolve_workstation_agent_id(session: &crate::proxy::session::SessionContext)
         None
     };
 
-    let user_opt = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).ok();
-    let host_opt = std::env::var("HOSTNAME").or_else(|_| std::env::var("COMPUTERNAME")).ok();
+    let user_opt = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .ok();
+    let host_opt = std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .ok();
 
     match (ide_tag, user_opt, host_opt) {
         (Some(ide), Some(user), Some(host)) => format!("{}@{}-{}", ide, user, host),
@@ -977,7 +981,9 @@ async fn stdio_scan_response(
                         "modified": modified_tools,
                     }),
                 );
-                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
+                if action == crate::policy::schema_drift::DriftAction::Block
+                    && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     let id = response
                         .get("id")
                         .cloned()

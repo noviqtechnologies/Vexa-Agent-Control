@@ -139,6 +139,10 @@ resource "google_cloud_run_v2_service" "api" {
           }
         }
       }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
+      }
 
       dynamic "volume_mounts" {
         for_each = var.enable_cloud_sql ? [1] : []
@@ -320,6 +324,10 @@ resource "google_cloud_run_v2_service" "ui" {
         name  = "DASHBOARD_API_URL"
         value = google_cloud_run_v2_service.api.uri
       }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
+      }
 
       startup_probe {
         http_get {
@@ -462,6 +470,10 @@ resource "google_cloud_run_v2_service" "gateway" {
       env {
         name  = "AGENTWALL_LOG_PATH"
         value = "/var/log/agentcontrol/audit.log"
+      }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
       }
 
       startup_probe {

@@ -1,7 +1,7 @@
 use agentcontrol::proxy::provider_router::{Deployment, ProviderRouter};
 use agentcontrol::proxy::routing::{
-    get_strategy, LowestLatencyStrategy, RegionAffinityStrategy,
-    RoutingDecision, WeightedRandomStrategy,
+    get_strategy, LowestLatencyStrategy, RegionAffinityStrategy, RoutingDecision,
+    WeightedRandomStrategy,
 };
 use std::time::Duration;
 
@@ -37,7 +37,9 @@ fn test_provider_router_select_deployment_backward_compatibility() {
     router.register_deployments("gpt-4o", deps);
 
     // Default select_deployment uses PriorityStrategy
-    let selected = router.select_deployment("gpt-4o").expect("should select deployment");
+    let selected = router
+        .select_deployment("gpt-4o")
+        .expect("should select deployment");
     assert_eq!(selected.id, "dep-primary-us");
 }
 

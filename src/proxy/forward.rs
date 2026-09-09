@@ -54,11 +54,9 @@ impl std::fmt::Display for ForwardError {
         match self {
             Self::Network(e) => write!(f, "Network error: {}", e),
             Self::InvalidResponse(e) => write!(f, "Invalid MCP response: {}", e),
-            Self::PayloadTooLarge(sz) => write!(
-                f,
-                "Upstream response exceeded maximum limit ({} bytes)",
-                sz
-            ),
+            Self::PayloadTooLarge(sz) => {
+                write!(f, "Upstream response exceeded maximum limit ({} bytes)", sz)
+            }
         }
     }
 }

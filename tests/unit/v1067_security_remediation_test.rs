@@ -79,9 +79,24 @@ fn test_profile_configuration_matrix() {
     for c in cases {
         let p = DeploymentProfile::parse(c.profile_str);
         assert_eq!(p.name(), c.expected_name);
-        assert_eq!(p.is_enforce(), c.expected_enforce, "enforce mismatch for {}", c.profile_str);
-        assert_eq!(p.default_scan_responses(), c.expected_scan_responses, "scan_responses mismatch for {}", c.profile_str);
-        assert_eq!(p.default_fail_closed(), c.expected_fail_closed, "fail_closed mismatch for {}", c.profile_str);
+        assert_eq!(
+            p.is_enforce(),
+            c.expected_enforce,
+            "enforce mismatch for {}",
+            c.profile_str
+        );
+        assert_eq!(
+            p.default_scan_responses(),
+            c.expected_scan_responses,
+            "scan_responses mismatch for {}",
+            c.profile_str
+        );
+        assert_eq!(
+            p.default_fail_closed(),
+            c.expected_fail_closed,
+            "fail_closed mismatch for {}",
+            c.profile_str
+        );
     }
 }
 
@@ -94,7 +109,10 @@ fn test_device_keypair_bundle_pem_serialization() {
     assert!(!bundle.ed25519_fingerprint.is_empty());
     assert!(!bundle.csr_sha256.is_empty());
     assert!(bundle.csr_pem.contains("BEGIN CERTIFICATE REQUEST"));
-    assert!(bundle.p256_key_pem.contains("BEGIN PRIVATE KEY") || bundle.p256_key_pem.contains("BEGIN EC PRIVATE KEY"));
+    assert!(
+        bundle.p256_key_pem.contains("BEGIN PRIVATE KEY")
+            || bundle.p256_key_pem.contains("BEGIN EC PRIVATE KEY")
+    );
 
     key_mgr.persist_bundle_securely(&bundle).unwrap();
     assert!(temp_dir.path().join("identity_ed25519.key").exists());
@@ -104,7 +122,8 @@ fn test_device_keypair_bundle_pem_serialization() {
 
 #[test]
 fn test_device_http_client_builder() {
-    let client = agentcontrol::policy::remote::build_device_http_client(std::time::Duration::from_secs(5));
+    let client =
+        agentcontrol::policy::remote::build_device_http_client(std::time::Duration::from_secs(5));
     // Verify client builds without panicking
     drop(client);
 }

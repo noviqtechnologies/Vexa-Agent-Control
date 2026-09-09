@@ -73,7 +73,10 @@ pub fn verify_backup_integrity(backup_path: &Path) -> Result<(), WrapError> {
             serde_json::from_str(&stripped)
         });
         if let Err(e) = parsed {
-            return Err(WrapError::InvalidJson(format!("Backup JSON corruption detected: {}", e)));
+            return Err(WrapError::InvalidJson(format!(
+                "Backup JSON corruption detected: {}",
+                e
+            )));
         }
     }
     Ok(())
@@ -88,13 +91,14 @@ fn list_backups(config_dir: &Path) -> Result<Vec<PathBuf>, WrapError> {
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n.contains(BACKUP_SUFFIX_PREFIX) || n.contains(LEGACY_BACKUP_SUFFIX_PREFIX))
+                .map(|n| {
+                    n.contains(BACKUP_SUFFIX_PREFIX) || n.contains(LEGACY_BACKUP_SUFFIX_PREFIX)
+                })
                 .unwrap_or(false)
         })
         .collect();
     Ok(backups)
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -23,7 +23,9 @@ fn make_azure_request(model: &str) -> NormalizedLLMRequest {
 fn test_azure_endpoint_url_rewriting() {
     let t = get_transformer("azure").expect("Azure transformer should exist");
     let req = make_azure_request("gpt-4o");
-    let (url, headers, _) = t.transform_request(&req, "az-key-123", Some("https://my-res.openai.azure.com")).unwrap();
+    let (url, headers, _) = t
+        .transform_request(&req, "az-key-123", Some("https://my-res.openai.azure.com"))
+        .unwrap();
     assert!(url.contains("my-res.openai.azure.com/openai/deployments/gpt-4o/chat/completions"));
     assert!(url.contains("api-version="));
     assert_eq!(headers.get("api-key").unwrap(), "az-key-123");
@@ -87,7 +89,9 @@ fn test_azure_normalize_response_passthrough() {
         }]
     });
     let bytes = serde_json::to_vec(&azure_raw).unwrap();
-    let val = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let val = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(val["choices"][0]["message"]["content"], "Azure response");
 }
 

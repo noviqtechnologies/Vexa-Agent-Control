@@ -138,14 +138,29 @@ impl Embedder {
         }
     }
 
-    /// Pure-Rust deterministic 384-dimensional lexical-semantic feature hashing vectorizer.
+    /// Pure-Rust deterministic 384-dimensional lexical n-gram feature hashing vectorizer.
     ///
-    /// Uses word unigrams, bigrams, and character n-grams with sub-linear term frequency
-    /// and sign-hashed projections. Normalized with L2 norm so dot products measure cosine similarity.
+    /// NOTE: This is a fast, deterministic lexical feature-hashing baseline designed for
+    /// offline testing, local dev, and air-gapped environments with zero external dependencies.
+    /// It captures lexical overlap and character n-grams, but is NOT equivalent to a modern deep
+    /// semantic embedding model. For true semantic paraphrase understanding, configure OpenAI
+    /// (`text-embedding-3-small`) or Ollama (`nomic-embed-text`) embedding models.
     pub fn local_vectorize(text: &str) -> Vec<f32> {
         const DIMENSIONS: usize = 384;
         let mut vector = vec![0.0f32; DIMENSIONS];
-        let normalized = text.to_lowercase();
+
+        // Bound input length to 16 KB safely at a UTF-8 character boundary
+        let safe_text = if text.len() > 16384 {
+            let mut end = 16384;
+            while !text.is_char_boundary(end) && end > 0 {
+                end -= 1;
+            }
+            &text[..end]
+        } else {
+            text
+        };
+
+        let normalized = safe_text.to_lowercase();
         let words: Vec<&str> = normalized
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| !w.is_empty())
@@ -175,7 +190,10 @@ impl Embedder {
         }
 
         // 3. Character 3-grams for root-word stems & spelling tolerance
-        let chars: Vec<char> = normalized.chars().filter(|c| c.is_alphanumeric() || *c == ' ').collect();
+        let chars: Vec<char> = normalized
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == ' ')
+            .collect();
         if chars.len() >= 3 {
             for window in chars.windows(3) {
                 let s: String = window.iter().collect();

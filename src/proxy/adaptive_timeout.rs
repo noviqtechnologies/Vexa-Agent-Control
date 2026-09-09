@@ -36,21 +36,31 @@ impl AdaptiveTimeoutManager {
     pub fn calculate_timeout(model: &str, expected_tokens: Option<usize>) -> Duration {
         let tokens = expected_tokens.unwrap_or(500) as u64;
 
-        let profile = if model.contains("o1") || model.contains("o3") || model.contains("r1") || model.contains("reasoning") {
+        let profile = if model.contains("o1")
+            || model.contains("o3")
+            || model.contains("r1")
+            || model.contains("reasoning")
+        {
             // Reasoning / Deep-thinking models take significantly longer
             ModelTimeoutProfile {
                 base_timeout_ms: 60_000,
                 per_token_timeout_ms: 200,
                 max_timeout_ms: 300_000,
             }
-        } else if model.contains("gpt-4o-mini") || model.contains("flash") || model.contains("haiku") {
+        } else if model.contains("gpt-4o-mini")
+            || model.contains("flash")
+            || model.contains("haiku")
+        {
             // Fast / Light models
             ModelTimeoutProfile {
                 base_timeout_ms: 15_000,
                 per_token_timeout_ms: 30,
                 max_timeout_ms: 60_000,
             }
-        } else if model.contains("claude-3-5") || model.contains("gpt-4o") || model.contains("sonnet") {
+        } else if model.contains("claude-3-5")
+            || model.contains("gpt-4o")
+            || model.contains("sonnet")
+        {
             // High capability standard models
             ModelTimeoutProfile {
                 base_timeout_ms: 30_000,

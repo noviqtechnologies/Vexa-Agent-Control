@@ -1,10 +1,10 @@
 //! OS Service Manager integration module — handles systemd (Linux), launchd (macOS), and SCM (Windows).
 
+pub mod eventlog;
 pub mod linux;
 pub mod macos;
 pub mod windows;
 pub mod windows_profiles;
-pub mod eventlog;
 
 use colored::*;
 use std::env;

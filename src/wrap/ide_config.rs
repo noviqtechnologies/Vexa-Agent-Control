@@ -41,7 +41,8 @@ pub fn cursor_settings_path() -> Option<PathBuf> {
         }
         "macos" => {
             let candidates = [
-                dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/settings.json")),
+                dirs::home_dir()
+                    .map(|h| h.join("Library/Application Support/Cursor/User/settings.json")),
                 dirs::home_dir().map(|h| h.join(".cursor/mcp.json")),
             ];
             for c in candidates.into_iter().flatten() {
@@ -49,7 +50,8 @@ pub fn cursor_settings_path() -> Option<PathBuf> {
                     return Some(c);
                 }
             }
-            dirs::home_dir().map(|h| h.join("Library/Application Support/Cursor/User/settings.json"))
+            dirs::home_dir()
+                .map(|h| h.join("Library/Application Support/Cursor/User/settings.json"))
         }
         "linux" => {
             let candidates = [
@@ -93,7 +95,8 @@ pub fn vscode_settings_path() -> Option<PathBuf> {
         }
         "macos" => {
             let candidates = [
-                dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/settings.json")),
+                dirs::home_dir()
+                    .map(|h| h.join("Library/Application Support/Code/User/settings.json")),
                 dirs::home_dir().map(|h| h.join("Library/Application Support/Code/User/mcp.json")),
             ];
             for c in candidates.into_iter().flatten() {
@@ -186,7 +189,8 @@ pub fn windsurf_settings_path() -> Option<PathBuf> {
         }
         "macos" => {
             let candidates = [
-                dirs::home_dir().map(|h| h.join("Library/Application Support/Windsurf/User/settings.json")),
+                dirs::home_dir()
+                    .map(|h| h.join("Library/Application Support/Windsurf/User/settings.json")),
                 dirs::home_dir().map(|h| h.join(".codeium/windsurf/mcp_config.json")),
             ];
             for c in candidates.into_iter().flatten() {
@@ -194,7 +198,8 @@ pub fn windsurf_settings_path() -> Option<PathBuf> {
                     return Some(c);
                 }
             }
-            dirs::home_dir().map(|h| h.join("Library/Application Support/Windsurf/User/settings.json"))
+            dirs::home_dir()
+                .map(|h| h.join("Library/Application Support/Windsurf/User/settings.json"))
         }
         "linux" => {
             let candidates = [
@@ -247,7 +252,10 @@ pub fn ensure_json_proxy_setting(
 
     if needs_update {
         if key_path.len() == 1 {
-            obj.insert(key_path[0].to_string(), Value::String(proxy_url.to_string()));
+            obj.insert(
+                key_path[0].to_string(),
+                Value::String(proxy_url.to_string()),
+            );
         }
 
         if let Some((k, v)) = api_key_override {
@@ -292,7 +300,10 @@ fn ensure_toml_codex_setting(path: &Path, proxy_url: &str) -> Result<bool, Strin
 
     let cur_root_base = root_tbl.get("openai_base_url").and_then(|v| v.as_str());
     if cur_root_base != Some(&base_url) {
-        root_tbl.insert("openai_base_url".to_string(), toml::Value::String(base_url.clone()));
+        root_tbl.insert(
+            "openai_base_url".to_string(),
+            toml::Value::String(base_url.clone()),
+        );
         updated = true;
     }
 
@@ -302,7 +313,10 @@ fn ensure_toml_codex_setting(path: &Path, proxy_url: &str) -> Result<bool, Strin
 
     if let Some(sep_tbl) = sep.as_table_mut() {
         if !sep_tbl.contains_key("inherit") {
-            sep_tbl.insert("inherit".to_string(), toml::Value::String("core".to_string()));
+            sep_tbl.insert(
+                "inherit".to_string(),
+                toml::Value::String("core".to_string()),
+            );
             updated = true;
         }
         let set_tbl = sep_tbl
@@ -311,12 +325,18 @@ fn ensure_toml_codex_setting(path: &Path, proxy_url: &str) -> Result<bool, Strin
         if let Some(set_m) = set_tbl.as_table_mut() {
             let cur_base = set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str());
             if cur_base != Some(&base_url) {
-                set_m.insert("OPENAI_BASE_URL".to_string(), toml::Value::String(base_url.clone()));
+                set_m.insert(
+                    "OPENAI_BASE_URL".to_string(),
+                    toml::Value::String(base_url.clone()),
+                );
                 updated = true;
             }
             let cur_proxy = set_m.get("HTTP_PROXY").and_then(|v| v.as_str());
             if cur_proxy != Some(proxy_url) {
-                set_m.insert("HTTP_PROXY".to_string(), toml::Value::String(proxy_url.to_string()));
+                set_m.insert(
+                    "HTTP_PROXY".to_string(),
+                    toml::Value::String(proxy_url.to_string()),
+                );
                 updated = true;
             }
         }
@@ -345,13 +365,17 @@ fn check_mcp_config_wrapped(path: &Path) -> bool {
                     return servers.values().all(|v| {
                         v.get("command")
                             .and_then(|c| c.as_str())
-                            .map(|cmd| cmd.to_lowercase().contains("agentwall") || cmd.to_lowercase().contains("agentcontrol"))
+                            .map(|cmd| {
+                                cmd.to_lowercase().contains("agentwall")
+                                    || cmd.to_lowercase().contains("agentcontrol")
+                            })
                             .unwrap_or(false)
                     });
                 }
             }
         } else if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-            let servers = v.get("mcpServers")
+            let servers = v
+                .get("mcpServers")
                 .or_else(|| v.get("mcp_servers"))
                 .or_else(|| v.get("context_servers"))
                 .or_else(|| v.get("experimental.context_servers"))
@@ -361,7 +385,9 @@ fn check_mcp_config_wrapped(path: &Path) -> bool {
                 if servers.is_empty() {
                     return true;
                 }
-                return servers.values().all(crate::wrap::transformer::is_already_wrapped);
+                return servers
+                    .values()
+                    .all(crate::wrap::transformer::is_already_wrapped);
             }
         }
     }
@@ -402,11 +428,13 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "vscode" => {
             if let Some(path) = vscode_settings_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     let key_spec = ("cline.baseUrl", None);
-                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    let updated =
+                        ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
                     if updated {
                         status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
                     }
@@ -424,11 +452,13 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "zed" => {
             if let Some(path) = zed_settings_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     let key_spec = ("language_models.openai.api_url", None);
-                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    let updated =
+                        ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
                     if updated {
                         status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
                     }
@@ -446,11 +476,13 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "windsurf" => {
             if let Some(path) = windsurf_settings_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     let key_spec = ("openai.baseUrl", None);
-                    let updated = ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
+                    let updated =
+                        ensure_json_proxy_setting(&path, &[key_spec.0], proxy_url, key_spec.1)?;
                     if updated {
                         status.last_healed_at = Some(chrono::Utc::now().to_rfc3339());
                     }
@@ -464,7 +496,8 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "claude_desktop" => {
             if let Ok(path) = crate::wrap::config_path::claude_config_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
@@ -477,7 +510,8 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "jetbrains" => {
             if let Ok(path) = crate::wrap::config_path::jetbrains_config_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
@@ -490,7 +524,8 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "antigravity" => {
             if let Ok(path) = crate::wrap::config_path::antigravity_config_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
@@ -503,7 +538,8 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "codex" => {
             if let Ok(path) = crate::wrap::config_path::codex_config_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     let updated = ensure_toml_codex_setting(&path, proxy_url)?;
@@ -522,7 +558,8 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
         "opencode" => {
             if let Ok(path) = crate::wrap::config_path::opencode_config_path() {
                 status.config_path = Some(path.to_string_lossy().to_string());
-                status.installed = path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
+                status.installed =
+                    path.parent().map(|p| p.exists()).unwrap_or(false) || path.exists();
 
                 if status.installed {
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);

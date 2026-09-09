@@ -71,7 +71,6 @@ schema_drift:
 "#.to_string()
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Internal aggregation types
 // ──────────────────────────────────────────────────────────────────────────────
@@ -516,7 +515,9 @@ self_healing:
 
                 out.push_str(&format!(
                     "      - name: \"{}\"\n        type: {}\n        required: {}\n",
-                    escape_yaml_string(param_name), inferred_type, required
+                    escape_yaml_string(param_name),
+                    inferred_type,
+                    required
                 ));
 
                 // max_length for strings
@@ -550,7 +551,11 @@ self_healing:
                         let mut unique = Vec::new();
                         for v in &stats.string_values {
                             // Enums must be short single-line values (no newlines/CRs, length <= 100)
-                            if !v.contains('\n') && !v.contains('\r') && v.len() <= 100 && seen.insert(v) {
+                            if !v.contains('\n')
+                                && !v.contains('\r')
+                                && v.len() <= 100
+                                && seen.insert(v)
+                            {
                                 unique.push(v.clone());
                             }
                         }

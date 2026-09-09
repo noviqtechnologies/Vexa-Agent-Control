@@ -70,7 +70,8 @@ pub fn install_windows_service(
     // ── Propagate invoking user's .agentcontrol credentials to SYSTEM service profile ──
     if let Some(user_home) = dirs::home_dir() {
         let user_agentcontrol = user_home.join(".agentcontrol");
-        let system_agentcontrol = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
+        let system_agentcontrol =
+            std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
         if user_agentcontrol.exists() && user_agentcontrol != system_agentcontrol {
             let _ = std::fs::create_dir_all(&system_agentcontrol);
             if let Ok(entries) = std::fs::read_dir(&user_agentcontrol) {
@@ -85,7 +86,10 @@ pub fn install_windows_service(
         }
     }
 
-    println!("  Creating service entry {}...", "AgentControlSentry".cyan());
+    println!(
+        "  Creating service entry {}...",
+        "AgentControlSentry".cyan()
+    );
 
     let service_info = ServiceInfo {
         name: OsStr::new("AgentControlSentry").to_os_string(),
@@ -267,7 +271,8 @@ pub mod service_dispatcher_handler {
         let status_handle =
             match service_control_handler::register("AgentControlSentry", event_handler) {
                 Ok(handle) => handle,
-                Err(_) => match service_control_handler::register("AgentWallSentry", event_handler) {
+                Err(_) => match service_control_handler::register("AgentWallSentry", event_handler)
+                {
                     Ok(handle) => handle,
                     Err(_) => return,
                 },
@@ -284,7 +289,8 @@ pub mod service_dispatcher_handler {
         });
 
         // Sync developer profile credentials to SYSTEM profile if missing
-        let system_agentcontrol = std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
+        let system_agentcontrol =
+            std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
         if !system_agentcontrol.join("device_token").exists() {
             for profile in crate::service::windows_profiles::enumerate_user_profiles() {
                 let user_agentcontrol = profile.join(".agentcontrol");
@@ -307,7 +313,10 @@ pub mod service_dispatcher_handler {
         // Auto-heal/register EventLog Application source in registry (runs as SYSTEM)
         super::ensure_eventlog_registered();
 
-        crate::service::eventlog::log_info(2004, "AgentControlSentry Windows SCM service started and active.");
+        crate::service::eventlog::log_info(
+            2004,
+            "AgentControlSentry Windows SCM service started and active.",
+        );
 
         if let Ok(mut guard) = SERVICE_RUNNER.lock() {
             if let Some(runner) = guard.take() {
@@ -316,7 +325,10 @@ pub mod service_dispatcher_handler {
             }
         }
 
-        crate::service::eventlog::log_info(2005, "AgentControlSentry Windows SCM service stopping.");
+        crate::service::eventlog::log_info(
+            2005,
+            "AgentControlSentry Windows SCM service stopping.",
+        );
 
         let _ = status_handle.set_service_status(ServiceStatus {
             service_type: ServiceType::OWN_PROCESS,

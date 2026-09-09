@@ -35,8 +35,7 @@ pub struct BrokerClient {
 
 impl BrokerClient {
     pub fn new(base_url: Option<String>) -> Self {
-        let mut builder = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(120));
+        let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120));
 
         let mut candidate_dirs = Vec::new();
         if let Some(home_dir) = dirs::home_dir() {
@@ -46,7 +45,9 @@ impl BrokerClient {
         #[cfg(windows)]
         {
             candidate_dirs.push(std::path::PathBuf::from(r"C:\ProgramData\AgentControl"));
-            candidate_dirs.push(std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol"));
+            candidate_dirs.push(std::path::PathBuf::from(
+                r"C:\Windows\System32\config\systemprofile\.agentcontrol",
+            ));
             let homes = crate::wrap::config_path::get_windows_user_homes();
             for h in homes {
                 candidate_dirs.push(h.join(".agentcontrol"));
@@ -63,13 +64,20 @@ impl BrokerClient {
             if cert_path.exists() {
                 for key_path in &key_candidates {
                     if key_path.exists() {
-                        if let (Ok(cert_bytes), Ok(key_bytes)) = (std::fs::read(&cert_path), std::fs::read(key_path)) {
+                        if let (Ok(cert_bytes), Ok(key_bytes)) =
+                            (std::fs::read(&cert_path), std::fs::read(key_path))
+                        {
                             let pem_key = if key_bytes.starts_with(b"-----BEGIN") {
                                 key_bytes.clone()
                             } else {
                                 use base64::Engine;
-                                let b64 = base64::engine::general_purpose::STANDARD.encode(&key_bytes);
-                                format!("-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n", b64).into_bytes()
+                                let b64 =
+                                    base64::engine::general_purpose::STANDARD.encode(&key_bytes);
+                                format!(
+                                    "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
+                                    b64
+                                )
+                                .into_bytes()
                             };
 
                             let mut combined = cert_bytes.clone();
@@ -100,13 +108,17 @@ impl BrokerClient {
         &self,
         request: &BrokerLLMRequest,
     ) -> Result<BrokerLLMResponse, Box<dyn std::error::Error + Send + Sync>> {
-        let endpoint = format!("{}/api/v3/gateway-broker/llm-requests", self.base_url.trim_end_matches('/'));
+        let endpoint = format!(
+            "{}/api/v3/gateway-broker/llm-requests",
+            self.base_url.trim_end_matches('/')
+        );
 
         let gateway_secret = std::env::var("GATEWAY_SECRET").unwrap_or_default();
-        let device_token = crate::identity::device::load_device_token()
-            .unwrap_or_else(|| gateway_secret.clone());
+        let device_token =
+            crate::identity::device::load_device_token().unwrap_or_else(|| gateway_secret.clone());
 
-        let mut req_builder = self.http_client
+        let mut req_builder = self
+            .http_client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .header("X-Request-ID", &request.request_id)
@@ -116,10 +128,7 @@ impl BrokerClient {
             req_builder = req_builder.header("X-Virtual-Key", vk);
         }
 
-        let resp = req_builder
-            .json(request)
-            .send()
-            .await?;
+        let resp = req_builder.json(request).send().await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -136,13 +145,17 @@ impl BrokerClient {
         &self,
         request: &BrokerLLMRequest,
     ) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
-        let endpoint = format!("{}/api/v3/gateway-broker/llm-stream", self.base_url.trim_end_matches('/'));
+        let endpoint = format!(
+            "{}/api/v3/gateway-broker/llm-stream",
+            self.base_url.trim_end_matches('/')
+        );
 
         let gateway_secret = std::env::var("GATEWAY_SECRET").unwrap_or_default();
-        let device_token = crate::identity::device::load_device_token()
-            .unwrap_or_else(|| gateway_secret.clone());
+        let device_token =
+            crate::identity::device::load_device_token().unwrap_or_else(|| gateway_secret.clone());
 
-        let mut req_builder = self.http_client
+        let mut req_builder = self
+            .http_client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
@@ -153,15 +166,14 @@ impl BrokerClient {
             req_builder = req_builder.header("X-Virtual-Key", vk);
         }
 
-        let resp = req_builder
-            .json(request)
-            .send()
-            .await?;
+        let resp = req_builder.json(request).send().await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let err_body = resp.text().await.unwrap_or_default();
-            return Err(format!("Broker streaming request failed ({}): {}", status, err_body).into());
+            return Err(
+                format!("Broker streaming request failed ({}): {}", status, err_body).into(),
+            );
         }
 
         Ok(resp)

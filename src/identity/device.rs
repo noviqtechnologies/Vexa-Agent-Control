@@ -352,18 +352,18 @@ pub fn load_hub_url() -> Option<String> {
     // 1. Explicit override if set and not a default placeholder
     if let Ok(v) = std::env::var("AGENTCONTROL_HUB_URL") {
         let trimmed = v.trim().trim_end_matches('/');
-        if !trimmed.is_empty() 
-            && trimmed != "https://console.vexasec.io" 
-            && trimmed != "https://console-stage.vexasec.io" 
+        if !trimmed.is_empty()
+            && trimmed != "https://console.vexasec.io"
+            && trimmed != "https://console-stage.vexasec.io"
         {
             return Some(trimmed.to_string());
         }
     }
     if let Ok(v) = std::env::var("DASHBOARD_API_URL") {
         let trimmed = v.trim().trim_end_matches('/');
-        if !trimmed.is_empty() 
-            && trimmed != "https://console.vexasec.io" 
-            && trimmed != "https://console-stage.vexasec.io" 
+        if !trimmed.is_empty()
+            && trimmed != "https://console.vexasec.io"
+            && trimmed != "https://console-stage.vexasec.io"
         {
             return Some(trimmed.to_string());
         }
@@ -548,7 +548,10 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
         return 1;
     }
 
-    println!("{} Vexa Agent Control PKI Device Enrollment (v4.0 Protocol)", "●".green().bold());
+    println!(
+        "{} Vexa Agent Control PKI Device Enrollment (v4.0 Protocol)",
+        "●".green().bold()
+    );
     let masked_token = if token.len() > 8 {
         format!("{}...{}", &token[..4], &token[token.len() - 4..])
     } else {
@@ -569,23 +572,35 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     let device_identity = match DeviceIdentity::load_or_create() {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("{} Failed to load or initialize device identity: {}", "✖".red(), e);
+            eprintln!(
+                "{} Failed to load or initialize device identity: {}",
+                "✖".red(),
+                e
+            );
             return 1;
         }
     };
     let stable_device_id = device_identity.device_id.clone();
 
     println!("  Generating dual-key cryptographic credentials...");
-    let bundle = match key_mgr.generate_bundle_with_key(&stable_device_id, device_identity.signing_key) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("{} Failed to generate cryptographic key bundle: {}", "✖".red(), e);
-            return 1;
-        }
-    };
+    let bundle =
+        match key_mgr.generate_bundle_with_key(&stable_device_id, device_identity.signing_key) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!(
+                    "{} Failed to generate cryptographic key bundle: {}",
+                    "✖".red(),
+                    e
+                );
+                return 1;
+            }
+        };
 
     println!("  Device Identity: {}", device_identity.device_id.bold());
-    println!("  Ed25519 Fingerprint: {}...", &bundle.ed25519_fingerprint[..16]);
+    println!(
+        "  Ed25519 Fingerprint: {}...",
+        &bundle.ed25519_fingerprint[..16]
+    );
     println!("  ECDSA P-256 CSR Hash: {}...", &bundle.csr_sha256[..16]);
 
     let hostname = get_hostname();
@@ -639,7 +654,7 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     let start_endpoint = format!("{}/api/v2/enrollment/start", clean_hub);
     let start_req_id = uuid::Uuid::new_v4().to_string();
     println!("  Step 1/2: Submitting enrollment start challenge request...");
-    
+
     let start_res = match client
         .post(&start_endpoint)
         .header("X-Request-ID", &start_req_id)
@@ -655,7 +670,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
                 err_msg.push_str(&format!(" -> {}", s));
                 source = std::error::Error::source(s);
             }
-            eprintln!("{} Cannot connect to Hub at {} [Request-ID: {}]: {}", "✖".red(), start_endpoint, start_req_id, err_msg);
+            eprintln!(
+                "{} Cannot connect to Hub at {} [Request-ID: {}]: {}",
+                "✖".red(),
+                start_endpoint,
+                start_req_id,
+                err_msg
+            );
             return 1;
         }
     };
@@ -669,7 +690,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
             .map(|s| s.to_string())
             .unwrap_or(start_req_id);
         let body = start_res.text().await.unwrap_or_default();
-        eprintln!("{} Enrollment start failed (HTTP {}) [Request-ID: {}]: {}", "✖".red(), status, resp_req_id, body);
+        eprintln!(
+            "{} Enrollment start failed (HTTP {}) [Request-ID: {}]: {}",
+            "✖".red(),
+            status,
+            resp_req_id,
+            body
+        );
         return 1;
     }
 
@@ -726,7 +753,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
                 err_msg.push_str(&format!(" -> {}", s));
                 source = std::error::Error::source(s);
             }
-            eprintln!("{} Cannot connect to Hub at {} [Request-ID: {}]: {}", "✖".red(), complete_endpoint, complete_req_id, err_msg);
+            eprintln!(
+                "{} Cannot connect to Hub at {} [Request-ID: {}]: {}",
+                "✖".red(),
+                complete_endpoint,
+                complete_req_id,
+                err_msg
+            );
             return 1;
         }
     };
@@ -740,7 +773,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
             .map(|s| s.to_string())
             .unwrap_or(complete_req_id);
         let body = complete_res.text().await.unwrap_or_default();
-        eprintln!("{} Enrollment completion failed (HTTP {}) [Request-ID: {}]: {}", "✖".red(), status, resp_req_id, body);
+        eprintln!(
+            "{} Enrollment completion failed (HTTP {}) [Request-ID: {}]: {}",
+            "✖".red(),
+            status,
+            resp_req_id,
+            body
+        );
         return 1;
     }
 
@@ -772,8 +811,14 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     {
         let prog_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
         let _ = fs::create_dir_all(&prog_data);
-        let _ = fs::write(prog_data.join("device_cert.pem"), &complete_data.mtls_certificate.pem_chain);
-        let _ = fs::write(prog_data.join("device_key.pem"), bundle.p256_key_pem.as_bytes());
+        let _ = fs::write(
+            prog_data.join("device_cert.pem"),
+            &complete_data.mtls_certificate.pem_chain,
+        );
+        let _ = fs::write(
+            prog_data.join("device_key.pem"),
+            bundle.p256_key_pem.as_bytes(),
+        );
     }
 
     let _ = save_device_token(&complete_data.device.id);
@@ -783,11 +828,19 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
     println!("{} Device enrolled successfully!", "✔".green().bold());
     println!("  Device ID:          {}", complete_data.device.id.cyan());
     println!("  Control Hub URL:    {}", clean_hub.cyan());
-    println!("  Initial State:      {}", complete_data.device.state.yellow());
-    println!("  Certificate Serial: {}", complete_data.mtls_certificate.serial.bold());
+    println!(
+        "  Initial State:      {}",
+        complete_data.device.state.yellow()
+    );
+    println!(
+        "  Certificate Serial: {}",
+        complete_data.mtls_certificate.serial.bold()
+    );
     println!("  Cert Location:      {}", cert_path.display());
     println!();
-    println!("Next: Start AgentWall Sentry daemon to begin active policy enforcement & heartbeats.");
+    println!(
+        "Next: Start AgentWall Sentry daemon to begin active policy enforcement & heartbeats."
+    );
     0
 }
 

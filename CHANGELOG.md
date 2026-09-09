@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.82] - 2026-09-09
+
+### Added
+- **Threat Intelligence DLP Telemetry Forwarding:** Mapped runtime DLP findings (`req_dlp_findings`) and prompt injection findings to control-plane protobuf telemetry payloads (`RawEventForRedaction`), enabling real-time violation tracking, timeline charting, and top-signature ranking in the Team Hub Threat Intelligence console.
+- **Observability & Logs Security Tab:** Integrated the comprehensive Security & DLP Audit Log view (`AuditLogs.tsx`) directly into the Observability & Logs dashboard (`/observability/logs`), surfacing tool execution records, verdicts (`allowed`/`denied`/`warned`), DLP findings count, and raw event telemetry inspector.
+- **Semantic Caching Engine Enhancements:** In-memory and persistent semantic vector cache enhancements, cosine similarity threshold verification, cache invalidation, and metrics telemetry.
+- **Direct Proxy Bypass Security Model:** Added formal threat model and verification tests for proxy bypass prevention and credential boundary protection.
+
+---
+
 ## [1.0.81] - 2026-09-09
 
 ### Added
@@ -70,14 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.76] - 2026-09-07
 
 ### Added
-- **Enterprise Semantic Vector Caching Engine:** Dual-tier cache combining exact SHA-256 matching and cosine similarity vector retrieval with in-memory HNSW and external Qdrant backends.
+- **Enterprise Semantic Vector Caching Engine:** Dual-tier cache combining exact SHA-256 matching and cosine similarity vector retrieval with partitioned in-memory cosine-similarity caching and optional external Qdrant backends.
 - **Team Hub Sync Architecture:** Real-time policy push and event aggregation via Server-Sent Events (SSE).
 - Updated pricing tables for frontier LLM models (GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro).
 - Interactive Policy UI enhancements: Live rule simulator and active rule toggle switches.
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.81...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...HEAD
+[1.0.82]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.81...v1.0.82
 [1.0.81]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.80...v1.0.81
 [1.0.80]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.79...v1.0.80
 [1.0.79]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.78...v1.0.79

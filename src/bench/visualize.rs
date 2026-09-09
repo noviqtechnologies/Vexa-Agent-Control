@@ -67,7 +67,8 @@ impl Visualizer {
 
         let mut baseline_rows = String::new();
         for b in baselines {
-            let is_primary = b.system_name.contains("Active Rules") || b.system_name.contains("Vexa");
+            let is_primary =
+                b.system_name.contains("Active Rules") || b.system_name.contains("Vexa");
             let row_style = if is_primary {
                 "background: rgba(83, 155, 245, 0.12); font-weight: bold;"
             } else {

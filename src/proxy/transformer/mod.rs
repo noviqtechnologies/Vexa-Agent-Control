@@ -55,7 +55,10 @@ impl NormalizedLLMRequest {
             .to_string();
 
         let stream = val.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
-        let temperature = val.get("temperature").and_then(|v| v.as_f64()).map(|f| f as f32);
+        let temperature = val
+            .get("temperature")
+            .and_then(|v| v.as_f64())
+            .map(|f| f as f32);
         let max_tokens = val
             .get("max_tokens")
             .or_else(|| val.get("max_completion_tokens"))
@@ -65,7 +68,11 @@ impl NormalizedLLMRequest {
         let mut messages = Vec::new();
         if let Some(msgs) = val.get("messages").and_then(|v| v.as_array()) {
             for m in msgs {
-                let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user").to_string();
+                let role = m
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("user")
+                    .to_string();
                 let content = if let Some(s) = m.get("content").and_then(|v| v.as_str()) {
                     s.to_string()
                 } else if let Some(arr) = m.get("content").and_then(|v| v.as_array()) {
@@ -82,8 +89,14 @@ impl NormalizedLLMRequest {
                 };
 
                 let tool_calls = m.get("tool_calls").cloned();
-                let tool_call_id = m.get("tool_call_id").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let name = m.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let tool_call_id = m
+                    .get("tool_call_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let name = m
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
 
                 messages.push(CanonicalMessage {
                     role,
@@ -98,7 +111,14 @@ impl NormalizedLLMRequest {
         let mut extra_params = serde_json::Map::new();
         if let Some(obj) = val.as_object() {
             for (k, v) in obj {
-                if k != "model" && k != "messages" && k != "stream" && k != "temperature" && k != "max_tokens" && k != "max_completion_tokens" && k != "tools" {
+                if k != "model"
+                    && k != "messages"
+                    && k != "stream"
+                    && k != "temperature"
+                    && k != "max_tokens"
+                    && k != "max_completion_tokens"
+                    && k != "tools"
+                {
                     extra_params.insert(k.clone(), v.clone());
                 }
             }
@@ -119,7 +139,7 @@ impl NormalizedLLMRequest {
 /// Provider transformation interface contract.
 pub trait ProviderTransformer: Send + Sync {
     fn provider_name(&self) -> &'static str;
-    
+
     /// Transform a normalized request to upstream endpoint URL, headers, and request body.
     fn transform_request(
         &self,

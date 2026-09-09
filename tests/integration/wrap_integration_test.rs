@@ -84,7 +84,8 @@ fn test_wrap_all_servers_wraps_3_servers() {
     use agentcontrol::wrap::transformer;
 
     let mut config = fake_config_3_servers();
-    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
+    let (wrapped, already) =
+        transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
 
     assert_eq!(wrapped, 3);
     assert_eq!(already, 0);
@@ -103,7 +104,8 @@ fn test_wrap_is_idempotent() {
     let mut config = fake_config_1_server();
 
     // First wrap
-    let (wrapped, already) = transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
+    let (wrapped, already) =
+        transformer::wrap_all_servers(&mut config, "/bin/agentcontrol").unwrap();
     assert_eq!(wrapped, 1);
     assert_eq!(already, 0);
 

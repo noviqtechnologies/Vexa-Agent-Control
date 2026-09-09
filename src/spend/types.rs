@@ -6,7 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Integer microcents representation: 1 USD = 100,000,000 microcents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub struct MoneyMicrocents(pub i64);
 
 impl MoneyMicrocents {
@@ -40,15 +42,21 @@ impl std::ops::Sub for MoneyMicrocents {
 }
 
 /// Typed token count for input prompt tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub struct InputTokens(pub u64);
 
 /// Typed token count for generated output completion tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub struct OutputTokens(pub u64);
 
 /// Typed token count for prompt caching hits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub struct CachedTokens(pub u64);
 
 /// ISO 4217 Currency Code (v1 strictly USD).

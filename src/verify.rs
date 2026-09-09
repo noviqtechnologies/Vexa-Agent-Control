@@ -39,7 +39,9 @@ pub async fn run_verification_probe(
 
     let normalized_gw = gateway_url.trim_end_matches('/');
 
-    let effective_hub = hub_opt.filter(|s| !s.trim().is_empty()).map(|s| s.to_string());
+    let effective_hub = hub_opt
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string());
 
     let effective_device_id = crate::identity::device::DeviceIdentity::load_or_create()
         .map(|d| d.device_id)
@@ -58,8 +60,16 @@ pub async fn run_verification_probe(
     // Priority: explicit CLI token → GATEWAY_SECRET env var → AGENTCONTROL_ADMIN_TOKEN env var → enrolled device_token → empty
     let gateway_token: Option<String> = gateway_token_opt
         .map(|s| s.to_string())
-        .or_else(|| std::env::var("GATEWAY_SECRET").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("AGENTCONTROL_ADMIN_TOKEN").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("GATEWAY_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            std::env::var("AGENTCONTROL_ADMIN_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
         .or_else(crate::identity::device::load_device_token);
 
     // 1. Health check pre-flight
@@ -68,32 +78,59 @@ pub async fn run_verification_probe(
         Ok(res) if res.status().is_success() => {}
         Ok(res) => {
             if !json_output {
-                eprintln!("{} Gateway returned unhealthy status code: {}", "✖".red(), res.status());
+                eprintln!(
+                    "{} Gateway returned unhealthy status code: {}",
+                    "✖".red(),
+                    res.status()
+                );
             } else {
-                println!("{}", json!({ "error": format!("Gateway returned unhealthy status code: {}", res.status()) }));
+                println!(
+                    "{}",
+                    json!({ "error": format!("Gateway returned unhealthy status code: {}", res.status()) })
+                );
             }
             return 1;
         }
         Err(e) => {
             if !json_output {
-                eprintln!("{} Cannot connect to gateway at {}: {}", "✖".red(), gateway_url.cyan(), e);
+                eprintln!(
+                    "{} Cannot connect to gateway at {}: {}",
+                    "✖".red(),
+                    gateway_url.cyan(),
+                    e
+                );
                 eprintln!("  💡 Make sure the gateway is running with 'agentcontrol protect' or 'agentcontrol dev'.");
             } else {
-                println!("{}", json!({ "error": format!("Cannot connect to gateway: {}", e) }));
+                println!(
+                    "{}",
+                    json!({ "error": format!("Cannot connect to gateway: {}", e) })
+                );
             }
             return 1;
         }
     }
 
     if !json_output {
-        println!("{}", "┌────────────────────────────────────────────────────────────────────────┐".cyan());
-        println!("│  {} Vexa Agent Control — Canonical Security Verification Suite        │", "🛡️".cyan());
+        println!(
+            "{}",
+            "┌────────────────────────────────────────────────────────────────────────┐".cyan()
+        );
+        println!(
+            "│  {} Vexa Agent Control — Canonical Security Verification Suite        │",
+            "🛡️".cyan()
+        );
         println!("│  Target Gateway: {:<53} │", gateway_url.green());
         if let Some(ref hub) = effective_hub {
             println!("│  Control Hub:    {:<53} │", hub.yellow());
         }
-        println!("│  Identity:       {:<53} │", format!("{}:{}", effective_user_id, effective_device_id).magenta());
-        println!("{}", "└────────────────────────────────────────────────────────────────────────┘".cyan());
+        println!(
+            "│  Identity:       {:<53} │",
+            format!("{}:{}", effective_user_id, effective_device_id).magenta()
+        );
+        println!(
+            "{}",
+            "└────────────────────────────────────────────────────────────────────────┘".cyan()
+        );
         println!();
     }
 
@@ -159,7 +196,15 @@ pub async fn run_verification_probe(
                     format!("HTTP {}", status),
                     req_id,
                     None,
-                    format!("Gateway rejected request with HTTP {}: {}", status, if err_msg.is_empty() { "Unauthorized" } else { &err_msg }),
+                    format!(
+                        "Gateway rejected request with HTTP {}: {}",
+                        status,
+                        if err_msg.is_empty() {
+                            "Unauthorized"
+                        } else {
+                            &err_msg
+                        }
+                    ),
                 )
             } else if !err_msg.is_empty() {
                 if err_msg.contains("Upstream error") || err_msg.contains("Connection refused") {
@@ -184,7 +229,11 @@ pub async fn run_verification_probe(
                     (
                         status == 200,
                         status,
-                        if status == 200 { "ALLOWED & RECORDED".to_string() } else { format!("HTTP {}", status) },
+                        if status == 200 {
+                            "ALLOWED & RECORDED".to_string()
+                        } else {
+                            format!("HTTP {}", status)
+                        },
                         req_id,
                         Some("default_allowlist".to_string()),
                         err_msg,
@@ -210,7 +259,14 @@ pub async fn run_verification_probe(
                 )
             }
         }
-        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (
+            false,
+            0,
+            "TRANSPORT_ERR".to_string(),
+            None,
+            None,
+            e.to_string(),
+        ),
     };
 
     reports.push(ProbeReport {
@@ -283,7 +339,9 @@ pub async fn run_verification_probe(
             };
 
             // Gateway returns HTTP 400 (or HTTP 403) with "Policy violation: dlp: ..."
-            if (status == 400 || status == 403) && (err_msg.contains("dlp:") || err_msg.contains("Policy violation")) {
+            if (status == 400 || status == 403)
+                && (err_msg.contains("dlp:") || err_msg.contains("Policy violation"))
+            {
                 (
                     true,
                     status,
@@ -318,11 +376,19 @@ pub async fn run_verification_probe(
                     format!("HTTP {} ({})", status, err_msg),
                     req_id,
                     None,
-                    "DLP shield assertion failed — policy did not intercept credentials".to_string(),
+                    "DLP shield assertion failed — policy did not intercept credentials"
+                        .to_string(),
                 )
             }
         }
-        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (
+            false,
+            0,
+            "TRANSPORT_ERR".to_string(),
+            None,
+            None,
+            e.to_string(),
+        ),
     };
 
     reports.push(ProbeReport {
@@ -406,7 +472,10 @@ pub async fn run_verification_probe(
                     Some("INJ-04-OVERRIDE".to_string()),
                     format!("System prompt override intercepted ({})", err_msg),
                 )
-            } else if status == 200 && json_body.get("error").is_some() && (err_msg.contains("injection") || err_msg.contains("INJ-04")) {
+            } else if status == 200
+                && json_body.get("error").is_some()
+                && (err_msg.contains("injection") || err_msg.contains("INJ-04"))
+            {
                 (
                     true,
                     status,
@@ -419,7 +488,9 @@ pub async fn run_verification_probe(
                 (
                     false,
                     status,
-                    if status == 200 && (err_msg.contains("Upstream error") || err_msg.contains("Network error")) {
+                    if status == 200
+                        && (err_msg.contains("Upstream error") || err_msg.contains("Network error"))
+                    {
                         "ALLOWED (UPSTREAM LEAK)".to_string()
                     } else {
                         format!("HTTP {} ({})", status, err_msg)
@@ -434,7 +505,14 @@ pub async fn run_verification_probe(
                 )
             }
         }
-        Err(e) => (false, 0, "TRANSPORT_ERR".to_string(), None, None, e.to_string()),
+        Err(e) => (
+            false,
+            0,
+            "TRANSPORT_ERR".to_string(),
+            None,
+            None,
+            e.to_string(),
+        ),
     };
 
     reports.push(ProbeReport {
@@ -459,28 +537,40 @@ pub async fn run_verification_probe(
 
     let any_installed = installed_ides.iter().any(|s| s.installed);
     let total_installed = installed_ides.iter().filter(|s| s.installed).count();
-    let total_protected = installed_ides.iter().filter(|s| s.installed && (s.mcp_wrapped || s.proxy_configured)).count();
+    let total_protected = installed_ides
+        .iter()
+        .filter(|s| s.installed && (s.mcp_wrapped || s.proxy_configured))
+        .count();
 
     let (pass4, verdict4, reason4, details4) = if !any_installed {
         (
             true,
             "PASS (STANDALONE GATEWAY)".to_string(),
-            "No client IDE configurations detected on workstation; standalone gateway operational".to_string(),
+            "No client IDE configurations detected on workstation; standalone gateway operational"
+                .to_string(),
             "0 IDE targets discovered".to_string(),
         )
     } else if total_protected == total_installed {
         (
             true,
             format!("PROTECTED ({}/{})", total_protected, total_installed),
-            "All discovered workstation IDE configs are actively routed through gateway".to_string(),
+            "All discovered workstation IDE configs are actively routed through gateway"
+                .to_string(),
             format!("{} client IDE(s) compliant", total_protected),
         )
     } else {
         (
             false,
-            format!("PARTIAL ({}/{} PROTECTED)", total_protected, total_installed),
-            "Some installed client IDEs are not wrapped or configured to route through gateway".to_string(),
-            format!("{}/{} IDE configs protected; run 'agentcontrol protect' to heal", total_protected, total_installed),
+            format!(
+                "PARTIAL ({}/{} PROTECTED)",
+                total_protected, total_installed
+            ),
+            "Some installed client IDEs are not wrapped or configured to route through gateway"
+                .to_string(),
+            format!(
+                "{}/{} IDE configs protected; run 'agentcontrol protect' to heal",
+                total_protected, total_installed
+            ),
         )
     };
 
@@ -504,7 +594,8 @@ pub async fn run_verification_probe(
     if let Some(ref hub_url) = effective_hub {
         let t5 = Instant::now();
         let clean_hub = hub_url.trim_end_matches('/');
-        let hub_client = crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(10));
+        let hub_client =
+            crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(10));
         let device_token = crate::identity::device::load_device_token()
             .or_else(|| std::env::var("GATEWAY_SECRET").ok())
             .unwrap_or_default();
@@ -534,13 +625,25 @@ pub async fn run_verification_probe(
         let hub_res = match req.send().await {
             Ok(resp) if resp.status().is_success() => {
                 let resp_val: Value = resp.json().await.unwrap_or(Value::Null);
-                let verified = resp_val.get("verified").and_then(|v| v.as_bool()).unwrap_or(false);
-                let state = resp_val.get("state").and_then(|s| s.as_str()).unwrap_or("verified");
+                let verified = resp_val
+                    .get("verified")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let state = resp_val
+                    .get("state")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("verified");
                 (
                     verified,
                     format!("VERIFIED ({})", state.to_uppercase()),
-                    format!("Control Hub acknowledged probe; assignment promoted to '{}'", state),
-                    format!("Device {} verified for user {}", effective_device_id, effective_user_id),
+                    format!(
+                        "Control Hub acknowledged probe; assignment promoted to '{}'",
+                        state
+                    ),
+                    format!(
+                        "Device {} verified for user {}",
+                        effective_device_id, effective_user_id
+                    ),
                 )
             }
             Ok(resp) => {
@@ -555,22 +658,49 @@ pub async fn run_verification_probe(
                 if let Ok(fb_resp) = fb_req.send().await {
                     if fb_resp.status().is_success() {
                         let resp_val: Value = fb_resp.json().await.unwrap_or(Value::Null);
-                        let verified = resp_val.get("verified").and_then(|v| v.as_bool()).unwrap_or(false);
-                        let state = resp_val.get("state").and_then(|s| s.as_str()).unwrap_or("verified");
+                        let verified = resp_val
+                            .get("verified")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let state = resp_val
+                            .get("state")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("verified");
                         (
                             verified,
                             format!("VERIFIED ({})", state.to_uppercase()),
-                            format!("Control Hub acknowledged probe; assignment promoted to '{}'", state),
-                            format!("Device {} verified for user {}", effective_device_id, effective_user_id),
+                            format!(
+                                "Control Hub acknowledged probe; assignment promoted to '{}'",
+                                state
+                            ),
+                            format!(
+                                "Device {} verified for user {}",
+                                effective_device_id, effective_user_id
+                            ),
                         )
                     } else {
-                        (false, format!("HTTP {}", fb_resp.status()), "Hub rejected verification probe".to_string(), format!("Status: {}", fb_resp.status()))
+                        (
+                            false,
+                            format!("HTTP {}", fb_resp.status()),
+                            "Hub rejected verification probe".to_string(),
+                            format!("Status: {}", fb_resp.status()),
+                        )
                     }
                 } else {
-                    (false, format!("HTTP {}", resp.status()), "Hub rejected verification probe".to_string(), format!("Status: {}", resp.status()))
+                    (
+                        false,
+                        format!("HTTP {}", resp.status()),
+                        "Hub rejected verification probe".to_string(),
+                        format!("Status: {}", resp.status()),
+                    )
                 }
             }
-            Err(e) => (false, "UNREACHABLE".to_string(), format!("Failed to reach Control Hub at {}: {}", clean_hub, e), e.to_string()),
+            Err(e) => (
+                false,
+                "UNREACHABLE".to_string(),
+                format!("Failed to reach Control Hub at {}: {}", clean_hub, e),
+                e.to_string(),
+            ),
         };
 
         reports.push(ProbeReport {
@@ -603,9 +733,25 @@ pub async fn run_verification_probe(
     }
 
     for (i, p) in reports.iter().enumerate() {
-        let icon = if p.passed { "✔".green().bold() } else { "✖".red().bold() };
-        let status_colored = if p.passed { p.verdict.green().bold() } else { p.verdict.red().bold() };
-        println!("  {} [{}/{}] {:<38} ➔ {} ({}ms)", icon, i + 1, total_probes, p.name.bold(), status_colored, p.latency_ms);
+        let icon = if p.passed {
+            "✔".green().bold()
+        } else {
+            "✖".red().bold()
+        };
+        let status_colored = if p.passed {
+            p.verdict.green().bold()
+        } else {
+            p.verdict.red().bold()
+        };
+        println!(
+            "  {} [{}/{}] {:<38} ➔ {} ({}ms)",
+            icon,
+            i + 1,
+            total_probes,
+            p.name.bold(),
+            status_colored,
+            p.latency_ms
+        );
         println!("        Expected : {}", p.expected.dimmed());
         println!("        Security : {}", p.reason.dimmed());
         if let Some(ref rule) = p.policy_rule {
@@ -614,14 +760,28 @@ pub async fn run_verification_probe(
         println!();
     }
 
-    println!("{}", "────────────────────────────────────────────────────────────────────────".cyan());
+    println!(
+        "{}",
+        "────────────────────────────────────────────────────────────────────────".cyan()
+    );
     if all_passed {
-        println!("  {} All {} Security Assertions Verified in {}ms!", "✨".green().bold(), total_probes, total_elapsed);
-        println!("  📊 Real-time telemetry recorded in Dashboard: {}", gateway_url.cyan().underline());
+        println!(
+            "  {} All {} Security Assertions Verified in {}ms!",
+            "✨".green().bold(),
+            total_probes,
+            total_elapsed
+        );
+        println!(
+            "  📊 Real-time telemetry recorded in Dashboard: {}",
+            gateway_url.cyan().underline()
+        );
         println!();
         0
     } else {
-        println!("  {} Verification failed on one or more security probes.", "✖".red().bold());
+        println!(
+            "  {} Verification failed on one or more security probes.",
+            "✖".red().bold()
+        );
         1
     }
 }

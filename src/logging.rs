@@ -115,13 +115,19 @@ mod tests {
         assert!(is_spend_only());
 
         // Non-spend event should be filtered out without panic
-        log_event(Level::Info, "firewall_enabled", serde_json::json!({"action": "PivotError"}));
+        log_event(
+            Level::Info,
+            "firewall_enabled",
+            serde_json::json!({"action": "PivotError"}),
+        );
         // Spend event should pass
-        log_event(Level::Info, "mitm_llm_spend_captured", serde_json::json!({"prompt_tokens": 100}));
+        log_event(
+            Level::Info,
+            "mitm_llm_spend_captured",
+            serde_json::json!({"prompt_tokens": 100}),
+        );
 
         set_spend_only(false);
         assert!(!is_spend_only());
     }
 }
-
-

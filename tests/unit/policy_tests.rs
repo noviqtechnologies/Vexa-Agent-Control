@@ -554,7 +554,11 @@ fn test_undeclared_top_level_parameter_denied() {
     });
 
     match p.evaluate_test("read_file", &bad_payload) {
-        EvalResult::Deny { reason_code, param_name, .. } => {
+        EvalResult::Deny {
+            reason_code,
+            param_name,
+            ..
+        } => {
             assert_eq!(reason_code, "param_unknown");
             assert_eq!(param_name, Some("extra_param".to_string()));
         }
@@ -570,4 +574,3 @@ fn test_undeclared_top_level_parameter_denied() {
         EvalResult::Allow { .. }
     ));
 }
-

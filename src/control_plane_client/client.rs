@@ -26,13 +26,22 @@ impl DashboardClient {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
+            if !s.is_empty()
+                && s != "local-dev-shared-secret-change-me"
+                && s != "vexa_team_gateway_secret_key_12345"
+            {
                 s
             } else {
-                crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id).unwrap_or_else(|| "gw-default".to_string())
+                crate::identity::device::DeviceIdentity::load_or_create()
+                    .ok()
+                    .map(|id| id.device_id)
+                    .unwrap_or_else(|| "gw-default".to_string())
             }
         } else {
-            crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id).unwrap_or_else(|| "gw-default".to_string())
+            crate::identity::device::DeviceIdentity::load_or_create()
+                .ok()
+                .map(|id| id.device_id)
+                .unwrap_or_else(|| "gw-default".to_string())
         };
 
         let http = reqwest::Client::builder()
@@ -124,7 +133,10 @@ impl DashboardClient {
                 Ok(res) if res.status().is_success() => {
                     crate::service::eventlog::log_info(
                         1004,
-                        &format!("MCP server snapshot ({} servers) accepted by Hub for agent {}", count, agent_id),
+                        &format!(
+                            "MCP server snapshot ({} servers) accepted by Hub for agent {}",
+                            count, agent_id
+                        ),
                     );
                 }
                 Ok(res) => {
@@ -142,7 +154,10 @@ impl DashboardClient {
                     if status != 401 && status != 403 {
                         crate::service::eventlog::log_warn(
                             1005,
-                            &format!("MCP server snapshot rejected by Hub with HTTP status: {}", status),
+                            &format!(
+                                "MCP server snapshot rejected by Hub with HTTP status: {}",
+                                status
+                            ),
                         );
                     }
                 }
@@ -155,7 +170,10 @@ impl DashboardClient {
                     );
                     crate::service::eventlog::log_error(
                         1006,
-                        &format!("Failed to connect to Hub for MCP server snapshot: {}", err_str),
+                        &format!(
+                            "Failed to connect to Hub for MCP server snapshot: {}",
+                            err_str
+                        ),
                     );
                 }
             }

@@ -165,10 +165,7 @@ async fn handle_mitm_http_request(
     let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let session_id_str = session_id.to_string();
 
-    let path_and_query = uri
-        .path_and_query()
-        .map(|pq| pq.as_str())
-        .unwrap_or("/");
+    let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
 
     let upstream_url = format!("https://{}:{}{}", target_host, target_port, path_and_query);
 
@@ -410,10 +407,6 @@ async fn handle_mitm_http_request(
                         .clone()
                         .unwrap_or_else(|| "gpt-4o-mini".to_string());
 
-                    println!(
-                        "⚠ Model '{}' not in allowlist → fallback to '{}'",
-                        model_name, fallback
-                    );
                     logging::log_event(
                         Level::Warn,
                         "model_fallback_applied",
@@ -439,7 +432,15 @@ async fn handle_mitm_http_request(
                         model_name,
                         allowed.join(", ")
                     );
-                    println!("🚫 Blocked model '{}' — not in allowlist", model_name);
+                    logging::log_event(
+                        Level::Warn,
+                        "model_blocked_not_allowed",
+                        serde_json::json!({
+                            "requested_model": model_name,
+                            "allowed_models": allowed,
+                            "target_host": target_host,
+                        }),
+                    );
 
                     let err_res = make_error_response(
                         StatusCode::FORBIDDEN,
@@ -470,16 +471,12 @@ async fn handle_mitm_http_request(
             if provider == "anthropic" {
                 req_headers.remove(reqwest::header::AUTHORIZATION);
                 if let Ok(val) = real_key.value().parse() {
-                    req_headers.insert(
-                        reqwest::header::HeaderName::from_static("x-api-key"),
-                        val,
-                    );
+                    req_headers.insert(reqwest::header::HeaderName::from_static("x-api-key"), val);
                 }
             } else if let Ok(val) = format!("Bearer {}", real_key.value()).parse() {
                 req_headers.insert(reqwest::header::AUTHORIZATION, val);
             }
 
-            println!("🔑 Injected centralized {} key from Control Hub", provider);
             logging::log_event(
                 Level::Info,
                 "centralized_key_injected",
@@ -494,9 +491,13 @@ async fn handle_mitm_http_request(
                 "No centralized API key for provider '{}' configured in Control Hub. Contact your administrator to add the key in LLM Providers settings.",
                 provider
             );
-            println!(
-                "❌ No centralized key for provider '{}' — request blocked",
-                provider
+            logging::log_event(
+                Level::Error,
+                "centralized_key_missing",
+                serde_json::json!({
+                    "provider": provider,
+                    "target_host": target_host,
+                }),
             );
 
             let err_res = make_error_response(
@@ -564,7 +565,9 @@ async fn handle_mitm_http_request(
     let completion_tokens = 50u64; // base estimate for active stream
 
     let exact_cents = if let Some(pricing) = &state.pricing_table {
-        pricing.estimate_cents(&model_name, prompt_tokens, completion_tokens).max(1)
+        pricing
+            .estimate_cents(&model_name, prompt_tokens, completion_tokens)
+            .max(1)
     } else {
         (prompt_tokens * 3 / 1000).max(1) // Fallback calculation: ~$0.003 per 1k tokens
     };
@@ -584,14 +587,6 @@ async fn handle_mitm_http_request(
     }
 
     if prompt_tokens >= state.min_tokens {
-        println!(
-            "✔ Intercepted Cursor IDE ({}) -> Model: {} | Prompt: ~{} tokens | Est. Cost: ${:.4}",
-            target_host,
-            model_name,
-            prompt_tokens,
-            exact_cents as f64 / 100.0
-        );
-
         logging::log_event(
             Level::Info,
             "mitm_llm_spend_captured",
@@ -644,8 +639,14 @@ mod tests {
         let sentinel2 = "Bearer agentcontrol-managed";
         let normal_key = "Bearer sk-proj-1234567890abcdef";
 
-        assert!(sentinel1.contains("sk-agentcontrol-managed") || sentinel1.contains("agentcontrol-managed"));
-        assert!(sentinel2.contains("sk-agentcontrol-managed") || sentinel2.contains("agentcontrol-managed"));
+        assert!(
+            sentinel1.contains("sk-agentcontrol-managed")
+                || sentinel1.contains("agentcontrol-managed")
+        );
+        assert!(
+            sentinel2.contains("sk-agentcontrol-managed")
+                || sentinel2.contains("agentcontrol-managed")
+        );
         assert!(!normal_key.contains("agentcontrol-managed"));
     }
 
@@ -675,14 +676,24 @@ mod tests {
 
     #[test]
     fn test_model_allowlist_matching() {
-        let allowed = ["gpt-4o".to_string(), "gpt-4o-mini".to_string(), "claude-3-5-sonnet".to_string()];
+        let allowed = [
+            "gpt-4o".to_string(),
+            "gpt-4o-mini".to_string(),
+            "claude-3-5-sonnet".to_string(),
+        ];
 
         let model1 = "gpt-4o";
         let model2 = "gpt-4o-mini";
         let model3 = "o3-pro";
 
-        assert!(allowed.iter().any(|m| model1.eq_ignore_ascii_case(m) || model1.contains(m)));
-        assert!(allowed.iter().any(|m| model2.eq_ignore_ascii_case(m) || model2.contains(m)));
-        assert!(!allowed.iter().any(|m| model3.eq_ignore_ascii_case(m) || model3.contains(m)));
+        assert!(allowed
+            .iter()
+            .any(|m| model1.eq_ignore_ascii_case(m) || model1.contains(m)));
+        assert!(allowed
+            .iter()
+            .any(|m| model2.eq_ignore_ascii_case(m) || model2.contains(m)));
+        assert!(!allowed
+            .iter()
+            .any(|m| model3.eq_ignore_ascii_case(m) || model3.contains(m)));
     }
 }

@@ -1,9 +1,9 @@
 //! Azure OpenAI Service Provider Transformer
 
+use super::{NormalizedLLMRequest, ProviderTransformer};
 use bytes::Bytes;
 use hyper::HeaderMap;
 use serde_json::Value;
-use super::{NormalizedLLMRequest, ProviderTransformer};
 
 pub struct AzureOpenAiTransformer;
 
@@ -19,10 +19,12 @@ impl ProviderTransformer for AzureOpenAiTransformer {
         base_url: Option<&str>,
     ) -> Result<(String, HeaderMap, Bytes), String> {
         let raw_base = base_url.unwrap_or("https://your-resource.openai.azure.com");
-        let api_version = std::env::var("AZURE_OPENAI_API_VERSION").unwrap_or_else(|_| "2024-06-01".to_string());
-        
+        let api_version =
+            std::env::var("AZURE_OPENAI_API_VERSION").unwrap_or_else(|_| "2024-06-01".to_string());
+
         // Azure routes via deployment name: /openai/deployments/{deployment-id}/chat/completions?api-version=...
-        let deployment_id = std::env::var("AZURE_OPENAI_DEPLOYMENT").unwrap_or_else(|_| req.model.replace('.', ""));
+        let deployment_id =
+            std::env::var("AZURE_OPENAI_DEPLOYMENT").unwrap_or_else(|_| req.model.replace('.', ""));
         let endpoint = format!(
             "{}/openai/deployments/{}/chat/completions?api-version={}",
             raw_base.trim_end_matches('/'),
@@ -37,7 +39,9 @@ impl ProviderTransformer for AzureOpenAiTransformer {
         );
         headers.insert(
             "api-key".parse::<hyper::header::HeaderName>().unwrap(),
-            api_key.parse().map_err(|e| format!("Invalid api-key header: {}", e))?,
+            api_key
+                .parse()
+                .map_err(|e| format!("Invalid api-key header: {}", e))?,
         );
 
         let mut body = serde_json::json!({
@@ -69,7 +73,8 @@ impl ProviderTransformer for AzureOpenAiTransformer {
         _headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Value, String> {
-        let val: Value = serde_json::from_slice(body).map_err(|e| format!("Azure JSON parse error ({}): {}", status, e))?;
+        let val: Value = serde_json::from_slice(body)
+            .map_err(|e| format!("Azure JSON parse error ({}): {}", status, e))?;
         Ok(val)
     }
 

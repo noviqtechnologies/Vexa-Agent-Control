@@ -68,7 +68,9 @@ impl KeyInvalidationSubscriber {
                                     for line in text.lines() {
                                         if let Some(data_json) = line.strip_prefix("data: ") {
                                             if let Ok(event) =
-                                                serde_json::from_str::<InvalidationEvent>(data_json.trim())
+                                                serde_json::from_str::<InvalidationEvent>(
+                                                    data_json.trim(),
+                                                )
                                             {
                                                 self.handle_event(event);
                                             }

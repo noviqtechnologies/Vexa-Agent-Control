@@ -18,19 +18,14 @@ use std::time::Instant;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OperationKind {
     /// LLM completion / chat request (generally safe to retry on transport failure).
-    LlmCompletion {
-        model: String,
-        stream: bool,
-    },
+    LlmCompletion { model: String, stream: bool },
     /// MCP tool call (state-mutating operations MUST NOT be blindly replayed).
     McpToolCall {
         tool_name: String,
         is_idempotent: bool,
     },
     /// Embedding generation request.
-    Embedding {
-        model: String,
-    },
+    Embedding { model: String },
 }
 
 impl OperationKind {
@@ -138,7 +133,12 @@ pub enum SecurityVerdict {
 
 impl SecurityVerdict {
     pub fn is_allowed(&self) -> bool {
-        matches!(self, SecurityVerdict::Allow { .. } | SecurityVerdict::Redact { .. } | SecurityVerdict::Warn { .. })
+        matches!(
+            self,
+            SecurityVerdict::Allow { .. }
+                | SecurityVerdict::Redact { .. }
+                | SecurityVerdict::Warn { .. }
+        )
     }
 }
 
@@ -191,28 +191,14 @@ pub trait SecurityDecisionService: Send + Sync {
 
 /// Pluggable spend and token reservation service trait.
 pub trait ReservationService: Send + Sync {
-    fn reserve(
-        &self,
-        ctx: &RequestContext,
-        estimated_microcents: u64,
-    ) -> ReservationResult;
+    fn reserve(&self, ctx: &RequestContext, estimated_microcents: u64) -> ReservationResult;
 
-    fn settle(
-        &self,
-        ctx: &RequestContext,
-        reservation_id: &str,
-        actual_microcents: u64,
-    );
+    fn settle(&self, ctx: &RequestContext, reservation_id: &str, actual_microcents: u64);
 }
 
 /// Pluggable deployment router service trait.
 pub trait DeploymentRouterService: Send + Sync {
-    fn plan_route(
-        &self,
-        ctx: &RequestContext,
-        provider: &str,
-        model: &str,
-    ) -> RouteDecision;
+    fn plan_route(&self, ctx: &RequestContext, provider: &str, model: &str) -> RouteDecision;
 
     fn report_attempt_outcome(
         &self,

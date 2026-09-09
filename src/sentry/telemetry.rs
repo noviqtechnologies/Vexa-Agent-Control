@@ -52,7 +52,10 @@ impl TelemetryClient {
     ) -> Result<TelemetryHeartbeatResponse, String> {
         let ide_statuses = scan_all_ides(proxy_url);
 
-        let overall = if ide_statuses.iter().any(|s| s.compliance_state == "BYPASSED") {
+        let overall = if ide_statuses
+            .iter()
+            .any(|s| s.compliance_state == "BYPASSED")
+        {
             "NON_COMPLIANT"
         } else {
             "COMPLIANT"
@@ -66,12 +69,18 @@ impl TelemetryClient {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        let endpoint = format!("{}/api/v1/devices/{}/telemetry", self.hub_url, self.device_id);
+        let endpoint = format!(
+            "{}/api/v1/devices/{}/telemetry",
+            self.hub_url, self.device_id
+        );
         let auth_token = if let Some(tok) = crate::identity::device::load_device_token() {
             tok
         } else if let Ok(sec) = std::env::var("GATEWAY_SECRET") {
             let s = sec.trim().to_string();
-            if !s.is_empty() && s != "local-dev-shared-secret-change-me" && s != "vexa_team_gateway_secret_key_12345" {
+            if !s.is_empty()
+                && s != "local-dev-shared-secret-change-me"
+                && s != "vexa_team_gateway_secret_key_12345"
+            {
                 s
             } else {
                 self.device_id.clone()

@@ -26,5 +26,10 @@ async fn test_durable_outbox_enqueue() {
 
     let enqueued = outbox.enqueue(entry);
     assert!(enqueued);
-    assert_eq!(outbox.enqueued_count.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        outbox
+            .enqueued_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 }

@@ -137,9 +137,10 @@ async fn run_watcher(policy_path: String, state: Arc<crate::proxy::handler::Prox
                 let is_relevant = matches!(
                     event.kind,
                     EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
-                ) && event.paths.iter().any(|p| {
-                    p.file_name() == Some(filename.as_os_str())
-                });
+                ) && event
+                    .paths
+                    .iter()
+                    .any(|p| p.file_name() == Some(filename.as_os_str()));
 
                 if is_relevant {
                     // Start or reset the debounce window.

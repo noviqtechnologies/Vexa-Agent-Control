@@ -119,13 +119,22 @@ jobs:
           path: artifacts
           pattern: agentcontrol-*
 
-      - name: Generate Checksums Manifest
+      - name: Generate Checksums Manifest (SHA-256 & SHA-512)
         shell: bash
         run: |
           cd artifacts
-          find . -type f -name "*.zip" -exec sha256sum {} + | sed 's|./[^/]*/||' > checksums.txt
+          echo "# SHA-256 Digests" > checksums.txt
+          find . -type f -name "*.zip" -exec sha256sum {} + | sed 's|./[^/]*/||' >> checksums.txt
+          echo "" >> checksums.txt
+          echo "# SHA-512 Digests" >> checksums.txt
+          find . -type f -name "*.zip" -exec sha512sum {} + | sed 's|./[^/]*/||' >> checksums.txt
           echo "Generated checksums.txt:"
           cat checksums.txt
+
+      - name: Generate SLSA Build Provenance Attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'artifacts/**/*.zip'
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

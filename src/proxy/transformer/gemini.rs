@@ -1,9 +1,9 @@
 //! Google Gemini Provider Transformer
 
+use super::{NormalizedLLMRequest, ProviderTransformer};
 use bytes::Bytes;
 use hyper::HeaderMap;
 use serde_json::Value;
-use super::{NormalizedLLMRequest, ProviderTransformer};
 
 pub struct GeminiTransformer;
 
@@ -21,7 +21,9 @@ impl ProviderTransformer for GeminiTransformer {
         // Use Google's OpenAI-compatible endpoint for maximum performance & fidelity
         let endpoint = format!(
             "{}/chat/completions",
-            base_url.unwrap_or("https://generativelanguage.googleapis.com/v1beta/openai").trim_end_matches('/')
+            base_url
+                .unwrap_or("https://generativelanguage.googleapis.com/v1beta/openai")
+                .trim_end_matches('/')
         );
 
         let mut headers = HeaderMap::new();
@@ -31,7 +33,9 @@ impl ProviderTransformer for GeminiTransformer {
         );
         headers.insert(
             hyper::header::AUTHORIZATION,
-            format!("Bearer {}", api_key).parse().map_err(|e| format!("Invalid auth header: {}", e))?,
+            format!("Bearer {}", api_key)
+                .parse()
+                .map_err(|e| format!("Invalid auth header: {}", e))?,
         );
 
         let mut body = serde_json::json!({
@@ -57,7 +61,8 @@ impl ProviderTransformer for GeminiTransformer {
         _headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Value, String> {
-        let val: Value = serde_json::from_slice(body).map_err(|e| format!("Gemini JSON parse error ({}): {}", status, e))?;
+        let val: Value = serde_json::from_slice(body)
+            .map_err(|e| format!("Gemini JSON parse error ({}): {}", status, e))?;
         Ok(val)
     }
 

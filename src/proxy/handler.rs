@@ -800,7 +800,12 @@ pub async fn evaluate_jsonrpc(
                     "dlp_warning",
                     tool_name,
                     None,
-                    Some(format!("pattern={} category={} preview={}", f.pattern_name, f.category.as_str(), f.preview)),
+                    Some(format!(
+                        "pattern={} category={} preview={}",
+                        f.pattern_name,
+                        f.category.as_str(),
+                        f.preview
+                    )),
                     None,
                     session.identity_sub.clone(),
                     session.identity_email.clone(),
@@ -909,9 +914,12 @@ pub async fn evaluate_jsonrpc(
     // FR-13: Prompt Injection Scanning on outbound tool call parameters
     let enforce_mode = !state.shadow_mode.load(Ordering::Relaxed);
     let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        state
-            .injection_scanner
-            .scan_response(&tool_params, tool_name, &session.session_id, enforce_mode)
+        state.injection_scanner.scan_response(
+            &tool_params,
+            tool_name,
+            &session.session_id,
+            enforce_mode,
+        )
     }));
 
     match inj_scan_result {
@@ -1474,7 +1482,10 @@ pub async fn evaluate_jsonrpc(
         },
         (None, None) => {
             if !state.policy_loaded.load(Ordering::Relaxed) {
-                if state.centralized_mode && !state.shadow_mode.load(Ordering::Relaxed) && !state.dry_run {
+                if state.centralized_mode
+                    && !state.shadow_mode.load(Ordering::Relaxed)
+                    && !state.dry_run
+                {
                     // Centralized Gateway Active Enforcement Mode requires a valid policy file (Fail Closed)
                     EvalResult::Deny {
                         reason_code: "no_valid_policy_loaded".to_string(),

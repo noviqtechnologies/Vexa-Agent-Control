@@ -42,7 +42,9 @@ fn test_openai_default_endpoint() {
 fn test_openai_custom_base_url() {
     let t = get_transformer("openai").unwrap();
     let req = base_request("gpt-4o-mini");
-    let (url, _, _) = t.transform_request(&req, "sk-test", Some("https://custom.proxy.internal/v1")).unwrap();
+    let (url, _, _) = t
+        .transform_request(&req, "sk-test", Some("https://custom.proxy.internal/v1"))
+        .unwrap();
     assert_eq!(url, "https://custom.proxy.internal/v1/v1/chat/completions");
 }
 
@@ -88,8 +90,10 @@ fn test_openai_tools_passthrough() {
 fn test_openai_extra_params_passthrough() {
     let t = get_transformer("openai").unwrap();
     let mut req = base_request("gpt-4o");
-    req.extra_params.insert("top_p".to_string(), serde_json::json!(0.9));
-    req.extra_params.insert("seed".to_string(), serde_json::json!(42));
+    req.extra_params
+        .insert("top_p".to_string(), serde_json::json!(0.9));
+    req.extra_params
+        .insert("seed".to_string(), serde_json::json!(42));
     let (_, _, body) = t.transform_request(&req, "sk-test", None).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["top_p"], 0.9);
@@ -112,7 +116,9 @@ fn test_openai_normalize_response_success() {
         "usage": { "prompt_tokens": 9, "completion_tokens": 12, "total_tokens": 21 }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let res = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let res = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(res["choices"][0]["message"]["content"], "Hello!");
     assert_eq!(res["usage"]["total_tokens"], 21);
 }

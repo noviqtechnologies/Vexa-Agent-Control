@@ -31,7 +31,13 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
                         (0, 0)
                     };
                     let is_wrapped = exists && total > 0 && wrapped == total;
-                    (path.to_string_lossy().to_string(), exists, is_wrapped, total, wrapped)
+                    (
+                        path.to_string_lossy().to_string(),
+                        exists,
+                        is_wrapped,
+                        total,
+                        wrapped,
+                    )
                 }
                 Err(e) => (format!("Path error: {}", e), false, false, 0, 0),
             };
@@ -143,10 +149,17 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
         let wrapped = servers
             .values()
             .filter(|v| {
-                let cmd_wrapped = v.get("command").and_then(|c| c.as_str())
-                    .map(|cmd| cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall"))
+                let cmd_wrapped = v
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .map(|cmd| {
+                        cmd.to_lowercase().contains("agentcontrol")
+                            || cmd.to_lowercase().contains("agentwall")
+                    })
                     .unwrap_or(false);
-                let args_wrapped = v.get("args").and_then(|a| a.as_array())
+                let args_wrapped = v
+                    .get("args")
+                    .and_then(|a| a.as_array())
                     .and_then(|arr| arr.first())
                     .and_then(|f| f.as_str())
                     == Some("stdio-proxy");
@@ -193,7 +206,10 @@ pub fn print_all_targets() {
 
     // Header
     println!();
-    println!("{}", "Vexa Agent Control — IDE Config Status".bold().white());
+    println!(
+        "{}",
+        "Vexa Agent Control — IDE Config Status".bold().white()
+    );
     println!("{}", "─".repeat(90).dimmed());
     println!(
         "  {:<18} {:<12} {:<8} {:<10} {}",
@@ -307,16 +323,16 @@ pub fn print_all_targets() {
 fn ide_wrap_target(name: &str) -> &str {
     match name {
         "Claude Desktop" => "claude",
-        "Cursor"         => "cursor",
-        "Codex"          => "codex",
-        "VS Code"        => "vscode",
-        "JetBrains"      => "jetbrains",
-        "Zed"            => "zed",
-        "Cline"          => "cline",
-        "OpenCode"       => "opencode",
-        "Antigravity"    => "antigravity",
+        "Cursor" => "cursor",
+        "Codex" => "codex",
+        "VS Code" => "vscode",
+        "JetBrains" => "jetbrains",
+        "Zed" => "zed",
+        "Cline" => "cline",
+        "OpenCode" => "opencode",
+        "Antigravity" => "antigravity",
         // Fallback: lowercase with hyphens (safe for future targets).
-        _                => name,
+        _ => name,
     }
 }
 
@@ -348,7 +364,10 @@ pub fn gather_servers_for_snapshot(
                                     let wrapped = val
                                         .get("command")
                                         .and_then(|c| c.as_str())
-                                        .map(|cmd| cmd.to_lowercase().contains("agentcontrol") || cmd.to_lowercase().contains("agentwall"))
+                                        .map(|cmd| {
+                                            cmd.to_lowercase().contains("agentcontrol")
+                                                || cmd.to_lowercase().contains("agentwall")
+                                        })
                                         .unwrap_or(false);
                                     let path_verified =
                                         t.verification == PathVerification::Verified;
@@ -364,7 +383,8 @@ pub fn gather_servers_for_snapshot(
                             }
                         }
                     } else {
-                        let config: Result<serde_json::Value, _> = match serde_json::from_str(&raw) {
+                        let config: Result<serde_json::Value, _> = match serde_json::from_str(&raw)
+                        {
                             Ok(v) => Ok(v),
                             Err(_) => {
                                 let stripped = strip_json_comments(&raw);
@@ -381,7 +401,8 @@ pub fn gather_servers_for_snapshot(
                             if let Some(servers) = servers {
                                 for (name, val) in servers {
                                     let wrapped = transformer::is_already_wrapped(val);
-                                    let path_verified = t.verification == PathVerification::Verified;
+                                    let path_verified =
+                                        t.verification == PathVerification::Verified;
                                     servers_meta.push(
                                         control_plane_proto::mcp_server::SanitizedMcpServerMeta {
                                             ide_target: t.name.to_string(),
@@ -409,7 +430,11 @@ pub fn gather_and_send_mcp_servers_snapshot() {
     let token_opt = std::env::var("AGENT_ID")
         .ok()
         .or_else(crate::identity::device::load_device_token)
-        .or_else(|| crate::identity::device::DeviceIdentity::load_or_create().ok().map(|id| id.device_id));
+        .or_else(|| {
+            crate::identity::device::DeviceIdentity::load_or_create()
+                .ok()
+                .map(|id| id.device_id)
+        });
     if token_opt.is_none() {
         return;
     }

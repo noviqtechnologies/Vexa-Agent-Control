@@ -40,7 +40,7 @@ async fn test_p1_hitl_respond_payload_handling() {
 #[tokio::test]
 async fn test_p1_spend_tracking_ledger_persistence() {
     let db = agentcontrol::proxy::db::DbManager::init();
-    
+
     let event = agentcontrol::proxy::db::EgressEvent {
         timestamp_ns: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -81,5 +81,8 @@ async fn test_p1_protect_default_enforcement_mode() {
     let shadow_flag = false;
     let active_enforcement = enforce_default && !shadow_flag;
 
-    assert!(active_enforcement, "Protect must default to active enforcement out of the box");
+    assert!(
+        active_enforcement,
+        "Protect must default to active enforcement out of the box"
+    );
 }

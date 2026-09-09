@@ -38,7 +38,9 @@ fn test_bedrock_alias_aws_bedrock() {
 fn test_bedrock_custom_base_url() {
     let t = get_transformer("bedrock").unwrap();
     let req = make_bedrock_request("amazon.titan-text-express-v1");
-    let (url, _, _) = t.transform_request(&req, "", Some("https://vpce-custom.bedrock.aws")).unwrap();
+    let (url, _, _) = t
+        .transform_request(&req, "", Some("https://vpce-custom.bedrock.aws"))
+        .unwrap();
     assert!(url.starts_with("https://vpce-custom.bedrock.aws"));
 }
 
@@ -87,7 +89,9 @@ fn test_bedrock_normalize_response_output_mapping() {
         }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let norm = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let norm = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(norm["object"], "chat.completion");
     assert_eq!(norm["choices"][0]["message"]["content"], "Bedrock answer");
     assert_eq!(norm["usage"]["prompt_tokens"], 12);

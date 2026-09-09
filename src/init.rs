@@ -31,11 +31,15 @@ pub fn run_init(target: &Option<InitTarget>) -> i32 {
         }
     }
 
-    println!("{}", "VEXA Agent Control — One-Command Protection Notice".bold().cyan());
+    println!(
+        "{}",
+        "VEXA Agent Control — One-Command Protection Notice"
+            .bold()
+            .cyan()
+    );
     println!("To discover IDEs, auto-generate local policies, and start protection, run:\n");
     println!("  {}", "agentcontrol protect".bold().green());
     println!();
-
 
     let mut found_any = false;
 

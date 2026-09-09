@@ -142,6 +142,26 @@ pub struct LlmConfig {
     pub semantic_cache: Option<SemanticCacheConfig>,
 }
 
+/// Nested Qdrant configuration block for semantic caching.
+#[derive(Debug, Clone, Deserialize, serde::Serialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct QdrantCacheConfig {
+    pub url: Option<String>,
+    pub api_key: Option<String>,
+    pub collection: Option<String>,
+}
+
+/// Nested Embedder configuration block for semantic caching.
+#[derive(Debug, Clone, Deserialize, serde::Serialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct EmbedderCacheConfig {
+    pub engine: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub endpoint: Option<String>,
+    pub api_key: Option<String>,
+}
+
 /// Semantic Cache configuration block.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -152,6 +172,7 @@ pub struct SemanticCacheConfig {
     pub similarity_threshold: Option<f32>,
     pub max_entries: Option<usize>,
     pub ttl_seconds: Option<u64>,
+    // Flat fields (legacy / backwards-compatible)
     pub qdrant_url: Option<String>,
     pub qdrant_api_key: Option<String>,
     pub qdrant_collection: Option<String>,
@@ -159,6 +180,60 @@ pub struct SemanticCacheConfig {
     pub embedding_model: Option<String>,
     pub embedding_api_key: Option<String>,
     pub embedding_endpoint: Option<String>,
+    // Optional nested structures (from documentation / enterprise YAMLs)
+    pub qdrant: Option<QdrantCacheConfig>,
+    pub embedder: Option<EmbedderCacheConfig>,
+}
+
+impl SemanticCacheConfig {
+    pub fn resolved_qdrant_url(&self) -> Option<String> {
+        self.qdrant
+            .as_ref()
+            .and_then(|q| q.url.clone())
+            .or_else(|| self.qdrant_url.clone())
+    }
+
+    pub fn resolved_qdrant_api_key(&self) -> Option<String> {
+        self.qdrant
+            .as_ref()
+            .and_then(|q| q.api_key.clone())
+            .or_else(|| self.qdrant_api_key.clone())
+    }
+
+    pub fn resolved_qdrant_collection(&self) -> Option<String> {
+        self.qdrant
+            .as_ref()
+            .and_then(|q| q.collection.clone())
+            .or_else(|| self.qdrant_collection.clone())
+    }
+
+    pub fn resolved_embedding_provider(&self) -> Option<String> {
+        self.embedder
+            .as_ref()
+            .and_then(|e| e.engine.clone().or_else(|| e.provider.clone()))
+            .or_else(|| self.embedding_provider.clone())
+    }
+
+    pub fn resolved_embedding_model(&self) -> Option<String> {
+        self.embedder
+            .as_ref()
+            .and_then(|e| e.model.clone())
+            .or_else(|| self.embedding_model.clone())
+    }
+
+    pub fn resolved_embedding_api_key(&self) -> Option<String> {
+        self.embedder
+            .as_ref()
+            .and_then(|e| e.api_key.clone())
+            .or_else(|| self.embedding_api_key.clone())
+    }
+
+    pub fn resolved_embedding_endpoint(&self) -> Option<String> {
+        self.embedder
+            .as_ref()
+            .and_then(|e| e.endpoint.clone())
+            .or_else(|| self.embedding_endpoint.clone())
+    }
 }
 
 /// Model group configuration for pluggable routing (AR-2).

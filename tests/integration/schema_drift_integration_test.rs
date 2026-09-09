@@ -124,7 +124,10 @@ async fn test_tools_list_forwarding_and_drift_evaluation() {
         } => {
             assert_eq!(server_name, "sensor_server");
             assert_eq!(modified_tools, vec!["read_sensor".to_string()]);
-            assert_eq!(action, agentcontrol::policy::schema_drift::DriftAction::Block);
+            assert_eq!(
+                action,
+                agentcontrol::policy::schema_drift::DriftAction::Block
+            );
         }
         other => panic!("Expected Drift, got {:?}", other),
     }

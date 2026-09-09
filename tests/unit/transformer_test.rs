@@ -46,7 +46,13 @@ fn test_openai_transformer() {
 fn test_azure_openai_transformer() {
     let t = get_transformer("azure").expect("Azure transformer should exist");
     let req = make_sample_request();
-    let (url, headers, body) = t.transform_request(&req, "azure-secret-key", Some("https://my-azure.openai.azure.com")).unwrap();
+    let (url, headers, body) = t
+        .transform_request(
+            &req,
+            "azure-secret-key",
+            Some("https://my-azure.openai.azure.com"),
+        )
+        .unwrap();
 
     assert!(url.contains("my-azure.openai.azure.com/openai/deployments/"));
     assert!(url.contains("api-version="));
@@ -99,7 +105,10 @@ fn test_gemini_transformer() {
 
     let (url, headers, body) = t.transform_request(&req, "AIzaSyTestKey", None).unwrap();
     assert!(url.contains("generativelanguage.googleapis.com"));
-    assert_eq!(headers.get("authorization").unwrap(), "Bearer AIzaSyTestKey");
+    assert_eq!(
+        headers.get("authorization").unwrap(),
+        "Bearer AIzaSyTestKey"
+    );
 
     let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(parsed["model"], "gemini-1.5-pro");
@@ -139,10 +148,15 @@ fn test_anthropic_response_normalization() {
     });
 
     let raw_bytes = serde_json::to_vec(&anthropic_raw).unwrap();
-    let normalized = t.normalize_response(200, &HeaderMap::new(), &raw_bytes).unwrap();
+    let normalized = t
+        .normalize_response(200, &HeaderMap::new(), &raw_bytes)
+        .unwrap();
 
     assert_eq!(normalized["object"], "chat.completion");
-    assert_eq!(normalized["choices"][0]["message"]["content"], "The capital of France is Paris.");
+    assert_eq!(
+        normalized["choices"][0]["message"]["content"],
+        "The capital of France is Paris."
+    );
     assert_eq!(normalized["usage"]["prompt_tokens"], 25);
     assert_eq!(normalized["usage"]["completion_tokens"], 8);
     assert_eq!(normalized["usage"]["total_tokens"], 33);

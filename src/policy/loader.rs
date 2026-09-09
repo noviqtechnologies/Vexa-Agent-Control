@@ -504,9 +504,39 @@ fn compile_policy_yaml(
         None
     };
 
-    let (scannable_tools, safe_tools, fail_closed) = if let Some(ref scanning) = policy_file.response_scanning {
-        (
-            scanning.scannable_tools.clone().unwrap_or_else(|| {
+    let (scannable_tools, safe_tools, fail_closed) =
+        if let Some(ref scanning) = policy_file.response_scanning {
+            (
+                scanning.scannable_tools.clone().unwrap_or_else(|| {
+                    vec![
+                        "read_file".to_string(),
+                        "exec_command".to_string(),
+                        "run_shell".to_string(),
+                        "run_command".to_string(),
+                        "http_get".to_string(),
+                        "list_files".to_string(),
+                        "bash".to_string(),
+                        "execute".to_string(),
+                        "terminal".to_string(),
+                        "read".to_string(),
+                        "cat".to_string(),
+                        "shell".to_string(),
+                        "leak_secret".to_string(),
+                        "secret".to_string(),
+                    ]
+                }),
+                scanning.safe_tools.clone().unwrap_or_else(|| {
+                    vec![
+                        "tools/list".to_string(),
+                        "get_schema".to_string(),
+                        "get_metadata".to_string(),
+                        "ping".to_string(),
+                    ]
+                }),
+                scanning.fail_closed.unwrap_or(false),
+            )
+        } else {
+            (
                 vec![
                     "read_file".to_string(),
                     "exec_command".to_string(),
@@ -522,45 +552,16 @@ fn compile_policy_yaml(
                     "shell".to_string(),
                     "leak_secret".to_string(),
                     "secret".to_string(),
-                ]
-            }),
-            scanning.safe_tools.clone().unwrap_or_else(|| {
+                ],
                 vec![
                     "tools/list".to_string(),
                     "get_schema".to_string(),
                     "get_metadata".to_string(),
                     "ping".to_string(),
-                ]
-            }),
-            scanning.fail_closed.unwrap_or(false),
-        )
-    } else {
-        (
-            vec![
-                "read_file".to_string(),
-                "exec_command".to_string(),
-                "run_shell".to_string(),
-                "run_command".to_string(),
-                "http_get".to_string(),
-                "list_files".to_string(),
-                "bash".to_string(),
-                "execute".to_string(),
-                "terminal".to_string(),
-                "read".to_string(),
-                "cat".to_string(),
-                "shell".to_string(),
-                "leak_secret".to_string(),
-                "secret".to_string(),
-            ],
-            vec![
-                "tools/list".to_string(),
-                "get_schema".to_string(),
-                "get_metadata".to_string(),
-                "ping".to_string(),
-            ],
-            false,
-        )
-    };
+                ],
+                false,
+            )
+        };
 
     // FR-306: Extract firewall configuration
     let firewall_config = policy_file.firewall.clone();

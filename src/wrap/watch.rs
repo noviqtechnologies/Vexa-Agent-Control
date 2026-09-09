@@ -387,7 +387,11 @@ fn handle_event(
             Some(f) => f,
             None => continue,
         };
-        if filename.ends_with(".agentcontrol-tmp") || filename.ends_with(".agentwall-tmp") || filename.contains("agentcontrol-backup-") || filename.contains("agentwall-backup-") {
+        if filename.ends_with(".agentcontrol-tmp")
+            || filename.ends_with(".agentwall-tmp")
+            || filename.contains("agentcontrol-backup-")
+            || filename.contains("agentwall-backup-")
+        {
             continue;
         }
 
@@ -472,7 +476,8 @@ fn do_wrap(at: &ActiveTarget, own_hashes: &Arc<Mutex<HashMap<String, [u8; 32]>>>
             }
             Ok(raw) => {
                 let valid = serde_json::from_str::<serde_json::Value>(&raw).is_ok()
-                    || serde_json::from_str::<serde_json::Value>(&super::strip_json_comments(&raw)).is_ok()
+                    || serde_json::from_str::<serde_json::Value>(&super::strip_json_comments(&raw))
+                        .is_ok()
                     || toml::from_str::<toml::Value>(&raw).is_ok();
                 if !valid {
                     return;

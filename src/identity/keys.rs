@@ -61,7 +61,11 @@ impl IdentityKeyManager {
     }
 
     /// Generate cryptographic bundle using an existing Ed25519 signing key
-    pub fn generate_bundle_with_key(&self, stable_device_id: &str, ed_signing: Ed25519SigningKey) -> Result<KeyPairBundle, KeyError> {
+    pub fn generate_bundle_with_key(
+        &self,
+        stable_device_id: &str,
+        ed_signing: Ed25519SigningKey,
+    ) -> Result<KeyPairBundle, KeyError> {
         let ed_verifying: Ed25519VerifyingKey = ed_signing.verifying_key();
         let ed_pub_bytes = ed_verifying.to_bytes();
         let ed_fp = hex::encode(Sha256::digest(&ed_pub_bytes));
@@ -75,13 +79,21 @@ impl IdentityKeyManager {
         // 3. Construct standard PKCS#10 Certificate Signing Request (CSR)
         let mut params = rcgen::CertificateParams::default();
         let mut dn = rcgen::DistinguishedName::new();
-        dn.push(rcgen::DnType::CommonName, format!("vexa-device-{}", stable_device_id));
-        dn.push(rcgen::DnType::OrganizationName, "Vexa Agent Control Enrolled Device");
+        dn.push(
+            rcgen::DnType::CommonName,
+            format!("vexa-device-{}", stable_device_id),
+        );
+        dn.push(
+            rcgen::DnType::OrganizationName,
+            "Vexa Agent Control Enrolled Device",
+        );
         params.distinguished_name = dn;
 
-        let csr = params.serialize_request(&key_pair)
+        let csr = params
+            .serialize_request(&key_pair)
             .map_err(|e| KeyError::Crypto(format!("Failed to serialize CSR: {}", e)))?;
-        let csr_pem = csr.pem()
+        let csr_pem = csr
+            .pem()
             .map_err(|e| KeyError::Crypto(format!("Failed to encode CSR PEM: {}", e)))?;
         let csr_sha256 = hex::encode(Sha256::digest(csr_pem.as_bytes()));
 
@@ -150,7 +162,9 @@ mod tests {
 
         assert!(!bundle.ed25519_fingerprint.is_empty());
         assert!(!bundle.csr_sha256.is_empty());
-        assert!(bundle.csr_pem.contains("-----BEGIN CERTIFICATE REQUEST-----"));
+        assert!(bundle
+            .csr_pem
+            .contains("-----BEGIN CERTIFICATE REQUEST-----"));
         assert!(bundle.csr_pem.contains("-----END CERTIFICATE REQUEST-----"));
         assert!(!bundle.p256_raw_key_bytes.is_empty());
 

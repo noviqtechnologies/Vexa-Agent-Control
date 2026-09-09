@@ -119,8 +119,7 @@ mod tests {
         assert_eq!(res.score, 100);
         assert_eq!(res.risk_level, "LOW");
 
-        let dangerous =
-            McpScorer::evaluate_server("untrusted_mcp", &["/".to_string()], true, 15);
+        let dangerous = McpScorer::evaluate_server("untrusted_mcp", &["/".to_string()], true, 15);
         assert!(dangerous.score < 50);
         assert!(dangerous
             .vulnerability_flags

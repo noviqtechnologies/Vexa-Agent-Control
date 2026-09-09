@@ -167,7 +167,10 @@ pub fn resolve_log_path(path: &std::path::Path) -> PathBuf {
     let s = path.to_string_lossy();
     if s.starts_with('~') {
         if let Some(home) = dirs::home_dir() {
-            let stripped = s.trim_start_matches('~').trim_start_matches('/').trim_start_matches('\\');
+            let stripped = s
+                .trim_start_matches('~')
+                .trim_start_matches('/')
+                .trim_start_matches('\\');
             return home.join(stripped);
         }
     }
@@ -204,7 +207,6 @@ impl AuditLogger {
         let max_bytes = cfg.max_bytes;
         let siem_exporter = cfg.siem_exporter.clone();
         let include_params = cfg.include_params;
-
 
         // Tokio's `spawn_blocking` keeps the blocking writes off the async executor.
         // We use a dedicated OS thread via `std::thread::spawn` to avoid holding

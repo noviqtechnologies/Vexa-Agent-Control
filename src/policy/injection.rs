@@ -1,7 +1,11 @@
-//! Prompt Injection & Response Poisoning Detection (FR-13)
+//! Deterministic Heuristic Prompt Injection & Response Poisoning Scanner (FR-13)
 //!
-//! Scans inbound responses from MCP servers and external APIs for prompt injection
-//! payloads, tool poisoning, and state manipulation before they reach the agent.
+//! Evaluates inbound prompts and MCP tool responses against 9 categories of known injection
+//! and jailbreak patterns using precompiled regular expressions and heuristic token boundaries.
+//!
+//! NOTE: This scanner is a fast, wire-speed deterministic heuristic filter with execution deadlines
+//! (ReDoS protection). It is NOT an unconstrained semantic deep-learning classifier or infallible
+//! guardrail model; it provides deterministic first-line defense at the network boundary.
 
 use base64::Engine;
 use regex::{Regex, RegexSet};

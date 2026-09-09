@@ -36,7 +36,11 @@ impl PromptCache {
     pub fn new(max_entries: usize) -> Self {
         Self {
             entries: DashMap::new(),
-            max_entries: if max_entries == 0 { 10_000 } else { max_entries },
+            max_entries: if max_entries == 0 {
+                10_000
+            } else {
+                max_entries
+            },
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
             evictions: AtomicU64::new(0),

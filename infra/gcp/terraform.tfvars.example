@@ -17,6 +17,7 @@ container_image         = "ghcr.io/noviqtechnologies/agentcontrol:latest"
 control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
 control_plane_api_image = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
 control_plane_db_image  = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
+force_image_pull        = true
 
 # Sizing & Scaling (Cost-Optimized Scale-to-Zero: ~$0–$2/month for Stage)
 min_instances  = 0       # Set to 0 for stage/dev scale-to-zero ($0 idle compute)

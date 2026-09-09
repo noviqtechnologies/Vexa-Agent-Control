@@ -441,7 +441,8 @@ pub(crate) async fn resolve_session(
             );
             return Err((
                 StatusCode::UNAUTHORIZED,
-                "Authentication is required when gateway is exposed on external network interfaces".to_string(),
+                "Authentication is required when gateway is exposed on external network interfaces"
+                    .to_string(),
             ));
         }
 
@@ -591,13 +592,20 @@ fn is_ip_loopback(addr: &std::net::IpAddr) -> bool {
         std::net::IpAddr::V4(v4) => v4.is_loopback(),
         std::net::IpAddr::V6(v6) => {
             v6.is_loopback()
-                || v6.to_ipv4_mapped().map(|v4| v4.is_loopback()).unwrap_or(false)
+                || v6
+                    .to_ipv4_mapped()
+                    .map(|v4| v4.is_loopback())
+                    .unwrap_or(false)
                 || v6.to_ipv4().map(|v4| v4.is_loopback()).unwrap_or(false)
         }
     }
 }
 
-fn is_authorized_management(client_ip: &str, auth_header: Option<&str>, admin_token: Option<&str>) -> bool {
+fn is_authorized_management(
+    client_ip: &str,
+    auth_header: Option<&str>,
+    admin_token: Option<&str>,
+) -> bool {
     if is_loopback(client_ip) {
         return true;
     }
@@ -643,7 +651,10 @@ async fn handle_request(
         || path == "/api/v1/status";
 
     if is_management_route {
-        let auth_hdr = req.headers().get(hyper::header::AUTHORIZATION).and_then(|h| h.to_str().ok());
+        let auth_hdr = req
+            .headers()
+            .get(hyper::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok());
         if !is_authorized_management(client_ip, auth_hdr, state.admin_token.as_deref()) {
             let err = serde_json::json!({
                 "error": "admin_authorization_required",
@@ -677,13 +688,20 @@ async fn handle_request(
             .map(|s| s.to_string());
         let credential_header = req
             .headers()
-            .get("X-AgentControl-Credential").or_else(|| req.headers().get("X-AgentWall-Credential"))
+            .get("X-AgentControl-Credential")
+            .or_else(|| req.headers().get("X-AgentWall-Credential"))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
         let scope_header = req
             .headers()
-            .get("X-AgentControl-Credential-Scope").or_else(|| req.headers().get("X-AgentControl-Scope")).or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
-            .or_else(|| req.headers().get("X-AgentControl-Scope").or_else(|| req.headers().get("X-AgentWall-Scope")))
+            .get("X-AgentControl-Credential-Scope")
+            .or_else(|| req.headers().get("X-AgentControl-Scope"))
+            .or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
+            .or_else(|| {
+                req.headers()
+                    .get("X-AgentControl-Scope")
+                    .or_else(|| req.headers().get("X-AgentWall-Scope"))
+            })
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
@@ -705,7 +723,9 @@ async fn handle_request(
             }
         };
 
-        return crate::proxy::egress::handle_egress(req, state, &session, client_ip).await.map(|r| r.map(full_to_box_body));
+        return crate::proxy::egress::handle_egress(req, state, &session, client_ip)
+            .await
+            .map(|r| r.map(full_to_box_body));
     }
 
     // Health/readiness/metrics/dashboard endpoints
@@ -727,7 +747,10 @@ async fn handle_request(
                 Ok(stats) => {
                     let mut json_val = serde_json::to_value(&stats).unwrap();
                     if let Some(obj) = json_val.as_object_mut() {
-                        obj.insert("semantic_cache".to_string(), state.semantic_cache.metrics.snapshot());
+                        obj.insert(
+                            "semantic_cache".to_string(),
+                            state.semantic_cache.metrics.snapshot(),
+                        );
                     }
                     return Ok(json_response(StatusCode::OK, &json_val));
                 }
@@ -807,10 +830,12 @@ async fn handle_request(
                 }
             }
             "/api/policy" | "/api/v1/policy/active" => {
-                let target_path = state.policy_path.as_deref().unwrap_or("agentcontrol-policy.yaml");
-                let yaml = std::fs::read_to_string(target_path).unwrap_or_else(|_| {
-                    crate::generate_policy::generate_default_baseline_policy()
-                });
+                let target_path = state
+                    .policy_path
+                    .as_deref()
+                    .unwrap_or("agentcontrol-policy.yaml");
+                let yaml = std::fs::read_to_string(target_path)
+                    .unwrap_or_else(|_| crate::generate_policy::generate_default_baseline_policy());
                 let resp = serde_json::json!({
                     "path": target_path,
                     "yaml": yaml,
@@ -965,7 +990,9 @@ async fn handle_request(
         }
     }
 
-    if method == hyper::Method::POST && (path == "/api/v1/cache/clear" || path == "/api/cache/clear") {
+    if method == hyper::Method::POST
+        && (path == "/api/v1/cache/clear" || path == "/api/cache/clear")
+    {
         state.semantic_cache.clear();
         let resp = serde_json::json!({
             "status": "cleared",
@@ -1144,26 +1171,32 @@ async fn handle_request(
         if let Ok(collected) = req.into_body().collect().await {
             let body_bytes = collected.to_bytes();
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                let policy_yaml = val.get("policy_yaml").and_then(|p| p.as_str()).unwrap_or_default();
+                let policy_yaml = val
+                    .get("policy_yaml")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or_default();
                 if policy_yaml.trim().is_empty() {
                     let err = serde_json::json!({"error": "Missing or empty policy_yaml in request body"});
                     return Ok(json_response(StatusCode::BAD_REQUEST, &err));
                 }
 
-                let parsed_res: Result<crate::policy::schema::PolicyFile, _> = serde_yaml::from_str(policy_yaml);
+                let parsed_res: Result<crate::policy::schema::PolicyFile, _> =
+                    serde_yaml::from_str(policy_yaml);
                 match parsed_res {
                     Ok(candidate_policy) => {
-                        let events = state.db_manager.get_all_events(100).await.unwrap_or_default();
+                        let events = state
+                            .db_manager
+                            .get_all_events(100)
+                            .await
+                            .unwrap_or_default();
                         let total_simulated = events.len();
                         let mut simulated_allowed = 0;
                         let mut simulated_blocked = 0;
 
                         let tools_vec = candidate_policy.tools.unwrap_or_default();
                         let tools_len = tools_vec.len();
-                        let allowed_tools: std::collections::HashSet<String> = tools_vec
-                            .into_iter()
-                            .map(|t| t.name)
-                            .collect();
+                        let allowed_tools: std::collections::HashSet<String> =
+                            tools_vec.into_iter().map(|t| t.name).collect();
 
                         for ev in &events {
                             if let Some(ref tool) = ev.url_path {
@@ -1212,8 +1245,14 @@ async fn handle_request(
         if let Ok(collected) = req.into_body().collect().await {
             let body_bytes = collected.to_bytes();
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                let request_id = val.get("request_id").and_then(|v| v.as_str()).unwrap_or_default();
-                let decision = val.get("decision").and_then(|v| v.as_str()).unwrap_or_default();
+                let request_id = val
+                    .get("request_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let decision = val
+                    .get("decision")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
 
                 if request_id.is_empty() || decision.is_empty() {
                     let err = serde_json::json!({"error": "Missing request_id or decision"});
@@ -1248,7 +1287,9 @@ async fn handle_request(
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                 if let Some(mode_str) = val.get("mode").and_then(|m| m.as_str()) {
                     let shadow = mode_str.eq_ignore_ascii_case("shadow");
-                    state.shadow_mode.store(shadow, std::sync::atomic::Ordering::Relaxed);
+                    state
+                        .shadow_mode
+                        .store(shadow, std::sync::atomic::Ordering::Relaxed);
 
                     let active_mode = if shadow { "shadow" } else { "enforce" };
                     let event_json = serde_json::json!({
@@ -1279,12 +1320,24 @@ async fn handle_request(
         if let Ok(collected) = req.into_body().collect().await {
             let body_bytes = collected.to_bytes();
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                let tool = val.get("tool").and_then(|t| t.as_str()).unwrap_or("generic_tool");
-                let rule_type = val.get("rule_type").and_then(|r| r.as_str()).unwrap_or("current_directory");
+                let tool = val
+                    .get("tool")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("generic_tool");
+                let rule_type = val
+                    .get("rule_type")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("current_directory");
 
                 let rule_desc = match rule_type {
-                    "current_directory" => format!("Limit tool '{}' execution path to current working directory", tool),
-                    "block_sensitive" => format!("Block access to sensitive files/system paths for tool '{}'", tool),
+                    "current_directory" => format!(
+                        "Limit tool '{}' execution path to current working directory",
+                        tool
+                    ),
+                    "block_sensitive" => format!(
+                        "Block access to sensitive files/system paths for tool '{}'",
+                        tool
+                    ),
                     _ => format!("Enforce default validation rule on tool '{}'", tool),
                 };
 
@@ -1323,7 +1376,10 @@ async fn handle_request(
                     match crate::policy::engine::CompiledPolicy::from_yaml_str(yaml_content) {
                         Ok(new_policy) => {
                             // 2. Save YAML to active policy file or fallback default
-                            let target_path = state.policy_path.as_deref().unwrap_or("agentcontrol-policy.yaml");
+                            let target_path = state
+                                .policy_path
+                                .as_deref()
+                                .unwrap_or("agentcontrol-policy.yaml");
                             if let Err(e) = std::fs::write(target_path, yaml_content) {
                                 let err = serde_json::json!({"error": format!("Failed to write policy file: {}", e)});
                                 return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
@@ -1335,7 +1391,9 @@ async fn handle_request(
                                     *policy_guard = Some(new_policy);
                                 }
                             }
-                            state.policy_loaded.store(true, std::sync::atomic::Ordering::Relaxed);
+                            state
+                                .policy_loaded
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
 
                             // 4. Broadcast policy_reloaded event over SSE
                             let event_json = serde_json::json!({
@@ -1372,7 +1430,9 @@ async fn handle_request(
     if method != hyper::Method::POST {
         return Ok(Response::builder()
             .status(StatusCode::METHOD_NOT_ALLOWED)
-            .body(full_to_box_body(Full::new(Bytes::from("Method Not Allowed"))))
+            .body(full_to_box_body(Full::new(Bytes::from(
+                "Method Not Allowed",
+            ))))
             .unwrap());
     }
 
@@ -1385,20 +1445,28 @@ async fn handle_request(
 
     let credential_header = req
         .headers()
-        .get("X-AgentControl-Credential").or_else(|| req.headers().get("X-AgentWall-Credential"))
+        .get("X-AgentControl-Credential")
+        .or_else(|| req.headers().get("X-AgentWall-Credential"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
     let scope_header = req
         .headers()
-        .get("X-AgentControl-Credential-Scope").or_else(|| req.headers().get("X-AgentControl-Scope")).or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
-        .or_else(|| req.headers().get("X-AgentControl-Scope").or_else(|| req.headers().get("X-AgentWall-Scope")))
+        .get("X-AgentControl-Credential-Scope")
+        .or_else(|| req.headers().get("X-AgentControl-Scope"))
+        .or_else(|| req.headers().get("X-AgentWall-Credential-Scope"))
+        .or_else(|| {
+            req.headers()
+                .get("X-AgentControl-Scope")
+                .or_else(|| req.headers().get("X-AgentWall-Scope"))
+        })
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
     let source_header = req
         .headers()
-        .get("X-AgentControl-Source").or_else(|| req.headers().get("X-AgentWall-Source"))
+        .get("X-AgentControl-Source")
+        .or_else(|| req.headers().get("X-AgentWall-Source"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
@@ -1510,10 +1578,14 @@ async fn handle_request(
         let response_str = response.to_string();
         let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
+        let mut req_dlp_findings = Vec::new();
+        let mut req_inj_findings = Vec::new();
+
         // Populate DLP findings from request parameters if not already populated
         if dlp_findings_json.is_none() {
             let req_dlp = state.dlp_scanner.scan_content(&parameters);
             if !req_dlp.is_empty() {
+                req_dlp_findings = req_dlp.clone();
                 let findings_json = serde_json::json!({
                     "findings": req_dlp.iter().map(|f| format!("{}: {}", f.category.as_str(), f.preview)).collect::<Vec<_>>()
                 });
@@ -1526,7 +1598,12 @@ async fn handle_request(
                         "dlp_warning",
                         &tool_name,
                         None,
-                        Some(format!("pattern={} category={} preview={}", f.pattern_name, f.category.as_str(), f.preview)),
+                        Some(format!(
+                            "pattern={} category={} preview={}",
+                            f.pattern_name,
+                            f.category.as_str(),
+                            f.preview
+                        )),
                         None,
                         session.identity_sub.clone(),
                         session.identity_email.clone(),
@@ -1558,13 +1635,17 @@ async fn handle_request(
                 .unwrap_or(serde_json::Value::Null);
             let enforce_mode = !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed);
             let req_inj = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                state
-                    .injection_scanner
-                    .scan_response(&tool_params_val, &tool_name, &session.session_id, enforce_mode)
+                state.injection_scanner.scan_response(
+                    &tool_params_val,
+                    &tool_name,
+                    &session.session_id,
+                    enforce_mode,
+                )
             }));
             match req_inj {
                 Ok(crate::policy::injection::ScanResult::Block { findings })
                 | Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
+                    req_inj_findings = findings.clone();
                     let findings_json = serde_json::json!({
                         "findings": findings.iter().map(|f| format!("{}: {}", f.category.as_str(), f.preview)).collect::<Vec<_>>()
                     });
@@ -1586,22 +1667,26 @@ async fn handle_request(
             ("deny".to_string(), "INJ-04-OVERRIDE".to_string())
         } else if should_kill {
             ("deny".to_string(), "KILL-SWITCH".to_string())
-        } else if err_msg.contains("Policy violation") || err_msg.contains("Cycle detected") || err_msg.contains("Rate limit") || err_msg.contains("Blocked") {
+        } else if err_msg.contains("Policy violation")
+            || err_msg.contains("Cycle detected")
+            || err_msg.contains("Rate limit")
+            || err_msg.contains("Blocked")
+        {
             ("deny".to_string(), "policy_denied".to_string())
         } else {
             ("allow".to_string(), "default_allowlist".to_string())
         };
 
-        let source_category = source_header
-            .unwrap_or_else(|| {
-                if session.session_id.contains("demo") || session.session_id.contains("simulated") {
-                    "simulated".to_string()
-                } else if session.session_id.contains("verify") || session.session_id.contains("probe") {
-                    "verification".to_string()
-                } else {
-                    "production".to_string()
-                }
-            });
+        let source_category = source_header.unwrap_or_else(|| {
+            if session.session_id.contains("demo") || session.session_id.contains("simulated") {
+                "simulated".to_string()
+            } else if session.session_id.contains("verify") || session.session_id.contains("probe")
+            {
+                "verification".to_string()
+            } else {
+                "production".to_string()
+            }
+        });
 
         let event = crate::proxy::db::EgressEvent {
             timestamp_ns,
@@ -1655,6 +1740,25 @@ async fn handle_request(
                     .unwrap_or(false)
             };
 
+            let raw_dlp: Vec<control_plane_proto::redact::RawDlpFinding> = req_dlp_findings
+                .iter()
+                .map(|f| control_plane_proto::redact::RawDlpFinding {
+                    category: to_proto_dlp_category(&f.category),
+                    pattern_name: &f.pattern_name,
+                    preview: &f.preview,
+                    position: f.position,
+                    length: f.length,
+                })
+                .collect();
+
+            let raw_inj: Vec<control_plane_proto::redact::RawInjectionFinding> = req_inj_findings
+                .iter()
+                .map(|f| control_plane_proto::redact::RawInjectionFinding {
+                    pattern_name: &f.pattern_name,
+                    matched_text: &f.preview,
+                })
+                .collect();
+
             let raw = control_plane_proto::redact::RawEventForRedaction {
                 session_id: &session.session_id,
                 agent_id,
@@ -1662,8 +1766,8 @@ async fn handle_request(
                 tool_name_is_allowlisted: tool_on_allowlist,
                 decision,
                 timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                dlp_findings: &[],
-                injection_findings: &[],
+                dlp_findings: &raw_dlp,
+                injection_findings: &raw_inj,
                 semantic_findings: &[],
             };
 
@@ -1682,6 +1786,65 @@ async fn handle_request(
 
     Ok(http_response)
 }
+
+fn to_proto_dlp_category(
+    cat: &crate::policy::dlp::SecretCategory,
+) -> control_plane_proto::event::SecretCategory {
+    match cat {
+        crate::policy::dlp::SecretCategory::AwsAccessKey => {
+            control_plane_proto::event::SecretCategory::AwsAccessKey
+        }
+        crate::policy::dlp::SecretCategory::GitHubToken => {
+            control_plane_proto::event::SecretCategory::GitHubToken
+        }
+        crate::policy::dlp::SecretCategory::OpenAiApiKey => {
+            control_plane_proto::event::SecretCategory::OpenAiApiKey
+        }
+        crate::policy::dlp::SecretCategory::AnthropicApiKey => {
+            control_plane_proto::event::SecretCategory::AnthropicApiKey
+        }
+        crate::policy::dlp::SecretCategory::SshPrivateKey => {
+            control_plane_proto::event::SecretCategory::SshPrivateKey
+        }
+        crate::policy::dlp::SecretCategory::StripeKey => {
+            control_plane_proto::event::SecretCategory::StripeKey
+        }
+        crate::policy::dlp::SecretCategory::DatabaseUri => {
+            control_plane_proto::event::SecretCategory::DatabaseUri
+        }
+        crate::policy::dlp::SecretCategory::Pii => {
+            control_plane_proto::event::SecretCategory::Pii
+        }
+        crate::policy::dlp::SecretCategory::HighEntropy => {
+            control_plane_proto::event::SecretCategory::HighEntropy
+        }
+        crate::policy::dlp::SecretCategory::CryptoSeedPhrase => {
+            control_plane_proto::event::SecretCategory::CryptoSeedPhrase
+        }
+        crate::policy::dlp::SecretCategory::EnvVar => {
+            control_plane_proto::event::SecretCategory::EnvVar
+        }
+        crate::policy::dlp::SecretCategory::AzureStorageKey => {
+            control_plane_proto::event::SecretCategory::AzureStorageKey
+        }
+        crate::policy::dlp::SecretCategory::GcpApiKey => {
+            control_plane_proto::event::SecretCategory::GcpApiKey
+        }
+        crate::policy::dlp::SecretCategory::SlackToken => {
+            control_plane_proto::event::SecretCategory::SlackToken
+        }
+        crate::policy::dlp::SecretCategory::SendGridKey => {
+            control_plane_proto::event::SecretCategory::SendGridKey
+        }
+        crate::policy::dlp::SecretCategory::CreditCard => {
+            control_plane_proto::event::SecretCategory::CreditCard
+        }
+        crate::policy::dlp::SecretCategory::Other => {
+            control_plane_proto::event::SecretCategory::Other
+        }
+    }
+}
+
 
 /// Create a JSON response
 pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<BoxBody> {
@@ -2072,7 +2235,9 @@ async fn scan_and_process_response(
                         "modified": modified_tools,
                     }),
                 );
-                if action == crate::policy::schema_drift::DriftAction::Block && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
+                if action == crate::policy::schema_drift::DriftAction::Block
+                    && !state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     let id = response
                         .get("id")
                         .cloned()
@@ -2499,24 +2664,24 @@ mod tests {
         assert!(is_loopback("localhost"));
         assert!(is_loopback("LOCALHOST"));
         assert!(is_loopback("ip6-localhost")); // Debian / Ubuntu / Alpine
-        assert!(is_loopback("localhost6"));     // RHEL / CentOS / Fedora
+        assert!(is_loopback("localhost6")); // RHEL / CentOS / Fedora
 
         // Standard IPv6 loopback (RFC 4291)
         assert!(is_loopback("::1"));
         assert!(is_loopback("[::1]"));
 
         // OS-specific scoped IPv6 loopbacks (RFC 4007)
-        assert!(is_loopback("::1%lo"));   // Linux
-        assert!(is_loopback("::1%lo0"));  // macOS / BSD
-        assert!(is_loopback("::1%1"));    // Windows
+        assert!(is_loopback("::1%lo")); // Linux
+        assert!(is_loopback("::1%lo0")); // macOS / BSD
+        assert!(is_loopback("::1%1")); // Windows
         assert!(is_loopback("[::1%lo0]"));
 
         // Dual-stack IPv4-mapped IPv6 loopbacks (Windows, Linux, macOS)
         assert!(is_loopback("::ffff:127.0.0.1"));
         assert!(is_loopback("[::ffff:127.0.0.1]"));
         assert!(is_loopback("::FFFF:127.0.0.1")); // Case-insensitive hex
-        assert!(is_loopback("::ffff:7f00:1"));     // BSD / Unix raw hex notation
-        assert!(is_loopback("::127.0.0.1"));       // IPv4-compatible (legacy Unix)
+        assert!(is_loopback("::ffff:7f00:1")); // BSD / Unix raw hex notation
+        assert!(is_loopback("::127.0.0.1")); // IPv4-compatible (legacy Unix)
 
         // Addresses with ports (e.g. SocketAddr strings from proxies/clients)
         assert!(is_loopback("127.0.0.1:8080"));

@@ -77,17 +77,39 @@ impl QdrantBackend {
                 let score = top.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32;
                 if score >= similarity_threshold {
                     if let Some(payload) = top.get("payload") {
-                        let id = top.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
-                        let prompt_text = payload.get("prompt_text").and_then(|p| p.as_str()).unwrap_or("").to_string();
-                        let content_type = payload.get("content_type").and_then(|c| c.as_str()).unwrap_or("application/json").to_string();
-                        let prompt_tokens = payload.get("prompt_tokens").and_then(|p| p.as_i64()).unwrap_or(0);
-                        let completion_tokens = payload.get("completion_tokens").and_then(|c| c.as_i64()).unwrap_or(0);
+                        let id = top
+                            .get("id")
+                            .and_then(|i| i.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let prompt_text = payload
+                            .get("prompt_text")
+                            .and_then(|p| p.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let content_type = payload
+                            .get("content_type")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("application/json")
+                            .to_string();
+                        let prompt_tokens = payload
+                            .get("prompt_tokens")
+                            .and_then(|p| p.as_i64())
+                            .unwrap_or(0);
+                        let completion_tokens = payload
+                            .get("completion_tokens")
+                            .and_then(|c| c.as_i64())
+                            .unwrap_or(0);
 
-                        let raw_body = if let Some(b64) = payload.get("response_body_b64").and_then(|b| b.as_str()) {
+                        let raw_body = if let Some(b64) =
+                            payload.get("response_body_b64").and_then(|b| b.as_str())
+                        {
                             base64::engine::general_purpose::STANDARD
                                 .decode(b64)
                                 .unwrap_or_default()
-                        } else if let Some(body_str) = payload.get("response_body").and_then(|b| b.as_str()) {
+                        } else if let Some(body_str) =
+                            payload.get("response_body").and_then(|b| b.as_str())
+                        {
                             body_str.as_bytes().to_vec()
                         } else {
                             Vec::new()
@@ -104,6 +126,7 @@ impl QdrantBackend {
                             prompt_tokens,
                             completion_tokens,
                             created_at: Instant::now(),
+                            last_accessed: Instant::now(),
                             ttl: Duration::from_secs(86400),
                         };
 
@@ -122,7 +145,10 @@ impl QdrantBackend {
         client: &reqwest::Client,
         entry: &super::vector_index::VectorEntry,
     ) -> Result<(), String> {
-        let endpoint = format!("{}/collections/{}/points?wait=false", self.url, self.collection);
+        let endpoint = format!(
+            "{}/collections/{}/points?wait=false",
+            self.url, self.collection
+        );
 
         let b64_body = base64::engine::general_purpose::STANDARD.encode(&entry.response_body);
 

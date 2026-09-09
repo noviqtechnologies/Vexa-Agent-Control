@@ -61,7 +61,8 @@ mod tests {
 
     #[test]
     fn test_bundled_pricing_table_loads_and_verifies_frontier_rates() {
-        let table = PricingTable::load(None).expect("Bundled pricing table must load and parse cleanly");
+        let table =
+            PricingTable::load(None).expect("Bundled pricing table must load and parse cleanly");
         assert_eq!(table.version, "2026-09-01");
 
         // Verify Anthropic frontier

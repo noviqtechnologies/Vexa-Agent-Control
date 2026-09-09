@@ -44,7 +44,10 @@ fn test_anthropic_headers_and_endpoint() {
 #[test]
 fn test_anthropic_system_prompt_extraction() {
     let t = get_transformer("anthropic").unwrap();
-    let req = make_anthropic_req(Some("You are a strict security auditor."), "Analyze this code");
+    let req = make_anthropic_req(
+        Some("You are a strict security auditor."),
+        "Analyze this code",
+    );
     let (_, _, body) = t.transform_request(&req, "sk-ant-key", None).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["system"], "You are a strict security auditor.");
@@ -133,9 +136,14 @@ fn test_anthropic_response_normalization_standard() {
         "usage": { "input_tokens": 15, "output_tokens": 6 }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let norm = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let norm = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(norm["object"], "chat.completion");
-    assert_eq!(norm["choices"][0]["message"]["content"], "Paris is the capital.");
+    assert_eq!(
+        norm["choices"][0]["message"]["content"],
+        "Paris is the capital."
+    );
     assert_eq!(norm["usage"]["prompt_tokens"], 15);
     assert_eq!(norm["usage"]["completion_tokens"], 6);
     assert_eq!(norm["usage"]["total_tokens"], 21);
@@ -156,7 +164,9 @@ fn test_anthropic_response_normalization_tool_use() {
         "usage": { "input_tokens": 20, "output_tokens": 10 }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let norm = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let norm = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(norm["choices"][0]["message"]["content"], "Calling tool");
     assert_eq!(norm["choices"][0]["finish_reason"], "tool_calls");
 }

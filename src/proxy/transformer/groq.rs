@@ -1,9 +1,9 @@
 //! Groq High-Speed LPU Provider Transformer
 
+use super::{NormalizedLLMRequest, ProviderTransformer};
 use bytes::Bytes;
 use hyper::HeaderMap;
 use serde_json::Value;
-use super::{NormalizedLLMRequest, ProviderTransformer};
 
 pub struct GroqTransformer;
 
@@ -20,7 +20,9 @@ impl ProviderTransformer for GroqTransformer {
     ) -> Result<(String, HeaderMap, Bytes), String> {
         let endpoint = format!(
             "{}/openai/v1/chat/completions",
-            base_url.unwrap_or("https://api.groq.com").trim_end_matches('/')
+            base_url
+                .unwrap_or("https://api.groq.com")
+                .trim_end_matches('/')
         );
 
         let mut headers = HeaderMap::new();
@@ -30,7 +32,9 @@ impl ProviderTransformer for GroqTransformer {
         );
         headers.insert(
             hyper::header::AUTHORIZATION,
-            format!("Bearer {}", api_key).parse().map_err(|e| format!("Invalid auth header: {}", e))?,
+            format!("Bearer {}", api_key)
+                .parse()
+                .map_err(|e| format!("Invalid auth header: {}", e))?,
         );
 
         let mut body = serde_json::json!({
@@ -63,7 +67,8 @@ impl ProviderTransformer for GroqTransformer {
         _headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Value, String> {
-        let val: Value = serde_json::from_slice(body).map_err(|e| format!("Groq JSON parse error ({}): {}", status, e))?;
+        let val: Value = serde_json::from_slice(body)
+            .map_err(|e| format!("Groq JSON parse error ({}): {}", status, e))?;
         Ok(val)
     }
 

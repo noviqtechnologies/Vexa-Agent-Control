@@ -33,6 +33,17 @@ pub struct SemanticCacheMetrics {
     pub gateway_cost_saved_microcents: AtomicU64,
     pub gateway_latency_saved_ms: AtomicU64,
 
+    // Safety & Operational Telemetry
+    pub safety_bypasses_syntactic: AtomicU64,
+    pub safety_bypasses_semantic: AtomicU64,
+    pub safety_bypasses_context: AtomicU64,
+    pub safety_bypasses_operational: AtomicU64,
+    pub invalidations: AtomicU64,
+    pub evictions_entries: AtomicU64,
+    pub evictions_bytes: AtomicU64,
+    pub current_bytes_allocated: AtomicU64,
+    pub eviction_quota_exhausted: AtomicU64,
+
     // Provider-level metrics (upstream prefix discounts on prompt tokens only)
     pub provider_cache_hits: AtomicU64,
     pub provider_cached_tokens: AtomicU64,
@@ -43,6 +54,19 @@ pub struct SemanticCacheMetrics {
 
     // Recent semantic matches for interactive cluster inspector (capped at 50)
     pub recent_matches: RwLock<VecDeque<SemanticMatchRecord>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CacheBypassReason {
+    SyntacticToolsOrFunctions,
+    SyntacticAgentMetadata,
+    SemanticNonReadOnlyIntent,
+    ContextMissingIdentity,
+    ContextUnversionedPolicy,
+    ContextNonDeterministicParameters,
+    OperationalOversizedPayload,
+    OperationalMalformedRequest,
+    OperationalUncertainty,
 }
 
 impl Default for SemanticCacheMetrics {
@@ -61,6 +85,16 @@ impl SemanticCacheMetrics {
             gateway_tokens_saved_completion: AtomicU64::new(0),
             gateway_cost_saved_microcents: AtomicU64::new(0),
             gateway_latency_saved_ms: AtomicU64::new(0),
+
+            safety_bypasses_syntactic: AtomicU64::new(0),
+            safety_bypasses_semantic: AtomicU64::new(0),
+            safety_bypasses_context: AtomicU64::new(0),
+            safety_bypasses_operational: AtomicU64::new(0),
+            invalidations: AtomicU64::new(0),
+            evictions_entries: AtomicU64::new(0),
+            evictions_bytes: AtomicU64::new(0),
+            current_bytes_allocated: AtomicU64::new(0),
+            eviction_quota_exhausted: AtomicU64::new(0),
 
             provider_cache_hits: AtomicU64::new(0),
             provider_cached_tokens: AtomicU64::new(0),
@@ -91,21 +125,26 @@ impl SemanticCacheMetrics {
 
         let p_tok = prompt_tokens.max(0) as u64;
         let c_tok = completion_tokens.max(0) as u64;
-        self.gateway_tokens_saved_prompt.fetch_add(p_tok, Ordering::Relaxed);
-        self.gateway_tokens_saved_completion.fetch_add(c_tok, Ordering::Relaxed);
+        self.gateway_tokens_saved_prompt
+            .fetch_add(p_tok, Ordering::Relaxed);
+        self.gateway_tokens_saved_completion
+            .fetch_add(c_tok, Ordering::Relaxed);
 
         // Estimate typical upstream latency saved (~1150ms upstream vs 2ms cached)
         let saved_lat = (1150.0 - latency_ms).max(10.0) as u64;
-        self.gateway_latency_saved_ms.fetch_add(saved_lat, Ordering::Relaxed);
+        self.gateway_latency_saved_ms
+            .fetch_add(saved_lat, Ordering::Relaxed);
 
         let cost_usd = Self::calculate_model_cost(model, prompt_tokens, completion_tokens);
         let microcents = (cost_usd * 100_000_000.0) as u64;
-        self.gateway_cost_saved_microcents.fetch_add(microcents, Ordering::Relaxed);
+        self.gateway_cost_saved_microcents
+            .fetch_add(microcents, Ordering::Relaxed);
 
         // Update per-model map
-        let entry = self.per_model.entry(model.to_string()).or_insert_with(|| {
-            (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0))
-        });
+        let entry = self
+            .per_model
+            .entry(model.to_string())
+            .or_insert_with(|| (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)));
         entry.0.fetch_add(p_tok + c_tok, Ordering::Relaxed);
         entry.2.fetch_add(microcents, Ordering::Relaxed);
 
@@ -145,16 +184,19 @@ impl SemanticCacheMetrics {
         }
         self.provider_cache_hits.fetch_add(1, Ordering::Relaxed);
         let tok = cached_tokens as u64;
-        self.provider_cached_tokens.fetch_add(tok, Ordering::Relaxed);
+        self.provider_cached_tokens
+            .fetch_add(tok, Ordering::Relaxed);
 
         // Provider discounts 50% (OpenAI) to 90% (Anthropic) of prompt token cost
         let discount_usd = Self::calculate_provider_discount(model, cached_tokens);
         let microcents = (discount_usd * 100_000_000.0) as u64;
-        self.provider_cost_discount_microcents.fetch_add(microcents, Ordering::Relaxed);
+        self.provider_cost_discount_microcents
+            .fetch_add(microcents, Ordering::Relaxed);
 
-        let entry = self.per_model.entry(model.to_string()).or_insert_with(|| {
-            (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0))
-        });
+        let entry = self
+            .per_model
+            .entry(model.to_string())
+            .or_insert_with(|| (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)));
         entry.1.fetch_add(tok, Ordering::Relaxed);
     }
 
@@ -163,7 +205,9 @@ impl SemanticCacheMetrics {
         let (prompt_rate, completion_rate) = match model.to_lowercase().as_str() {
             m if m.starts_with("gpt-4o-mini") => (0.15 / 1_000_000.0, 0.60 / 1_000_000.0),
             m if m.starts_with("gpt-4o") => (2.50 / 1_000_000.0, 10.00 / 1_000_000.0),
-            m if m.starts_with("o1") || m.starts_with("o3") => (15.00 / 1_000_000.0, 60.00 / 1_000_000.0),
+            m if m.starts_with("o1") || m.starts_with("o3") => {
+                (15.00 / 1_000_000.0, 60.00 / 1_000_000.0)
+            }
             m if m.contains("claude-3-5-sonnet") || m.contains("claude-3-7-sonnet") => {
                 (3.00 / 1_000_000.0, 15.00 / 1_000_000.0)
             }
@@ -181,7 +225,9 @@ impl SemanticCacheMetrics {
             m if m.starts_with("gpt-4o-mini") => 0.15 / 1_000_000.0,
             m if m.starts_with("gpt-4o") => 2.50 / 1_000_000.0,
             m if m.starts_with("o1") || m.starts_with("o3") => 15.00 / 1_000_000.0,
-            m if m.contains("claude-3-5-sonnet") || m.contains("claude-3-7-sonnet") => 3.00 / 1_000_000.0,
+            m if m.contains("claude-3-5-sonnet") || m.contains("claude-3-7-sonnet") => {
+                3.00 / 1_000_000.0
+            }
             m if m.contains("claude-3-5-haiku") => 0.80 / 1_000_000.0,
             m if m.contains("deepseek") => 0.14 / 1_000_000.0,
             _ => 2.00 / 1_000_000.0,
@@ -206,12 +252,16 @@ impl SemanticCacheMetrics {
 
         let p_tok = self.gateway_tokens_saved_prompt.load(Ordering::Relaxed);
         let c_tok = self.gateway_tokens_saved_completion.load(Ordering::Relaxed);
-        let gateway_cost_usd = self.gateway_cost_saved_microcents.load(Ordering::Relaxed) as f64 / 100_000_000.0;
+        let gateway_cost_usd =
+            self.gateway_cost_saved_microcents.load(Ordering::Relaxed) as f64 / 100_000_000.0;
         let gateway_latency_ms = self.gateway_latency_saved_ms.load(Ordering::Relaxed);
 
         let prov_hits = self.provider_cache_hits.load(Ordering::Relaxed);
         let prov_tokens = self.provider_cached_tokens.load(Ordering::Relaxed);
-        let prov_discount_usd = self.provider_cost_discount_microcents.load(Ordering::Relaxed) as f64 / 100_000_000.0;
+        let prov_discount_usd = self
+            .provider_cost_discount_microcents
+            .load(Ordering::Relaxed) as f64
+            / 100_000_000.0;
 
         let total_savings_usd = gateway_cost_usd + prov_discount_usd;
         let vexa_contribution_pct = if total_savings_usd > 0.0 {
@@ -225,6 +275,15 @@ impl SemanticCacheMetrics {
             .read()
             .map(|r| r.iter().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
+
+        let bypass_syn = self.safety_bypasses_syntactic.load(Ordering::Relaxed);
+        let bypass_sem = self.safety_bypasses_semantic.load(Ordering::Relaxed);
+        let bypass_ctx = self.safety_bypasses_context.load(Ordering::Relaxed);
+        let bypass_ops = self.safety_bypasses_operational.load(Ordering::Relaxed);
+        let evictions_e = self.evictions_entries.load(Ordering::Relaxed);
+        let evictions_b = self.evictions_bytes.load(Ordering::Relaxed);
+        let invalidations_cnt = self.invalidations.load(Ordering::Relaxed);
+        let current_bytes = self.current_bytes_allocated.load(Ordering::Relaxed);
 
         serde_json::json!({
             "gateway_cache": {
@@ -243,6 +302,17 @@ impl SemanticCacheMetrics {
                 "avg_serving_latency_ms": 2.4,
                 "egress_bytes_avoided": (p_tok + c_tok) * 4
             },
+            "operational_safety": {
+                "bypasses_syntactic": bypass_syn,
+                "bypasses_semantic": bypass_sem,
+                "bypasses_context": bypass_ctx,
+                "bypasses_operational": bypass_ops,
+                "total_safety_bypasses": bypass_syn + bypass_sem + bypass_ctx + bypass_ops,
+                "evictions_entries": evictions_e,
+                "evictions_bytes": evictions_b,
+                "invalidations": invalidations_cnt,
+                "current_bytes_allocated": current_bytes
+            },
             "provider_cache": {
                 "prefix_cache_hits": prov_hits,
                 "cached_tokens": prov_tokens,
@@ -253,9 +323,46 @@ impl SemanticCacheMetrics {
                 "total_savings_usd": (total_savings_usd * 10000.0).round() / 10000.0,
                 "vexa_contribution_pct": (vexa_contribution_pct * 10.0).round() / 10.0,
                 "provider_contribution_pct": if total_savings_usd > 0.0 { ((100.0 - vexa_contribution_pct) * 10.0).round() / 10.0 } else { 0.0 },
-                "roi_multiplier": if prov_discount_usd > 0.0 { (gateway_cost_usd / prov_discount_usd * 100.0).round() / 100.0 } else { 1.0 }
+                "roi_multiplier": if prov_discount_usd > 0.0 { (gateway_cost_usd / prov_discount_usd * 100.0).round() / 10.0 } else { 1.0 }
             },
             "recent_matches": recent
         })
+    }
+
+    /// Record a safety bypass event by category
+    pub fn record_bypass(&self, reason: CacheBypassReason) {
+        match reason {
+            CacheBypassReason::SyntacticToolsOrFunctions
+            | CacheBypassReason::SyntacticAgentMetadata => {
+                self.safety_bypasses_syntactic
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            CacheBypassReason::SemanticNonReadOnlyIntent => {
+                self.safety_bypasses_semantic
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            CacheBypassReason::ContextMissingIdentity
+            | CacheBypassReason::ContextUnversionedPolicy
+            | CacheBypassReason::ContextNonDeterministicParameters => {
+                self.safety_bypasses_context.fetch_add(1, Ordering::Relaxed);
+            }
+            CacheBypassReason::OperationalOversizedPayload
+            | CacheBypassReason::OperationalMalformedRequest
+            | CacheBypassReason::OperationalUncertainty => {
+                self.safety_bypasses_operational
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Record cache eviction event
+    pub fn record_eviction(&self, entries: u64, bytes: u64) {
+        self.evictions_entries.fetch_add(entries, Ordering::Relaxed);
+        self.evictions_bytes.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    /// Record cache invalidation event
+    pub fn record_invalidation(&self) {
+        self.invalidations.fetch_add(1, Ordering::Relaxed);
     }
 }

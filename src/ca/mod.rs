@@ -12,7 +12,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_rustls::rustls::ServerConfig;
 
-pub use trust_store::{install_ca_to_trust_store, is_ca_installed, uninstall_ca_from_trust_store, CA_COMMON_NAME};
+pub use trust_store::{
+    install_ca_to_trust_store, is_ca_installed, uninstall_ca_from_trust_store, CA_COMMON_NAME,
+};
 
 #[derive(Debug)]
 pub enum CaError {
@@ -98,7 +100,10 @@ fn build_ca_params() -> rcgen::CertificateParams {
     ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
     let mut dn = rcgen::DistinguishedName::new();
     dn.push(rcgen::DnType::CommonName, CA_COMMON_NAME);
-    dn.push(rcgen::DnType::OrganizationName, "Vexa Agent Control Security Gateway");
+    dn.push(
+        rcgen::DnType::OrganizationName,
+        "Vexa Agent Control Security Gateway",
+    );
     ca_params.distinguished_name = dn;
     ca_params.key_usages = vec![
         rcgen::KeyUsagePurpose::KeyCertSign,
@@ -145,8 +150,9 @@ impl CaManager {
             let key_pem = fs::read_to_string(&key_path)?;
 
             // Reconstruct KeyPair from existing PEM
-            let key_pair = rcgen::KeyPair::from_pem(&key_pem)
-                .map_err(|e| CaError::Crypto(format!("Failed to parse CA private key PEM: {}", e)))?;
+            let key_pair = rcgen::KeyPair::from_pem(&key_pem).map_err(|e| {
+                CaError::Crypto(format!("Failed to parse CA private key PEM: {}", e))
+            })?;
 
             let ca_params = build_ca_params();
             let ca_cert = ca_params
@@ -204,8 +210,10 @@ impl CaManager {
         }
 
         // Generate dynamic leaf certificate for host
-        let leaf_key_pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)
-            .map_err(|e| CaError::Crypto(format!("Failed to generate leaf P-256 keypair: {}", e)))?;
+        let leaf_key_pair =
+            rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(|e| {
+                CaError::Crypto(format!("Failed to generate leaf P-256 keypair: {}", e))
+            })?;
 
         let mut leaf_params = rcgen::CertificateParams::default();
         leaf_params.is_ca = rcgen::IsCa::NoCa;
@@ -225,7 +233,12 @@ impl CaManager {
         // Sign dynamic leaf directly with the authoritative Root CA instance
         let leaf_cert = leaf_params
             .signed_by(&leaf_key_pair, &self.ca_cert, &self.ca_key_pair)
-            .map_err(|e| CaError::Crypto(format!("Failed to sign leaf cert for {}: {}", clean_host, e)))?;
+            .map_err(|e| {
+                CaError::Crypto(format!(
+                    "Failed to sign leaf cert for {}: {}",
+                    clean_host, e
+                ))
+            })?;
 
         let leaf_cert_pem = leaf_cert.pem();
         let leaf_key_pem = leaf_key_pair.serialize_pem();
@@ -288,8 +301,12 @@ mod tests {
         assert!(temp_dir.path().join("agentcontrol-ca.key").exists());
 
         // Test dynamic leaf cert generation
-        let config1 = ca_mgr.get_or_create_server_config("api2.cursor.sh").unwrap();
-        let config2 = ca_mgr.get_or_create_server_config("api2.cursor.sh").unwrap();
+        let config1 = ca_mgr
+            .get_or_create_server_config("api2.cursor.sh")
+            .unwrap();
+        let config2 = ca_mgr
+            .get_or_create_server_config("api2.cursor.sh")
+            .unwrap();
 
         // Memory cache should return the exact same Arc instance
         assert!(Arc::ptr_eq(&config1, &config2));

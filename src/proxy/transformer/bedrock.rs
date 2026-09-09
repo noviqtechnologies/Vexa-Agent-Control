@@ -1,9 +1,9 @@
 //! AWS Bedrock Provider Transformer
 
+use super::{NormalizedLLMRequest, ProviderTransformer};
 use bytes::Bytes;
 use hyper::HeaderMap;
 use serde_json::Value;
-use super::{NormalizedLLMRequest, ProviderTransformer};
 
 pub struct BedrockTransformer;
 
@@ -21,7 +21,9 @@ impl ProviderTransformer for BedrockTransformer {
         let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
         let endpoint = format!(
             "{}/model/{}/converse",
-            base_url.unwrap_or(&format!("https://bedrock-runtime.{}.amazonaws.com", region)).trim_end_matches('/'),
+            base_url
+                .unwrap_or(&format!("https://bedrock-runtime.{}.amazonaws.com", region))
+                .trim_end_matches('/'),
             req.model
         );
 
@@ -33,13 +35,19 @@ impl ProviderTransformer for BedrockTransformer {
         if !api_key.is_empty() {
             headers.insert(
                 hyper::header::AUTHORIZATION,
-                format!("Bearer {}", api_key).parse().map_err(|e| format!("Invalid auth: {}", e))?,
+                format!("Bearer {}", api_key)
+                    .parse()
+                    .map_err(|e| format!("Invalid auth: {}", e))?,
             );
         }
 
         let mut bedrock_messages = Vec::new();
         for m in &req.messages {
-            let role = if m.role == "assistant" { "assistant" } else { "user" };
+            let role = if m.role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
             bedrock_messages.push(serde_json::json!({
                 "role": role,
                 "content": [{ "text": m.content }]
@@ -64,8 +72,9 @@ impl ProviderTransformer for BedrockTransformer {
         _headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Value, String> {
-        let val: Value = serde_json::from_slice(body).map_err(|e| format!("Bedrock JSON parse error: {}", e))?;
-        
+        let val: Value =
+            serde_json::from_slice(body).map_err(|e| format!("Bedrock JSON parse error: {}", e))?;
+
         let text = val
             .get("output")
             .and_then(|o| o.get("message"))
@@ -76,8 +85,16 @@ impl ProviderTransformer for BedrockTransformer {
             .and_then(|t| t.as_str())
             .unwrap_or("");
 
-        let input_tokens = val.get("usage").and_then(|u| u.get("inputTokens")).and_then(|v| v.as_i64()).unwrap_or(0);
-        let output_tokens = val.get("usage").and_then(|u| u.get("outputTokens")).and_then(|v| v.as_i64()).unwrap_or(0);
+        let input_tokens = val
+            .get("usage")
+            .and_then(|u| u.get("inputTokens"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let output_tokens = val
+            .get("usage")
+            .and_then(|u| u.get("outputTokens"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
 
         let normalized = serde_json::json!({
             "id": "bedrock-resp",

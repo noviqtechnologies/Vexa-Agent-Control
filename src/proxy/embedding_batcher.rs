@@ -30,7 +30,11 @@ impl EmbeddingBatcher {
         Self {
             queues: DashMap::new(),
             batch_window,
-            max_batch_size: if max_batch_size == 0 { 96 } else { max_batch_size },
+            max_batch_size: if max_batch_size == 0 {
+                96
+            } else {
+                max_batch_size
+            },
         }
     }
 
@@ -54,7 +58,8 @@ impl EmbeddingBatcher {
             return Err("Embedding batch queue is unavailable".to_string());
         }
 
-        rx.await.map_err(|_| "Embedding batch worker dropped response".to_string())?
+        rx.await
+            .map_err(|_| "Embedding batch worker dropped response".to_string())?
     }
 
     async fn get_or_create_queue(&self, key: (String, String)) -> mpsc::Sender<EmbeddingItem> {

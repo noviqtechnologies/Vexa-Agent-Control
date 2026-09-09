@@ -1,5 +1,5 @@
 //! Anonymized metadata sync for AgentWall SMB / Team Control Hub
- 
+
 #[cfg(feature = "hub-sync")]
 pub struct HubDataSync;
 

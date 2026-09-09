@@ -176,7 +176,14 @@ const COMMAND_TOOLS: &[&str] = &[
     "cmd",
     "powershell",
 ];
-const URL_TOOLS: &[&str] = &["fetch", "http_get", "http_post", "http_request", "curl", "wget"];
+const URL_TOOLS: &[&str] = &[
+    "fetch",
+    "http_get",
+    "http_post",
+    "http_request",
+    "curl",
+    "wget",
+];
 
 /// Map a tool name to a (target, param_name) pair.
 fn tool_scan_target(tool_name: &str) -> Option<(RuleTarget, &'static str)> {
@@ -801,10 +808,7 @@ mod tests {
         assert_eq!(m.category, ThreatCategory::Destructive);
 
         let m2 = s
-            .scan_tool(
-                "exec_command",
-                &json!({"arguments": {"cmd": "rm -rf /"}}),
-            )
+            .scan_tool("exec_command", &json!({"arguments": {"cmd": "rm -rf /"}}))
             .unwrap();
         assert_eq!(m2.category, ThreatCategory::Destructive);
     }

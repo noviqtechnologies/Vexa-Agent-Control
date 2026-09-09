@@ -39,7 +39,9 @@ fn test_gemini_alias_google() {
 fn test_gemini_custom_base_url() {
     let t = get_transformer("gemini").unwrap();
     let req = make_gemini_request("gemini-1.5-flash");
-    let (url, _, _) = t.transform_request(&req, "key", Some("https://internal.gemini.gw")).unwrap();
+    let (url, _, _) = t
+        .transform_request(&req, "key", Some("https://internal.gemini.gw"))
+        .unwrap();
     assert!(url.starts_with("https://internal.gemini.gw"));
 }
 
@@ -87,7 +89,9 @@ fn test_gemini_normalize_response_standard() {
         "usage": { "prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10 }
     });
     let bytes = serde_json::to_vec(&raw).unwrap();
-    let res = t.normalize_response(200, &HeaderMap::new(), &bytes).unwrap();
+    let res = t
+        .normalize_response(200, &HeaderMap::new(), &bytes)
+        .unwrap();
     assert_eq!(res["choices"][0]["message"]["content"], "I am Gemini.");
     assert_eq!(res["usage"]["total_tokens"], 10);
 }

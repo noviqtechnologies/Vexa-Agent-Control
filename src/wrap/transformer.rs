@@ -28,7 +28,8 @@ pub fn is_already_wrapped(entry: &Value) -> bool {
                 return true;
             }
         }
-        let obj_first_arg = cmd_obj.get("args")
+        let obj_first_arg = cmd_obj
+            .get("args")
             .and_then(|a| a.as_array())
             .and_then(|a| a.first())
             .and_then(|v| v.as_str());
@@ -52,11 +53,15 @@ pub fn wrap_entry(entry: &mut Value, agentwall_bin: &str) -> Result<(), WrapErro
     }
 
     if let Some(cmd_obj) = entry.get_mut("command").and_then(|c| c.as_object_mut()) {
-        let path = cmd_obj.get("path")
+        let path = cmd_obj
+            .get("path")
             .and_then(|p| p.as_str())
-            .ok_or_else(|| WrapError::InvalidJson("mcpServer command object missing 'path'".to_string()))?
+            .ok_or_else(|| {
+                WrapError::InvalidJson("mcpServer command object missing 'path'".to_string())
+            })?
             .to_string();
-        let existing_args: Vec<Value> = cmd_obj.get("args")
+        let existing_args: Vec<Value> = cmd_obj
+            .get("args")
             .and_then(|a| a.as_array())
             .cloned()
             .unwrap_or_default();
@@ -96,11 +101,17 @@ pub fn unwrap_entry(entry: &mut Value) -> Result<(), WrapError> {
     }
 
     if let Some(cmd_obj) = entry.get_mut("command").and_then(|c| c.as_object_mut()) {
-        let args = cmd_obj.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+        let args = cmd_obj
+            .get("args")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
         if args.len() >= 3 && args.first().and_then(|a| a.as_str()) == Some(STDIO_PROXY_MARKER) {
             let original_command = args[2]
                 .as_str()
-                .ok_or_else(|| WrapError::InvalidJson("Original command is not a string".to_string()))?
+                .ok_or_else(|| {
+                    WrapError::InvalidJson("Original command is not a string".to_string())
+                })?
                 .to_string();
             let original_args: Vec<Value> = args[3..].to_vec();
             cmd_obj.insert("path".to_string(), json!(original_command));
@@ -161,7 +172,11 @@ pub fn wrap_all_servers(
     let mut command_based = 0;
     for (_name, entry) in servers.iter_mut() {
         let has_cmd = entry.get("command").and_then(|c| c.as_str()).is_some()
-            || entry.get("command").and_then(|c| c.as_object()).and_then(|o| o.get("path").and_then(|p| p.as_str())).is_some();
+            || entry
+                .get("command")
+                .and_then(|c| c.as_object())
+                .and_then(|o| o.get("path").and_then(|p| p.as_str()))
+                .is_some();
         if !has_cmd {
             continue;
         }
@@ -352,10 +367,19 @@ mod tests {
         let (wrapped, already) = wrap_all_servers(&mut config, "/bin/agentwall").unwrap();
         assert_eq!(wrapped, 1);
         assert_eq!(already, 0);
-        assert_eq!(config["context_servers"]["local-mcp"]["command"], "/bin/agentwall");
-        assert_eq!(config["context_servers"]["local-mcp"]["args"][0], "stdio-proxy");
+        assert_eq!(
+            config["context_servers"]["local-mcp"]["command"],
+            "/bin/agentwall"
+        );
+        assert_eq!(
+            config["context_servers"]["local-mcp"]["args"][0],
+            "stdio-proxy"
+        );
         // Extension without command is preserved unmodified
-        assert_eq!(config["context_servers"]["mcp-server-github"]["enabled"], true);
+        assert_eq!(
+            config["context_servers"]["mcp-server-github"]["enabled"],
+            true
+        );
     }
 
     #[test]
@@ -397,11 +421,16 @@ mod tests {
         assert_eq!(config["mcpServers"]["server1"]["command"], "npx");
         assert_eq!(config["mcpServers"]["server1"]["args"], json!(["-y", "s1"]));
         assert_eq!(config["mcpServers"]["server2"]["command"], "node");
-        assert_eq!(config["mcpServers"]["server2"]["args"], json!(["server.js"]));
+        assert_eq!(
+            config["mcpServers"]["server2"]["args"],
+            json!(["server.js"])
+        );
 
         // Check server 3 completely preserved
         assert_eq!(config["mcpServers"]["server3"]["command"], "python");
-        assert_eq!(config["mcpServers"]["server3"]["args"], json!(["custom_tool.py"]));
+        assert_eq!(
+            config["mcpServers"]["server3"]["args"],
+            json!(["custom_tool.py"])
+        );
     }
 }
-
