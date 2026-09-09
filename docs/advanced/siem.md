@@ -54,3 +54,16 @@ To verify log integrity offline:
 ```bash
 agentcontrol verify-log ~/.agentcontrol/audit.jsonl
 ```
+
+---
+
+## Threat Model: Why Stream to a SIEM?
+
+While local log files provide offline verification for accidental corruption and casual tampering, an attacker with local root access on a compromised workstation could theoretically recompute local HMAC chains.
+
+Streaming audit events directly to an enterprise SIEM ensures **cryptographic tamper resistance against workstation compromise**:
+- Ingestion credentials are write-only.
+- Central storage and master verification keys are physically isolated from developer workstations.
+- Historical records cannot be erased or rewritten by compromised local processes.
+
+Read the complete [Audit Log Threat Model](../security/audit-threat-model.md) for architectural comparisons.

@@ -11,7 +11,10 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.80-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.81-10B981.svg?style=flat-square)](Cargo.toml)
+[![Changelog](https://img.shields.io/badge/Changelog-SemVer%202.0-blueviolet.svg?style=flat-square)](CHANGELOG.md)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
+[![Contributing](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 [![Rust](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![OWASP](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
@@ -577,7 +580,7 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.80`.
+- **Expected Result:** Prints `agentcontrol 1.0.81`.
 - **Troubleshooting:** Check platform-specific guides: [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md).
 
 ### Step 2: Inspect Discovered Clients (Safe Dry-Run)
@@ -745,7 +748,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.80_checksums.txt
+sha256sum -c agentcontrol_1.0.81_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe
@@ -854,6 +857,7 @@ The core gateway primitives, local CLI protections, MCP interception engine, and
 - **Zero Telemetry:** No phone-home pings, cloud tracking, or metric exfiltration. Your data, prompts, and credentials stay entirely within your infrastructure.
 - **No License Keys Required:** Spin up the local CLI or the full team control plane (`docker compose up -d`) with zero license files or activation codes.
 - **Sovereign Single-Tenant Ownership:** All proxy evaluation, DLP redaction, and audit logs execute strictly on your own hardware or private cloud. Live keys, tool calls, and LLM payloads never touch third-party servers.
+- **Continuity & Sovereign Guarantee:** Read our explicit [Continuity & Sovereign Independence Guarantee](docs/CONTINUITY_GUARANTEE.md) detailing why your deployment will never be stranded or locked in.
 
 ---
 
@@ -872,6 +876,7 @@ Have questions, feedback, or testing a complex agent toolchain?
 - 💬 **Discord Community:** [discord.gg/vexasec](https://discord.gg/vexasec)
 - 🐞 **GitHub Issues:** [github.com/noviqtechnologies/Vexa-Agent-Control/issues](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues)
 - 📧 **Email:** [contact@vexasec.io](mailto:contact@vexasec.io)
+- 🔒 **Security:** [SECURITY.md](SECURITY.md) (Report via [GitHub Advisory](https://github.com/noviqtechnologies/Vexa-Agent-Control/security/advisories/new) or `contact@vexasec.io`)
 - 🌐 **Website:** [vexasec.io](https://vexasec.io/)
 
 ---
@@ -883,5 +888,5 @@ Explore the complete [Documentation Hub](docs/README.md):
 - **Install Guides:** [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md)
 - **Feature Guides:** [Docker Deployment](docs/guides/docker-deployment.md) · [Workstation Workflow](docs/guides/workstation.md) · [Custom Agent HTTP](docs/guides/custom-agent-http.md) · [Small Team Hub](docs/guides/small-team-hub.md) · [Run Explorer](docs/guides/run-explorer.md) · [Effective Policy Explorer](docs/guides/effective-policy.md) · [Spend & Budgets Testing](docs/spend_budgets_testing_guide.md)
 - **Integrations:** [Integrations Matrix](docs/integrations/README.md) · [Claude Desktop](docs/integrations/claude-desktop.md) · [Cursor](docs/integrations/cursor.md) · [Codex](docs/integrations/codex.md) · [Antigravity](docs/integrations/antigravity.md)
-- **Architecture & Enterprise:** [Architecture V2](docs/ARCHITECTURE_V2.md) · [Enterprise Architecture](docs/advanced/enterprise.md) · [Kubernetes Helm Deployment](docs/advanced/kubernetes.md) · [OIDC Identity Binding](docs/advanced/oidc.md) · [SIEM Log Forwarding](docs/advanced/siem.md) · [OWASP ASI Top 10](docs/owasp_agentic_top10.md)
-- **Reference:** [CLI Commands](docs/reference/cli.md) · [Configuration & Env Vars](docs/reference/configuration.md) · [Paths & State](docs/reference/paths-and-state.md) · [Troubleshooting](docs/reference/troubleshooting.md) · [Removal & Recovery](docs/reference/removal-and-recovery.md) · [Legacy Alias Migration](docs/reference/legacy-migration.md) · [Release Notes Template](docs/reference/release-notes-template.md) · [Multi-Cloud Terraform](infra/README.md)
+- **Architecture & Enterprise:** [Architecture V2](docs/ARCHITECTURE_V2.md) · [Enterprise Architecture](docs/advanced/enterprise.md) · [Kubernetes Helm Deployment](docs/advanced/kubernetes.md) · [OIDC Identity Binding](docs/advanced/oidc.md) · [SIEM Log Forwarding](docs/advanced/siem.md) · [OWASP ASI Top 10](docs/owasp_agentic_top10.md) · [Audit Threat Model](docs/security/audit-threat-model.md) · [Continuity Guarantee](docs/CONTINUITY_GUARANTEE.md)
+- **Reference & Governance:** [CLI Commands](docs/reference/cli.md) · [Configuration & Env Vars](docs/reference/configuration.md) · [Paths & State](docs/reference/paths-and-state.md) · [Troubleshooting](docs/reference/troubleshooting.md) · [Removal & Recovery](docs/reference/removal-and-recovery.md) · [Legacy Alias Migration](docs/reference/legacy-migration.md) · [Release Notes Template](docs/reference/release-notes-template.md) · [Versioning & Releases](docs/reference/versioning-and-releases.md) · [Contributing Guide](CONTRIBUTING.md) · [Multi-Cloud Terraform](infra/README.md)

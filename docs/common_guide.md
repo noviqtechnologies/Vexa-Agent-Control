@@ -463,6 +463,13 @@ $$\text{HMAC}_n = \text{HMAC-SHA256}(K, \text{Payload}_n \parallel \text{HMAC}_{
 
 If an attacker attempts to modify, delete, or re-order any historical audit line, the hash chain breaks and verification tools instantly detect the tamper point.
 
+> [!NOTE]
+> **Threat Model & Cryptographic Boundaries:**
+> - **Local Mode (`audit.jsonl`):** Protects against accidental corruption, log truncation, and casual tampering. Because the signing key resides on the local workstation, Local Mode is not designed to withstand root/workstation compromise.
+> - **Central Mode (SIEM / Hub Streaming):** For tamper resistance against workstation compromise, configure streaming to an enterprise SIEM or Control Hub where the verification key and permanent storage never touch the workstation.
+>
+> See the complete architectural analysis in the [Audit Log Threat Model](security/audit-threat-model.md).
+
 ---
 
 ### Log Integrity Verification

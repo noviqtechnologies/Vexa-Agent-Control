@@ -37,6 +37,7 @@ docs/
 │   ├── cursor.md                     # Cursor IDE integration
 │   ├── codex.md                      # ChatGPT Codex integration
 │   └── antigravity.md                # Antigravity IDE integration
+├── CONTINUITY_GUARANTEE.md           # Sovereign independence & zero vendor lock-in guarantee
 ├── reference/                        # Authoritative technical references
 │   ├── cli.md                        # Complete CLI commands and flags reference
 │   ├── configuration.md              # Policy Schema v2, detectors, and canonical env vars
@@ -44,7 +45,10 @@ docs/
 │   ├── troubleshooting.md            # Common first-run issues and diagnostics
 │   ├── removal-and-recovery.md       # Safe manual and automated uninstallation
 │   ├── legacy-migration.md           # Migration guide for AGENTWALL_* to AGENTCONTROL_*
-│   └── release-notes-template.md     # Standardized release notes specification
+│   ├── release-notes-template.md     # Standardized release notes specification
+│   └── versioning-and-releases.md    # SemVer 2.0.0 policy and release governance
+├── security/                         # Security architecture and threat models
+│   └── audit-threat-model.md         # Audit log threat model (Local vs Central mode)
 └── advanced/                         # Platform, security, and enterprise infrastructure
     ├── team-operations.md            # OTET device enrollment, telemetry, spend caps
     ├── oidc.md                       # OIDC identity provider binding (Okta, Entra ID, Auth0)
@@ -68,6 +72,9 @@ docs/
 | Route LangChain / Custom Agent | [Custom Agent HTTP Guide](guides/custom-agent-http.md) |
 | View All CLI Options | [CLI Reference](reference/cli.md) |
 | Environment Variable Reference | [Configuration Reference](reference/configuration.md) |
+| Audit Threat Model & Limits | [Audit Log Threat Model](security/audit-threat-model.md) |
+| Continuity & Lock-in Guarantee | [Continuity Guarantee](CONTINUITY_GUARANTEE.md) |
+| SemVer & Release Governance | [Versioning & Releases](reference/versioning-and-releases.md) |
 | Clean Uninstall / Rollback | [Removal & Recovery Guide](reference/removal-and-recovery.md) |
 | Organization & License Setup | [Organization Admin Guide](organization_admin_guide.md) |
 | Migrating from `AGENTWALL_*` | [Legacy Migration Guide](reference/legacy-migration.md) |

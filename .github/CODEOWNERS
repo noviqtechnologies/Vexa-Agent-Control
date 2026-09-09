@@ -1,0 +1,35 @@
+# GitHub Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default fallback owners for the entire repository
+* @noviqtechnologies/maintainers
+
+# Core Gateway Engine & MCP Interception (Rust)
+/src/ @noviqtechnologies/core-engine @noviqtechnologies/maintainers
+/Cargo.toml @noviqtechnologies/core-engine @noviqtechnologies/maintainers
+/Cargo.lock @noviqtechnologies/core-engine @noviqtechnologies/maintainers
+
+# Security Rules, DLP Classifiers & Policy Evaluation
+/src/scanner/ @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+/src/interceptor/ @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+/src/policy/ @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+/agentcontrol-policy.yaml @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+/policy.example.yaml @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+/SECURITY.md @noviqtechnologies/security-leads @noviqtechnologies/maintainers
+
+# Control Hub, Database & Central Telemetry
+/control-plane/ @noviqtechnologies/control-plane @noviqtechnologies/maintainers
+/enterprise/ @noviqtechnologies/control-plane @noviqtechnologies/maintainers
+
+# Infrastructure, Helm Charts, Docker & CI/CD
+/.github/workflows/ @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/Dockerfile* @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/docker-compose*.yml @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/compose*.yml @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/chart/ @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/infra/ @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+/deploy/ @noviqtechnologies/infra-team @noviqtechnologies/maintainers
+
+# Documentation & Developer Guides
+/docs/ @noviqtechnologies/maintainers
+/*.md @noviqtechnologies/maintainers

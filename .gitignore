@@ -6,6 +6,7 @@ scratch/
 graphify-out/
 scripts/
 infra/gcp-teams-saas-hub
+sdk/
 
 # Terraform
 .terraform/

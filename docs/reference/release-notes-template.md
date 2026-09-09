@@ -10,8 +10,15 @@ This template defines the mandatory structure for every public release of Vexa A
 ## Who Should Update
 [One paragraph describing affected operating systems, clients, bug severity, and whether this update is recommended or mandatory.]
 
+## Release Classification (SemVer)
+- [ ] **PATCH (v1.0.Z):** Bug fixes, security patches, performance, and documentation only. Zero additive configuration fields or new engines.
+- [ ] **MINOR (v1.Y.0):** Additive, backward-compatible features, new integrations, or additive configuration keys.
+- [ ] **MAJOR (vX.0.0):** Breaking configuration syntax, removed CLI flags, or breaking wire protocol changes.
+
+See [Versioning & Release Governance](versioning-and-releases.md) for detailed rules.
+
 ## Highlights
-- **New Feature:** [Plain English description of what changed and the exact developer outcome].
+- **New Feature / Change:** [Plain English description of what changed and the exact developer outcome].
 - **Fix:** [Plain English description of the prior symptom, root cause, and confirmed fix].
 
 ## Compatibility Matrix
