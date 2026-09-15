@@ -6,7 +6,7 @@ import {
 import {
   api, subscribeAlerts,
   type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus, type CoverageHealthResponse, type ListSentryDevicesResponse,
-  type VirtualKey, type Policy, type BudgetWindowV2
+  type VirtualKey, type Policy, type BudgetWindowV2, type SpendPolicyV2
 } from '../api/client'
 
 const DECISION_COLORS: Record<string, string> = {
@@ -48,6 +48,7 @@ export default function FleetOverview() {
   const [virtualKeys, setVirtualKeys] = useState<VirtualKey[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [spendWindows, setSpendWindows] = useState<BudgetWindowV2[]>([])
+  const [spendPolicies, setSpendPolicies] = useState<SpendPolicyV2[]>([])
   const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [loading, setLoading] = useState(true)
@@ -66,7 +67,8 @@ export default function FleetOverview() {
       (api.listVirtualKeys ? api.listVirtualKeys().catch(() => ({ virtual_keys: [] })) : Promise.resolve({ virtual_keys: [] })),
       (api.listPolicies ? api.listPolicies().catch(() => []) : Promise.resolve([])),
       (api.getEffectiveSpendV2 ? api.getEffectiveSpendV2().catch(() => null) : Promise.resolve(null)),
-    ]).then(([s, a, h, al, cov, lic, snt, vk, pol, sp]) => {
+      (api.listSpendPoliciesV2 ? api.listSpendPoliciesV2().catch(() => null) : Promise.resolve(null)),
+    ]).then(([s, a, h, al, cov, lic, snt, vk, pol, sp, spPol]) => {
       const rawAgents = a || []
       const seen = new Set<string>()
       const dedupedAgents: AgentSummary[] = []
@@ -94,6 +96,9 @@ export default function FleetOverview() {
       }
       if (sp && Array.isArray((sp as any).windows)) {
         setSpendWindows((sp as any).windows)
+      }
+      if (spPol && Array.isArray((spPol as any).policies)) {
+        setSpendPolicies((spPol as any).policies)
       }
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -151,7 +156,14 @@ export default function FleetOverview() {
   const activeWorkstations = sentrySummary?.compliant_count ?? (sentryDeduped.length > 0 ? computedCompliant : undefined) ?? coverage?.summary?.protected_workstations ?? (stats && stats.active_agents > 0 ? stats.active_agents : 0)
   const offlineWorkstations = sentrySummary?.offline_count ?? (sentryDeduped.length > 0 ? computedOffline : undefined) ?? coverage?.summary?.stale_workstations ?? 0
   const driftedWorkstations = sentrySummary?.non_compliant_count ?? (sentryDeduped.length > 0 ? computedNonCompliant : undefined) ?? coverage?.summary?.exposed_workstations ?? 0
-  const activeIdesCount = coverage?.summary?.total_active_ides ?? (activeWorkstations > 0 ? 11 : 0)
+  const activeIdesCount = coverage?.summary?.total_active_ides ?? 0
+
+  // Spend calculations (authoritative settled total and policy cap)
+  const totalSettledMicrocents = (spendWindows || []).reduce((acc, w) => acc + (w.settled_microcents || 0), 0)
+  const activeSpendPolicy = spendPolicies.find(p => p.status === 'PUBLISHED')
+  const totalLimitMicrocents = (spendWindows && spendWindows.length > 0)
+    ? spendWindows.reduce((acc, w) => acc + (w.limit_microcents || 0), 0)
+    : (activeSpendPolicy?.limit_microcents || 0)
 
   // ── Multi-Factor Composite Security Posture Index ──────────────────────
   // 1. Workstations & Sentry Health (35% weight)
@@ -162,12 +174,12 @@ export default function FleetOverview() {
 
   // 2. Active Guardrails & 21 DLP Wire Rules (35% weight)
   const guardrailWeight = 35
-  const activePolicyCount = policies.length > 0 ? policies.length : 3
+  const activePolicyCount = policies.length
   const guardrailScore = Math.min(guardrailWeight, 20 + (activePolicyCount > 0 ? 15 : 0)) // Safe Mode + DLP active
 
   // 3. Universal Gateway & Key Custody (15% weight)
   const gatewayWeight = 15
-  const gatewayScore = gatewayWeight // Sub-3ms Rust gateway active + virtual keys scoped
+  const gatewayScore = virtualKeys.length > 0 ? gatewayWeight : 10 // Baseline gateway operational
 
   // 4. Spend Governance & Preflight Caps (15% weight)
   const spendWeight = 15
@@ -194,7 +206,7 @@ export default function FleetOverview() {
     badgeClass = 'delta-neutral'
     runtimePillText = '○ Awaiting Onboarding'
     runtimePillColor = '#94a3b8'
-    bannerSubtext = '0 Workstations Active · Click "+ Enroll Device" to generate an enrollment token and onboard workstations.'
+    bannerSubtext = '0 Workstations Active · Run "agentcontrol login" on a developer workstation to authenticate and register.'
     shieldBg = 'linear-gradient(135deg, #64748b 0%, #475569 100%)'
     shieldShadow = '0 8px 24px rgba(100, 116, 139, 0.35)'
   } else if (totalEnrolledWorkstations > 0 && activeWorkstations === 0) {
@@ -250,9 +262,9 @@ export default function FleetOverview() {
           <button
             type="button"
             className="soc-btn-primary"
-            onClick={() => navigate('/devices')}
+            onClick={() => navigate('/devices?onboard=true')}
           >
-            + Enroll Device
+            + Onboard Workstation
           </button>
         </div>
       </div>
@@ -332,7 +344,7 @@ export default function FleetOverview() {
             <div className="soc-breakdown-row">
               <span style={{ color: '#cbd5e1' }}>3. Universal AI Gateway & Key Custody (15% weight)</span>
               <span style={{ fontWeight: 600, color: '#34d399' }}>
-                {gatewayScore} / 15 pts (Virtual Keys active, rate limits enforced)
+                {gatewayScore} / 15 pts ({virtualKeys.length > 0 ? `${virtualKeys.length} Virtual Keys active, rate limits enforced` : 'Universal Gateway active, awaiting virtual keys'})
               </span>
             </div>
             <div className="soc-breakdown-row">
@@ -362,7 +374,7 @@ export default function FleetOverview() {
               <span className="soc-capability-icon">💻</span>
               <div>
                 <div className="soc-capability-title">Device Governance</div>
-                <div className="soc-capability-role">OTET & Seats</div>
+                <div className="soc-capability-role">Ed25519 & PKCE</div>
               </div>
             </div>
             <span className={`soc-status-pill ${activeWorkstations > 0 ? (driftedWorkstations > 0 ? 'pill-warning' : 'pill-success') : 'pill-neutral'}`}>
@@ -374,9 +386,16 @@ export default function FleetOverview() {
             <span className="metric-secondary">of {Math.max(activeWorkstations, totalEnrolledWorkstations)} Workstations</span>
           </div>
           <div className="soc-capability-subtext">
-            {activeIdesCount > 0 ? `${activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf)` : 'Hardware PKI Device Enrolled'}
+            {activeIdesCount > 0 ? `${activeIdesCount} IDE Targets Monitored (Cursor, VS Code, Windsurf)` : (totalEnrolledWorkstations > 0 ? 'Gateway Node Enrolled' : 'No Devices Enrolled')}
           </div>
-          <div className="soc-capability-footer">
+          <div
+            className="soc-capability-footer"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate('/coverage-health')
+            }}
+            title="View Coverage Matrix"
+          >
             <span>View Coverage Matrix</span>
             <span>→</span>
           </div>
@@ -385,8 +404,8 @@ export default function FleetOverview() {
         {/* Card 2: Policies & Guardrails Hub */}
         <div
           className="card soc-capability-card soc-clickable-tile"
-          onClick={() => navigate('/policy/marketplace')}
-          title="Browse and deploy active security policies"
+          onClick={() => navigate('/policy/edit')}
+          title="Inspect and edit active security policies"
         >
           <div className="soc-capability-header">
             <div className="soc-capability-title-group">
@@ -400,14 +419,28 @@ export default function FleetOverview() {
               ● Enforcing
             </span>
           </div>
-          <div className="soc-capability-metric">
-            <span className="metric-primary">{policies.length > 0 ? `${policies.length} Policies` : '2 Policies'}</span>
+          <div
+            className="soc-capability-metric"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate('/policy/edit')
+            }}
+            title="View Current Active Policy"
+          >
+            <span className="metric-primary">{`${policies.length} ${policies.length === 1 ? 'Policy' : 'Policies'}`}</span>
             <span className="metric-secondary">Active Postures</span>
           </div>
           <div className="soc-capability-subtext">
             21 DLP Patterns · 6-Pass Injection Shield · Safe Mode Active
           </div>
-          <div className="soc-capability-footer">
+          <div
+            className="soc-capability-footer"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate('/policy/marketplace')
+            }}
+            title="Browse Policy Marketplace"
+          >
             <span>Browse Policy Marketplace</span>
             <span>→</span>
           </div>
@@ -427,16 +460,18 @@ export default function FleetOverview() {
                 <div className="soc-capability-role">LLM Providers</div>
               </div>
             </div>
-            <span className="soc-status-pill pill-success">
-              ● Operational
+            <span className={`soc-status-pill ${virtualKeys.length > 0 ? 'pill-success' : 'pill-neutral'}`}>
+              {virtualKeys.length > 0 ? '● Operational' : '○ No Keys'}
             </span>
           </div>
           <div className="soc-capability-metric">
-            <span className="metric-primary">{virtualKeys.length > 0 ? `${virtualKeys.length} ${virtualKeys.length === 1 ? 'Key' : 'Keys'}` : '1 Key'}</span>
+            <span className="metric-primary">{`${virtualKeys.length} ${virtualKeys.length === 1 ? 'Key' : 'Keys'}`}</span>
             <span className="metric-secondary">Governed</span>
           </div>
           <div className="soc-capability-subtext">
-            Multi-Provider Routing · L1/L2 Vector Semantic Cache Active
+            {virtualKeys.length > 0
+              ? 'Multi-Provider Routing · L1/L2 Vector Semantic Cache Active'
+              : 'No virtual keys issued · Universal gateway awaiting keys'}
           </div>
           <div className="soc-capability-footer">
             <span>Manage Virtual Keys</span>
@@ -458,26 +493,31 @@ export default function FleetOverview() {
                 <div className="soc-capability-role">Budgets & Caps</div>
               </div>
             </div>
-            <span className="soc-status-pill pill-success">
-              ● Fail-Closed
+            <span className={`soc-status-pill ${totalLimitMicrocents > 0 ? 'pill-success' : 'pill-neutral'}`}>
+              {totalLimitMicrocents > 0 ? '● Fail-Closed' : '○ No Cap Set'}
             </span>
           </div>
           <div className="soc-capability-metric">
             <span className="metric-primary">
-              {spendWindows && spendWindows.length > 0
-                ? `$${((spendWindows[0].settled_microcents || 0) / 100000000).toFixed(2)}`
-                : '$0.18'}
+              ${(totalSettledMicrocents / 100000000).toFixed(2)}
             </span>
             <span className="metric-secondary">
-              {spendWindows && spendWindows.length > 0 && spendWindows[0].limit_microcents > 0
-                ? `/ $${(spendWindows[0].limit_microcents / 100000000).toFixed(2)} Cap`
-                : '/ $100.00 Cap'}
+              {totalLimitMicrocents > 0
+                ? `/ $${(totalLimitMicrocents / 100000000).toFixed(2)} Cap`
+                : '/ No Cap'}
             </span>
           </div>
           <div className="soc-capability-subtext">
             Atomic Preflight Balance Reservations · 0 Budget Overages
           </div>
-          <div className="soc-capability-footer">
+          <div
+            className="soc-capability-footer"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate('/spend/limits')
+            }}
+            title="View Spend Ledgers"
+          >
             <span>View Spend Ledgers</span>
             <span>→</span>
           </div>
@@ -573,23 +613,24 @@ export default function FleetOverview() {
             <div className="stat-subtext">High Severity Injections</div>
           </div>
 
-          {licenseStatus && (
-            <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to manage Device Seat Allocations">
-              <div className="stat-header-row">
-                <div className="stat-label">Seats Used ({licenseStatus.tier.toUpperCase()})</div>
-                <span className="soc-delta-badge delta-neutral">{licenseStatus.seats_remaining} left</span>
+          {(() => {
+            const seatsUsed = licenseStatus?.seats_used ?? (licenseStatus as any)?.devices_enrolled ?? totalEnrolledWorkstations ?? 0
+            const maxSeats = licenseStatus?.max_seats ?? (licenseStatus as any)?.max_devices ?? 25
+            const seatsRemaining = licenseStatus?.seats_remaining ?? (licenseStatus as any)?.devices_remaining ?? Math.max(0, maxSeats - seatsUsed)
+            const tierName = (licenseStatus?.tier || 'TEAM').toUpperCase()
+            return (
+              <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/devices')} title="Click to manage Device Seat Allocations">
+                <div className="stat-header-row">
+                  <div className="stat-label">Seats Used ({tierName})</div>
+                  <span className="soc-delta-badge delta-neutral">{seatsRemaining} left</span>
+                </div>
+                <div className="stat-value" style={{ color: seatsRemaining === 0 ? 'var(--danger)' : 'var(--text-main, #f8fafc)' }}>
+                  {seatsUsed} / {maxSeats}
+                </div>
+                <div className="stat-subtext">Active Developer Seats</div>
               </div>
-              <div className="stat-value" style={{ color: licenseStatus.seats_remaining === 0 ? 'var(--danger)' : 'var(--accent)' }}>
-                {licenseStatus.seats_used} / {licenseStatus.max_seats}
-              </div>
-              <div className="soc-progress-track">
-                <div
-                  className="soc-progress-bar"
-                  style={{ width: `${Math.min(100, (licenseStatus.seats_used / Math.max(1, licenseStatus.max_seats)) * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 

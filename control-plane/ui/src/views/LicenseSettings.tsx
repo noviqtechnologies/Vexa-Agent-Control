@@ -154,7 +154,7 @@ export const LicenseSettings: React.FC = () => {
           </div>
           <div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Email</div>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>{org?.contact_email || 'admin@agentcontrol.local'}</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>{org?.contact_email || '—'}</div>
           </div>
         </div>
       </div>

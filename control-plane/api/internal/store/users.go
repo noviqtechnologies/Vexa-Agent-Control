@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
@@ -193,4 +195,80 @@ func (s *Store) UpsertUser(ctx context.Context, u *model.User) error {
 		return s.UpdateUser(ctx, u)
 	}
 	return s.CreateUser(ctx, u)
+}
+
+// BootstrapAdmin ensures the customer organization, default team, local auth provider,
+// and the initial administrator user exist with current configured credentials.
+func (s *Store) BootstrapAdmin(ctx context.Context, orgID, orgName, email, passwordHash string) error {
+	if s.pool == nil || email == "" {
+		return nil
+	}
+	email = strings.TrimSpace(strings.ToLower(email))
+
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
+	if orgName == "" {
+		orgName = "Primary Organization"
+	}
+
+	// 1. Ensure Organization exists with configured name and contact email
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
+		VALUES ($1, $2, 'default', $3, 'team', 50, 'active')
+		ON CONFLICT (id) DO UPDATE SET
+			name = EXCLUDED.name,
+			contact_email = EXCLUDED.contact_email,
+			updated_at = now()
+	`, orgID, orgName, email)
+	if err != nil {
+		return fmt.Errorf("bootstrap organization: %w", err)
+	}
+
+	// 2. Ensure Default Team exists
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO teams (id, organization_id, name, description)
+		VALUES ('default', $1, 'Default Team', 'Default team workspace')
+		ON CONFLICT (id) DO NOTHING
+	`, orgID)
+	if err != nil {
+		return fmt.Errorf("bootstrap team: %w", err)
+	}
+
+	// 3. Ensure Local Auth Provider exists
+	const localAuthID = "00000000-0000-0000-0000-000000000002"
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO auth_providers (id, organization_id, name, type, enabled)
+		VALUES ($1, $2, 'Local Password Authentication', 'local', true)
+		ON CONFLICT (organization_id, type) DO NOTHING
+	`, localAuthID, orgID)
+	if err != nil {
+		return fmt.Errorf("bootstrap auth provider: %w", err)
+	}
+
+	// 4. Ensure Admin User exists with role OWNER, is_admin true, and given password_hash
+	if passwordHash != "" {
+		provID := localAuthID
+		_, err = s.pool.Exec(ctx, `
+			INSERT INTO users (organization_id, auth_provider_id, email, password_hash, is_admin, role)
+			VALUES ($1, $2, $3, $4, true, 'OWNER')
+			ON CONFLICT (organization_id, email) DO UPDATE SET
+				auth_provider_id = EXCLUDED.auth_provider_id,
+				password_hash    = EXCLUDED.password_hash,
+				is_admin         = true,
+				role             = 'OWNER',
+				updated_at       = now()
+		`, orgID, provID, email, passwordHash)
+		if err != nil {
+			return fmt.Errorf("bootstrap admin user: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// BootstrapTenantAdmin ensures the tenant organization, default team, local auth provider,
+// and the initial tenant administrator user exist with current configured credentials.
+func (s *Store) BootstrapTenantAdmin(ctx context.Context, orgName, email, passwordHash string) error {
+	return s.BootstrapAdmin(ctx, DefaultOrgID, orgName, email, passwordHash)
 }

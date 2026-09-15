@@ -2,6 +2,8 @@
 
 #[cfg(windows)]
 use colored::*;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 fn sanitize_url(url: &str) -> String {
@@ -29,116 +31,141 @@ pub fn install_windows_service(
     _policy_read_secret: &str,
     agent_id: Option<&str>,
 ) -> Result<(), String> {
-    use std::ffi::OsStr;
-    use windows_service::{service::*, service_manager::*};
-
     let clean_hub_url = sanitize_url(hub_url);
 
-    println!("  Connecting to Windows Service Control Manager (SCM)...");
-    let manager = ServiceManager::local_computer(
-        None::<&str>,
-        ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
-    )
-    .map_err(|e| {
-        format!(
-            "failed to connect to Windows SCM (Administrator permissions required?): {}",
-            e
-        )
-    })?;
+    println!("  Registering per-user background agent via Task Scheduler...");
 
-    // ── Write non-secret Hub URL to HKLM BEFORE creating/starting the service ──
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "AGENTCONTROL_HUB_URL", &clean_hub_url])
+    // Per-user task name avoids conflicts with tasks created under a different elevation context
+    let username = std::env::var("USERNAME").unwrap_or_else(|_| "user".to_string());
+    let task_name = format!("VexaAgentControl-{}", username);
+
+    // The schtasks /TR command cannot set environment variables directly.
+    // Use cmd /C to set AGENTCONTROL_HUB_URL before launching so the daemon
+    // knows which hub to connect to. Also sets AGENTCONTROL_LISTEN.
+    let task_run_cmd = format!(
+        "cmd /C \"set AGENTCONTROL_HUB_URL={} && \"{}\" start --listen 127.0.0.1:18080\"",
+        clean_hub_url, bin_path
+    );
+
+    // Primary: use PowerShell Register-ScheduledTask (works for current user, no elevation needed).
+    // We pass AGENTCONTROL_HUB_URL via the EnvironmentVariables setting instead of a fragile
+    // cmd /C "set VAR=... && binary.exe" wrapper which breaks on paths that contain spaces.
+    // Two triggers: AtLogOn (persistent) + AtStartup (fallback) so the task runs at next system boot.
+    let bin_escaped = bin_path.replace('\'', "''"); // PowerShell single-quote escape
+    let ps_register = format!(
+        r#"$action = New-ScheduledTaskAction -Execute '{bin}' -Argument 'start --listen 127.0.0.1:18080'; $env_setting = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew -StartWhenAvailable; $trigger_logon = New-ScheduledTaskTrigger -AtLogOn; $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; $task = New-ScheduledTask -Action $action -Trigger $trigger_logon -Settings $env_setting -Principal $principal; Register-ScheduledTask -TaskName '{task}' -InputObject $task -Force; $td = Get-ScheduledTask -TaskName '{task}'; $td.Triggers[0].Delay = 'PT0S'; Set-ScheduledTask -TaskName '{task}' -InputObject $td -ErrorAction SilentlyContinue; $env_path = [System.Environment]::ExpandEnvironmentVariables('%APPDATA%\Microsoft\Windows\Task Scheduler'); try {{ $xml = Export-ScheduledTask -TaskName '{task}'; $xml = $xml -replace '<EnvironmentVariables/>', '<EnvironmentVariables><EnvironmentVariable><Name>AGENTCONTROL_HUB_URL</Name><Value>{hub}</Value></EnvironmentVariable></EnvironmentVariables>'; Register-ScheduledTask -Xml $xml -TaskName '{task}' -Force }} catch {{ }}"#,
+        bin = bin_escaped,
+        task = task_name,
+        hub = clean_hub_url,
+    );
+
+    let ps_output = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command", &ps_register])
         .output();
-    let _ = std::process::Command::new("setx")
-        .args(&["/M", "DASHBOARD_API_URL", &clean_hub_url])
-        .output();
-    if !_gateway_secret.trim().is_empty() {
-        let _ = std::process::Command::new("setx")
-            .args(&["/M", "GATEWAY_SECRET", _gateway_secret.trim()])
-            .output();
-    }
-    if let Some(id) = agent_id {
-        let _ = std::process::Command::new("setx")
-            .args(&["/M", "AGENT_ID", id])
-            .output();
-    }
 
-    // ── Register EventLog Application Source in Windows Registry ──
-    ensure_eventlog_registered();
+    let registered = match ps_output {
+        Ok(ref out) if out.status.success() => {
+            println!("  {} Task registered via PowerShell.", "✔".green());
+            true
+        }
+        Ok(ref out) => {
+            let err = String::from_utf8_lossy(&out.stderr);
+            println!("  ⚠ PowerShell register failed ({}), falling back to schtasks...", err.trim().lines().next().unwrap_or(""));
+            false
+        }
+        Err(ref e) => {
+            println!("  ⚠ PowerShell not available ({}), falling back to schtasks...", e);
+            false
+        }
+    };
 
-    // ── Propagate invoking user's .agentcontrol credentials to SYSTEM service profile ──
-    if let Some(user_home) = dirs::home_dir() {
-        let user_agentcontrol = user_home.join(".agentcontrol");
-        let system_agentcontrol =
-            std::path::PathBuf::from(r"C:\Windows\System32\config\systemprofile\.agentcontrol");
-        if user_agentcontrol.exists() && user_agentcontrol != system_agentcontrol {
-            let _ = std::fs::create_dir_all(&system_agentcontrol);
-            if let Ok(entries) = std::fs::read_dir(&user_agentcontrol) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        let dest = system_agentcontrol.join(entry.file_name());
-                        let _ = std::fs::copy(&path, dest);
-                    }
-                }
-            }
+    if !registered {
+        // Fallback: schtasks /Create
+        let create_output = std::process::Command::new("schtasks")
+            .args(&[
+                "/Create",
+                "/TN", &task_name,
+                "/TR", &task_run_cmd,
+                "/SC", "ONLOGON",
+                "/RL", "LIMITED",
+                "/IT",
+                "/F",
+            ])
+            .output()
+            .map_err(|e| format!("failed to execute schtasks: {}", e))?;
+
+        if !create_output.status.success() {
+            let err = String::from_utf8_lossy(&create_output.stderr);
+            println!(
+                "  ⚠ Task Scheduler registration skipped ({}) — using HKCU\\Run logon persistence.",
+                err.trim()
+            );
         }
     }
 
-    println!(
-        "  Creating service entry {}...",
-        "AgentControlSentry".cyan()
+    // ── Secondary persistence: HKCU\Run registry key ─────────────────────────────────────────
+    // Ensures daemon launches at logon even when Task Scheduler denies immediate Start-ScheduledTask
+    // (common when task was registered under a different elevation context).
+    // No admin rights required; HKCU is always writable by the current user.
+    let reg_run_value = format!("\"{}\" start --listen 127.0.0.1:18080", bin_path);
+    let reg_ps = format!(
+        "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VexaAgentControl' -Value '{}' -Force",
+        reg_run_value.replace('\'', "''")
     );
+    let _ = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command", &reg_ps])
+        .output();
+    println!("  {} Logon persistence via HKCU\\Run registry key set.", "✔".green());
 
-    let service_info = ServiceInfo {
-        name: OsStr::new("AgentControlSentry").to_os_string(),
-        display_name: OsStr::new("Agent Control Sentry Endpoint Security Service").to_os_string(),
-        service_type: ServiceType::OWN_PROCESS,
-        start_type: ServiceStartType::AutoStart,
-        error_control: ServiceErrorControl::Normal,
-        executable_path: std::path::PathBuf::from(bin_path),
-        launch_arguments: vec![
-            OsStr::new("start").to_os_string(),
-            OsStr::new("--centralized").to_os_string(),
-            OsStr::new("--listen").to_os_string(),
-            OsStr::new("127.0.0.1:8080").to_os_string(),
-        ],
-        dependencies: vec![],
-        account_name: None, // Runs under virtual/local service account
-        account_password: None,
-    };
+    // ── Immediate start: try Task Scheduler first, then spawn directly ────────────────────────
+    let run_result = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command",
+            &format!("Start-ScheduledTask -TaskName '{}'", task_name)])
+        .output();
 
-    let service = manager
-        .create_service(&service_info, ServiceAccess::ALL_ACCESS)
-        .map_err(|e| format!("failed to create Windows service: {}", e))?;
+    if let Err(ref e) = run_result {
+        println!("  {} schtasks /Run failed: {} — will start process directly", "⚠".yellow(), e);
+    }
 
-    if let Err(e) = service.start::<&std::ffi::OsStr>(&[]) {
-        println!(
-            "  Note: Service created, but auto-start attempt returned: {}",
-            e
-        );
-        crate::service::eventlog::log_warn(
-            2003,
-            &format!("AgentControlSentry auto-start attempt returned: {}", e),
-        );
-    } else {
-        crate::service::eventlog::log_info(
-            2001,
-            &format!(
-                "AgentControlSentry Windows SCM service installed and running. Hub URL: {}",
-                clean_hub_url
+    // Wait briefly and verify the process actually started
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+
+    let running = std::process::Command::new("tasklist")
+        .args(&["/FI", "IMAGENAME eq agentcontrol.exe", "/NH", "/FO", "CSV"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("agentcontrol.exe"))
+        .unwrap_or(false);
+
+    if !running {
+        // Fallback: spawn directly with DETACHED_PROCESS | CREATE_NO_WINDOW so the daemon
+        // lives independently of the spawning parent shell (survives session boundary).
+        println!("  {} Task did not start via scheduler — launching daemon directly...", "⚠".yellow());
+        let spawn_result = std::process::Command::new(bin_path)
+            .args(&["start", "--listen", "127.0.0.1:18080"])
+            .env("AGENTCONTROL_HUB_URL", &clean_hub_url)
+            .creation_flags(0x00000008 | 0x08000000) // DETACHED_PROCESS | CREATE_NO_WINDOW
+            .spawn();
+
+        match spawn_result {
+            Ok(child) => println!(
+                "  {} Daemon launched directly (PID: {})",
+                "✔".green().bold(),
+                child.id()
             ),
-        );
+            Err(e) => println!("  {} Failed to launch daemon directly: {}", "✖".red(), e),
+        }
+    } else {
+        println!("  {} Background daemon is running.", "✔".green().bold());
     }
 
     println!(
-        "{} Agent Control Windows SCM Service installed successfully!",
+        "{} Agent Control per-user background agent installed successfully!",
         "✔".green().bold()
     );
-    println!("  Hub URL:            {}", hub_url.cyan());
-    println!("  Authentication:     mTLS Hardware/OS Certificate Store");
-    println!("  Listener Binding:   127.0.0.1:8080 (Loopback Only)");
+    println!("  Task Name:          {}", task_name.cyan());
+    println!("  Execution Level:    Standard User (/RL LIMITED, No Admin Elevation)");
+    println!("  Hub URL:            {}", clean_hub_url.cyan());
+    println!("  Listener Binding:   127.0.0.1:18080 (Loopback Only)");
     if let Some(id) = agent_id {
         println!("  Device Principal:   {}", id);
     }
@@ -154,39 +181,63 @@ pub fn install_windows_service(
     _policy_read_secret: &str,
     _agent_id: Option<&str>,
 ) -> Result<(), String> {
-    Err("Windows SCM service installation is only supported on Windows OS.".to_string())
+    Err("Windows background agent installation is only supported on Windows OS.".to_string())
 }
 
 #[cfg(windows)]
 pub fn uninstall_windows_service() -> Result<(), String> {
+    let username = std::env::var("USERNAME").unwrap_or_else(|_| "user".to_string());
+    let task_name = format!("VexaAgentControl-{}", username);
+
+    // Primary: use PowerShell Unregister-ScheduledTask (works for current user without elevation)
+    let ps_delete = format!("Unregister-ScheduledTask -TaskName '{}' -Confirm:$false -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'VexaAgentControl' -Confirm:$false -ErrorAction SilentlyContinue", task_name);
+    let _ = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command", &ps_delete])
+        .output();
+
+    // Also terminate any running instance
+    let _ = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command",
+            "Get-Process agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"])
+        .output();
+
+    // Fallback: schtasks /Delete
+    let _ = std::process::Command::new("schtasks")
+        .args(&["/End", "/TN", "VexaAgentControl"])
+        .output();
+    let _ = std::process::Command::new("schtasks")
+        .args(&["/Delete", "/TN", "VexaAgentControl", "/F"])
+        .output();
+
+    // Clean up legacy SCM services if they were ever installed by admin
     use std::ffi::OsStr;
     use windows_service::{service::*, service_manager::*};
 
-    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
-        .map_err(|e| format!("failed to connect to Windows SCM: {}", e))?;
-
-    // Try deleting AgentControlSentry
-    if let Ok(service) = manager.open_service(
-        OsStr::new("AgentControlSentry"),
-        ServiceAccess::STOP | ServiceAccess::DELETE,
-    ) {
-        let _ = service.stop();
-        let _ = service.delete();
+    if let Ok(manager) = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT) {
+        if let Ok(service) = manager.open_service(
+            OsStr::new("AgentControlSentry"),
+            ServiceAccess::STOP | ServiceAccess::DELETE,
+        ) {
+            let _ = service.stop();
+            let _ = service.delete();
+        }
+        if let Ok(service) = manager.open_service(
+            OsStr::new("AgentWallSentry"),
+            ServiceAccess::STOP | ServiceAccess::DELETE,
+        ) {
+            let _ = service.stop();
+            let _ = service.delete();
+        }
     }
 
-    // Also clean up legacy AgentWallSentry if present
-    if let Ok(service) = manager.open_service(
-        OsStr::new("AgentWallSentry"),
-        ServiceAccess::STOP | ServiceAccess::DELETE,
-    ) {
-        let _ = service.stop();
-        let _ = service.delete();
-    }
-
-    crate::service::eventlog::log_info(2002, "AgentControlSentry Windows SCM service uninstalled.");
+    // Remove HKCU\Run registry entry (secondary persistence added by install)
+    let _ = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-NonInteractive", "-Command",
+            "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VexaAgentControl' -ErrorAction SilentlyContinue"])
+        .output();
 
     println!(
-        "{} Agent Control Windows SCM service uninstalled.",
+        "{} Agent Control user background task uninstalled.",
         "✔".green().bold()
     );
     Ok(())

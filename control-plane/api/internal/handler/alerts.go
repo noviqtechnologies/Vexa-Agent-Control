@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
@@ -34,11 +36,21 @@ func (h *AlertHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	ch, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
 
+	// Initial heartbeat line
+	w.Write([]byte(": ping\n\n"))
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	ctx := r.Context()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			w.Write([]byte(": ping\n\n"))
+			flusher.Flush()
 		case msg, ok := <-ch:
 			if !ok {
 				return
@@ -58,6 +70,7 @@ func (h *AlertHandler) ListRecent(w http.ResponseWriter, r *http.Request) {
 
 	alerts, err := h.store.ListRecentAlerts(r.Context(), tenantID, limit, hours)
 	if err != nil {
+		log.Printf("[alerts] ListRecent store error: %v (tenant=%s)", err, tenantID)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}

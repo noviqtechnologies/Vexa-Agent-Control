@@ -5,12 +5,9 @@ use agentcontrol::audit;
 use agentcontrol::check;
 use agentcontrol::cli;
 use agentcontrol::identity; // FR-22
-use agentcontrol::init;
 use agentcontrol::kill;
 use agentcontrol::policy;
-use agentcontrol::promote;
 use agentcontrol::proxy;
-use agentcontrol::report;
 use agentcontrol::{log_error, log_warn};
 
 use colored::*;
@@ -29,6 +26,28 @@ use policy::safe_mode::SafeModeScanner;
 use proxy::handler::ProxyState;
 
 fn main() {
+    // ── Panic Hook with Secret Scrubbing (Task 3.6 / PRD §FR-9) ───────────────
+    std::panic::set_hook(Box::new(|info| {
+        let msg = match info.payload().downcast_ref::<&'static str>() {
+            Some(s) => *s,
+            None => match info.payload().downcast_ref::<String>() {
+                Some(s) => &s[..],
+                None => "Box<dyn Any>",
+            },
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let (scrubbed, _) = agentcontrol::mcp::policy::scan_and_redact_text(msg);
+        eprintln!(
+            "thread '{}' panicked at {}: {}",
+            std::thread::current().name().unwrap_or("<unnamed>"),
+            location,
+            scrubbed
+        );
+    }));
+
     // ── Windows SCM fast-path ──────────────────────────────────────────────
     // service_dispatcher::start() MUST be called from the main thread before
     // any heavy setup.  SCM will kill the process with Error 1053 (timeout)
@@ -66,40 +85,46 @@ fn main() {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    let exit_code = runtime.block_on(async_main());
+    let exit_code = runtime.block_on(async {
+        tokio::spawn(async_main()).await.unwrap_or(1)
+    });
     std::process::exit(exit_code);
 }
 
 async fn async_main() -> i32 {
     let cli = Cli::parse();
-
-    let is_dev_stdio = match &*cli.command {
-        Commands::Dev { stdio, .. } => *stdio,
-        _ => false,
-    };
-
-    let suppress_banner = is_dev_stdio
-        || matches!(
-            &*cli.command,
-            Commands::Report { .. }
-                | Commands::Test { .. }
-                | Commands::Wrap { .. }
-                | Commands::StdioProxy { .. }
-                | Commands::Status
-                | Commands::Watch { .. }
-                | Commands::Verify { json: true, .. }
-                | Commands::Scan { .. }
-        );
-
-    if !suppress_banner {
-        print_banner();
-    }
-
     dispatch_command(cli.command).await
 }
 
 async fn dispatch_command(command: Box<Commands>) -> i32 {
     match *command {
+        Commands::Login { hub_url, no_browser } => {
+            agentcontrol::identity::oauth::run_login(&hub_url, no_browser).await
+        }
+        Commands::Connect { target, mode, key, force } => {
+            agentcontrol::wrap::run_connect(target, mode, key, force).await
+        }
+        Commands::Disconnect { target } => {
+            agentcontrol::wrap::run_disconnect(target)
+        }
+        Commands::Doctor { json } => {
+            agentcontrol::doctor::run_doctor(json).await
+        }
+        Commands::SupportBundle { output_dir, yes } => {
+            agentcontrol::support::run_support_bundle(output_dir, yes).await
+        }
+        Commands::Repair => {
+            agentcontrol::support::run_repair()
+        }
+        Commands::Logout => {
+            agentcontrol::support::run_logout()
+        }
+        Commands::ResetLocalState { force } => {
+            agentcontrol::support::run_reset_local_state(force)
+        }
+        Commands::RotateLocalToken => {
+            agentcontrol::support::run_rotate_local_token().await
+        }
         Commands::Wrap(args) => {
             if args.all {
                 agentcontrol::wrap::run_wrap_all(args.dry_run, args.scan_responses)
@@ -160,6 +185,9 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentcontrol::service::run_service(act)
         }
         Commands::Start(args) => {
+            if args.record_payloads {
+                std::env::set_var("AGENTCONTROL_RECORD_PAYLOADS", "true");
+            }
             // When running interactively (not under Windows SCM), just run the
             // centralized daemon directly.
             dispatch_start(*args).await
@@ -177,17 +205,6 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             gateway.as_deref(),
             oidc_token.as_deref(),
         ),
-        Commands::Promote { policy, key } => promote::run_promote(&policy, key.as_deref()),
-        Commands::VerifyLog { log_path, key_file } => {
-            run_verify_log(&log_path, key_file.as_deref())
-        }
-        Commands::Report {
-            log_path,
-            output,
-            format,
-            report_include_params,
-            risk: _,
-        } => run_report(&log_path, output.as_deref(), &format, report_include_params),
         Commands::Scan { path, format } => {
             use crate::policy::mcp_score::McpScorer;
             eprintln!("[vexa-scan] Scanning MCP configuration: {}", path);
@@ -213,7 +230,6 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 0
             }
         }
-        Commands::Init { target } => init::run_init(&target),
         // FR-22: Identity subcommand dispatch
         Commands::Identity { command } => match command {
             cli::IdentityCommands::Create {
@@ -321,43 +337,6 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 }
             }
         },
-        Commands::License { command } => match command {
-            cli::LicenseCommands::Keygen { output } => {
-                match agentcontrol::license::generate_keypair(Path::new(&output)) {
-                    Ok(()) => 0,
-                    Err(e) => {
-                        eprintln!("{} {}", "✖".red(), e);
-                        1
-                    }
-                }
-            }
-            cli::LicenseCommands::Generate {
-                org,
-                tier,
-                seats,
-                days,
-                signing_key,
-                features,
-            } => {
-                match agentcontrol::license::generate_license(
-                    &org,
-                    &tier,
-                    seats,
-                    days,
-                    Path::new(&signing_key),
-                    features,
-                ) {
-                    Ok(jwt) => {
-                        println!("{}", jwt);
-                        0
-                    }
-                    Err(e) => {
-                        eprintln!("{} {}", "✖".red(), e);
-                        1
-                    }
-                }
-            }
-        },
         Commands::Compliance { command } => match command {
             cli::ComplianceCommands::Report {
                 log_path,
@@ -389,6 +368,101 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 }
             },
         },
+        Commands::Spend { command } => match command {
+            cli::SpendCommands::Status { agent_id } => {
+                let ledger = agentcontrol::spend::ledger::SpendLedger::init(None);
+                let target_agent = agent_id.unwrap_or_else(|| "default".to_string());
+                if let Some(spend) = ledger.get_spend(target_agent.clone()).await {
+                    println!("Agent ID: {}", spend.agent_id);
+                    println!("Period Start: {}", spend.period_start);
+                    println!("Spent: {} cents (${:.2})", spend.spent_cents, spend.spent_cents as f64 / 100.0);
+                    if let Some(cap) = spend.cap_cents {
+                        println!("Budget Cap: {} cents (${:.2})", cap, cap as f64 / 100.0);
+                    } else {
+                        println!("Budget Cap: Unlimited");
+                    }
+                } else {
+                    println!("No spend recorded yet for agent: {}", target_agent);
+                }
+                0
+            }
+            cli::SpendCommands::Export {
+                format,
+                client,
+                project,
+                output,
+            } => {
+                let ledger = agentcontrol::spend::ledger::SpendLedger::init(None);
+                let filter = agentcontrol::spend::types::SpendExportFilter {
+                    client_id: client,
+                    project_id: project,
+                    start_timestamp: None,
+                    end_timestamp: None,
+                };
+                let records = ledger.export_usage(filter).await;
+                let content = if format.to_lowercase() == "json" {
+                    serde_json::to_string_pretty(&records).unwrap_or_else(|_| "[]".to_string())
+                } else {
+                    let mut csv = String::from("timestamp,request_id,client_id,project_id,cost_center,agent_id,provider,model,input_tokens,output_tokens,total_tokens,cost_cents,cost_usd,is_estimated\n");
+                    for r in records {
+                        csv.push_str(&format!(
+                            "{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{}\n",
+                            r.timestamp, r.request_id, r.client_id, r.project_id, r.cost_center,
+                            r.agent_id, r.provider, r.model, r.input_tokens, r.output_tokens,
+                            r.total_tokens, r.cost_cents, r.cost_usd, r.is_estimated
+                        ));
+                    }
+                    csv
+                };
+                if let Some(out_path) = output {
+                    if let Err(e) = std::fs::write(&out_path, &content) {
+                        eprintln!("Failed to write export to {}: {}", out_path, e);
+                        1
+                    } else {
+                        println!("✓ Exported spend usage records to {}", out_path);
+                        0
+                    }
+                } else {
+                    print!("{}", content);
+                    0
+                }
+            }
+            cli::SpendCommands::SetCap {
+                agent_id,
+                cap_cents,
+                period,
+            } => {
+                let ledger = agentcontrol::spend::ledger::SpendLedger::init(None);
+                let p = match period.to_lowercase().as_str() {
+                    "weekly" => agentcontrol::spend::model::BudgetPeriod::Weekly,
+                    "monthly" => agentcontrol::spend::model::BudgetPeriod::Monthly,
+                    _ => agentcontrol::spend::model::BudgetPeriod::Daily,
+                };
+                match ledger
+                    .set_budget(
+                        agentcontrol::spend::model::BudgetScope::User(agent_id.clone()),
+                        cap_cents,
+                        p,
+                    )
+                    .await
+                {
+                    Ok(()) => {
+                        println!(
+                            "✓ Successfully set budget cap of {} cents (${:.2}) ({:?}) for agent {}",
+                            cap_cents,
+                            cap_cents as f64 / 100.0,
+                            p,
+                            agent_id
+                        );
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("✖ Failed to set budget cap: {}", e);
+                        1
+                    }
+                }
+            }
+        },
         Commands::Unwrap { target } => agentcontrol::wrap::run_unwrap_target(&target),
         Commands::Protect {
             dry_run,
@@ -399,10 +473,14 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             shadow,
             spend_only,
             min_tokens,
+            record_payloads,
             policy,
         } => {
             if spend_only {
                 agentcontrol::logging::set_spend_only(true);
+            }
+            if record_payloads {
+                std::env::set_var("AGENTCONTROL_RECORD_PAYLOADS", "true");
             }
             let active_enforce = enforce && !shadow;
             let code = agentcontrol::wrap::run_protect_orchestration(
@@ -435,80 +513,6 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         Commands::Unprotect { dry_run, force } => {
             agentcontrol::wrap::run_unprotect_all(dry_run, force)
         }
-        Commands::Ca { command } => match command {
-            cli::CaCommands::Generate { dir } => {
-                match agentcontrol::ca::CaManager::init_or_load(dir) {
-                    Ok(mgr) => {
-                        println!(
-                            "✓ Root CA generated successfully at: {}",
-                            mgr.ca_dir.display()
-                        );
-                        println!(
-                            "  Cert: {}",
-                            mgr.ca_dir.join("agentcontrol-ca.pem").display()
-                        );
-                        println!(
-                            "  Key:  {}",
-                            mgr.ca_dir.join("agentcontrol-ca.key").display()
-                        );
-                        0
-                    }
-                    Err(e) => {
-                        eprintln!("✖ Failed to generate Root CA: {}", e);
-                        1
-                    }
-                }
-            }
-            cli::CaCommands::Install => match agentcontrol::ca::CaManager::init_or_load(None) {
-                Ok(mgr) => {
-                    let cert_path = mgr.ca_dir.join("agentcontrol-ca.pem");
-                    match agentcontrol::ca::install_ca_to_trust_store(&cert_path) {
-                        Ok(()) => {
-                            println!("✓ Local Root CA successfully installed in OS trust store.");
-                            0
-                        }
-                        Err(e) => {
-                            eprintln!("✖ Failed to install Root CA into OS trust store: {}", e);
-                            1
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("✖ Failed to initialize Root CA: {}", e);
-                    1
-                }
-            },
-            cli::CaCommands::Uninstall => match agentcontrol::ca::uninstall_ca_from_trust_store() {
-                Ok(()) => {
-                    println!("✓ Local Root CA removed from OS trust store.");
-                    0
-                }
-                Err(e) => {
-                    eprintln!("✖ Failed to remove Root CA from trust store: {}", e);
-                    1
-                }
-            },
-            cli::CaCommands::Status => {
-                let installed = agentcontrol::ca::is_ca_installed();
-                let dir = agentcontrol::ca::CaManager::default_ca_dir();
-                let exists = dir.join("agentcontrol-ca.pem").exists();
-                println!("Local CA Status:");
-                println!("  Storage Directory: {}", dir.display());
-                println!(
-                    "  CA Files Exist:    {}",
-                    if exists { "YES".green() } else { "NO".yellow() }
-                );
-                println!(
-                    "  OS Trust Store:    {}",
-                    if installed {
-                        "INSTALLED & TRUSTED".green()
-                    } else {
-                        "NOT INSTALLED".yellow()
-                    }
-                );
-                0
-            }
-        },
         Commands::Verify {
             gateway,
             json,
@@ -678,7 +682,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 }
             }
         },
-        Commands::Status => agentcontrol::wrap::run_status(),
+        Commands::Status { json } => agentcontrol::wrap::run_status(json),
         Commands::Watch { all, target } => agentcontrol::wrap::run_watch(all, target),
         Commands::StdioProxy {
             args,
@@ -696,11 +700,15 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             dual_agent,
             spend_only,
             min_tokens,
+            record_payloads,
             local_llm_url,
             args,
         } => {
             if spend_only {
                 agentcontrol::logging::set_spend_only(true);
+            }
+            if record_payloads {
+                std::env::set_var("AGENTCONTROL_RECORD_PAYLOADS", "true");
             }
             run_dev(
                 listen,
@@ -718,16 +726,6 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             )
             .await
         }
-        Commands::Bench {
-            full,
-            compare_baselines,
-            visualize,
-            output,
-        } => run_bench(full, compare_baselines, visualize, Some(output)).await,
-        Commands::GeneratePolicy {
-            output,
-            decay_window,
-        } => run_generate_policy(output, decay_window).await,
         Commands::Validate {
             policy,
             tool,
@@ -750,33 +748,63 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
     }
 }
 
-fn print_banner() {
+fn print_gateway_startup_banner(
+    listen: &str,
+    mcp_url: &str,
+    profile: &cli::DeploymentProfile,
+    shadow_mode: bool,
+    is_enrolled: bool,
+) {
+    use std::io::IsTerminal;
+    if !std::io::stdout().is_terminal() {
+        return;
+    }
+
     let version = env!("CARGO_PKG_VERSION");
+    let mode_str = if shadow_mode {
+        "SHADOW (Observation Only; Non-Enforcing)".yellow().bold()
+    } else {
+        match profile {
+            cli::DeploymentProfile::LocalShadow => "SHADOW (Observation Only; Non-Enforcing)".yellow().bold(),
+            cli::DeploymentProfile::LocalEnforce => "LOCAL ENFORCE (DLP + Injection Guard)".green().bold(),
+            cli::DeploymentProfile::TeamEnforce => "TEAM ENFORCE (Hub Sync + Policy Lock)".green().bold(),
+            cli::DeploymentProfile::DedicatedEnforce => "DEDICATED ENFORCE (Enterprise CMEK + SIEM)".purple().bold(),
+        }
+    };
+
+    let storage_desc = if cfg!(windows) {
+        "OS_KEYRING (Windows Credential Manager)"
+    } else if cfg!(target_os = "macos") {
+        "OS_KEYRING (macOS Keychain)"
+    } else if std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok() {
+        "OS_KEYRING (FreeDesktop Secret Service)"
+    } else {
+        "STRICT_PERM_FILE (Headless Linux 0600 Mode)"
+    };
+
+    let enroll_status = if is_enrolled {
+        "Enrolled (Control Hub)".green()
+    } else {
+        "Local Standalone".dimmed()
+    };
+
+    println!();
+    println!("{}", "┌─────────────────────────────────────────────────────────────────────────────┐".cyan());
     println!(
-        "{}",
-        "┌────────────────────────────────────────────────────────────────────────────────┐".cyan()
+        "│  {} {:<21} │",
+        "VEXA AGENT CONTROL — MCP Security Gateway & Proxy".bold().white(),
+        format!("(v{})", version).cyan()
     );
-    println!(
-        "│  {}  {} │",
-        "🛡️  VEXA AGENT CONTROL — Intelligent MCP Security Gateway"
-            .bold()
-            .cyan(),
-        format!("(v{})", version).dimmed()
-    );
-    println!(
-        "│  Gateway: {}  •  Dashboard: {}          │",
-        "http://127.0.0.1:8080".green(),
-        "http://127.0.0.1:8080".cyan()
-    );
-    println!(
-        "│  Transport: {}   •  Enforcement: {} │",
-        "stdio / HTTP proxy".yellow(),
-        "ACTIVE (DLP + Injection Guard)".green().bold()
-    );
-    println!(
-        "{}",
-        "└────────────────────────────────────────────────────────────────────────────────┘".cyan()
-    );
+    println!("{}", "├─────────────────────────────────────────────────────────────────────────────┤".cyan());
+    println!("│  Proxy Listener:    {:<55} │", format!("http://{}", listen).green().bold());
+    println!("│  Upstream MCP:      {:<55} │", mcp_url.yellow());
+    println!("│  Governance Mode:   {:<55} │", mode_str);
+    println!("│  Device Identity:   {:<55} │", enroll_status);
+    println!("│  Credential Vault:  {:<55} │", storage_desc.dimmed());
+    println!("{}", "├─────────────────────────────────────────────────────────────────────────────┤".cyan());
+    println!("│  {} Native shell commands (bash/git) run out-of-band & bypass proxy! │", "⚠  Notice:".yellow().bold());
+    println!("{}", "└─────────────────────────────────────────────────────────────────────────────┘".cyan());
+    println!();
 }
 
 fn resolve_audit_log_path() -> std::path::PathBuf {
@@ -1060,6 +1088,7 @@ fn build_proxy_state(
         ),
         provider_router: Arc::new(agentcontrol::proxy::provider_router::ProviderRouter::default()),
         hook_registry,
+        hitl_manager: Arc::new(agentcontrol::policy::hitl::HitlManager::new(hex::encode(resolve_hmac_key()))),
     })
 }
 
@@ -1138,8 +1167,15 @@ async fn run_stdio_proxy(
         ],
     };
 
+    // Automatically discover and resolve active GitOps policy (.agentcontrol.yaml)
+    let (compiled_policy, policy_path_buf) = agentcontrol::policy::loader::resolve_active_policy(None, None);
+    let policy_path_str = policy_path_buf.map(|p| p.to_string_lossy().to_string());
+    let policy_loaded = compiled_policy.is_some();
+
+    let spend_ledger = Some(Arc::new(agentcontrol::spend::ledger::SpendLedger::init(None)));
+
     let state = build_proxy_state(
-        None,
+        compiled_policy,
         audit_logger,
         session_id,
         KillMode::Connection,
@@ -1147,7 +1183,7 @@ async fn run_stdio_proxy(
         "".to_string(),
         false,
         false,
-        false,
+        policy_loaded,
         0,
         safe_mode_scanner,
         response_scanner,
@@ -1155,12 +1191,12 @@ async fn run_stdio_proxy(
         Arc::new(policy::credential_scope::CredentialScopeValidator::new(
             false,
         )),
-        None,
-        None,
+        policy_path_str,
+        spend_ledger,
         agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         true,
         false,
-        "local-shadow".to_string(),
+        if policy_loaded { "local-enforce".to_string() } else { "local-shadow".to_string() },
         1024,
         30,
         16777216,
@@ -1251,7 +1287,9 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     let strict_credential_scope = args.strict_credential_scope;
     let tls_cert = args.tls_cert;
     let tls_key = args.tls_key;
-    let centralized = args.centralized || is_enrolled;
+    let centralized = args.centralized;
+
+    print_gateway_startup_banner(&listen, &mcp_url, &profile, shadow_mode, is_enrolled);
 
     // Parse kill mode
     let kill_mode = match KillMode::from_str(&kill_mode_str) {
@@ -1737,9 +1775,12 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     }
 
     // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)
-    tokio::spawn(async move {
-        agentcontrol::control_plane_client::heartbeat::start_heartbeat_loop(60).await;
-    });
+    // Only active on developer workstations (sentry mode); disabled in centralized server gateway mode.
+    if !centralized {
+        tokio::spawn(async move {
+            agentcontrol::control_plane_client::heartbeat::start_heartbeat_loop(60).await;
+        });
+    }
 
     // Background provider keys and routing reconciler (REQ-DSM-004 / REQ-DSM-005)
     // 60-second pull convergence loop ensuring eventually consistent desired-state
@@ -2056,125 +2097,6 @@ fn resolve_hmac_key() -> Vec<u8> {
     }
 
     (0..32).map(|_| rand::random::<u8>()).collect()
-}
-
-fn run_verify_log(log_path: &str, key_file: Option<&str>) -> i32 {
-    let key_path = key_file
-        .map(std::path::PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".agentcontrol").join("audit.key")));
-
-    if let Some(ref kpath) = key_path {
-        if kpath.exists() {
-            if let Ok(key_bytes) = std::fs::read(kpath) {
-                if key_bytes.len() >= 32 {
-                    print!(
-                        "{} Verifying HMAC chain and payload integrity for {} (key: {})... ",
-                        "ℹ".blue(),
-                        log_path.yellow(),
-                        kpath.display().to_string().cyan()
-                    );
-                    match audit::verifier::verify_chain_with_secret(
-                        Path::new(log_path),
-                        &key_bytes[..32],
-                    ) {
-                        audit::verifier::VerifyResult::Valid { entry_count } => {
-                            println!("{}", "VALID".green().bold());
-                            println!("  {} {} entries verified with HMAC key, cryptographic chain and payloads intact.", "✓".green(), entry_count);
-                            return 0;
-                        }
-                        audit::verifier::VerifyResult::Invalid {
-                            entry_index,
-                            reason,
-                        } => {
-                            println!("{}", "INVALID".red().bold());
-                            println!(
-                                "  {} Chain/payload broken at index {}: {}",
-                                "✖".red(),
-                                entry_index,
-                                reason
-                            );
-                            return 1;
-                        }
-                        audit::verifier::VerifyResult::Error(e) => {
-                            println!("{}", "ERROR".red().bold());
-                            eprintln!("  {} {}", "✖".red(), e);
-                            return 2;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    print!(
-        "{} Verifying log chain integrity for {}... ",
-        "ℹ".blue(),
-        log_path.yellow()
-    );
-    match audit::verifier::verify_chain(Path::new(log_path)) {
-        audit::verifier::VerifyResult::Valid { entry_count } => {
-            println!("{}", "VALID".green().bold());
-            println!(
-                "  {} {} entries found, cryptographic chain intact.",
-                "✓".green(),
-                entry_count
-            );
-            0
-        }
-        audit::verifier::VerifyResult::Invalid {
-            entry_index,
-            reason,
-        } => {
-            println!("{}", "INVALID".red().bold());
-            println!(
-                "  {} Chain broken at index {}: {}",
-                "✖".red(),
-                entry_index,
-                reason
-            );
-            1
-        }
-        audit::verifier::VerifyResult::Error(e) => {
-            println!("{}", "ERROR".red().bold());
-            eprintln!("  {} {}", "✖".red(), e);
-            2
-        }
-    }
-}
-
-fn run_report(log_path: &str, output: Option<&str>, format: &str, include_params: bool) -> i32 {
-    match report::generate_report(
-        Path::new(log_path),
-        include_params,
-        "sha256:unknown",
-        true,
-        "unknown",
-        false,
-        vec![],
-    ) {
-        Ok(report) => {
-            let out_str = if format == "text" {
-                report::format_text_report(&report)
-            } else {
-                serde_json::to_string_pretty(&report).unwrap()
-            };
-            match output {
-                Some(path) => {
-                    if let Err(e) = std::fs::write(path, &out_str) {
-                        eprintln!("{} Cannot write report: {}", "✖".red(), e);
-                        return 2;
-                    }
-                    println!("{} Report saved to {}", "✓".green(), path.cyan());
-                }
-                None => println!("{}", out_str),
-            }
-            0
-        }
-        Err(e) => {
-            eprintln!("{} {}", "✖".red(), e);
-            2
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2713,143 +2635,4 @@ async fn run_dev(
         return 1;
     }
     0
-}
-
-// ─── FR-4: agentwall generate-policy ──────────────────────────────────────────
-
-/// Run the auto-policy generator (FR-4).
-///
-/// Reads up to 500 events from the local SQLite event store (chronological order),
-/// runs the analysis engine, and writes the resulting YAML to `output_path`.
-async fn run_generate_policy(output_path: String, decay_window: u32) -> i32 {
-    println!(
-        "{} Reading observed tool calls from event store...",
-        "ℹ".blue()
-    );
-
-    let db = agentcontrol::proxy::db::DbManager::init();
-    let events = match db.get_all_events(500).await {
-        Ok(evs) => evs,
-        Err(e) => {
-            eprintln!("{} Failed to read events: {}", "✖".red(), e);
-            return 1;
-        }
-    };
-
-    if events.is_empty() {
-        println!("{} No tool calls observed yet.", "⚠".yellow());
-        println!(
-            "{} Start shadow mode first: {}",
-            "ℹ".blue(),
-            "agentcontrol dev".cyan()
-        );
-        return 1;
-    }
-
-    println!(
-        "{} Analysing {} events across {} unique tools...",
-        "ℹ".blue(),
-        events.len().to_string().cyan(),
-        events
-            .iter()
-            .filter_map(|e| e.url_path.as_deref())
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-            .to_string()
-            .cyan()
-    );
-
-    let yaml = agentcontrol::generate_policy::generate_from_events(&events, decay_window);
-
-    match std::fs::write(&output_path, &yaml) {
-        Ok(_) => {
-            println!(
-                "{} Policy written to {}",
-                "✓".green().bold(),
-                output_path.cyan().underline()
-            );
-            println!("{} Next steps:", "ℹ".blue());
-            println!(
-                "    1. Review {} carefully — check anomalies section.",
-                output_path.cyan()
-            );
-            println!(
-                "    2. Run {} to validate.",
-                "agentcontrol lint agentcontrol-policy.yaml".yellow()
-            );
-            println!("    3. Submit to your platform/security team for gateway deployment.");
-            0
-        }
-        Err(e) => {
-            eprintln!("{} Failed to write {}: {}", "✖".red(), output_path, e);
-            1
-        }
-    }
-}
-
-async fn run_bench(
-    full: bool,
-    compare_baselines: bool,
-    visualize: bool,
-    output: Option<String>,
-) -> i32 {
-    println!("{}", "=".repeat(60).cyan());
-    println!(
-        "{} {}",
-        " VEXA Agent Control ".bold().white().on_cyan(),
-        "ADR Security Benchmarking Subsystem".cyan()
-    );
-    println!("{}", "=".repeat(60).cyan());
-    println!(
-        "{} Running benchmark suite (303 tasks, 17 attack categories, 133 mock MCP servers)...",
-        "ℹ".blue()
-    );
-
-    let config = agentcontrol::bench::BenchmarkConfig {
-        full,
-        compare_baselines,
-        visualize,
-        output_path: output.clone(),
-    };
-
-    match agentcontrol::bench::BenchmarkRunner::run_benchmark(config).await {
-        Ok(report) => {
-            println!("\n{}", "=== BENCHMARK SUMMARY ===".bold().cyan());
-            println!(
-                "   Overall Security Score: {}/100",
-                format!("{:.1}", report.score).green().bold()
-            );
-            println!(
-                "   Tasks Executed:         {}",
-                report.tasks_executed.to_string().cyan()
-            );
-            println!(
-                "   Attack Classes Tested:  {}",
-                report.categories_tested.len().to_string().cyan()
-            );
-
-            if compare_baselines {
-                println!("\n{}", "=== BASELINE COMPARISON ===".bold().cyan());
-                println!(
-                    "   Vexa Agent Control ADR Engine: {}%",
-                    format!("{:.1}", report.score).green().bold()
-                );
-                println!("   Vanilla LLM:          14.2% (Blocked)");
-                println!("   Static Regex Shield:  42.8% (Blocked)");
-            }
-
-            if let Some(out) = output {
-                println!(
-                    "\n{} Report generated at: {}",
-                    "✓".green().bold(),
-                    out.cyan().underline()
-                );
-            }
-            0
-        }
-        Err(e) => {
-            eprintln!("{} Benchmark execution failed: {}", "✖".red(), e);
-            1
-        }
-    }
 }

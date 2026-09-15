@@ -61,18 +61,21 @@ export default function IdentityGovernance() {
   if (loading) return <div className="loading">Loading identity data</div>
 
   const hubOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8400'
-  const sampleCurl = `curl -X POST ${hubOrigin}/api/v1/ingest/credentials \\
+  const sampleCurl = `curl -X POST ${hubOrigin}/api/v2/telemetry/ingest \\
   -H "Content-Type: application/json" \\
-  -H "X-Gateway-Secret: local-dev-shared-secret-change-me" \\
+  -H "X-Device-Authorization: Bearer <ed25519_signed_device_assertion_jwt>" \\
   -d '{
-    "credential_id": "cred-agent-01",
-    "agent_id": "agent-sentry-01",
-    "scope": ["mcp:tools:execute", "egress:https"],
-    "ttl_seconds": 86400,
-    "created_at_ms": ${Date.now()},
-    "expires_at_ms": ${Date.now() + 86400000},
-    "last_rotated_at_ms": ${Date.now()},
-    "rotation_history": []
+    "events": [
+      {
+        "event_id": "evt-01",
+        "device_id": "dev-workstation-01",
+        "agent_name": "agentcontrol-daemon",
+        "session_id": "sess-default",
+        "event_type": "mcp_tool_call",
+        "payload": { "tool": "exec_command", "status": "allowed" },
+        "timestamp_ms": ${Date.now()}
+      }
+    ]
   }'`
 
   return (

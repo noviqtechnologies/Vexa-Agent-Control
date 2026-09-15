@@ -15,11 +15,9 @@ export default function Login() {
   const queryParams = new URLSearchParams(location.search)
   const isIdleTimeout = queryParams.get('reason') === 'idle_timeout'
 
-  const [authMode, setAuthMode] = useState<'password' | 'sso' | 'token'>('password')
+  const [authMode, setAuthMode] = useState<'password' | 'sso'>('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
-  const [ssoDomain, setSsoDomain] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberDevice, setRememberDevice] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -51,19 +49,23 @@ export default function Login() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      const secretToSubmit = authMode === 'token' ? token : password
-      await login(email, secretToSubmit)
+      await login(email, password)
+      const returnTo = queryParams.get('return_to')
+      if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
+        window.location.href = returnTo
+        return
+      }
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleSsoDomainSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!ssoDomain.trim()) return
-    // Route to domain-specific SSO initiate endpoint
-    const cleanDomain = encodeURIComponent(ssoDomain.trim().toLowerCase())
-    window.location.href = `/api/v1/auth/sso/lookup?domain=${cleanDomain}`
+  const returnTo = queryParams.get('return_to')
+  const getOAuthLoginUrl = (providerId: string) => {
+    if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
+      return `/api/v1/auth/oauth/${providerId}/login?return_to=${encodeURIComponent(returnTo)}`
+    }
+    return `/api/v1/auth/oauth/${providerId}/login`
   }
 
   const oauthProviders = providers.filter(p => p.type !== 'local')
@@ -203,14 +205,14 @@ export default function Login() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                <span>Customer Workspace Mode</span>
+                <span>Dedicated Control Hub</span>
               </div>
-              <h2 id="login-title" className="soc-card-title" aria-label="Customer Organization Console: Sign in to your organization">
+              <h2 id="login-title" className="soc-card-title" aria-label="Control Hub Console: Sign in to your organization">
                 <span>Sign in to your organization</span>
-                <span className="soc-card-title-subtitle">Customer Organization Console</span>
+                <span className="soc-card-title-subtitle">Security Operations &amp; AI Governance</span>
               </h2>
               <p className="soc-card-desc">
-                Use your organization account to manage AI developers, workspaces, policies, and spending limits.
+                Sign in to manage AI developers, agent fleets, zero-trust policies, and spending limits.
               </p>
             </div>
 
@@ -246,58 +248,44 @@ export default function Login() {
               </div>
             ) : (
               <div className="login-methods">
-                {/* Method Navigation Tabs: Password, SSO, Token */}
-                <div className="soc-auth-nav" role="tablist" aria-label="Authentication Options">
-                  <button
-                    type="button"
-                    role="tab"
-                    id="tab-password"
-                    aria-selected={authMode === 'password'}
-                    aria-controls="panel-password"
-                    className={`soc-tab-btn ${authMode === 'password' ? 'active' : ''}`}
-                    onClick={() => setAuthMode('password')}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    </svg>
-                    <span>Sign in with password</span>
-                  </button>
+                {/* Method Navigation Tabs: Render only when SSO providers are actually configured */}
+                {oauthProviders.length > 0 && (
+                  <div className="soc-auth-nav" role="tablist" aria-label="Authentication Options">
+                    <button
+                      type="button"
+                      role="tab"
+                      id="tab-password"
+                      aria-selected={authMode === 'password'}
+                      aria-controls="panel-password"
+                      className={`soc-tab-btn ${authMode === 'password' ? 'active' : ''}`}
+                      onClick={() => setAuthMode('password')}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      <span>Sign in with password</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    role="tab"
-                    id="tab-sso"
-                    aria-selected={authMode === 'sso'}
-                    aria-controls="panel-sso"
-                    className={`soc-tab-btn ${authMode === 'sso' ? 'active' : ''}`}
-                    onClick={() => setAuthMode('sso')}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="8.5" cy="7" r="4" />
-                      <line x1="20" y1="8" x2="20" y2="14" />
-                      <line x1="23" y1="11" x2="17" y2="11" />
-                    </svg>
-                    <span>Continue with SSO</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    role="tab"
-                    id="tab-token"
-                    aria-selected={authMode === 'token'}
-                    aria-controls="panel-token"
-                    className={`soc-tab-btn ${authMode === 'token' ? 'active' : ''}`}
-                    onClick={() => setAuthMode('token')}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <polyline points="4 17 10 11 4 5" />
-                      <line x1="12" y1="19" x2="20" y2="19" />
-                    </svg>
-                    <span>Use access token</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="tab-sso"
+                      aria-selected={authMode === 'sso'}
+                      aria-controls="panel-sso"
+                      className={`soc-tab-btn ${authMode === 'sso' ? 'active' : ''}`}
+                      onClick={() => setAuthMode('sso')}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="8.5" cy="7" r="4" />
+                        <line x1="20" y1="8" x2="20" y2="14" />
+                        <line x1="23" y1="11" x2="17" y2="11" />
+                      </svg>
+                      <span>Continue with SSO</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* TAB PANEL: Password Sign-in */}
                 {authMode === 'password' && (
@@ -403,14 +391,14 @@ export default function Login() {
                           <span>Authenticating...</span>
                         </span>
                       ) : (
-                        <span>Sign In to Customer Workspace →</span>
+                        <span>Sign In to Control Hub →</span>
                       )}
                     </button>
                   </form>
                 )}
 
                 {/* TAB PANEL: Dedicated Enterprise SSO */}
-                {authMode === 'sso' && (
+                {authMode === 'sso' && oauthProviders.length > 0 && (
                   <div className="soc-sso-panel" id="panel-sso" role="tabpanel" aria-labelledby="tab-sso">
                     <div className="sso-panel-intro">
                       <p>
@@ -418,131 +406,20 @@ export default function Login() {
                       </p>
                     </div>
 
-                    {oauthProviders.length > 0 ? (
-                      <div className="oauth-buttons">
-                        {oauthProviders.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={`oauth-btn oauth-btn-${p.type}`}
-                            onClick={() => { window.location.href = `/api/v1/auth/oauth/${p.id}/login` }}
-                          >
-                            <ProviderIcon type={p.type} />
-                            <span>Continue with {p.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="soc-empty-sso-notice">
-                        <p>No OAuth providers are configured yet.</p>
-                      </div>
-                    )}
-
-                    <div className="soc-login-divider">
-                      <span>OR SIGN IN WITH COMPANY DOMAIN</span>
-                    </div>
-
-                    <form onSubmit={handleSsoDomainSubmit} className="sso-domain-form">
-                      <div className="form-group">
-                        <label htmlFor="sso-domain-input">Organization domain or work email</label>
-                        <div className="soc-input-wrapper">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                            <line x1="8" y1="21" x2="16" y2="21" />
-                            <line x1="12" y1="17" x2="12" y2="21" />
-                          </svg>
-                          <input
-                            id="sso-domain-input"
-                            type="text"
-                            value={ssoDomain}
-                            onChange={e => setSsoDomain(e.target.value)}
-                            placeholder="acme.com or you@company.com"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <button type="submit" className="soc-btn-domain-submit">
-                        Continue with Organization SSO →
-                      </button>
-                    </form>
-                  </div>
-                )}
-
-                {/* TAB PANEL: Access Token Sign-in */}
-                {authMode === 'token' && (
-                  <form onSubmit={handleSubmit} className="local-login-form" id="panel-token" role="tabpanel" aria-labelledby="tab-token">
-                    <div className="soc-token-notice">
-                      <div className="token-icon">🔒</div>
-                      <div>
-                        <strong>Zero-Trust Access Token</strong>
-                        <p>Tokens are treated with high-security policy. Never share access tokens or store them in public repositories.</p>
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="token-email">
-                        Work email or service account ID
-                      </label>
-                      <div className="soc-input-wrapper">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <input
-                          id="token-email"
-                          type="text"
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
-                          placeholder="name@company.com or username"
-                          required
-                          autoComplete="username"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <div className="label-row">
-                        <label htmlFor="login-token">
-                          Personal or Service Access Token
-                        </label>
+                    <div className="oauth-buttons">
+                      {oauthProviders.map(p => (
                         <button
+                          key={p.id}
                           type="button"
-                          className="help-link-btn"
-                          onClick={() => setShowHelpModal(true)}
+                          className={`oauth-btn oauth-btn-${p.type}`}
+                          onClick={() => { window.location.href = getOAuthLoginUrl(p.id) }}
                         >
-                          Need help?
+                          <ProviderIcon type={p.type} />
+                          <span>Continue with {p.name}</span>
                         </button>
-                      </div>
-                      <div className="soc-input-wrapper">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                          <path d="M21 2l-2 2m-1.5 1.5L14 9l-3-3 1.5-1.5M3 21l9-9" />
-                        </svg>
-                        <input
-                          id="login-token"
-                          type="password"
-                          value={token}
-                          onChange={e => setToken(e.target.value)}
-                          placeholder="vex_pat_••••••••••••••••"
-                          required
-                        />
-                      </div>
+                      ))}
                     </div>
-
-                    <button
-                      type="submit"
-                      className="soc-login-submit-btn"
-                      disabled={submitting}
-                    >
-                      {submitting ? (
-                        <span className="btn-loading-content">
-                          <span className="btn-spinner" />
-                          <span>Verifying Token...</span>
-                        </span>
-                      ) : (
-                        <span>Verify Token &amp; Sign In →</span>
-                      )}
-                    </button>
-                  </form>
+                  </div>
                 )}
 
                 {/* Quick Enterprise SSO buttons visible below Password form for instant access */}
@@ -557,7 +434,7 @@ export default function Login() {
                           key={p.id}
                           type="button"
                           className={`oauth-btn oauth-btn-${p.type}`}
-                          onClick={() => { window.location.href = `/api/v1/auth/oauth/${p.id}/login` }}
+                          onClick={() => { window.location.href = getOAuthLoginUrl(p.id) }}
                         >
                           <ProviderIcon type={p.type} />
                           <span>Continue with {p.name}</span>

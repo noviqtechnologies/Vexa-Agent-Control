@@ -28,7 +28,7 @@ param(
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
-    $FallbackVersion = "v1.0.82"
+    $FallbackVersion = "v1.0.83"
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
     if (-not $Version) {
         Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
@@ -191,9 +191,11 @@ param(
     Write-Host "│  ✨ Vexa Agent Control $Version successfully installed!                 │" -ForegroundColor $ColorCyan
     Write-Host "├────────────────────────────────────────────────────────────────────────┤" -ForegroundColor $ColorCyan
     Write-Host "│  Binary Location : $FinalBinaryPath" -ForegroundColor $ColorCyan
-    Write-Host "│  To start one-command protection right now in PowerShell:              │" -ForegroundColor $ColorCyan
+    Write-Host "│  Get started by authenticating and connecting your assistant:          │" -ForegroundColor $ColorCyan
     Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
-    Write-Host "│    `$env:Path = `"$InstallDir;`$env:Path`"; agentcontrol protect           │" -ForegroundColor $ColorGreen
+    Write-Host "│    agentcontrol login                                                  │" -ForegroundColor $ColorGreen
+    Write-Host "│    agentcontrol connect codex                                          │" -ForegroundColor $ColorGreen
+    Write-Host "│    agentcontrol doctor                                                 │" -ForegroundColor $ColorGreen
     Write-Host "│                                                                        │" -ForegroundColor $ColorCyan
     Write-Host "│  💬 Early Access Developer Community & Edge-Case Support:              │" -ForegroundColor $ColorCyan
     Write-Host "│     Discord : https://discord.gg/vexasec                               │" -ForegroundColor $ColorCyan

@@ -16,7 +16,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 | **Dual-Pass DLP Scanning** | 21 built-in regex detectors redact or block AWS keys, SSH keys, PII, and API tokens in real time |
 | **Passive Shadow AI Discovery** | Observe traffic risk-free and auto-generate a **Risk Delta Report** before enabling blocking mode |
 | **MCP Security Scoring Engine** | Audit and score local MCP server definitions (0–100 Vexa Security Score) |
-| **Local Developer Web Console** | Embedded real-time dashboard at `http://127.0.0.1:8080` |
+| **Local Developer Web Console** | Embedded real-time dashboard at `http://127.0.0.1:18080` |
 | **IDE Auto-Wrapping Engine** | One-command patching of Claude Desktop, Cursor, VS Code, JetBrains, Zed, Cline, OpenCode, and Antigravity IDE |
 | **ADR Security Benchmark** | Run 303 attack-detection tasks across 17 categories to score your security posture |
 
@@ -172,82 +172,54 @@ agentcontrol.exe --version
 
 ## 3. Step-by-Step: Getting Started
 
-### Step 1 — Protect & Launch (Recommended)
+### Step 1 — Zero-Touch Authentication & Target Connection
 
-The fastest path from zero to full protection. Run **one command** and Agent Control handles everything:
-1. Auto-generates a baseline `agentcontrol-policy.yaml` with DLP secret rules if no policy exists
-2. Discovers all installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex) and atomically wraps their MCP configs
-3. Starts the local gateway proxy listening on `127.0.0.1:8080` (audit log → `~/.agentcontrol/audit.jsonl`)
-4. Opens the local developer dashboard in your default browser
-
-```bash
-agentcontrol protect                # macOS / Linux
-agentcontrol protect --enforce      # Start immediately in active-blocking mode
-agentcontrol protect --dry-run      # Preview all changes without writing to disk
-```
-
-**Windows (PowerShell):**
-```powershell
-agentcontrol.exe protect
-```
-
-**What You Will See:**
-A terminal summary listing every IDE discovered, configs patched, and the baseline policy generated. Your default browser opens automatically at `http://127.0.0.1:8080`.
-
-**What You Achieve:**
-Full IDE protection + real-time agent event monitoring with zero manual configuration. Reverse everything cleanly with `agentcontrol unprotect`.
-
-> [!NOTE]
-> **`agentcontrol init` is deprecated.** All zero-config setup is now handled by `agentcontrol protect` in a single step.
-
----
-
-### Step 1b — Observation-Only Mode (`agentcontrol protect --shadow`)
-
-If you want to observe agent traffic *without* active policy enforcement (for risk auditing or policy learning), pass the `--shadow` flag:
+The recommended developer onboarding flow requires zero administrative elevation:
+1. Authenticate with your Control Hub via browser OAuth PKCE (`agentcontrol login`). The browser prompts for sign-in via your organization's configured Auth Provider (Local email/password, Google Workspace, or Microsoft Entra ID), binds the workstation to your verified employee identity in the Primary Organization, generates a local Ed25519 keypair, and starts the background agent on `127.0.0.1:18080`.
+2. Connect your installed AI coding assistants with scoped target injection (`agentcontrol connect codex`, `agentcontrol connect claude`).
+3. Verify comprehensive health with `agentcontrol doctor` and inspect status with `agentcontrol status`.
 
 ```bash
-agentcontrol protect --shadow          # macOS / Linux
-agentcontrol.exe protect --shadow      # Windows
+# 1. Log in via browser PKCE:
+agentcontrol login
+
+# 2. Connect installed coding assistants:
+agentcontrol connect codex
+agentcontrol connect claude
+
+# 3. Check health and multi-state status:
+agentcontrol doctor
+agentcontrol status
 ```
 
-> [!NOTE]
-> `agentcontrol dev` is deprecated in favor of `agentcontrol protect` and `agentcontrol protect --shadow`.
-
 **What You Achieve:**
-Real-time agent event monitoring is active. All traffic passing through the proxy appears instantly in the dashboard without active blocking, allowing you to assess agent behavior before enforcing policy rules.
-
-> [!TIP]
-> **Populating Test Telemetry:** `quickstart_agent.py` is automatically installed alongside the `agentcontrol` binary into your PATH. If your browser dashboard shows *"No tool calls recorded yet"*, run the test script in a separate terminal to populate all dashboard panels:
-> ```bash
-> python quickstart_agent.py
-> ```
+Zero-elevation target governance with pristine baseline backups (`.baseline.bak`) and ownership manifests (`~/.agentcontrol/manifests/<target>.manifest.json`). Cleanly disconnect at any time with `agentcontrol disconnect <target>`.
 
 ---
 
 ### Step 2 — Route Agent HTTP Traffic Through Proxy
 
-Redirect HTTP/HTTPS requests from your AI agents or SDKs through Agent Control by setting standard proxy environment variables:
+Redirect HTTP/HTTPS requests from custom AI scripts or SDKs through Agent Control by setting standard proxy environment variables:
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
-export HTTP_PROXY=http://127.0.0.1:8080
-export HTTPS_PROXY=http://127.0.0.1:8080
-export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
+export HTTP_PROXY=http://127.0.0.1:18080
+export HTTPS_PROXY=http://127.0.0.1:18080
+export AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080
 ```
 
 **Windows (PowerShell):**
 ```powershell
-$env:HTTP_PROXY="http://127.0.0.1:8080"
-$env:HTTPS_PROXY="http://127.0.0.1:8080"
-$env:AGENTCONTROL_PROXY_URL="http://127.0.0.1:8080"
+$env:HTTP_PROXY="http://127.0.0.1:18080"
+$env:HTTPS_PROXY="http://127.0.0.1:18080"
+$env:AGENTCONTROL_PROXY_URL="http://127.0.0.1:18080"
 ```
 
 **Windows (Command Prompt / CMD):**
 ```cmd
-set HTTP_PROXY=http://127.0.0.1:8080
-set HTTPS_PROXY=http://127.0.0.1:8080
-set AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
+set HTTP_PROXY=http://127.0.0.1:18080
+set HTTPS_PROXY=http://127.0.0.1:18080
+set AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080
 ```
 
 **What You Will See:**
@@ -422,11 +394,11 @@ Execute the automated verification smoke test against your running gateway to ve
 **Linux / macOS (Bash / Zsh):**
 ```bash
 # Basic gateway smoke test
-agentcontrol verify --gateway http://127.0.0.1:8080
+agentcontrol verify --gateway http://127.0.0.1:18080
 
 # With Control Hub identity correlation and desired-state assertion (REQ-VER-004)
 agentcontrol verify \
-  --gateway http://127.0.0.1:8080 \
+  --gateway http://127.0.0.1:18080 \
   --hub https://console.vexasec.io \
   --user-id $(whoami) \
   --json
@@ -434,7 +406,7 @@ agentcontrol verify \
 
 **Windows (PowerShell):**
 ```powershell
-agentcontrol.exe verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --user-id $env:USERNAME
+agentcontrol.exe verify --gateway http://127.0.0.1:18080 --hub https://console.vexasec.io --user-id $env:USERNAME
 ```
 
 **What You Will See:**
@@ -469,7 +441,7 @@ agentcontrol status
 
 To enable **enforcing (blocking) mode** after observation:
 ```bash
-agentcontrol start --policy agentcontrol-policy.yaml --listen 127.0.0.1:8080
+agentcontrol start --policy agentcontrol-policy.yaml --listen 127.0.0.1:18080
 ```
 
 For full policy authoring, see → [Common Reference Guide — YAML Policies](common_guide.md#writing-yaml-policies-v2-schema).

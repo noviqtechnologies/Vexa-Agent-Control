@@ -43,11 +43,11 @@ func TestSecurityGA_DevModeRequiresBothFlags(t *testing.T) {
 	}
 	authH := NewAuthHandler(nil, cfgNoDev)
 
-	body, _ := json.Marshal(LoginReq{
+	bodyDevCreds, _ := json.Marshal(LoginReq{
 		Email:    "admin",
-		Password: "anypassword",
+		Password: "admin12345678",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyDevCreds))
 	w := httptest.NewRecorder()
 
 	authH.Login(w, req)
@@ -56,19 +56,33 @@ func TestSecurityGA_DevModeRequiresBothFlags(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized when DevMode is false, got %d", w.Code)
 	}
 
-	// 2. cfg with DevMode = true (both flags were present)
+	// 2. cfg with DevMode = true (both flags were present) - valid dev password succeeds
 	cfgDev := &config.Config{
 		DevMode: true,
 	}
 	authHDev := NewAuthHandler(nil, cfgDev)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyDevCreds))
 	w2 := httptest.NewRecorder()
 
 	authHDev.Login(w2, req2)
 
 	if w2.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK when DevMode is true, got %d", w2.Code)
+		t.Fatalf("expected 200 OK when DevMode is true with valid dev password, got %d", w2.Code)
+	}
+
+	// 3. cfg with DevMode = true - random/wrong password MUST be rejected
+	bodyWrongPass, _ := json.Marshal(LoginReq{
+		Email:    "admin",
+		Password: "randompassword123",
+	})
+	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyWrongPass))
+	w3 := httptest.NewRecorder()
+
+	authHDev.Login(w3, req3)
+
+	if w3.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized when DevMode is true with wrong password, got %d", w3.Code)
 	}
 }
 

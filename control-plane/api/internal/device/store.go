@@ -200,38 +200,24 @@ func (s *Store) RecordTelemetry(ctx context.Context, orgID string, req *Telemetr
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if orgID == "" {
-				orgID = "00000000-0000-0000-0000-000000000001"
-			}
-			err = tx.QueryRow(ctx, `
-				INSERT INTO devices (
-					organization_id, stable_device_id, display_name, owner_subject,
-					os_family, architecture, os_version_summary, daemon_version,
-					state, state_reason_code, state_changed_at, first_enrolled_at, last_heartbeat_at
-				) VALUES ($1, $2, $2, 'Developer Workstation', 'windows', 'x86_64', 'v1.0', '2.1.0', $3, 'HEARTBEAT_PROVISIONED', now(), now(), now())
-				RETURNING id::text, state::text, stable_device_id
-			`, orgID, req.DeviceID, targetState).
-				Scan(&canonicalDeviceID, &devState, &devHostname)
-			if err != nil {
-				return nil, fmt.Errorf("auto-provision device: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("lookup device: %w", err)
+			return nil, fmt.Errorf("device not found or not enrolled: %s", req.DeviceID)
 		}
-	} else {
-		if devState == "REVOKED" {
-			targetState = "REVOKED"
-		}
-		_, err = tx.Exec(ctx, `
-			UPDATE devices 
-			SET last_heartbeat_at = now(),
-			    state = $2,
-			    updated_at = now()
-			WHERE id::text = $1
-		`, canonicalDeviceID, targetState)
-		if err != nil {
-			return nil, fmt.Errorf("update device heartbeat: %w", err)
-		}
+		return nil, fmt.Errorf("lookup device: %w", err)
+	}
+
+	if devState == "REVOKED" {
+		return nil, fmt.Errorf("device is revoked: %s", req.DeviceID)
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE devices 
+		SET last_heartbeat_at = now(),
+		    state = $2,
+		    updated_at = now()
+		WHERE id::text = $1
+	`, canonicalDeviceID, targetState)
+	if err != nil {
+		return nil, fmt.Errorf("update device heartbeat: %w", err)
 	}
 
 	for _, tEvent := range req.TamperEvents {
@@ -277,7 +263,7 @@ func (s *Store) ListDevices(ctx context.Context, orgID string) ([]DeviceComplian
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT 
-			d.id::text, 
+			COALESCE(NULLIF(d.stable_device_id, ''), d.id::text), 
 			COALESCE(NULLIF(d.display_name, ''), d.stable_device_id, d.id::text), 
 			COALESCE(d.owner_subject, 'Developer'), 
 			d.os_family, 
@@ -471,4 +457,19 @@ func (s *Store) ListTamperEvents(ctx context.Context, orgID string, limit, offse
 		Events:     []DeviceTamperEventLog{},
 		TotalCount: 0,
 	}, nil
+}
+
+func (s *Store) DeleteDevice(ctx context.Context, orgID, deviceID string) error {
+	if s.pool == nil {
+		return nil
+	}
+	if orgID == "" {
+		orgID = "00000000-0000-0000-0000-000000000001"
+	}
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM devices
+		WHERE (id::text = $1 OR stable_device_id = $1)
+		  AND (organization_id::text = $2 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	`, deviceID, orgID)
+	return err
 }

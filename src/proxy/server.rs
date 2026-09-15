@@ -47,24 +47,50 @@ pub async fn run_server(
     mut shutdown_rx: watch::Receiver<bool>,
     tls_acceptor: Option<super::tls::TlsAcceptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let listener = match TcpListener::bind(listen_addr).await {
-        Ok(l) => l,
-        Err(_) => {
-            let domain = if listen_addr.is_ipv4() {
-                Domain::IPV4
-            } else {
-                Domain::IPV6
-            };
-            let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
-            #[cfg(not(windows))]
-            socket.set_reuse_address(true)?;
-            socket.bind(&listen_addr.into())?;
-            socket.listen(128)?;
-            let std_listener: std::net::TcpListener = socket.into();
-            std_listener.set_nonblocking(true)?;
-            TcpListener::from_std(std_listener)?
+    let (listener, actual_addr) = {
+        let mut bind_result = TcpListener::bind(listen_addr).await;
+        let mut current_addr = listen_addr;
+        if bind_result.is_err() && listen_addr.port() == 18080 {
+            for fallback_port in 18081..=18090 {
+                let candidate = SocketAddr::new(listen_addr.ip(), fallback_port);
+                if let Ok(l) = TcpListener::bind(candidate).await {
+                    bind_result = Ok(l);
+                    current_addr = candidate;
+                    crate::logging::log_event(
+                        crate::logging::Level::Info,
+                        "proxy_port_fallback",
+                        serde_json::json!({
+                            "message": format!("Default port 18080 busy; bound dynamic fallback port {}", fallback_port),
+                            "port": fallback_port
+                        }),
+                    );
+                    break;
+                }
+            }
         }
+        let l = match bind_result {
+            Ok(l) => l,
+            Err(_) => {
+                let domain = if current_addr.is_ipv4() {
+                    Domain::IPV4
+                } else {
+                    Domain::IPV6
+                };
+                let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
+                #[cfg(not(windows))]
+                socket.set_reuse_address(true)?;
+                socket.bind(&current_addr.into())?;
+                socket.listen(128)?;
+                let std_listener: std::net::TcpListener = socket.into();
+                std_listener.set_nonblocking(true)?;
+                TcpListener::from_std(std_listener)?
+            }
+        };
+        (l, current_addr)
     };
+
+    let bound_port = actual_addr.port();
+    let _ = super::security::record_daemon_port(bound_port);
 
     // Track active connection tasks and bound max concurrency with a semaphore
     let mut connection_tasks = tokio::task::JoinSet::new();
@@ -74,6 +100,19 @@ pub async fn run_server(
         tokio::select! {
             accept_result = listener.accept() => {
                 let (stream, addr) = accept_result?;
+                // REQ-SEC-005 / Task 3.1: Socket-Level Loopback Assertion
+                if state.listen_is_loopback && !super::security::is_strict_loopback_addr(&addr) {
+                    crate::logging::log_event(
+                        crate::logging::Level::Warn,
+                        "socket_non_loopback_rejected",
+                        serde_json::json!({
+                            "message": format!("Connection rejected: peer {} is non-loopback", addr),
+                            "peer_ip": addr.to_string()
+                        }),
+                    );
+                    drop(stream);
+                    continue;
+                }
                 let permit = match conn_semaphore.clone().try_acquire_owned() {
                     Ok(p) => p,
                     Err(_) => {
@@ -542,7 +581,7 @@ pub(crate) async fn resolve_session(
     }
 }
 
-pub(crate) fn is_loopback(ip: &str) -> bool {
+pub fn is_loopback(ip: &str) -> bool {
     let mut s = ip.trim();
 
     // 1. Direct SocketAddr parse handles addresses with ports across OSes
@@ -584,6 +623,55 @@ pub(crate) fn is_loopback(ip: &str) -> bool {
     } else {
         false
     }
+}
+
+/// RFC 7230 §5.4: Validate Host header authority.
+/// When listening on loopback, rejects duplicate Host headers and non-loopback host authorities (DNS rebinding protection).
+pub fn validate_host_header(
+    headers: &hyper::HeaderMap,
+    listen_is_loopback: bool,
+) -> Result<String, (StatusCode, &'static str)> {
+    let host_headers: Vec<_> = headers.get_all(hyper::header::HOST).iter().collect();
+    if host_headers.len() > 1 {
+        return Err((StatusCode::BAD_REQUEST, "duplicate_host_header"));
+    }
+    if let Some(host_val) = host_headers.first() {
+        if let Ok(host_str) = host_val.to_str() {
+            let host_trimmed = host_str.trim();
+            if listen_is_loopback && !is_loopback(host_trimmed) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_host_authority"));
+            }
+            return Ok(host_trimmed.to_string());
+        }
+    }
+    Ok(String::new())
+}
+
+/// Validate browser Origin header to protect local agents against Web-to-Localhost CSRF / Drive-by attacks.
+pub fn validate_origin_header(headers: &hyper::HeaderMap) -> Result<(), (StatusCode, &'static str)> {
+    if let Some(origin_val) = headers.get(hyper::header::ORIGIN) {
+        if let Ok(origin_str) = origin_val.to_str() {
+            let origin_trimmed = origin_str.trim();
+            // Allow desktop apps, local scripts, and file URLs
+            if origin_trimmed == "null" || origin_trimmed.is_empty() {
+                return Ok(());
+            }
+            // Allow VS Code webview contexts
+            if origin_trimmed.starts_with("vscode-webview://") {
+                return Ok(());
+            }
+            // Parse origin as URL
+            if let Ok(url) = reqwest::Url::parse(origin_trimmed) {
+                if let Some(host) = url.host_str() {
+                    if is_loopback(host) {
+                        return Ok(());
+                    }
+                }
+            }
+            return Err((StatusCode::FORBIDDEN, "cross_origin_request_forbidden"));
+        }
+    }
+    Ok(())
 }
 
 #[inline]
@@ -628,10 +716,43 @@ fn is_authorized_management(
 
 /// Handle a single HTTP request
 async fn handle_request(
-    req: Request<Incoming>,
+    mut req: Request<Incoming>,
     state: Arc<ProxyState>,
     client_ip: &str,
 ) -> Result<Response<BoxBody>, hyper::Error> {
+    // 0. Sanitize inbound proxy headers (Task 3.1: Strip X-Forwarded-For, X-Real-IP, Forwarded)
+    super::security::sanitize_inbound_headers(req.headers_mut());
+
+    // 1. Host header validation (RFC 7230 §5.4 & DNS rebinding protection)
+    if let Err((status, reason)) = validate_host_header(req.headers(), state.listen_is_loopback) {
+        let err = serde_json::json!({
+            "error": reason,
+            "message": "Host header failed security authority validation"
+        });
+        return Ok(json_response(status, &err));
+    }
+
+    // 2. Browser Origin header validation (Web-to-Localhost CSRF / Drive-by protection)
+    if let Err((status, reason)) = validate_origin_header(req.headers()) {
+        let err = serde_json::json!({
+            "error": reason,
+            "message": "Cross-origin request from external web origin rejected"
+        });
+        return Ok(json_response(status, &err));
+    }
+
+    // 3. Persistent Local Token & Sentinel Rejection Validation (Task 3.1)
+    if let Err(sec_err) = super::security::validate_persistent_token(req.headers(), None) {
+        let err = serde_json::json!({
+            "error": {
+                "message": sec_err.message,
+                "type": "authentication_error",
+                "code": sec_err.code
+            }
+        });
+        return Ok(json_response(sec_err.status, &err));
+    }
+
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
@@ -1240,44 +1361,81 @@ async fn handle_request(
         return Ok(json_response(StatusCode::BAD_REQUEST, &err));
     }
 
-    // Section 6: HITL approval response endpoint
-    if method == hyper::Method::POST && path == "/api/v1/hitl/respond" {
-        if let Ok(collected) = req.into_body().collect().await {
-            let body_bytes = collected.to_bytes();
-            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                let request_id = val
-                    .get("request_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let decision = val
-                    .get("decision")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
+    // Section 6: HITL approval response endpoint (POST or GET)
+    if (method == hyper::Method::POST || method == hyper::Method::GET)
+        && path.starts_with("/api/v1/hitl/respond")
+    {
+        let mut request_id = String::new();
+        let mut decision = String::new();
+        let mut signed_hmac = String::new();
 
-                if request_id.is_empty() || decision.is_empty() {
-                    let err = serde_json::json!({"error": "Missing request_id or decision"});
-                    return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+        if method == hyper::Method::POST {
+            if let Ok(collected) = req.into_body().collect().await {
+                let body_bytes = collected.to_bytes();
+                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                    request_id = val
+                        .get("request_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    decision = val
+                        .get("decision")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    signed_hmac = val
+                        .get("signed_hmac")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
                 }
-
-                let sse_event = serde_json::json!({
-                    "event": "hitl_response",
-                    "request_id": request_id,
-                    "decision": decision
-                });
-                if let Ok(s) = serde_json::to_string(&sse_event) {
-                    let _ = state.event_tx.send(s);
+            }
+        } else if let Some(query) = req.uri().query() {
+            for pair in query.split('&') {
+                let mut parts = pair.splitn(2, '=');
+                if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
+                    let decoded_v = urlencoding::decode(v)
+                        .unwrap_or(std::borrow::Cow::Borrowed(v))
+                        .to_string();
+                    match k {
+                        "request_id" => request_id = decoded_v,
+                        "decision" => decision = decoded_v,
+                        "signed_hmac" => signed_hmac = decoded_v,
+                        _ => {}
+                    }
                 }
-
-                let resp = serde_json::json!({
-                    "status": "processed",
-                    "request_id": request_id,
-                    "decision": decision
-                });
-                return Ok(json_response(StatusCode::OK, &resp));
             }
         }
-        let err = serde_json::json!({"error": "Invalid HITL request payload"});
-        return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+
+        if request_id.is_empty() || decision.is_empty() {
+            let err = serde_json::json!({"error": "Missing request_id or decision"});
+            return Ok(json_response(StatusCode::BAD_REQUEST, &err));
+        }
+
+        let escalation_response = crate::policy::hitl::EscalationResponse {
+            request_id: request_id.clone(),
+            decision: decision.clone(),
+            signed_hmac,
+        };
+        let callback_result = state.hitl_manager.process_callback(&escalation_response);
+
+        let sse_event = serde_json::json!({
+            "event": "hitl_response",
+            "request_id": request_id,
+            "decision": decision,
+            "result": callback_result.is_ok()
+        });
+        if let Ok(s) = serde_json::to_string(&sse_event) {
+            let _ = state.event_tx.send(s);
+        }
+
+        let resp = serde_json::json!({
+            "status": "processed",
+            "request_id": request_id,
+            "decision": decision,
+            "success": callback_result.is_ok()
+        });
+        return Ok(json_response(StatusCode::OK, &resp));
     }
 
     // Interactive Security Posture Toggle Endpoint (FR-2.1)

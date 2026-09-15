@@ -72,6 +72,18 @@ func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 		runs = []spend.RunSummary{}
 	}
 
+	claims := middleware.UserClaimsFromContext(r.Context())
+	if claims != nil && !claims.IsAdmin && claims.UserID != "" {
+		userRuns := make([]spend.RunSummary, 0)
+		for _, rItem := range runs {
+			if (rItem.InternalUserID != nil && strings.EqualFold(*rItem.InternalUserID, claims.UserID)) ||
+				(rItem.EndUserID != nil && strings.EqualFold(*rItem.EndUserID, claims.UserID)) {
+				userRuns = append(userRuns, rItem)
+			}
+		}
+		runs = userRuns
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"organization_id": tenantID,
@@ -105,6 +117,21 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, `{"error":"failed to fetch run dossier"}`, http.StatusInternalServerError)
 		return
+	}
+
+	claims := middleware.UserClaimsFromContext(r.Context())
+	if claims != nil && !claims.IsAdmin && claims.UserID != "" {
+		isOwner := false
+		if dossier.InternalUserID != nil && strings.EqualFold(*dossier.InternalUserID, claims.UserID) {
+			isOwner = true
+		}
+		if dossier.EndUserID != nil && strings.EqualFold(*dossier.EndUserID, claims.UserID) {
+			isOwner = true
+		}
+		if !isOwner {
+			http.Error(w, `{"error":"forbidden: access to run is restricted"}`, http.StatusForbidden)
+			return
+		}
 	}
 
 	// Parse JSON policy snapshot if available

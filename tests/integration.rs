@@ -10,8 +10,6 @@ mod integration {
     mod mitm_interception_integration_test;
     mod multi_tenant_tests;
     mod phase_1_1_tests;
-    mod promotion_tests;
-    mod proxy_test;
     mod real_client_wrapper_fixture_test;
     mod schema_drift_integration_test;
     mod stdio_process_integration_test;

@@ -145,6 +145,7 @@ export default function RequestLogsTab() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [liveTail, setLiveTail] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
   const autoRefreshTimerRef = useRef<number | null>(null)
   const liveTailRef = useRef<EventSource | null>(null)
 
@@ -263,6 +264,105 @@ export default function RequestLogsTab() {
     }
   }
 
+  const downloadExcel = () => {
+    if (logs.length === 0) return
+    setDownloading(true)
+    try {
+      const headers = [
+        'Time (ISO)',
+        'Time (Local)',
+        'Type',
+        'Status',
+        'Session ID',
+        'Request ID',
+        'Cost (USD)',
+        'Duration (s)',
+        'TTFT (s)',
+        'Team',
+        'Key Prefix',
+        'Key Alias',
+        'Model',
+        'Provider',
+        'Total Tokens',
+        'Input Tokens',
+        'Output Tokens',
+        'Cached Tokens',
+        'User',
+        'Host / Device Name',
+        'Device ID',
+      ]
+
+      const rows = logs.map((r, index) => {
+        const isDenied = r.state === 'DENIED' || r.state === 'BLOCKED' || (r.status_code === 403 || r.status_code === 429)
+        const isReleased = r.state === 'RELEASED'
+        const isFailed = r.state === 'FAILED' || r.state === 'ERROR' || (r.status_code !== undefined && r.status_code >= 400 && !isDenied) || (isReleased && (r.status_code === undefined || r.status_code >= 400))
+        const isSuccess = r.state === 'SETTLED' && (r.status_code === undefined || (r.status_code >= 200 && r.status_code < 300))
+        const isAuthorized = r.state === 'AUTHORIZED'
+
+        let status = r.state || 'Unknown'
+        if (isDenied) status = 'Denied'
+        else if (isFailed) status = 'Failure'
+        else if (isSuccess) status = 'Success'
+        else if (isAuthorized) status = 'Authorized'
+        else if (isReleased) status = 'Released'
+
+        const billedMicrocents = r.state === 'SETTLED' ? (r.settled_microcents || 0) : 0
+        const costUSD = microcentsToUSD(billedMicrocents)
+        const typeBadge = getRequestTypeBadge(r, index, logs)
+        const durationSec = r.duration_ms ? (r.duration_ms / 1000).toFixed(2) : '0.00'
+        const ttftSec = r.ttft_ms ? (r.ttft_ms / 1000).toFixed(2) : ''
+        const totalTokens = (r.input_tokens || 0) + (r.output_tokens || 0)
+
+        return [
+          r.started_at,
+          formatTimestamp(r.started_at),
+          typeBadge.label,
+          status,
+          r.session_id || '',
+          r.request_id || '',
+          costUSD,
+          durationSec,
+          ttftSec,
+          r.project_id || 'default',
+          r.virtual_key_prefix || '',
+          r.virtual_key_alias || '',
+          r.model || '',
+          r.provider || '',
+          totalTokens,
+          r.input_tokens || 0,
+          r.output_tokens || 0,
+          r.cached_tokens || 0,
+          r.internal_user_id || r.end_user_id || '',
+          r.device_name || '',
+          r.device_id || '',
+        ]
+      })
+
+      // RFC 4180 CSV with UTF-8 BOM (\uFEFF) for immediate Excel opening
+      const csv = '\uFEFF' + [headers, ...rows]
+        .map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\r\n')
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      if (typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        const d = new Date()
+        const dateStr = d.toISOString().split('T')[0]
+        a.download = `agentwall-request-logs-${dateStr}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      console.error('Failed to export Excel CSV:', err)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <div className="obs-request-logs-tab">
       {/* Auto-refresh indicator banner */}
@@ -349,6 +449,22 @@ export default function RequestLogsTab() {
           {/* Reset Filters */}
           <button type="button" className="obs-btn-secondary" onClick={resetFilters}>
             Reset Filters
+          </button>
+
+          {/* Export Excel Button */}
+          <button
+            type="button"
+            className="obs-btn-secondary obs-export-btn"
+            onClick={downloadExcel}
+            disabled={downloading || logs.length === 0}
+            title="Download Request Logs in Excel CSV format"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {downloading ? 'Exporting…' : 'Export Excel'}
           </button>
 
           {/* Refresh Button */}
@@ -467,7 +583,7 @@ export default function RequestLogsTab() {
                 <th>Key Prefix</th>
                 <th>Model</th>
                 <th>Tokens</th>
-                <th>User</th>
+                <th>User / Host</th>
               </tr>
             </thead>
             <tbody>
@@ -579,7 +695,37 @@ export default function RequestLogsTab() {
                     <td className="obs-col-tokens">
                       {formatTokens(r.input_tokens, r.output_tokens)}
                     </td>
-                    <td>{r.internal_user_id || r.end_user_id || '-'}</td>
+                    <td className="obs-col-user">
+                      {r.internal_user_id || r.end_user_id ? (
+                        <div className="obs-user-cell">
+                          <span className="obs-user-primary">{r.internal_user_id || r.end_user_id}</span>
+                          {r.device_name && (
+                            <span className="obs-user-host-sub" title={`Enrolled Host: ${r.device_name}`}>
+                              💻 {r.device_name}
+                            </span>
+                          )}
+                        </div>
+                      ) : r.device_name || r.device_id ? (
+                        <div className="obs-user-cell" title="Device / Host identifier (Requester user was not explicitly tagged in request)">
+                          <span className="obs-user-host-fallback">
+                            💻 {r.device_name || r.device_id}
+                          </span>
+                          {r.virtual_key_alias && (
+                            <span className="obs-user-key-sub" title={`Virtual Key Alias: ${r.virtual_key_alias}`}>
+                              🔑 {r.virtual_key_alias}
+                            </span>
+                          )}
+                        </div>
+                      ) : r.virtual_key_alias ? (
+                        <div className="obs-user-cell" title={`Virtual Key Alias: ${r.virtual_key_alias}`}>
+                          <span className="obs-user-key-fallback">
+                            🔑 {r.virtual_key_alias}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="obs-muted">-</span>
+                      )}
+                    </td>
                   </tr>
                 )
               })}

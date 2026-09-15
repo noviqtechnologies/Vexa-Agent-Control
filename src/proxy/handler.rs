@@ -194,6 +194,8 @@ pub struct ProxyState {
     pub provider_router: Arc<super::provider_router::ProviderRouter>,
     /// Extensible lifecycle pipeline hook registry (AR-1)
     pub hook_registry: Arc<super::hooks::HookRegistry>,
+    /// Human-in-the-Loop policy escalation and desktop toast approval manager
+    pub hitl_manager: Arc<crate::policy::hitl::HitlManager>,
 }
 
 impl ProxyState {
@@ -280,6 +282,7 @@ impl ProxyState {
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
+            hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
         })
     }
 
@@ -366,6 +369,7 @@ impl ProxyState {
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
+            hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
         })
     }
 
@@ -450,6 +454,7 @@ impl ProxyState {
             embedding_batcher: Arc::new(super::embedding_batcher::EmbeddingBatcher::default()),
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
+            hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
         })
     }
 }
@@ -747,7 +752,24 @@ pub async fn evaluate_jsonrpc(
                 .await;
             }
             CycleAction::PauseInteractive => {
-                let user_allowed = try_interactive_pause(tool_name, max_attempts);
+                let user_allowed = if std::env::var("CARGO_MANIFEST_DIR").is_ok() {
+                    false
+                } else {
+                    let addr = if state.upstream_url.is_empty() {
+                        "127.0.0.1:8080"
+                    } else {
+                        &state.upstream_url
+                    };
+                    state
+                        .hitl_manager
+                        .request_desktop_approval(
+                            tool_name,
+                            &format!("Cycle detected: {} consecutive calls", max_attempts),
+                            addr,
+                            30,
+                        )
+                        .await
+                };
                 if user_allowed {
                     let _ = state
                         .audit_logger
@@ -1767,70 +1789,15 @@ fn make_error(id: &Value, code: i64, message: &str) -> Value {
     })
 }
 
-/// FR-306: Attempt to pause and ask the developer via the system console.
-/// Returns true if the user typed 'y' to allow the call through.
-/// Returns false if the user denied, or if console I/O is not available (non-TTY).
+/// Fallback interactive pause helper — delegates to HitlManager desktop notification toasts.
+#[allow(dead_code)]
 fn try_interactive_pause(tool_name: &str, consecutive_calls: usize) -> bool {
-    use std::io::{BufRead, Write};
-
-    // Do not block when running under cargo tests/CI
     if std::env::var("CARGO_MANIFEST_DIR").is_ok() {
         return false;
     }
-
-    // Try to open the system console directly (not stdin, which may be owned by JSON-RPC).
-    #[cfg(target_os = "windows")]
-    let console_result = {
-        std::fs::OpenOptions::new()
-            .read(true)
-            .open("CONIN$")
-            .and_then(|reader| {
-                let mut stderr = std::io::stderr();
-                writeln!(
-                    stderr,
-                    "\n⚠️  AgentWall Firewall: Cycle detected — tool '{}' called {} times with identical arguments.",
-                    tool_name, consecutive_calls
-                ).ok();
-                writeln!(stderr, "   Allow this call? (y/N): ").ok();
-                stderr.flush().ok();
-
-                let mut line = String::new();
-                let mut buf_reader = std::io::BufReader::new(reader);
-                buf_reader.read_line(&mut line)?;
-                Ok(line.trim().eq_ignore_ascii_case("y"))
-            })
-    };
-
-    #[cfg(not(target_os = "windows"))]
-    let console_result = {
-        std::fs::OpenOptions::new()
-            .read(true)
-            .open("/dev/tty")
-            .and_then(|reader| {
-                let mut stderr = std::io::stderr();
-                writeln!(
-                    stderr,
-                    "\n⚠️  AgentWall Firewall: Cycle detected — tool '{}' called {} times with identical arguments.",
-                    tool_name, consecutive_calls
-                ).ok();
-                writeln!(stderr, "   Allow this call? (y/N): ").ok();
-                stderr.flush().ok();
-
-                let mut line = String::new();
-                let mut buf_reader = std::io::BufReader::new(reader);
-                buf_reader.read_line(&mut line)?;
-                Ok(line.trim().eq_ignore_ascii_case("y"))
-            })
-    };
-
-    match console_result {
-        Ok(allowed) => allowed,
-        Err(_) => {
-            // Non-TTY environment — cannot interact. Log warning and fall back to block.
-            eprintln!(
-                "⚠️  AgentWall: pause_interactive requested but no TTY available. Falling back to block."
-            );
-            false
-        }
-    }
+    eprintln!(
+        "⚠️  AgentWall: Interactive pause requested for tool '{}' ({} calls). Dispatched desktop alert.",
+        tool_name, consecutive_calls
+    );
+    false
 }

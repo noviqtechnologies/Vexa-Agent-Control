@@ -125,3 +125,41 @@ func TestMultiTenant_AdminRouteRoleGating(t *testing.T) {
 		t.Fatalf("Expected 200 OK for admin, got %d", adminW.Code)
 	}
 }
+
+func TestMultiTenant_AdminEndpointsGatedForMembers(t *testing.T) {
+	r := chi.NewRouter()
+	r.With(middleware.RequireAdmin()).Get("/users", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r.With(middleware.RequireAdmin()).Get("/auth_providers", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r.With(middleware.RequireAdmin()).Get("/organization", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	for _, endpoint := range []string{"/users", "/auth_providers", "/organization"} {
+		// Non-admin request (e.g. zoya@agentcontrol.local)
+		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		req = withUserContext(req, "zoya@agentcontrol.local", "tenant-1", false, false)
+
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Errorf("Expected 403 Forbidden for non-admin on %s, got %d", endpoint, w.Code)
+		}
+
+		// Admin request
+		adminReq := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		adminReq = withUserContext(adminReq, "admin@agentcontrol.local", "tenant-1", true, false)
+
+		adminW := httptest.NewRecorder()
+		r.ServeHTTP(adminW, adminReq)
+
+		if adminW.Code != http.StatusOK {
+			t.Errorf("Expected 200 OK for admin on %s, got %d", endpoint, adminW.Code)
+		}
+	}
+}
+

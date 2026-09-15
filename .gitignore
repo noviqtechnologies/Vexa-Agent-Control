@@ -18,6 +18,8 @@ tfplan
 
 # Audit Logs and Backups
 *.log
+*.log.err
+*.err
 *.bak
 *.sig
 *.agentcontrol-backup-*

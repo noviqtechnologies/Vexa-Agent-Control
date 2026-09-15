@@ -2,6 +2,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot};
 
 use rusqlite::{params, Connection, Transaction};
@@ -69,12 +70,22 @@ pub struct DbManager {
     cmd_tx: mpsc::Sender<DbCmd>,
     _shutdown: Arc<()>,
     pub dropped_events: Arc<std::sync::atomic::AtomicU64>,
+    pub record_payloads: bool,
 }
 
 impl DbManager {
     /// Initialise the manager, opening/creating the DB file under $HOME/.agentcontrol/events.db.
     /// Spawns a background thread that processes commands.
+    /// Default: payload redaction is ENABLED (record_payloads = false) unless AGENTCONTROL_RECORD_PAYLOADS=true.
     pub fn init() -> Self {
+        let record_payloads = std::env::var("AGENTCONTROL_RECORD_PAYLOADS")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        Self::init_with_options(record_payloads)
+    }
+
+    /// Initialise the manager with explicit payload logging configuration.
+    pub fn init_with_options(record_payloads: bool) -> Self {
         // Resolve path with fallback
         let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
@@ -166,6 +177,46 @@ impl DbManager {
             while let Some(cmd) = cmd_rx.blocking_recv() {
                 match cmd {
                     DbCmd::Insert(event) => {
+                        let (req_body, req_body_hash) = if record_payloads {
+                            let hash = event.request_body_hash.or_else(|| {
+                                event.request_body.as_ref().map(|b| {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(b.as_bytes());
+                                    hex::encode(hasher.finalize())
+                                })
+                            });
+                            (event.request_body, hash)
+                        } else {
+                            let hash = event.request_body_hash.or_else(|| {
+                                event.request_body.as_ref().map(|b| {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(b.as_bytes());
+                                    hex::encode(hasher.finalize())
+                                })
+                            });
+                            (None, hash)
+                        };
+
+                        let (resp_body, resp_body_hash) = if record_payloads {
+                            let hash = event.response_body_hash.or_else(|| {
+                                event.response_body.as_ref().map(|b| {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(b.as_bytes());
+                                    hex::encode(hasher.finalize())
+                                })
+                            });
+                            (event.response_body, hash)
+                        } else {
+                            let hash = event.response_body_hash.or_else(|| {
+                                event.response_body.as_ref().map(|b| {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(b.as_bytes());
+                                    hex::encode(hasher.finalize())
+                                })
+                            });
+                            (None, hash)
+                        };
+
                         let sql = "INSERT INTO egress_events (
                                 timestamp_ns, session_id, transport, method, target_host, target_port, url_path,
                                 request_headers, request_body, request_body_hash, response_status, response_body, response_body_hash,
@@ -181,11 +232,11 @@ impl DbManager {
                             event.target_port,
                             event.url_path,
                             event.request_headers,
-                            event.request_body,
-                            event.request_body_hash,
+                            req_body,
+                            req_body_hash,
                             event.response_status,
-                            event.response_body,
-                            event.response_body_hash,
+                            resp_body,
+                            resp_body_hash,
                             event.dlp_findings,
                             event.injection_findings,
                             event.latency_ms,
@@ -365,6 +416,7 @@ impl DbManager {
             cmd_tx,
             _shutdown,
             dropped_events,
+            record_payloads,
         }
     }
 
@@ -452,5 +504,97 @@ impl DbManager {
 pub fn init_db_manager() -> DbManager {
     DbManager::init()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_payload_redaction_by_default() {
+        // Create an in-memory or isolated DbManager with record_payloads = false
+        let mgr = DbManager::init_with_options(false);
+        assert!(!mgr.record_payloads);
+
+        let event = EgressEvent {
+            timestamp_ns: 123456789,
+            session_id: "test-sess-redact".to_string(),
+            transport: "llm".to_string(),
+            method: Some("POST".to_string()),
+            target_host: "api.openai.com".to_string(),
+            target_port: Some(443),
+            url_path: Some("/v1/chat/completions".to_string()),
+            request_headers: None,
+            request_body: Some("CONFIDENTIAL PROMPT SECRET".to_string()),
+            request_body_hash: None,
+            response_status: Some(200),
+            response_body: Some("CONFIDENTIAL COMPLETION SECRET".to_string()),
+            response_body_hash: None,
+            dlp_findings: None,
+            injection_findings: None,
+            latency_ms: Some(12.5),
+            verdict: Some("allow".to_string()),
+            semantic_anomaly_score: None,
+            identity_context: None,
+            source: Some("test".to_string()),
+            policy_rule: None,
+        };
+
+        mgr.insert(event).await.unwrap();
+        // Give background worker time to write
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let events = mgr.get_events(10).await.unwrap();
+        let saved = events.iter().find(|e| e.session_id == "test-sess-redact").unwrap();
+
+        // Raw payloads MUST be redacted
+        assert_eq!(saved.request_body, None);
+        assert_eq!(saved.response_body, None);
+
+        // Hashes MUST be computed and preserved
+        assert!(saved.request_body_hash.is_some());
+        assert!(saved.response_body_hash.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_payload_recording_when_opted_in() {
+        let mgr = DbManager::init_with_options(true);
+        assert!(mgr.record_payloads);
+
+        let event = EgressEvent {
+            timestamp_ns: 987654321,
+            session_id: "test-sess-opt-in".to_string(),
+            transport: "llm".to_string(),
+            method: Some("POST".to_string()),
+            target_host: "api.openai.com".to_string(),
+            target_port: Some(443),
+            url_path: Some("/v1/chat/completions".to_string()),
+            request_headers: None,
+            request_body: Some("DEBUG PROMPT".to_string()),
+            request_body_hash: None,
+            response_status: Some(200),
+            response_body: Some("DEBUG RESPONSE".to_string()),
+            response_body_hash: None,
+            dlp_findings: None,
+            injection_findings: None,
+            latency_ms: Some(15.0),
+            verdict: Some("allow".to_string()),
+            semantic_anomaly_score: None,
+            identity_context: None,
+            source: Some("test".to_string()),
+            policy_rule: None,
+        };
+
+        mgr.insert(event).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let events = mgr.get_events(10).await.unwrap();
+        let saved = events.iter().find(|e| e.session_id == "test-sess-opt-in").unwrap();
+
+        // Raw payloads preserved when opted-in
+        assert_eq!(saved.request_body, Some("DEBUG PROMPT".to_string()));
+        assert_eq!(saved.response_body, Some("DEBUG RESPONSE".to_string()));
+    }
+}
+
 
 // The module is deliberately lightweight; higher‑level code should call `insert` and `get_events`.

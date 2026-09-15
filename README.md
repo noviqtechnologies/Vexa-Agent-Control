@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.82-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.83-10B981.svg?style=flat-square)](Cargo.toml)
 [![Changelog](https://img.shields.io/badge/Changelog-SemVer%202.0-blueviolet.svg?style=flat-square)](CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
 [![Contributing](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
@@ -41,6 +41,7 @@
   - [6. Pluggable Routing Engine & Pipeline Hooks](#6-pluggable-routing-engine--pipeline-hooks)
   - [7. Enterprise Semantic Vector Caching](#7-enterprise-semantic-vector-caching)
   - [8. Desired-State Routing & Verification Probe](#8-desired-state-routing--verification-probe)
+  - [9. Control Hub v2 Architecture & Multi-State Observability](#9-control-hub-v2-architecture--multi-state-observability)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -111,7 +112,7 @@ from openai import OpenAI
 
 # Connect to Vexa Agent Control Gateway
 client = OpenAI(
-    base_url="http://localhost:8080/v1",
+    base_url="http://localhost:18080/v1",
     api_key="your-vexa-virtual-key"  # or upstream provider key in local_compat mode
 )
 
@@ -133,7 +134,7 @@ for chunk in response:
 
 #### cURL Request
 ```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
+curl -X POST http://localhost:18080/v1/chat/completions \
   -H "Authorization: Bearer your-vexa-virtual-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -152,14 +153,18 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 
 Vexa automatically discovers, backs up, and wraps MCP configurations for **Claude Desktop**, **Cursor**, **Codex**, and **Antigravity**.
 
-### One-Command Protection & Gateway Startup
+### Zero-Touch Workstation Quickstart
 ```bash
-# 1. Inspect discovered clients without touching files:
-agentcontrol status
-agentcontrol protect --dry-run
+# 1. Authenticate your workstation via browser OAuth PKCE:
+agentcontrol login
 
-# 2. Wrap configs & start local gateway with active enforcement:
-agentcontrol protect
+# 2. Connect your installed coding assistants:
+agentcontrol connect codex
+agentcontrol connect claude
+
+# 3. Check health and multi-state status:
+agentcontrol status
+agentcontrol doctor
 ```
 
 ### Automated 4-Point Live Verification Suite
@@ -252,10 +257,24 @@ tools:
           - path_traversal
 ```
 
+- **GitOps Policy Precedence (Central Ceiling):** Centralized policies define hard ceiling boundaries. Repository-local `.agentcontrol.yaml` policies can only tighten rules, never loosen or bypass Central permissions.
+- **4-Tier Client & Project Attribution:** Attributions (`client_id`, `project_id`, `cost_center`) resolve with strict precedence: `HTTP Header > Env Var > GitOps Policy YAML > Fallback ("default")`, with automated slug sanitization and Central Tenant Boundary Locks.
+- **Zero-Payload Privacy by Default:** Local SQLite databases only persist SHA-256 hashes of prompts/responses by default. Raw bodies are recorded only when explicitly opting in via `--record-payloads`.
+- **Autonomous Local Spend CLI & Invoicing Exports:**
+  ```bash
+  # Check local spend & active budget caps
+  agentcontrol spend status --agent-id alice
+
+  # Export invoice-ready token accounting records to CSV or JSON
+  agentcontrol spend export --format=csv --client=acme_corp --output=./invoices/spend_acme.csv
+
+  # Configure local agent daily, weekly, or monthly budget cap
+  agentcontrol spend set-cap --agent-id alice --cap-cents 500 --period daily
+  ```
 - **Atomic Preflight Reservations:** Pre-reserves max-token microcents in memory before upstream dispatch.
 - **Exact SSE Stream Settlement:** Calculates actual prompt and completion tokens upon stream finish and settles balance.
 
-[**Read the Spend & Budgets Guide →**](docs/spend_budgets_testing_guide.md)
+[**Read the Spend & Budgets Guide →**](docs/spend_budgets_testing_guide.md) · [**GitOps Policy Precedence Guide →**](docs/user-guide/gitops-policy-precedence.md)
 
 </details>
 
@@ -421,7 +440,7 @@ agentcontrol cache clear
 
 ### Developer Dashboard Telemetry
 
-Open `http://localhost:8080/dashboard` and navigate to **Token Economics & Cache**:
+Open `http://localhost:18080/dashboard` and navigate to **Token Economics & Cache**:
 - **3 Hero Metric Cards:** Explicitly visualizes Vexa Gateway 100% Avoided Spend vs. Provider-side prefix discounts.
 - **Proportional Attribution Bar:** Live percentage split showing direct gateway savings vs upstream provider discounts.
 - **Live Semantic Cluster Inspector:** Inspects incoming queries and cached clusters side-by-side with exact cosine similarity scores and per-query dollar savings.
@@ -443,11 +462,27 @@ Replace fragile fire-and-forget push channels with a formal 9-state desired-stat
 - **5-Point Verification Probe (REQ-VER-004):**
   ```bash
   # Assert effective routing, injection safety, DLP redaction, and Hub identity correlation
-  agentcontrol verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --user-id $(whoami)
+  agentcontrol verify --gateway http://127.0.0.1:18080 --hub https://console.vexasec.io --user-id $(whoami)
   ```
 - **Correlated Request Attribution (REQ-VER-008):** Centralized broker permanently stamps every routed LLM request with authenticated device ID, user ID, active assignment hash, and token usage metrics.
 
 [**Read the Desired-State & Verification Guide →**](docs/user_guide.md#17-desired-state-routing--verification-architecture)
+
+</details>
+
+<details>
+<summary><b>9. Control Hub v2 Architecture & Multi-State Observability</b> — Zero Private Key Ingestion & Signed Policy Manifests</summary>
+
+The enterprise Control Hub v2 provides centralized governance, multi-state capability tracking, and signed policy distributions without ever ingesting private keys:
+
+- **Zero Private Key Ingestion:** Workstations generate local Ed25519 keypairs within OS secure storage (DPAPI/Keychain). Only raw public key bytes are registered via `/api/v2/devices/enroll`.
+- **Signed Device Assertions (`X-Device-Authorization`):** Workstation daemons sign every gateway transaction using short-lived (300s) Ed25519 assertions with sliding 5-minute replay nonce deduplication (`jti`).
+- **Multi-State Capability Vectors:** Replaces binary compliance with verified operational states: `CONFIGURED` (proxy locked), `MCP_WRAPPED` (tools routed), and `TRAFFIC_VERIFIED` (attested transactions).
+- **Freshness Tiers:** Continuous liveness tracking categorized into `ACTIVE_FRESH` (≤ 15m), `ACTIVE_RECENT` (≤ 24h), and `STALE` (&gt; 24h).
+- **Cryptographically Signed Effective Policies:** Control Hub distributes canonical JSON policy manifests signed with an Ed25519 authority key (`GET /api/v2/policy/effective`).
+- **Cryptographic Audit Checkpoints:** Telemetry events are sequentially hash-chained (`event_hash` / `prev_event_hash`) and sealed into verifiable checkpoints (`GET /api/v2/audit/checkpoints`).
+
+[**Read the Control Hub v2 API Reference →**](docs/guides/control_hub_api_guide.md) · [**SOC Web Console User Guide →**](docs/guides/web_console_user_guide.md)
 
 </details>
 
@@ -480,7 +515,7 @@ cd Vexa-Agent-Control
 docker compose -f docker-compose.team.yml up -d
 ```
 
-- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin` / `admin123!`)
+- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Sign in with your configured administrator credentials set via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`)
 - **Security Gateway Endpoint:** `http://localhost:8080`
 - **Pre-enrolled Evaluation Gateway:** The bundled gateway automatically registers as `vexa-demo-gateway` in **Device Governance** as an active evaluation node. To enroll your host machine / IDEs, click **`+ Generate Enrollment Token`** in the UI.
 - Read the complete [Docker Deployment Guide](docs/guides/docker-deployment.md).
@@ -549,20 +584,20 @@ docker run -d \
 
 ## 10-Minute Workstation Quickstart
 
-Follow this step-by-step developer journey to install, safely discover, protect one client, verify enforcement, and roll back.
+Follow this developer journey to authenticate, connect coding assistants with zero elevation, verify health diagnostics, and roll back cleanly without affecting your custom settings.
 
 ### Step 0: Preflight Check
 
-Confirm your local architecture and ensure port `8080` is available:
+Confirm your local architecture and ensure port `18080` is available:
 
 ```bash
 # macOS / Linux / WSL
-uname -m && netstat -an | grep 8080 || echo "Port 8080 is available"
+uname -m && netstat -an | grep 18080 || echo "Port 18080 is available"
 ```
 
 ```powershell
 # Windows (PowerShell)
-$env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+$env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 18080 -ErrorAction SilentlyContinue
 ```
 
 ### Step 1: Install Vexa Agent Control
@@ -582,59 +617,100 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.82`.
-- **Troubleshooting:** Check platform-specific guides: [macOS](docs/install/macos.md) · [Linux](docs/install/linux.md) · [WSL2](docs/install/wsl.md) · [Windows PowerShell](docs/install/windows-powershell.md) · [Windows CMD](docs/install/windows-cmd.md).
+- **Expected Result:** Prints `agentcontrol 1.0.83`.
 
-### Step 2: Inspect Discovered Clients (Safe Dry-Run)
+### Step 2: Authenticate Workstation (`agentcontrol login`)
 
-Inspect which IDE configurations exist on your machine without modifying any files:
-
-```bash
-agentcontrol status
-agentcontrol protect --dry-run
-```
-
-- **Expected Result:** Prints the status table identifying **[verified]** vs **[unverified]** config files.
-
-### Step 3: Protect and Launch Local Gateway
-
-Run one-command protection to wrap discovered configs and launch the local security gateway:
+Authenticate your developer workstation with your organization's Control Hub using OAuth 2.0 PKCE. **Zero administrator or UAC elevation is required**:
 
 ```bash
-# Start in observation (shadow) mode:
-agentcontrol protect --shadow
-
-# OR start in active enforcement mode (blocks secrets & prompt injections):
-agentcontrol protect
+agentcontrol login
 ```
 
-- **Expected Result:** Discovered MCP configs are backed up and wrapped; local gateway starts on `http://127.0.0.1:8080` and opens the local dashboard.
-- **What Changes:** Configs are updated; backups saved to `<config_path>.bak.<timestamp>`.
+- Opens your system browser to authenticate via SSO/OIDC.
+- Generates an Ed25519 device identity and stores credentials in your native OS Keyring (Windows Credential Manager, macOS Keychain, or Freedesktop Secret Service).
+- Automatically registers a per-user background agent (`VexaAgentControl`) on your login session.
 
-### Step 4: Verify Live Enforcement
+*(For headless Linux or CI environments, pass `--no-browser`).*
 
-In a separate terminal, execute the 3-point live verification probe:
+### Step 3: Connect Coding Assistants (`agentcontrol connect <target>`)
+
+Connect your installed coding assistants with non-destructive ownership tracking:
 
 ```bash
-agentcontrol verify
+# Connect OpenAI Codex CLI:
+agentcontrol connect codex
+
+# Connect Anthropic Claude Desktop:
+agentcontrol connect claude
+
+# Connect VS Code Continue extension:
+agentcontrol connect vscode-continue
 ```
 
-- **Expected Result:**
-  ```text
-  ✔ [1/3] Safe Tool Execution (read_file)      ➔ ALLOWED
-  ✔ [2/3] DLP Exfiltration Guard (AWS Secret) ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
-  ✔ [3/3] Prompt Injection (System Override)  ➔ BLOCKED [INJ-04-OVERRIDE]
-  ```
+- **Zero Plaintext Secrets:** Upstream master provider keys (OpenAI, Anthropic, Gemini) remain safely quarantined in Cloud Vault. Workstations only use local session tokens.
+- **Zero Root CA:** Agent Control never installs Root CA certificates or modifies operating system trust stores.
+- **Ownership Manifest:** Every mutation is hashed and tracked in `~/.agentcontrol/manifests/<target>.manifest.json`.
 
-### Step 5: Clean Reversion & Unprotect
+### Step 4: Run Health Diagnostics (`agentcontrol doctor`)
 
-To restore all original IDE configurations from backups at any time:
+Execute a 7-point health and security verification check:
 
 ```bash
-agentcontrol unprotect
+agentcontrol doctor
 ```
 
-- **Expected Result:** Backups are restored; configurations return to their pre-Vexa state.
+```text
+✔ Binary Integrity:          Pass (v1.0.83)
+✔ Authentication State:      Pass (alice@company.com - dev-team)
+✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
+✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
+✔ Gateway Connectivity:      Pass (https://app.vexasec.io, 28ms)
+✔ Target Configuration:      Pass (codex: verified, claude: verified)
+✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
+
+Overall Health: HEALTHY (Exit Code 0)
+```
+
+*(Use `agentcontrol doctor --json` for machine-readable output in CI/CD).*
+
+### Step 5: Clean Reversal (`agentcontrol disconnect <target>`)
+
+To cleanly disconnect an assistant at any time:
+
+```bash
+agentcontrol disconnect codex
+agentcontrol disconnect claude
+agentcontrol disconnect vscode-continue
+```
+
+- Reverts only the managed settings tracked in the `OwnershipManifest`.
+- Unwraps MCP servers back to their original commands and arguments.
+- **Developer Preserving:** Custom tool configurations, model settings, themes, and personal properties added while connected are preserved completely.
+
+---
+
+### Step 6: Loopback Hardening, FinOps & MCP Process Sandboxing
+
+Agent Control implements comprehensive workstation-level security guarantees:
+
+1. **Socket-Level Loopback Assertion & Dynamic Fallback:**
+   - Background daemon listens on `127.0.0.1:18080`.
+   - If port `18080` is busy, dynamically binds to an available fallback port in range `18080..=18090` and writes the active port to `~/.agentcontrol/daemon.port`.
+   - Inbound connections are asserted at the TCP socket layer (accepting strictly `127.0.0.0/8`, `::1`, or `::ffff:127.0.0.1`). Non-loopback attempts are dropped immediately.
+   - Ambient browser requests (`Origin`, `Sec-Fetch-Site: cross-site`) are rejected with HTTP 403 Forbidden to prevent Web-to-Localhost CSRF / DNS rebinding attacks.
+
+2. **FinOps Spend Governance & 500ms Stream Cancellation:**
+   - Atomic preflight token reservations enforce monthly workspace spend limits.
+   - When spend caps are reached, immediately returns HTTP 429 (`BUDGET_EXCEEDED`) without retry storms.
+   - Premature client SSE disconnects (canceling long reasoning runs) trigger upstream cancellation within **500ms**, reconciling exact tokens streamed.
+   - Read the [FinOps Spend Management Guide](docs/guides/finops_spend_management.md).
+
+3. **Multi-OS MCP Stdio Process Sandboxing:**
+   - Child MCP processes run with a strict **< 64MB Memory RSS Ceiling** (Windows Job Objects, Linux `RLIMIT_AS`, macOS `RLIMIT_DATA`).
+   - Parameter DLP automatically redacts credentials (`[REDACTED:API_KEY]`, `[REDACTED:CONNECTION_STRING]`).
+   - Stderr is separated with `[mcp-stderr]` prefixes and child crashes are fully isolated from the daemon.
+   - Read the [MCP Stdio Proxy Isolation Guide](docs/guides/mcp_proxy_isolation.md).
 
 ---
 
@@ -682,11 +758,12 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 | Component | Path (macOS / Linux) | Path (Windows) |
 |---|---|---|
 | **Binary Executable** | `~/.local/bin/agentcontrol` | `%USERPROFILE%\.local\bin\agentcontrol.exe` |
+| **Device & Local Token** | `~/.agentcontrol/local.token` (`0600`) | `%USERPROFILE%\.agentcontrol\local.token` |
+| **Credential Storage** | macOS Keychain / Secret Service | Windows Credential Manager |
+| **Ownership Manifests** | `~/.agentcontrol/manifests/*.manifest.json` | `%USERPROFILE%\.agentcontrol\manifests\*.manifest.json` |
+| **Baseline Backups** | `~/.agentcontrol/backups/*.baseline.bak` | `%USERPROFILE%\.agentcontrol\backups\*.baseline.bak` |
 | **State & Audit Logs** | `~/.agentcontrol/audit.jsonl` | `%USERPROFILE%\.agentcontrol\audit.jsonl` |
-| **Local Database** | `~/.agentcontrol/events.db` | `%USERPROFILE%\.agentcontrol\events.db` |
-| **Local Policy** | `./agentcontrol-policy.yaml` | `.\agentcontrol-policy.yaml` |
-| **Backups Created** | `<config_dir>/<file>.bak.<timestamp>` | `<config_dir>\<file>.bak.<timestamp>` |
-| **Local TCP Port** | `127.0.0.1:8080` (customizable with `--listen`) | `127.0.0.1:8080` (customizable with `--listen`) |
+| **Local TCP Port** | `127.0.0.1:18080` (loopback only) | `127.0.0.1:18080` (loopback only) |
 
 ---
 
@@ -694,11 +771,11 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 
 ### Security Enforcement Modes
 - **Observation / Shadow Mode (`--shadow`):** Logs all tool calls and evaluated policy decisions without blocking any execution. Ideal for testing and policy baseline generation (`agentcontrol generate-policy`).
-- **Enforcement Mode (`--enforce` / default in `protect`):** Actively denies tool executions that violate DLP, schema validation, or prompt injection rules.
+- **Enforcement Mode (`--enforce`):** Actively denies tool executions that violate DLP, schema validation, or prompt injection rules.
 - **Custom Agent Proxy Mode:** Routes custom Python/Node.js agents via HTTP proxy variables:
   ```bash
-  export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
-  export HTTP_PROXY=http://127.0.0.1:8080
+  export AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080
+  export HTTP_PROXY=http://127.0.0.1:18080
   ```
 
 ### LLM Key & Spend Governance Modes (`llm_mode`)
@@ -731,7 +808,7 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 | **Verified** | **Codex** | `~/.codex/config.toml` | Supported ([Guide](docs/integrations/codex.md)) — wraps MCP tools & injects shell environment policy |
 | **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported ([Guide](docs/integrations/antigravity.md)) |
 | **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
-| **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080` | Manual proxy routing ([Guide](docs/guides/custom-agent-http.md)) |
+| **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080` | Manual proxy routing ([Guide](docs/guides/custom-agent-http.md)) |
 
 ---
 
@@ -750,7 +827,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.82_checksums.txt
+sha256sum -c agentcontrol_1.0.83_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe
@@ -792,12 +869,9 @@ npm run dev
 ## Troubleshooting & Clean Removal
 
 ### Top 3 First-Run Checks
-1. **Port 8080 in use:** Launch on an alternative port:
-   ```bash
-   agentcontrol protect --listen 127.0.0.1:9090
-   ```
-2. **IDE tool calls not intercepted:** Restart your IDE after running `agentcontrol protect` so it reloads its configuration.
-3. **Configuration rollback:** Run `agentcontrol unprotect` to non-destructively unwrap MCP tools in-place, or `agentcontrol unprotect --force` to force restore from raw backup files.
+1. **Port 18080 in use:** The daemon automatically falls back to an open port in `18080..=18090` and writes the active port to `~/.agentcontrol/daemon.port`.
+2. **IDE tool calls not intercepted:** Restart your IDE after running `agentcontrol connect <target>` so it reloads its configuration.
+3. **Configuration rollback:** Run `agentcontrol disconnect <target>` to non-destructively revert configurations from manifests, or run `agentcontrol repair` to diagnose and fix configuration drift.
 
 ### Automated Clean Uninstall
 To remove the binary, service daemons, and purge state files:

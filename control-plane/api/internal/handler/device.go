@@ -86,6 +86,17 @@ func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := middleware.UserClaimsFromContext(r.Context())
+	if claims != nil && !claims.IsAdmin && claims.UserID != "" {
+		userDevices := make([]device.DeviceComplianceSummary, 0)
+		for _, d := range resp {
+			if strings.EqualFold(d.UserIdentifier, claims.UserID) {
+				userDevices = append(userDevices, d)
+			}
+		}
+		resp = userDevices
+	}
+
 	var compliantCount, nonCompliantCount, offlineCount int
 	now := time.Now().UTC()
 	for i := range resp {
@@ -170,4 +181,28 @@ func (h *DeviceHandler) GetDevice(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(detail)
+}
+
+// DeleteDevice handles DELETE /api/v1/devices/{id}
+func (h *DeviceHandler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	if deviceID == "" {
+		http.Error(w, `{"error":"missing_device_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := middleware.ResolveTenantScope(r)
+
+	if err := h.store.DeleteDevice(r.Context(), orgID, deviceID); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"device_id": deviceID,
+		"deleted":   true,
+		"message":   "Device removed from fleet inventory",
+	})
 }

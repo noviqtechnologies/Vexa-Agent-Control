@@ -13,7 +13,10 @@ use clap::{Parser, Subcommand};
     name = "agentcontrol",
     bin_name = "agentcontrol",
     version,
-    about = "VEXA Agent Control — centralized enterprise security gateway for AI agent tool calls over MCP"
+    about = "VEXA Agent Control — centralized security gateway and governance proxy for AI agent tool calls over MCP",
+    long_about = "VEXA Agent Control is a deterministic enterprise security gateway for Model Context Protocol (MCP)\n\
+                  and AI agent tool executions. It enforces parameter DLP, prompt injection defense, token accounting,\n\
+                  and HMAC-chained cryptographic audit trails across supported developer IDEs and autonomous agents."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -23,7 +26,85 @@ pub struct Cli {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Browser PKCE OAuth authentication and zero-touch device onboarding
+    Login {
+        /// Control Hub API URL
+        #[arg(
+            long,
+            alias = "hub",
+            env = "AGENTCONTROL_HUB_URL",
+            default_value = "https://app.vexasec.io"
+        )]
+        hub_url: String,
+
+        /// Disable automatic opening of system browser
+        #[arg(long, default_value_t = false)]
+        no_browser: bool,
+    },
+
+    /// Configure a verified IDE client (codex, claude, vscode-continue) with ownership manifest
+    Connect {
+        /// Target client to connect
+        target: crate::wrap::ConnectTarget,
+
+        /// Connection mode (local or cloud-direct)
+        #[arg(long, value_enum)]
+        mode: Option<crate::wrap::ConnectMode>,
+
+        /// Virtual key or authentication token (e.g. sk-vex-...)
+        #[arg(long, short = 'k', env = "AGENTCONTROL_VIRTUAL_KEY")]
+        key: Option<String>,
+
+        /// Force connection even if client version is outside pinned range
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
+    /// Non-destructively disconnect a client using ownership manifest, preserving all user customizations
+    Disconnect {
+        /// Target client to disconnect
+        target: crate::wrap::ConnectTarget,
+    },
+
+    /// Read-only diagnostic health check returning standardized exit codes (0 healthy, 1 critical, 2 degraded)
+    Doctor {
+        /// Output results as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+
+    /// Generate a sanitized diagnostic support bundle (< 10MB) using structural allowlisting
+    #[command(name = "support-bundle")]
+    SupportBundle {
+        /// Optional directory to save the support bundle
+        #[arg(long)]
+        output_dir: Option<std::path::PathBuf>,
+
+        /// Automatically proceed without interactive confirmation prompt
+        #[arg(long, short = 'y', default_value_t = false)]
+        yes: bool,
+    },
+
+    /// Re-validate active configurations against manifests and repair background agent service
+    Repair,
+
+    /// Flush local workstation credentials and invalidate session
+    Logout,
+
+    /// Purge local telemetry events and cache while preserving baseline config backups
+    #[command(name = "reset-local-state")]
+    ResetLocalState {
+        /// Force reset without interactive confirmation prompt
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
+    /// Rotate persistent local proxy bearer token and update connected client configurations
+    #[command(name = "rotate-local-token")]
+    RotateLocalToken,
+
     /// Perform PKI Device Enrollment with Control Hub
+    #[command(hide = true)]
     Enroll {
         /// One-Time Enrollment Token (OTET)
         #[arg(long, env = "AGENTCONTROL_ENROLLMENT_TOKEN")]
@@ -40,6 +121,7 @@ pub enum Commands {
 
     /// Join organization / team workspace (SMB Feature)
     #[cfg(feature = "team")]
+    #[command(hide = true)]
     Join {
         /// Organization or workspace join token
         #[arg(long)]
@@ -56,10 +138,11 @@ pub enum Commands {
         action: ServiceCliAction,
     },
 
-    /// Start local shadow proxy (observation only, no enforcement)
+    /// Start local shadow proxy (observation only, no enforcement) [DEPRECATED: Use 'start --shadow-mode']
+    #[command(hide = true)]
     Dev {
-        /// Listen address for HTTP mode (default: 127.0.0.1:8080)
-        #[arg(long, default_value = "127.0.0.1:8080")]
+        /// Listen address for HTTP mode (default: 127.0.0.1:18080)
+        #[arg(long, default_value = "127.0.0.1:18080")]
         listen: String,
 
         /// Upstream HTTP MCP server URL (default: http://127.0.0.1:3000)
@@ -96,6 +179,10 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         min_tokens: u64,
 
+        /// Opt-in to recording raw prompt and response payloads in SQLite egress events (hashes stored by default)
+        #[arg(long, env = "AGENTCONTROL_RECORD_PAYLOADS", default_value_t = false)]
+        record_payloads: bool,
+
         /// [EXPERIMENTAL] Local LLM API endpoint for dual-agent advisory threat reasoning
         #[arg(long, default_value = "http://localhost:11434")]
         local_llm_url: String,
@@ -105,29 +192,11 @@ pub enum Commands {
         args: Vec<String>,
     },
 
-    /// Run ADR security benchmark suite (303 tasks, 17 attack classes, 133 MCP servers)
-    Bench {
-        /// Run all 303 benchmark scenarios across 17 attack classes
-        #[arg(long, default_value_t = false)]
-        full: bool,
-
-        /// Benchmark comparative scoring against industry baselines (ALRPHFS, GuardAgent, LlamaFirewall)
-        #[arg(long, default_value_t = false)]
-        compare_baselines: bool,
-
-        /// Render HTML/SVG figures and scorecards
-        #[arg(long, default_value_t = false)]
-        visualize: bool,
-
-        /// Output path for benchmark HTML report
-        #[arg(long, default_value = "./target/benchmark-report.html")]
-        output: String,
-    },
-
-    /// Run the gateway server
+    /// Start the local gateway proxy daemon (listening on 127.0.0.1:18080 by default)
     Start(Box<StartArgs>),
 
-    /// Automatically wrap an existing agent command with AgentControl
+    /// Automatically wrap an existing agent command with AgentControl [LEGACY: Use 'connect']
+    #[command(hide = true)]
     Wrap(Box<WrapArgs>),
 
     /// Validate a policy against a gateway instance using fixture test calls
@@ -162,50 +231,6 @@ pub enum Commands {
         oidc_token: Option<String>,
     },
 
-    /// Validate and sign a policy for production
-    Promote {
-        /// YAML policy file to promote
-        #[arg(long)]
-        policy: String,
-
-        /// Path to the Ed25519 private key (PEM or raw bytes)
-        /// If not provided, a temporary key will be generated for demo purposes.
-        #[arg(long)]
-        key: Option<String>,
-    },
-
-    /// Verify HMAC chain integrity of an audit log
-    VerifyLog {
-        /// Audit log file path
-        log_path: String,
-
-        /// Optional path to HMAC signing key file for full payload verification
-        #[arg(long, env = "AGENTCONTROL_KEY_FILE")]
-        key_file: Option<String>,
-    },
-
-    /// Generate a session report from a completed audit log
-    Report {
-        /// Audit log file path
-        log_path: String,
-
-        /// Output file
-        #[arg(long)]
-        output: Option<String>,
-
-        /// Report format (json|text)
-        #[arg(long, default_value = "json")]
-        format: String,
-
-        /// Include raw params in report (WARNING: may leak PII/secrets)
-        #[arg(long, default_value_t = false)]
-        report_include_params: bool,
-
-        /// Generate a Risk Delta summary report of hypothetical blocks/redactions from shadow mode
-        #[arg(long, default_value_t = false)]
-        risk: bool,
-    },
-
     /// Run Vexa security scanner against local MCP server configurations
     Scan {
         /// Target policy or MCP configuration YAML file path
@@ -217,44 +242,10 @@ pub enum Commands {
         format: String,
     },
 
-    /// Generate a YAML security policy draft from observed shadow-mode traffic
-    ///
-    /// Reads all tool-call events recorded by `agentcontrol dev` (shadow mode) from the
-    /// local SQLite database and produces a lint-passing `agentcontrol-policy.yaml` draft.
-    ///
-    /// ## Workflow
-    ///
-    /// 1. Run `agentcontrol dev` and route your agent's MCP traffic through it.
-    /// 2. Run `agentcontrol generate-policy` to draft the policy.
-    /// 3. Review and tighten the generated YAML.
-    /// 4. Run `agentcontrol lint agentcontrol-policy.yaml` to validate.
-    /// 5. Submit to your security/platform team for deployment to the centralized gateway.
-    #[command(name = "generate-policy")]
-    GeneratePolicy {
-        /// Output file path for the generated policy (default: ./agentcontrol-policy.yaml)
-        #[arg(long, default_value = "agentcontrol-policy.yaml")]
-        output: String,
-
-        /// Decay window in days for self-healing behavioral learning
-        #[arg(long, default_value_t = 30)]
-        decay_window: u32,
-    },
-
-    Init {
-        #[command(subcommand)]
-        target: Option<InitTarget>,
-    },
-
     /// Agent Identity & Credential Governance
     Identity {
         #[command(subcommand)]
         command: IdentityCommands,
-    },
-
-    /// Enterprise License Management & Key Generation
-    License {
-        #[command(subcommand)]
-        command: LicenseCommands,
     },
 
     /// Generate compliance reports (SOC 2, ISO 27001, NIST AI RMF)
@@ -263,14 +254,22 @@ pub enum Commands {
         command: ComplianceCommands,
     },
 
-    /// Restore AgentControl wrappers
+    /// Spend budget enforcement and token accounting
+    Spend {
+        #[command(subcommand)]
+        command: SpendCommands,
+    },
+
+    /// Restore AgentControl wrappers [LEGACY: Use 'disconnect']
+    #[command(hide = true)]
     Unwrap {
         /// Target to unwrap (e.g. claude)
         #[command(subcommand)]
         target: UnwrapTarget,
     },
 
-    /// Automatically discover IDEs, atomically wrap MCP configs, start gateway, and open dashboard
+    /// Automatically discover IDEs, atomically wrap MCP configs, start gateway, and open dashboard [LEGACY: Use 'connect' and 'start']
+    #[command(hide = true)]
     Protect {
         /// Preview changes without writing to disk or starting gateway
         #[arg(long, default_value_t = false)]
@@ -280,8 +279,8 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         no_browser: bool,
 
-        /// Listen address for gateway proxy (default: 127.0.0.1:8080)
-        #[arg(long, default_value = "127.0.0.1:8080")]
+        /// Listen address for gateway proxy (default: 127.0.0.1:18080)
+        #[arg(long, default_value = "127.0.0.1:18080")]
         listen: String,
 
         /// Upstream HTTP MCP server URL (default: http://127.0.0.1:3000)
@@ -304,12 +303,17 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         min_tokens: u64,
 
+        /// Opt-in to recording raw prompt and response payloads in SQLite egress events (hashes stored by default)
+        #[arg(long, env = "AGENTCONTROL_RECORD_PAYLOADS", default_value_t = false)]
+        record_payloads: bool,
+
         /// YAML policy file path
         #[arg(long, default_value = "agentcontrol-policy.yaml")]
         policy: String,
     },
 
-    /// One-command reversion — restore all IDE configurations from backups and verify integrity
+    /// One-command reversion — restore all IDE configurations from backups and verify integrity [LEGACY: Use 'disconnect']
+    #[command(hide = true)]
     Unprotect {
         /// Preview unprotect operations without modifying disk
         #[arg(long, default_value_t = false)]
@@ -340,7 +344,8 @@ pub enum Commands {
         max_scan_bytes: usize,
     },
 
-    /// Validate a tool call payload against a policy file locally
+    /// Validate a tool call payload against a policy file locally [LEGACY: Use 'test']
+    #[command(hide = true)]
     Validate {
         /// YAML policy file path
         #[arg(long)]
@@ -355,31 +360,22 @@ pub enum Commands {
         payload: String,
     },
 
-    /// Lint a policy YAML file for schema and security warnings
+    /// Lint a policy YAML file for schema and security warnings [LEGACY: Handled by Central Hub]
+    #[command(hide = true)]
     Lint {
         /// YAML policy file path
         policy: String,
     },
 
-    /// Show config path, existence, and wrap status for all 8 IDE targets
-    ///
-    /// Displays a table with: target name, resolved config path, whether the
-    /// file exists, and whether all MCP servers are wrapped. Paths that are
-    /// known-wrong or unverified are flagged explicitly.
-    Status,
+    /// Show target configurations, capability vectors, and traffic freshness
+    Status {
+        /// Output results as structured JSON conforming to PRD schema
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
 
-    /// Watch IDE configs and auto-wrap new MCP servers (daemon, event-driven)
-    ///
-    /// Monitors the config file of each selected IDE target via OS-native
-    /// filesystem events (inotify / FSEvents / ReadDirectoryChangesW).
-    /// When an unwrapped `mcpServers` entry is detected, the daemon calls
-    /// the same wrap logic as `agentcontrol wrap <target>` — closing the gap
-    /// before the IDE's next restart.
-    ///
-    /// NOTE: IDEs load `mcpServers` at process startup. This daemon does NOT
-    /// make IDEs hot-reload. Correct framing: "closes the gap before the
-    /// IDE's next restart." You must restart the IDE for changes to take
-    /// effect after each wrap.
+    /// Watch IDE configs and auto-wrap new MCP servers (daemon, event-driven) [LEGACY: Background daemon handles auto-detection]
+    #[command(hide = true)]
     Watch {
         /// Watch all verified targets (currently Claude Desktop only — other
         /// paths are unverified and excluded from --all)
@@ -393,8 +389,8 @@ pub enum Commands {
 
     /// Run live security verification probe against gateway (3-point smoke test)
     Verify {
-        /// Gateway URL to test (default: http://127.0.0.1:8080)
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        /// Gateway URL to test (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
 
         /// Output results as JSON
@@ -418,12 +414,6 @@ pub enum Commands {
         token: Option<String>,
     },
 
-    /// Manage local Root Certificate Authority (CA) for LLM interception and spend tracking
-    Ca {
-        #[command(subcommand)]
-        command: CaCommands,
-    },
-
     /// Manage gateway semantic vector cache and prompt economics
     Cache {
         #[command(subcommand)]
@@ -435,8 +425,8 @@ pub enum Commands {
 pub enum CacheCommands {
     /// Show semantic cache hit ratio, tokens saved, and dollar cost advantage
     Status {
-        /// Gateway URL to query (default: http://127.0.0.1:8080)
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        /// Gateway URL to query (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
 
         /// Output results as raw JSON
@@ -445,26 +435,10 @@ pub enum CacheCommands {
     },
     /// Clear all in-memory and Qdrant cache entries
     Clear {
-        /// Gateway URL to query (default: http://127.0.0.1:8080)
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        /// Gateway URL to query (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
     },
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum CaCommands {
-    /// Generate local Root CA certificate and private key
-    Generate {
-        /// Optional directory to save the CA files (default: ~/.agentcontrol/ca)
-        #[arg(long)]
-        dir: Option<std::path::PathBuf>,
-    },
-    /// Install local Root CA into the current user's OS trust store
-    Install,
-    /// Remove local Root CA from the OS trust store
-    Uninstall,
-    /// Check whether local Root CA is generated and installed in trust store
-    Status,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -606,16 +580,6 @@ pub enum WatchTarget {
 }
 
 #[derive(Subcommand)]
-pub enum InitTarget {
-    /// Generate a Kubernetes sidecar manifest for AgentControl proxy
-    Sidecar {
-        /// Upstream MCP server URL
-        #[arg(long, default_value = "http://mcp-server:3000")]
-        mcp_upstream: String,
-    },
-}
-
-#[derive(Subcommand)]
 pub enum IdentityCommands {
     /// Provision a scoped, short-lived credential for an agent
     Create {
@@ -701,43 +665,6 @@ pub enum IdentityCommands {
 }
 
 #[derive(Subcommand)]
-pub enum LicenseCommands {
-    /// Generate an Ed25519 signing keypair for license issuance
-    Keygen {
-        /// Output directory to write vexa_license.key and vexa_license.pub
-        #[arg(long, default_value = "./keys")]
-        output: String,
-    },
-
-    /// Issue an Ed25519-signed JWT license token
-    Generate {
-        /// Organization identifier (e.g. "acme-corp")
-        #[arg(long)]
-        org: String,
-
-        /// License tier ("community", "team", "enterprise")
-        #[arg(long, default_value = "team")]
-        tier: String,
-
-        /// Maximum allowed seats / devices
-        #[arg(long, default_value_t = 25)]
-        seats: usize,
-
-        /// License validity period in days
-        #[arg(long, default_value_t = 365)]
-        days: i64,
-
-        /// Path to the Ed25519 private signing key file
-        #[arg(long, default_value = "./keys/vexa_license.key")]
-        signing_key: String,
-
-        /// Optional custom feature flags (comma-separated)
-        #[arg(long, value_delimiter = ',')]
-        features: Option<Vec<String>>,
-    },
-}
-
-#[derive(Subcommand)]
 pub enum ComplianceCommands {
     /// Generate SOC 2 / ISO 27001 / NIST AI RMF compliance evidence report
     Report {
@@ -752,6 +679,48 @@ pub enum ComplianceCommands {
         /// Output file path (defaults to stdout if omitted)
         #[arg(long)]
         output: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum SpendCommands {
+    /// Show current spend and budget status
+    Status {
+        /// Agent ID (defaults to anonymous / current user)
+        #[arg(long)]
+        agent_id: Option<String>,
+    },
+    /// Export invoice-ready usage records (CSV or JSON)
+    Export {
+        /// Output format ("csv" or "json")
+        #[arg(long, default_value = "csv")]
+        format: String,
+
+        /// Filter by client_id
+        #[arg(long)]
+        client: Option<String>,
+
+        /// Filter by project_id
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Output file path (defaults to stdout if omitted)
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Set a budget cap
+    SetCap {
+        /// Target agent or user ID
+        #[arg(long)]
+        agent_id: String,
+
+        /// Budget cap in cents
+        #[arg(long)]
+        cap_cents: u64,
+
+        /// Budget period ("daily", "weekly", "monthly")
+        #[arg(long, default_value = "daily")]
+        period: String,
     },
 }
 
@@ -796,7 +765,7 @@ pub struct StartArgs {
     pub policy: Option<String>,
 
     /// Gateway listen address
-    #[arg(long, env = "AGENTCONTROL_LISTEN", default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "AGENTCONTROL_LISTEN", default_value = "127.0.0.1:18080")]
     pub listen: String,
 
     /// Audit log output path
@@ -899,6 +868,10 @@ pub struct StartArgs {
     )]
     pub strict_credential_scope: bool,
 
+    /// Opt-in to recording raw prompt and response payloads in SQLite egress events (hashes stored by default)
+    #[arg(long, env = "AGENTCONTROL_RECORD_PAYLOADS", default_value_t = false)]
+    pub record_payloads: bool,
+
     /// TLS certificate chain PEM file for HTTPS listener
     #[arg(long, env = "AGENTCONTROL_TLS_CERT")]
     pub tls_cert: Option<String>,
@@ -982,7 +955,7 @@ impl StartArgs {
     pub fn centralized_default() -> Self {
         Self {
             policy: None,
-            listen: "127.0.0.1:8080".to_string(),
+            listen: "127.0.0.1:18080".to_string(),
             log_path: "~/.agentcontrol/audit.jsonl".to_string(),
             mcp_url: "http://127.0.0.1:3000".to_string(),
             agent_pid: None,
@@ -1005,6 +978,7 @@ impl StartArgs {
             include_params: false,
             shadow_mode: false,
             strict_credential_scope: false,
+            record_payloads: false,
             tls_cert: None,
             tls_key: None,
             centralized: true,

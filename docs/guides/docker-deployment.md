@@ -74,7 +74,7 @@ docker compose -f docker-compose.team.yml up -d
 ```
 
 This single command starts:
-- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Login: `admin` / `admin123!`)
+- **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Sign in with administrator credentials configured via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`)
 - **Control Plane API:** `http://localhost:8081`
 - **Security Gateway Endpoint:** `http://localhost:8080` (appears as `vexa-demo-gateway` in **Device Governance**)
 - **PostgreSQL 16 Database:** internal port 5432
@@ -83,6 +83,38 @@ To check running services:
 ```bash
 docker compose -f docker-compose.team.yml ps
 ```
+
+---
+
+### 🛠️ Option A.2: Deploying Local Code to Containers (Build from Source)
+
+If you are modifying local source code (Rust Gateway in `src/`, Go REST API in `control-plane/api/`, or React Console in `control-plane/ui/`) and want to build and deploy your local changes directly into containers:
+
+```bash
+# Build and run containers from local source code:
+docker compose -f docker-compose.team.local.yml up -d --build
+```
+
+**Key benefits of `docker-compose.team.local.yml`:**
+- **Local Build Priority (`pull_policy: build`):** Bypasses GHCR remote registry images and recompiles directly from your local files.
+- **Isolated Local Containers:** Uses dedicated container names (`vexa-team-local-*`) and volume storage (`vexa-team-local-postgres-data`, `vexa-team-local-logs`).
+- **Exposed Database Port:** Maps PostgreSQL on host port `5432` for direct inspection via `psql` or database clients.
+- **Selective Rebuilds:** Recompile only the component you changed:
+  ```bash
+  # Rebuild only the Go API:
+  docker compose -f docker-compose.team.local.yml up -d --build control-plane-api
+
+  # Rebuild only the React UI:
+  docker compose -f docker-compose.team.local.yml up -d --build control-plane-ui
+
+  ```
+
+#### 🛡️ Control Hub v2 Architecture & Endpoints
+When running the Control Hub stack, the following v2 endpoints are automatically available:
+- **Device Registration & Management**: `POST /api/v2/devices/enroll`, `POST /api/v2/devices/{id}/rotate-key`, `GET /api/v2/devices`, `DELETE /api/v2/devices/{id}`.
+- **Signed Policy Distribution**: `GET /api/v2/policy/effective` (signed canonical JSON policy manifest).
+- **Sequenced Telemetry & Checkpoints**: `POST /api/v2/telemetry/ingest`, `GET /api/v2/audit/checkpoints`.
+- **Database Schema**: Hardened with `device_keys`, `audit_checkpoints`, and sequential hash-chaining telemetry columns (`000009_phase1_phase2_control_hub_hardening.up.sql`).
 
 ---
 
@@ -247,8 +279,10 @@ Key environment variables in `.env`:
 | `POLICY_READ_SECRET` | Secret for gateway active policy fetching | Min 16 chars |
 | `PROVIDER_KEY_ENCRYPTION_SECRET` | AES-256-GCM master key for LLM provider key custody | 64-hex string (32 bytes) |
 | `AGENTCONTROL_SESSION_SECRET` | Web UI session cookie signing key | Min 32 chars |
-| `SAAS_OPERATOR_EMAIL` | Super-admin login email | `admin@vexa.local` |
-| `SAAS_OPERATOR_PASSWORD` | Super-admin login password | `admin12345678` |
+| `ADMIN_EMAIL` | Platform administrator login email | `admin@example.com` |
+| `ADMIN_PASSWORD` | Platform administrator login password (min 12 chars) | Strong random password |
+| `SAAS_OPERATOR_EMAIL` | Legacy operator login email fallback | `admin@example.com` |
+| `SAAS_OPERATOR_PASSWORD` | Legacy operator login password fallback | Strong random password |
 
 ---
 
@@ -287,7 +321,7 @@ Once the containers are running:
 
 | Component | URL | Default Credentials | Description |
 |---|---|---|---|
-| **Web Console UI** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin123!` | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
+| **Web Console UI** | [http://localhost:3000](http://localhost:3000) | Configured in `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
 | **Control Plane API** | [http://localhost:8081/healthz](http://localhost:8081/healthz) | Bearer Token (`GATEWAY_SECRET`) | REST API for policies, telemetry, and device enrollment |
 | **Security Gateway** | [http://localhost:8080](http://localhost:8080) | N/A (Transparent Proxy) | Intercepts MCP tool calls, OpenAI/Anthropic/Gemini LLM traffic (registered as `vexa-demo-gateway`) |
 

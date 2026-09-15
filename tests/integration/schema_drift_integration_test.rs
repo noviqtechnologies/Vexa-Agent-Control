@@ -29,6 +29,7 @@ fn create_test_state_with_drift(
         llm: None,
         schema_drift: drift_config,
         fail_closed: false,
+        attribution: None,
     });
 
     (state, dir)

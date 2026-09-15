@@ -28,6 +28,8 @@ pub struct CompiledPolicy {
     pub schema_drift: Option<super::schema::SchemaDriftConfig>,
     /// Whether scanner errors should fail-closed (block) or fail-open (allow).
     pub fail_closed: bool,
+    /// Client attribution metadata for spend tracking and multi-tenancy
+    pub attribution: Option<crate::spend::types::AttributionContext>,
 }
 
 impl Default for CompiledPolicy {
@@ -44,7 +46,8 @@ impl Default for CompiledPolicy {
             llm: None,
             sequence_rules: Vec::new(),
             schema_drift: None,
-            fail_closed: false,
+            fail_closed: true,
+            attribution: None,
         }
     }
 }
@@ -489,6 +492,8 @@ impl CompiledPolicy {
                             true
                         }
                     }
+                    // Basic parameter heuristic check. Note: Parameter pattern matching cannot replace
+                    // database-level role permissions, read-only credentials, and query parameterization.
                     CompiledValidator::SqlInjectionBasic => {
                         if let Some(s) = value.as_str() {
                             let s_upper = s.to_uppercase();
@@ -500,6 +505,8 @@ impl CompiledPolicy {
                             true
                         }
                     }
+                    // Basic shell injection heuristic check. Note: True execution isolation requires
+                    // OS sandboxing, fixed argument allowlists, and no shell interpolation.
                     CompiledValidator::ShellInjectionBasic => {
                         if let Some(s) = value.as_str() {
                             !(s.contains(';')
@@ -580,6 +587,141 @@ impl CompiledPolicy {
         EvalResult::Allow {
             matched_group_id: None,
         }
+    }
+
+    /// Merges this repository-level policy with a central organization policy.
+    ///
+    /// # Central Ceiling Invariant
+    /// The central policy establishes an absolute security ceiling.
+    /// A repository policy can ONLY tighten restrictions:
+    /// - If a tool/action is denied in central, it CANNOT be allowed by repo policy.
+    /// - If central specifies an allowlist of tools, repo tools must be a subset.
+    /// - If central specifies allowed models, repo allowed models must be a subset.
+    /// - Rate limits and spend caps take the stricter (minimum) limit.
+    /// - `fail_closed` is true if either policy mandates fail_closed.
+    pub fn merge_with_central(&self, central: &CompiledPolicy) -> Result<CompiledPolicy, String> {
+        let mut merged = central.clone();
+
+        // 1. Fail-closed: if central or repo requires fail_closed, enforce it.
+        merged.fail_closed = central.fail_closed || self.fail_closed;
+
+        // 2. Rate limiting: take stricter limit if > 0
+        if self.max_calls_per_second > 0 {
+            if merged.max_calls_per_second == 0 || self.max_calls_per_second < merged.max_calls_per_second {
+                merged.max_calls_per_second = self.max_calls_per_second;
+            }
+        }
+
+        // 3. Tools allowlist & deny rules:
+        // Any tool explicitly denied by central cannot be allowed by repo.
+        for repo_tool in &self.tools {
+            if let Some(central_tool) = central.tools.iter().find(|t| t.name == repo_tool.name) {
+                if central_tool.action == "deny" && repo_tool.action == "allow" {
+                    return Err(format!(
+                        "GitOps policy violation: repository policy attempts to allow tool '{}' which is explicitly DENIED by Central Policy",
+                        repo_tool.name
+                    ));
+                }
+            } else if !central.tools.is_empty() && repo_tool.action == "allow" {
+                let central_has_allowlist = central.tools.iter().any(|t| t.action == "allow");
+                if central_has_allowlist {
+                    return Err(format!(
+                        "GitOps policy violation: repository policy attempts to allow tool '{}' which is NOT in the Central Policy allowlist",
+                        repo_tool.name
+                    ));
+                }
+            }
+        }
+
+        // Apply repo tools that tighten central rules (e.g. repo denies a tool or adds tighter parameter constraints)
+        for repo_tool in &self.tools {
+            if let Some(pos) = merged.tools.iter().position(|t| t.name == repo_tool.name) {
+                if repo_tool.action == "deny" {
+                    // Repo tightening: deny a tool that central permitted
+                    merged.tools[pos] = repo_tool.clone();
+                } else if merged.tools[pos].action == "allow" && repo_tool.action == "allow" {
+                    // Both allow: merge parameter constraints (repo adds extra parameter validators)
+                    let mut combined_params = merged.tools[pos].parameters.clone();
+                    for rp in &repo_tool.parameters {
+                        if let Some(cp) = combined_params.iter_mut().find(|p| p.name == rp.name) {
+                            cp.validators.extend(rp.validators.clone());
+                            if rp.required {
+                                cp.required = true;
+                            }
+                        } else {
+                            combined_params.push(rp.clone());
+                        }
+                    }
+                    merged.tools[pos].parameters = combined_params;
+                }
+            } else if repo_tool.action == "deny" {
+                // Repo can always add extra explicit denies
+                merged.tools.push(repo_tool.clone());
+            }
+        }
+
+        // 4. LLM allowed models: strict intersection
+        if let (Some(central_llm), Some(repo_llm)) = (&central.llm, &self.llm) {
+            let mut merged_llm = central_llm.clone();
+            if let (Some(central_allowed), Some(repo_allowed)) = (&central_llm.allowed_models, &repo_llm.allowed_models) {
+                let intersection: Vec<String> = repo_allowed
+                    .iter()
+                    .filter(|m| central_allowed.contains(m))
+                    .cloned()
+                    .collect();
+                if intersection.is_empty() && !repo_allowed.is_empty() {
+                    return Err(format!(
+                        "GitOps policy violation: None of repository allowed_models ({:?}) are permitted by Central Policy ({:?})",
+                        repo_allowed, central_allowed
+                    ));
+                }
+                merged_llm.allowed_models = Some(intersection);
+            } else if central_llm.allowed_models.is_none() && repo_llm.allowed_models.is_some() {
+                merged_llm.allowed_models = repo_llm.allowed_models.clone();
+            }
+            merged.llm = Some(merged_llm);
+        } else if central.llm.is_none() && self.llm.is_some() {
+            merged.llm = self.llm.clone();
+        }
+
+        // 5. Spend caps: minimum tokens / ceiling
+        if let (Some(central_spend), Some(repo_spend)) = (&central.spend_caps, &self.spend_caps) {
+            let mut merged_spend = central_spend.clone();
+            if let (Some(c_max), Some(r_max)) = (central_spend.max_tokens_per_session, repo_spend.max_tokens_per_session) {
+                merged_spend.max_tokens_per_session = Some(c_max.min(r_max));
+            } else if repo_spend.max_tokens_per_session.is_some() {
+                merged_spend.max_tokens_per_session = repo_spend.max_tokens_per_session;
+            }
+            if let (Some(c_conc), Some(r_conc)) = (central_spend.concurrency_ceiling, repo_spend.concurrency_ceiling) {
+                merged_spend.concurrency_ceiling = Some(c_conc.min(r_conc));
+            }
+            merged.spend_caps = Some(merged_spend);
+        } else if central.spend_caps.is_none() && self.spend_caps.is_some() {
+            merged.spend_caps = self.spend_caps.clone();
+        }
+
+        // 6. Attribution & Central Tenant Boundary Lock:
+        // If central specifies a non-default client_id, repo cannot change client_id to another tenant.
+        if let Some(central_attr) = &central.attribution {
+            if let Some(repo_attr) = &self.attribution {
+                if !central_attr.client_id.is_empty()
+                    && central_attr.client_id != "default"
+                    && repo_attr.client_id != central_attr.client_id
+                    && !repo_attr.client_id.is_empty()
+                    && repo_attr.client_id != "default"
+                {
+                    return Err(format!(
+                        "GitOps policy violation: repository policy client_id '{}' violates Central Tenant Boundary '{}'",
+                        repo_attr.client_id, central_attr.client_id
+                    ));
+                }
+            }
+            merged.attribution = Some(central_attr.clone());
+        } else if self.attribution.is_some() {
+            merged.attribution = self.attribution.clone();
+        }
+
+        Ok(merged)
     }
 
     /// Helper for tests to parse policy YAML string into CompiledPolicy
@@ -685,4 +827,111 @@ sequence_rules:
         );
         assert!(matches!(eval, EvalResult::Allow { .. }));
     }
+
+    #[test]
+    fn test_merge_with_central_rejects_repo_allowing_denied_tool() {
+        let central_yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: dangerous_exec
+    action: deny
+  - name: read_file
+    action: allow
+"#;
+        let repo_yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: dangerous_exec
+    action: allow
+"#;
+        let central = CompiledPolicy::from_yaml_str(central_yaml).unwrap();
+        let repo = CompiledPolicy::from_yaml_str(repo_yaml).unwrap();
+        let res = repo.merge_with_central(&central);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("DENIED by Central Policy"));
+    }
+
+    #[test]
+    fn test_merge_with_central_allows_repo_tightening_tool() {
+        let central_yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: dangerous_exec
+    action: allow
+  - name: read_file
+    action: allow
+"#;
+        let repo_yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: dangerous_exec
+    action: deny
+"#;
+        let central = CompiledPolicy::from_yaml_str(central_yaml).unwrap();
+        let repo = CompiledPolicy::from_yaml_str(repo_yaml).unwrap();
+        let merged = repo.merge_with_central(&central).unwrap();
+        let tool = merged.tools.iter().find(|t| t.name == "dangerous_exec").unwrap();
+        assert_eq!(tool.action, "deny");
+    }
+
+    #[test]
+    fn test_merge_with_central_llm_models_intersection() {
+        let central_yaml = r#"
+version: "2.1"
+default_action: deny
+llm:
+  allowed_models: ["gpt-4o", "claude-3-5-sonnet"]
+"#;
+        let repo_yaml = r#"
+version: "2.1"
+default_action: deny
+llm:
+  allowed_models: ["claude-3-5-sonnet", "unapproved-model"]
+"#;
+        let central = CompiledPolicy::from_yaml_str(central_yaml).unwrap();
+        let repo = CompiledPolicy::from_yaml_str(repo_yaml).unwrap();
+        let merged = repo.merge_with_central(&central).unwrap();
+        let allowed = merged.llm.unwrap().allowed_models.unwrap();
+        assert_eq!(allowed, vec!["claude-3-5-sonnet".to_string()]);
+    }
+
+    #[test]
+    fn test_merge_with_central_tenant_boundary_lock() {
+        let central_yaml = r#"
+version: "2.1"
+default_action: deny
+metadata:
+  attribution:
+    client_id: "acme_corp"
+"#;
+        let repo_yaml_same = r#"
+version: "2.1"
+default_action: deny
+metadata:
+  attribution:
+    client_id: "acme_corp"
+    project_id: "analytics"
+"#;
+        let central = CompiledPolicy::from_yaml_str(central_yaml).unwrap();
+        let repo = CompiledPolicy::from_yaml_str(repo_yaml_same).unwrap();
+        let merged = repo.merge_with_central(&central);
+        assert!(merged.is_ok());
+
+        let repo_yaml_violation = r#"
+version: "2.1"
+default_action: deny
+metadata:
+  attribution:
+    client_id: "other_corp"
+"#;
+        let repo_bad = CompiledPolicy::from_yaml_str(repo_yaml_violation).unwrap();
+        let merged_bad = repo_bad.merge_with_central(&central);
+        assert!(merged_bad.is_err());
+        assert!(merged_bad.unwrap_err().contains("violates Central Tenant Boundary"));
+    }
 }
+

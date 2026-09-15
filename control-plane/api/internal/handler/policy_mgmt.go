@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
@@ -163,9 +164,15 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	clientChan, cleanup := h.broker.SubscribeTenant(tenantID)
 	defer cleanup()
+
+	// Initial heartbeat line
+	w.Write([]byte(": ping\n\n"))
+	flusher.Flush()
+
 	// Send initial active policy if available
 	policy, err := h.store.GetActivePolicy(r.Context(), tenantID)
 	if err == nil && policy != nil {
@@ -173,11 +180,17 @@ func (h *PolicyMgmtHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	notify := r.Context().Done()
 	for {
 		select {
 		case <-notify:
 			return
+		case <-ticker.C:
+			w.Write([]byte(": ping\n\n"))
+			flusher.Flush()
 		case payload := <-clientChan:
 			w.Write(payload)
 			flusher.Flush()

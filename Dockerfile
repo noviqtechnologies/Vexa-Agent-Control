@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ─── Stage 1: Build ──────────────────────────────────────────────────────────
 FROM rust:1.88-slim-bookworm AS builder
 
@@ -33,6 +32,7 @@ COPY keys/ ./keys/
 COPY policy.example.yaml ./policy.example.yaml
 
 # Invalidate dummy binary and workspace library artifacts, then build actual release binary
+ARG CARGO_FEATURES="team"
 RUN rm -rf target/release/deps/agentcontrol* \
            target/release/deps/libagentcontrol* \
            target/release/deps/control_plane_proto* \
@@ -41,7 +41,11 @@ RUN rm -rf target/release/deps/agentcontrol* \
            target/release/.fingerprint/control_plane_proto* \
            target/release/agentcontrol \
            target/release/agentcontrol.d && \
-    cargo build --release --bin agentcontrol && \
+    if [ -n "$CARGO_FEATURES" ]; then \
+        cargo build --release --bin agentcontrol --features "$CARGO_FEATURES"; \
+    else \
+        cargo build --release --bin agentcontrol; \
+    fi && \
     cp target/release/agentcontrol /usr/local/bin/agentcontrol
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
@@ -52,6 +56,7 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled binary from the builder's global path
@@ -69,16 +74,16 @@ RUN useradd -r -s /bin/false -d /app agentcontrol && \
 USER agentcontrol
 
 # Default environment
-ENV AGENTCONTROL_LISTEN=0.0.0.0:8080 \
+ENV AGENTCONTROL_LISTEN=0.0.0.0:18080 \
     AGENTCONTROL_LOG_PATH=/var/log/agentcontrol/audit.log \
     AGENTCONTROL_MCP_URL=http://mock-mcp:3000 \
     AGENTCONTROL_DRY_RUN=false
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-    CMD agentcontrol --version || exit 1
+    CMD curl -f http://localhost:18080/healthz || agentcontrol --version || exit 1
 
-EXPOSE 8080
+EXPOSE 18080 8080
 
 ENTRYPOINT ["agentcontrol"]
 CMD ["start"]

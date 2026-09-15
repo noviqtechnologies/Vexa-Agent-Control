@@ -76,9 +76,15 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
         }
         total_records += 1;
 
-        if line.contains("\"action\":\"tool_allow\"") || line.contains("\"decision\":\"allowed\"") {
+        if line.contains("\"event\":\"tool_allow\"")
+            || line.contains("\"event\":\"llm_allow\"")
+            || line.contains("\"action\":\"tool_allow\"")
+            || line.contains("\"decision\":\"allowed\"")
+        {
             allowed_count += 1;
-        } else if line.contains("\"action\":\"tool_deny\"")
+        } else if line.contains("\"event\":\"tool_deny\"")
+            || line.contains("\"event\":\"llm_deny\"")
+            || line.contains("\"action\":\"tool_deny\"")
             || line.contains("\"decision\":\"denied\"")
         {
             denied_count += 1;
@@ -103,32 +109,42 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
         .map(|(category, count)| DlpCategoryCount { category, count })
         .collect();
 
+    // Cryptographic HMAC chain verification via crate::audit::verifier
+    let (hmac_chain_valid, hmac_details) = match crate::audit::verifier::verify_chain(log_path) {
+        crate::audit::verifier::VerifyResult::Valid { entry_count } => {
+            (true, format!("HMAC audit chain verified across {} entries", entry_count))
+        }
+        crate::audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
+            (false, format!("HMAC audit chain BROKEN at entry {}: {}", entry_index, reason))
+        }
+        crate::audit::verifier::VerifyResult::Error(e) => {
+            (false, format!("HMAC chain verification failed: {}", e))
+        }
+    };
+
     let control_mappings = vec![
         ControlMapping {
             framework: "SOC 2 Type II".to_string(),
             control_id: "CC6.1".to_string(),
             control_title: "Logical Access Controls & Least Privilege".to_string(),
-            status: "SATISFIED".to_string(),
-            evidence: format!(
-                "HMAC audit chain verified across {} tool calls",
-                total_records
-            ),
+            status: if hmac_chain_valid { "EVIDENCE_COLLECTED".to_string() } else { "TAMPERING_DETECTED".to_string() },
+            evidence: hmac_details,
         },
         ControlMapping {
             framework: "SOC 2 Type II".to_string(),
             control_id: "CC6.6".to_string(),
             control_title: "Boundary & Perimeter Defense for AI Agents".to_string(),
-            status: "SATISFIED".to_string(),
+            status: if injection_blocked > 0 { "EVIDENCE_COLLECTED".to_string() } else { "OBSERVED".to_string() },
             evidence: format!(
-                "Blocked {} unauthorized injection attempts",
-                injection_blocked
+                "Blocked {} unauthorized injection attempts across {} calls",
+                injection_blocked, total_records
             ),
         },
         ControlMapping {
             framework: "ISO 27001:2022".to_string(),
             control_id: "A.8.12".to_string(),
             control_title: "Data Leakage Prevention (DLP)".to_string(),
-            status: "SATISFIED".to_string(),
+            status: if secret_redactions > 0 { "EVIDENCE_COLLECTED".to_string() } else { "MONITORED".to_string() },
             evidence: format!(
                 "Performed inline masking on {} secret instances",
                 secret_redactions
@@ -138,8 +154,8 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
             framework: "NIST AI RMF 1.0".to_string(),
             control_id: "MEASURE 2.2".to_string(),
             control_title: "AI System Input & Output Verification".to_string(),
-            status: "SATISFIED".to_string(),
-            evidence: "15 Safe Mode rules & 6-pass injection normalizer active".to_string(),
+            status: "CONTROLS_ACTIVE".to_string(),
+            evidence: "Safe Mode heuristics & multi-pass injection scanning active".to_string(),
         },
     ];
 
@@ -147,7 +163,7 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
         timestamp: chrono::Utc::now().to_rfc3339(),
         log_path: log_path.display().to_string(),
         total_records,
-        hmac_chain_valid: true,
+        hmac_chain_valid,
         summary: EventSummary {
             allowed_count,
             denied_count,
@@ -167,7 +183,7 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
 
 fn render_markdown(report: &ComplianceReport) -> String {
     let mut md = String::new();
-    md.push_str("# AgentWall Compliance Evidence Report\n\n");
+    md.push_str("# AgentControl Evidence & Audit Verification Report\n\n");
     md.push_str(&format!("- **Timestamp:** {}\n", report.timestamp));
     md.push_str(&format!("- **Audit Log Path:** {}\n", report.log_path));
     md.push_str(&format!(
@@ -179,7 +195,7 @@ fn render_markdown(report: &ComplianceReport) -> String {
         if report.hmac_chain_valid {
             "VALID ✓"
         } else {
-            "INVALID ✖"
+            "INVALID ✖ (Tampering or incomplete chain)"
         }
     ));
 
@@ -212,3 +228,96 @@ fn render_markdown(report: &ComplianceReport) -> String {
     }
     md
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_compliance_report_with_valid_hmac_chain() {
+        let dir = tempdir().unwrap();
+        let log_path = dir.path().join("audit.jsonl");
+
+        let cfg = crate::audit::logger::AuditLoggerConfig {
+            log_path: log_path.clone(),
+            session_id: "test-session".to_string(),
+            session_secret: vec![42u8; 32],
+            max_bytes: 0,
+            siem_exporter: None,
+            include_params: true,
+        };
+        let logger = crate::audit::logger::AuditLogger::new(cfg).unwrap();
+        logger
+            .write_entry(
+                "session-1",
+                "tool_allow",
+                "read_file",
+                None,
+                Some("Allowed by policy".to_string()),
+                None,
+                Some("dev1".to_string()),
+                None,
+                None,
+                Some("127.0.0.1".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let report_json = generate_report(&log_path, "json").unwrap();
+        let report: ComplianceReport = serde_json::from_str(&report_json).unwrap();
+
+        assert_eq!(report.total_records, 1);
+        assert!(report.hmac_chain_valid);
+        assert_eq!(report.summary.allowed_count, 1);
+        assert_eq!(report.control_mappings[0].status, "EVIDENCE_COLLECTED");
+    }
+
+    #[tokio::test]
+    async fn test_compliance_report_tampering_detection() {
+        let dir = tempdir().unwrap();
+        let log_path = dir.path().join("audit_tampered.jsonl");
+
+        let cfg = crate::audit::logger::AuditLoggerConfig {
+            log_path: log_path.clone(),
+            session_id: "test-session".to_string(),
+            session_secret: vec![42u8; 32],
+            max_bytes: 0,
+            siem_exporter: None,
+            include_params: true,
+        };
+        let logger = crate::audit::logger::AuditLogger::new(cfg).unwrap();
+        logger
+            .write_entry(
+                "session-1",
+                "tool_allow",
+                "read_file",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Tamper with log file by appending a forged line with invalid HMAC chain
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .unwrap();
+        writeln!(f, "{{\"entry_index\":2,\"prev_hmac\":\"badhmac\",\"hmac\":\"fake\"}}").unwrap();
+
+        let report_json = generate_report(&log_path, "json").unwrap();
+        let report: ComplianceReport = serde_json::from_str(&report_json).unwrap();
+
+        assert!(!report.hmac_chain_valid);
+        assert_eq!(report.control_mappings[0].status, "TAMPERING_DETECTED");
+    }
+}
+

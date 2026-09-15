@@ -108,6 +108,21 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
 
 /// Background async task that runs a 60-second periodic heartbeat loop.
 pub async fn start_heartbeat_loop(interval_secs: u64) {
+    let is_centralized = std::env::var("AGENTCONTROL_CENTRALIZED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+        || std::env::var("AGENTCONTROL_MODE")
+            .map(|v| v.eq_ignore_ascii_case("gateway") || v.eq_ignore_ascii_case("server"))
+            .unwrap_or(false);
+
+    if is_centralized {
+        println!(
+            "{} Centralized gateway server active — endpoint workstation sentry heartbeat disabled",
+            "●".cyan().bold()
+        );
+        return;
+    }
+
     let start_time = Instant::now();
     let interval_duration = Duration::from_secs(interval_secs.max(10));
     let mut interval = tokio::time::interval(interval_duration);
@@ -196,6 +211,15 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
 
         match req.send().await {
             Ok(res) if res.status().is_success() => {
+                crate::logging::log_event(
+                    crate::logging::Level::Info,
+                    "heartbeat_sent",
+                    serde_json::json!({
+                        "device_id": &device_id,
+                        "hub_url": &base_url,
+                        "status": 200
+                    }),
+                );
                 crate::service::eventlog::log_info(
                     1001,
                     &format!(

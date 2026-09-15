@@ -20,12 +20,12 @@
                                                              Increase Requests
 ```
 
-There are **two spend layers** in AgentControl:
+There are **two spend enforcement modes** in AgentControl:
 
-| Layer | Database | Purpose | Authority |
+| Mode / Layer | Storage | Capabilities | Authority |
 |---|---|---|---|
-| **Local Ledger (Legacy)** | SQLite at `~/.agentcontrol/events.db` | Observational telemetry, per-agent daily caps | Read-only local mirror |
-| **Central V2 Ledger** | PostgreSQL via Control Plane API | Preflight reservations, settlements, policy enforcement | **Authoritative** |
+| **Local Standalone Ledger** | SQLite at `~/.agentcontrol/events.db` (`spend_ledger_records`, `spend_budgets`) | Local proxy spend tracking, attribution tagging (`client_id`, `project_id`, `cost_center`), post-stream token settlement, CSV/JSON export, offline daily/weekly/monthly caps via `agentcontrol spend` CLI | **Authoritative in standalone / local proxy mode** |
+| **Central V2 Fleet Ledger** | PostgreSQL via Control Plane API (`/api/v2/spend/*`) | Fleet-wide preflight reservations, multi-tenant team budget windows, formal increase requests, admin approvals | **Authoritative in fleet / cloud mode** |
 
 ---
 
@@ -623,6 +623,118 @@ spend_caps:
 
 ---
 
+## Phase 13: Local Standalone Spend Ledger & Attribution Testing (Offline / GitOps / SMB Mode)
+
+AgentControl includes a fully self-contained local spend ledger in `~/.agentcontrol/events.db` that operates without requiring a central cloud backend. This is ideal for single developers, local agent workflows, and client billing attribution.
+
+### 13.1 Set a Local Spend Cap via CLI
+
+Configure budget caps directly in the local SQLite ledger:
+
+```powershell
+# Set a daily cap of $5.00 with hard denial on breach
+agentcontrol spend set-cap --agent-id default --period daily --amount-usd 5.00 --hard-deny
+
+# Set a monthly project cap for a custom agent
+agentcontrol spend set-cap --agent-id my-project --period monthly --amount-usd 50.00
+```
+
+### 13.2 Test Client & Project Attribution Header Propagation
+
+When sending requests through the local proxy (`http://127.0.0.1:8080/v1/chat/completions`), attach client billing attribution headers:
+
+```powershell
+# Test OpenAI proxy call with client attribution headers
+$headers = @{
+    "Authorization" = "Bearer $env:OPENAI_API_KEY"
+    "Content-Type"  = "application/json"
+    "X-AgentControl-Client-ID"   = "client-acme-corp"
+    "X-AgentControl-Project-ID"  = "rag-search-v1"
+    "X-AgentControl-Cost-Center" = "eng-ai-rd"
+}
+
+$body = @{
+    model = "gpt-4o-mini"
+    messages = @(
+        @{ role = "user"; content = "Say Hello in one word." }
+    )
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8080/v1/chat/completions" -Method Post -Headers $headers -Body $body
+```
+
+#### Attribution Resolution Hierarchy
+The proxy resolves attribution tags using the strict 4-tier precedence:
+1. **HTTP Request Headers**: `X-AgentControl-Client-ID`, `X-AgentControl-Project-ID`, `X-AgentControl-Cost-Center` (or legacy `X-AgentWall-*`)
+2. **Process Environment Variables**: `AGENTCONTROL_CLIENT_ID`, `AGENTCONTROL_PROJECT_ID`, `AGENTCONTROL_COST_CENTER`
+3. **GitOps Policy YAML**: `metadata.attribution.client_id`, `project_id`, `cost_center` in `.agentcontrol.yaml`
+4. **Virtual Key / Session Default**: Defaults configured per session / agent key
+5. **Fallback Default**: Value `"default"`
+
+> [!NOTE]
+> **Slug Sanitization & CSV Injection Defense**:
+> All attribution values are validated against the slug regex `^[a-zA-Z0-9_\-\.]{1,64}$`. Any leading spreadsheet formula characters (`=`, `+`, `-`, `@`, `\t`, `\r`) are automatically stripped before writing to SQLite or exporting to CSV.
+
+### 13.3 Inspect Local Spend Status via CLI
+
+Inspect configured budgets and current period spend:
+
+```powershell
+agentcontrol spend status
+```
+
+Example output:
+```text
+=== AgentControl Local Spend Ledger ===
+
+Configured Budgets:
+  Agent: default | Period: daily | Limit: $5.00 | Hard Deny: true
+
+Current Spend:
+  Agent: default | Period: daily | Spend: $0.0024
+```
+
+### 13.4 Export Spend Records (CSV & JSON for Client Invoicing)
+
+Export settled spend ledger records filtered by client, project, or date:
+
+```powershell
+# Export all records as CSV to stdout
+agentcontrol spend export --format=csv
+
+# Export records for a specific client to a file
+agentcontrol spend export --format=csv --client-id client-acme-corp --output acme_spend.csv
+
+# Export records as JSON
+agentcontrol spend export --format=json --project-id rag-search-v1 --output project_spend.json
+```
+
+The exported CSV contains:
+`id,timestamp,agent_id,client_id,project_id,cost_center,model,provider,input_tokens,output_tokens,cost_cents`
+
+### 13.5 Verify Payload Privacy Hashing & `--record-payloads` Opt-In
+
+By default, AgentControl enforces strict privacy: prompt and completion payloads are **never logged in plaintext** to `~/.agentcontrol/events.db`. Instead, cryptographic SHA-256 hashes (`request_body_hash` and `response_body_hash`) are logged for tamper-evident provenance.
+
+1. **Verify Default Privacy**:
+```powershell
+# Start gateway without --record-payloads
+agentcontrol start --listen 127.0.0.1:8080 --policy test-llm-policy.yaml
+
+# Query SQLite egress_events table after a request
+sqlite3 "$env:USERPROFILE\.agentcontrol\events.db" "SELECT request_body, request_body_hash, response_body, response_body_hash FROM egress_events ORDER BY id DESC LIMIT 1;"
+```
+Expected: `request_body` and `response_body` are `NULL`, while `request_body_hash` and `response_body_hash` contain 64-character SHA-256 hexadecimal strings.
+
+2. **Verify Opt-In Plaintext Recording**:
+```powershell
+# Start gateway with explicit payload recording enabled
+agentcontrol start --listen 127.0.0.1:8080 --policy test-llm-policy.yaml --record-payloads
+```
+Expected: `request_body` and `response_body` contain the full JSON payloads alongside the computed hashes.
+
+---
+
 ## Quick-Reference: Complete Test Checklist
 
 | # | Test Case | Expected Result | ✅ |
@@ -644,6 +756,12 @@ spend_caps:
 | 15 | Send LLM request from IDE | Budget window reflects new spend | ☐ |
 | 16 | Verify Web Console dashboard | Budget bars, events table, increase forms work | ☐ |
 | 17 | Check local SQLite telemetry | `spend_budgets` and `spend_counters` tables populated | ☐ |
+| 18 | Set local spend cap via CLI | `agentcontrol spend set-cap` records budget in SQLite | ☐ |
+| 19 | Propagate attribution headers | `X-AgentControl-Client-ID` reflected in ledger records | ☐ |
+| 20 | Query local spend status | `agentcontrol spend status` displays budgets and spend | ☐ |
+| 21 | Export spend records to CSV/JSON | `agentcontrol spend export` outputs sanitized records | ☐ |
+| 22 | Verify SHA-256 payload privacy | Default request/response bodies NULL; hashes populated | ☐ |
+| 23 | Opt-in plaintext with `--record-payloads` | Payloads written when flag explicitly supplied | ☐ |
 
 ---
 

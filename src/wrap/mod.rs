@@ -6,12 +6,16 @@
 pub mod backup;
 pub mod claude;
 pub mod config_path;
+pub mod connect;
 pub mod file_lock;
 pub mod generic_ide;
 pub mod ide_config;
+pub mod manifest;
 pub mod status;
 pub mod transformer;
 pub mod watch;
+
+pub use connect::{ConnectMode, ConnectTarget, run_connect, run_disconnect};
 
 use crate::cli::{UnwrapTarget, WatchTarget, WrapTarget};
 use colored::*;
@@ -303,8 +307,8 @@ pub fn run_wrap_all(dry_run: bool, scan_responses: bool) -> i32 {
         println!();
         println!("  ℹ 0 clients wrapped. No supported AI IDE configurations with active MCP servers were detected.");
         println!("  ℹ To route custom agents or CLI tools through the gateway, set:");
-        println!("    export AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080");
-        println!("    export HTTP_PROXY=http://127.0.0.1:8080");
+        println!("    export AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080");
+        println!("    export HTTP_PROXY=http://127.0.0.1:18080");
     }
     0
 }
@@ -356,9 +360,9 @@ pub fn run_unwrap_target(target: &UnwrapTarget) -> i32 {
     }
 }
 
-/// Run `agentcontrol status` — enumerate all 8 targets and print their wrap state.
-pub fn run_status() -> i32 {
-    status::print_all_targets();
+/// Run `agentcontrol status` — inspect targets, capability vectors, and traffic freshness.
+pub fn run_status(json: bool) -> i32 {
+    status::print_all_targets(json);
     0
 }
 
@@ -465,8 +469,8 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
 pub fn open_browser(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
             .spawn()?;
     }
     #[cfg(target_os = "macos")]
@@ -606,30 +610,7 @@ pub fn run_protect_orchestration(
     );
     run_wrap_all(dry_run, false);
 
-    // Initialize local Root CA for LLM interception
-    if !dry_run {
-        if let Ok(ca_mgr) = crate::ca::CaManager::init_or_load(None) {
-            let ca_cert_path = ca_mgr.ca_dir.join("agentcontrol-ca.pem");
-            if !crate::ca::is_ca_installed() {
-                let _ = crate::ca::install_ca_to_trust_store(&ca_cert_path);
-            }
-            std::env::set_var("NODE_EXTRA_CA_CERTS", &ca_cert_path);
-            #[cfg(target_os = "windows")]
-            {
-                let path_str = ca_cert_path.to_string_lossy().to_string();
-                let _ = std::process::Command::new("powershell")
-                    .args([
-                        "-NoProfile",
-                        "-Command",
-                        &format!(
-                            "[Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', '{}', 'User')",
-                            path_str
-                        ),
-                    ])
-                    .output();
-            }
-        }
-    }
+
 
     println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());
     println!(

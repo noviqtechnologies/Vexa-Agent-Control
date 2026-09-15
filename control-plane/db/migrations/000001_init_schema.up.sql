@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     id                   UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
     name                 TEXT NOT NULL DEFAULT 'Primary Organization',
     slug                 TEXT NOT NULL DEFAULT 'default',
-    contact_email        TEXT NOT NULL DEFAULT 'admin@agentcontrol.local',
+    contact_email        TEXT NOT NULL DEFAULT '',
     license_tier         TEXT NOT NULL DEFAULT 'developer',
     license_key_jwt      TEXT,
     max_devices          INT NOT NULL DEFAULT 1,
@@ -555,7 +555,7 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
 -- ============================================================================
 
 INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', 'admin@agentcontrol.local', 'team', 25, 'active')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 25, 'active')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO teams (id, organization_id, name, description)
@@ -566,17 +566,7 @@ INSERT INTO auth_providers (id, organization_id, name, type, enabled)
 VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Local Password Authentication', 'local', true)
 ON CONFLICT (organization_id, type) DO NOTHING;
 
-INSERT INTO users (id, organization_id, auth_provider_id, email, password_hash, is_admin, role)
-VALUES (
-    '00000000-0000-0000-0000-000000000003',
-    '00000000-0000-0000-0000-000000000001',
-    '00000000-0000-0000-0000-000000000002',
-    'admin@agentcontrol.local',
-    '$2a$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
-    true,
-    'OWNER'
-)
-ON CONFLICT (organization_id, email) DO NOTHING;
+-- 4. Initial Administrative User is provisioned dynamically from environment configuration (see TENANT_ADMIN_EMAIL / CONTROL_HUB_ADMIN_EMAIL)
 
 INSERT INTO policies (id, organization_id, version, content, is_active)
 VALUES (

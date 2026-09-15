@@ -75,7 +75,11 @@ cd Vexa-Agent-Control\control-plane
 > [!TIP]
 > **One-Command Root Launch:** You can also launch the full development stack directly from the repository root:
 > ```bash
+> # Run pre-built evaluation stack:
 > docker compose -f docker-compose.team.yml up -d
+>
+> # Or build and deploy directly from local working tree code:
+> docker compose -f docker-compose.team.local.yml up -d --build
 > ```
 > For complete single-container and full-stack options across macOS, Linux, and Windows, see the [Docker Deployment Guide](../guides/docker-deployment.md).
 

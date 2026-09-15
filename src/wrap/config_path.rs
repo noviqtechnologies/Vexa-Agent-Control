@@ -474,6 +474,7 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
     }
 }
 
+/// Returns the absolute path to ~/.codex/config.toml for the current OS.
 pub fn codex_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {
         "windows" => {
@@ -500,6 +501,39 @@ pub fn codex_config_path() -> Result<PathBuf, WrapError> {
             base.ok_or_else(|| {
                 WrapError::ConfigNotFound(
                     "Cannot resolve Codex config path (~/.codex/config.toml)".to_string(),
+                )
+            })
+        }
+    }
+}
+
+/// Returns the absolute path to ~/.codex/auth.json for the current OS.
+pub fn codex_auth_path() -> Result<PathBuf, WrapError> {
+    match std::env::consts::OS {
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = get_windows_user_homes();
+                for home in &homes {
+                    let candidate = home.join(r".codex\auth.json");
+                    if candidate.exists() {
+                        return Ok(candidate);
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Ok(first.join(r".codex\auth.json"));
+                }
+            }
+            let base = dirs::home_dir().map(|h| h.join(r".codex\auth.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound("Cannot resolve Codex auth path".to_string())
+            })
+        }
+        _ => {
+            let base = dirs::home_dir().map(|h| h.join(".codex").join("auth.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound(
+                    "Cannot resolve Codex auth path (~/.codex/auth.json)".to_string(),
                 )
             })
         }

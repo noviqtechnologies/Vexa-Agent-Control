@@ -30,10 +30,7 @@ pub struct RemotePolicy {
     pub content: Option<String>,
 }
 
-/// Helper to construct a Reqwest client with mTLS device identity if available.
-pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder().no_proxy().timeout(timeout);
-
+fn apply_device_identity(mut builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
     // Look for device cert and key in ~/.agentcontrol, ~/.agentwall, or Windows ProgramData
     let mut candidate_dirs = Vec::new();
     if let Some(home_dir) = dirs::home_dir() {
@@ -63,7 +60,22 @@ pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client
         }
     }
 
-    builder.build().unwrap_or_default()
+    builder
+}
+
+/// Helper to construct a Reqwest client with mTLS device identity if available.
+pub fn build_device_http_client(timeout: std::time::Duration) -> reqwest::Client {
+    let builder = reqwest::Client::builder().no_proxy().timeout(timeout);
+    apply_device_identity(builder).build().unwrap_or_default()
+}
+
+/// Helper to construct a Reqwest client for long-lived SSE streaming without request timeout.
+pub fn build_device_sse_client() -> reqwest::Client {
+    let builder = reqwest::Client::builder()
+        .no_proxy()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .tcp_keepalive(Some(std::time::Duration::from_secs(15)));
+    apply_device_identity(builder).build().unwrap_or_default()
 }
 
 /// Fetch the active policy YAML from the dashboard API.

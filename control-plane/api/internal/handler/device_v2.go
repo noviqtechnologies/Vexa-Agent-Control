@@ -377,3 +377,224 @@ func (h *DeviceV2Handler) ListDeviceAssignments(w http.ResponseWriter, r *http.R
 	})
 }
 
+// DeviceEnrollRequestV2 contains the payload for POST /api/v2/devices/enroll
+type DeviceEnrollRequestV2 struct {
+	EnrollmentToken string `json:"enrollment_token"`
+	DeviceID        string `json:"device_id"`
+	DisplayName     string `json:"display_name"`
+	PublicKey       string `json:"ed25519_public_key"`
+	PublicKeyBytes  string `json:"public_key_bytes"`
+	PublicKeyRaw    string `json:"public_key"`
+	ClientPlatform  string `json:"client_platform"`
+	Platform        string `json:"platform"`
+	AgentVersion    string `json:"agent_version"`
+}
+
+// POST /api/v2/devices/enroll
+func (h *DeviceV2Handler) EnrollDeviceV2(w http.ResponseWriter, r *http.Request) {
+	var req DeviceEnrollRequestV2
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"Malformed JSON payload"}}`, http.StatusBadRequest)
+		return
+	}
+
+	// Normalize flexible field mappings across CLI and API guide variants
+	if req.PublicKey == "" {
+		if req.PublicKeyBytes != "" {
+			req.PublicKey = req.PublicKeyBytes
+		} else if req.PublicKeyRaw != "" {
+			req.PublicKey = req.PublicKeyRaw
+		}
+	}
+	if req.ClientPlatform == "" && req.Platform != "" {
+		req.ClientPlatform = req.Platform
+	}
+
+	if req.PublicKey == "" {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"ed25519_public_key or public_key_bytes is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := middleware.ResolveTenantScope(r)
+	if orgID == "" {
+		orgID = store.DefaultOrgID
+	}
+	if req.EnrollmentToken != "" {
+		// Consume token if provided
+		_ = h.Store.ConsumeEnrollmentToken(r.Context(), req.EnrollmentToken)
+	}
+
+	deviceID := req.DeviceID
+	if deviceID == "" {
+		// Generate UUID if not provided
+		hasher := sha256.Sum256([]byte(req.PublicKey))
+		deviceID = fmt.Sprintf("dev-%x", hasher[:8])
+	}
+
+	displayName := req.DisplayName
+	if displayName == "" {
+		displayName = deviceID
+	}
+
+	platform := req.ClientPlatform
+	if platform == "" {
+		platform = "windows"
+	}
+
+	agentVersion := req.AgentVersion
+	if agentVersion == "" {
+		agentVersion = "1.0.0"
+	}
+
+	dev, key, err := h.Store.EnrollDeviceV2(r.Context(), orgID, deviceID, displayName, platform, agentVersion, req.PublicKey)
+	if err != nil {
+		log.Printf("[enroll-v2] failed to enroll device: %v", err)
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"enrollment_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"device_id":        dev.StableDeviceID,
+		"organization_id":  dev.OrganizationID,
+		"status":           "ACTIVE",
+		"enrolled_at":      time.Now().UTC(),
+		"key_id":           key.ID,
+		"public_key_bytes": key.PublicKeyBytes,
+		"algorithm":        key.Algorithm,
+	})
+}
+
+// POST /api/v2/devices/{id}/rotate-key
+func (h *DeviceV2Handler) RotateKey(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	if deviceID == "" {
+		deviceID = chi.URLParam(r, "device_id")
+	}
+	if deviceID == "" {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"Device ID is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		NewPublicKey string `json:"new_public_key"`
+		Signature    string `json:"signature,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NewPublicKey == "" {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"new_public_key is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := store.DefaultOrgID
+	key, err := h.Store.RotateDeviceKey(r.Context(), orgID, deviceID, req.NewPublicKey)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"rotation_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"device_id":        deviceID,
+		"status":           "ROTATED",
+		"active_key_id":    key.ID,
+		"public_key_bytes": key.PublicKeyBytes,
+		"rotated_at":       time.Now().UTC(),
+	})
+}
+
+// DELETE /api/v2/devices/{id}
+func (h *DeviceV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	if deviceID == "" {
+		deviceID = chi.URLParam(r, "device_id")
+	}
+	if deviceID == "" {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"Device ID is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	orgID := store.DefaultOrgID
+	_ = h.Store.RevokeDeviceKeys(r.Context(), orgID, deviceID)
+	_ = h.Store.TransitionDeviceState(r.Context(), orgID, deviceID, model.DeviceStateRevoked, "ADMIN_REVOCATION", "ADMIN", "console", "revocation-req")
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"device_id":  deviceID,
+		"status":     "REVOKED",
+		"revoked_at": time.Now().UTC(),
+	})
+}
+
+// GET /api/v2/devices
+func (h *DeviceV2Handler) ListDevicesV2(w http.ResponseWriter, r *http.Request) {
+	devices, err := h.Store.ListDevices(r.Context(), store.DefaultOrgID, "", "", 100, 0)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"list_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	type DeviceV2Item struct {
+		DeviceID         string    `json:"device_id"`
+		StableDeviceID   string    `json:"stable_device_id"`
+		DisplayName      string    `json:"display_name"`
+		OSFamily         string    `json:"os_family"`
+		Architecture     string    `json:"architecture"`
+		Status           string    `json:"status"`
+		CapabilityVector []string  `json:"capability_vector"`
+		LastFreshness    string    `json:"last_freshness"`
+		PublicKey        string    `json:"public_key,omitempty"`
+		LastSeenAt       time.Time `json:"last_seen_at"`
+		FirstEnrolledAt  time.Time `json:"first_enrolled_at"`
+	}
+
+	var items []DeviceV2Item
+	for _, d := range devices {
+		status := "ACTIVE"
+		if d.ComplianceStatus == "REVOKED" || d.IsRevoked {
+			status = "REVOKED"
+		} else if d.ComplianceStatus == "PENDING" {
+			status = "PENDING"
+		}
+
+		// Look up active key
+		pubKey := d.PublicKey
+		if activeKey, err := h.Store.GetActiveDeviceKey(r.Context(), d.DeviceID); err == nil && activeKey != nil {
+			pubKey = activeKey.PublicKeyBytes
+		}
+
+		capVector := []string{"CONFIGURED", "TRAFFIC_VERIFIED"}
+		if d.MCPServersWrapped > 0 {
+			capVector = append(capVector, "MCP_WRAPPED")
+		}
+
+		freshness := "ACTIVE_FRESH"
+		if time.Since(d.LastHeartbeatAt) > 24*time.Hour {
+			freshness = "STALE"
+		} else if time.Since(d.LastHeartbeatAt) > 15*time.Minute {
+			freshness = "ACTIVE_RECENT"
+		}
+
+		items = append(items, DeviceV2Item{
+			DeviceID:         d.DeviceID,
+			StableDeviceID:   d.DeviceID,
+			DisplayName:      d.Hostname,
+			OSFamily:         d.OSFamily,
+			Architecture:     d.OSArch,
+			Status:           status,
+			CapabilityVector: capVector,
+			LastFreshness:    freshness,
+			PublicKey:        pubKey,
+			LastSeenAt:       d.LastHeartbeatAt,
+			FirstEnrolledAt:  d.FirstEnrolledAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"devices":     items,
+		"total_count": len(items),
+	})
+}
+
+

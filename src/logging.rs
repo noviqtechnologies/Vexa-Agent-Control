@@ -41,6 +41,21 @@ impl Level {
 /// Emit a structured JSON log line to stderr.
 /// All fields are merged into the top-level object alongside ts, level, event.
 pub fn log_event(level: Level, event: &str, fields: serde_json::Value) {
+    if matches!(level, Level::Debug) {
+        let debug_enabled = std::env::var("RUST_LOG")
+            .map(|v| {
+                let s = v.to_ascii_lowercase();
+                s.contains("debug") || s.contains("trace")
+            })
+            .unwrap_or(false)
+            || std::env::var("AGENTCONTROL_DEBUG")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+        if !debug_enabled {
+            return;
+        }
+    }
+
     if is_spend_only() {
         // Only emit spend-related events when spend-only mode is enabled
         let is_spend_event = event == "mitm_llm_spend_captured"

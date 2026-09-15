@@ -9,10 +9,23 @@ const LEGACY_BACKUP_SUFFIX_PREFIX: &str = "agentwall-backup-";
 #[allow(dead_code)]
 const MAX_BACKUPS: usize = 5;
 
+/// Check if a configuration file is already modified by AgentControl.
+pub fn is_config_already_modified(path: &Path) -> bool {
+    if let Ok(content) = std::fs::read_to_string(path) {
+        content.contains("agentcontrol")
+            || content.contains("agentwall")
+            || content.contains("127.0.0.1:18080")
+            || content.contains("127.0.0.1:8080")
+            || content.contains("sk-agentcontrol-managed")
+    } else {
+        false
+    }
+}
+
 /// Create a timestamped backup of the config file in the same directory.
+/// If the file is already modified and an existing baseline backup exists, the baseline is preserved.
 /// Returns the path of the created backup.
 pub fn create_backup(config_path: &Path) -> Result<PathBuf, WrapError> {
-    let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
     let file_name = config_path
         .file_name()
         .ok_or_else(|| {
@@ -23,11 +36,22 @@ pub fn create_backup(config_path: &Path) -> Result<PathBuf, WrapError> {
         })?
         .to_string_lossy();
 
+    let parent = config_path.parent().unwrap_or(Path::new("."));
+    let baseline_path = parent.join(format!("{}.agentcontrol.baseline.bak", file_name));
+
+    // If file is already modified by agentcontrol, ensure pristine baseline is preserved
+    if is_config_already_modified(config_path) && baseline_path.exists() {
+        return Ok(baseline_path);
+    }
+
+    // If pristine baseline does not exist and file is clean, save it
+    if !baseline_path.exists() && !is_config_already_modified(config_path) {
+        let _ = std::fs::copy(config_path, &baseline_path);
+    }
+
+    let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
     let backup_name = format!("{}.{}{}", file_name, BACKUP_SUFFIX_PREFIX, ts);
-    let backup_path = config_path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(&backup_name);
+    let backup_path = parent.join(&backup_name);
 
     std::fs::copy(config_path, &backup_path)?;
     Ok(backup_path)

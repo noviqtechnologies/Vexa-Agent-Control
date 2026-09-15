@@ -687,3 +687,90 @@
     transform: rotate(360deg);
   }
 }
+
+/* Excel Export Button */
+.obs-export-btn {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.obs-export-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+
+.obs-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* User / Host cell styling */
+.obs-col-user {
+  max-width: 200px;
+}
+
+.obs-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.obs-user-primary {
+  font-weight: 500;
+  color: var(--text-primary, #f8fafc);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obs-user-host-sub {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obs-user-host-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #38bdf8;
+  font-family: var(--font-mono, monospace);
+  background: rgba(56, 189, 248, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obs-user-key-sub {
+  font-size: 11px;
+  color: #a78bfa;
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obs-user-key-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #a78bfa;
+  font-family: var(--font-mono, monospace);
+  background: rgba(167, 139, 250, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+}
+

@@ -89,7 +89,7 @@ Agent Control adapts to your infrastructure across three operational deployment 
 └──────────────────────────┴───────────────────────────────┴───────────────────────────────┴──────────────┘
 ```
 
-1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides one-command discovery and wrapping of all installed IDEs (`agentcontrol protect`), 15 out-of-the-box safe mode rules, inline DLP, passive shadow discovery, and an embedded browser dashboard on `http://127.0.0.1:8080`.
+1. **[Workstation Sidecar](workstation_guide.md)** — Statically-linked binary for individual developers. Provides zero-touch authentication and target connection (`agentcontrol login` and `agentcontrol connect`), 15 out-of-the-box safe mode rules, inline DLP, and a local background proxy on `http://127.0.0.1:18080`.
 2. **[Docker Local / PoC Deployment](guides/docker-deployment.md)** — Containerized gateway or all-in-one full stack (PostgreSQL + Control Plane API + React Console + Gateway) for fast zero-install development, testing, and PoC evaluation.
 3. **[Team Control Hub](team_hub_guide.md)** — Self-hosted centralized management plane deployed via Docker Compose (Go REST API on `:8081`, React Management Console on `:3000`, PostgreSQL database). Coordinates distributed gateways with real-time SSE policy push, OIDC identity binding, centralized provider key custody, and authoritative spend ledgers.
 4. **[Enterprise Fleet](enterprise_guide.md)** — High-availability Kubernetes Helm deployment (`./chart`) featuring the Hardened Agent Container Runtime (HAR) sidecar image (`Dockerfile.har`), hardened WebSocket egress tunneling, offline Ed25519 licensing, pure-Rust TLS (`rustls`), and zero-knowledge customer-managed key (CMK) SIEM export.
@@ -127,13 +127,13 @@ Agent Control adapts to your infrastructure across three operational deployment 
 | **Pluggable Model Routing (4 Strategies)** | ✓ | ✓ | ✓ | `model_groups` policy config (AR-2) |
 | **Extensible Pipeline Hook Framework** | ✓ | ✓ | ✓ | PreRoute, PreExecute, PostExecute hooks (AR-1) |
 | **Asynchronous Spend Batch Writer** | — | ✓ | ✓ | Bounded buffer with backpressure protection (AR-3) |
-| **Centralized Daemon Job Scheduler** | — | ✓ | ✓ | Introspection endpoint `/internal/jobs` (AR-4) |
+| **Centralized Daemon Job Scheduler** | — | — | ✓ | Introspection endpoint `/internal/jobs` (AR-4) |
 
 ---
 
-## 4. Workstation Quickstart & Single-Command Protection
+## 4. Workstation Quickstart & Zero-Touch Onboarding
 
-The fastest path to complete local AI security is **One-Command Protection** via `agentcontrol protect`.
+The recommended onboarding workflow across all platforms is **Zero-Touch Onboarding** via `agentcontrol login` and `agentcontrol connect`.
 
 ### Step 1: Install the Agent Control Binary
 
@@ -152,95 +152,100 @@ The fastest path to complete local AI security is **One-Command Protection** via
   curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
   ```
 
-### Step 2: Run One-Command Protection
 
-Execute `agentcontrol protect` in your terminal:
+### Step 2: Authenticate via Browser PKCE OAuth
+
+Authenticate your workstation with your organization's Control Hub:
 
 ```bash
-# macOS / Linux
-agentcontrol protect
+# Interactive browser OAuth 2.0 PKCE login:
+agentcontrol login
 
-# Windows (PowerShell / CMD)
-agentcontrol.exe protect
+# Headless / SSH server login:
+agentcontrol login --no-browser
 ```
 
-**What `agentcontrol protect` performs automatically:**
-1. 🛡 **Generates Baseline Policy:** Creates `agentcontrol-policy.yaml` with baseline P0 DLP rules (blocking `.env`, `.ssh/id_rsa`, `~/.aws/credentials`) if no policy file exists.
-2. 🔍 **Auto-Discovers Installed IDEs:** Scans for Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, and Codex.
-3. 🔒 **Atomically Wraps Configurations:** Updates MCP configs to route through the gateway while creating timestamped backups before writing.
-4. 🚀 **Starts Security Gateway:** Binds the local proxy to `127.0.0.1:8080` and streams structured JSONL logs to `~/.agentcontrol/audit.jsonl`.
-5. 🌐 **Launches Local Dashboard:** Automatically opens your default web browser to `http://127.0.0.1:8080`.
+**What `agentcontrol login` performs automatically:**
+1. 🔐 **Identity Verification via Configured Auth Providers:** Opens your default browser to your organization's Control Hub (`/oauth/authorize`). If you do not have an active session, you are prompted to sign in using your organization's configured Auth Provider (Local email/password, Google Workspace SSO, or Microsoft Entra ID). If already signed into the Hub, enrollment completes instantly in one click.
+2. 🏢 **Single-Tenant Organization Binding:** The workstation automatically registers into your organization's Primary Organization and binds to your verified employee email address (`user_id`).
+3. 🔑 **Hardware/OS Keypair Generation:** Generates an Ed25519 device keypair locally; the private key is stored securely in your OS Keyring (or `0600` token file on headless Linux) and never transmitted to the cloud.
+4. 📡 **Public Key Registration:** Registers the public key with the Control Hub.
+5. ⚙️ **Per-User Background Service:** Installs and starts the per-user background agent (`VexaAgentControl`) listening on `127.0.0.1:18080` (zero administrative elevation required across Windows, macOS, and Linux).
+
+> [!TIP]
+> **Headless Environments & Automated Fleet Deployment:**
+> - For remote SSH servers without a desktop browser, use `agentcontrol login --no-browser` to print the authorization URL directly to the terminal.
+> - For automated fleet deployments (MDM, Intune, Jamf, Ansible, or CI/CD pipelines), use the non-interactive token flow: `agentcontrol enroll --token <OTET> --hub <URL>`.
+
+### Step 3: Connect Your Coding Assistants
+
+Connect target AI assistants with scoped target connection:
 
 ```bash
-# Useful flags:
-agentcontrol protect --dry-run   # Preview all discovery & wrapping actions without modifying files
-agentcontrol protect --shadow    # Launch in passive observation mode (no active blocking)
-agentcontrol protect --no-browser # Start gateway without opening browser automatically
+# Connect OpenAI Codex CLI (Mode B: Local proxy + MCP stdio-proxy):
+agentcontrol connect codex
+
+# Connect Claude Desktop (MCP stdio-proxy sandboxing):
+agentcontrol connect claude
+
+# Connect VS Code Continue extension (Mode A: Cloud-direct with scoped virtual key):
+agentcontrol connect vscode-continue --mode cloud-direct
 ```
 
-### Step 3: Run Live 3-Point Security Verification
+**What `agentcontrol connect` performs automatically:**
+1. 🔍 **Discovers & Verifies Version:** Checks client version against pinned supported ranges.
+2. 🔒 **Creates Pristine Baseline Backup:** Backs up original configuration to `<config>.baseline.bak`.
+3. 📝 **Injects Scoped Governance:** Injects loopback routing (`http://127.0.0.1:18080/v1`) or wraps MCP servers with `agentcontrol stdio-proxy -- <command>`.
+4. 📜 **Writes Ownership Manifest:** Records pre/post SHA-256 file hashes and injected keys in `~/.agentcontrol/manifests/<target>.manifest.json` for non-destructive reversal.
+5. ⚡ **Synthesizes Verification Probe:** Sends a synthetic 1-token loopback probe to assert routing.
 
-In a second terminal window, run the canonical verification probe to assert active gateway defenses:
+### Step 4: Run Diagnostic Health Suite
+
+Verify system integrity, auth status, background daemon, and target drift:
 
 ```bash
-# macOS / Linux / WSL
-agentcontrol verify
+# Run comprehensive diagnostic checks:
+agentcontrol doctor
 
-# Windows (PowerShell)
-agentcontrol.exe verify
-
-# JSON Output (CI / Scripting)
-agentcontrol verify --json
+# View multi-state capability status and freshness tiers:
+agentcontrol status
 ```
 
-The verifier executes 3 automated assertions against the running gateway:
-1. **Safe Tool Execution:** Asserts baseline operations like `read_file` are allowed (`HTTP 200`).
-2. **DLP Secret Shield:** Asserts high-entropy secrets and SSNs are blocked (`HTTP 400`, `DLP-01-HIGH-ENTROPY`).
-3. **Prompt Injection Shield:** Asserts system prompt overrides and jailbreaks are blocked (`HTTP 400`, `INJ-04-OVERRIDE`).
+**Diagnostic Exit Code Contract:**
+* `0`: All systems fully healthy (`PASS`).
+* `1`: Critical failure (auth missing, daemon dead, gateway unreachable).
+* `2`: Degraded / Warning (target drift, unverified client, `BYPASS_POSSIBLE`).
 
-### Step 4: Verify with Instant Telemetry
+### Step 5: Clean Non-Destructive Reversal Anytime
 
-If you have not connected an IDE yet, generate simulated tool calls to verify the dashboard:
-
-```bash
-# macOS / Linux / WSL
-python3 ~/.local/bin/quickstart_agent.py
-
-# Windows (PowerShell)
-python "$env:USERPROFILE\.local\bin\quickstart_agent.py"
-```
-
-### Step 5: Revert Anytime
-
-To cleanly restore all IDE configurations from their original backups:
+To cleanly restore target configurations without erasing custom developer settings:
 
 ```bash
-agentcontrol unprotect            # macOS / Linux (verifies backup integrity)
-agentcontrol.exe unprotect        # Windows
-agentcontrol.exe unprotect --force # Emergency recovery: force restore
+# Revert specific connected target:
+agentcontrol disconnect codex
+agentcontrol disconnect claude
+
+# Diagnose and automatically repair configuration drift:
+agentcontrol repair
 ```
 
 ---
 
-## 5. Multi-IDE Integration & File-Lock Management
+## 5. Target Governance & Child Process MCP Sandboxing
 
-Agent Control natively discovers, wraps, and monitors 9 leading AI coding environments:
+Agent Control governs autonomous coding agents and Model Context Protocol (MCP) servers:
 
-| IDE / Target | Wrap Command | Config File Location | Interception Behavior |
+| Target Client | Connect Command | Governed Surfaces | Isolation Model |
 |---|---|---|---|
-| **Claude Desktop** | `agentcontrol wrap claude` | `claude_desktop_config.json` | Replaces stdio commands with Agent Control proxy wrapper |
-| **Cursor** | `agentcontrol wrap cursor` | Cursor `User/settings.json` | Intercepts MCP server registrations & tool invocations |
-| **VS Code** | `agentcontrol wrap vscode` | `.vscode/mcp.json` / Extension storage | Governs extension-based MCP tool calls |
-| **JetBrains** | `agentcontrol wrap jetbrains` | JetBrains AI assistant settings | Wraps external MCP servers with default-deny rules |
-| **Zed Editor** | `agentcontrol wrap zed` | `~/.config/zed/settings.json` | Injects security proxy into Zed language model config |
-| **Cline Extension** | `agentcontrol wrap cline` | Cline extension settings | Intercepts autonomous tool execution and shell commands |
-| **OpenCode** | `agentcontrol wrap opencode` | OpenCode configuration | Secures tool parameter payloads and audits activity |
-| **Antigravity IDE** | `agentcontrol wrap antigravity` | Antigravity settings / MCP config | Governs tool calls and surfaces interactive HITL modals |
-| **ChatGPT Codex** | `agentcontrol wrap codex` | Codex CLI / API settings | Scopes credentials and blocks prompt injections |
+| **ChatGPT Codex** | `agentcontrol connect codex` | LLM completions & MCP tools | Loopback proxy (`127.0.0.1:18080`) + child `stdio-proxy` |
+| **Claude Desktop** | `agentcontrol connect claude` | MCP tool executions | Isolated child `stdio-proxy` per server (< 64MB memory quota) |
+| **VS Code Continue** | `agentcontrol connect vscode-continue` | LLM completions | Mode A Cloud-Direct via scoped virtual key |
+| **Cursor** | `agentcontrol connect cursor` | MCP tools & LLM egress | Stdio proxy wrapping & custom proxy endpoint |
+| **Antigravity IDE** | `agentcontrol connect antigravity` | MCP tool execution | Stdio proxy with inline parameter DLP |
 
-### Checking Wrap Status
+### Checking Multi-State Capability Status
 
-Run `agentcontrol status` to inspect all 9 targets:
+Run `agentcontrol status` to inspect all connected targets with verified capabilities and freshness tiers:
 
 ```bash
 agentcontrol status
@@ -248,19 +253,16 @@ agentcontrol status
 
 Output:
 ```text
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│ Target        Config File Path                                   Exists?   Wrapped?   │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│ Claude        C:\Users\dev\AppData\Roaming\Claude\config.json     YES       YES       │
-│ Cursor        C:\Users\dev\AppData\Roaming\Cursor\settings.json   YES       YES       │
-│ VS Code       C:\Users\dev\.vscode\mcp.json                       YES       YES       │
-│ JetBrains     C:\Users\dev\AppData\Roaming\JetBrains\mcp.json     NO        NO        │
-│ Zed           C:\Users\dev\.config\zed\settings.json              NO        NO        │
-│ Cline         C:\Users\dev\AppData\Roaming\Code\cline.json        YES       YES       │
-│ OpenCode      C:\Users\dev\.config\opencode\config.json           NO        NO        │
-│ Antigravity   C:\Users\dev\.gemini\antigravity\config.json        YES       YES       │
-│ Codex         C:\Users\dev\.codex\config.json                     NO        NO        │
-└───────────────────────────────────────────────────────────────────────────────────────┘
+=== Vexa Agent Control Workstation Status ===
+Daemon:    RUNNING (127.0.0.1:18080, PID 14208)
+Identity:  alice@company.com (dev-team)
+Keyring:   OS_KEYRING (Available)
+Gateway:   REACHABLE (gateway.vexa.ai, 24ms RTT)
+
+Target Status:
+• codex:            CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED (ACTIVE_FRESH)
+• claude:           MCP_WRAPPED, MCP_TRAFFIC_VERIFIED (ACTIVE_RECENT)
+• vscode-continue:  CONFIGURED, BYPASS_POSSIBLE (ACTIVE_RECENT)
 ```
 
 ### Event-Driven Configuration Watcher Daemon
@@ -448,7 +450,7 @@ agentcontrol lint agentcontrol-policy.yaml
 agentcontrol validate --policy agentcontrol-policy.yaml --tool read_file --payload payload.json
 
 # 3. Validate policy fixtures against a running gateway in CI/CD pipelines
-agentcontrol test --policy agentcontrol-policy.yaml --gateway "http://127.0.0.1:8080" fixture.json
+agentcontrol test --policy agentcontrol-policy.yaml --gateway "http://127.0.0.1:18080" fixture.json
 
 # 4. Cryptographically sign policy with Ed25519 key for production promotion
 agentcontrol promote --policy agentcontrol-policy.yaml --key ./keys/prod.key
@@ -544,57 +546,38 @@ When developers use a Virtual Key, the Agent Control Gateway validates the key, 
 
 | AI Tool / IDE | Operating System | Configuration File Location | Configuration Snippet |
 |---|---|---|---|
-| **ChatGPT Codex** | **Windows** | `%USERPROFILE%\.codex\config.toml` | ```toml<br>openai_base_url = "http://127.0.0.1:8080/v1"<br>model = "gpt-4o"<br><br>[shell_environment_policy.set]<br>OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY"<br>OPENAI_MODEL = "gpt-4o"<br>HTTP_PROXY = "http://127.0.0.1:8080"<br>HTTPS_PROXY = "http://127.0.0.1:8080"<br>``` |
+| **ChatGPT Codex** | **Windows** | `%USERPROFILE%\.codex\config.toml` | ```toml<br>openai_base_url = "http://127.0.0.1:18080/v1"<br>model = "gpt-4o"<br><br>[shell_environment_policy.set]<br>OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"<br>OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY"<br>OPENAI_MODEL = "gpt-4o"<br>HTTP_PROXY = "http://127.0.0.1:18080"<br>HTTPS_PROXY = "http://127.0.0.1:18080"<br>``` |
 | | **macOS / Linux** | `~/.codex/config.toml` | Same top-level routing and `[shell_environment_policy.set]` block |
-| **Claude Desktop** | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | ```json<br>{<br>  "mcpServers": {<br>    "agent": {<br>      "command": "agentcontrol",<br>      "args": ["stdio-proxy", "--", "node", "runner.js"],<br>      "env": {<br>        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",<br>        "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY"<br>      }<br>    }<br>  }<br>}<br>``` |
+| **Claude Desktop** | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | ```json<br>{<br>  "mcpServers": {<br>    "agent": {<br>      "command": "agentcontrol",<br>      "args": ["stdio-proxy", "--", "node", "runner.js"]<br>    }<br>  }<br>}<br>``` |
 | | **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Same JSON schema |
 | | **Linux** | `~/.config/Claude/claude_desktop_config.json` | Same JSON schema |
-| **Cursor IDE** | **Windows** | `%APPDATA%\Cursor\User\settings.json` | ```json<br>{<br>  "cursor.openAI.baseUrl": "http://127.0.0.1:8080/v1",<br>  "cursor.openAI.apiKey": "sk-vex-YOUR_VIRTUAL_KEY",<br>  "cursor.openAI.model": "gpt-4o"<br>}<br>``` |
+| **Cursor IDE** | **Windows** | `%APPDATA%\Cursor\User\settings.json` | ```json<br>{<br>  "cursor.openAI.baseUrl": "http://127.0.0.1:18080/v1",<br>  "cursor.openAI.apiKey": "sk-vex-YOUR_VIRTUAL_KEY",<br>  "cursor.openAI.model": "gpt-4o"<br>}<br>``` |
 | | **macOS** | `~/Library/Application Support/Cursor/User/settings.json` | Same JSON settings |
 | | **Linux** | `~/.config/Cursor/User/settings.json` | Same JSON settings |
-| **Terminal / CLI** (Aider, SDKs) | **Windows (PowerShell)** | `$PROFILE` or session env | ```powershell<br>$env:OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"<br>$env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
-| | **macOS / Linux** | `~/.bashrc` or `~/.zshrc` | ```bash<br>export OPENAI_BASE_URL="http://127.0.0.1:8080/v1"<br>export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
+| **Terminal / CLI** (Aider, SDKs) | **Windows (PowerShell)** | `$PROFILE` or session env | ```powershell<br>$env:OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"<br>$env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
+| | **macOS / Linux** | `~/.bashrc` or `~/.zshrc` | ```bash<br>export OPENAI_BASE_URL="http://127.0.0.1:18080/v1"<br>export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY"<br>``` |
 
 > [!IMPORTANT]
-> **Codex Desktop & CLI Routing:** In `~/.codex/config.toml`, always set `openai_base_url = "http://127.0.0.1:8080/v1"` and `model = "gpt-4o"` at the **top level** of the file so the Codex chat engine routes completions to AgentControl. `[shell_environment_policy.set]` configures child tools and subprocesses. Do not place custom keys under sections like `[features]`.
+> **Codex Desktop & CLI Routing:** In `~/.codex/config.toml`, always set `openai_base_url = "http://127.0.0.1:18080/v1"` and `model = "gpt-4o"` at the **top level** of the file so the Codex chat engine routes completions to AgentControl. `[shell_environment_policy.set]` configures child tools and subprocesses. Do not place custom keys under sections like `[features]`.
 
-### 3-Tier Integration Architecture for IDEs & SDKs
+### Native BaseURL & Stdio Proxy Architecture for IDEs & SDKs
 
-Agent Control provides a 3-tier architecture for governing LLM spend and security across all developer environments:
+Agent Control provides a clean architecture for governing LLM spend and security across all developer environments without OS trust store modifications:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                       3-TIER LLM SPEND & GOVERNANCE                         │
+│                    NATIVE LLM SPEND & GOVERNANCE ARCHITECTURE               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ TIER 1: Native BaseURL Redirection (Cleanest, Fastest, Zero Certs)         │
-│   • Targets: Cline, Roo Code, Continue.dev, OpenCode, Aider, Python/Node SDK│
-│   • Configuration: Set `baseURL: http://127.0.0.1:8080/v1`                  │
+│ 1. Native BaseURL Redirection (Cleanest, Fastest, Zero Certs)               │
+│   • Targets: Codex, Continue.dev, Cursor OpenAI-mode, Aider, Python/Node SDK│
+│   • Configuration: Set `baseURL: http://127.0.0.1:18080/v1`                 │
 │   • Path: Handled directly by high-performance proxy (`/v1/chat/completions`)│
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ TIER 2: Native MCP Stdio Proxy Wrapping (Surgical, Zero Network Overhead)  │
-│   • Targets: Claude Desktop, Zed, VS Code / Cursor MCP servers              │
-│   • Configuration: Auto-wrapped command `agentcontrol stdio-proxy -- <bin>` │
-│   • Path: Intercepts JSON-RPC tool calls on stdin/stdout                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ TIER 3: Local MITM Proxy (Locked Proprietary Client Fallback)               │
-│   • Targets: Cursor Free Tier (`api2.cursor.sh`), locked enterprise agents │
-│   • Configuration: `http.proxy: 127.0.0.1:8080` + User Trust Store Root CA │
-│   • Path: Decrypts CONNECT stream, counts prompt/completion tokens, settles │
+│ 2. Isolated MCP Stdio Proxy Child Processes (< 64MB RSS Ceiling)            │
+│   • Targets: Claude Desktop, Cursor MCP, Zed, VS Code MCP servers           │
+│   • Configuration: Command wrapped as `agentcontrol stdio-proxy -- <bin>`   │
+│   • Path: Intercepts JSON-RPC tool calls on stdin/stdout with parameter DLP │
 └─────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Cursor Desktop (Free Tier & BYOK)
-When running `agentcontrol protect`, Agent Control automatically:
-1. Generates and registers an ECDSA P-256 Root CA into the OS Current User trust store (`certutil -user "Root"` / macOS `login.keychain-db`).
-2. Configures Cursor's `User/settings.json` with `"http.proxy": "http://127.0.0.1:8080"` and `"cursor.general.disableHttp2": true`.
-3. Sets `NODE_EXTRA_CA_CERTS` so Cursor's internal Node runtime trusts the gateway.
-4. Streams and records all Chat, Tab Autocomplete, and Composer token usage into the spend ledger.
-
-```bash
-# Manage Local CA for LLM Interception
-agentcontrol ca status       # Check CA generation & OS trust store status
-agentcontrol ca install      # Register Root CA in User Trust Store
-agentcontrol ca uninstall    # Cleanly remove Root CA from trust store
 ```
 
 ### Requesting a Budget Increase
@@ -636,7 +619,7 @@ The Go Control Plane manages true background daemons using a centralized, contex
 High-risk actions (e.g., database drops, production deployments, sensitive file access) can be routed for human authorization.
 
 ### Real-Time Interactive Browser Modals
-When running locally (`agentcontrol protect` / `agentcontrol dev`), dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:8080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
+When running locally, dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:18080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
 
 ### Asynchronous Slack / MS Teams / Webhook Queue
 For team and enterprise deployments, the gateway dispatches an async webhook payload containing:
@@ -647,9 +630,9 @@ For team and enterprise deployments, the gateway dispatches an async webhook pay
 
 Approvers submit decisions via HTTP callback:
 ```bash
-curl -X POST http://localhost:8080/api/v1/hitl/respond \
+curl -X POST http://localhost:18080/api/v1/hitl/respond \
   -H "Content-Type: application/json" \
-  -H "X-Agent Control-Signature: <HMAC_SIGNATURE>" \
+  -H "X-Agent-Control-Signature: <HMAC_SIGNATURE>" \
   -d '{"request_id": "req-9842", "decision": "approve"}'
 ```
 
@@ -700,35 +683,25 @@ agentcontrol compliance report --log-path ~/.agentcontrol/audit.jsonl --format j
 
 ---
 
-## 12. Master CLI Command Reference
+## 12. Master CLI Command Reference (12 Canonical Commands)
+
+Vexa Agent Control provides a streamlined set of 12 canonical CLI commands for developer workstation management, target governance, and diagnostics:
 
 | Command | Arguments / Flags | Description |
 |---|---|---|
-| `agentcontrol protect` | `--dry-run`, `--shadow`, `--no-browser`, `--listen <ADDR>`, `--policy <PATH>` | Single-command automated discovery, atomic IDE wrapping, gateway launch, and dashboard opening |
-| `agentcontrol unprotect` | `--dry-run`, `--force` | Reverts all IDE configurations from backups and verifies integrity |
-| `agentcontrol status` | *(none)* | Displays active wrap state, paths, and existence for all 9 IDE targets |
-| `agentcontrol wrap <target>` | `claude`, `cursor`, `vscode`, `jetbrains`, `zed`, `cline`, `opencode`, `antigravity`, `codex`, or `--all` | Wraps specified IDE configuration(s) with timestamped backup creation |
-| `agentcontrol unwrap <target>` | `<target>`, `--force` | Restores specified IDE configuration from its backup |
-| `agentcontrol watch` | `--all`, or `<target>` | Starts the OS filesystem watcher daemon for auto-rewrapping on configuration drift |
-| `agentcontrol dev` | `--listen <ADDR>`, `--stdio`, `--enforce`, `--learn`, `--dual-agent`, `-- <cmd>` | Starts shadow observation proxy or stdio wrapper with learning mode |
-| `agentcontrol start` | `--policy <PATH>`, `--listen <ADDR>`, `--centralized`, `--tls-cert <CERT>`, `--tls-key <KEY>` | Runs the centralized production security gateway daemon |
-| `agentcontrol service` | `install`, `uninstall`, `status` | Manages persistent OS background Sentry service (Windows SCM, macOS launchd, Linux systemd) |
-| `agentcontrol enroll` | `--token <OTET>`, `--hub-url <URL>` | Performs hardware-bound Ed25519 PKI device enrollment with Control Hub |
-| `agentcontrol generate-policy` | `--decay-window <DAYS>`, `--output <PATH>` | Synthesizes a lint-passing `agentcontrol-policy.yaml` from recorded shadow traffic |
-| `agentcontrol scan` | `--path <PATH>`, `--format <text\|json>` | Audits local MCP configuration and assigns 0–100 Vexa Security Score |
-| `agentcontrol bench` | `--full`, `--compare-baselines`, `--visualize`, `--output <PATH>` | Runs 303-task ADR security benchmark across 17 attack categories |
-| `agentcontrol compliance report` | `--log-path <PATH>`, `--format <markdown\|json>`, `--output <PATH>` | Generates SOC 2, ISO 27001, and NIST AI RMF compliance evidence reports |
-| `agentcontrol identity create` | `--agent <NAME>`, `--scope <SCOPE>`, `--ttl <TTL>` | Provisions a scoped, short-lived credential for an agent |
-| `agentcontrol identity rotate` | `--agent <NAME>`, `--drain-secs <SECS>` | Rotates active agent credential with zero downtime |
-| `agentcontrol identity audit` | `--agent <NAME>`, `--verify` | Displays HMAC-chained credential lifecycle audit log |
-| `agentcontrol verify-log` | `<LOG_PATH>`, `--key-file <KEY>` | Verifies cryptographic HMAC-SHA256 hash chain of an audit log |
-| `agentcontrol report` | `<LOG_PATH>`, `--output <PATH>`, `--risk`, `--format <json\|text>` | Generates session summary report or shadow Risk Delta analysis |
-| `agentcontrol lint` | `<POLICY_PATH>` | Checks YAML policy syntax, parameter schemas, and security bounds |
-| `agentcontrol validate` | `--policy <PATH>`, `--tool <NAME>`, `--payload <JSON_FILE>` | Evaluates tool call payload offline against policy rules |
-| `agentcontrol test` | `--policy <PATH>`, `--gateway <URL>`, `--oidc-token <JWT>`, `<FIXTURE>` | Validates policy test fixtures in CI/CD pipeline against gateway |
-| `agentcontrol license keygen` | `--output <DIR>` | Generates Ed25519 keypair for enterprise license generation |
-| `agentcontrol license generate`| `--org <ORG>`, `--tier <TIER>`, `--seats <N>`, `--days <D>`, `--signing-key <KEY>` | Issues Ed25519-signed JWT enterprise license token |
-| `agentcontrol verify` | `--gateway <URL>`, `--json`, `--hub <URL>`, `--user-id <ID>`, `--assignment-id <ASGN_ID>` | Executes 5-point verification probe asserting effective routing and Control Hub identity correlation |
+| `agentcontrol login` | `[--no-browser]` | Authenticates workstation via browser OAuth 2.0 PKCE, generates local Ed25519 keypair, registers public key with Control Hub, and installs background service. |
+| `agentcontrol connect <target>` | `codex`, `claude`, `vscode-continue` `[--mode local\|cloud-direct]`, `[--force]` | Injects loopback proxy or wraps MCP tool configuration; records ownership manifest and baseline backup. |
+| `agentcontrol disconnect <target>` | `codex`, `claude`, `vscode-continue` | Reverts injected configuration keys from ownership manifest while preserving user custom settings. |
+| `agentcontrol status` | *(none)* | Displays active daemon state, identity, gateway latency, target capabilities (`CONFIGURED`, `MCP_WRAPPED`), and freshness tiers (`ACTIVE_FRESH`, `ACTIVE_RECENT`, `STALE`). |
+| `agentcontrol doctor` | `[--json]` | Runs comprehensive health checks (binary integrity, auth, daemon IPC, gateway RTT, target drift, security invariants). Strict exit codes: 0 (Pass), 1 (Fail), 2 (Degraded). |
+| `agentcontrol support-bundle` | `[--output-dir <PATH>]`, `[--yes]` | Generates a privacy-preserving diagnostic archive containing doctor report, system info, service metrics, error tail, and manifest summaries with zero secrets. |
+| `agentcontrol repair` | *(none)* | Validates configuration files against manifests; repairs missing user tasks and broken loopback endpoints without modifying custom user edits. |
+| `agentcontrol rotate-local-token` | *(none)* | Atomically rotates the 32-byte local session bearer token in `~/.agentcontrol/local.token`, updates connected configs, and notifies the running daemon. |
+| `agentcontrol service` | `install`, `uninstall`, `status` `[--hub-url <URL>]` | Manages the per-user background agent daemon (Windows scheduled user task, macOS launchd LaunchAgent, Linux systemd user service). |
+| `agentcontrol start` | `[--listen <ADDR>]`, `[--policy <PATH>]` | Runs the local background proxy daemon listening on `127.0.0.1:18080`. |
+| `agentcontrol logout` | *(none)* | Flushes local cached tokens from OS keyring and notifies Control Hub to revoke device session. |
+| `agentcontrol reset-local-state` | `[--force]` | Interactive recovery command to purge local SQLite event ledger and cache while preserving pristine baseline backups. |
+| `agentcontrol stdio-proxy -- <cmd>` | `<command> [args...]` | Dedicated child process wrapper for MCP servers enforcing frame quotas (< 16MB), memory limits (< 64MB RSS), 60s timeouts, and parameter DLP. |
 
 ---
 
@@ -851,17 +824,17 @@ Operators and automated CI/CD pipelines can run the 5-point verification probe t
 
 ```bash
 # Basic local gateway verification
-agentcontrol verify --gateway http://127.0.0.1:8080
+agentcontrol verify --gateway http://127.0.0.1:18080
 
 # Full end-to-end verification with Control Hub correlation (REQ-VER-004)
 agentcontrol verify \
-  --gateway http://127.0.0.1:8080 \
+  --gateway http://127.0.0.1:18080 \
   --hub https://console.vexasec.io \
   --user-id dev-user-42 \
   --assignment-id asgn-01918a2b-c3d4-7e8f-9a0b-1c2d3e4f5a6b
 
 # Output structured JSON report
-agentcontrol verify --gateway http://127.0.0.1:8080 --hub https://console.vexasec.io --json
+agentcontrol verify --gateway http://127.0.0.1:18080 --hub https://console.vexasec.io --json
 ```
 
 The probe verifies:

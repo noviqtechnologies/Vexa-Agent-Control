@@ -1,10 +1,10 @@
 # 10-Minute Developer Quickstart
 
-This tutorial takes you from a clean machine to a running local gateway with one protected integration, live enforcement verification, and a proven rollback path.
+This tutorial takes you from a clean machine to an authenticated workstation sentry with one connected AI coding assistant, live diagnostic health verification, and a proven non-destructive reversal path.
 
 ---
 
-## The 7-Step Interaction Contract
+## The 6-Step Interaction Contract
 
 Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If it fails**, **What changes**, and **Undo**.
 
@@ -12,26 +12,26 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ### Step 0: Platform Preflight
 
-- **Goal:** Verify architecture compatibility and ensure port `8080` is free.
+- **Goal:** Verify architecture compatibility and ensure port `18080` is free.
 - **Run:**
   - *macOS / Linux / WSL:*
     ```bash
-    uname -m && netstat -an | grep 8080 || echo "Port 8080 is available"
+    uname -m && netstat -an | grep 18080 || echo "Port 18080 is available"
     ```
   - *Windows (PowerShell):*
     ```powershell
-    $env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+    $env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 18080 -ErrorAction SilentlyContinue
     ```
-- **Expected Result:** Architecture is `x86_64` or `aarch64` (or `AMD64` on Windows). Port 8080 is not in use.
-- **If it fails:** If port 8080 is taken, select another port in Step 3 using `--listen 127.0.0.1:9090`.
+- **Expected Result:** Architecture is `x86_64` or `aarch64` (or `AMD64` on Windows). Port 18080 is not in use.
+- **If it fails:** If port 18080 is taken, the daemon automatically binds to an available fallback port in range `18080..=18090` and writes the active port to `~/.agentcontrol/daemon.port`.
 - **What changes:** None (read-only inspection).
 - **Undo:** Not applicable.
 
 ---
 
-### Step 1: Install `agentcontrol` Binary (or Use Docker)
+### Step 1: Install `agentcontrol` Binary
 
-- **Goal:** Download and install the standalone release binary to `~/.local/bin` (or use Docker).
+- **Goal:** Download and install the standalone release binary to `~/.local/bin` (or `%USERPROFILE%\.local\bin`).
 - **Run:**
   - *macOS / Linux / WSL (Bash / Zsh):*
     ```bash
@@ -50,123 +50,121 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-  - *Alternative (Docker - Zero Host Installation):*
-    ```bash
-    docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
-    ```
-- **Expected Result:** Prints `agentcontrol 1.0.70`.
-- **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/) or the [Docker Deployment Guide](guides/docker-deployment.md).
+- **Expected Result:** Prints `agentcontrol 1.0.82` (or current release).
+- **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
 
 ---
 
-### Step 2: Safe Discovery (Dry-Run)
+### Step 2: Authenticate via Browser PKCE OAuth
 
-- **Goal:** Identify which AI clients exist on your machine without modifying any configurations.
+- **Goal:** Enroll workstation, generate local Ed25519 keypair, and start per-user background agent.
 - **Run:**
   ```bash
-  agentcontrol status
-  agentcontrol protect --dry-run
+  agentcontrol login
   ```
-- **Expected Result:** Prints an IDE config table showing existence and verification levels:
-  - `Claude Desktop` [verified]
-  - `Cursor` [verified]
-  - `Codex` [verified]
-  - `Antigravity` [verified]
-  - `VS Code`, `JetBrains`, `Zed`, `Cline`, `OpenCode` [unverified]
-- **If it fails:** Check if your client configuration is stored in a non-standard location. See [Integrations Matrix](integrations/README.md).
-- **What changes:** None (dry-run mode).
+  *(On headless Linux servers or CI without a browser, run: `agentcontrol login --no-browser`)*
+- **Expected Result:**
+  - Browser opens to the secure OAuth login page.
+  - Sentry authenticates and stores private key in your OS Keyring (DPAPI / Keychain / `0600` token file).
+  - Background daemon starts on `127.0.0.1:18080`.
+- **If it fails:** Check network connectivity to `app.vexasec.io`.
+- **What changes:** Device credentials stored in secure store; background daemon registered for autostart on login.
+- **Undo:** Run `agentcontrol logout`.
+
+---
+
+### Step 3: Connect Your AI Coding Assistant
+
+- **Goal:** Atomically configure target assistant to route completions and MCP tools through Agent Control with baseline backup and ownership manifest.
+- **Run:**
+  - *For OpenAI Codex CLI:*
+    ```bash
+    agentcontrol connect codex
+    ```
+  - *For Claude Desktop:*
+    ```bash
+    agentcontrol connect claude
+    ```
+  - *For VS Code Continue Extension:*
+    ```bash
+    agentcontrol connect vscode-continue --mode cloud-direct
+    ```
+- **Expected Result:**
+  - Pristine baseline backup created: `<config>.baseline.bak`.
+  - Ownership manifest created: `~/.agentcontrol/manifests/<target>.manifest.json`.
+  - Injected loopback routing (`127.0.0.1:18080`) or MCP `agentcontrol stdio-proxy` child wrapper.
+  - Synthetic 1-token loopback probe verifies communication.
+- **If it fails:** Check if assistant is installed or pinned version matches supported range (`agentcontrol doctor`).
+- **What changes:** Target config updated; ownership manifest recorded.
+- **Undo:** Run `agentcontrol disconnect <target>` (see Step 6).
+
+---
+
+### Step 4: Run Diagnostic Health Suite
+
+- **Goal:** Verify complete workstation health, background daemon, target configurations, and security invariants.
+- **Run:**
+  ```bash
+  agentcontrol doctor
+  agentcontrol status
+  ```
+- **Expected Result:**
+  ```text
+  [PASS] Binary integrity & architecture verified
+  [PASS] Authentication state: ENROLLED (OS_KEYRING)
+  [PASS] Background daemon: RUNNING (127.0.0.1:18080, PID 14208)
+  [PASS] Gateway latency: 24ms RTT (gateway.vexa.ai)
+  [PASS] Target governance: codex CONFIGURED, PROBE_VERIFIED
+  [PASS] Security invariants: No Root CA detected; No plaintext keys
+  ```
+- **If it fails:** Review diagnostic output for actionable error codes (`AUTH_REQUIRED`, `PORT_UNAVAILABLE`, etc.) and run `agentcontrol repair`.
+- **What changes:** None (diagnostic inspection).
 - **Undo:** Not applicable.
 
 ---
 
-### Step 3: Wrap Configuration & Launch Gateway
+### Step 5: Test with Real AI Completions & MCP Tools
 
-- **Goal:** Atomically wrap discovered configurations and launch the local security proxy.
+- **Goal:** Confirm real tool calls and completions flow through Vexa with parameter DLP and FinOps governance.
 - **Run:**
-  - *For observation/audit-only mode (recommended for evaluation):*
-    ```bash
-    agentcontrol protect --shadow
-    ```
-  - *For active blocking mode (DLP & injection prevention):*
-    ```bash
-    agentcontrol protect
-    ```
-- **Expected Result:**
-  - Terminal prints discovered and wrapped MCP targets.
-  - A timestamped backup is saved next to each modified config.
-  - Local gateway starts listening on `http://127.0.0.1:8080`.
-  - Local dashboard automatically opens in your browser.
-- **If it fails:** If a port collision occurs, specify `--listen 127.0.0.1:9090`.
-- **What changes:**
-  - Client config files modified to route stdio tool calls through `agentcontrol stdio-proxy`.
-  - Backups created: `<config_file>.bak.<timestamp>`.
-  - Baseline policy created: `./agentcontrol-policy.yaml`.
-  - Event logs written: `~/.agentcontrol/audit.jsonl`.
-- **Undo:** Run `agentcontrol unprotect` (see Step 6).
-
----
-
-### Step 4: Verify Live Enforcement
-
-- **Goal:** Prove the gateway is actively evaluating and blocking threats using a 3-point smoke test.
-- **Run (in a second terminal):**
-  ```bash
-  agentcontrol verify
-  ```
-- **Expected Result:**
-  ```text
-  ✔ [1/3] Safe Tool Execution (read_file)      ➔ ALLOWED
-  ✔ [2/3] DLP Exfiltration Guard (AWS Key)     ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
-  ✔ [3/3] Prompt Injection (System Override)  ➔ BLOCKED [INJ-04-OVERRIDE]
-  ```
-- **If it fails:** Ensure the `agentcontrol protect` process is running in your primary terminal.
-- **What changes:** 3 probe events logged in `~/.agentcontrol/audit.jsonl`.
-- **Undo:** None needed.
-
----
-
-### Step 5: Test with Your Real AI Client
-
-- **Goal:** Confirm your AI agent tool calls flow through Vexa.
-- **Run:**
-  1. Restart your AI client (e.g., Claude Desktop or Cursor) so it loads the updated configuration.
-  2. Ask your AI client to execute any tool call (e.g., "List files in workspace").
-  3. Open the Local Dashboard at `http://127.0.0.1:8080` or view logs:
+  1. Restart your AI client (e.g., Codex or Claude Desktop) so it reloads its configuration.
+  2. Ask your assistant to perform a task or run a tool call.
+  3. Inspect active status and freshness tiers:
      ```bash
-     tail -f ~/.agentcontrol/audit.jsonl
+     agentcontrol status
      ```
-- **Expected Result:** The event appears in the Local Dashboard marked with a live timestamp and verdict `ALLOW`.
-- **What changes:** Real tool call events appended to audit log.
+- **Expected Result:** Target shows `TRAFFIC_VERIFIED` with freshness tier `ACTIVE_FRESH`.
+- **What changes:** Real tool and LLM telemetry logged to `~/.agentcontrol/audit.jsonl`.
 - **Undo:** Not applicable.
 
 ---
 
-### Step 6: Roll Back & Restore Original State
+### Step 6: Non-Destructive Disconnect & Revert Anytime
 
-- **Goal:** Safely restore all client configurations from backups and verify clean removal.
+- **Goal:** Safely restore target configurations from ownership manifests without erasing custom user settings.
 - **Run:**
   ```bash
-  # Restore all wrapped configurations:
-  agentcontrol unprotect
+  # Restore specific assistant configuration:
+  agentcontrol disconnect codex
+  agentcontrol disconnect claude
 
-  # Verify all configurations are back to original state:
-  agentcontrol status
+  # Diagnose and repair configuration drift without losing settings:
+  agentcontrol repair
   ```
 - **Expected Result:**
   ```text
-  ✔ Claude Desktop: Restored config from .../claude_desktop_config.json.bak.xxx
-  ✔ Restored: 1, No Backups Needed: 8, Errors: 0
+  [✓] Successfully disconnected codex. Restored original configuration from manifest.
   ```
-- **What changes:** Client config files are replaced with the pre-Vexa backup copies.
-- **Undo:** You can re-run `agentcontrol protect` at any time.
+- **What changes:** Injected Agent Control keys are reverted to previous values (or deleted if previously absent), while user-added keys remain untouched.
+- **Undo:** Reconnect at any time with `agentcontrol connect <target>`.
 
 ---
 
 ## Next Steps
 
+- [User Guide](user_guide.md) — Master operational manual for developer workstations and enterprise fleets.
 - [Docker Deployment Guide](guides/docker-deployment.md) — Deploy standalone gateway or full stack via Docker / Docker Compose.
-- [Workstation Guide](guides/workstation.md) — Learn how to generate custom policies with `agentcontrol generate-policy`.
 - [Custom Agent HTTP Guide](guides/custom-agent-http.md) — Route LangChain, LlamaIndex, or CrewAI agents.
-- [Small Team Hub Guide](guides/small-team-hub.md) — Share security policies across your team.
+- [Troubleshooting & Doctor Guide](guides/troubleshooting_doctor.md) — Deep dive into diagnostic exit codes and recovery workflows.

@@ -24,7 +24,7 @@ CREATE TABLE organizations (
     id                   UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
     name                 TEXT NOT NULL DEFAULT 'Primary Organization',
     slug                 TEXT NOT NULL DEFAULT 'default',
-    contact_email        TEXT NOT NULL DEFAULT 'admin@agentcontrol.local',
+    contact_email        TEXT NOT NULL DEFAULT '',
     license_tier         TEXT NOT NULL DEFAULT 'developer', -- "developer", "team", "enterprise"
     license_key_jwt      TEXT,
     max_devices          INT NOT NULL DEFAULT 1,            -- 1 (Developer), 25 (Team), -1 (Enterprise)
@@ -94,6 +94,9 @@ CREATE TABLE devices (
     daemon_version     TEXT DEFAULT '2.1.0',
     public_key         TEXT,
     state              device_state NOT NULL DEFAULT 'PENDING',
+    capability_vector  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_freshness     VARCHAR(32) NOT NULL DEFAULT 'STALE',
+    verified_target_states JSONB NOT NULL DEFAULT '{}'::jsonb,
     state_reason_code  TEXT,
     state_changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     first_enrolled_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -107,6 +110,20 @@ CREATE TABLE devices (
 CREATE INDEX idx_devices_org_state ON devices(organization_id, state);
 CREATE INDEX idx_devices_org_team ON devices(organization_id, team_id);
 CREATE INDEX idx_devices_heartbeat ON devices(last_heartbeat_at DESC);
+
+CREATE TABLE device_keys (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    device_id        TEXT NOT NULL,
+    public_key_bytes TEXT NOT NULL,
+    algorithm        VARCHAR(32) NOT NULL DEFAULT 'Ed25519',
+    status           VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at       TIMESTAMPTZ
+);
+
+CREATE INDEX idx_device_keys_lookup ON device_keys(device_id, status);
+CREATE INDEX idx_device_keys_org ON device_keys(organization_id, device_id);
 
 CREATE TABLE enrollment_tokens (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -301,13 +318,6 @@ CREATE TABLE policy_templates (
 -- 7. AUTHORITATIVE SPEND LEDGER
 -- ============================================================================
 
-CREATE TABLE price_books (
-    price_book_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    version        TEXT NOT NULL UNIQUE,
-    is_active      BOOLEAN NOT NULL DEFAULT false,
-    effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 CREATE TABLE price_book_versions (
     price_book_version_id TEXT PRIMARY KEY,
@@ -476,6 +486,9 @@ CREATE TABLE telemetry_events (
     dlp_findings       JSONB NOT NULL DEFAULT '[]',
     injection_findings JSONB NOT NULL DEFAULT '[]',
     semantic_findings  JSONB NOT NULL DEFAULT '[]',
+    event_hash         TEXT,
+    prev_event_hash    TEXT,
+    sequence_number    BIGINT,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -512,12 +525,29 @@ CREATE TABLE audit_events (
     target_id       TEXT,
     diff_json       JSONB NOT NULL DEFAULT '{}',
     ip_address      TEXT,
+    event_hash      TEXT,
+    prev_event_hash TEXT,
+    sequence_number BIGINT,
     occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_audit_events_org_time ON audit_events(organization_id, occurred_at DESC);
 CREATE INDEX idx_audit_events_resource ON audit_events(organization_id, resource_type, occurred_at DESC);
 CREATE INDEX idx_audit_events_action ON audit_events(organization_id, action, occurred_at DESC);
+
+CREATE TABLE audit_checkpoints (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    workspace_id     TEXT NOT NULL DEFAULT 'default',
+    sequence_start   BIGINT NOT NULL,
+    sequence_end     BIGINT NOT NULL,
+    checkpoint_hash  TEXT NOT NULL,
+    signature        TEXT NOT NULL,
+    algorithm        VARCHAR(32) NOT NULL DEFAULT 'Ed25519',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_audit_checkpoints_org_seq ON audit_checkpoints(organization_id, sequence_end DESC);
 
 CREATE TABLE mcp_servers (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -556,7 +586,7 @@ CREATE TABLE idempotency_records (
 
 -- 1. Seed Primary Organization (Default: Team Plan, 25 devices)
 INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', 'admin@agentcontrol.local', 'team', 25, 'active')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 25, 'active')
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Seed Default Team
@@ -569,18 +599,7 @@ INSERT INTO auth_providers (id, organization_id, name, type, enabled)
 VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Local Password Authentication', 'local', true)
 ON CONFLICT (organization_id, type) DO NOTHING;
 
--- 4. Seed Default Admin User (Password: admin123! using bcrypt)
-INSERT INTO users (id, organization_id, auth_provider_id, email, password_hash, is_admin, role)
-VALUES (
-    '00000000-0000-0000-0000-000000000003',
-    '00000000-0000-0000-0000-000000000001',
-    '00000000-0000-0000-0000-000000000002',
-    'admin@agentcontrol.local',
-    '$2a$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
-    true,
-    'OWNER'
-)
-ON CONFLICT (organization_id, email) DO NOTHING;
+-- 4. Initial Administrative User is provisioned dynamically from environment configuration (see TENANT_ADMIN_EMAIL / CONTROL_HUB_ADMIN_EMAIL)
 
 -- 5. Seed Default Active Policy (v1.0.0)
 INSERT INTO policies (id, organization_id, version, content, is_active)

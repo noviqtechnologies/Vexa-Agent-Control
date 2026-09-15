@@ -2,12 +2,23 @@ package device
 
 import "time"
 
-// Compliance states
+// Multi-State Capability Vectors (PRD Rev 3.3)
 const (
-	ComplianceStateCompliant    = "COMPLIANT"
-	ComplianceStateNonCompliant = "NON_COMPLIANT"
+	TargetStateNotDetected        = "NOT_DETECTED"
+	TargetStateDetected           = "DETECTED"
+	TargetStateConfigured         = "CONFIGURED"
+	TargetStateMcpWrapped         = "MCP_WRAPPED"
+	TargetStateProbeVerified      = "PROBE_VERIFIED"
+	TargetStateTrafficVerified    = "TRAFFIC_VERIFIED"
+	TargetStateMcpTrafficVerified = "MCP_TRAFFIC_VERIFIED"
+	TargetStateBypassPossible     = "BYPASS_POSSIBLE"
+	TargetStateNotInstalled       = "NOT_INSTALLED"
+
+	// Deprecated legacy aliases
+	ComplianceStateCompliant    = "CONFIGURED"
+	ComplianceStateNonCompliant = "BYPASS_POSSIBLE"
 	ComplianceStateOffline      = "OFFLINE"
-	ComplianceStateBypassed     = "BYPASSED"
+	ComplianceStateBypassed     = "BYPASS_POSSIBLE"
 	ComplianceStateNotInstalled = "NOT_INSTALLED"
 )
 

@@ -19,6 +19,8 @@ func clearDashboardEnv(t *testing.T) {
 		"OIDC_ISSUER", "OIDC_CLIENT_ID", "DEV_MODE", "ALLOW_DEV_MODE",
 		"POLICY_READ_SECRET", "GATEWAY_URL", "PROVIDER_KEY_ENCRYPTION_SECRET", "AGENTCONTROL_HUB_LICENSE_KEY",
 		"INGRESS_AUTH_SECRET", "VPC_INGRESS_AUTH_SECRET", "DIRECT_TLS_ENABLED",
+		"ADMIN_EMAIL", "ADMIN_PASSWORD", "TENANT_ADMIN_EMAIL", "TENANT_ADMIN_PASSWORD",
+		"CONTROL_HUB_ADMIN_EMAIL", "CONTROL_HUB_ADMIN_PASSWORD", "ORGANIZATION_NAME", "ORGANIZATION_ID",
 	} {
 		os.Unsetenv(k)
 	}
@@ -187,6 +189,7 @@ func TestLoad_InvalidPort(t *testing.T) {
 func TestLoad_RejectsPlaceholderAdminPasswordInProduction(t *testing.T) {
 	clearDashboardEnv(t)
 	env := productionEnv()
+	env["ADMIN_EMAIL"] = "admin@mycorp.com"
 	env["ADMIN_PASSWORD"] = "admin123!"
 	setEnv(t, env)
 
@@ -195,3 +198,80 @@ func TestLoad_RejectsPlaceholderAdminPasswordInProduction(t *testing.T) {
 		t.Fatal("expected error when ADMIN_PASSWORD uses placeholder 'admin123!' in production")
 	}
 }
+
+func TestLoad_RejectsDefaultAdminEmailInProduction(t *testing.T) {
+	clearDashboardEnv(t)
+	for _, defaultEmail := range []string{"admin", "admin@agentcontrol.local"} {
+		env := productionEnv()
+		env["ADMIN_EMAIL"] = defaultEmail
+		env["ADMIN_PASSWORD"] = "secure-admin-pass-1234"
+		setEnv(t, env)
+
+		_, err := Load()
+		if err == nil {
+			t.Fatalf("expected error when ADMIN_EMAIL uses default %q in production", defaultEmail)
+		}
+	}
+}
+
+func TestLoad_RejectsAdminPasswordWithoutEmailInProduction(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["ADMIN_PASSWORD"] = "secure-admin-pass-1234"
+	setEnv(t, env)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when ADMIN_PASSWORD is set without ADMIN_EMAIL in production")
+	}
+}
+
+func TestLoad_AdminConfig(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["ADMIN_EMAIL"] = "admin@mycorp.com"
+	env["ADMIN_PASSWORD"] = "secure-admin-pass-1234"
+	env["ORGANIZATION_NAME"] = "Acme Corp"
+	setEnv(t, env)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AdminEmail != "admin@mycorp.com" {
+		t.Errorf("expected admin email admin@mycorp.com, got %s", cfg.AdminEmail)
+	}
+	if cfg.AdminPassword != "secure-admin-pass-1234" {
+		t.Errorf("expected admin password secure-admin-pass-1234, got %s", cfg.AdminPassword)
+	}
+	if cfg.OrganizationName != "Acme Corp" {
+		t.Errorf("expected org name Acme Corp, got %s", cfg.OrganizationName)
+	}
+	if cfg.OrganizationID != "00000000-0000-0000-0000-000000000001" {
+		t.Errorf("expected default org ID, got %s", cfg.OrganizationID)
+	}
+}
+
+func TestLoad_TenantAndControlHubAdminConfig_Fallback(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["TENANT_ADMIN_EMAIL"] = "tenant@myorg.com"
+	env["TENANT_ADMIN_PASSWORD"] = "secure-tenant-pass-1234"
+	env["TENANT_ADMIN_ORG_NAME"] = "Acme Legacy"
+	setEnv(t, env)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AdminEmail != "tenant@myorg.com" {
+		t.Errorf("expected fallback admin email tenant@myorg.com, got %s", cfg.AdminEmail)
+	}
+	if cfg.AdminPassword != "secure-tenant-pass-1234" {
+		t.Errorf("expected fallback admin password secure-tenant-pass-1234, got %s", cfg.AdminPassword)
+	}
+	if cfg.OrganizationName != "Acme Legacy" {
+		t.Errorf("expected fallback org name Acme Legacy, got %s", cfg.OrganizationName)
+	}
+}
+

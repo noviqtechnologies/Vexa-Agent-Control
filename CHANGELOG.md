@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.83] - 2026-09-15
+
+### Added
+- **Multi-Tenant Hub Hardening & Device Auth Middleware:** Enhanced fleet security with OAuth PKCE authorization flows and device authentication middleware.
+- **Diagnostics & Troubleshooting Suite:** Added deep system diagnostics and doctor command suite for workstations and control plane.
+- **Enterprise Spend Cap & FinOps Testing Suite:** Integrated comprehensive FinOps quota, budget cap, and fallback verification tests.
+- **MCP Proxy Isolation & Manifest Reversals:** Hardened MCP bidirectional interception, authority parser, and loopback security boundaries.
+
+---
+
 ## [1.0.82] - 2026-09-09
 
 ### Added
@@ -87,7 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.83...HEAD
+[1.0.83]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...v1.0.83
 [1.0.82]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.81...v1.0.82
 [1.0.81]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.80...v1.0.81
 [1.0.80]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.79...v1.0.80

@@ -6,4 +6,4 @@ if (-not $env:OPENAI_API_KEY) {
     Write-Error "OPENAI_API_KEY environment variable is not set. Aborting."
     exit 1
 }
-target\debug\agentcontrol.exe start --listen 127.0.0.1:8080 --policy test-llm-policy.yaml
+target\debug\agentcontrol.exe start --listen 127.0.0.1:18080 --policy test-llm-policy.yaml

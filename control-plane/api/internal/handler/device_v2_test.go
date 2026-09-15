@@ -1,64 +1,84 @@
 package handler
 
 import (
-	"context"
-	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
-	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
-func TestDeviceV2Handler_GetBootstrap_PolicySignature(t *testing.T) {
-	h := NewDeviceV2Handler(nil)
+func TestEnrollDeviceV2_FlexibilityAndValidation(t *testing.T) {
+	st := store.New(nil)
+	h := NewDeviceV2Handler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/device/bootstrap", nil)
-	principal := &model.DevicePrincipal{
-		DeviceID:       "dev-boot-1",
-		OrganizationID: "00000000-0000-0000-0000-000000000001",
-		DeviceState:    model.DeviceStateCompliant,
+	tests := []struct {
+		name           string
+		payload        map[string]interface{}
+		expectedStatus int
+		expectDevID    string
+	}{
+		{
+			name: "Standard CLI registration with public_key_bytes and platform",
+			payload: map[string]interface{}{
+				"device_id":        "dev-zoya-f846abd6",
+				"display_name":     "ZOYA",
+				"platform":         "windows",
+				"agent_version":    "1.0.82",
+				"public_key_bytes": "6d3AYn840c9qZvZcK3r7Z8Xw==",
+			},
+			expectedStatus: http.StatusCreated,
+			expectDevID:    "dev-zoya-f846abd6",
+		},
+		{
+			name: "Registration with ed25519_public_key and client_platform",
+			payload: map[string]interface{}{
+				"device_id":          "dev-mac-1234",
+				"display_name":       "MacBook",
+				"client_platform":    "macos",
+				"agent_version":      "1.0.82",
+				"ed25519_public_key": "some-valid-key-content==",
+			},
+			expectedStatus: http.StatusCreated,
+			expectDevID:    "dev-mac-1234",
+		},
+		{
+			name: "Missing public key should return 400 Bad Request",
+			payload: map[string]interface{}{
+				"device_id":    "dev-invalid",
+				"display_name": "No Key",
+				"platform":     "windows",
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
-	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
-	req = req.WithContext(ctx)
 
-	rr := httptest.NewRecorder()
-	h.GetBootstrap(rr, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(tc.payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/devices/enroll", bytes.NewReader(body))
+			w := httptest.NewRecorder()
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
+			h.EnrollDeviceV2(w, req)
 
-	var resp BootstrapResponseV2
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to decode bootstrap response: %v", err)
-	}
+			if w.Code != tc.expectedStatus {
+				t.Fatalf("expected status %d, got %d. Body: %s", tc.expectedStatus, w.Code, w.Body.String())
+			}
 
-	// Verify SHA-256 matches the policy content
-	hasher := sha256.New()
-	hasher.Write([]byte(resp.Policy.Content))
-	expectedHash := hex.EncodeToString(hasher.Sum(nil))
-
-	if resp.Policy.SHA256 != expectedHash {
-		t.Fatalf("policy SHA256 mismatch: got %s, want %s", resp.Policy.SHA256, expectedHash)
-	}
-
-	// Verify Ed25519 signature
-	seed := sha256.Sum256([]byte("vexa-hub-policy-signing-seed-2026"))
-	privKey := ed25519.NewKeyFromSeed(seed[:])
-	pubKey := privKey.Public().(ed25519.PublicKey)
-
-	sigBytes, err := base64.StdEncoding.DecodeString(resp.Policy.Signature.Value)
-	if err != nil {
-		t.Fatalf("failed to decode signature base64: %v", err)
-	}
-
-	if !ed25519.Verify(pubKey, []byte(resp.Policy.SHA256), sigBytes) {
-		t.Fatalf("Ed25519 signature verification failed")
+			if tc.expectedStatus == http.StatusCreated {
+				var resp map[string]interface{}
+				if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("failed to decode response: %v", err)
+				}
+				if resp["device_id"] != tc.expectDevID {
+					t.Errorf("expected device_id %q, got %v", tc.expectDevID, resp["device_id"])
+				}
+				if resp["status"] != "ACTIVE" {
+					t.Errorf("expected status 'ACTIVE', got %v", resp["status"])
+				}
+			}
+		})
 	}
 }

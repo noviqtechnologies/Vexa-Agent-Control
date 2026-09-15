@@ -95,6 +95,10 @@ services:
       GATEWAY_URL: "http://gateway:8080"
       # Master key for AES-256-GCM encryption of provider API keys
       PROVIDER_KEY_ENCRYPTION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      ORGANIZATION_NAME: "${ORGANIZATION_NAME:-Primary Organization}"
+      ORGANIZATION_ID: "${ORGANIZATION_ID:-00000000-0000-0000-0000-000000000001}"
     ports:
       - "8400:8400"
     healthcheck:

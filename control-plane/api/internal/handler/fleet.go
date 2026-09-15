@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -24,6 +25,7 @@ func (h *FleetHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	hours := queryInt(r, "hours", 24)
 	stats, err := h.store.GetFleetStats(r.Context(), tenantID, hours)
 	if err != nil {
+		log.Printf("[fleet] GetOverview store error: %v (tenant=%s, hours=%d)", err, tenantID, hours)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -39,6 +41,7 @@ func (h *FleetHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 
 	agents, err := h.store.ListAgents(r.Context(), tenantID, limit, offset, hours)
 	if err != nil {
+		log.Printf("[fleet] ListAgents store error: %v (tenant=%s)", err, tenantID)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}

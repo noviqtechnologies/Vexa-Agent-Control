@@ -967,6 +967,27 @@ pub async fn handle_request(
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
 
+    let client_id_hdr = req
+        .headers()
+        .get("X-AgentControl-Client-ID")
+        .or_else(|| req.headers().get("X-AgentWall-Client-ID"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
+    let project_id_hdr = req
+        .headers()
+        .get("X-AgentControl-Project-ID")
+        .or_else(|| req.headers().get("X-AgentWall-Project-ID"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
+    let cost_center_hdr = req
+        .headers()
+        .get("X-AgentControl-Cost-Center")
+        .or_else(|| req.headers().get("X-AgentWall-Cost-Center"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
     let session = match crate::proxy::server::resolve_session(
         &state,
         auth_header.as_deref(),
@@ -991,6 +1012,15 @@ pub async fn handle_request(
             ));
         }
     };
+
+    let policy_attr = session.policy.as_ref().and_then(|p| p.attribution.as_ref());
+    let req_attribution = crate::spend::types::AttributionContext::resolve(
+        client_id_hdr.as_deref(),
+        project_id_hdr.as_deref(),
+        cost_center_hdr.as_deref(),
+        policy_attr,
+        policy_attr.map(|a| a.client_id.as_str()),
+    );
 
     if req.method() != hyper::Method::POST {
         return Ok(make_error_response_with_protocol(
@@ -1475,6 +1505,8 @@ pub async fn handle_request(
                     tokio::spawn(async move {
                         let mut byte_buffer = Vec::<u8>::new();
                         let mut has_emitted_content = false;
+                        let mut streamed_chunks_count: u64 = 0;
+                        let mut streamed_tokens_est: u64 = 0;
                         while let Some(chunk_res) = stream.next().await {
                             match chunk_res {
                                 Ok(chunk) => {
@@ -1487,6 +1519,8 @@ pub async fn handle_request(
                                         let text = String::from_utf8_lossy(&event_bytes);
                                         if let Some(clean_event) = sanitize_sse_block(&text) {
                                             has_emitted_content = true;
+                                            streamed_chunks_count += 1;
+                                            streamed_tokens_est += (clean_event.len() as u64 / 4).max(1);
                                             if tx
                                                 .send(Ok(hyper::body::Frame::data(Bytes::from(
                                                     clean_event,
@@ -1494,6 +1528,21 @@ pub async fn handle_request(
                                                 .await
                                                 .is_err()
                                             {
+                                                // REQ-OPS-003 / Task 3.3: Downstream client disconnect (TCP RST / client abort)
+                                                crate::logging::log_event(
+                                                    crate::logging::Level::Warn,
+                                                    "streaming_client_disconnect",
+                                                    serde_json::json!({
+                                                        "request_id": req_uuid_for_broker_stream,
+                                                        "chunks_streamed": streamed_chunks_count,
+                                                        "tokens_settled": streamed_tokens_est
+                                                    }),
+                                                );
+                                                let broker_cancel = crate::proxy::broker_client::BrokerClient::new(crate::identity::device::load_hub_url());
+                                                let req_id_cancel = req_uuid_for_broker_stream.clone();
+                                                tokio::spawn(async move {
+                                                    let _ = broker_cancel.cancel_brokered_stream(&req_id_cancel).await;
+                                                });
                                                 return;
                                             }
                                         }
@@ -1528,9 +1577,8 @@ pub async fn handle_request(
                                 let err_chunk = serde_json::json!({
                                     "error": {
                                         "message": "[AgentControl Gateway] Upstream broker completed stream without content deltas",
-                                        "type": "gateway_stream_error",
-                                        "code": "empty_stream",
-                                        "request_id": req_uuid_for_broker_stream
+                                        "type": "server_error",
+                                        "code": "empty_stream"
                                     }
                                 });
                                 format!(
@@ -1561,6 +1609,28 @@ pub async fn handle_request(
                     return Ok(resp_builder.body(stream_body).unwrap());
                 }
                 Err(e) => {
+                    if let Some(crate::proxy::broker_client::BrokerError::BudgetExceeded(msg)) =
+                        e.downcast_ref::<crate::proxy::broker_client::BrokerError>()
+                    {
+                        let finops_err = serde_json::json!({
+                            "error": {
+                                "message": format!("Vexa FinOps: Monthly spend budget limit reached ({}). Contact your administrator.", msg),
+                                "type": "budget_exceeded",
+                                "code": "BUDGET_EXCEEDED"
+                            }
+                        });
+                        return Ok(make_error_response_with_protocol(
+                            StatusCode::TOO_MANY_REQUESTS,
+                            "finops",
+                            "BUDGET_EXCEEDED",
+                            &format!("Vexa FinOps: Monthly spend budget limit reached ({}). Contact your administrator.", msg),
+                            Some(finops_err),
+                            is_streaming,
+                            &req_uuid,
+                            is_anthropic_protocol,
+                            is_responses_protocol,
+                        ));
+                    }
                     return Ok(make_error_response_with_protocol(
                         StatusCode::SERVICE_UNAVAILABLE,
                         "agentcontrol",
@@ -1592,6 +1662,28 @@ pub async fn handle_request(
                         .unwrap());
                 }
                 Err(e) => {
+                    if let Some(crate::proxy::broker_client::BrokerError::BudgetExceeded(msg)) =
+                        e.downcast_ref::<crate::proxy::broker_client::BrokerError>()
+                    {
+                        let finops_err = serde_json::json!({
+                            "error": {
+                                "message": format!("Vexa FinOps: Monthly spend budget limit reached ({}). Contact your administrator.", msg),
+                                "type": "budget_exceeded",
+                                "code": "BUDGET_EXCEEDED"
+                            }
+                        });
+                        return Ok(make_error_response_with_protocol(
+                            StatusCode::TOO_MANY_REQUESTS,
+                            "finops",
+                            "BUDGET_EXCEEDED",
+                            &format!("Vexa FinOps: Monthly spend budget limit reached ({}). Contact your administrator.", msg),
+                            Some(finops_err),
+                            is_streaming,
+                            &req_uuid,
+                            is_anthropic_protocol,
+                            is_responses_protocol,
+                        ));
+                    }
                     return Ok(make_error_response_with_protocol(
                         StatusCode::SERVICE_UNAVAILABLE,
                         "agentcontrol",
@@ -2399,6 +2491,7 @@ pub async fn handle_request(
                 let is_responses_protocol_clone = is_responses_protocol;
                 let prompt_text_clone = prompt_text.clone();
                 let tenant_id_clone = tenant_id.clone();
+                let req_attribution_stream_clone = req_attribution.clone();
 
                 tokio::spawn(async move {
                     let mut accumulated_chars = 0usize;
@@ -2752,6 +2845,41 @@ pub async fn handle_request(
                         }
                     }
 
+                    // Settle exact usage in local SpendLedger
+                    if let Some(ledger) = &state_clone.spend_ledger {
+                        let agent_id = session_clone
+                            .identity_sub
+                            .clone()
+                            .unwrap_or_else(|| "anonymous".to_string());
+                        let groups = session_clone.identity_groups.clone();
+                        let tot = total_tokens_val.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
+                        let cost_cents = if let Some(pricing) = &state_clone.pricing_table {
+                            pricing.estimate_cents(&model_clone, prompt_tokens_val as u64, completion_tokens_val as u64)
+                        } else {
+                            (tot * 3 / 1000).max(1)
+                        };
+                        let ledger_clone = ledger.clone();
+                        let attr = req_attribution_stream_clone.clone();
+                        let req_id = req_uuid_clone.clone();
+                        let prov = provider_name_clone.clone();
+                        let mdl = model_clone.clone();
+                        tokio::spawn(async move {
+                            let _ = ledger_clone.check_and_increment(agent_id.clone(), groups, cost_cents).await;
+                            ledger_clone.settle_usage(
+                                req_id,
+                                agent_id,
+                                attr,
+                                prov,
+                                mdl,
+                                prompt_tokens_val as u64,
+                                completion_tokens_val as u64,
+                                tot,
+                                cost_cents,
+                                !found_provider_usage,
+                            );
+                        });
+                    }
+
                     if cached_tokens_val > 0 {
                         state_clone
                             .semantic_cache
@@ -2869,6 +2997,9 @@ pub async fn handle_request(
                     .header("X-AgentControl-Origin", "upstream_provider")
                     .header("X-AgentControl-Verdict", "allowed")
                     .header("X-AgentControl-Request-ID", &req_uuid)
+                    .header("X-AgentControl-Client-ID", &req_attribution.client_id)
+                    .header("X-AgentControl-Project-ID", &req_attribution.project_id)
+                    .header("X-AgentControl-Cost-Center", &req_attribution.cost_center)
                     .body(stream_body)
                     .unwrap();
 
@@ -3029,6 +3160,41 @@ pub async fn handle_request(
                     }
                 }
 
+                // Settle exact usage in local SpendLedger
+                if let Some(ledger) = &state.spend_ledger {
+                    let agent_id = session
+                        .identity_sub
+                        .clone()
+                        .unwrap_or_else(|| "anonymous".to_string());
+                    let groups = session.identity_groups.clone();
+                    let cost_cents = if let Some(pricing) = &state.pricing_table {
+                        pricing.estimate_cents(&model, prompt_tokens_val as u64, completion_tokens_val as u64)
+                    } else {
+                        ((total_tokens.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)) * 3 / 1000).max(1)
+                    };
+                    let ledger_clone = ledger.clone();
+                    let attr = req_attribution.clone();
+                    let req_id = req_uuid.clone();
+                    let prov = provider_name.clone();
+                    let mdl = model.clone();
+                    let total_tok = total_tokens.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
+                    tokio::spawn(async move {
+                        let _ = ledger_clone.check_and_increment(agent_id.clone(), groups, cost_cents).await;
+                        ledger_clone.settle_usage(
+                            req_id,
+                            agent_id,
+                            attr,
+                            prov,
+                            mdl,
+                            prompt_tokens_val as u64,
+                            completion_tokens_val as u64,
+                            total_tok,
+                            cost_cents,
+                            is_estimated,
+                        );
+                    });
+                }
+
                 emit_llm_telemetry(
                     &state,
                     &session,
@@ -3122,7 +3288,10 @@ pub async fn handle_request(
                     .header(hyper::header::CONTENT_TYPE, "application/json")
                     .header("X-AgentControl-Origin", "upstream_provider")
                     .header("X-AgentControl-Verdict", "allowed")
-                    .header("X-AgentControl-Request-ID", &req_uuid);
+                    .header("X-AgentControl-Request-ID", &req_uuid)
+                    .header("X-AgentControl-Client-ID", &req_attribution.client_id)
+                    .header("X-AgentControl-Project-ID", &req_attribution.project_id)
+                    .header("X-AgentControl-Cost-Center", &req_attribution.cost_center);
                 let body_frame = full_to_box_body(Full::new(final_resp_bytes));
                 let resp = builder.body(body_frame).unwrap_or_else(|_| {
                     Response::builder()

@@ -303,14 +303,14 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 			UNION ALL
 			SELECT 
 				COALESCE(stable_device_id, id::text) AS agent_id,
-				COALESCE(display_name, hostname, 'Workstation') AS display_name,
+				COALESCE(NULLIF(display_name, ''), 'Workstation') AS display_name,
 				CASE 
-					WHEN state = 'COMPLIANT' THEN 'active'
+					WHEN state = 'COMPLIANT' OR state = 'ACTIVE' THEN 'active'
 					WHEN state = 'REVOKED' THEN 'revoked'
 					ELSE 'inactive'
 				END AS status,
-				COALESCE(policy_version, 'v1.0.0') AS policy_version,
-				COALESCE(last_heartbeat_at, registered_at, created_at, now()) AS last_seen_at
+				'v1.0.0' AS policy_version,
+				COALESCE(last_heartbeat_at, first_enrolled_at, created_at, now()) AS last_seen_at
 			FROM devices
 			WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
 			  AND COALESCE(stable_device_id, id::text) NOT IN (
@@ -336,7 +336,7 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 			SELECT agent_id, COUNT(*) AS cnt
 			FROM telemetry_events
 			WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
-			  AND created_at >= NOW() - ($4 || ' hours')::interval
+			  AND created_at >= NOW() - ($4 * INTERVAL '1 hour')
 			  AND agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY agent_id
 		) e ON e.agent_id = pa.agent_id
@@ -345,7 +345,7 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 			FROM alerts al
 			JOIN telemetry_events te ON te.event_id = al.event_id
 			WHERE (al.organization_id::text = $1 OR al.organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
-			  AND al.created_at >= NOW() - ($4 || ' hours')::interval
+			  AND al.created_at >= NOW() - ($4 * INTERVAL '1 hour')
 			  AND te.agent_id IN (SELECT agent_id FROM paged_agents)
 			GROUP BY te.agent_id
 		) al ON al.agent_id = pa.agent_id
@@ -359,8 +359,15 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 	var agents []AgentSummary
 	for rows.Next() {
 		var a AgentSummary
-		if err := rows.Scan(&a.AgentID, &a.DisplayName, &a.Status,
-			&a.PolicyVersion, &a.LastSeenAt, &a.EventCount, &a.AlertCount); err != nil {
+		if err := rows.Scan(
+			&a.AgentID,
+			&a.DisplayName,
+			&a.Status,
+			&a.PolicyVersion,
+			&a.LastSeenAt,
+			&a.EventCount,
+			&a.AlertCount,
+		); err != nil {
 			return nil, err
 		}
 		agents = append(agents, a)
@@ -391,11 +398,11 @@ func (s *Store) GetFleetStats(ctx context.Context, organizationID string, hours 
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED'),
-			(SELECT COUNT(*) FROM devices WHERE state = 'COMPLIANT' AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes'),
-			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 || ' hours')::interval),
-			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND decision = 'denied' AND created_at >= NOW() - ($2 || ' hours')::interval),
-			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 || ' hours')::interval),
-			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND severity = 'critical' AND created_at >= NOW() - ($2 || ' hours')::interval)
+			(SELECT COUNT(*) FROM devices WHERE (state = 'COMPLIANT' OR state = 'ACTIVE') AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes'),
+			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
+			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND decision = 'denied' AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
+			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
+			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND severity = 'critical' AND created_at >= NOW() - ($2 * INTERVAL '1 hour'))
 	`, organizationID, hours).Scan(&stats.TotalAgents, &stats.ActiveAgents, &stats.TotalEvents,
 		&stats.DeniedEvents, &stats.TotalAlerts, &stats.CriticalAlerts)
 	return &stats, err
@@ -420,7 +427,7 @@ func (s *Store) ListRecentAlerts(ctx context.Context, organizationID string, lim
 		FROM alerts a
 		JOIN telemetry_events e ON e.event_id = a.event_id
 		WHERE (a.organization_id::text = $1 OR a.organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
-		  AND a.created_at >= NOW() - ($3 || ' hours')::interval
+		  AND a.created_at >= NOW() - ($3 * INTERVAL '1 hour')
 		ORDER BY a.created_at DESC
 		LIMIT $2
 	`, organizationID, limit, hours)

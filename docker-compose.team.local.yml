@@ -1,0 +1,195 @@
+# ─── Vexa Agent Control — Local Source Code Deployment Profile ────────────────
+#
+# Profile: docker-compose.team.local.yml
+# Purpose: Build and deploy containers directly from LOCAL repository source code.
+#
+# Key Differences from docker-compose.team.yml:
+#   1. Forces local Docker build from source on every startup (pull_policy: build)
+#   2. Local image tags (vexa-agentcontrol-*:local) instead of pulling ghcr.io images
+#   3. Synchronized dependency healthchecks across API, UI, and Gateway
+#   4. Exposes PostgreSQL port 5432 to host for direct database inspection
+#   5. Persistent audit log volume (vexa-agentcontrol-logs)
+#
+# Services:
+#   postgres           — Relational DB with init scripts (port 5432 loopback)
+#   control-plane-api  — Central Go REST API built from ./control-plane/api (port 8081)
+#   control-plane-ui   — React web console built from ./control-plane/ui (port 3000)
+#   agentcontrol-gw    — Centralized gateway for team/cloud simulation (port 8080)
+#
+# Note on Ports:
+#   Port 18080 is reserved exclusively for the developer workstation agent (agentcontrol daemon).
+#   The containerized team gateway is exposed on port 8080 so both can run simultaneously.
+#
+# Usage:
+#   # Launch all services built from local code:
+#   docker compose -f docker-compose.team.local.yml up -d --build
+#
+#   # Access points:
+#   # Web Console UI:    http://127.0.0.1:3000  (Default DEV_MODE: admin / admin12345678)
+#   # Control Plane API: http://127.0.0.1:8081
+#   # Team Gateway:      http://127.0.0.1:8080
+#   # Workstation Agent: http://127.0.0.1:18080 (Runs locally on host via agentcontrol login)
+#   # PostgreSQL:        127.0.0.1:5432 (user: vexa, db: vexa_control_plane)
+#
+#   # Local verification from Windows host:
+#   # agentcontrol doctor
+#   # agentcontrol status
+#   # agentcontrol connect codex
+#
+# Rebuild specific component after editing local code:
+#   docker compose -f docker-compose.team.local.yml up -d --build control-plane-api
+#   docker compose -f docker-compose.team.local.yml up -d --build control-plane-ui
+#   docker compose -f docker-compose.team.local.yml up -d --build agentcontrol-gw
+#
+# View service logs:
+#   docker compose -f docker-compose.team.local.yml logs -f
+#
+# Teardown:
+#   docker compose -f docker-compose.team.local.yml down
+#   # Or with database purge:
+#   docker compose -f docker-compose.team.local.yml down -v
+
+name: vexa-agentcontrol
+
+services:
+  # ── PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vexa-agentcontrol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vexa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-vexa_control_plane}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - vexa-agentcontrol-postgres-data:/var/lib/postgresql/data
+      - ./control-plane/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vexa} -d ${POSTGRES_DB:-vexa_control_plane}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vexa-agentcontrol-net
+
+  # ── Control Plane API (Built from local Go source) ─────────────────────────
+  control-plane-api:
+    image: vexa-agentcontrol-api:local
+    build:
+      context: ./control-plane/api
+      dockerfile: Dockerfile
+    pull_policy: build
+    container_name: vexa-agentcontrol-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DATABASE_URL: postgres://${POSTGRES_USER:-vexa}:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/${POSTGRES_DB:-vexa_control_plane}?sslmode=disable
+      DEV_MODE: "${DEV_MODE:-true}"
+      ALLOW_DEV_MODE: "${ALLOW_DEV_MODE:-true}"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret}
+      GATEWAY_URL: http://agentcontrol-gw:18080
+      PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:-local-dev-session-secret-32-chars-long-123456}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@agentcontrol.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345678}
+      ORGANIZATION_NAME: "${ORGANIZATION_NAME:-Primary Organization}"
+      ORGANIZATION_ID: "${ORGANIZATION_ID:-00000000-0000-0000-0000-000000000001}"
+      INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"
+      LEGACY_SINGLE_TENANT_MODE: "${LEGACY_SINGLE_TENANT_MODE:-true}"
+    ports:
+      - "127.0.0.1:${CONTROL_PLANE_API_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - vexa-agentcontrol-net
+
+  # ── Control Plane Web UI Console (Built from local React source) ───────────
+  control-plane-ui:
+    image: vexa-agentcontrol-ui:local
+    build:
+      context: ./control-plane/ui
+      dockerfile: Dockerfile
+    pull_policy: build
+    container_name: vexa-agentcontrol-ui
+    restart: unless-stopped
+    depends_on:
+      control-plane-api:
+        condition: service_healthy
+    environment:
+      AGENTCONTROL_API_URL: http://control-plane-api:8081
+      AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
+    ports:
+      - "127.0.0.1:${CONTROL_PLANE_UI_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - vexa-agentcontrol-net
+
+  # ── Vexa Agent Control Gateway (Built from local Rust source) ─────────────
+  agentcontrol-gw:
+    image: vexa-agentcontrol:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CARGO_FEATURES: "team"
+    pull_policy: build
+    container_name: vexa-agentcontrol-gateway
+    hostname: vexa-agentcontrol-gateway
+    restart: unless-stopped
+    depends_on:
+      control-plane-api:
+        condition: service_healthy
+    environment:
+      AGENTCONTROL_LISTEN: 0.0.0.0:18080
+      AGENTCONTROL_CENTRALIZED: "true"
+      AGENTCONTROL_PROFILE: team-enforce
+      AGENTCONTROL_MODE: "gateway"
+      AGENTCONTROL_ADMIN_TOKEN: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
+      AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
+      AGENTCONTROL_DRY_RUN: "false"
+      AGENTCONTROL_HUB_URL: http://control-plane-api:8081
+      DASHBOARD_API_URL: http://control-plane-api:8081
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
+      POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret}
+    volumes:
+      - vexa-agentcontrol-logs:/var/log/agentcontrol
+      # Optional: mount a custom policy file override:
+      # - ./policy.example.yaml:/app/policy.yaml:ro
+    ports:
+      # Port 18080 is reserved exclusively for the host workstation daemon.
+      # Centralized gateway is exposed on host port 8080 so both run concurrently.
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:18080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:18080/healthz || agentcontrol --version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - vexa-agentcontrol-net
+
+volumes:
+  vexa-agentcontrol-postgres-data:
+    driver: local
+  vexa-agentcontrol-logs:
+    driver: local
+
+networks:
+  vexa-agentcontrol-net:
+    driver: bridge

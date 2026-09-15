@@ -1,4 +1,4 @@
-# PowerShell Installer for AgentWall CLI Workstation
+# PowerShell Installer for Vexa Agent Control CLI Workstation
 $ErrorActionPreference = "Stop"
 
 $ColorGreen = "Green"
@@ -6,7 +6,7 @@ $ColorYellow = "Yellow"
 $ColorCyan = "Cyan"
 $ColorRed = "Red"
 
-Write-Host "[*] AgentWall CLI Workstation Installer" -ForegroundColor $ColorCyan
+Write-Host "[*] Vexa Agent Control CLI Workstation Installer" -ForegroundColor $ColorCyan
 
 $ArchStr = "x86_64"
 if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64") {
@@ -14,18 +14,20 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
 }
 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
+$ReleasesUrl = "https://api.github.com/repos/$Repo/releases/latest"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
-$FallbackVersion = "v1.0.82"
+$FallbackVersion = "v1.0.83"
 $Version = $null
 try {
-    $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentWall-Installer" }
-    $Version = $ReleaseJson[0].tag_name
+    $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
+    $Version = $ReleaseJson.tag_name
 } catch {
     Write-Host "[!] Notice: GitHub API resolution failed. Falling back to: $FallbackVersion" -ForegroundColor $ColorYellow
     $Version = $FallbackVersion
 }
 if (-not $Version) { $Version = $FallbackVersion }
+if (-not $Version.StartsWith("v")) { $Version = "v$Version" }
 
 Write-Host "[*] Using version: $Version" -ForegroundColor $ColorGreen
 
@@ -34,7 +36,7 @@ if (!(Test-Path $LocalBinDir)) {
     New-Item -ItemType Directory -Path $LocalBinDir -Force | Out-Null
 }
 
-$BinaryName = "agentwall.exe"
+$BinaryName = "agentcontrol.exe"
 $FinalBinaryPath = Join-Path $LocalBinDir $BinaryName
 
 $InstalledVersion = $null
@@ -47,20 +49,21 @@ if (Test-Path $FinalBinaryPath) {
     } catch { }
 }
 
-if ($InstalledVersion -and "v$InstalledVersion" -eq $Version) {
-    Write-Host "[✓] AgentWall $Version is already installed." -ForegroundColor $ColorGreen
+$RawVer = $Version.TrimStart("v")
+if ($InstalledVersion -and $InstalledVersion -eq $RawVer) {
+    Write-Host "[✓] Vexa Agent Control $Version is already installed." -ForegroundColor $ColorGreen
 } else {
     if ($InstalledVersion) {
-        Write-Host "[*] Upgrading AgentWall $InstalledVersion -> $Version..." -ForegroundColor $ColorYellow
+        Write-Host "[*] Upgrading Vexa Agent Control $InstalledVersion -> $Version..." -ForegroundColor $ColorYellow
     } else {
-        Write-Host "[*] Fresh install of AgentWall $Version..." -ForegroundColor $ColorCyan
+        Write-Host "[*] Fresh install of Vexa Agent Control $Version..." -ForegroundColor $ColorCyan
     }
 
-    $AssetName = "agentwall-$Version-windows-$ArchStr.zip"
+    $AssetName = "agentcontrol-$Version-windows-$ArchStr.zip"
     $DownloadUrl = "https://github.com/$Repo/releases/download/$Version/$AssetName"
 
-    $TempZip = Join-Path $env:TEMP "agentwall_asset.zip"
-    $TempExtract = Join-Path $env:TEMP "agentwall_extract"
+    $TempZip = Join-Path $env:TEMP "agentcontrol_asset.zip"
+    $TempExtract = Join-Path $env:TEMP "agentcontrol_extract"
     if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force | Out-Null }
 
     Write-Host "[*] Downloading $DownloadUrl..." -ForegroundColor $ColorCyan
@@ -68,9 +71,9 @@ if ($InstalledVersion -and "v$InstalledVersion" -eq $Version) {
 
     Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
-    $ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentwall.exe" | Select-Object -First 1
+    $ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol.exe" | Select-Object -First 1
     if (!$ExtractedBin) {
-        Write-Host "[!] Could not find agentwall.exe in archive." -ForegroundColor $ColorRed
+        Write-Host "[!] Could not find agentcontrol.exe in archive." -ForegroundColor $ColorRed
         exit 1
     }
 
@@ -80,7 +83,16 @@ if ($InstalledVersion -and "v$InstalledVersion" -eq $Version) {
     Write-Host "[✓] Installed binary to $FinalBinaryPath" -ForegroundColor $ColorGreen
 }
 
+# Ensure LocalBinDir is on PATH
+$CurrentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
+if ($CurrentPath -notlike "*$LocalBinDir*") {
+    $NewPath = "$LocalBinDir;$CurrentPath".Replace(";;", ";")
+    [Environment]::SetEnvironmentVariable("PATH", $NewPath, [EnvironmentVariableTarget]::User)
+    $env:Path = "$LocalBinDir;$env:Path"
+}
+
 Write-Host "`nGet started by running:" -ForegroundColor $ColorGreen
-Write-Host "  agentwall protect" -ForegroundColor $ColorGreen
-Write-Host "  agentwall --version"
+Write-Host "  agentcontrol login" -ForegroundColor $ColorGreen
+Write-Host "  agentcontrol connect codex" -ForegroundColor $ColorGreen
+Write-Host "  agentcontrol doctor" -ForegroundColor $ColorGreen
 Write-Host ""

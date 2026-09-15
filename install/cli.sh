@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "[*] AgentWall CLI Workstation Installer"
+echo "[*] Vexa Agent Control CLI Workstation Installer"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -25,34 +25,40 @@ echo "[*] Target OS: $OS | Arch: $ARCH"
 REPO="noviqtechnologies/Vexa-Agent-Control"
 
 echo "[*] Fetching latest release version..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
+VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
   | grep '"tag_name"' \
   | head -1 \
   | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
 if [[ -z "$VERSION" ]]; then
-  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.82"
-  VERSION="v1.0.82"
+  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.83"
+  VERSION="v1.0.83"
+fi
+
+if [[ "$VERSION" != v* ]]; then
+  VERSION="v${VERSION}"
 fi
 
 echo "[*] Using version: $VERSION"
 
 LOCALBIN="$HOME/.local/bin"
+mkdir -p "$LOCALBIN"
 INSTALLED_VERSION=""
-if command -v agentwall &>/dev/null || [ -f "${LOCALBIN}/agentwall" ]; then
-  INSTALLED_VERSION=$("${LOCALBIN}/agentwall" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+if command -v agentcontrol &>/dev/null || [ -f "${LOCALBIN}/agentcontrol" ]; then
+  INSTALLED_VERSION=$("${LOCALBIN}/agentcontrol" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 fi
 
-if [[ -n "$INSTALLED_VERSION" && "v${INSTALLED_VERSION}" == "$VERSION" ]]; then
-  echo "[✓] AgentWall $VERSION is already up to date."
+RAW_VER="${VERSION#v}"
+if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" == "$RAW_VER" ]]; then
+  echo "[✓] Vexa Agent Control $VERSION is already up to date."
 else
   if [[ -n "$INSTALLED_VERSION" ]]; then
-    echo "[*] Upgrading $INSTALLED_VERSION → ${VERSION}..."
+    echo "[*] Upgrading v$INSTALLED_VERSION → ${VERSION}..."
   else
-    echo "[*] Fresh install of AgentWall $VERSION..."
+    echo "[*] Fresh install of Vexa Agent Control $VERSION..."
   fi
 
-  ASSET_NAME="agentwall-${VERSION}-${OS}-${ARCH}.zip"
+  ASSET_NAME="agentcontrol-${VERSION}-${OS}-${ARCH}.zip"
   BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
   ASSET_URL="${BASE_URL}/${ASSET_NAME}"
   CHECKSUMS_URL="${BASE_URL}/checksums.txt"
@@ -71,6 +77,7 @@ else
   if curl -sSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
     EXPECTED_HASH=$(grep "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk '{print $1}' || true)
     if [[ -n "$EXPECTED_HASH" ]]; then
+      ACTUAL_HASH=""
       if command -v sha256sum &>/dev/null; then
         ACTUAL_HASH=$(sha256sum "${TEMPDIR}/asset.zip" | awk '{print $1}')
       elif command -v shasum &>/dev/null; then
@@ -80,21 +87,20 @@ else
         echo "[!] Checksum mismatch!"
         exit 1
       fi
-      echo "[✓] Checksum verified."
+      echo "[✓] Cryptographic SHA-256 checksum verified."
     fi
   fi
 
-  mkdir -p "$LOCALBIN"
   unzip -q -o "${TEMPDIR}/asset.zip" -d "$TEMPDIR"
-  BINARY_PATH=$(find "$TEMPDIR" -type f \( -name "agentwall" -o -name "agentwall.exe" \) | head -1 || true)
+  BINARY_PATH=$(find "$TEMPDIR" -type f \( -name "agentcontrol" -o -name "agentcontrol.exe" \) | head -1 || true)
   
   if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
-    echo "[!] Failed to locate agentwall binary."
+    echo "[!] Failed to locate agentcontrol binary."
     exit 1
   fi
 
-  mv "$BINARY_PATH" "${LOCALBIN}/agentwall"
-  chmod +x "${LOCALBIN}/agentwall"
+  cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
+  chmod +x "${LOCALBIN}/agentcontrol"
 
   QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
   if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
@@ -102,15 +108,22 @@ else
     chmod +x "${LOCALBIN}/quickstart_agent.py"
   fi
 
-  echo "[✓] AgentWall binary installed to ${LOCALBIN}/agentwall"
+  echo "[✓] Vexa Agent Control binary installed to ${LOCALBIN}/agentcontrol"
 fi
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-  echo "[!] Warning: $HOME/.local/bin is not in your PATH."
-  echo '    Add to PATH: export PATH="$HOME/.local/bin:$PATH"'
+  if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+  elif [[ -f "$HOME/.zshrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zshrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+  fi
+  echo "[!] Notice: Added $HOME/.local/bin to your PATH configuration."
 fi
 
 echo ""
-echo "Get started by securing all your AI IDE tools:"
-echo "  agentwall protect"
+echo "Get started by authenticating and connecting your coding assistant:"
+echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+echo "  agentcontrol login"
+echo "  agentcontrol connect codex"
+echo "  agentcontrol doctor"
 echo ""

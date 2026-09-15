@@ -346,33 +346,173 @@ fn send_dashboard_event(
     }
 }
 
+/// Enforces process memory quota (< 64MB RSS) across Windows, Linux, and macOS (PRD §FR-7, Task 3.4).
+pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), String> {
+    #[cfg(windows)]
+    #[allow(non_camel_case_types, non_upper_case_globals)]
+    {
+        use std::os::raw::c_void;
+
+        type HANDLE = *mut c_void;
+        type BOOL = i32;
+        type DWORD = u32;
+        type SIZE_T = usize;
+
+        #[repr(C)]
+        struct IO_COUNTERS {
+            read_operation_count: u64,
+            write_operation_count: u64,
+            other_operation_count: u64,
+            read_transfer_count: u64,
+            write_transfer_count: u64,
+            other_transfer_count: u64,
+        }
+
+        #[repr(C)]
+        struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
+            per_process_user_time_limit: i64,
+            per_job_user_time_limit: i64,
+            limit_flags: DWORD,
+            minimum_working_set_size: SIZE_T,
+            maximum_working_set_size: SIZE_T,
+            active_process_limit: DWORD,
+            affinity: usize,
+            priority_class: DWORD,
+            scheduling_class: DWORD,
+        }
+
+        #[repr(C)]
+        struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+            basic_limit_information: JOBOBJECT_BASIC_LIMIT_INFORMATION,
+            io_info: IO_COUNTERS,
+            process_memory_limit: SIZE_T,
+            job_memory_limit: SIZE_T,
+            peak_process_memory_limit: SIZE_T,
+            peak_job_memory_limit: SIZE_T,
+        }
+
+        const JOB_OBJECT_LIMIT_PROCESS_MEMORY: DWORD = 0x00000100;
+        const JOB_OBJECT_LIMIT_JOB_MEMORY: DWORD = 0x00000200;
+        const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: DWORD = 0x00002000;
+        const JobObjectExtendedLimitInformation: i32 = 9;
+        const PROCESS_SET_QUOTA: DWORD = 0x0100;
+        const PROCESS_TERMINATE: DWORD = 0x0001;
+
+        extern "system" {
+            fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+            fn CreateJobObjectW(lpJobAttributes: *mut c_void, lpName: *const u16) -> HANDLE;
+            fn SetInformationJobObject(
+                hJob: HANDLE,
+                JobObjectInformationClass: i32,
+                lpJobObjectInformation: *const c_void,
+                cbJobObjectInformationLength: DWORD,
+            ) -> BOOL;
+            fn AssignProcessToJobObject(hJob: HANDLE, hProcess: HANDLE) -> BOOL;
+            fn CloseHandle(hObject: HANDLE) -> BOOL;
+        }
+
+        unsafe {
+            let proc_handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, _pid);
+            if proc_handle.is_null() {
+                return Err("OpenProcess failed for child PID".to_string());
+            }
+
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                CloseHandle(proc_handle);
+                return Err("CreateJobObjectW failed".to_string());
+            }
+
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.basic_limit_information.limit_flags =
+                JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_JOB_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            info.process_memory_limit = max_bytes;
+            info.job_memory_limit = max_bytes;
+
+            let ret = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as DWORD,
+            );
+            if ret == 0 {
+                CloseHandle(proc_handle);
+                CloseHandle(job);
+                return Err("SetInformationJobObject failed".to_string());
+            }
+
+            let assign_ret = AssignProcessToJobObject(job, proc_handle);
+            CloseHandle(proc_handle);
+            if assign_ret == 0 {
+                CloseHandle(job);
+                return Err("AssignProcessToJobObject failed".to_string());
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        unsafe {
+            let rlim = libc::rlimit {
+                rlim_cur: max_bytes as libc::rlim_t,
+                rlim_max: max_bytes as libc::rlim_t,
+            };
+            #[cfg(target_os = "linux")]
+            let res = libc::setrlimit(libc::RLIMIT_AS, &rlim);
+            #[cfg(target_os = "macos")]
+            let res = libc::setrlimit(libc::RLIMIT_DATA, &rlim);
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+            let res = -1;
+
+            if res != 0 {
+                return Err("setrlimit memory limit unavailable in current environment".to_string());
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(not(any(windows, unix)))]
+    {
+        Err("Unsupported operating system for memory quota".to_string())
+    }
+}
+
 pub async fn run_stdio_bridge(
     state: Arc<ProxyState>,
     mut command: Command,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Configure stdio for the child process
+    // Configure stdio for the child process with stream separation (stderr strictly isolated)
     command.stdin(Stdio::piped());
     command.stdout(Stdio::piped());
-    command.stderr(Stdio::inherit());
+    command.stderr(Stdio::piped());
 
     let mut child = command.spawn()?;
 
-    if state.shadow_mode.load(std::sync::atomic::Ordering::Relaxed) {
-        let mut child_stdin = child.stdin.take().expect("Failed to open stdin");
-        let mut child_stdout = child.stdout.take().expect("Failed to open stdout");
-        let mut agent_stdin = tokio::io::stdin();
-        let mut agent_stdout = tokio::io::stdout();
-
-        let pipe_in = tokio::io::copy(&mut agent_stdin, &mut child_stdin);
-        let pipe_out = tokio::io::copy(&mut child_stdout, &mut agent_stdout);
-
-        tokio::select! {
-            _ = pipe_in => {}
-            _ = pipe_out => {}
-            _ = child.wait() => {}
+    // Enforce 64MB memory limit across Windows/macOS/Linux
+    if let Some(pid) = child.id() {
+        if let Err(e) = enforce_child_memory_quota(pid, crate::mcp::policy::MAX_MEMORY_RSS_BYTES) {
+            crate::logging::log_event(
+                crate::logging::Level::Warn,
+                "RESOURCE_LIMIT_UNAVAILABLE",
+                serde_json::json!({
+                    "reason": e,
+                    "pid": pid,
+                    "target_limit_bytes": crate::mcp::policy::MAX_MEMORY_RSS_BYTES
+                }),
+            );
         }
-        let _ = child.kill().await;
-        return Ok(());
+    }
+
+    // Stream Separation: Forward child stderr to terminal with prefix [mcp-stderr]
+    if let Some(child_stderr) = child.stderr.take() {
+        tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            let mut lines = tokio::io::BufReader::new(child_stderr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                eprintln!("[mcp-stderr] {}", line);
+            }
+        });
     }
 
     let child_stdin = child.stdin.take().expect("Failed to open stdin");
@@ -404,7 +544,6 @@ pub async fn run_stdio_bridge(
     ));
 
     // FR-303b: Track forwarded tools by their JSON-RPC ID for response correlation.
-    // This prevents out-of-order responses from being scanned against the wrong tool context.
     let mut forwarded_requests: std::collections::HashMap<serde_json::Value, String> =
         std::collections::HashMap::new();
 
@@ -413,7 +552,39 @@ pub async fn run_stdio_bridge(
             // Read from Agent (client)
             msg = agent_reader.next() => {
                 match msg {
-                    Some(Ok(json)) => {
+                    Some(Ok(mut json)) => {
+                        // Protocol Check: Verify JSON nesting depth <= 32 levels
+                        let depth = crate::mcp::policy::calculate_json_depth(&json);
+                        if depth > crate::mcp::policy::MAX_JSON_DEPTH {
+                            let err_resp = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json.get("id"),
+                                "error": {
+                                    "code": -32600,
+                                    "message": "JSON-RPC nesting depth exceeded maximum of 32 levels"
+                                }
+                            });
+                            let _ = agent_writer.send(err_resp).await;
+                            continue;
+                        }
+
+                        // Parameter DLP: Scan and redact sensitive tool call arguments in-place
+                        if let Some(params) = json.get_mut("params") {
+                            if let Some(args) = params.get_mut("arguments") {
+                                let findings = crate::mcp::policy::scan_and_redact_json(args);
+                                if !findings.is_empty() {
+                                    crate::logging::log_event(
+                                        crate::logging::Level::Info,
+                                        "mcp_parameter_dlp_redacted",
+                                        serde_json::json!({
+                                            "findings_count": findings.len(),
+                                            "pattern": findings[0].pattern_type
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+
                         // FR-303b: Extract tool name before forwarding
                         let method = json.get("method").and_then(|m| m.as_str()).unwrap_or("");
                         let tool_name = if method == "tools/list" {

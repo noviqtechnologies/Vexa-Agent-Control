@@ -113,6 +113,7 @@ func DashboardAuth() func(http.Handler) http.Handler {
 				TenantID:       orgID,
 				UserID:         sess.UserID,
 				IsAdmin:        sess.IsAdmin,
+				IsSaaSOperator: sess.IsSaaSOperator,
 			}
 			principal := &RequestPrincipal{
 				OrganizationID: orgID,
@@ -147,6 +148,7 @@ func SessionAuthOptional() func(http.Handler) http.Handler {
 						TenantID:       orgID,
 						UserID:         sess.UserID,
 						IsAdmin:        sess.IsAdmin,
+						IsSaaSOperator: sess.IsSaaSOperator,
 					}
 					principal := &RequestPrincipal{
 						OrganizationID: orgID,

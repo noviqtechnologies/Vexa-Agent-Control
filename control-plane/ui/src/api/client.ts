@@ -135,9 +135,12 @@ export interface GatewayInfo {
 export interface LicenseStatus {
   org_id: string
   tier: string
-  max_seats: number
-  seats_used: number
-  seats_remaining: number
+  max_seats?: number
+  seats_used?: number
+  seats_remaining?: number
+  max_devices?: number
+  devices_enrolled?: number
+  devices_remaining?: number
   features: string[]
   expires_at?: string
 }
@@ -848,6 +851,7 @@ export const api = {
   },
   listSentryTamperEvents: (limit = 50) =>
     get<ListSentryTamperEventsResponse>(`/devices/tamper-log?limit=${limit}`),
+  deleteDevice: (deviceId: string) => deleteDevice(deviceId),
 }
 
 async function post<T>(path: string): Promise<T> {
@@ -1025,10 +1029,15 @@ export function resolveHubUrl(tokenHubUrl?: string): string {
       return origin.replace('console.', 'enroll.')
     }
 
-    // 3. Fallback to current browser origin
+    // 3. Local Docker Compose port alignment (UI on 3000 -> API on 8081)
+    if (origin.includes(':3000')) {
+      return origin.replace(':3000', ':8081')
+    }
+
+    // 4. Fallback to current browser origin
     return origin
   }
-  return 'http://localhost:8400'
+  return 'http://localhost:8081'
 }
 
 export async function createEnrollmentTokenV2(reason: string, deviceLabel = '', targetOwner = '', ttlHours = 24): Promise<EnrollmentTokenV2> {
@@ -1067,6 +1076,24 @@ export async function listDevices(osFamily = '', status = ''): Promise<{ devices
 
 export async function revokeDevice(deviceId: string): Promise<{ device_id: string; status: string }> {
   return revokeDeviceV2(deviceId)
+}
+
+export async function deleteDevice(deviceId: string): Promise<{ device_id: string; deleted: boolean }> {
+  const res = await fetch(`/api/v2/admin/devices/${deviceId}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const fallbackRes = await fetch(`/api/v1/devices/${deviceId}`, {
+      method: 'DELETE',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    })
+    if (!fallbackRes.ok) {
+      throw new Error(`API ${fallbackRes.status}: ${await fallbackRes.text()}`)
+    }
+    return fallbackRes.json()
+  }
+  return res.json()
 }
 
 export async function createEnrollmentToken(rawToken: string, maxUses = 10, ttlHours = 24): Promise<EnrollmentToken> {
@@ -1161,6 +1188,78 @@ export async function listSentryTamperEvents(limit = 50): Promise<ListSentryTamp
   return get<ListSentryTamperEventsResponse>(`/devices/tamper-log?limit=${limit}`)
 }
 
+// ── V2 Phase 1 & 2 Identity, Device Governance, Policy & Audit Checkpoints ───
+
+async function getV2<T>(path: string): Promise<T> {
+  const res = await fetch(`/api/v2${path}`, { headers: authHeaders() })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${extractErrorMessage(text, res.status)}`)
+  }
+  return res.json()
+}
+
+export interface DeviceV2Item {
+  device_id: string
+  stable_device_id: string
+  display_name: string
+  os_family: string
+  architecture: string
+  status: string
+  capability_vector: string[]
+  last_freshness: 'ACTIVE_FRESH' | 'ACTIVE_RECENT' | 'STALE'
+  public_key?: string
+  last_seen_at: string
+  first_enrolled_at: string
+}
+
+export interface ListDevicesV2Response {
+  devices: DeviceV2Item[]
+  total_count: number
+}
+
+export interface AuditCheckpoint {
+  checkpoint_id: string
+  tenant_id: string
+  workspace_id: string
+  sequence_start: number
+  sequence_end: number
+  checkpoint_hash: string
+  signature: string
+  algorithm: string
+  created_at: string
+}
+
+export interface ListAuditCheckpointsResponse {
+  checkpoints: AuditCheckpoint[]
+  total_count: number
+}
+
+export interface SignedPolicyManifest {
+  policy_version: number
+  policy_hash: string
+  tenant_id: string
+  issued_at: number
+  expires_at: number
+  allowed_models: string[]
+  blocked_models: string[]
+  dlp_rules: Record<string, boolean>
+  rate_limits: Record<string, number>
+  signature: string
+}
+
+export async function listDevicesV2(): Promise<ListDevicesV2Response> {
+  return getV2<ListDevicesV2Response>('/devices')
+}
+
+export async function getEffectivePolicyV2(): Promise<SignedPolicyManifest> {
+  return getV2<SignedPolicyManifest>('/policy/effective')
+}
+
+export async function listAuditCheckpoints(): Promise<ListAuditCheckpointsResponse> {
+  return getV2<ListAuditCheckpointsResponse>('/audit/checkpoints')
+}
+
 // SSE stream for real-time alerts (AC-23.2).
 export function subscribeAlerts(
   onAlert: (alert: RedactedAlert) => void,
@@ -1175,3 +1274,4 @@ export function subscribeAlerts(
   es.onerror = (e) => onError?.(e)
   return () => es.close()
 }
+

@@ -42,6 +42,7 @@ pub fn run_service(action: ServiceAction) -> i32 {
                 "●".green().bold()
             );
             println!("  Hub URL: {}", hub_url.cyan());
+            let _ = crate::identity::device::save_hub_url(&hub_url);
 
             let gw_sec = gateway_secret.as_deref().unwrap_or("");
             let pol_sec = policy_read_secret.as_deref().unwrap_or("");
@@ -108,8 +109,8 @@ pub fn run_service(action: ServiceAction) -> i32 {
             println!("  Arch: {}", std::env::consts::ARCH.cyan());
 
             if cfg!(target_os = "windows") {
-                println!("  Service Name: AgentControlSentry (Windows SCM)");
-                println!("  Profile Scan Engine: Windows Session 0 Multi-User Hives Enabled");
+                println!("  Task Name: VexaAgentControl (Per-User Scheduled Task)");
+                println!("  Execution Context: Interactive User Session (/RL LIMITED, No Admin Required)");
             } else if cfg!(target_os = "macos") {
                 println!("  Service Target: LaunchDaemon / LaunchAgent (io.vexasec.agentcontrol)");
             } else {

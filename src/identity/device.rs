@@ -1,6 +1,7 @@
 //! Device PKI Identity module — manages Ed25519 key generation, OS Keychain storage,
 //! payload signing, and Hub token persistence.
 
+use base64::Engine;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -116,6 +117,48 @@ impl DeviceIdentity {
     pub fn sign(&self, payload: &[u8]) -> String {
         let signature = self.signing_key.sign(payload);
         hex::encode(signature.to_bytes())
+    }
+
+    /// Return base64 standard encoded 32-byte Ed25519 public key.
+    pub fn public_key_base64(&self) -> String {
+        use base64::engine::general_purpose::STANDARD;
+        let verifying_key: VerifyingKey = self.signing_key.verifying_key();
+        STANDARD.encode(verifying_key.as_bytes())
+    }
+
+    /// Generate an Ed25519-signed JWT device assertion for authenticating against the Control Hub (PRD §FR-10.4).
+    pub fn create_assertion_token(&self, tenant_id: Option<&str>, user_id: Option<&str>) -> Result<String, String> {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        use serde_json::json;
+
+        let now = chrono::Utc::now().timestamp();
+        let exp = now + 300; // 5 minute validity window
+        let jti = uuid::Uuid::new_v4().to_string();
+
+        let header = json!({
+            "alg": "EdDSA",
+            "typ": "JWT"
+        });
+
+        let payload = json!({
+            "sub": self.device_id,
+            "tenant_id": tenant_id.unwrap_or("00000000-0000-0000-0000-000000000001"),
+            "workspace_id": "default",
+            "user_id": user_id.unwrap_or("default-user"),
+            "jti": jti,
+            "iat": now,
+            "exp": exp,
+            "agent_version": env!("CARGO_PKG_VERSION")
+        });
+
+        let header_b64 = URL_SAFE_NO_PAD.encode(header.to_string().as_bytes());
+        let payload_b64 = URL_SAFE_NO_PAD.encode(payload.to_string().as_bytes());
+        let signing_input = format!("{}.{}", header_b64, payload_b64);
+
+        let signature = self.signing_key.sign(signing_input.as_bytes());
+        let sig_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+
+        Ok(format!("{}.{}", signing_input, sig_b64))
     }
 }
 
@@ -255,61 +298,16 @@ fn save_fallback_file(path: &PathBuf, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Persist signed Device JWT token returned by Control Hub to ~/.agentcontrol/device_token and ProgramData
+/// Persist signed Device JWT token returned by Control Hub to CredentialStore
 pub fn save_device_token(token: &str) -> Result<(), String> {
-    if let Some(home) = dirs::home_dir() {
-        let dir = home.join(".agentcontrol");
-        let _ = fs::create_dir_all(&dir);
-        let _ = save_fallback_file(&dir.join("device_token"), token);
-    }
-    #[cfg(windows)]
-    {
-        let program_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
-        let _ = fs::create_dir_all(&program_data);
-        let _ = save_fallback_file(&program_data.join("device_token"), token);
-    }
-    Ok(())
+    crate::identity::storage::CredentialStore::set("device_token", token)
 }
 
-/// Load saved Device JWT token from ~/.agentcontrol/device_token or ProgramData (with Windows Session 0 fallback)
+/// Load saved Device JWT token from CredentialStore
 pub fn load_device_token() -> Option<String> {
-    #[cfg(windows)]
-    {
-        // 1. Check C:\ProgramData\AgentControl\device_token (machine-wide store)
-        let prog_data_token = std::path::PathBuf::from(r"C:\ProgramData\AgentControl\device_token");
-        if let Ok(content) = fs::read_to_string(&prog_data_token) {
-            let trimmed = content.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        let token_path = home.join(".agentcontrol").join("device_token");
-        if let Ok(content) = fs::read_to_string(&token_path) {
-            let trimmed = content.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        for profile in crate::service::windows_profiles::enumerate_user_profiles() {
-            let token_path = profile.join(".agentcontrol").join("device_token");
-            if let Ok(content) = fs::read_to_string(&token_path) {
-                let trimmed = content.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
-            }
-        }
-    }
-
-    None
+    crate::identity::storage::CredentialStore::get("device_token").unwrap_or(None)
 }
+
 
 /// Persist enrolled Control Hub API URL to ~/.agentcontrol/hub_url and ProgramData (Windows) or /etc (Unix)
 pub fn save_hub_url(url: &str) -> Result<(), String> {
@@ -325,31 +323,12 @@ pub fn save_hub_url(url: &str) -> Result<(), String> {
         let _ = fs::create_dir_all(&dir);
         let _ = fs::write(dir.join("hub_url"), clean);
     }
-    #[cfg(windows)]
-    {
-        let program_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl");
-        let _ = fs::create_dir_all(&program_data);
-        let _ = fs::write(program_data.join("hub_url"), clean);
-        let _ = std::process::Command::new("setx")
-            .args(&["AGENTCONTROL_HUB_URL", clean])
-            .output();
-        let _ = std::process::Command::new("setx")
-            .args(&["DASHBOARD_API_URL", clean])
-            .output();
-    }
-    #[cfg(not(windows))]
-    {
-        let etc_dir = std::path::PathBuf::from("/etc/agentcontrol");
-        if etc_dir.exists() || fs::create_dir_all(&etc_dir).is_ok() {
-            let _ = fs::write(etc_dir.join("hub_url"), clean);
-        }
-    }
     Ok(())
 }
 
-/// Load enrolled Control Hub URL from environment, ~/.agentcontrol/hub_url, or machine-wide store
+/// Load enrolled Control Hub URL from environment, ~/.agentcontrol/hub_url, or fallback
 pub fn load_hub_url() -> Option<String> {
-    // 1. Explicit override if set and not a default placeholder
+    // 1. Explicit environment override if set and not a default placeholder
     if let Ok(v) = std::env::var("AGENTCONTROL_HUB_URL") {
         let trimmed = v.trim().trim_end_matches('/');
         if !trimmed.is_empty()
@@ -369,48 +348,13 @@ pub fn load_hub_url() -> Option<String> {
         }
     }
 
-    // 2. Authoritative enrolled hub URL saved on disk
-    #[cfg(windows)]
-    {
-        let prog_data = std::path::PathBuf::from(r"C:\ProgramData\AgentControl\hub_url");
-        if let Ok(content) = fs::read_to_string(&prog_data) {
-            let trimmed = content.trim().trim_end_matches('/').to_string();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
-        }
-    }
-
+    // 2. Authoritative enrolled hub URL saved on disk in user home
     if let Some(home) = dirs::home_dir() {
         let hub_path = home.join(".agentcontrol").join("hub_url");
         if let Ok(content) = fs::read_to_string(&hub_path) {
             let trimmed = content.trim().trim_end_matches('/').to_string();
             if !trimmed.is_empty() {
                 return Some(trimmed);
-            }
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        let etc_path = std::path::PathBuf::from("/etc/agentcontrol/hub_url");
-        if let Ok(content) = fs::read_to_string(&etc_path) {
-            let trimmed = content.trim().trim_end_matches('/').to_string();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        for profile in crate::service::windows_profiles::enumerate_user_profiles() {
-            let hub_path = profile.join(".agentcontrol").join("hub_url");
-            if let Ok(content) = fs::read_to_string(&hub_path) {
-                let trimmed = content.trim().trim_end_matches('/').to_string();
-                if !trimmed.is_empty() {
-                    return Some(trimmed);
-                }
             }
         }
     }

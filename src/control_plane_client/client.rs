@@ -141,7 +141,7 @@ impl DashboardClient {
                 }
                 Ok(res) => {
                     let status = res.status().as_u16();
-                    let level = if status == 401 || status == 403 {
+                    let level = if status == 401 || status == 403 || status == 404 {
                         crate::logging::Level::Debug
                     } else {
                         crate::logging::Level::Warn
@@ -151,7 +151,7 @@ impl DashboardClient {
                         "mcp_server_snapshot_rejected",
                         serde_json::json!({"status": status, "agent_id": &agent_id}),
                     );
-                    if status != 401 && status != 403 {
+                    if status != 401 && status != 403 && status != 404 {
                         crate::service::eventlog::log_warn(
                             1005,
                             &format!(

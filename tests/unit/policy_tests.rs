@@ -31,6 +31,7 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     }
 }
 

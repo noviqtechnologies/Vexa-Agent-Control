@@ -150,3 +150,34 @@ func (h *AdminV2Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 		"message":   "Device has been revoked and all active credentials invalidated",
 	})
 }
+
+// DELETE /api/v2/admin/devices/{device_id}
+func (h *AdminV2Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "device_id")
+	if deviceID == "" {
+		deviceID = chi.URLParam(r, "id")
+	}
+	if deviceID == "" {
+		http.Error(w, `{"error":{"code":"invalid_device_id"}}`, http.StatusBadRequest)
+		return
+	}
+
+	tenantID := middleware.ResolveTenantScope(r)
+	err := h.Store.DeleteDevice(r.Context(), tenantID, deviceID)
+	if err != nil {
+		log.Printf("DeleteDevice error for device %s: %v", deviceID, err)
+		if errors.Is(err, store.ErrDeviceNotFound) {
+			http.Error(w, `{"error":{"code":"device_not_found","message":"Device not found"}}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":"%s"}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"device_id": deviceID,
+		"deleted":   true,
+		"message":   "Device permanently purged from fleet inventory",
+	})
+}

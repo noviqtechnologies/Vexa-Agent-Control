@@ -26,6 +26,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -112,6 +113,7 @@ async fn test_rate_limiting_isolation() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -227,6 +229,7 @@ async fn test_cycle_detection_isolation() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -327,6 +330,7 @@ async fn test_hot_reload_policy_isolation() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     // Policy 2 (Denies everything)
@@ -343,6 +347,7 @@ async fn test_hot_reload_policy_isolation() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let state = create_mock_proxy_state(Some(policy_v1.clone()));
@@ -434,6 +439,7 @@ async fn test_dynamic_tool_history_max() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -490,6 +496,7 @@ async fn test_session_ttl_expiry() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     };
 
     let session = SessionContext::new(

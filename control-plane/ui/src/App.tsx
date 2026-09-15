@@ -11,7 +11,6 @@ import ThreatIntelligence from './views/ThreatIntelligence'
 import AuthProviders from './views/AuthProviders'
 import Users from './views/Users'
 import SafeMode from './views/SafeMode'
-import AuditLogs from './views/AuditLogs'
 import ObservabilityLogs from './views/ObservabilityLogs'
 import Login from './views/Login'
 
@@ -46,25 +45,6 @@ interface NavSection {
   icon: React.ReactNode
   children: NavItem[]
 }
-
-const OPERATOR_NAV_SECTIONS: NavSection[] = [
-  {
-    id: 'operator',
-    label: 'Platform Administration',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-      </svg>
-    ),
-    children: [
-      { label: 'SaaS Operator Console', to: '/operator' },
-      { label: 'Global Audit Ledger', to: '/observability/logs' },
-      { label: 'Global LLM Providers', to: '/integrations/llm-providers' },
-      { label: 'Global Spend Visualization', to: '/spend/visualization' },
-      { label: 'Global Users & SSO', to: '/admin/users' },
-    ],
-  },
-]
 
 const CUSTOMER_NAV_SECTIONS: NavSection[] = [
   {
@@ -141,7 +121,7 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
     ),
     children: [
       { label: 'Spend Limits', to: '/spend/limits' },
-      { label: 'Increase Requests', to: '/spend/requests', badge: 'Coming Soon' },
+      { label: 'Increase Requests', to: '/spend/requests' },
     ],
   },
   {
@@ -186,10 +166,11 @@ function ChevronIcon({ open }: { open: boolean }) {
 function Sidebar({ onLogout }: { onLogout: () => void }) {
   const location = useLocation()
   const { user, needsAuthProviderConfig } = useAuth()
-  const isOperator = !!user?.is_saas_operator
-  const isEnforced = needsAuthProviderConfig && !isOperator
+  const isEnforced = needsAuthProviderConfig
 
-  const visibleSections = isOperator ? OPERATOR_NAV_SECTIONS : CUSTOMER_NAV_SECTIONS
+  const visibleSections = user?.is_admin
+    ? CUSTOMER_NAV_SECTIONS
+    : CUSTOMER_NAV_SECTIONS.filter((s) => s.id !== 'team' && s.id !== 'integrations')
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {}
@@ -212,7 +193,7 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
     <aside className="app-sidebar">
       {/* Brand / Logo header */}
       <div className="sidebar-brand">
-        <NavLink to={isOperator ? "/operator" : "/fleet"} className="brand-link">
+        <NavLink to="/fleet" className="brand-link">
           <div className="brand-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -220,28 +201,14 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
           <div className="brand-text">
             <span className="brand-name">Vexa Agent Control</span>
-            <span className="brand-tag">{isOperator ? "Platform Management" : "SOC Console"}</span>
+            <span className="brand-tag">SOC Console</span>
           </div>
         </NavLink>
       </div>
 
       {/* Top-level standalone Overview link */}
       <div className="sidebar-top-nav">
-        {isOperator ? (
-          <NavLink
-            to="/operator"
-            className={({ isActive }) => `sidebar-nav-item single-item ${isActive ? 'active' : ''}`}
-          >
-            <span className="item-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                <line x1="8" y1="21" x2="16" y2="21"/>
-                <line x1="12" y1="17" x2="12" y2="21"/>
-              </svg>
-            </span>
-            <span className="item-label">Platform Overview</span>
-          </NavLink>
-        ) : isEnforced ? (
+        {isEnforced ? (
           <div className="sidebar-nav-item single-item disabled" title="Complete Authentication Setup to unlock Fleet Overview">
             <span className="item-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -416,23 +383,11 @@ function GlobalAuthBanner() {
 
 function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => void }) {
   const { user, needsAuthProviderConfig } = useAuth()
-  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
+  const isEnforced = needsAuthProviderConfig
 
-  const roleLabel = user?.is_saas_operator
-    ? 'Platform Super-Admin'
-    : user?.is_admin
-    ? 'Tenant Admin'
-    : 'User'
-
-  const roleClass = user?.is_saas_operator
-    ? 'role-operator'
-    : user?.is_admin
-    ? 'role-tenant-admin'
-    : 'role-user'
-
-  const workspaceLabel = user?.is_saas_operator
-    ? '🌐 Platform Management (Super-Admin)'
-    : `🏢 ${user?.organization_name || 'Organization Workspace'}`
+  const roleLabel = user?.is_admin ? 'Administrator' : 'Member'
+  const roleClass = user?.is_admin ? 'role-tenant-admin' : 'role-user'
+  const workspaceLabel = `🏢 ${user?.organization_name || 'Organization Workspace'}`
 
   return (
     <header className="top-header-bar">
@@ -482,15 +437,29 @@ function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => vo
   )
 }
 
+function AuthenticatedLoginRedirect() {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const returnTo = params.get('return_to')
+  if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
+    if (returnTo.startsWith('/oauth/') || returnTo.startsWith('/api/')) {
+      window.location.href = returnTo
+      return null
+    }
+    return <Navigate to={returnTo} replace />
+  }
+  return <Navigate to="/fleet" replace />
+}
+
 export default function App() {
-  const { authenticated, logout, user, needsAuthProviderConfig, needsPasswordSetup } = useAuth()
+  const { authenticated, logout, needsPasswordSetup, needsAuthProviderConfig } = useAuth()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const isEnforced = needsAuthProviderConfig && !user?.is_saas_operator
+  const isEnforced = needsAuthProviderConfig
 
   return (
     <>
       <SessionTimeoutModal />
-      {authenticated && needsPasswordSetup && !user?.is_saas_operator && (
+      {authenticated && needsPasswordSetup && (
         <SetInitialPasswordModal />
       )}
       <CommandPalette
@@ -498,7 +467,7 @@ export default function App() {
         onClose={() => setIsCommandPaletteOpen(false)}
       />
       <Routes>
-        <Route path="/login" element={authenticated ? (user?.is_saas_operator ? <Navigate to="/operator" replace /> : <Navigate to="/fleet" replace />) : <Login />} />
+        <Route path="/login" element={authenticated ? <AuthenticatedLoginRedirect /> : <Login />} />
 
         <Route path="*" element={
           <RequireAuth>
@@ -511,17 +480,7 @@ export default function App() {
                 <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
                 <main className="main-content">
                   <GlobalAuthBanner />
-                  {user?.is_saas_operator ? (
-                    <Routes>
-                      <Route path="/" element={<Navigate to="/settings/license" replace />} />
-                      <Route path="/settings/license" element={<LicenseSettings />} />
-                      <Route path="/organization" element={<LicenseSettings />} />
-                      <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
-                      <Route path="/operator/tenants" element={<Navigate to="/settings/license" replace />} />
-                      <Route path="/audit" element={<AuditLogs />} />
-                      <Route path="*" element={<Navigate to="/settings/license" replace />} />
-                    </Routes>
-                  ) : isEnforced ? (
+                  {isEnforced ? (
                     <Routes>
                       <Route path="/admin/auth-providers" element={<AuthProviders />} />
                       <Route path="/settings/license" element={<LicenseSettings />} />
@@ -531,8 +490,16 @@ export default function App() {
                     <Routes>
                       <Route path="/" element={<Navigate to="/fleet" replace />} />
                       <Route path="/fleet" element={<FleetOverview />} />
-                      <Route path="/settings/license" element={<LicenseSettings />} />
-                      <Route path="/organization" element={<LicenseSettings />} />
+                      <Route path="/settings/license" element={
+                        <RequireAdmin>
+                          <LicenseSettings />
+                        </RequireAdmin>
+                      } />
+                      <Route path="/organization" element={
+                        <RequireAdmin>
+                          <LicenseSettings />
+                        </RequireAdmin>
+                      } />
                       <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
                       <Route path="/identity" element={<IdentityGovernance />} />
                       <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
@@ -553,9 +520,17 @@ export default function App() {
                       <Route path="/policy/safe-mode" element={<SafeMode />} />
                       <Route path="/threats" element={<ThreatIntelligence />} />
                       <Route path="/audit" element={<ObservabilityLogs />} />
-                      <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                      <Route path="/admin/auth-providers" element={
+                        <RequireAdmin>
+                          <AuthProviders />
+                        </RequireAdmin>
+                      } />
 
-                      <Route path="/admin/users" element={<Users />} />
+                      <Route path="/admin/users" element={
+                        <RequireAdmin>
+                          <Users />
+                        </RequireAdmin>
+                      } />
                       <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
                       <Route path="/devices" element={<Devices />} />
                       <Route path="/devices/tamper-log" element={<TamperLog />} />

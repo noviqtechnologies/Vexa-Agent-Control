@@ -33,6 +33,39 @@ pub struct BrokerClient {
     http_client: reqwest::Client,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetExceededPayload {
+    pub error: Option<BudgetExceededDetail>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetExceededDetail {
+    pub message: Option<String>,
+    pub code: Option<String>,
+    #[serde(rename = "type")]
+    pub err_type: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum BrokerError {
+    BudgetExceeded(String),
+    Http { status: reqwest::StatusCode, body: String },
+    Other(String),
+}
+
+impl std::fmt::Display for BrokerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BrokerError::BudgetExceeded(msg) => write!(f, "BudgetExceeded: {}", msg),
+            BrokerError::Http { status, body } => write!(f, "Broker HTTP {}: {}", status, body),
+            BrokerError::Other(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for BrokerError {}
+
 impl BrokerClient {
     pub fn new(base_url: Option<String>) -> Self {
         let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120));
@@ -103,7 +136,20 @@ impl BrokerClient {
         }
     }
 
-    /// Dispatches a buffered LLM request to the provider broker v3 via gateway-secret auth.
+    /// Helper to resolve device assertion and bearer authorization headers.
+    fn auth_headers(&self) -> (Option<String>, String) {
+        let assertion = crate::identity::device::DeviceIdentity::load_or_create()
+            .ok()
+            .and_then(|id| id.create_assertion_token(None, None).ok());
+
+        let auth_token = crate::identity::device::load_device_token()
+            .or_else(|| assertion.clone())
+            .unwrap_or_default();
+
+        (assertion, auth_token)
+    }
+
+    /// Dispatches a buffered LLM request to the provider broker v3 via Ed25519 device assertion.
     pub async fn invoke_brokered_llm(
         &self,
         request: &BrokerLLMRequest,
@@ -113,16 +159,18 @@ impl BrokerClient {
             self.base_url.trim_end_matches('/')
         );
 
-        let gateway_secret = std::env::var("GATEWAY_SECRET").unwrap_or_default();
-        let device_token =
-            crate::identity::device::load_device_token().unwrap_or_else(|| gateway_secret.clone());
+        let (assertion, auth_token) = self.auth_headers();
 
         let mut req_builder = self
             .http_client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .header("X-Request-ID", &request.request_id)
-            .header("Authorization", format!("Bearer {}", device_token));
+            .header("Authorization", format!("Bearer {}", auth_token));
+
+        if let Some(ref token) = assertion {
+            req_builder = req_builder.header("X-Device-Authorization", format!("Bearer {}", token));
+        }
 
         if let Some(ref vk) = request.virtual_key {
             req_builder = req_builder.header("X-Virtual-Key", vk);
@@ -133,14 +181,22 @@ impl BrokerClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let err_body = resp.text().await.unwrap_or_default();
-            return Err(format!("Broker request failed ({}): {}", status, err_body).into());
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let msg = if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
+                    parsed.error.and_then(|e| e.message).or(parsed.message).unwrap_or(err_body)
+                } else {
+                    err_body
+                };
+                return Err(Box::new(BrokerError::BudgetExceeded(msg)));
+            }
+            return Err(Box::new(BrokerError::Http { status, body: err_body }));
         }
 
         let parsed = resp.json::<BrokerLLMResponse>().await?;
         Ok(parsed)
     }
 
-    /// Dispatches a streaming SSE request to the provider broker v3 via gateway-secret auth.
+    /// Dispatches a streaming SSE request to the provider broker v3 via Ed25519 device assertion.
     pub async fn invoke_brokered_stream(
         &self,
         request: &BrokerLLMRequest,
@@ -150,9 +206,7 @@ impl BrokerClient {
             self.base_url.trim_end_matches('/')
         );
 
-        let gateway_secret = std::env::var("GATEWAY_SECRET").unwrap_or_default();
-        let device_token =
-            crate::identity::device::load_device_token().unwrap_or_else(|| gateway_secret.clone());
+        let (assertion, auth_token) = self.auth_headers();
 
         let mut req_builder = self
             .http_client
@@ -160,7 +214,11 @@ impl BrokerClient {
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
             .header("X-Request-ID", &request.request_id)
-            .header("Authorization", format!("Bearer {}", device_token));
+            .header("Authorization", format!("Bearer {}", auth_token));
+
+        if let Some(ref token) = assertion {
+            req_builder = req_builder.header("X-Device-Authorization", format!("Bearer {}", token));
+        }
 
         if let Some(ref vk) = request.virtual_key {
             req_builder = req_builder.header("X-Virtual-Key", vk);
@@ -171,11 +229,42 @@ impl BrokerClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let err_body = resp.text().await.unwrap_or_default();
-            return Err(
-                format!("Broker streaming request failed ({}): {}", status, err_body).into(),
-            );
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let msg = if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
+                    parsed.error.and_then(|e| e.message).or(parsed.message).unwrap_or(err_body)
+                } else {
+                    err_body
+                };
+                return Err(Box::new(BrokerError::BudgetExceeded(msg)));
+            }
+            return Err(Box::new(BrokerError::Http { status, body: err_body }));
         }
 
         Ok(resp)
+    }
+
+    /// Dispatches a stream cancellation signal to upstream gateway within 500ms (Task 3.3).
+    pub async fn cancel_brokered_stream(&self, request_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let endpoint = format!(
+            "{}/api/v3/gateway-broker/llm-stream/{}/cancel",
+            self.base_url.trim_end_matches('/'),
+            request_id
+        );
+
+        let (assertion, auth_token) = self.auth_headers();
+
+        let mut req_builder = self
+            .http_client
+            .post(&endpoint)
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .timeout(std::time::Duration::from_millis(500));
+
+        if let Some(ref token) = assertion {
+            req_builder = req_builder.header("X-Device-Authorization", format!("Bearer {}", token));
+        }
+
+        let _ = req_builder.send().await;
+
+        Ok(())
     }
 }

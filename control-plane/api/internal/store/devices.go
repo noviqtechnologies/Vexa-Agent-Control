@@ -241,42 +241,9 @@ func (s *Store) UpdateDeviceHeartbeat(ctx context.Context, params DeviceHeartbea
 	`, params.DeviceID, status).Scan(&canonicalDeviceID, &devOrgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			org := params.OrganizationID
-			if org == "" {
-				org = DefaultOrgID
-			}
-
-			displayName := params.Hostname
-			if displayName == "" {
-				displayName = params.DeviceID
-			}
-
-			osFamily, arch := parseOSArch(params.OSArch)
-			version := params.AgentControlVersion
-			if version == "" {
-				version = "1.0.70"
-			}
-
-			err = s.pool.QueryRow(ctx, `
-				INSERT INTO devices (
-					organization_id, stable_device_id, display_name, owner_subject,
-					os_family, architecture, os_version_summary, daemon_version,
-					state, state_reason_code, state_changed_at, first_enrolled_at, last_heartbeat_at
-				) VALUES (
-					$1::uuid, $2, $3, 'Developer',
-					$4, $5, $4, $6,
-					$7, 'HEARTBEAT_PROVISIONED', now(), now(), now()
-				)
-				ON CONFLICT (stable_device_id) DO UPDATE SET
-					last_heartbeat_at = NOW(),
-					state = CASE WHEN devices.state::text = 'REVOKED' THEN devices.state ELSE EXCLUDED.state END,
-					updated_at = NOW()
-				RETURNING id::text, organization_id::text
-			`, org, params.DeviceID, displayName, osFamily, arch, version, status).Scan(&canonicalDeviceID, &devOrgID)
+			return ErrDeviceNotFound
 		}
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	if len(params.IDEChecksums) > 0 {
@@ -349,7 +316,7 @@ func (s *Store) ListDevices(ctx context.Context, organizationID, osFamily, statu
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT 
-			d.id::text AS device_id,
+			COALESCE(NULLIF(d.stable_device_id, ''), d.id::text) AS device_id,
 			COALESCE(NULLIF(d.display_name, ''), d.stable_device_id, d.id::text) AS hostname,
 			COALESCE(d.architecture, 'x86_64') AS os_arch,
 			COALESCE(d.os_family, 'windows') AS os_family,
@@ -518,6 +485,9 @@ func (s *Store) EnsureDevicesSchema(ctx context.Context) error {
 			daemon_version TEXT DEFAULT '2.1.0',
 			public_key TEXT,
 			state device_state NOT NULL DEFAULT 'PENDING',
+			capability_vector JSONB NOT NULL DEFAULT '[]'::jsonb,
+			last_freshness VARCHAR(32) NOT NULL DEFAULT 'STALE',
+			verified_target_states JSONB NOT NULL DEFAULT '{}'::jsonb,
 			state_reason_code TEXT,
 			state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			first_enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -536,21 +506,315 @@ func (s *Store) EnsureDevicesSchema(ctx context.Context) error {
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 		ALTER TABLE devices ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS capability_vector JSONB NOT NULL DEFAULT '[]'::jsonb;
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_freshness VARCHAR(32) NOT NULL DEFAULT 'STALE';
+		ALTER TABLE devices ADD COLUMN IF NOT EXISTS verified_target_states JSONB NOT NULL DEFAULT '{}'::jsonb;
 
-		CREATE TABLE IF NOT EXISTS device_compliance_reports (
-			report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		CREATE TABLE IF NOT EXISTS device_keys (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-			device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE UNIQUE,
-			overall_compliance TEXT NOT NULL DEFAULT 'COMPLIANT',
-			tamper_event_count_24h INT NOT NULL DEFAULT 0,
-			mcp_servers_total INT NOT NULL DEFAULT 0,
-			mcp_servers_wrapped INT NOT NULL DEFAULT 0,
-			report_payload JSONB NOT NULL DEFAULT '[]'::jsonb,
-			generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			device_id TEXT NOT NULL,
+			public_key_bytes TEXT NOT NULL,
+			algorithm VARCHAR(32) NOT NULL DEFAULT 'Ed25519',
+			status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			revoked_at TIMESTAMPTZ
 		);
-		CREATE INDEX IF NOT EXISTS idx_compliance_reports_device ON device_compliance_reports(device_id);
+		CREATE INDEX IF NOT EXISTS idx_device_keys_lookup ON device_keys(device_id, status);
+		CREATE INDEX IF NOT EXISTS idx_device_keys_org ON device_keys(organization_id, device_id);
+
+		CREATE TABLE IF NOT EXISTS audit_checkpoints (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			workspace_id TEXT NOT NULL DEFAULT 'default',
+			sequence_start BIGINT NOT NULL,
+			sequence_end BIGINT NOT NULL,
+			checkpoint_hash TEXT NOT NULL,
+			signature TEXT NOT NULL,
+			algorithm VARCHAR(32) NOT NULL DEFAULT 'Ed25519',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_audit_checkpoints_org_seq ON audit_checkpoints(organization_id, sequence_end DESC);
+
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS event_hash TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS prev_event_hash TEXT;
+		ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS sequence_number BIGINT;
+
+		ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS event_hash TEXT;
+		ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS prev_event_hash TEXT;
+		ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS sequence_number BIGINT;
 	`)
 	return err
+}
+
+// DeviceKey represents an Ed25519 public key registered for a workstation device.
+type DeviceKey struct {
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	DeviceID       string     `json:"device_id"`
+	PublicKeyBytes string     `json:"public_key_bytes"`
+	Algorithm      string     `json:"algorithm"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"created_at"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
+}
+
+// RegisterDeviceKey inserts an active public key for a device.
+func (s *Store) RegisterDeviceKey(ctx context.Context, organizationID, deviceID, publicKeyBytes, algorithm string) (*DeviceKey, error) {
+	if s.pool == nil {
+		return &DeviceKey{
+			ID:             "mock-key-id",
+			OrganizationID: organizationID,
+			DeviceID:       deviceID,
+			PublicKeyBytes: publicKeyBytes,
+			Algorithm:      algorithm,
+			Status:         "ACTIVE",
+			CreatedAt:      time.Now(),
+		}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	if algorithm == "" {
+		algorithm = "Ed25519"
+	}
+
+	var dk DeviceKey
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO device_keys (organization_id, device_id, public_key_bytes, algorithm, status, created_at)
+		VALUES ($1, $2, $3, $4, 'ACTIVE', now())
+		RETURNING id::text, organization_id::text, device_id, public_key_bytes, algorithm, status, created_at, revoked_at
+	`, organizationID, deviceID, publicKeyBytes, algorithm).Scan(
+		&dk.ID, &dk.OrganizationID, &dk.DeviceID, &dk.PublicKeyBytes, &dk.Algorithm, &dk.Status, &dk.CreatedAt, &dk.RevokedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register device key: %w", err)
+	}
+	return &dk, nil
+}
+
+// GetActiveDeviceKey returns the active public key for a given device.
+func (s *Store) GetActiveDeviceKey(ctx context.Context, deviceID string) (*DeviceKey, error) {
+	if s.pool == nil {
+		return nil, ErrDeviceNotFound
+	}
+	var dk DeviceKey
+	err := s.pool.QueryRow(ctx, `
+		SELECT id::text, organization_id::text, device_id, public_key_bytes, algorithm, status, created_at, revoked_at
+		FROM device_keys
+		WHERE device_id = $1 AND status = 'ACTIVE'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, deviceID).Scan(
+		&dk.ID, &dk.OrganizationID, &dk.DeviceID, &dk.PublicKeyBytes, &dk.Algorithm, &dk.Status, &dk.CreatedAt, &dk.RevokedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Fallback to checking public_key in devices table for backwards compatibility
+			var legacyPubKey *string
+			var orgID string
+			if qErr := s.pool.QueryRow(ctx, `
+				SELECT organization_id::text, public_key FROM devices 
+				WHERE (id::text = $1 OR stable_device_id = $1) AND state != 'REVOKED'
+			`, deviceID).Scan(&orgID, &legacyPubKey); qErr == nil && legacyPubKey != nil && *legacyPubKey != "" {
+				return &DeviceKey{
+					ID:             "legacy-key-" + deviceID,
+					OrganizationID: orgID,
+					DeviceID:       deviceID,
+					PublicKeyBytes: *legacyPubKey,
+					Algorithm:      "Ed25519",
+					Status:         "ACTIVE",
+					CreatedAt:      time.Now(),
+				}, nil
+			}
+			return nil, ErrDeviceNotFound
+		}
+		return nil, err
+	}
+	return &dk, nil
+}
+
+// RotateDeviceKey marks existing active keys as ROTATED and inserts a new active key.
+func (s *Store) RotateDeviceKey(ctx context.Context, organizationID, deviceID, newPublicKeyBytes string) (*DeviceKey, error) {
+	if s.pool == nil {
+		return &DeviceKey{
+			ID:             "mock-rotated-key",
+			OrganizationID: organizationID,
+			DeviceID:       deviceID,
+			PublicKeyBytes: newPublicKeyBytes,
+			Algorithm:      "Ed25519",
+			Status:         "ACTIVE",
+			CreatedAt:      time.Now(),
+		}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Retire old keys
+	_, err = tx.Exec(ctx, `
+		UPDATE device_keys 
+		SET status = 'ROTATED', revoked_at = now()
+		WHERE device_id = $1 AND status = 'ACTIVE'
+	`, deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("retire old keys: %w", err)
+	}
+
+	var dk DeviceKey
+	err = tx.QueryRow(ctx, `
+		INSERT INTO device_keys (organization_id, device_id, public_key_bytes, algorithm, status, created_at)
+		VALUES ($1, $2, $3, 'Ed25519', 'ACTIVE', now())
+		RETURNING id::text, organization_id::text, device_id, public_key_bytes, algorithm, status, created_at, revoked_at
+	`, organizationID, deviceID, newPublicKeyBytes).Scan(
+		&dk.ID, &dk.OrganizationID, &dk.DeviceID, &dk.PublicKeyBytes, &dk.Algorithm, &dk.Status, &dk.CreatedAt, &dk.RevokedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert rotated key: %w", err)
+	}
+
+	// Update devices table
+	_, _ = tx.Exec(ctx, `
+		UPDATE devices SET public_key = $1, updated_at = now()
+		WHERE (id::text = $2 OR stable_device_id = $2)
+	`, newPublicKeyBytes, deviceID)
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return &dk, nil
+}
+
+// RevokeDeviceKeys marks all keys for a device as REVOKED.
+func (s *Store) RevokeDeviceKeys(ctx context.Context, organizationID, deviceID string) error {
+	if s.pool == nil {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE device_keys 
+		SET status = 'REVOKED', revoked_at = now()
+		WHERE device_id = $1
+	`, deviceID)
+	return err
+}
+
+// UpdateDeviceCapabilityVector updates the multi-state vector and freshness indicators.
+func (s *Store) UpdateDeviceCapabilityVector(ctx context.Context, organizationID, deviceID string, vector []string, freshness string, verifiedTargets map[string]interface{}) error {
+	if s.pool == nil {
+		return nil
+	}
+	vecJSON, _ := json.Marshal(vector)
+	targetJSON, _ := json.Marshal(verifiedTargets)
+
+	_, err := s.pool.Exec(ctx, `
+		UPDATE devices
+		SET capability_vector = $1,
+		    last_freshness = $2,
+		    verified_target_states = $3,
+		    last_heartbeat_at = now(),
+		    updated_at = now()
+		WHERE (id::text = $4 OR stable_device_id = $4)
+	`, vecJSON, freshness, targetJSON, deviceID)
+	return err
+}
+
+// EnrollDeviceV2 registers or updates a device record with public key bytes.
+func (s *Store) EnrollDeviceV2(ctx context.Context, organizationID, deviceID, displayName, platform, agentVersion, publicKeyBytes string) (*model.DeviceRecord, *DeviceKey, error) {
+	now := time.Now()
+	if s.pool == nil {
+		d := &model.DeviceRecord{
+			ID:              deviceID,
+			OrganizationID:  organizationID,
+			StableDeviceID:  deviceID,
+			DisplayName:     displayName,
+			State:           model.DeviceStateCompliant,
+			FirstEnrolledAt: now,
+			LastHeartbeatAt: &now,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		dk := &DeviceKey{
+			ID:             "mock-key",
+			OrganizationID: organizationID,
+			DeviceID:       deviceID,
+			PublicKeyBytes: publicKeyBytes,
+			Algorithm:      "Ed25519",
+			Status:         "ACTIVE",
+			CreatedAt:      now,
+		}
+		return d, dk, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	if displayName == "" {
+		displayName = deviceID
+	}
+
+	osFamily, arch := parseOSArch(platform)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Upsert device record
+	var d model.DeviceRecord
+	var lastHb time.Time
+	err = tx.QueryRow(ctx, `
+		INSERT INTO devices (
+			organization_id, stable_device_id, display_name, os_family, architecture,
+			daemon_version, public_key, state, last_freshness, first_enrolled_at, last_heartbeat_at, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'COMPLIANT', 'ACTIVE_FRESH', now(), now(), now(), now())
+		ON CONFLICT (stable_device_id) DO UPDATE SET
+			display_name    = EXCLUDED.display_name,
+			os_family       = EXCLUDED.os_family,
+			architecture    = EXCLUDED.architecture,
+			daemon_version  = EXCLUDED.daemon_version,
+			public_key      = EXCLUDED.public_key,
+			state           = 'COMPLIANT',
+			last_freshness  = 'ACTIVE_FRESH',
+			last_heartbeat_at = now(),
+			updated_at      = now()
+		RETURNING id::text, organization_id::text, stable_device_id, display_name, os_family, architecture, state, first_enrolled_at, last_heartbeat_at
+	`, organizationID, deviceID, displayName, osFamily, arch, agentVersion, publicKeyBytes).Scan(
+		&d.ID, &d.OrganizationID, &d.StableDeviceID, &d.DisplayName, &d.OSFamily, &d.Architecture, &d.State, &d.FirstEnrolledAt, &lastHb,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("upsert device: %w", err)
+	}
+	d.LastHeartbeatAt = &lastHb
+
+	// Register key in device_keys
+	_, _ = tx.Exec(ctx, `
+		UPDATE device_keys SET status = 'ROTATED', revoked_at = now()
+		WHERE device_id = $1 AND status = 'ACTIVE'
+	`, deviceID)
+
+	var dk DeviceKey
+	err = tx.QueryRow(ctx, `
+		INSERT INTO device_keys (organization_id, device_id, public_key_bytes, algorithm, status, created_at)
+		VALUES ($1, $2, $3, 'Ed25519', 'ACTIVE', now())
+		RETURNING id::text, organization_id::text, device_id, public_key_bytes, algorithm, status, created_at, revoked_at
+	`, organizationID, deviceID, publicKeyBytes).Scan(
+		&dk.ID, &dk.OrganizationID, &dk.DeviceID, &dk.PublicKeyBytes, &dk.Algorithm, &dk.Status, &dk.CreatedAt, &dk.RevokedAt,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("register device key: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, nil, err
+	}
+	return &d, &dk, nil
 }
 
 // ValidateDeviceToken returns true if the token matches an enrolled/active device.
@@ -567,4 +831,23 @@ func (s *Store) ValidateDeviceToken(ctx context.Context, token string) bool {
 		)
 	`, token).Scan(&exists)
 	return err == nil && exists
+}
+
+// DeleteDevice removes a device and associated records from the store.
+func (s *Store) DeleteDevice(ctx context.Context, organizationID, deviceID string) error {
+	if s.pool == nil {
+		return nil
+	}
+	res, err := s.pool.Exec(ctx, `
+		DELETE FROM devices
+		WHERE (id::text = $1 OR stable_device_id = $1)
+		  AND (organization_id::text = $2 OR $2 = '' OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	`, deviceID, organizationID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return ErrDeviceNotFound
+	}
+	return nil
 }

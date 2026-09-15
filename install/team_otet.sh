@@ -131,7 +131,7 @@ if [[ -z "$VERSION" ]]; then
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
   if [[ -z "$VERSION" ]]; then
-    VERSION="v1.0.82"
+    VERSION="v1.0.83"
   fi
 fi
 
@@ -209,28 +209,25 @@ if ! "${LOCALBIN}/agentcontrol" enroll --token "$TOKEN" --hub-url "$HUB_URL"; th
 fi
 
 SHOULD_INSTALL_SERVICE="false"
-if [[ "$INSTALL_SERVICE" == "true" ]] || [[ "$INSTALL_SERVICE" != "false" && "$(id -u)" -eq 0 ]]; then
+if [[ "$INSTALL_SERVICE" == "true" ]] || [[ "$INSTALL_SERVICE" != "false" ]]; then
   SHOULD_INSTALL_SERVICE="true"
 fi
 
 if [[ "$SHOULD_INSTALL_SERVICE" == "true" ]]; then
-  echo "[*] Step 2/3: Installing Persistent OS Sentry Daemon..."
-  if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
-    sudo "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Could not install machine-level system service without root."
-  else
-    "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Sentry service installation requires appropriate permissions."
-  fi
+  echo "[*] Step 2/3: Installing Persistent Per-User Background Daemon..."
+  "${LOCALBIN}/agentcontrol" service install --hub-url "$HUB_URL" || echo "[!] Note: Daemon service registration emitted a note."
 else
-  echo "[*] Step 2/3: Skipping system daemon installation (run as root or pass --install-service to enable)."
+  echo "[*] Step 2/3: Skipping daemon installation (pass --install-service to enable)."
 fi
 
-echo "[*] Step 3/3: Auto-wrapping active IDE targets..."
-"${LOCALBIN}/agentcontrol" wrap --all || true
+echo "[*] Step 3/3: Running diagnostic health verification..."
+"${LOCALBIN}/agentcontrol" doctor || true
 
 echo ""
 echo "[+] Automated Enterprise Provisioning Completed!"
 echo "  • Version: $VERSION"
 echo "  • SHA-256: $ACTUAL_HASH"
-echo "Get started by running:"
-echo "  agentcontrol protect"
+echo "Next steps:"
+echo "  agentcontrol status"
+echo "  agentcontrol connect codex"
 echo ""

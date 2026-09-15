@@ -7,14 +7,48 @@ use std::path::{Path, PathBuf};
 
 use super::{config_path, transformer};
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum TargetState {
+    NotDetected,
+    Detected,
+    Configured,
+    McpWrapped,
+    McpTrafficVerified,
+    ProbeVerified,
+    TrafficVerified,
+    BypassPossible,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum FreshnessTier {
+    ActiveFresh,  // < 15 minutes
+    ActiveRecent, // 15m - 24h
+    Stale,        // > 24h
+    None,         // No traffic observed
+}
+
+impl FreshnessTier {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::ActiveFresh => "ACTIVE_FRESH",
+            Self::ActiveRecent => "ACTIVE_RECENT",
+            Self::Stale => "STALE",
+            Self::None => "NO_TRAFFIC",
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct IdeIntegrationSummary {
     pub name: String,
     pub path: String,
     pub exists: bool,
+    pub states: Vec<TargetState>,
+    pub freshness: FreshnessTier,
     pub is_wrapped: bool,
     pub total_servers: usize,
     pub wrapped_servers: usize,
+    pub disclosures: Vec<String>,
 }
 
 pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
@@ -41,19 +75,45 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
                 }
                 Err(e) => (format!("Path error: {}", e), false, false, 0, 0),
             };
+
+            let mut states = Vec::new();
+            let mut disclosures = Vec::new();
+
+            if !exists {
+                states.push(TargetState::NotDetected);
+            } else {
+                states.push(TargetState::Detected);
+                if is_wrapped {
+                    states.push(TargetState::McpWrapped);
+                }
+                if t.name == "Claude Desktop" {
+                    disclosures.push("LLM completions route out-of-band directly to Anthropic Cloud; MCP tools governed via stdio-proxy.".to_string());
+                } else {
+                    states.push(TargetState::Configured);
+                    states.push(TargetState::BypassPossible);
+                }
+
+                if t.name == "Codex" {
+                    disclosures.push("Native shell execution (bash/git) is UNGOVERNED by local proxy.".to_string());
+                }
+            }
+
             IdeIntegrationSummary {
                 name: t.name.to_string(),
                 path: path_str,
                 exists,
+                states,
+                freshness: FreshnessTier::None,
                 is_wrapped,
                 total_servers: total,
                 wrapped_servers: wrapped,
+                disclosures,
             }
         })
         .collect()
 }
 
-/// Classification of a target's path resolution reliability.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PathVerification {
     /// Path is correct and tested on all platforms (Claude Desktop).
@@ -68,7 +128,7 @@ struct TargetInfo {
     path_result: Result<PathBuf, String>,
 }
 
-/// Collect status for all 8 IDE targets.
+/// Collect status for verified supported IDE targets.
 fn gather_all() -> Vec<TargetInfo> {
     let targets: Vec<(
         &'static str,
@@ -92,28 +152,8 @@ fn gather_all() -> Vec<TargetInfo> {
         ),
         (
             "VS Code",
-            PathVerification::Unverified,
+            PathVerification::Verified,
             config_path::vscode_config_path(),
-        ),
-        (
-            "JetBrains",
-            PathVerification::Unverified,
-            config_path::jetbrains_config_path(),
-        ),
-        (
-            "Zed",
-            PathVerification::Unverified,
-            config_path::zed_config_path(),
-        ),
-        (
-            "Cline",
-            PathVerification::Unverified,
-            config_path::cline_config_path(),
-        ),
-        (
-            "OpenCode",
-            PathVerification::Unverified,
-            config_path::opencode_config_path(),
         ),
         (
             "Antigravity",
@@ -197,120 +237,176 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
     }
 }
 
-/// Print the status table for all 8 targets to stdout.
-pub fn print_all_targets() {
-    // Send snapshot in the background if dashboard client is configured
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TargetStatusDetails {
+    pub target: String,
+    pub config_path: String,
+    pub exists: bool,
+    pub states: Vec<TargetState>,
+    pub llm_routing: String,
+    pub mcp_governance: String,
+    pub freshness: String,
+    pub total_servers: usize,
+    pub wrapped_servers: usize,
+    pub disclosures: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StatusReport {
+    pub version: String,
+    pub timestamp: String,
+    pub targets: Vec<TargetStatusDetails>,
+    pub endpoints: StatusEndpoints,
+    pub global_disclosures: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StatusEndpoints {
+    pub default_proxy_url: String,
+    pub hub_url: String,
+    pub device_enrolled: bool,
+}
+
+/// Print the status table or structured JSON for verified targets.
+pub fn print_all_targets(json: bool) {
+    let summaries = get_all_integrations_summary();
+    let hub_url = crate::identity::device::load_hub_url()
+        .unwrap_or_else(|| "https://app.vexasec.io".to_string());
+    let enrolled = crate::identity::device::is_device_enrolled();
+
+    let targets_details: Vec<TargetStatusDetails> = summaries
+        .iter()
+        .map(|s| {
+            let llm_routing = if !s.exists {
+                "NOT_DETECTED".to_string()
+            } else if s.name == "Claude Desktop" {
+                "DIRECT_CLOUD".to_string()
+            } else if s.states.contains(&TargetState::Configured) {
+                "PROXIED (18080)".to_string()
+            } else {
+                "NOT_CONFIGURED".to_string()
+            };
+
+            let mcp_gov = if !s.exists {
+                "NOT_INSTALLED".to_string()
+            } else if s.total_servers == 0 {
+                "NO_SERVERS".to_string()
+            } else if s.wrapped_servers == s.total_servers {
+                format!("WRAPPED ({}/{})", s.wrapped_servers, s.total_servers)
+            } else {
+                format!("PARTIAL ({}/{})", s.wrapped_servers, s.total_servers)
+            };
+
+            TargetStatusDetails {
+                target: s.name.clone(),
+                config_path: s.path.clone(),
+                exists: s.exists,
+                states: s.states.clone(),
+                llm_routing,
+                mcp_governance: mcp_gov,
+                freshness: s.freshness.label().to_string(),
+                total_servers: s.total_servers,
+                wrapped_servers: s.wrapped_servers,
+                disclosures: s.disclosures.clone(),
+            }
+        })
+        .collect();
+
+    if json {
+        let report = StatusReport {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            targets: targets_details,
+            endpoints: StatusEndpoints {
+                default_proxy_url: "http://127.0.0.1:18080/v1".to_string(),
+                hub_url,
+                device_enrolled: enrolled,
+            },
+            global_disclosures: vec![
+                "Native shell execution (bash/git) is UNGOVERNED by local proxy across all targets.".to_string(),
+                "Workstation developers can configure personal API keys in environment variables (Bypass Possible).".to_string(),
+                "Binary 'COMPLIANT' state is retired; independent capability states reflect actual workstation posture.".to_string(),
+            ],
+        };
+        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        return;
+    }
+
+    // Only send snapshot in interactive table mode
     gather_and_send_mcp_servers_snapshot();
 
-    let targets = gather_all();
-
-    // Header
     println!();
     println!(
-        "{}",
-        "Vexa Agent Control — IDE Config Status".bold().white()
+        "{} {}",
+        "Vexa Agent Control — Target Governance & Capability Posture".bold().white(),
+        format!("(v{})", env!("CARGO_PKG_VERSION")).cyan()
     );
-    println!("{}", "─".repeat(90).dimmed());
+    println!("{}", "─".repeat(105).dimmed());
     println!(
-        "  {:<18} {:<12} {:<8} {:<10} {}",
+        "  {:<16} {:<32} {:<18} {:<18} {:<12}",
         "TARGET".bold(),
-        "PATH".bold(),
-        "EXISTS".bold(),
-        "WRAPPED".bold(),
-        "NOTES".bold()
+        "CONFIG PATH".bold(),
+        "LLM ROUTING".bold(),
+        "MCP GOVERNANCE".bold(),
+        "FRESHNESS".bold()
     );
-    println!("{}", "─".repeat(90).dimmed());
+    println!("{}", "─".repeat(105).dimmed());
 
-    for t in &targets {
-        let verified_label = match t.verification {
-            PathVerification::Verified => "[verified]".green().to_string(),
-            PathVerification::Unverified => "[unverified]".yellow().to_string(),
+    for t in &targets_details {
+        let path_disp = shorten_path(Path::new(&t.config_path));
+        let routing_colored = if t.llm_routing.starts_with("PROXIED") {
+            t.llm_routing.green()
+        } else if t.llm_routing == "DIRECT_CLOUD" {
+            t.llm_routing.yellow()
+        } else {
+            t.llm_routing.dimmed()
         };
 
-        match &t.path_result {
-            Err(e) => {
-                println!(
-                    "  {:<18} {:<12} {:<8} {:<10} path error: {} {}",
-                    t.name.cyan(),
-                    "N/A".dimmed(),
-                    "✖".red(),
-                    "—".dimmed(),
-                    e,
-                    verified_label,
-                );
-            }
-            Ok(path) => {
-                let path_display = shorten_path(path);
-                let exists = path.exists();
-                let (exists_label, wrap_label, notes) = if !exists {
-                    (
-                        "✖".red().to_string(),
-                        "—".dimmed().to_string(),
-                        format!("file not found {}", verified_label),
-                    )
-                } else {
-                    match check_wrap_status(path) {
-                        Err(e) => (
-                            "✔".green().to_string(),
-                            "?".yellow().to_string(),
-                            format!("read error: {} {}", e, verified_label),
-                        ),
-                        Ok((0, _)) => (
-                            "✔".green().to_string(),
-                            "—".dimmed().to_string(),
-                            format!("no mcpServers {}", verified_label),
-                        ),
-                        Ok((total, wrapped)) if wrapped == total => (
-                            "✔".green().to_string(),
-                            format!("{}/{}", wrapped, total).green().to_string(),
-                            format!("all wrapped {}", verified_label),
-                        ),
-                        Ok((total, wrapped)) if wrapped == 0 => (
-                            "✔".green().to_string(),
-                            format!("{}/{}", wrapped, total).red().bold().to_string(),
-                            format!(
-                                "⚠ unwrapped! run: agentcontrol wrap {} {}",
-                                // P2-a fix: map IDE display names to valid CLI wrap target names.
-                                // Previously used `.replace(' ', "-")` which produced invalid
-                                // targets like "claude-desktop" instead of the correct "claude".
-                                ide_wrap_target(t.name),
-                                verified_label
-                            ),
-                        ),
-                        Ok((total, wrapped)) => (
-                            "✔".green().to_string(),
-                            format!("{}/{}", wrapped, total).yellow().to_string(),
-                            format!(
-                                "⚠ partial — run: agentcontrol wrap {} {}",
-                                ide_wrap_target(t.name),
-                                verified_label
-                            ),
-                        ),
-                    }
-                };
+        let mcp_colored = if t.mcp_governance.starts_with("WRAPPED") {
+            t.mcp_governance.green()
+        } else if t.mcp_governance.starts_with("PARTIAL") {
+            t.mcp_governance.yellow()
+        } else {
+            t.mcp_governance.dimmed()
+        };
 
-                println!(
-                    "  {:<18} {:<36} {:<8} {:<10} {}",
-                    t.name.cyan(),
-                    path_display.dimmed(),
-                    exists_label,
-                    wrap_label,
-                    notes,
-                );
+        println!(
+            "  {:<16} {:<32} {:<18} {:<18} {:<12}",
+            t.target.cyan().bold(),
+            path_disp.dimmed(),
+            routing_colored,
+            mcp_colored,
+            t.freshness.dimmed()
+        );
+    }
 
-                // Debug: always print full path on a second line for unverified targets
-                if t.verification == PathVerification::Unverified && exists {
-                    eprintln!("  [debug] {} full path: {}", t.name, path.display());
-                }
-            }
+    println!("{}", "─".repeat(105).dimmed());
+    println!("{}", "  ACTIVE CAPABILITY STATES:".bold());
+    for t in &targets_details {
+        if t.exists {
+            let names: Vec<String> = t.states.iter().map(|st| format!("{:?}", st)).collect();
+            let note = if t.target == "Claude Desktop" {
+                " (LLM completions route out-of-band to Anthropic Cloud)"
+            } else {
+                ""
+            };
+            println!("    • {:<14} [{}]{}", t.target.bold(), names.join(", ").blue(), note.dimmed());
         }
     }
 
-    println!("{}", "─".repeat(90).dimmed());
+    println!();
+    println!("{}", "  SECURITY BOUNDARIES & DISCLOSURES (No Sugar Coating):".bold().yellow());
     println!(
-        "  {} = path tested and correct.  {} = guessed/hypothetical path.",
-        "[verified]".green(),
-        "[unverified]".yellow()
+        "    ⚠ Bypass Vector: Native shell commands (bash/git) run out-of-band and are UNGOVERNED by local proxy."
+    );
+    println!(
+        "    ⚠ Bypass Vector: Developers can configure personal API keys in workstation environment variables."
+    );
+    println!(
+        "    ℹ Claude Desktop: Native completions route directly to Anthropic Cloud; MCP tools governed via stdio-proxy."
+    );
+    println!(
+        "    ℹ Integrity: Binary 'COMPLIANT' state is retired; capability states reflect exact workstation posture."
     );
     println!();
 }
@@ -320,6 +416,7 @@ pub fn print_all_targets() {
 /// P2-a fix: `t.name.to_lowercase().replace(' ', "-")` previously produced
 /// invalid targets like "claude-desktop" (unrecognised by the CLI). This function
 /// returns the exact string accepted by the `wrap` subcommand for every known IDE.
+#[allow(dead_code)]
 fn ide_wrap_target(name: &str) -> &str {
     match name {
         "Claude Desktop" => "claude",

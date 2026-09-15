@@ -17,6 +17,8 @@ var knownInsecurePlaceholders = []string{
 	"vexa_team_session_signing_secret_67890",
 	"VexaAdminPassword2026!",
 	"admin123!",
+	"admin12345678",
+	"admin",
 	"password",
 	"secret",
 	"changeme",
@@ -54,11 +56,24 @@ type Config struct {
 	// AdminPassword is the optional platform administrator initial password.
 	AdminPassword string
 
-	// SaaSOperatorEmail is the platform operator administrator email.
-	SaaSOperatorEmail string
+	// AdminEmail is the dedicated Control Hub administrator email.
+	AdminEmail string
 
-	// SaaSOperatorPassword is the optional platform operator initial password.
-	SaaSOperatorPassword string
+	// AdminPassword is the dedicated Control Hub administrator password.
+	// OrganizationName is the customer organization display name.
+	OrganizationName string
+
+	// OrganizationID is the primary organization UUID (default: 00000000-0000-0000-0000-000000000001).
+	OrganizationID string
+
+	// Legacy backward compatibility fields
+	SaaSOperatorEmail       string
+	SaaSOperatorPassword    string
+	TenantAdminEmail        string
+	TenantAdminPassword     string
+	TenantAdminOrgName      string
+	ControlHubAdminEmail    string
+	ControlHubAdminPassword string
 
 	// LicenseKey is the Ed25519-signed JWT license key for Agent Control Hub.
 	LicenseKey string
@@ -118,9 +133,49 @@ func Load() (*Config, error) {
 	if sessionSecret == "" {
 		sessionSecret = os.Getenv("AGENTWALL_SESSION_SECRET")
 	}
+	// Canonical Single-Tenant Administration Configuration
+	adminEmail := strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))
+	if adminEmail == "" {
+		adminEmail = strings.TrimSpace(os.Getenv("TENANT_ADMIN_EMAIL"))
+	}
+	if adminEmail == "" {
+		adminEmail = strings.TrimSpace(os.Getenv("CONTROL_HUB_ADMIN_EMAIL"))
+	}
+
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
-	saasOpEmail := os.Getenv("SAAS_OPERATOR_EMAIL")
-	saasOpPassword := os.Getenv("SAAS_OPERATOR_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = os.Getenv("TENANT_ADMIN_PASSWORD")
+	}
+	if adminPassword == "" {
+		adminPassword = os.Getenv("CONTROL_HUB_ADMIN_PASSWORD")
+	}
+	if adminPassword == "" && devMode {
+		adminPassword = "admin12345678"
+	}
+
+	orgName := os.Getenv("ORGANIZATION_NAME")
+	if orgName == "" {
+		orgName = os.Getenv("TENANT_ADMIN_ORG_NAME")
+	}
+	if orgName == "" {
+		orgName = "Primary Organization"
+	}
+
+	orgID := strings.TrimSpace(os.Getenv("ORGANIZATION_ID"))
+	if orgID == "" {
+		orgID = strings.TrimSpace(os.Getenv("LEGACY_TENANT_ID"))
+	}
+	if orgID == "" {
+		orgID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	// Legacy backward compatibility values
+	tenantAdminEmail := adminEmail
+	tenantAdminPassword := adminPassword
+	tenantAdminOrgName := orgName
+	controlHubAdminEmail := adminEmail
+	controlHubAdminPassword := adminPassword
+
 	legacySingleTenant := os.Getenv("LEGACY_SINGLE_TENANT_MODE") == "true"
 	legacyTenantID := strings.TrimSpace(os.Getenv("LEGACY_TENANT_ID"))
 	if legacySingleTenant && legacyTenantID == "" {
@@ -166,12 +221,20 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("POLICY_READ_SECRET must not use a known placeholder in production")
 		}
 
-		if adminPassword != "" && isPlaceholder(adminPassword) {
-			return nil, fmt.Errorf("ADMIN_PASSWORD must not use a known default password in production")
+		if strings.EqualFold(adminEmail, "admin") || strings.EqualFold(adminEmail, "admin@agentcontrol.local") {
+			return nil, fmt.Errorf("ADMIN_EMAIL must not use default email 'admin' or 'admin@agentcontrol.local' in production")
 		}
 
-		if saasOpPassword != "" && isPlaceholder(saasOpPassword) {
-			return nil, fmt.Errorf("SAAS_OPERATOR_PASSWORD must not use a known default password in production")
+		if (tenantAdminPassword != "" || adminPassword != "") && adminEmail == "" {
+			return nil, fmt.Errorf("ADMIN_EMAIL is required when ADMIN_PASSWORD is configured in production")
+		}
+
+		if tenantAdminPassword != "" && isPlaceholder(tenantAdminPassword) {
+			return nil, fmt.Errorf("TENANT_ADMIN_PASSWORD / ADMIN_PASSWORD must not use a known default password in production")
+		}
+
+		if controlHubAdminPassword != "" && isPlaceholder(controlHubAdminPassword) {
+			return nil, fmt.Errorf("CONTROL_HUB_ADMIN_PASSWORD / SAAS_OPERATOR_PASSWORD must not use a known default password in production")
 		}
 
 		if ingressAuthSecret == "" && os.Getenv("DIRECT_TLS_ENABLED") != "true" {
@@ -196,9 +259,17 @@ func Load() (*Config, error) {
 		ProviderKeyEncryptionSecret: encryptionSecret,
 		IngressAuthSecret:           ingressAuthSecret,
 		SessionSecret:               sessionSecret,
+		AdminEmail:                  adminEmail,
 		AdminPassword:               adminPassword,
-		SaaSOperatorEmail:           saasOpEmail,
-		SaaSOperatorPassword:        saasOpPassword,
+		OrganizationName:            orgName,
+		OrganizationID:              orgID,
+		SaaSOperatorEmail:           controlHubAdminEmail,
+		SaaSOperatorPassword:        controlHubAdminPassword,
+		TenantAdminEmail:            tenantAdminEmail,
+		TenantAdminPassword:         tenantAdminPassword,
+		TenantAdminOrgName:          tenantAdminOrgName,
+		ControlHubAdminEmail:        controlHubAdminEmail,
+		ControlHubAdminPassword:     controlHubAdminPassword,
 		LicenseKey:                  licenseKey,
 		LegacySingleTenantMode:      legacySingleTenant,
 		LegacyTenantID:              legacyTenantID,

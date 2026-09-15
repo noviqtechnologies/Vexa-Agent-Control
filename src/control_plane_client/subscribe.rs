@@ -22,8 +22,7 @@ pub async fn start_policy_subscriber(
     state: Arc<crate::proxy::handler::ProxyState>,
 ) {
     let clean_base = dashboard_url.trim_end_matches('/');
-    let client =
-        crate::policy::remote::build_device_http_client(std::time::Duration::from_secs(30));
+    let client = crate::policy::remote::build_device_sse_client();
 
     loop {
         let device_token_opt =

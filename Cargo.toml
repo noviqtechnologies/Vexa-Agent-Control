@@ -3,7 +3,7 @@ members = [".", "control-plane/proto"]
 
 [package]
 name = "agentcontrol"
-version = "1.0.82"
+version = "1.0.83"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
@@ -158,6 +158,14 @@ harness = false
 
 [[bench]]
 name = "safe_mode"
+harness = false
+
+[[bench]]
+name = "workstation_throughput"
+harness = false
+
+[[bench]]
+name = "gateway_capacity"
 harness = false
 
 # --- Compilation Speed Optimizations ---

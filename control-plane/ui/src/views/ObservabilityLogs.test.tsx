@@ -264,5 +264,58 @@ describe('ObservabilityLogs View', () => {
       expect(screen.getByText('1 finding')).toBeInTheDocument()
     })
   })
+
+  it('renders Export Excel button and User / Host column with device fallback', async () => {
+    vi.mocked(api.listRequestLogs).mockResolvedValueOnce({
+      organization_id: 'tenant-1',
+      request_logs: [
+        {
+          run_id: 'run-103',
+          request_id: 'c8179b27-b001-4444-9999-111122223333',
+          session_id: '73fc9665-6112-4c6d-9781-37dfd125fa0a',
+          device_id: 'dev-1',
+          device_name: 'win-dev-01',
+          project_id: 'default',
+          provider: 'openai',
+          model: 'gpt-4o',
+          state: 'SETTLED',
+          status_code: 200,
+          reserved_microcents: 149000,
+          settled_microcents: 149000,
+          started_at: '2026-09-03T12:37:06Z',
+          duration_ms: 2870,
+          input_tokens: 10436,
+          output_tokens: 36,
+          total_tokens: 10472,
+          request_type: 'TOOL_CALL',
+        },
+      ],
+      total: 1,
+      data_freshness: '2026-09-03T12:38:00Z',
+      confidence: 'observed',
+    })
+
+    const createObjectURLMock = vi.fn().mockReturnValue('blob:mock-url')
+    const revokeObjectURLMock = vi.fn()
+    window.URL.createObjectURL = createObjectURLMock
+    window.URL.revokeObjectURL = revokeObjectURLMock
+
+    render(
+      <MemoryRouter initialEntries={['/observability/logs']}>
+        <ObservabilityLogs />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('User / Host')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument()
+      expect(screen.getByText(/win-dev-01/)).toBeInTheDocument()
+    })
+
+    const exportBtn = screen.getByRole('button', { name: /Export Excel/i })
+    fireEvent.click(exportBtn)
+
+    expect(createObjectURLMock).toHaveBeenCalled()
+  })
 })
 

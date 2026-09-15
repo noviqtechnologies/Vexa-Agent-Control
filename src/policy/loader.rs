@@ -13,7 +13,7 @@
 
 use regex::Regex;
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::engine::CompiledPolicy;
 use super::schema::{ParamType, PolicyFile, SUPPORTED_VERSIONS};
@@ -614,6 +614,24 @@ fn compile_policy_yaml(
         }
     }
 
+    let attribution = policy_file.metadata.as_ref().and_then(|meta| {
+        if let Some(attr) = &meta.attribution {
+            Some(crate::spend::types::AttributionContext::new(
+                attr.client_id.as_deref().unwrap_or("default"),
+                attr.project_id.as_deref().unwrap_or("default"),
+                attr.cost_center.as_deref().unwrap_or("default"),
+            ))
+        } else if meta.client_id.is_some() || meta.project_id.is_some() || meta.cost_center.is_some() {
+            Some(crate::spend::types::AttributionContext::new(
+                meta.client_id.as_deref().unwrap_or("default"),
+                meta.project_id.as_deref().unwrap_or("default"),
+                meta.cost_center.as_deref().unwrap_or("default"),
+            ))
+        } else {
+            None
+        }
+    });
+
     PolicyLoadResult::Loaded {
         policy: CompiledPolicy {
             tools: compiled_tools,
@@ -628,6 +646,7 @@ fn compile_policy_yaml(
             sequence_rules: compiled_sequence_rules,
             schema_drift: policy_file.schema_drift,
             fail_closed,
+            attribution,
         },
         raw_hash,
         warnings,
@@ -707,3 +726,219 @@ fn check_schema_depth(value: &serde_json::Value, current_depth: usize) -> Result
 
     Ok(())
 }
+
+/// Standard filenames recognized for repo-level and local policies.
+pub const POLICY_FILE_CANDIDATES: &[&str] = &[
+    ".agentcontrol.yaml",
+    ".agentcontrol.yml",
+    ".agentwall.yaml",
+    ".agentwall.yml",
+    "agentcontrol-policy.yaml",
+    "agentcontrol-policy.yml",
+    ".agentcontrol/policy.yaml",
+    ".agentcontrol/policy.yml",
+];
+
+/// Traverses upward from `start_dir` to find the nearest GitOps policy file.
+/// Stops at the git repository root (`.git`), filesystem root, or after 32 parent hops.
+/// If no repo policy is found, falls back to machine global locations in ~/.config.
+pub fn find_policy_file_upward(start_dir: &Path) -> Option<PathBuf> {
+    let mut current = if start_dir.is_file() {
+        start_dir.parent()?.to_path_buf()
+    } else {
+        start_dir.to_path_buf()
+    };
+
+    let mut hops = 0;
+    loop {
+        // Check all policy candidate names in current directory
+        for candidate in POLICY_FILE_CANDIDATES {
+            let candidate_path = current.join(candidate);
+            if candidate_path.is_file() {
+                return Some(candidate_path);
+            }
+        }
+
+        // If we hit a .git directory or file (e.g. submodule/worktree), stop searching upward
+        if current.join(".git").exists() {
+            break;
+        }
+
+        hops += 1;
+        if hops > 32 {
+            break;
+        }
+
+        match current.parent() {
+            Some(parent) if parent != current => {
+                current = parent.to_path_buf();
+            }
+            _ => break,
+        }
+    }
+
+    // Fallback: Global user config directory (~/.config/agentcontrol/policy.yaml or %APPDATA%)
+    if let Some(config_dir) = dirs::config_dir() {
+        let global_p = config_dir.join("agentcontrol").join("policy.yaml");
+        if global_p.is_file() {
+            return Some(global_p);
+        }
+    }
+    if let Some(home_dir) = dirs::home_dir() {
+        let dot_config = home_dir.join(".config").join("agentcontrol").join("policy.yaml");
+        if dot_config.is_file() {
+            return Some(dot_config);
+        }
+        let dot_agentcontrol = home_dir.join(".agentcontrol").join("policy.yaml");
+        if dot_agentcontrol.is_file() {
+            return Some(dot_agentcontrol);
+        }
+    }
+
+    None
+}
+
+/// Automatically resolves and loads the active policy.
+///
+/// Priority & Merge Architecture:
+/// 1. If an explicit path is passed (via CLI / environment / central config), it serves as the baseline.
+/// 2. If a repository policy (.agentcontrol.yaml) is discovered in the working tree, it is MERGED
+///    against the central policy via `merge_with_central`.
+///    The central policy acts as an absolute security ceiling; repo policies cannot loosen restrictions.
+/// 3. If only a repo policy is found (standalone mode), it is loaded directly.
+/// 4. If neither is found, fallback to global user config (~/.config/agentcontrol/policy.yaml).
+pub fn resolve_active_policy(
+    explicit_path: Option<&Path>,
+    issuer_override: Option<String>,
+) -> (Option<CompiledPolicy>, Option<PathBuf>) {
+    resolve_active_policy_with_dir(explicit_path, None, issuer_override)
+}
+
+pub fn resolve_active_policy_with_dir(
+    explicit_path: Option<&Path>,
+    working_dir: Option<&Path>,
+    issuer_override: Option<String>,
+) -> (Option<CompiledPolicy>, Option<PathBuf>) {
+    let cwd = match working_dir {
+        Some(d) => d.to_path_buf(),
+        None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    };
+    let discovered_repo_path = find_policy_file_upward(&cwd);
+
+    if let Some(p) = explicit_path {
+        if p.exists() {
+            if let PolicyLoadResult::Loaded { policy: explicit_policy, .. } = load_policy(p, issuer_override.clone()) {
+                if let Some(ref repo_path) = discovered_repo_path {
+                    if repo_path != p {
+                        if let PolicyLoadResult::Loaded { policy: repo_policy, .. } = load_policy(repo_path, issuer_override.clone()) {
+                            match repo_policy.merge_with_central(&explicit_policy) {
+                                Ok(merged) => {
+                                    crate::logging::log_event(
+                                        crate::logging::Level::Info,
+                                        "policy_merged_with_central",
+                                        serde_json::json!({
+                                            "central_policy": p.display().to_string(),
+                                            "repo_policy": repo_path.display().to_string(),
+                                            "ceiling_enforced": true
+                                        }),
+                                    );
+                                    return (Some(merged), Some(repo_path.clone()));
+                                }
+                                Err(err) => {
+                                    crate::logging::log_event(
+                                        crate::logging::Level::Warn,
+                                        "repo_policy_rejected_by_central",
+                                        serde_json::json!({
+                                            "central_policy": p.display().to_string(),
+                                            "repo_policy": repo_path.display().to_string(),
+                                            "reason": err
+                                        }),
+                                    );
+                                    // Fall back to central policy rather than letting unapproved repo rules apply
+                                    return (Some(explicit_policy), Some(p.to_path_buf()));
+                                }
+                            }
+                        }
+                    }
+                }
+                return (Some(explicit_policy), Some(p.to_path_buf()));
+            }
+        }
+        return (None, None);
+    }
+
+    if let Some(discovered_path) = discovered_repo_path {
+        if let PolicyLoadResult::Loaded { policy, .. } = load_policy(&discovered_path, issuer_override) {
+            return (Some(policy), Some(discovered_path));
+        }
+    }
+
+    (None, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_find_policy_file_upward_in_root() {
+        let dir = tempdir().unwrap();
+        let policy_file = dir.path().join(".agentcontrol.yaml");
+        std::fs::write(&policy_file, "version: \"2.0\"\ndefault_action: deny\n").unwrap();
+
+        let found = find_policy_file_upward(dir.path());
+        assert_eq!(found, Some(policy_file));
+    }
+
+    #[test]
+    fn test_find_policy_file_upward_from_nested_subdir() {
+        let dir = tempdir().unwrap();
+        let policy_file = dir.path().join(".agentcontrol.yaml");
+        std::fs::write(&policy_file, "version: \"2.0\"\ndefault_action: deny\n").unwrap();
+
+        let nested = dir.path().join("services").join("worker").join("src");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let found = find_policy_file_upward(&nested);
+        assert_eq!(found, Some(policy_file));
+    }
+
+    #[test]
+    fn test_find_policy_file_stops_at_git_boundary() {
+        let dir = tempdir().unwrap();
+        // Policy outside repo
+        let outer_policy = dir.path().join(".agentcontrol.yaml");
+        std::fs::write(&outer_policy, "version: \"2.0\"\ndefault_action: deny\n").unwrap();
+
+        // Repo root with .git
+        let repo_root = dir.path().join("my-repo");
+        let git_dir = repo_root.join(".git");
+        std::fs::create_dir_all(&git_dir).unwrap();
+
+        let nested = repo_root.join("src");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        // Without policy inside repo, search stops at repo_root (.git) and does not leak outer_policy
+        let found = find_policy_file_upward(&nested);
+        assert_ne!(found, Some(outer_policy));
+    }
+
+    #[test]
+    fn test_resolve_active_policy_merges_explicit_with_repo() {
+        let dir = tempdir().unwrap();
+        let central_file = dir.path().join("central.yaml");
+        std::fs::write(&central_file, "version: \"2.0\"\ndefault_action: deny\ntools:\n  - name: tool_a\n    action: allow\n  - name: tool_b\n    action: deny\n").unwrap();
+
+        let repo_file = dir.path().join(".agentcontrol.yaml");
+        std::fs::write(&repo_file, "version: \"2.0\"\ndefault_action: deny\ntools:\n  - name: tool_a\n    action: deny\n").unwrap();
+
+        let (policy_opt, _) = resolve_active_policy_with_dir(Some(&central_file), Some(dir.path()), None);
+        assert!(policy_opt.is_some());
+        let policy = policy_opt.unwrap();
+        // Central permitted tool_a, but repo tightened it to deny
+        let tool_a = policy.tools.iter().find(|t| t.name == "tool_a").unwrap();
+        assert_eq!(tool_a.action, "deny");
+    }
+}
+

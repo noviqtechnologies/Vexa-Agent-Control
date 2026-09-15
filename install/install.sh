@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.82"
+FALLBACK_VERSION="v1.0.83"
 
 if [[ -z "$VERSION" ]]; then
   echo "[*] Fetching latest release version from GitHub..."
@@ -191,13 +191,12 @@ echo "│  ✨ Vexa Agent Control $VERSION successfully installed!              
 echo "├────────────────────────────────────────────────────────────────────────┤"
 echo "│  Binary Location : ${LOCALBIN}/agentcontrol"
 echo "│                                                                        │"
-echo "│  ► Run in THIS terminal session right now (no restart needed):         │"
+echo "│  ► Get started in THIS terminal session right now:                     │"
 echo "│                                                                        │"
-echo "│    export PATH=\"\$HOME/.local/bin:\$PATH\" && agentcontrol protect       │"
-echo "│                                                                        │"
-echo "│  ► For future sessions (already written to ~/.bashrc / ~/.zshrc):      │"
-echo "│                                                                        │"
-echo "│    agentcontrol protect                                                │"
+echo "│    export PATH=\"\$HOME/.local/bin:\$PATH\"                                 │"
+echo "│    agentcontrol login                                                  │"
+echo "│    agentcontrol connect codex                                          │"
+echo "│    agentcontrol doctor                                                 │"
 echo "│                                                                        │"
 echo "│  💬 Early Access Developer Community & Edge-Case Support:              │"
 echo "│     Discord : https://discord.gg/vexasec                               │"

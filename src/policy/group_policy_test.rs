@@ -106,6 +106,7 @@ mod tests {
             sequence_rules: vec![],
             schema_drift: None,
             fail_closed: false,
+            attribution: None,
         }
     }
 

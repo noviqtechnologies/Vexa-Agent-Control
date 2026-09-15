@@ -60,10 +60,10 @@ describe('Login View', () => {
     expect(screen.getAllByText(/Fail-Closed Spend Caps/i).length).toBeGreaterThanOrEqual(1)
 
     // Check Customer Workspace console form elements
-    expect(screen.getByText(/Customer Workspace Mode/i)).toBeDefined()
-    expect(screen.getByRole('heading', { name: /Customer Organization Console/i })).toBeDefined()
+    expect(screen.getByText(/Dedicated Control Hub/i)).toBeDefined()
+    expect(screen.getByRole('heading', { name: /Sign in to your organization/i })).toBeDefined()
     expect(screen.getByPlaceholderText(/name@company.com or username/i)).toBeDefined()
-    expect(screen.getByRole('button', { name: /Sign In to Customer Workspace →/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Sign In to (Control Hub|Customer Workspace) →/i })).toBeDefined()
 
     // Check vexasec.io links and contact email
     const websiteLinks = screen.getAllByRole('link', { name: /vexasec\.io/i })
@@ -89,7 +89,7 @@ describe('Login View', () => {
 
     const emailInput = screen.getByPlaceholderText(/name@company.com or username/i)
     const passwordInput = screen.getByPlaceholderText('••••••••••••')
-    const submitBtn = screen.getByRole('button', { name: /Sign In to Customer Workspace →/i })
+    const submitBtn = screen.getByRole('button', { name: /Sign In to (Control Hub|Customer Workspace) →/i })
 
     fireEvent.change(emailInput, { target: { value: 'secops@enterprise.com' } })
     fireEvent.change(passwordInput, { target: { value: 'SecretToken123!' } })

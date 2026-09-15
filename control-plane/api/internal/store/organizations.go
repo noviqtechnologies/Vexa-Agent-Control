@@ -54,7 +54,7 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 			id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
 			name TEXT NOT NULL DEFAULT 'Primary Organization',
 			slug TEXT NOT NULL DEFAULT 'default',
-			contact_email TEXT NOT NULL DEFAULT 'admin@agentcontrol.local',
+			contact_email TEXT NOT NULL DEFAULT '',
 			license_tier TEXT NOT NULL DEFAULT 'team',
 			license_key_jwt TEXT,
 			max_devices INT NOT NULL DEFAULT 50,
@@ -65,7 +65,7 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		);
 
 		INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', 'admin@agentcontrol.local', 'team', 50, 'active')
+		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 50, 'active')
 		ON CONFLICT (id) DO NOTHING;
 
 		UPDATE organizations

@@ -57,6 +57,10 @@ vi.mock('../api/client', async () => {
       getHeatmap: vi.fn(),
       listRecentAlerts: vi.fn(),
       getLicenseStatus: vi.fn().mockResolvedValue(null),
+      listVirtualKeys: vi.fn().mockResolvedValue({ virtual_keys: [] }),
+      listPolicies: vi.fn().mockResolvedValue([]),
+      getEffectiveSpendV2: vi.fn().mockResolvedValue({ organization_id: 'org-1', windows: [] }),
+      listSpendPoliciesV2: vi.fn().mockResolvedValue({ organization_id: 'org-1', policies: [] }),
     },
     subscribeAlerts: vi.fn(() => vi.fn()),
   }
@@ -239,7 +243,7 @@ describe('FleetOverview', () => {
 
     // Assert all 4 capability cards are rendered
     expect(screen.getByText('Device Governance')).toBeInTheDocument()
-    expect(screen.getByText('OTET & Seats')).toBeInTheDocument()
+    expect(screen.getByText('Ed25519 & PKCE')).toBeInTheDocument()
 
     expect(screen.getByText('Policy Hub')).toBeInTheDocument()
     expect(screen.getByText('DLP & Guardrails')).toBeInTheDocument()
@@ -291,5 +295,25 @@ describe('FleetOverview', () => {
     expect(screen.getByText(/Active Guardrails & 21 DLP Wire Rules/i)).toBeInTheDocument()
     expect(screen.getByText(/Universal AI Gateway & Key Custody/i)).toBeInTheDocument()
     expect(screen.getByText(/Spend Boundaries & Preflight Settlement/i)).toBeInTheDocument()
+  })
+
+  it('renders accurate zero metrics for fresh deployment with no virtual keys or spend', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+    vi.mocked(api.listVirtualKeys).mockResolvedValue({ virtual_keys: [] } as any)
+    vi.mocked(api.getEffectiveSpendV2).mockResolvedValue({ organization_id: 'org-1', windows: [] } as any)
+    vi.mocked(api.listSpendPoliciesV2).mockResolvedValue({ organization_id: 'org-1', policies: [{ policy_id: 'sp-1', status: 'PUBLISHED', limit_microcents: 10000000000 }] } as any)
+    vi.mocked(api.listPolicies).mockResolvedValue([{ id: 'pol-1', version: 1, is_active: true } as any])
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('0 Keys')).toBeInTheDocument()
+      expect(screen.getByText('$0.00')).toBeInTheDocument()
+      expect(screen.getByText('/ $100.00 Cap')).toBeInTheDocument()
+      expect(screen.getByText('1 Policy')).toBeInTheDocument()
+    })
   })
 })

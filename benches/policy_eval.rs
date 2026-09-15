@@ -73,6 +73,7 @@ fn make_policy(n: usize) -> CompiledPolicy {
         sequence_rules: vec![],
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     }
 }
 
@@ -119,6 +120,7 @@ fn make_policy_with_schema() -> CompiledPolicy {
         sequence_rules: vec![],
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     }
 }
 

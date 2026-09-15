@@ -211,7 +211,7 @@ export default function CoverageControlHealth() {
         ) : filteredWorkstations.length === 0 ? (
           <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No developer workstations found matching the criteria.</p>
-            <p style={{ fontSize: 13, marginTop: 4 }}>Deploy the Agent Control daemon (`agentcontrol enroll`) to observe developer coverage.</p>
+            <p style={{ fontSize: 13, marginTop: 4 }}>Deploy and authenticate the Agent Control workstation daemon (<code>agentcontrol login</code>) to observe developer coverage.</p>
           </div>
         ) : (
           <div className="table-wrap">

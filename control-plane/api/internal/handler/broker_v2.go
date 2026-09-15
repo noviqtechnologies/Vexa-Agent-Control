@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,8 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
@@ -24,6 +27,7 @@ type BrokerV2Handler struct {
 	SpendStore     *spend.Store
 	ProviderClient broker.ProviderClient
 	MasterKey      []byte
+	activeStreams  sync.Map
 }
 
 func NewBrokerV2Handler(st *store.Store, pc broker.ProviderClient, masterKey []byte, spendStore *spend.Store) *BrokerV2Handler {
@@ -441,6 +445,13 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 		llmMode = "central_enforce"
 	}
 
+	streamCtx, cancelStream := context.WithCancel(r.Context())
+	h.activeStreams.Store(reqID, cancelStream)
+	defer func() {
+		h.activeStreams.Delete(reqID)
+		cancelStream()
+	}()
+
 	// 0. Extract & Validate Scoped Virtual Key if present
 	virtualKeySecret := r.Header.Get("X-Virtual-Key")
 	if virtualKeySecret == "" {
@@ -597,7 +608,7 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.handleStreamingDispatch(w, r, tenantID, reqID, &req, apiKey, authResp, vk)
+	h.handleStreamingDispatch(w, r.WithContext(streamCtx), tenantID, reqID, &req, apiKey, authResp, vk)
 }
 
 func (h *BrokerV2Handler) handleStreamingDispatch(
@@ -772,4 +783,22 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 			OutputTokens:     outToks,
 		})
 	}
+}
+
+// CancelStream POST /api/v3/broker/llm-stream/{id}/cancel (Task 3.3, Task 3.9)
+func (h *BrokerV2Handler) CancelStream(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id != "" {
+		if cancelVal, ok := h.activeStreams.Load(id); ok {
+			if cancelFunc, ok := cancelVal.(context.CancelFunc); ok {
+				cancelFunc()
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":     "cancelled",
+		"request_id": id,
+	})
 }

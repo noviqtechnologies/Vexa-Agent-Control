@@ -720,6 +720,59 @@ select option {
   margin-bottom: 24px;
 }
 
+/* 7-column single row layout for Fleet Overview */
+.soc-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.soc-stats-grid .stat-tile {
+  padding: 14px 14px 12px 14px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.soc-stats-grid .stat-header-row {
+  margin-bottom: 6px;
+  gap: 4px;
+}
+
+.soc-stats-grid .stat-label {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.soc-stats-grid .stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.soc-stats-grid .stat-subtext {
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+
+.soc-stats-grid .soc-delta-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1300px) {
+  .soc-stats-grid {
+    grid-template-columns: repeat(7, minmax(130px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+}
+
 .stat-tile {
   padding: 20px;
   position: relative;

@@ -421,7 +421,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -445,7 +445,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -469,7 +469,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -489,7 +489,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -501,9 +501,9 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
 
                 if status.installed {
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
-                    status.proxy_configured = true;
-                    status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.proxy_configured = false;
+                    status.configured_base_url = None;
+                    status.compliance_state = "MCP_WRAPPED".to_string();
                 }
             }
         }
@@ -517,7 +517,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -531,7 +531,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -551,7 +551,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                     status.proxy_configured = true;
                     let base_url = format!("{}/v1", proxy_url.trim_end_matches('/'));
                     status.configured_base_url = Some(base_url);
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -565,7 +565,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -578,7 +578,7 @@ pub fn enforce_ide_target(name: &str, proxy_url: &str) -> Result<IdeConfigStatus
                     status.mcp_wrapped = check_mcp_config_wrapped(&path);
                     status.proxy_configured = true;
                     status.configured_base_url = Some(proxy_url.to_string());
-                    status.compliance_state = "COMPLIANT".to_string();
+                    status.compliance_state = "CONFIGURED".to_string();
                 }
             }
         }
@@ -627,7 +627,7 @@ mod tests {
         let updated = ensure_json_proxy_setting(
             &config_file,
             &["cursor.models.openaiBaseUrl"],
-            "http://127.0.0.1:8080/v1",
+            "http://127.0.0.1:18080/v1",
             Some(("cursor.models.apiKey", "dummy-key")),
         )
         .unwrap();
@@ -640,7 +640,7 @@ mod tests {
         let parsed: Value = serde_json::from_str(&content).unwrap();
         assert_eq!(
             parsed["cursor.models.openaiBaseUrl"],
-            "http://127.0.0.1:8080/v1"
+            "http://127.0.0.1:18080/v1"
         );
         assert_eq!(parsed["cursor.models.apiKey"], "dummy-key");
 
@@ -648,7 +648,7 @@ mod tests {
         let updated_second = ensure_json_proxy_setting(
             &config_file,
             &["cursor.models.openaiBaseUrl"],
-            "http://127.0.0.1:8080/v1",
+            "http://127.0.0.1:18080/v1",
             Some(("cursor.models.apiKey", "dummy-key")),
         )
         .unwrap();

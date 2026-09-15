@@ -8,6 +8,55 @@ use crate::proxy::db::EgressEvent;
 use crate::proxy::handler::ProxyState;
 use crate::proxy::session::SessionContext;
 
+pub fn is_blocked_ssrf_target(host: &str) -> bool {
+    let mut h = host.trim().to_lowercase();
+    if h.is_empty() {
+        return false;
+    }
+
+    // Strip port if present on IPv4 or hostname
+    if let Some((base, port)) = h.rsplit_once(':') {
+        if !base.contains(':') && port.chars().all(|c| c.is_ascii_digit()) {
+            h = base.to_string();
+        }
+    }
+
+    // Strip bracket notation for IPv6
+    if h.starts_with('[') {
+        if let Some(idx) = h.find(']') {
+            h = h[1..idx].to_string();
+        }
+    }
+
+    // Cloud metadata endpoints
+    if h == "169.254.169.254"
+        || h == "fd00:ec2::254"
+        || h == "metadata.google.internal"
+        || h == "metadata"
+        || h == "instance-data"
+    {
+        return true;
+    }
+    // Check link-local (169.254.0.0/16) and loopback bouncing
+    if let Ok(ip) = h.parse::<std::net::IpAddr>() {
+        match ip {
+            std::net::IpAddr::V4(v4) => {
+                if v4.is_link_local() || v4.is_loopback() {
+                    return true;
+                }
+            }
+            std::net::IpAddr::V6(v6) => {
+                if v6.is_loopback() {
+                    return true;
+                }
+            }
+        }
+    } else if h == "localhost" || h.ends_with(".localhost") {
+        return true;
+    }
+    false
+}
+
 pub async fn handle_egress(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
@@ -17,12 +66,33 @@ pub async fn handle_egress(
     let method = req.method().clone();
     let uri = req.uri().clone();
 
+    let target_host = uri
+        .authority()
+        .map(|a| a.host().to_string())
+        .unwrap_or_default();
+
+    // Non-relay SSRF defense (PRD §3.3)
+    if is_blocked_ssrf_target(&target_host) {
+        crate::logging::log_event(
+            crate::logging::Level::Warn,
+            "ssrf_target_blocked",
+            serde_json::json!({
+                "target_host": target_host,
+                "session_id": session.session_id,
+                "client_ip": _client_ip,
+            }),
+        );
+        return Ok(Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header("X-AgentControl-Block-Reason", "ssrf_protection")
+            .body(Full::new(Bytes::from(
+                "Vexa Agent Control Blocked: Target matches restricted cloud metadata or link-local SSRF address",
+            )))
+            .unwrap());
+    }
+
     // 1. CONNECT proxying
     if method == hyper::Method::CONNECT {
-        let target_host = uri
-            .authority()
-            .map(|a| a.host().to_string())
-            .unwrap_or_default();
         let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(443);
 
         // Tier 3: If host is an allowlisted LLM domain and CA manager is present, perform MITM decryption & spend tracking

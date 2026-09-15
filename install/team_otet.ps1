@@ -93,10 +93,10 @@ if (!$Version) {
         $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
         $Version = $ReleaseJson[0].tag_name
     } catch {
-        $Version = "v1.0.82"
+        $Version = "v1.0.83"
     }
     if (-not $Version) {
-        $Version = "v1.0.82"
+        $Version = "v1.0.83"
     }
 }
 
@@ -182,39 +182,25 @@ if ($LASTEXITCODE -ne 0) {
 $ShouldInstallService = (-not $NoService) -and ($InstallService -or $IsAdmin)
 
 if ($ShouldInstallService) {
-    Write-Host "[*] Step 2/3: Installing Persistent OS Sentry Service Daemon..." -ForegroundColor $ColorCyan
+    Write-Host "[*] Step 2/3: Installing Persistent Per-User Background Daemon..." -ForegroundColor $ColorCyan
     try {
-        # Sync user credentials to SYSTEM service profile if elevated
-        $SystemAgentControl = "C:\Windows\System32\config\systemprofile\.agentcontrol"
-        if (!(Test-Path $SystemAgentControl)) {
-            New-Item -ItemType Directory -Path $SystemAgentControl -Force -ErrorAction SilentlyContinue | Out-Null
-        }
-        if (Test-Path "$env:USERPROFILE\.agentcontrol") {
-            Copy-Item -Path "$env:USERPROFILE\.agentcontrol\*" -Destination $SystemAgentControl -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        [Environment]::SetEnvironmentVariable("AGENTCONTROL_HUB_URL", $HubUrl, "Machine")
-        [Environment]::SetEnvironmentVariable("DASHBOARD_API_URL", $HubUrl, "Machine")
-        if ($env:GATEWAY_SECRET -and $env:GATEWAY_SECRET -ne "local-dev-shared-secret-change-me") {
-            [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $env:GATEWAY_SECRET, "Machine")
-        } else {
-            [Environment]::SetEnvironmentVariable("GATEWAY_SECRET", $null, "Machine")
-        }
-
+        [Environment]::SetEnvironmentVariable("AGENTCONTROL_HUB_URL", $HubUrl, "User")
         & $FinalBinaryPath service install --hub-url $HubUrl
     } catch {
-        Write-Host "[!] Note: Sentry service installation failed: $_" -ForegroundColor $ColorYellow
+        Write-Host "[!] Note: Daemon service installation note: $_" -ForegroundColor $ColorYellow
     }
 } else {
-    Write-Host "[*] Step 2/3: Skipping system daemon installation (run in Administrator console or pass -InstallService to enable)." -ForegroundColor $ColorCyan
+    Write-Host "[*] Step 2/3: Skipping daemon installation (pass -InstallService to enable)." -ForegroundColor $ColorCyan
 }
 
-Write-Host "[*] Step 3/3: Auto-wrapping active IDE targets..." -ForegroundColor $ColorCyan
-& $FinalBinaryPath wrap --all
+Write-Host "[*] Step 3/3: Running diagnostic health verification..." -ForegroundColor $ColorCyan
+& $FinalBinaryPath doctor
 
 Write-Host "`n[+] Automated Enterprise Provisioning Completed!" -ForegroundColor $ColorGreen
 Write-Host "  - Version: $Version" -ForegroundColor $ColorGreen
 Write-Host "  - SHA-256: $ActualHash" -ForegroundColor $ColorGreen
-Write-Host "Get started by running:" -ForegroundColor $ColorGreen
-Write-Host "  agentcontrol protect" -ForegroundColor $ColorGreen
+Write-Host "Next steps:" -ForegroundColor $ColorGreen
+Write-Host "  agentcontrol status" -ForegroundColor $ColorGreen
+Write-Host "  agentcontrol connect codex" -ForegroundColor $ColorGreen
 Write-Host ""
 

@@ -1,5 +1,6 @@
 mod unit {
     mod audit_tests;
+    mod cli_tests;
     mod dashboard_html_test;
     mod firewall_tests;
     mod functional_matrix_tests;

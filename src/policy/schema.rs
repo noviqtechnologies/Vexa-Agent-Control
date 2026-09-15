@@ -123,6 +123,25 @@ pub struct PolicyFile {
 
     /// Optional safe mode enforcement toggle from centralized control plane.
     pub enforce_safe_mode: Option<bool>,
+
+    /// Optional policy metadata, including client attribution for spend management.
+    pub metadata: Option<PolicyMetadata>,
+}
+
+/// Policy metadata block including attribution tags (client_id, project_id, cost_center)
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+pub struct PolicyAttributionMetadata {
+    pub client_id: Option<String>,
+    pub project_id: Option<String>,
+    pub cost_center: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+pub struct PolicyMetadata {
+    pub client_id: Option<String>,
+    pub project_id: Option<String>,
+    pub cost_center: Option<String>,
+    pub attribution: Option<PolicyAttributionMetadata>,
 }
 
 /// LLM API configuration block.

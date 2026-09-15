@@ -51,6 +51,7 @@ fn test_tool_history_memory_bounding() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     });
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -111,6 +112,7 @@ fn test_cycle_detection_blocking() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     });
 
     let req = json!({
@@ -198,6 +200,7 @@ fn test_pause_interactive_fallback_in_non_tty() {
         llm: None,
         schema_drift: None,
         fail_closed: false,
+        attribution: None,
     });
 
     let req = json!({

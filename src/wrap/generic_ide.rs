@@ -58,20 +58,20 @@ pub fn wrap_generic(
                     .as_table_mut();
                 if let Some(set_m) = set_tbl {
                     if set_m.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
-                        != Some("http://127.0.0.1:8080/v1")
+                        != Some("http://127.0.0.1:18080/v1")
                     {
                         set_m.insert(
                             "OPENAI_BASE_URL".to_string(),
-                            toml::Value::String("http://127.0.0.1:8080/v1".to_string()),
+                            toml::Value::String("http://127.0.0.1:18080/v1".to_string()),
                         );
                         env_policy_updated = true;
                     }
                     if set_m.get("HTTP_PROXY").and_then(|v| v.as_str())
-                        != Some("http://127.0.0.1:8080")
+                        != Some("http://127.0.0.1:18080")
                     {
                         set_m.insert(
                             "HTTP_PROXY".to_string(),
-                            toml::Value::String("http://127.0.0.1:8080".to_string()),
+                            toml::Value::String("http://127.0.0.1:18080".to_string()),
                         );
                         env_policy_updated = true;
                     }
@@ -370,16 +370,22 @@ pub fn unwrap_generic(
         {
             if let Some(set_tbl) = sep.get_mut("set").and_then(|v| v.as_table_mut()) {
                 if set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:18080/v1")
+                    || set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:8080/v1")
                 {
                     set_tbl.remove("OPENAI_BASE_URL");
                 }
                 if set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:18080")
+                    || set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:8080")
                 {
                     set_tbl.remove("HTTP_PROXY");
                 }
                 if set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str())
+                    == Some("http://127.0.0.1:18080")
+                    || set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:8080")
                 {
                     set_tbl.remove("HTTPS_PROXY");
@@ -522,7 +528,7 @@ pub fn wrap_cursor_settings(dry_run: bool) -> Result<(), WrapError> {
             }
             if !dry_run {
                 let mut initial = serde_json::json!({
-                    "http.proxy": "http://127.0.0.1:8080",
+                    "http.proxy": "http://127.0.0.1:18080",
                     "cursor.general.disableHttp2": true
                 });
                 if has_centralized_openai {
@@ -558,7 +564,8 @@ pub fn wrap_cursor_settings(dry_run: bool) -> Result<(), WrapError> {
             .get("cursor.general.openaiApiKey")
             .and_then(|v| v.as_str());
 
-        let already_configured = current_proxy == Some("http://127.0.0.1:8080")
+        let already_configured = (current_proxy == Some("http://127.0.0.1:18080")
+            || current_proxy == Some("http://127.0.0.1:8080"))
             && current_h2 == Some(true)
             && (!has_centralized_openai || current_key == Some("sk-agentcontrol-managed"));
 
@@ -571,7 +578,7 @@ pub fn wrap_cursor_settings(dry_run: bool) -> Result<(), WrapError> {
         }
 
         let _ = backup::create_backup(&settings_path);
-        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:8080");
+        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:18080");
         settings["cursor.general.disableHttp2"] = serde_json::json!(true);
         if has_centralized_openai {
             settings["cursor.general.openaiApiKey"] = serde_json::json!("sk-agentcontrol-managed");
@@ -609,7 +616,7 @@ pub fn apply_centralized_cursor_config(has_openai_key: bool) -> Result<(), WrapE
         }
 
         let _ = backup::create_backup(&settings_path);
-        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:8080");
+        settings["http.proxy"] = serde_json::json!("http://127.0.0.1:18080");
         settings["cursor.general.disableHttp2"] = serde_json::json!(true);
 
         if has_openai_key {
@@ -646,8 +653,9 @@ pub fn unwrap_cursor_settings(force: bool) -> Result<(), WrapError> {
                 if let Ok(mut settings) = parsed {
                     if let Some(map) = settings.as_object_mut() {
                         let mut modified = false;
-                        if map.get("http.proxy").and_then(|v| v.as_str())
-                            == Some("http://127.0.0.1:8080")
+                        let proxy_val = map.get("http.proxy").and_then(|v| v.as_str());
+                        if proxy_val == Some("http://127.0.0.1:18080")
+                            || proxy_val == Some("http://127.0.0.1:8080")
                         {
                             map.remove("http.proxy");
                             modified = true;

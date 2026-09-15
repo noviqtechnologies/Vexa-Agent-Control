@@ -101,6 +101,23 @@ func main() {
 		log.Printf("schema initialization warning: %v", err)
 	}
 
+	// Bootstrap dedicated single-tenant Administrator from configuration
+	if cfg.AdminEmail != "" {
+		hash := ""
+		if cfg.AdminPassword != "" {
+			var err error
+			hash, err = handler.HashPassword(cfg.AdminPassword)
+			if err != nil {
+				log.Printf("failed to hash admin password: %v", err)
+			}
+		}
+		if err := db.BootstrapAdmin(ctx, cfg.OrganizationID, cfg.OrganizationName, cfg.AdminEmail, hash); err != nil {
+			log.Printf("admin bootstrap warning: %v", err)
+		} else {
+			log.Printf("Control Hub Admin bootstrapped: email=%s org=%s id=%s", cfg.AdminEmail, cfg.OrganizationName, cfg.OrganizationID)
+		}
+	}
+
 	// Initialize Spend v2 Store, Writer, and Sweeper (AR-3, AR-4)
 	spendStore := spend.NewStore(db.Pool())
 	if err := spendStore.EnsureSchema(ctx); err != nil {
@@ -186,6 +203,9 @@ func main() {
 	threatH := handler.NewThreatHandler(db)
 	policyH := handler.NewPolicyHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
 	rotationH := handler.NewRotationHandler(cfg.GatewayURL, cfg.PolicyReadSecret)
+	licenseIssuer, _ := license.NewIssuerFromEnv()
+	saasOpH := handler.NewSaaSOperatorHandler(db, licenseIssuer)
+	_ = saasOpH
 
 	authH := handler.NewAuthHandler(db, cfg)
 	authProviderH := handler.NewAuthProviderHandler(db)
@@ -228,17 +248,28 @@ func main() {
 	sessionH := handler.NewSessionHandler(spendStore, db)
 	coverageHealthH := handler.NewCoverageHealthHandler(deviceStore)
 	healthH := handler.NewHealthHandler(db)
+	pkceH := handler.NewPKCEOAuthHandler(db)
+
+	// OAuth PKCE Endpoints for Workstation Agent Login (agentcontrol login)
+	r.Get("/oauth/authorize", pkceH.Authorize)
+	r.Post("/oauth/token", pkceH.Token)
+	r.Post("/api/v2/auth/pkce/token", pkceH.Token)
+	r.Post("/api/v1/auth/token", pkceH.Token)
+	r.Get("/login", authH.HandleLoginView)
+	r.Post("/login", authH.Login)
 
 	legacyAuthCfg := middleware.LegacyAuthConfig{
 		LegacySingleTenantMode: true,
 		LegacyTenantID:         middleware.DefaultOrganizationID,
 	}
 
-	// 1. Enrollment Handlers
+	// 1. Enrollment Handlers & Device v2 Registration (PRD §FR-10.1, §FR-10.4)
 	r.Route("/api/v2/enrollment", func(r chi.Router) {
 		r.Post("/start", enrollmentV2H.StartEnrollment)
 		r.Post("/complete", enrollmentV2H.CompleteEnrollment)
 	})
+	r.Post("/api/v2/devices/enroll", deviceV2H.EnrollDeviceV2)
+	r.Post("/api/v2/devices/{id}/rotate-key", deviceV2H.RotateKey)
 
 	// 2. Admin Console v2 Handlers
 	r.Route("/api/v2/admin", func(r chi.Router) {
@@ -247,11 +278,20 @@ func main() {
 		r.Post("/enrollment-tokens", adminV2H.CreateEnrollmentToken)
 		r.Post("/devices/{device_id}/revoke", adminV2H.RevokeDevice)
 		r.Post("/devices/{id}/revoke", adminV2H.RevokeDevice)
+		r.Delete("/devices/{device_id}", adminV2H.DeleteDevice)
+		r.Delete("/devices/{id}", adminV2H.DeleteDevice)
 	})
 
-	// 3. Strict Device Control API
+	// Device v2 List & Revoke (Dashboard & Admin)
+	r.Route("/api/v2/devices", func(r chi.Router) {
+		r.Use(middleware.DashboardAuth())
+		r.Get("/", deviceV2H.ListDevicesV2)
+		r.Delete("/{id}", deviceV2H.RevokeDevice)
+	})
+
+	// 3. Strict Device Control API (Supports mTLS and Ed25519 Assertion Auth)
 	r.Route("/api/v2/device", func(r chi.Router) {
-		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
 		r.Get("/bootstrap", deviceV2H.GetBootstrap)
 		r.Post("/heartbeats", deviceV2H.SubmitHeartbeat)
 		r.Get("/status", deviceV2H.GetDeviceStatus)
@@ -263,19 +303,25 @@ func main() {
 		r.Get("/assignments", deviceV2H.ListDeviceAssignments)
 	})
 
-	// 4. Provider LLM Broker v2 & v3
+	// 4. Provider LLM Broker v2 & v3 (Supports mTLS and Ed25519 Assertion Auth)
 	r.Route("/api/v2/broker", func(r chi.Router) {
-		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
 		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 	})
 
 	r.Route("/api/v3/broker", func(r chi.Router) {
-		r.Use(middleware.StrictDeviceMTLS(db, cfg.IngressAuthSecret))
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
 		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
+		r.Post("/llm-stream/{id}/cancel", brokerV2H.CancelStream)
 	})
+
+	// Effective signed policy manifest & Telemetry v2 Ingestion / Audit Checkpoints
+	r.Get("/api/v2/policy/effective", effectivePolicyH.GetEffectiveSigned)
+	r.Post("/api/v2/telemetry/ingest", ingestH.PostTelemetryIngest)
+	r.Get("/api/v2/audit/checkpoints", ingestH.GetAuditCheckpoints)
 
 	r.Post("/api/v3/broker/dispatch", brokerV3H.Dispatch)
 
@@ -307,6 +353,7 @@ func main() {
 		r.Use(middleware.RequireOrganizationFeature(db, "group_policies"))
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
+		r.Post("/llm-stream/{id}/cancel", brokerV2H.CancelStream)
 		r.Get("/provider-keys/active", deviceV2H.GetActiveProviderKeys)
 		r.Post("/assignments/{id}/ack", deviceV2H.AcknowledgeAssignment)
 		r.Post("/verify-probe", deviceV2H.SubmitVerificationProbe)
@@ -377,13 +424,27 @@ func main() {
 		r.With(middleware.DashboardAuth()).Post("/setup-initial-password", authH.SetupInitialPassword)
 	})
 
+	// SaaS Operator / Control Hub Platform Super-Admin API
+	r.Route("/api/v1/operator", func(r chi.Router) {
+		r.Use(middleware.DashboardAuth())
+		r.Use(middleware.RequireSaaSOperator())
+		r.Get("/organizations", saasOpH.ListOrganizations)
+		r.Post("/organizations", saasOpH.CreateOrganization)
+		r.Get("/organizations/{id}", saasOpH.GetOrganization)
+		r.Put("/organizations/{id}", saasOpH.UpdateOrganization)
+		r.Put("/organizations/{id}/status", saasOpH.UpdateStatus)
+		r.Post("/organizations/{id}/renew-license", saasOpH.RenewLicense)
+		r.Post("/organizations/{id}/regenerate-bootstrap", saasOpH.RegenerateBootstrapToken)
+		r.Get("/stats", saasOpH.GetStats)
+	})
+
 	// Dashboard API
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
 
 		// Organization & License Management
-		r.Get("/organization", licenseH.GetOrganization)
-		r.Put("/organization", licenseH.UpdateOrganization)
+		r.With(middleware.RequireAdmin()).Get("/organization", licenseH.GetOrganization)
+		r.With(middleware.RequireAdmin()).Put("/organization", licenseH.UpdateOrganization)
 		r.Get("/license/status", licenseH.GetStatus)
 		r.With(middleware.RequireAdmin()).Post("/license/activate", licenseH.ActivateLicense)
 
@@ -419,6 +480,7 @@ func main() {
 		r.Get("/devices", deviceH.ListDevices)
 		r.Get("/devices/tamper-log", deviceH.ListTamperEvents)
 		r.Get("/devices/{id}", deviceH.GetDevice)
+		r.With(middleware.RequireAdmin()).Delete("/devices/{id}", deviceH.DeleteDevice)
 
 		// Admin-only fleet routes
 		r.Route("/fleet/mcp-servers", func(r chi.Router) {
@@ -442,12 +504,12 @@ func main() {
 		r.Post("/identity/rotate", rotationH.TriggerRotation)
 		
 		// Auth Providers
-		r.Get("/auth_providers", authProviderH.List)
-		r.Get("/auth_providers/{id}", authProviderH.Get)
+		r.With(middleware.RequireAdmin()).Get("/auth_providers", authProviderH.List)
+		r.With(middleware.RequireAdmin()).Get("/auth_providers/{id}", authProviderH.Get)
 		r.With(middleware.RequireAdmin()).Put("/auth_providers", authProviderH.Upsert)
 		
 		// Users
-		r.Get("/users", userH.List)
+		r.With(middleware.RequireAdmin()).Get("/users", userH.List)
 		r.With(middleware.RequireAdmin()).Post("/users", userH.Create)
 		r.Post("/users/{id}/password", userH.UpdatePassword)
 		r.Put("/users/{id}/password", userH.UpdatePassword)

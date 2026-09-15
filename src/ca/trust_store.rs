@@ -146,7 +146,7 @@ pub fn uninstall_ca_from_trust_store() -> Result<(), TrustStoreError> {
     #[cfg(target_os = "windows")]
     {
         let output = Command::new("certutil")
-            .args(["-delstore", "-user", "Root", CA_COMMON_NAME])
+            .args(["-f", "-delstore", "-user", "Root", CA_COMMON_NAME])
             .output()?;
 
         if !output.status.success() {

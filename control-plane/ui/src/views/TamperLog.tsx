@@ -40,7 +40,7 @@ export default function TamperLog() {
       <div className="page-header soc-page-header">
         <div>
           <h1>IDE Tamper & Drift Audit Log</h1>
-          <p>Immutable forensic record of configuration tampering, proxy bypass attempts, and automatic self-healing events across developer workstations.</p>
+          <p>Forensic record of configuration tampering, proxy bypass detections, and policy realignment events across developer workstations.</p>
         </div>
       </div>
 
@@ -48,7 +48,7 @@ export default function TamperLog() {
         <div className="soc-card-header">
           <div>
             <div className="card-title">Workstation Event Stream</div>
-            <div className="soc-card-subtitle">Real-time tamper detections and proxy lock integrity alerts</div>
+            <div className="soc-card-subtitle">Real-time anti-tamper drift detections and proxy lock integrity alerts</div>
           </div>
           <span className="soc-live-pill">FORENSIC LOG</span>
         </div>
@@ -58,7 +58,7 @@ export default function TamperLog() {
         ) : events.length === 0 ? (
           <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No configuration tampering or bypass events recorded.</p>
-            <p style={{ fontSize: 13, marginTop: 4 }}>Workstation Sentry Daemons are actively maintaining required proxy locks.</p>
+            <p style={{ fontSize: 13, marginTop: 4 }}>Workstations are actively aligned with required proxy and MCP policies.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -70,7 +70,7 @@ export default function TamperLog() {
                   <th>Target IDE</th>
                   <th>Incident Type</th>
                   <th>Forensic Details</th>
-                  <th>Self-Healed</th>
+                  <th>Realignment Status</th>
                   <th>Timestamp</th>
                 </tr>
               </thead>
@@ -87,7 +87,7 @@ export default function TamperLog() {
                     <td style={{ fontSize: 13, maxWidth: 350 }}>{e.tamper_details}</td>
                     <td>
                       {e.healed_successfully ? (
-                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>✔ Yes (&lt;500ms)</span>
+                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>✔ Realigned (&lt;500ms)</span>
                       ) : (
                         <span style={{ color: 'var(--danger)', fontWeight: 600 }}>✖ Blocked</span>
                       )}

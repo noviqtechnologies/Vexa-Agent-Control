@@ -139,3 +139,187 @@ pub struct SpendV2ReleaseResp {
     pub reservation_id: String,
     pub released_microcents: MoneyMicrocents,
 }
+
+/// 4-Tier Client Attribution Context for Agencies & Multi-Tenant Workspaces.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AttributionContext {
+    pub client_id: String,
+    pub project_id: String,
+    pub cost_center: String,
+}
+
+impl Default for AttributionContext {
+    fn default() -> Self {
+        Self {
+            client_id: "default".to_string(),
+            project_id: "default".to_string(),
+            cost_center: "default".to_string(),
+        }
+    }
+}
+
+impl AttributionContext {
+    /// Validates and normalizes slug (^[a-zA-Z0-9_\-\.]{1,64}$).
+    /// Replaces commas, quotes, spaces, and invalid chars with underscores to prevent CSV injection.
+    pub fn sanitize_slug(input: &str) -> String {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return "default".to_string();
+        }
+        let sanitized: String = trimmed
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' { c } else { '_' })
+            .take(64)
+            .collect();
+        if sanitized.is_empty() {
+            "default".to_string()
+        } else {
+            sanitized
+        }
+    }
+
+    pub fn new(client: &str, project: &str, cost_center: &str) -> Self {
+        Self {
+            client_id: Self::sanitize_slug(client),
+            project_id: Self::sanitize_slug(project),
+            cost_center: Self::sanitize_slug(cost_center),
+        }
+    }
+
+    /// Resolves attribution using 4-tier precedence:
+    /// Tier 1: HTTP Request Header (X-AgentControl-*, X-AgentWall-*)
+    /// Tier 2: Environment Variable (AGENTCONTROL_*)
+    /// Tier 3: GitOps Policy YAML metadata
+    /// Tier 4: Session Default / Fallback ("default")
+    ///
+    /// If central_tenant_lock is Some (and non-empty/non-default), client_id is locked to the central tenant.
+    pub fn resolve(
+        header_client: Option<&str>,
+        header_project: Option<&str>,
+        header_cost_center: Option<&str>,
+        policy_attribution: Option<&AttributionContext>,
+        central_tenant_lock: Option<&str>,
+    ) -> Self {
+        let client_id = header_client
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .or_else(|| std::env::var("AGENTCONTROL_CLIENT_ID").ok())
+            .or_else(|| policy_attribution.map(|p| p.client_id.clone()))
+            .unwrap_or_else(|| "default".to_string());
+
+        let project_id = header_project
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .or_else(|| std::env::var("AGENTCONTROL_PROJECT_ID").ok())
+            .or_else(|| policy_attribution.map(|p| p.project_id.clone()))
+            .unwrap_or_else(|| "default".to_string());
+
+        let cost_center = header_cost_center
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .or_else(|| std::env::var("AGENTCONTROL_COST_CENTER").ok())
+            .or_else(|| policy_attribution.map(|p| p.cost_center.clone()))
+            .unwrap_or_else(|| "default".to_string());
+
+        let mut attr = Self::new(&client_id, &project_id, &cost_center);
+
+        // Central Tenant Boundary Lock:
+        if let Some(lock) = central_tenant_lock {
+            let lock_slug = Self::sanitize_slug(lock);
+            if !lock_slug.is_empty() && lock_slug != "default" {
+                attr.client_id = lock_slug;
+            }
+        }
+
+        attr
+    }
+}
+
+/// Invoice-ready usage record for client attribution and finance billing export.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpendExportRecord {
+    pub timestamp: String,
+    pub request_id: String,
+    pub client_id: String,
+    pub project_id: String,
+    pub cost_center: String,
+    pub agent_id: String,
+    pub provider: String,
+    pub model: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub cost_cents: u64,
+    pub cost_usd: f64,
+    pub is_estimated: bool,
+}
+
+/// Filter options for spend export query.
+#[derive(Debug, Clone, Default)]
+pub struct SpendExportFilter {
+    pub client_id: Option<String>,
+    pub project_id: Option<String>,
+    pub start_timestamp: Option<i64>,
+    pub end_timestamp: Option<i64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_attribution_precedence_header_wins() {
+        let policy_attr = AttributionContext::new("policy_client", "policy_proj", "policy_cc");
+        let resolved = AttributionContext::resolve(
+            Some("hdr_client"),
+            Some("hdr_proj"),
+            Some("hdr_cc"),
+            Some(&policy_attr),
+            None,
+        );
+        assert_eq!(resolved.client_id, "hdr_client");
+        assert_eq!(resolved.project_id, "hdr_proj");
+        assert_eq!(resolved.cost_center, "hdr_cc");
+    }
+
+    #[test]
+    fn test_attribution_precedence_policy_over_fallback() {
+        let policy_attr = AttributionContext::new("policy_client", "policy_proj", "policy_cc");
+        let resolved = AttributionContext::resolve(None, None, None, Some(&policy_attr), None);
+        assert_eq!(resolved.client_id, "policy_client");
+        assert_eq!(resolved.project_id, "policy_proj");
+        assert_eq!(resolved.cost_center, "policy_cc");
+    }
+
+    #[test]
+    fn test_attribution_precedence_fallback() {
+        let resolved = AttributionContext::resolve(None, None, None, None, None);
+        assert_eq!(resolved.client_id, "default");
+        assert_eq!(resolved.project_id, "default");
+        assert_eq!(resolved.cost_center, "default");
+    }
+
+    #[test]
+    fn test_attribution_central_tenant_lock() {
+        let resolved = AttributionContext::resolve(
+            Some("rogue_client"),
+            Some("proj1"),
+            None,
+            None,
+            Some("locked_corp"),
+        );
+        assert_eq!(resolved.client_id, "locked_corp");
+        assert_eq!(resolved.project_id, "proj1");
+    }
+
+    #[test]
+    fn test_attribution_slug_sanitization() {
+        let dirty = "Client, Inc. / Dept #1 <script> @!%*";
+        let clean = AttributionContext::sanitize_slug(dirty);
+        assert!(!clean.contains(','));
+        assert!(!clean.contains('<'));
+        assert!(!clean.contains(' '));
+        assert!(clean.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'));
+    }
+}
+
