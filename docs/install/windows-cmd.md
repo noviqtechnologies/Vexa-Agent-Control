@@ -42,6 +42,7 @@ docker run -d ^
 :: Full-Stack Control Hub (Compose):
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
+copy .env.team.example .env
 docker compose -f docker-compose.team.yml up -d
 ```
 Access the Web Console at `http://localhost:3000`. Read the full [Docker Deployment Guide](../guides/docker-deployment.md).
@@ -50,28 +51,50 @@ Access the Web Console at `http://localhost:3000`. Read the full [Docker Deploym
 
 ## Starting Protection in CMD
 
-```cmd
-:: Start in active protection mode:
-agentcontrol.exe protect
+Launch the local security gateway on `127.0.0.1:18080`:
 
-:: Or start in shadow/observation mode:
-agentcontrol.exe protect --shadow
+```cmd
+agentcontrol.exe start
 ```
 
 ---
 
-## Running Verification
+## Connecting Coding Assistants via CMD
 
 In a second CMD prompt window:
 
 ```cmd
-agentcontrol.exe verify
+agentcontrol.exe connect codex
+agentcontrol.exe connect claude
+agentcontrol.exe connect vscode-continue
+agentcontrol.exe connect cursor
 ```
 
 ---
 
-## Clean Uninstallation from CMD
+## Running Verification & Status
 
+```cmd
+agentcontrol.exe doctor
+agentcontrol.exe status
+```
+
+Open the Local Developer Dashboard in your browser:
+```text
+http://127.0.0.1:18080
+```
+
+---
+
+## Disconnecting & Uninstallation from CMD
+
+To disconnect an assistant:
+```cmd
+agentcontrol.exe disconnect codex
+agentcontrol.exe disconnect claude
+```
+
+To cleanly uninstall:
 ```cmd
 powershell.exe -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex"
 ```

@@ -137,6 +137,17 @@ impl BrokerClient {
     }
 
     /// Helper to resolve device assertion and bearer authorization headers.
+    ///
+    /// Resolution order (most-to-least preferred):
+    /// 1. Persisted device token (from enrollment)
+    /// 2. Ed25519 device assertion JWT (from identity key)
+    /// 3. `GATEWAY_SECRET` environment variable (shared-secret for containerised gateways)
+    /// 4. `AGENTCONTROL_ADMIN_TOKEN` environment variable (legacy / admin fallback)
+    ///
+    /// Without this fallback chain the gateway would send an empty Bearer token to the
+    /// hub when no device identity is present, causing the hub's `GatewayAuth` middleware
+    /// to return `403 invalid gateway token`, which in turn surfaces to clients as
+    /// "stream disconnected before completion: stream closed before response.completed".
     fn auth_headers(&self) -> (Option<String>, String) {
         let assertion = crate::identity::device::DeviceIdentity::load_or_create()
             .ok()
@@ -144,6 +155,14 @@ impl BrokerClient {
 
         let auth_token = crate::identity::device::load_device_token()
             .or_else(|| assertion.clone())
+            // Fallback 1: shared gateway secret (set via GATEWAY_SECRET env in Docker / systemd)
+            .or_else(|| std::env::var("GATEWAY_SECRET").ok().filter(|s| !s.is_empty()))
+            // Fallback 2: admin token (legacy / single-binary deployments)
+            .or_else(|| {
+                std::env::var("AGENTCONTROL_ADMIN_TOKEN")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+            })
             .unwrap_or_default();
 
         (assertion, auth_token)

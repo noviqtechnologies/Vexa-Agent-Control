@@ -116,8 +116,8 @@ pub async fn fetch_active_provider_keys(
                 .map_err(|e| format!("Failed to parse active provider keys JSON: {}", e))?;
             Ok(Some(payload))
         }
-        Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
-            // Try gateway-broker fallback
+        Ok(resp) => {
+            // Try gateway-broker fallback on any non-2xx status (e.g. 401/403/404)
             let fb_url = format!("{}/api/v3/gateway-broker/provider-keys/active", clean_base);
             let mut fb_req = client.get(&fb_url);
             if let Some(ref tok) = device_token {
@@ -131,12 +131,11 @@ pub async fn fetch_active_provider_keys(
                     return Ok(Some(payload));
                 }
             }
-            Ok(None)
+            Err(format!(
+                "HTTP {} fetching active provider keys",
+                resp.status()
+            ))
         }
-        Ok(resp) => Err(format!(
-            "HTTP {} fetching active provider keys",
-            resp.status()
-        )),
         Err(e) => Err(format!("Failed to connect to Control Hub: {}", e)),
     }
 }

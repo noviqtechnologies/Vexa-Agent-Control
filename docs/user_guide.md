@@ -10,7 +10,7 @@
 1. [Overview & Security Boundary](#1-overview--security-boundary)
 2. [Operating Profile Selection](#2-operating-profile-selection)
 3. [Master Capabilities Matrix](#3-master-capabilities-matrix)
-4. [Workstation Quickstart & Single-Command Protection](#4-workstation-quickstart--single-command-protection)
+4. [Workstation Quickstart (Standalone Developer)](#4-workstation-quickstart-standalone-developer)
 5. [Multi-IDE Integration & File-Lock Management](#5-multi-ide-integration--file-lock-management)
 6. [Hardware PKI Enrollment & OS Sentry Service](#6-hardware-pki-enrollment--os-sentry-service)
 7. [Policy Configuration & Automated Rule Synthesis](#7-policy-configuration--automated-rule-synthesis)
@@ -131,92 +131,122 @@ Agent Control adapts to your infrastructure across three operational deployment 
 
 ---
 
-## 4. Workstation Quickstart & Zero-Touch Onboarding
+## 4. Workstation Quickstart (Standalone Developer)
 
-The recommended onboarding workflow across all platforms is **Zero-Touch Onboarding** via `agentcontrol login` and `agentcontrol connect`.
+This quickstart is designed for individual software developers evaluating Vexa Agent Control on their local workstation. **Zero Docker, zero external databases, and zero Control Hub required** — the entire security gateway, DLP engine, prompt injection shield, and developer dashboard run locally from a single standalone binary.
 
 ### Step 1: Install the Agent Control Binary
 
 * **macOS / Linux / WSL (Bash / Zsh):**
   ```bash
   curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
+  export PATH="$HOME/.local/bin:$PATH"
+  agentcontrol --version
   ```
 
 * **Windows (PowerShell):**
   ```powershell
   irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
+  agentcontrol.exe --version
   ```
 
-* **Windows (Command Prompt):**
+* **Windows (Command Prompt - CMD):**
   ```cmd
-  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File install.ps1
+  curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o "%TEMP%\install.ps1" && powershell.exe -ExecutionPolicy Bypass -File "%TEMP%\install.ps1" && del "%TEMP%\install.ps1"
+  set PATH=%USERPROFILE%\.local\bin;%PATH%
+  agentcontrol.exe --version
   ```
 
+### Step 2: Start the Local Security Gateway (`agentcontrol start`)
 
-### Step 2: Authenticate via Browser PKCE OAuth
-
-Authenticate your workstation with your organization's Control Hub:
+Launch the local security gateway and proxy daemon on your workstation:
 
 ```bash
-# Interactive browser OAuth 2.0 PKCE login:
-agentcontrol login
-
-# Headless / SSH server login:
-agentcontrol login --no-browser
+agentcontrol start
 ```
 
-**What `agentcontrol login` performs automatically:**
-1. 🔐 **Identity Verification via Configured Auth Providers:** Opens your default browser to your organization's Control Hub (`/oauth/authorize`). If you do not have an active session, you are prompted to sign in using your organization's configured Auth Provider (Local email/password, Google Workspace SSO, or Microsoft Entra ID). If already signed into the Hub, enrollment completes instantly in one click.
-2. 🏢 **Single-Tenant Organization Binding:** The workstation automatically registers into your organization's Primary Organization and binds to your verified employee email address (`user_id`).
-3. 🔑 **Hardware/OS Keypair Generation:** Generates an Ed25519 device keypair locally; the private key is stored securely in your OS Keyring (or `0600` token file on headless Linux) and never transmitted to the cloud.
-4. 📡 **Public Key Registration:** Registers the public key with the Control Hub.
-5. ⚙️ **Per-User Background Service:** Installs and starts the per-user background agent (`VexaAgentControl`) listening on `127.0.0.1:18080` (zero administrative elevation required across Windows, macOS, and Linux).
+**What occurs automatically:**
+1. 🔒 **Local Bearer Token:** Automatically generates a persistent, high-entropy bearer token at `~/.agentcontrol/local.token` (restricted with `0600` / Windows User ACL).
+2. 🚀 **Loopback Socket:** Listens on `127.0.0.1:18080` (with dynamic fallback range `18080..=18090`).
+3. 💾 **Local Audit Store:** Commits all telemetry to `~/.agentcontrol/events.db` (SQLite WAL mode).
+4. 🌐 **Local Web Console:** Serves the embedded **Local Developer Dashboard** at `http://127.0.0.1:18080`.
 
-> [!TIP]
-> **Headless Environments & Automated Fleet Deployment:**
-> - For remote SSH servers without a desktop browser, use `agentcontrol login --no-browser` to print the authorization URL directly to the terminal.
-> - For automated fleet deployments (MDM, Intune, Jamf, Ansible, or CI/CD pipelines), use the non-interactive token flow: `agentcontrol enroll --token <OTET> --hub <URL>`.
+*(To register as a persistent background user service across reboots, run `agentcontrol service install`).*
 
-### Step 3: Connect Your Coding Assistants
+### Step 3: Connect Your Coding Assistants (`agentcontrol connect <target>`)
 
-Connect target AI assistants with scoped target connection:
+In a new terminal window, connect your local AI coding assistants:
 
 ```bash
-# Connect OpenAI Codex CLI (Mode B: Local proxy + MCP stdio-proxy):
+# Connect OpenAI Codex CLI:
 agentcontrol connect codex
 
-# Connect Claude Desktop (MCP stdio-proxy sandboxing):
+# Connect Anthropic Claude Desktop:
 agentcontrol connect claude
 
-# Connect VS Code Continue extension (Mode A: Cloud-direct with scoped virtual key):
-agentcontrol connect vscode-continue --mode cloud-direct
+# Connect VS Code Continue extension:
+agentcontrol connect vscode-continue
+
+# Connect Cursor:
+agentcontrol connect cursor
 ```
 
 **What `agentcontrol connect` performs automatically:**
-1. 🔍 **Discovers & Verifies Version:** Checks client version against pinned supported ranges.
-2. 🔒 **Creates Pristine Baseline Backup:** Backs up original configuration to `<config>.baseline.bak`.
-3. 📝 **Injects Scoped Governance:** Injects loopback routing (`http://127.0.0.1:18080/v1`) or wraps MCP servers with `agentcontrol stdio-proxy -- <command>`.
-4. 📜 **Writes Ownership Manifest:** Records pre/post SHA-256 file hashes and injected keys in `~/.agentcontrol/manifests/<target>.manifest.json` for non-destructive reversal.
+1. 🔍 **Discovers & Verifies Version:** Checks client version against supported ranges.
+2. 🔒 **Creates Baseline Backup:** Backs up original config to `<config>.baseline.bak`.
+3. 📝 **Injects Local Governance:** Injects loopback routing (`http://127.0.0.1:18080/v1`) using the local token, or wraps MCP servers with `agentcontrol stdio-proxy -- <command>`.
+4. 📜 **Writes Ownership Manifest:** Records pre/post SHA-256 file hashes and injected keys in `~/.agentcontrol/manifests/<target>.manifest.json` for risk-free reversal.
 5. ⚡ **Synthesizes Verification Probe:** Sends a synthetic 1-token loopback probe to assert routing.
 
-### Step 4: Run Diagnostic Health Suite
+### Step 4: Experience Live Governance in the Local Developer Dashboard (`http://127.0.0.1:18080`)
 
-Verify system integrity, auth status, background daemon, and target drift:
+Open the embedded **Local Developer Dashboard** in your web browser:
+
+```text
+http://127.0.0.1:18080
+```
+
+**The Developer Experience in the Local Dashboard:**
+1. **Overview & Security Posture:** Check your real-time security score, active connected clients, loopback latency, and system health.
+2. **Real-Time Activity Stream:** Send a prompt or tool call from your connected coding assistant (Codex, Claude, Cursor, Continue) and watch the intercepted LLM stream and tool calls populate via live SSE events.
+3. **Live Detections & Parameter DLP:** Observe automatic redaction of credentials (`[REDACTED:API_KEY]`, `[REDACTED:CONNECTION_STRING]`) and prompt injection shield triggers.
+4. **Token Economics & Semantic Cache:** Monitor real-time token spend, budget burn-down, and cache hits.
+5. **Live Policy Wizard:** Interactively customize safe-mode tool permissions and synthesize custom policies.
+
+Inspect verified target capabilities and freshness tiers from your terminal:
 
 ```bash
-# Run comprehensive diagnostic checks:
-agentcontrol doctor
-
 # View multi-state capability status and freshness tiers:
 agentcontrol status
 ```
 
-**Diagnostic Exit Code Contract:**
-* `0`: All systems fully healthy (`PASS`).
-* `1`: Critical failure (auth missing, daemon dead, gateway unreachable).
-* `2`: Degraded / Warning (target drift, unverified client, `BYPASS_POSSIBLE`).
+```text
+Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+```
 
-### Step 5: Clean Non-Destructive Reversal Anytime
+### Step 5: Run Diagnostic Health Suite (`agentcontrol doctor`)
+
+Verify system integrity, local auth token, background daemon, and target drift:
+
+```bash
+# Run comprehensive diagnostic checks:
+agentcontrol doctor
+```
+
+```text
+✔ Binary Integrity:          Pass (v1.0.83)
+✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
+✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
+✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
+✔ Target Configuration:      Pass (codex: verified, claude: verified)
+✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
+
+Overall Health: HEALTHY (Exit Code 0)
+```
+
+### Step 6: Clean Non-Destructive Reversal Anytime (`agentcontrol disconnect <target>`)
 
 To cleanly restore target configurations without erasing custom developer settings:
 
@@ -224,6 +254,8 @@ To cleanly restore target configurations without erasing custom developer settin
 # Revert specific connected target:
 agentcontrol disconnect codex
 agentcontrol disconnect claude
+agentcontrol disconnect vscode-continue
+agentcontrol disconnect cursor
 
 # Diagnose and automatically repair configuration drift:
 agentcontrol repair

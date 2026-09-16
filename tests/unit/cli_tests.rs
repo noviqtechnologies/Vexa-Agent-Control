@@ -163,7 +163,7 @@ fn test_cli_port_18080_standardization() {
 #[test]
 fn test_status_report_serialization_and_disclosures() {
     let report = StatusReport {
-        version: "1.0.83".to_string(),
+        version: "1.0.84".to_string(),
         timestamp: "2026-09-14T00:00:00Z".to_string(),
         targets: vec![TargetStatusDetails {
             target: "Claude Desktop".to_string(),
@@ -196,7 +196,7 @@ fn test_status_report_serialization_and_disclosures() {
     assert!(serialized.contains("Native shell execution (bash/git) is UNGOVERNED"));
 
     let deserialized: StatusReport = serde_json::from_str(&serialized).expect("StatusReport deserialization failed");
-    assert_eq!(deserialized.version, "1.0.83");
+    assert_eq!(deserialized.version, "1.0.84");
     assert_eq!(deserialized.targets.len(), 1);
     assert_eq!(deserialized.targets[0].wrapped_servers, 2);
     assert_eq!(deserialized.global_disclosures.len(), 3);

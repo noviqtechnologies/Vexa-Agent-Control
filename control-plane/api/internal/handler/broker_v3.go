@@ -100,8 +100,10 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 	if vk != nil {
 		if len(vk.AllowedModels) > 0 {
 			modelAllowed := false
+			modelLower := strings.ToLower(req.Model)
 			for _, m := range vk.AllowedModels {
-				if strings.EqualFold(m, req.Model) || m == "*" {
+				mLower := strings.ToLower(m)
+				if mLower == "*" || mLower == modelLower || (strings.HasSuffix(mLower, "*") && strings.HasPrefix(modelLower, strings.TrimSuffix(mLower, "*"))) {
 					modelAllowed = true
 					break
 				}

@@ -1,6 +1,6 @@
 # 10-Minute Developer Quickstart
 
-This tutorial takes you from a clean machine to an authenticated workstation sentry with one connected AI coding assistant, live diagnostic health verification, and a proven non-destructive reversal path.
+This tutorial takes you from a clean machine to a fully protected local workstation sentry with connected AI coding assistants, real-time developer dashboard visibility, and a proven non-destructive reversal path. **Zero Docker, zero external databases, and zero Control Hub required.**
 
 ---
 
@@ -31,7 +31,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ### Step 1: Install `agentcontrol` Binary
 
-- **Goal:** Download and install the standalone release binary to `~/.local/bin` (or `%USERPROFILE%\.local\bin`).
+- **Goal:** Download and install the standalone release binary to `~/.local/bin` (or `%USERPROFILE%\.local\bin` on Windows).
 - **Run:**
   - *macOS / Linux / WSL (Bash / Zsh):*
     ```bash
@@ -50,51 +50,54 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.82` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.83` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
 
 ---
 
-### Step 2: Authenticate via Browser PKCE OAuth
+### Step 2: Start Local Gateway Daemon (`agentcontrol start`)
 
-- **Goal:** Enroll workstation, generate local Ed25519 keypair, and start per-user background agent.
+- **Goal:** Start the local security gateway and proxy daemon on `127.0.0.1:18080`.
 - **Run:**
   ```bash
-  agentcontrol login
+  agentcontrol start
   ```
-  *(On headless Linux servers or CI without a browser, run: `agentcontrol login --no-browser`)*
+  *(To register as a persistent per-user service across reboots, run `agentcontrol service install`).*
 - **Expected Result:**
-  - Browser opens to the secure OAuth login page.
-  - Sentry authenticates and stores private key in your OS Keyring (DPAPI / Keychain / `0600` token file).
-  - Background daemon starts on `127.0.0.1:18080`.
-- **If it fails:** Check network connectivity to `app.vexasec.io`.
-- **What changes:** Device credentials stored in secure store; background daemon registered for autostart on login.
-- **Undo:** Run `agentcontrol logout`.
+  - Gateway starts listening on `127.0.0.1:18080`.
+  - Local high-entropy token generated in `~/.agentcontrol/local.token` (`vx-local-...`).
+  - Embedded SQLite audit store initialized at `~/.agentcontrol/events.db` (WAL mode).
+  - Embedded Local Developer Dashboard available at `http://127.0.0.1:18080`.
+- **If it fails:** Ensure port 18080 is free or check fallback port in `~/.agentcontrol/daemon.port`.
+- **What changes:** Local token and SQLite audit database initialized; gateway process active.
+- **Undo:** Stop the daemon (`Ctrl+C` or `agentcontrol service uninstall`).
 
 ---
 
-### Step 3: Connect Your AI Coding Assistant
+### Step 3: Connect Your AI Coding Assistants (`agentcontrol connect <target>`)
 
-- **Goal:** Atomically configure target assistant to route completions and MCP tools through Agent Control with baseline backup and ownership manifest.
+- **Goal:** Configure target assistants to route completions and MCP tools through Agent Control with baseline backups and ownership manifests.
 - **Run:**
-  - *For OpenAI Codex CLI:*
-    ```bash
-    agentcontrol connect codex
-    ```
-  - *For Claude Desktop:*
-    ```bash
-    agentcontrol connect claude
-    ```
-  - *For VS Code Continue Extension:*
-    ```bash
-    agentcontrol connect vscode-continue --mode cloud-direct
-    ```
+  In a new terminal window:
+  ```bash
+  # For OpenAI Codex CLI:
+  agentcontrol connect codex
+
+  # For Claude Desktop:
+  agentcontrol connect claude
+
+  # For VS Code Continue Extension:
+  agentcontrol connect vscode-continue
+
+  # For Cursor:
+  agentcontrol connect cursor
+  ```
 - **Expected Result:**
   - Pristine baseline backup created: `<config>.baseline.bak`.
   - Ownership manifest created: `~/.agentcontrol/manifests/<target>.manifest.json`.
-  - Injected loopback routing (`127.0.0.1:18080`) or MCP `agentcontrol stdio-proxy` child wrapper.
+  - Injected loopback routing (`127.0.0.1:18080`) using local token or child MCP `agentcontrol stdio-proxy` wrapper.
   - Synthetic 1-token loopback probe verifies communication.
 - **If it fails:** Check if assistant is installed or pinned version matches supported range (`agentcontrol doctor`).
 - **What changes:** Target config updated; ownership manifest recorded.
@@ -102,46 +105,53 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ---
 
-### Step 4: Run Diagnostic Health Suite
+### Step 4: Experience Live Protection in the Local Developer Dashboard (`http://127.0.0.1:18080`)
 
-- **Goal:** Verify complete workstation health, background daemon, target configurations, and security invariants.
+- **Goal:** Experience real-time governance, parameter DLP, and token telemetry in the embedded Local Developer Dashboard as tools execute.
 - **Run:**
-  ```bash
-  agentcontrol doctor
-  agentcontrol status
-  ```
-- **Expected Result:**
-  ```text
-  [PASS] Binary integrity & architecture verified
-  [PASS] Authentication state: ENROLLED (OS_KEYRING)
-  [PASS] Background daemon: RUNNING (127.0.0.1:18080, PID 14208)
-  [PASS] Gateway latency: 24ms RTT (gateway.vexa.ai)
-  [PASS] Target governance: codex CONFIGURED, PROBE_VERIFIED
-  [PASS] Security invariants: No Root CA detected; No plaintext keys
-  ```
-- **If it fails:** Review diagnostic output for actionable error codes (`AUTH_REQUIRED`, `PORT_UNAVAILABLE`, etc.) and run `agentcontrol repair`.
-- **What changes:** None (diagnostic inspection).
-- **Undo:** Not applicable.
-
----
-
-### Step 5: Test with Real AI Completions & MCP Tools
-
-- **Goal:** Confirm real tool calls and completions flow through Vexa with parameter DLP and FinOps governance.
-- **Run:**
-  1. Restart your AI client (e.g., Codex or Claude Desktop) so it reloads its configuration.
-  2. Ask your assistant to perform a task or run a tool call.
-  3. Inspect active status and freshness tiers:
+  1. Open the Local Developer Dashboard in your browser: `http://127.0.0.1:18080`.
+  2. Ask your connected coding assistant (e.g., Codex or Claude Desktop) to perform a coding task or run a tool call.
+  3. Watch real-time SSE telemetry in the **Activity Stream**, inspect blocked prompt injections or redacted secrets in **Detections & DLP**, and check **Token Economics & Cache**.
+  4. Inspect active status and freshness tiers from your terminal:
      ```bash
      agentcontrol status
      ```
-- **Expected Result:** Target shows `TRAFFIC_VERIFIED` with freshness tier `ACTIVE_FRESH`.
-- **What changes:** Real tool and LLM telemetry logged to `~/.agentcontrol/audit.jsonl`.
+- **Expected Result:**
+  ```text
+  Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+  Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+  Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+  ```
+- **What changes:** Telemetry streamed live to dashboard and persisted in `~/.agentcontrol/events.db`.
 - **Undo:** Not applicable.
 
 ---
 
-### Step 6: Non-Destructive Disconnect & Revert Anytime
+### Step 5: Run Diagnostic Health Suite (`agentcontrol doctor`)
+
+- **Goal:** Verify complete workstation health, background daemon, target configurations, and local security invariants.
+- **Run:**
+  ```bash
+  agentcontrol doctor
+  ```
+- **Expected Result:**
+  ```text
+  ✔ Binary Integrity:          Pass (v1.0.83)
+  ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
+  ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
+  ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
+  ✔ Target Configuration:      Pass (codex: verified, claude: verified)
+  ✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
+
+  Overall Health: HEALTHY (Exit Code 0)
+  ```
+- **If it fails:** Review diagnostic output for actionable error codes and run `agentcontrol repair`.
+- **What changes:** None (read-only diagnostic inspection).
+- **Undo:** Not applicable.
+
+---
+
+### Step 6: Non-Destructive Disconnect & Revert Anytime (`agentcontrol disconnect <target>`)
 
 - **Goal:** Safely restore target configurations from ownership manifests without erasing custom user settings.
 - **Run:**
@@ -149,6 +159,8 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
   # Restore specific assistant configuration:
   agentcontrol disconnect codex
   agentcontrol disconnect claude
+  agentcontrol disconnect vscode-continue
+  agentcontrol disconnect cursor
 
   # Diagnose and repair configuration drift without losing settings:
   agentcontrol repair
@@ -165,6 +177,6 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 ## Next Steps
 
 - [User Guide](user_guide.md) — Master operational manual for developer workstations and enterprise fleets.
-- [Docker Deployment Guide](guides/docker-deployment.md) — Deploy standalone gateway or full stack via Docker / Docker Compose.
+- [Workstation Guide](guides/workstation.md) — 4-stage lifecycle: Observe (Shadow Mode) → Validate → Enforce → Restore.
 - [Custom Agent HTTP Guide](guides/custom-agent-http.md) — Route LangChain, LlamaIndex, or CrewAI agents.
 - [Troubleshooting & Doctor Guide](guides/troubleshooting_doctor.md) — Deep dive into diagnostic exit codes and recovery workflows.

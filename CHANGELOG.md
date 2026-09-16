@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.84] - 2026-09-16
+
+### Added
+- **Standalone Workstation Quickstart & Zero-Cloud Journey:** Refactored developer onboarding across all documentation (`README.md`, `user_guide.md`, `quickstart.md`, and platform installation guides) to provide zero-cloud, zero-Docker local evaluation with autonomous `local.token` generation (`~/.agentcontrol/local.token`) and embedded local developer dashboard (`http://127.0.0.1:18080`).
+- **Windows Background Sentry Hardening:** Enhanced `install_windows_service` in `src/service/windows.rs` with hidden-window execution (`-WindowStyle Hidden`), reliable multi-instance scheduled task settings, and robust daemon process verification.
+- **Virtual Key Scoping & Wildcard Model Matching:** Enhanced `LocalKeyCache` in `src/proxy/local_key_cache.rs` with case-insensitive model scoping, wildcard prefix validation (`m*`), and improved fallback token handling.
+- **Broker Client & Remote Key Auth Resilience:** Added robust fallback token resolution in `src/proxy/broker_client.rs` and `src/policy/remote_keys.rs` prioritizing assertion headers, `GATEWAY_SECRET`, and `AGENTCONTROL_ADMIN_TOKEN`.
+- **Multi-OS User Guides & Docker Quickstart:** Updated cross-platform install guides (Windows PowerShell, Windows CMD, macOS, Linux, WSL2) and Docker Quickstart with explicit copy-paste commands and `.env` initialization.
+
+---
+
 ## [1.0.83] - 2026-09-15
 
 ### Added
@@ -97,7 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.83...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.84...HEAD
+[1.0.84]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.83...v1.0.84
 [1.0.83]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...v1.0.83
 [1.0.82]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.81...v1.0.82
 [1.0.81]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.80...v1.0.81

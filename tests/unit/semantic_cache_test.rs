@@ -550,7 +550,7 @@ fn test_canonical_context_key_isolation() {
 
     // 4. Policy version change isolation
     let mut diff_policy = base_ctx.clone();
-    diff_policy.policy_version = "1.0.83".to_string();
+    diff_policy.policy_version = "1.0.84".to_string();
     assert_ne!(
         base_key,
         diff_policy.compute_exact_key(),

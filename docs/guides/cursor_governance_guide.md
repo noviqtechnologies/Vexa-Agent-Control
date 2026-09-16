@@ -39,47 +39,40 @@ Cursor Desktop communicates across two distinct pathways:
 
 ---
 
-## 1-Command Protection (`agentcontrol protect`)
+## Connecting Cursor (`agentcontrol connect cursor`)
 
-To automatically configure Cursor Desktop and start the security gateway:
+To connect Cursor Desktop and configure the local security gateway:
 
 ```bash
-agentcontrol protect
+agentcontrol connect cursor
 ```
 
-### What `agentcontrol protect` does automatically:
-1. **Local Root CA Generation**: Generates an isolated ECDSA P-256 Root CA in `~/.agentcontrol/ca/`.
-2. **OS Trust Store Registration**: Installs the CA in the **Current User** trust store (`certutil -user "Root"` on Windows / `login.keychain-db` on macOS) without requiring Administrator/sudo elevation.
-3. **Cursor Settings Configuration**: Atomically updates Cursor's `User/settings.json`:
+### What `agentcontrol connect cursor` does automatically:
+1. **Safety Backup**: Creates an atomic baseline backup of Cursor's configuration.
+2. **Cursor Settings Configuration**: Atomically updates Cursor's `User/settings.json` (or `%APPDATA%\Cursor\User\settings.json` on Windows):
    ```json
    {
-     "http.proxy": "http://127.0.0.1:8080",
+     "http.proxy": "http://127.0.0.1:18080",
      "cursor.general.disableHttp2": true
    }
    ```
-4. **Node Runtime Trust**: Sets `NODE_EXTRA_CA_CERTS` so Cursor's internal Node.js extension processes trust the gateway.
-5. **Gateway Daemon**: Starts the local policy enforcement gateway on `127.0.0.1:8080`.
+3. **MCP Tool Wrapping**: Wraps MCP servers in `.cursor/mcp.json` with `agentcontrol stdio-proxy`.
+4. **Ownership Manifest**: Records all mutations in `~/.agentcontrol/manifests/cursor.manifest.json`.
 
 ---
 
 ## Verification & Monitoring
 
-### 1. Check Local CA & Proxy Status
+### 1. Check Status & Doctor
 ```bash
-agentcontrol ca status
-```
-*Expected Output:*
-```
-Local CA Status:
-  Storage Directory: C:\Users\<user>\.agentcontrol\ca
-  CA Files Exist:    YES
-  OS Trust Store:    INSTALLED & TRUSTED
+agentcontrol doctor
+agentcontrol status
 ```
 
-### 2. Verify Live Traffic & Token Counts
-Open Cursor, initiate a Chat prompt or inline completion, and monitor terminal logs:
+### 2. Verify Live Traffic & Telemetry in Local Dashboard
+Open the Local Developer Dashboard at `http://127.0.0.1:18080` or monitor terminal status:
 ```
-✔ Intercepted Cursor IDE (api2.cursor.sh) -> Model: gpt-4o | Prompt: 1,420 tokens | Completion: 210 tokens | Cost: $0.0048
+✔ Intercepted Cursor IDE -> Model: gpt-4o | Prompt: 1,420 tokens | Completion: 210 tokens | Cost: $0.0048
 ```
 
 ### 3. Check Spend Ledger Balance
@@ -89,15 +82,15 @@ agentcontrol spend status
 
 ---
 
-## Clean Reversion (`agentcontrol unprotect`)
+## Clean Reversion (`agentcontrol disconnect cursor`)
 
-To restore Cursor's original configuration and remove the proxy settings:
+To restore Cursor's original configuration and remove proxy settings without erasing personal customizations:
 
 ```bash
-agentcontrol unprotect
+agentcontrol disconnect cursor
 ```
 
-This restores `settings.json` from the atomic backup and removes the Root CA from the OS trust store.
+This restores `settings.json` and `.cursor/mcp.json` from the ownership manifest.
 
 ---
 

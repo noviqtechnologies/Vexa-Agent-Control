@@ -53,44 +53,62 @@ Read the full [Docker Deployment Guide](../guides/docker-deployment.md).
 Launch the local security gateway:
 
 ```bash
-agentcontrol protect
+agentcontrol start
 ```
 
 ### Browser Opening in WSL
 Vexa Agent Control detects WSL environments automatically:
 1. It attempts to launch `wslview` to open the Local Dashboard in your default Windows browser.
 2. If `wslview` is not available, it calls `/mnt/c/Windows/System32/cmd.exe /c start <url>`.
-3. If run in headless mode or if browser launch fails, simply open your browser on Windows and navigate to:
+3. You can also directly open your browser on Windows and navigate to:
    ```text
-   http://localhost:8080
+   http://localhost:18080
    ```
    *(WSL2 mirrors localhost ports to the Windows host automatically).*
 
 ---
 
-## Protecting Python / Custom Agents in WSL
+## Connecting Coding & Custom Agents in WSL
 
-For agents running inside WSL (e.g., LangChain, CrewAI, AutoGen):
+In a second terminal window inside WSL:
 
 ```bash
-export AGENTCONTROL_PROXY_URL="http://127.0.0.1:8080"
-export HTTP_PROXY="http://127.0.0.1:8080"
-export HTTPS_PROXY="http://127.0.0.1:8080"
+agentcontrol connect codex
+agentcontrol connect claude
+agentcontrol connect vscode-continue
+agentcontrol connect cursor
+```
+
+For Python or custom agents running inside WSL (e.g., LangChain, CrewAI, AutoGen):
+
+```bash
+export AGENTCONTROL_PROXY_URL="http://127.0.0.1:18080"
+export HTTP_PROXY="http://127.0.0.1:18080"
+export HTTPS_PROXY="http://127.0.0.1:18080"
 
 python my_agent.py
 ```
 
 ---
 
-## Verification & Removal
-
-Run the 3-point live smoke test from within WSL:
+## Verification & Status
 
 ```bash
-agentcontrol verify
+agentcontrol doctor
+agentcontrol status
 ```
 
-To clean up:
+---
+
+## Clean Removal
+
+To disconnect an assistant:
+```bash
+agentcontrol disconnect codex
+agentcontrol disconnect claude
+```
+
+To cleanly uninstall:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
 ```

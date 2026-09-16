@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.83-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.84-10B981.svg?style=flat-square)](Cargo.toml)
 [![Changelog](https://img.shields.io/badge/Changelog-SemVer%202.0-blueviolet.svg?style=flat-square)](CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
 [![Contributing](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
@@ -503,19 +503,36 @@ The enterprise Control Hub v2 provides centralized governance, multi-state capab
 
 Choose the setup that matches your goal:
 
-### 🌟 Option 1: Full-Stack Control Hub with Web UI (Recommended for Evaluation)
+### 🌟 Option 1: Full-Stack Control Hub with Web UI (Recommended for Team Hub Evaluation)
 
-*Best for exploring the platform, visual policy editor, audit logs, and real-time dashboard.*
+*Best for exploring the complete team platform: visual policy editor, audit logs, PostgreSQL storage, and real-time React web console.*
 
+**macOS / Linux / WSL (Bash / Zsh):**
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
+cp .env.team.example .env
+docker compose -f docker-compose.team.yml up -d
+```
 
-# Launch PostgreSQL 16 + Control Plane API + React Management UI + Gateway
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+Copy-Item .env.team.example .env
+docker compose -f docker-compose.team.yml up -d
+```
+
+**Windows (Command Prompt - CMD):**
+```cmd
+git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
+cd Vexa-Agent-Control
+copy .env.team.example .env
 docker compose -f docker-compose.team.yml up -d
 ```
 
 - **Web Management Console UI:** Open [http://localhost:3000](http://localhost:3000) (Sign in with your configured administrator credentials set via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`)
+- **Control Plane API:** `http://localhost:8085` (internal port 8081)
 - **Security Gateway Endpoint:** `http://localhost:8080`
 - **Pre-enrolled Evaluation Gateway:** The bundled gateway automatically registers as `vexa-demo-gateway` in **Device Governance** as an active evaluation node. To enroll your host machine / IDEs, click **`+ Generate Enrollment Token`** in the UI.
 - Read the complete [Docker Deployment Guide](docs/guides/docker-deployment.md).
@@ -584,11 +601,13 @@ docker run -d \
 
 ## 10-Minute Workstation Quickstart
 
-Follow this developer journey to authenticate, connect coding assistants with zero elevation, verify health diagnostics, and roll back cleanly without affecting your custom settings.
+This quickstart is designed for individual software developers to experience Vexa Agent Control directly on their local workstation. **Zero Docker, zero external databases, and zero Control Hub required** — everything runs locally via a single statically-linked binary with an embedded developer web dashboard.
+
+---
 
 ### Step 0: Preflight Check
 
-Confirm your local architecture and ensure port `18080` is available:
+Confirm your local architecture and verify port `18080` is available:
 
 ```bash
 # macOS / Linux / WSL
@@ -600,11 +619,13 @@ uname -m && netstat -an | grep 18080 || echo "Port 18080 is available"
 $env:PROCESSOR_ARCHITECTURE; Get-NetTCPConnection -LocalPort 18080 -ErrorAction SilentlyContinue
 ```
 
-### Step 1: Install Vexa Agent Control
+---
 
-Download and install the statically-linked binary to `~/.local/bin`:
+### Step 1: Install Vexa Agent Control Binary
 
-**macOS / Linux / WSL:**
+Download and install the standalone binary to `~/.local/bin` (or `%USERPROFILE%\.local\bin` on Windows):
+
+**macOS / Linux / WSL (Bash / Zsh):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -617,25 +638,38 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.83`.
-
-### Step 2: Authenticate Workstation (`agentcontrol login`)
-
-Authenticate your developer workstation with your organization's Control Hub using OAuth 2.0 PKCE. **Zero administrator or UAC elevation is required**:
-
-```bash
-agentcontrol login
+**Windows (Command Prompt - CMD):**
+```cmd
+curl.exe -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 -o "%TEMP%\install.ps1" && powershell.exe -ExecutionPolicy Bypass -File "%TEMP%\install.ps1" && del "%TEMP%\install.ps1"
+set PATH=%USERPROFILE%\.local\bin;%PATH%
+agentcontrol.exe --version
 ```
 
-- Opens your system browser to authenticate via SSO/OIDC.
-- Generates an Ed25519 device identity and stores credentials in your native OS Keyring (Windows Credential Manager, macOS Keychain, or Freedesktop Secret Service).
-- Automatically registers a per-user background agent (`VexaAgentControl`) on your login session.
+- **Expected Result:** Prints `agentcontrol 1.0.84` (or current release).
 
-*(For headless Linux or CI environments, pass `--no-browser`).*
+---
 
-### Step 3: Connect Coding Assistants (`agentcontrol connect <target>`)
+### Step 2: Start the Local Security Gateway (`agentcontrol start`)
 
-Connect your installed coding assistants with non-destructive ownership tracking:
+Launch the local security gateway and governance proxy on your workstation:
+
+```bash
+agentcontrol start
+```
+
+- **What happens automatically:**
+  - Binds locally to `127.0.0.1:18080` (or dynamic fallback `18080..=18090` written to `~/.agentcontrol/daemon.port`).
+  - Initializes a high-entropy local bearer token in `~/.agentcontrol/local.token` (restricted with POSIX `0600` / Windows ACL permissions).
+  - Initializes the embedded SQLite audit engine at `~/.agentcontrol/events.db` in Write-Ahead Logging (WAL) mode.
+  - Serves the **embedded Local Developer Dashboard** directly at `http://127.0.0.1:18080`.
+
+*(To run persistently in the background across restarts, run `agentcontrol service install`).*
+
+---
+
+### Step 3: Connect Your Coding Assistants (`agentcontrol connect <target>`)
+
+In a new terminal window, connect your installed coding assistants with non-destructive ownership tracking:
 
 ```bash
 # Connect OpenAI Codex CLI:
@@ -646,13 +680,48 @@ agentcontrol connect claude
 
 # Connect VS Code Continue extension:
 agentcontrol connect vscode-continue
+
+# Connect Cursor:
+agentcontrol connect cursor
 ```
 
-- **Zero Plaintext Secrets:** Upstream master provider keys (OpenAI, Anthropic, Gemini) remain safely quarantined in Cloud Vault. Workstations only use local session tokens.
-- **Zero Root CA:** Agent Control never installs Root CA certificates or modifies operating system trust stores.
-- **Ownership Manifest:** Every mutation is hashed and tracked in `~/.agentcontrol/manifests/<target>.manifest.json`.
+- **Zero Cloud Dependencies:** Automatically uses your local proxy token (`~/.agentcontrol/local.token`) and configures loopback routing (`http://127.0.0.1:18080/v1`).
+- **MCP Process Sandboxing:** Wraps MCP servers with `agentcontrol stdio-proxy` under strict memory limits and credential redaction.
+- **Baseline Backup & Ownership Manifest:** Backs up existing configs to `<config>.baseline.bak` and tracks all mutations in `~/.agentcontrol/manifests/<target>.manifest.json` for risk-free reversal.
 
-### Step 4: Run Health Diagnostics (`agentcontrol doctor`)
+---
+
+### Step 4: Experience Live Protection in the Local Developer Dashboard (`http://127.0.0.1:18080`)
+
+Open the embedded **Local Developer Dashboard** in your web browser:
+
+```text
+http://127.0.0.1:18080
+```
+
+- **Zero-Dependency Local UI:** Rendered 100% locally from the running binary — no Node.js, React build steps, or external services required.
+- **Interactive Developer Experience:**
+  1. **Prompt Your Assistant:** Ask your connected assistant (e.g. Codex or Claude Desktop) to write code or execute a tool call.
+  2. **Activity Stream (Live SSE):** Watch intercepted LLM completions and MCP tool executions stream in real time.
+  3. **Detections & DLP:** Observe automatic parameter secret redactions (`[REDACTED:API_KEY]`, `[REDACTED:CONNECTION_STRING]`) and prompt injection shield triggers.
+  4. **Token Economics & Cache:** Track real-time token spend, budget burn-down, and cache hits.
+  5. **Live Policy Wizard:** Review active safe-mode rules and tune tool permissions interactively.
+
+Inspect verified target capabilities and freshness tiers from your terminal:
+
+```bash
+agentcontrol status
+```
+
+```text
+Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+```
+
+---
+
+### Step 5: Run Health Diagnostics (`agentcontrol doctor`)
 
 Execute a 7-point health and security verification check:
 
@@ -661,11 +730,10 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.83)
-✔ Authentication State:      Pass (alice@company.com - dev-team)
+✔ Binary Integrity:          Pass (v1.0.84)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
-✔ Gateway Connectivity:      Pass (https://app.vexasec.io, 28ms)
+✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
 ✔ Target Configuration:      Pass (codex: verified, claude: verified)
 ✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
 
@@ -674,25 +742,28 @@ Overall Health: HEALTHY (Exit Code 0)
 
 *(Use `agentcontrol doctor --json` for machine-readable output in CI/CD).*
 
-### Step 5: Clean Reversal (`agentcontrol disconnect <target>`)
+---
 
-To cleanly disconnect an assistant at any time:
+### Step 6: Non-Destructive Reversal Anytime (`agentcontrol disconnect <target>`)
+
+To cleanly disconnect an assistant and restore original settings at any time:
 
 ```bash
 agentcontrol disconnect codex
 agentcontrol disconnect claude
 agentcontrol disconnect vscode-continue
+agentcontrol disconnect cursor
 ```
 
-- Reverts only the managed settings tracked in the `OwnershipManifest`.
+- Restores only the managed settings recorded in the `OwnershipManifest`.
 - Unwraps MCP servers back to their original commands and arguments.
-- **Developer Preserving:** Custom tool configurations, model settings, themes, and personal properties added while connected are preserved completely.
+- **Developer Preserving:** Any custom themes, model settings, keybindings, or personal tool configs added while connected are preserved completely.
 
 ---
 
-### Step 6: Loopback Hardening, FinOps & MCP Process Sandboxing
+### Workstation Security Guarantees & Built-in Protections
 
-Agent Control implements comprehensive workstation-level security guarantees:
+Agent Control implements comprehensive workstation-level security guarantees automatically in the background:
 
 1. **Socket-Level Loopback Assertion & Dynamic Fallback:**
    - Background daemon listens on `127.0.0.1:18080`.
@@ -827,7 +898,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.83_checksums.txt
+sha256sum -c agentcontrol_1.0.84_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe

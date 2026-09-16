@@ -20,8 +20,8 @@ To install prerequisites on common distributions:
 
 | Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.70-linux-x86_64.zip` | **Yes (Verified)** |
-| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.70-linux-aarch64.zip` | **Yes (Verified)** |
+| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.83-linux-x86_64.zip` | **Yes (Verified)** |
+| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.83-linux-aarch64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -70,48 +70,61 @@ docker run -d \
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
+cp .env.team.example .env
 docker compose -f docker-compose.team.yml up -d
 ```
 Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
 
 ---
 
-## Headless / Server Environments
+## Starting Protection
 
-When running in a headless Linux environment (e.g., remote SSH server, CI runner, or container) where no desktop browser is available:
+Launch the local security gateway and dashboard on `127.0.0.1:18080`:
 
 ```bash
-# Start in background with browser launch disabled:
-agentcontrol protect --no-browser &
+agentcontrol start
 ```
 
-Or run via `agentcontrol dev`:
+*(To run as a persistent background systemd user service across reboots, run `agentcontrol service install`).*
+
+---
+
+## Connecting Coding Assistants
+
+In a second terminal window:
+
 ```bash
-agentcontrol dev --listen 0.0.0.0:8080 --no-browser
+agentcontrol connect codex
+agentcontrol connect claude
+agentcontrol connect vscode-continue
+agentcontrol connect cursor
 ```
 
 ---
 
-## Service Installation (systemd user daemon)
-
-To keep Vexa running as a persistent background daemon:
+## Verification & Status
 
 ```bash
-agentcontrol service install
-agentcontrol service status
+agentcontrol doctor
+agentcontrol status
 ```
 
-To stop and remove the user service:
-```bash
-agentcontrol service uninstall
+Open the Local Developer Dashboard in your browser:
+```text
+http://127.0.0.1:18080
 ```
 
 ---
 
-## Uninstallation
+## Clean Disconnect & Uninstallation
 
-To cleanly restore all wrapped client configs and remove the binary:
+To cleanly disconnect an assistant:
+```bash
+agentcontrol disconnect codex
+agentcontrol disconnect claude
+```
 
+To cleanly uninstall:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
 ```

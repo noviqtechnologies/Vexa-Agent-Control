@@ -30,7 +30,7 @@ agentcontrol dev --stdio -- python my_agent.py
 ```
 
 ### Inspect Recorded Events
-1. Open the Local Dashboard at `http://127.0.0.1:8080`.
+1. Open the Local Dashboard at `http://127.0.0.1:18080`.
 2. Inspect tool invocations, parameters, and simulated policy verdicts.
 
 ---

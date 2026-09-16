@@ -16,8 +16,8 @@ This guide covers installing Vexa Agent Control on macOS for both Apple Silicon 
 
 | Apple Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.70-macos-aarch64.zip` | **Yes (Verified)** |
-| **Intel Core (x86_64)** | `agentcontrol-v1.0.70-macos-x86_64.zip` | **Yes (Verified)** |
+| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.83-macos-aarch64.zip` | **Yes (Verified)** |
+| **Intel Core (x86_64)** | `agentcontrol-v1.0.83-macos-x86_64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -66,6 +66,7 @@ docker run -d \
 ```bash
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
+cp .env.team.example .env
 docker compose -f docker-compose.team.yml up -d
 ```
 Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
@@ -80,7 +81,7 @@ If you prefer to inspect and verify the binary manually before running:
    ```bash
    ARCH=$(uname -m)
    if [[ "$ARCH" == "arm64" ]]; then ARCH="aarch64"; fi
-   VERSION="v1.0.70"
+   VERSION="v1.0.83"
 
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/agentcontrol-${VERSION}-macos-${ARCH}.zip"
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/checksums.txt"
@@ -115,15 +116,49 @@ If macOS displays a warning stating *"agentcontrol cannot be opened because deve
 
 ## Starting Protection
 
-After installation, run:
+Launch the local security gateway and dashboard on `127.0.0.1:18080`:
 
 ```bash
-agentcontrol protect
+agentcontrol start
 ```
 
-To verify live enforcement:
+*(To run as a persistent background LaunchAgent service across reboots, run `agentcontrol service install`).*
+
+---
+
+## Connecting Coding Assistants
+
+In a second Terminal window:
+
 ```bash
-agentcontrol verify
+agentcontrol connect codex
+agentcontrol connect claude
+agentcontrol connect vscode-continue
+agentcontrol connect cursor
+```
+
+---
+
+## Verification & Status
+
+```bash
+agentcontrol doctor
+agentcontrol status
+```
+
+Open the Local Developer Dashboard in your browser:
+```text
+http://127.0.0.1:18080
+```
+
+---
+
+## Clean Disconnect & Uninstallation
+
+To cleanly disconnect an assistant:
+```bash
+agentcontrol disconnect codex
+agentcontrol disconnect claude
 ```
 
 To cleanly uninstall:

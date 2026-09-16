@@ -16,8 +16,8 @@ This is the primary and recommended installation path for Windows 10 and Windows
 
 | Windows Architecture | Release Asset | Status | Notes |
 |---|---|---|---|
-| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.70-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
-| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.70-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
+| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.83-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
+| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.83-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
 
 ---
 
@@ -67,6 +67,7 @@ docker run -d `
 ```powershell
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
 cd Vexa-Agent-Control
+Copy-Item .env.team.example .env
 docker compose -f docker-compose.team.yml up -d
 ```
 Access the Web Management Console at `http://localhost:3000`. See the complete [Docker Deployment Guide](../guides/docker-deployment.md).
@@ -75,44 +76,54 @@ Access the Web Management Console at `http://localhost:3000`. See the complete [
 
 ## Starting Protection
 
-To discover IDEs, wrap configurations with timestamped backups, and start the local security gateway:
+Launch the local security gateway and dashboard on `127.0.0.1:18080`:
 
 ```powershell
-agentcontrol.exe protect
+agentcontrol.exe start
 ```
 
-To run in observation/shadow mode (auditing only without blocking):
+*(To install as an always-on background scheduled task without UAC elevation, run `agentcontrol.exe service install`).*
+
+---
+
+## Connecting Coding Assistants
+
+In a separate PowerShell window, connect your AI assistants:
+
 ```powershell
-agentcontrol.exe protect --shadow
+agentcontrol.exe connect codex
+agentcontrol.exe connect claude
+agentcontrol.exe connect vscode-continue
+agentcontrol.exe connect cursor
 ```
 
 ---
 
-## Verification
+## Verification & Status
 
-In a second PowerShell window, run:
+Check health diagnostics and active traffic status:
 
 ```powershell
-agentcontrol.exe verify
+agentcontrol.exe doctor
+agentcontrol.exe status
 ```
 
-Expected output:
+Open the Local Developer Dashboard in your browser:
 ```text
-✔ [1/3] Safe Tool Execution (read_file)      ➔ ALLOWED
-✔ [2/3] DLP Exfiltration Guard (AWS Key)     ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
-✔ [3/3] Prompt Injection (System Override)  ➔ BLOCKED [INJ-04-OVERRIDE]
+http://127.0.0.1:18080
 ```
 
 ---
 
-## Reversion & Uninstallation
+## Clean Disconnect & Uninstallation
 
-To restore all IDE configurations from backups without deleting the binary:
+To cleanly disconnect an assistant and restore its original settings from the ownership manifest:
 ```powershell
-agentcontrol.exe unprotect
+agentcontrol.exe disconnect codex
+agentcontrol.exe disconnect claude
 ```
 
-To completely uninstall Vexa Agent Control, stop any running service, and remove state files:
+To completely uninstall Vexa Agent Control and clean up all state files:
 ```powershell
 irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
 ```

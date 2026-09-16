@@ -17,7 +17,7 @@ $Repo = "noviqtechnologies/Vexa-Agent-Control"
 $ReleasesUrl = "https://api.github.com/repos/$Repo/releases/latest"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
-$FallbackVersion = "v1.0.83"
+$FallbackVersion = "v1.0.84"
 $Version = $null
 try {
     $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }

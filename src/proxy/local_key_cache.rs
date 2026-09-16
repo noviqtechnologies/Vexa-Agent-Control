@@ -167,7 +167,13 @@ impl LocalKeyCache {
 
         // 5. Model Scoping Validation
         if !key.allowed_models.is_empty() && !model.is_empty() {
-            let matched = key.allowed_models.iter().any(|m| m == "*" || m == model);
+            let model_lower = model.to_lowercase();
+            let matched = key.allowed_models.iter().any(|m| {
+                let m_lower = m.to_lowercase();
+                m_lower == "*"
+                    || m_lower == model_lower
+                    || (m_lower.ends_with('*') && model_lower.starts_with(&m_lower[..m_lower.len() - 1]))
+            });
             if !matched {
                 return Err(format!(
                     "Model {} is not permitted for this virtual key",

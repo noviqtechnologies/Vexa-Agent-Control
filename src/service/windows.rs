@@ -48,12 +48,11 @@ pub fn install_windows_service(
     );
 
     // Primary: use PowerShell Register-ScheduledTask (works for current user, no elevation needed).
-    // We pass AGENTCONTROL_HUB_URL via the EnvironmentVariables setting instead of a fragile
-    // cmd /C "set VAR=... && binary.exe" wrapper which breaks on paths that contain spaces.
+    // We launch via powershell -WindowStyle Hidden so no console window / Windows Terminal tab pops up on screen.
     // Two triggers: AtLogOn (persistent) + AtStartup (fallback) so the task runs at next system boot.
     let bin_escaped = bin_path.replace('\'', "''"); // PowerShell single-quote escape
     let ps_register = format!(
-        r#"$action = New-ScheduledTaskAction -Execute '{bin}' -Argument 'start --listen 127.0.0.1:18080'; $env_setting = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew -StartWhenAvailable; $trigger_logon = New-ScheduledTaskTrigger -AtLogOn; $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; $task = New-ScheduledTask -Action $action -Trigger $trigger_logon -Settings $env_setting -Principal $principal; Register-ScheduledTask -TaskName '{task}' -InputObject $task -Force; $td = Get-ScheduledTask -TaskName '{task}'; $td.Triggers[0].Delay = 'PT0S'; Set-ScheduledTask -TaskName '{task}' -InputObject $td -ErrorAction SilentlyContinue; $env_path = [System.Environment]::ExpandEnvironmentVariables('%APPDATA%\Microsoft\Windows\Task Scheduler'); try {{ $xml = Export-ScheduledTask -TaskName '{task}'; $xml = $xml -replace '<EnvironmentVariables/>', '<EnvironmentVariables><EnvironmentVariable><Name>AGENTCONTROL_HUB_URL</Name><Value>{hub}</Value></EnvironmentVariable></EnvironmentVariables>'; Register-ScheduledTask -Xml $xml -TaskName '{task}' -Force }} catch {{ }}"#,
+        r#"$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-WindowStyle Hidden -NoProfile -NonInteractive -Command "Start-Process -FilePath ''{bin}'' -ArgumentList ''start --listen 127.0.0.1:18080'' -WindowStyle Hidden"'; $env_setting = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); $trigger_logon = New-ScheduledTaskTrigger -AtLogOn; $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; $task = New-ScheduledTask -Action $action -Trigger $trigger_logon -Settings $env_setting -Principal $principal; Register-ScheduledTask -TaskName '{task}' -InputObject $task -Force; $td = Get-ScheduledTask -TaskName '{task}'; $td.Triggers[0].Delay = 'PT0S'; Set-ScheduledTask -TaskName '{task}' -InputObject $td -ErrorAction SilentlyContinue; $env_path = [System.Environment]::ExpandEnvironmentVariables('%APPDATA%\Microsoft\Windows\Task Scheduler'); try {{ $xml = Export-ScheduledTask -TaskName '{task}'; $xml = $xml -replace '<EnvironmentVariables/>', '<EnvironmentVariables><EnvironmentVariable><Name>AGENTCONTROL_HUB_URL</Name><Value>{hub}</Value></EnvironmentVariable></EnvironmentVariables>'; Register-ScheduledTask -Xml $xml -TaskName '{task}' -Force }} catch {{ }}"#,
         bin = bin_escaped,
         task = task_name,
         hub = clean_hub_url,
@@ -107,10 +106,9 @@ pub fn install_windows_service(
     // Ensures daemon launches at logon even when Task Scheduler denies immediate Start-ScheduledTask
     // (common when task was registered under a different elevation context).
     // No admin rights required; HKCU is always writable by the current user.
-    let reg_run_value = format!("\"{}\" start --listen 127.0.0.1:18080", bin_path);
     let reg_ps = format!(
-        "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VexaAgentControl' -Value '{}' -Force",
-        reg_run_value.replace('\'', "''")
+        "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'VexaAgentControl' -Value 'powershell.exe -WindowStyle Hidden -NoProfile -Command \"Start-Process -FilePath ''{}'' -ArgumentList ''start --listen 127.0.0.1:18080'' -WindowStyle Hidden\"' -Force",
+        bin_path.replace('\'', "''")
     );
     let _ = std::process::Command::new("powershell")
         .args(&["-NoProfile", "-NonInteractive", "-Command", &reg_ps])
@@ -127,19 +125,32 @@ pub fn install_windows_service(
         println!("  {} schtasks /Run failed: {} — will start process directly", "⚠".yellow(), e);
     }
 
-    // Wait briefly and verify the process actually started
+    // Wait briefly and verify if another agentcontrol daemon process actually started (excluding current installer PID)
     std::thread::sleep(std::time::Duration::from_millis(1500));
 
-    let running = std::process::Command::new("tasklist")
+    let current_pid = std::process::id();
+    let is_daemon_running = std::process::Command::new("tasklist")
         .args(&["/FI", "IMAGENAME eq agentcontrol.exe", "/NH", "/FO", "CSV"])
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("agentcontrol.exe"))
+        .map(|o| {
+            let out = String::from_utf8_lossy(&o.stdout);
+            out.lines().any(|line| {
+                let parts: Vec<&str> = line.split(',').collect();
+                if parts.len() >= 2 {
+                    let pid_str = parts[1].trim_matches('"').trim();
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        return pid != current_pid;
+                    }
+                }
+                false
+            })
+        })
         .unwrap_or(false);
 
-    if !running {
+    if !is_daemon_running {
         // Fallback: spawn directly with DETACHED_PROCESS | CREATE_NO_WINDOW so the daemon
         // lives independently of the spawning parent shell (survives session boundary).
-        println!("  {} Task did not start via scheduler — launching daemon directly...", "⚠".yellow());
+        println!("  {} Task not started by scheduler — launching daemon directly in background...", "ℹ".cyan());
         let spawn_result = std::process::Command::new(bin_path)
             .args(&["start", "--listen", "127.0.0.1:18080"])
             .env("AGENTCONTROL_HUB_URL", &clean_hub_url)
@@ -148,7 +159,7 @@ pub fn install_windows_service(
 
         match spawn_result {
             Ok(child) => println!(
-                "  {} Daemon launched directly (PID: {})",
+                "  {} Background daemon launched directly (PID: {})",
                 "✔".green().bold(),
                 child.id()
             ),
