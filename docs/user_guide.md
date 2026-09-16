@@ -178,17 +178,17 @@ agentcontrol start
 In a new terminal window, connect your local AI coding assistants:
 
 ```bash
-# Connect OpenAI Codex CLI:
-agentcontrol connect codex
-
 # Connect Anthropic Claude Desktop:
 agentcontrol connect claude
 
-# Connect VS Code Continue extension:
-agentcontrol connect vscode-continue
-
 # Connect Cursor:
 agentcontrol connect cursor
+
+# Connect Antigravity IDE:
+agentcontrol connect antigravity
+
+# Connect OpenAI Codex CLI:
+agentcontrol connect codex
 ```
 
 **What `agentcontrol connect` performs automatically:**
@@ -221,9 +221,10 @@ agentcontrol status
 ```
 
 ```text
-Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
 Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+Target: cursor          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: antigravity     [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
 ```
 
 ### Step 5: Run Diagnostic Health Suite (`agentcontrol doctor`)
@@ -236,11 +237,11 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.83)
+✔ Binary Integrity:          Pass (v1.0.85)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
-✔ Target Configuration:      Pass (codex: verified, claude: verified)
+✔ Target Configuration:      Pass (codex: verified, claude: verified, cursor: verified)
 ✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
 
 Overall Health: HEALTHY (Exit Code 0)
@@ -252,10 +253,10 @@ To cleanly restore target configurations without erasing custom developer settin
 
 ```bash
 # Revert specific connected target:
-agentcontrol disconnect codex
 agentcontrol disconnect claude
-agentcontrol disconnect vscode-continue
 agentcontrol disconnect cursor
+agentcontrol disconnect antigravity
+agentcontrol disconnect codex
 
 # Diagnose and automatically repair configuration drift:
 agentcontrol repair
@@ -269,11 +270,11 @@ Agent Control governs autonomous coding agents and Model Context Protocol (MCP) 
 
 | Target Client | Connect Command | Governed Surfaces | Isolation Model |
 |---|---|---|---|
-| **ChatGPT Codex** | `agentcontrol connect codex` | LLM completions & MCP tools | Loopback proxy (`127.0.0.1:18080`) + child `stdio-proxy` |
 | **Claude Desktop** | `agentcontrol connect claude` | MCP tool executions | Isolated child `stdio-proxy` per server (< 64MB memory quota) |
-| **VS Code Continue** | `agentcontrol connect vscode-continue` | LLM completions | Mode A Cloud-Direct via scoped virtual key |
-| **Cursor** | `agentcontrol connect cursor` | MCP tools & LLM egress | Stdio proxy wrapping & custom proxy endpoint |
+| **Cursor** | `agentcontrol connect cursor` | MCP tools & LLM egress | Stdio proxy wrapping & custom proxy endpoint (`127.0.0.1:18080`) |
+| **ChatGPT Codex** | `agentcontrol connect codex` | LLM completions & MCP tools | Loopback proxy (`127.0.0.1:18080`) + child `stdio-proxy` |
 | **Antigravity IDE** | `agentcontrol connect antigravity` | MCP tool execution | Stdio proxy with inline parameter DLP |
+| **VS Code** *(Experimental)* | Manual `stdio-proxy` wrapping | LLM completions | Mode A Cloud-Direct via scoped virtual key |
 
 ### Checking Multi-State Capability Status
 
@@ -287,14 +288,13 @@ Output:
 ```text
 === Vexa Agent Control Workstation Status ===
 Daemon:    RUNNING (127.0.0.1:18080, PID 14208)
-Identity:  alice@company.com (dev-team)
-Keyring:   OS_KEYRING (Available)
-Gateway:   REACHABLE (gateway.vexa.ai, 24ms RTT)
+Identity:  local (local.token, ~/.agentcontrol/local.token)
+Keyring:   LOCAL_TOKEN (Available)
 
 Target Status:
-• codex:            CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED (ACTIVE_FRESH)
-• claude:           MCP_WRAPPED, MCP_TRAFFIC_VERIFIED (ACTIVE_RECENT)
-• vscode-continue:  CONFIGURED, BYPASS_POSSIBLE (ACTIVE_RECENT)
+• codex:        CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED (ACTIVE_FRESH)
+• claude:       MCP_WRAPPED, MCP_TRAFFIC_VERIFIED (ACTIVE_RECENT)
+• cursor:       CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED (ACTIVE_FRESH)
 ```
 
 ### Event-Driven Configuration Watcher Daemon
@@ -321,7 +321,7 @@ When wrapping IDE configurations like Claude Desktop, Agent Control substitutes 
    - **DLP Exfiltration Attempts:** Gated and persisted as `DLP-01-HIGH-ENTROPY` with structured DLP finding metadata.
    - **Prompt Injection & System Overrides:** Gated and persisted as `INJ-04-OVERRIDE` with injection finding metadata.
    - **Safe Permitted Operations:** Forwarded transparently to upstream server and recorded as `tool_allow` / `default_allowlist`.
-4. **Cross-Process WAL Persistence:** All policy decisions are atomically committed to `~/.agentcontrol/events.db` (using SQLite Write-Ahead Logging) and badged as **REAL** in the local dashboard (`http://127.0.0.1:8080`).
+4. **Cross-Process WAL Persistence:** All policy decisions are atomically committed to `~/.agentcontrol/events.db` (using SQLite Write-Ahead Logging) and badged as **REAL** in the local dashboard (`http://127.0.0.1:18080`).
 
 ### Custom IDE Config Paths & Non-Standard Environments
 

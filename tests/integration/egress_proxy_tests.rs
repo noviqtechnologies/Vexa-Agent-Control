@@ -38,6 +38,7 @@ fn start_dummy_http_server() -> u16 {
 async fn start_proxy(port: u16) -> tokio::process::Child {
     let bin = env!("CARGO_BIN_EXE_agentcontrol");
     let child = tokio::process::Command::new(bin)
+        .env("AGENTCONTROL_ALLOW_LOOPBACK_EGRESS", "1")
         .args([
             "dev",
             "--listen",

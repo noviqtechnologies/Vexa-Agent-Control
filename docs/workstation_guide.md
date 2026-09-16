@@ -172,25 +172,31 @@ agentcontrol.exe --version
 
 ## 3. Step-by-Step: Getting Started
 
-### Step 1 — Zero-Touch Authentication & Target Connection
+### Step 1 — Start Gateway & Connect Your Coding Assistants
 
-The recommended developer onboarding flow requires zero administrative elevation:
-1. Authenticate with your Control Hub via browser OAuth PKCE (`agentcontrol login`). The browser prompts for sign-in via your organization's configured Auth Provider (Local email/password, Google Workspace, or Microsoft Entra ID), binds the workstation to your verified employee identity in the Primary Organization, generates a local Ed25519 keypair, and starts the background agent on `127.0.0.1:18080`.
-2. Connect your installed AI coding assistants with scoped target injection (`agentcontrol connect codex`, `agentcontrol connect claude`).
+The recommended standalone developer onboarding flow requires zero administrative elevation and zero Control Hub:
+
+1. Start the local security gateway — it auto-generates a `local.token` and begins listening on `127.0.0.1:18080`.
+2. Connect your installed AI coding assistants with scoped target injection.
 3. Verify comprehensive health with `agentcontrol doctor` and inspect status with `agentcontrol status`.
 
 ```bash
-# 1. Log in via browser PKCE:
-agentcontrol login
+# 1. Start the local security gateway:
+agentcontrol start
 
 # 2. Connect installed coding assistants:
-agentcontrol connect codex
 agentcontrol connect claude
+agentcontrol connect cursor
+agentcontrol connect antigravity
+agentcontrol connect codex
 
 # 3. Check health and multi-state status:
 agentcontrol doctor
 agentcontrol status
 ```
+
+> [!NOTE]
+> **Team / Enterprise users:** If your organization has a Control Hub, authenticate first with `agentcontrol login` (browser OAuth PKCE) before running `agentcontrol connect`.
 
 **What You Achieve:**
 Zero-elevation target governance with pristine baseline backups (`.baseline.bak`) and ownership manifests (`~/.agentcontrol/manifests/<target>.manifest.json`). Cleanly disconnect at any time with `agentcontrol disconnect <target>`.
@@ -270,40 +276,40 @@ agentcontrol.exe dev --stdio -- npx -y @modelcontextprotocol/server-filesystem "
 Agent Control automatically patches the MCP configuration file of the target IDE — no manual JSON editing required. Supported targets:
 
 > [!TIP]
-> **One-command protection:** Instead of wrapping IDEs one by one, use `agentcontrol protect` to discover and wrap **all** supported IDEs simultaneously, start the gateway, and open the dashboard:
+> **One-command protection for all IDEs:** Use `agentcontrol connect --all` to discover and connect **all** detected supported IDEs simultaneously:
 > ```bash
-> agentcontrol protect             # macOS / Linux — wraps all IDEs in one pass
-> agentcontrol.exe protect         # Windows
-> agentcontrol protect --dry-run   # Preview changes without writing to disk
-> agentcontrol protect --enforce   # Start immediately in active-blocking mode
+> agentcontrol connect --all             # macOS / Linux — connects all detected IDEs in one pass
+> agentcontrol.exe connect --all         # Windows
+> agentcontrol connect --all --dry-run   # Preview changes without writing to disk
 > ```
-> To restore every IDE to its original config: `agentcontrol unprotect` (verifies backup integrity before restoring).
+> To restore every IDE to its original config: `agentcontrol disconnect --all`.
 
-| IDE / Client | Wrap Command | Unprotect |
+| IDE / Client | Connect Command | Disconnect |
 |---|---|---|
-| Claude Desktop | `agentcontrol wrap claude` | `agentcontrol unwrap claude` |
-| Cursor | `agentcontrol wrap cursor` | `agentcontrol unwrap cursor` |
-| VS Code | `agentcontrol wrap vscode` | `agentcontrol unwrap vscode` |
-| JetBrains IDEs | `agentcontrol wrap jetbrains` | `agentcontrol unwrap jetbrains` |
-| Zed | `agentcontrol wrap zed` | `agentcontrol unwrap zed` |
-| Cline | `agentcontrol wrap cline` | `agentcontrol unwrap cline` |
-| OpenCode | `agentcontrol wrap opencode` | `agentcontrol unwrap opencode` |
-| Antigravity IDE | `agentcontrol wrap antigravity` | `agentcontrol unwrap antigravity` |
+| **Claude Desktop** *(Verified)* | `agentcontrol connect claude` | `agentcontrol disconnect claude` |
+| **Cursor** *(Verified)* | `agentcontrol connect cursor` | `agentcontrol disconnect cursor` |
+| **Antigravity IDE** *(Verified)* | `agentcontrol connect antigravity` | `agentcontrol disconnect antigravity` |
+| **Codex CLI** *(Verified)* | `agentcontrol connect codex` | `agentcontrol disconnect codex` |
+| **VS Code** *(Experimental)* | `agentcontrol connect vscode` | `agentcontrol disconnect vscode` |
+| **JetBrains IDEs** *(Experimental)* | `agentcontrol connect jetbrains` | `agentcontrol disconnect jetbrains` |
+| **Zed** *(Experimental)* | `agentcontrol connect zed` | `agentcontrol disconnect zed` |
+| **Cline** *(Experimental)* | `agentcontrol connect cline` | `agentcontrol disconnect cline` |
+| **OpenCode** *(Experimental)* | `agentcontrol connect opencode` | `agentcontrol disconnect opencode` |
 
-**Linux / macOS (Bash / Zsh):**
+**macOS / Linux (Bash / Zsh):**
 ```bash
-agentcontrol wrap claude      # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
-agentcontrol status           # inspect active wrappers and proxy health
+agentcontrol connect claude    # or cursor, antigravity, codex, vscode, jetbrains, zed, cline, opencode
+agentcontrol status            # inspect active connections and proxy health
 ```
 
 **Windows (PowerShell / CMD):**
 ```powershell
-agentcontrol.exe wrap claude  # or cursor, vscode, jetbrains, zed, cline, opencode, antigravity
-agentcontrol.exe status       # inspect active wrappers and proxy health
+agentcontrol.exe connect claude  # or cursor, antigravity, codex, vscode, jetbrains, zed, cline, opencode
+agentcontrol.exe status          # inspect active connections and proxy health
 ```
 
 > [!IMPORTANT]
-> **Restart your IDE** after running `agentcontrol wrap <target>`. IDE processes read MCP configuration strictly at application startup.
+> **Restart your IDE** after running `agentcontrol connect <target>`. IDE processes read MCP configuration strictly at application startup.
 
 **What You Achieve:**
 MCP tool calls (file manipulation, shell execution, etc.) are proxied and governed by Agent Control. The IDE itself requires no plugin installation.
@@ -365,7 +371,7 @@ Start-Process target/benchmark-report.html  # Windows PowerShell
 start target\benchmark-report.html          # Windows Command Prompt (CMD)
 ```
 
-The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:8080`) also renders the latest report interactively.
+The **ADR Benchmark tab** in the local dashboard (`http://127.0.0.1:18080`) also renders the latest report interactively.
 
 For the full benchmark reference (all 17 attack categories and scoring methodology), see → [Common Reference Guide — ADR Security Benchmark](common_guide.md#adr-security-benchmark).
 

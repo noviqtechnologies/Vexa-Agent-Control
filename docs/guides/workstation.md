@@ -17,16 +17,16 @@ graph LR
 
 ## Stage 1: Observe (Shadow Mode)
 
-In **Shadow Mode**, Vexa records every tool call, parameter, response, and theoretical policy verdict into `~/.agentcontrol/audit.jsonl` **without blocking any traffic**. This allows developers to use their agents normally and observe what tools they actually invoke.
+In **Shadow Mode**, Agent Control records every tool call, parameter, response, and theoretical policy verdict into `~/.agentcontrol/audit.jsonl` **without blocking any traffic**. This allows developers to use their agents normally and observe what tools they actually invoke.
 
 ### Start Shadow Gateway
 ```bash
-agentcontrol protect --shadow
+agentcontrol start --shadow
 ```
 
-Or for a specific stdio agent:
+Or connect a target IDE:
 ```bash
-agentcontrol dev --stdio -- python my_agent.py
+agentcontrol connect cursor
 ```
 
 ### Inspect Recorded Events
@@ -63,7 +63,7 @@ Once you are satisfied with your policy rules:
 
 ### Launch with Active Enforcement
 ```bash
-agentcontrol protect --policy agentcontrol-policy.yaml --enforce
+agentcontrol start --policy agentcontrol-policy.yaml
 ```
 
 ### What Happens in Enforcement Mode
@@ -84,10 +84,13 @@ agentcontrol verify
 When you finish your evaluation or need to revert your configuration:
 
 ```bash
-# Restore all IDE configurations to their pre-Vexa state:
-agentcontrol unprotect
+# Disconnect all configured IDE targets:
+agentcontrol disconnect --all
 
-# Verify all configurations:
+# Stop the daemon:
+agentcontrol stop
+
+# Verify target status:
 agentcontrol status
 ```
 

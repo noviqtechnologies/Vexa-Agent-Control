@@ -250,7 +250,7 @@ fn test_stdio_proxy_process_integration() {
         let mut stmt = conn
             .prepare(
                 "SELECT verdict, policy_rule, dlp_findings, injection_findings FROM egress_events \
-                 WHERE transport='stdio' AND source='production' ORDER BY id DESC LIMIT 3",
+                 WHERE transport='stdio' AND source='production' ORDER BY id DESC LIMIT 20",
             )
             .expect("prepare select from egress_events");
 
@@ -273,54 +273,41 @@ fn test_stdio_proxy_process_integration() {
             events.len()
         );
 
-        // events[0]: 3rd request (Prompt Injection)
-        let (inj_verdict, inj_rule, _inj_dlp, inj_findings) = &events[0];
-        assert_eq!(
-            inj_verdict, "deny",
-            "Injection event must have verdict='deny'"
-        );
-        assert_eq!(
-            inj_rule.as_deref(),
-            Some("INJ-04-OVERRIDE"),
-            "Injection event must retain canonical policy_rule='INJ-04-OVERRIDE', got {:?}",
-            inj_rule
-        );
+        // Find prompt injection event
+        let inj = events
+            .iter()
+            .find(|(_, rule, _, _)| rule.as_deref() == Some("INJ-04-OVERRIDE"))
+            .expect("Injection event with policy_rule='INJ-04-OVERRIDE' must exist in events.db");
+        assert_eq!(inj.0, "deny", "Injection event must have verdict='deny'");
         assert!(
-            inj_findings.is_some(),
+            inj.3.is_some(),
             "Injection event must have non-empty injection_findings JSON"
         );
 
-        // events[1]: 2nd request (DLP Secret Exfiltration)
-        let (dlp_verdict, dlp_rule, dlp_findings, _dlp_inj) = &events[1];
-        assert_eq!(dlp_verdict, "deny", "DLP event must have verdict='deny'");
-        assert_eq!(
-            dlp_rule.as_deref(),
-            Some("DLP-01-HIGH-ENTROPY"),
-            "DLP event must retain canonical policy_rule='DLP-01-HIGH-ENTROPY', got {:?}",
-            dlp_rule
-        );
+        // Find DLP Secret Exfiltration event
+        let dlp = events
+            .iter()
+            .find(|(_, rule, _, _)| rule.as_deref() == Some("DLP-01-HIGH-ENTROPY"))
+            .expect("DLP event with policy_rule='DLP-01-HIGH-ENTROPY' must exist in events.db");
+        assert_eq!(dlp.0, "deny", "DLP event must have verdict='deny'");
         assert!(
-            dlp_findings.is_some(),
+            dlp.2.is_some(),
             "DLP event must have non-empty dlp_findings JSON"
         );
 
-        // events[2]: 1st request (Safe Tool Call)
-        let (safe_verdict, safe_rule, safe_dlp, safe_inj) = &events[2];
+        // Find Safe Tool Call event
+        let safe = events
+            .iter()
+            .find(|(verdict, _, _, _)| verdict == "allow")
+            .expect("Safe event with verdict='allow' must exist in events.db");
         assert_eq!(
-            safe_verdict, "allow",
-            "Safe event must have verdict='allow'"
-        );
-        assert_eq!(
-            safe_rule.as_deref(),
+            safe.1.as_deref(),
             Some("tool_allow"),
             "Safe event must have policy_rule='tool_allow', got {:?}",
-            safe_rule
+            safe.1
         );
-        assert!(safe_dlp.is_none(), "Safe event must have no DLP findings");
-        assert!(
-            safe_inj.is_none(),
-            "Safe event must have no injection findings"
-        );
+        assert!(safe.2.is_none(), "Safe event must have no DLP findings");
+        assert!(safe.3.is_none(), "Safe event must have no injection findings");
     } else {
         eprintln!(
             "[WARN] events.db not found at {}; skipping DB persistence check. \

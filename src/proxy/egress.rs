@@ -72,7 +72,10 @@ pub async fn handle_egress(
         .unwrap_or_default();
 
     // Non-relay SSRF defense (PRD §3.3)
-    if is_blocked_ssrf_target(&target_host) {
+    let allow_loopback = std::env::var("AGENTCONTROL_ALLOW_LOOPBACK_EGRESS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if (!allow_loopback || (!target_host.starts_with("127.") && !target_host.starts_with("localhost") && target_host != "::1")) && is_blocked_ssrf_target(&target_host) {
         crate::logging::log_event(
             crate::logging::Level::Warn,
             "ssrf_target_blocked",

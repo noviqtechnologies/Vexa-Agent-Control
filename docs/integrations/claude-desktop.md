@@ -72,11 +72,11 @@ If your Claude Desktop MCP servers (e.g., custom code execution engines, autonom
         "C:\\tools\\agent-runner.js"
       ],
       "env": {
-        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
+        "OPENAI_BASE_URL": "http://127.0.0.1:18080/v1",
         "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY_HERE",
-        "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080/v1",
-        "HTTP_PROXY": "http://127.0.0.1:8080",
-        "HTTPS_PROXY": "http://127.0.0.1:8080"
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:18080/v1",
+        "HTTP_PROXY": "http://127.0.0.1:18080",
+        "HTTPS_PROXY": "http://127.0.0.1:18080"
       }
     }
   }
@@ -84,7 +84,7 @@ If your Claude Desktop MCP servers (e.g., custom code execution engines, autonom
 ```
 
 > [!NOTE]
-> The Agent Control gateway accepts both Anthropic and OpenAI protocols on port `8080`. When passing an Agent Control Virtual Key (`sk-vex-...`), the gateway enforces your spend cap, rates, and allowed models, then securely injects the real provider key before dispatching upstream.
+> The Agent Control gateway accepts both Anthropic and OpenAI protocols on port `18080`. When passing an Agent Control Virtual Key (`sk-vex-...`), the gateway enforces your spend cap, rates, and allowed models, then securely injects the real provider key before dispatching upstream.
 
 ---
 
@@ -96,36 +96,38 @@ If your Claude Desktop MCP servers (e.g., custom code execution engines, autonom
    ```
    Confirm `Claude Desktop` shows `[verified]` and `EXISTS: ✔`.
 
-2. **Wrap Claude Desktop Configuration:**
+2. **Connect Claude Desktop:**
    ```bash
-   agentcontrol wrap claude
+   agentcontrol connect claude
    ```
-   - An atomic, timestamped backup is automatically created: `claude_desktop_config.json.bak.<timestamp>`.
+   - Automatically creates an atomic, timestamped baseline backup: `claude_desktop_config.json.bak.<timestamp>`.
+   - Wraps each MCP server with `agentcontrol stdio-proxy --`.
+   - Records all mutations in `~/.agentcontrol/manifests/claude.manifest.json`.
 
 3. **Start Local Security Gateway:**
    ```bash
-   agentcontrol protect
-   # Or run with a custom policy:
-   agentcontrol start --listen 127.0.0.1:8080 --policy agentcontrol-policy.yaml
+   agentcontrol start
+   # Or with a custom policy:
+   agentcontrol start --listen 127.0.0.1:18080 --policy agentcontrol-policy.yaml
    ```
 
 4. **Restart Claude Desktop:**
    - **Windows:** Exit Claude Desktop completely from the system tray/taskbar and relaunch.
    - **macOS:** Press `Cmd+Q` and relaunch from Applications.
-   - **Linux:** Terminate process and relaunch.
+   - **Linux:** Terminate the process and relaunch.
 
 5. **Verify Live Traffic:**
-   Invoke any tool in Claude Desktop. Inspect live events in the Web Console at `http://localhost:3000` or the Local Dashboard at `http://127.0.0.1:8080`.
+   Invoke any tool in Claude Desktop. Inspect live events in the Local Developer Dashboard at `http://127.0.0.1:18080`.
 
 ---
 
 ## 4. Reversion
 
-To restore the original Claude Desktop configuration:
+To restore the original Claude Desktop configuration from the ownership manifest:
 ```bash
-agentcontrol unwrap claude
+agentcontrol disconnect claude
 ```
-Or restore all wrapped targets across the workstation:
+Or disconnect all managed targets across the workstation:
 ```bash
-agentcontrol unprotect
+agentcontrol disconnect --all
 ```

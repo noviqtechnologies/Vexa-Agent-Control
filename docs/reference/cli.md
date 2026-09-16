@@ -6,38 +6,58 @@ Comprehensive reference for all `agentcontrol` subcommands, options, flags, and 
 
 ## Core Commands
 
-### `agentcontrol protect`
-Discovers installed AI IDEs, creates timestamped backups, wraps MCP configurations with `stdio-proxy`, starts the local security gateway, and launches the dashboard.
+### `agentcontrol start`
+Starts the local security gateway proxy daemon on `127.0.0.1:18080` (default) and auto-generates a local bearer token at `~/.agentcontrol/local.token`.
 
 ```bash
-agentcontrol protect [OPTIONS]
+agentcontrol start [OPTIONS]
 ```
 
 **Options:**
-- `--dry-run`: Preview config changes without modifying files or starting the gateway.
-- `--shadow`: Start in observation/audit mode without actively blocking calls.
-- `--enforce`: Enable active blocking (default: `true`).
-- `--listen <ADDR>`: Gateway listen address (default: `127.0.0.1:8080`).
+- `--listen <ADDR>`: Gateway listen address (default: `127.0.0.1:18080`).
 - `--policy <PATH>`: Path to YAML policy file (default: `agentcontrol-policy.yaml`).
-- `--no-browser`: Suppress automatic opening of local dashboard.
+- `--shadow-mode`: Start in observation/audit mode without actively blocking calls.
 
 ---
 
-### `agentcontrol unprotect`
-Restores all IDE configurations from their most recent timestamped backups.
+### `agentcontrol connect <TARGET>`
+Connects a specific IDE or coding assistant by discovering its config, creating a timestamped backup, wrapping MCP configurations with `stdio-proxy`, and writing an ownership manifest.
 
 ```bash
-agentcontrol unprotect [OPTIONS]
+agentcontrol connect <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [OPTIONS]
 ```
 
 **Options:**
-- `--dry-run`: Preview restoration actions without touching disk.
+- `--dry-run`: Preview config changes without modifying files.
+- `--scan-responses`: Enable response scanning for secret detection.
+- `--block-on-secrets`: Block entire response on secret detection instead of redacting.
+
+---
+
+### `agentcontrol disconnect <TARGET>`
+Restores configuration for a specific IDE target from its ownership manifest.
+
+```bash
+agentcontrol disconnect <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [OPTIONS]
+agentcontrol disconnect --all
+```
+
+**Options:**
 - `--force`: Force restoration even if backup metadata warnings occur.
 
 ---
 
+### `agentcontrol login`
+Authenticates with a Team Control Hub via browser OAuth 2.0 PKCE. *Required for enterprise/team users with a Control Hub. Optional for standalone workstation users (who use `agentcontrol start` directly).*
+
+```bash
+agentcontrol login [--no-browser]
+```
+
+---
+
 ### `agentcontrol status`
-Inspects all 9 AI IDE configurations, displaying path, existence, wrap status, and verification trust level (`[verified]` vs `[unverified]`).
+Inspects all supported AI IDE configurations, displaying path, existence, connection status, and verification trust level (`[verified]` vs `[unverified]`).
 
 ```bash
 agentcontrol status
@@ -56,21 +76,38 @@ agentcontrol verify [OPTIONS]
 ```
 
 **Options:**
-- `--gateway <URL>`: Target gateway URL (default: `http://127.0.0.1:8080`).
+- `--gateway <URL>`: Target gateway URL (default: `http://127.0.0.1:18080`).
 - `--json`: Output probe results as JSON.
 
 ---
 
-### `agentcontrol wrap <TARGET>`
+## Legacy Aliases (Still Functional)
+
+> [!NOTE]
+> The following commands are functional legacy aliases. The canonical commands above are preferred for new workflows.
+
+### `agentcontrol protect` *(Legacy: use `agentcontrol start` + `agentcontrol connect`)*
+Discovers installed AI IDEs, creates timestamped backups, wraps MCP configurations with `stdio-proxy`, and starts the local security gateway.
+
+```bash
+agentcontrol protect [--dry-run] [--shadow] [--enforce] [--listen <ADDR>] [--policy <PATH>]
+```
+
+### `agentcontrol unprotect` *(Legacy: use `agentcontrol disconnect --all`)*
+Restores all IDE configurations from their most recent timestamped backups.
+
+```bash
+agentcontrol unprotect [--dry-run] [--force]
+```
+
+### `agentcontrol wrap <TARGET>` *(Legacy: use `agentcontrol connect`)*
 Wraps MCP configurations for a specific IDE target.
 
 ```bash
 agentcontrol wrap <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [--dry-run]
 ```
 
----
-
-### `agentcontrol unwrap <TARGET>`
+### `agentcontrol unwrap <TARGET>` *(Legacy: use `agentcontrol disconnect`)*
 Restores configuration for a specific IDE target.
 
 ```bash

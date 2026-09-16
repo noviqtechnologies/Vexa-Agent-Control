@@ -18,7 +18,7 @@ Codex stores user and agent runtime configurations in a TOML configuration file:
 
 ## 1. LLM Proxy & Virtual Key Configuration
 
-Agent Control allows you to route all Codex completions through the local edge gateway (`http://127.0.0.1:8080/v1`) to enforce authoritative token spend caps, rate limits (RPM/TPM), model governance, and DLP without exposing raw upstream OpenAI secrets.
+Agent Control allows you to route all Codex completions through the local edge gateway (`http://127.0.0.1:18080/v1`) to enforce authoritative token spend caps, rate limits (RPM/TPM), model governance, and DLP without exposing raw upstream OpenAI secrets.
 
 ### Recommended Configuration (`config.toml`)
 
@@ -26,7 +26,7 @@ In `%USERPROFILE%\.codex\config.toml` (Windows) or `~/.codex/config.toml` (macOS
 
 ```toml
 # ── Top-Level Core Routing (Directs Codex Desktop & CLI Chat Engine) ────────
-openai_base_url = "http://127.0.0.1:8080/v1"
+openai_base_url = "http://127.0.0.1:18080/v1"
 model = "gpt-4o"
 
 # ── Subprocess / MCP Shell Policy (Directs Child Tools & Agents) ────────────
@@ -35,7 +35,7 @@ inherit = "core"
 
 [shell_environment_policy.set]
 # Route tool LLM completions through AgentControl Gateway
-OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"
 
 # Virtual Key issued from AgentControl Web Console (/virtual-keys) or Hub profile
 OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
@@ -44,8 +44,8 @@ OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
 OPENAI_MODEL = "gpt-4o"
 
 # Proxy child network requests through AgentControl Gateway
-HTTP_PROXY = "http://127.0.0.1:8080"
-HTTPS_PROXY = "http://127.0.0.1:8080"
+HTTP_PROXY = "http://127.0.0.1:18080"
+HTTPS_PROXY = "http://127.0.0.1:18080"
 ```
 
 > [!IMPORTANT]
@@ -60,14 +60,14 @@ If using the **Codex CLI** directly in your terminal, you can set standard envir
 
 #### Windows (PowerShell)
 ```powershell
-$env:OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+$env:OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"
 $env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
 $env:OPENAI_MODEL    = "o3-mini"
 ```
 
 To persist across all sessions on Windows:
 ```powershell
-[System.Environment]::SetEnvironmentVariable('OPENAI_BASE_URL', 'http://127.0.0.1:8080/v1', 'User')
+[System.Environment]::SetEnvironmentVariable('OPENAI_BASE_URL', 'http://127.0.0.1:18080/v1', 'User')
 [System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-vex-YOUR_VIRTUAL_KEY_HERE', 'User')
 [System.Environment]::SetEnvironmentVariable('OPENAI_MODEL', 'o3-mini', 'User')
 ```
@@ -75,7 +75,7 @@ To persist across all sessions on Windows:
 #### macOS & Linux (Bash / Zsh)
 Add to `~/.bashrc` or `~/.zshrc`:
 ```bash
-export OPENAI_BASE_URL="http://127.0.0.1:8080/v1"
+export OPENAI_BASE_URL="http://127.0.0.1:18080/v1"
 export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY_HERE"
 export OPENAI_MODEL="o3-mini"
 ```
@@ -118,29 +118,29 @@ To secure Model Context Protocol (MCP) servers configured inside Codex:
    agentcontrol status
    ```
 
-2. **Wrap Codex MCP Servers:**
+2. **Connect Codex:**
    ```bash
-   agentcontrol wrap codex
+   agentcontrol connect codex
    ```
    This automatically injects `agentcontrol stdio-proxy --` before every configured MCP command in `config.toml` and creates a timestamped backup (`config.toml.bak.<timestamp>`).
 
 3. **Start Security Gateway:**
    ```bash
-   agentcontrol start --listen 127.0.0.1:8080 --policy agentcontrol-policy.yaml
+   agentcontrol start --listen 127.0.0.1:18080 --policy agentcontrol-policy.yaml
    ```
 
 4. **Verify Live Traffic:**
-   Inspect live tool calls and LLM spend in the Web Console at `http://localhost:3000` or `https://console.vexasec.io`.
+   Inspect live tool calls and LLM spend in the Local Developer Dashboard at `http://127.0.0.1:18080`.
 
 ---
 
-## 4. Unwrapping Codex
+## 4. Disconnecting Codex
 
-To restore the original Codex configuration from its timestamped backup:
+To restore the original Codex configuration from the ownership manifest:
 ```bash
-agentcontrol unwrap codex
+agentcontrol disconnect codex
 ```
-Or unwrap all managed tools at once:
+Or disconnect all managed targets at once:
 ```bash
-agentcontrol unprotect
+agentcontrol disconnect --all
 ```

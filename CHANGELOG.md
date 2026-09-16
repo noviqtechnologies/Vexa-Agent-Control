@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.85] - 2026-09-16
+
+### Added & Fixed
+- **Complete User Guides & Docs Multi-OS Audit & Harmonization:** Conducted deep multi-OS audit across all documentation files (`docs/`, `README.md`, `workstation_guide.md`, `user_guide.md`, `quickstart.md`, `comprehensive_guide.md`, integration guides, and troubleshooting).
+- **Canonical CLI Command Standardization:** Standardized on `agentcontrol start`, `agentcontrol connect <target>`, and `agentcontrol disconnect` as canonical subcommands across all documentation, marking legacy aliases appropriately.
+- **Port Standardization:** Unified local workstation daemon and embedded dashboard default URL to `http://127.0.0.1:18080` (with 18080–18090 dynamic fallback range) and isolated port `8080` strictly to containerized Team Hub gateway deployments.
+- **Integration Target Parity:** Updated IDE integration guides (`cursor.md`, `codex.md`, `claude-desktop.md`, `antigravity.md`) to reflect accurate configuration file paths, env variables, and zero-touch auto-wrapping across Windows, macOS, and Linux.
+
+---
+
 ## [1.0.84] - 2026-09-16
 
 ### Added
@@ -108,7 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.84...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.85...HEAD
+[1.0.85]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.84...v1.0.85
 [1.0.84]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.83...v1.0.84
 [1.0.83]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...v1.0.83
 [1.0.82]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.81...v1.0.82

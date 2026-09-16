@@ -1,76 +1,70 @@
 # IDE & Ecosystem Integrations
 
-Agent Control provides seamless integrations with the most popular AI-powered IDEs and coding assistants. 
+Agent Control provides seamless integrations with the most popular AI-powered IDEs and coding assistants.
 
-Instead of manually setting up environment variables, you can use the `agentcontrol wrap` command to automatically patch your local IDE configurations to route traffic through the Agent Control proxy.
+Use `agentcontrol connect <target>` to automatically patch your local IDE configurations to route traffic and MCP tool calls through the Agent Control proxy.
 
 ---
 
-## One-Command Protection (FR-1.3)
+## One-Command Protection
 
-The `agentcontrol protect` command is the recommended way to secure your entire AI development environment in a single step. It automatically:
-
-1. **Auto-generates** a baseline `agentcontrol-policy.yaml` with P0 DLP secret rules if no policy exists in the current directory
-2. **Discovers** all supported IDEs and their MCP server configurations on your machine
-3. **Creates timestamped backups** of every config before modifying it (atomic, zero-loss)
-4. **Injects the Agent Control proxy** into each discovered IDE configuration
-5. **Starts the local security gateway** on `http://127.0.0.1:8080` (audit log → `~/.agentcontrol/audit.jsonl`)
-6. **Opens the Local Dashboard** in your default browser for instant observability
-
-> [!NOTE]
-> **`agentcontrol init` is deprecated.** All zero-config setup is now handled by `agentcontrol protect` in a single step.
+The `agentcontrol connect` command is the recommended way to secure individual AI coding assistants. To protect all detected IDEs in a single step:
 
 ```bash
-# macOS / Linux
-agentcontrol protect
+# Start the local security gateway first:
+agentcontrol start
 
-# Windows (PowerShell)
-agentcontrol.exe protect
-
-# Preview changes without writing to disk (--dry-run)
-agentcontrol protect --dry-run
-
-# Start in Enforce mode (active blocking enabled immediately)
-agentcontrol protect --enforce
-
-# Use a custom listen address
-agentcontrol protect --listen 127.0.0.1:9090
-
-# Override default audit log path (~/.agentcontrol/audit.jsonl)
-agentcontrol protect --log-path /var/log/agentcontrol/audit.jsonl
+# Connect individual targets:
+agentcontrol connect claude
+agentcontrol connect cursor
+agentcontrol connect antigravity
+agentcontrol connect codex
 ```
 
-### Reverting to Original Configuration (FR-1.4)
+> [!NOTE]
+> `agentcontrol connect` automatically:
+> 1. **Discovers** the target IDE's MCP server configuration on your machine
+> 2. **Creates timestamped backups** of every config before modifying it (atomic, zero-loss)
+> 3. **Injects the Agent Control stdio-proxy** into each discovered IDE configuration
+> 4. **Writes an ownership manifest** to `~/.agentcontrol/manifests/<target>.manifest.json`
+> 5. **Sends a synthetic 1-token loopback probe** to assert routing
 
-The `agentcontrol unprotect` command restores all IDE configs from their Agent Control-created backups. Backup integrity is verified (JSON structure validation) before any reversion is performed — ensuring zero-loss rollback.
+---
+
+### Reverting to Original Configuration
+
+The `agentcontrol disconnect <target>` command restores the IDE config from its ownership manifest. Backup integrity is verified before any reversion — ensuring zero-loss rollback.
 
 ```bash
-# macOS / Linux
-agentcontrol unprotect
+# Disconnect specific targets:
+agentcontrol disconnect claude
+agentcontrol disconnect cursor
+agentcontrol disconnect antigravity
+agentcontrol disconnect codex
 
-# Windows (PowerShell)
-agentcontrol.exe unprotect
+# Disconnect all managed targets at once:
+agentcontrol disconnect --all
 
-# Bypass backup integrity check (use only for recovery)
-agentcontrol.exe unprotect --force
+# Bypass backup integrity check (use only for recovery):
+agentcontrol disconnect --force
 ```
 
 > [!IMPORTANT]
-> `unprotect` will **refuse** to restore from a corrupt or empty backup by default. Use `--force` only if you are certain the backup corruption is acceptable and want to proceed with manual cleanup.
+> `disconnect` will **refuse** to restore from a corrupt or empty manifest by default. Use `--force` only if you are certain and want to proceed with manual cleanup.
 
 ---
 
-### Advanced Wrapping Commands
+### Advanced Connection Commands
 
-- **Auto-Detect & Wrap All:** `agentcontrol wrap --auto-detect`
-- **Dry Run:** `agentcontrol wrap <target> --dry-run`
-- **Scan Responses:** `agentcontrol wrap <target> --scan-responses`
+- **Dry Run:** `agentcontrol connect <target> --dry-run`
+- **Scan Responses:** `agentcontrol connect <target> --scan-responses`
+- **Block on Secrets:** `agentcontrol connect <target> --block-on-secrets`
 
 ### Continuous Auto-Wrapping (`agentcontrol watch`)
 
 You can run the **Watch Daemon** to continuously monitor your IDE configuration directories. Whenever a new MCP server is added to your IDE, Agent Control will automatically detect and wrap it in real time:
 
-* **Linux / macOS (Bash / Zsh):**
+* **macOS / Linux (Bash / Zsh):**
   ```bash
   agentcontrol watch
   ```
@@ -82,9 +76,9 @@ You can run the **Watch Daemon** to continuously monitor your IDE configuration 
 
 ### Telemetry & Fleet Visibility (`agentcontrol status`)
 
-Run the status command to view the existence and wrap status of all supported IDE configurations on your machine:
+Run the status command to view the existence and connection status of all supported IDE configurations on your machine:
 
-* **Linux / macOS (Bash / Zsh):**
+* **macOS / Linux (Bash / Zsh):**
   ```bash
   agentcontrol status
   ```
@@ -100,34 +94,34 @@ When connected to an Agent Control Dashboard, this command also sends an **MCP S
 
 ## Supported Targets
 
-| Target IDE | Wrap Command | Unwrap Command |
-|---|---|---|
-| **Claude Desktop** | `agentcontrol wrap claude` | `agentcontrol unwrap claude` |
-| **Cursor** | `agentcontrol wrap cursor` | `agentcontrol unwrap cursor` |
-| **VS Code** | `agentcontrol wrap vscode` | `agentcontrol unwrap vscode` |
-| **JetBrains** | `agentcontrol wrap jetbrains` | `agentcontrol unwrap jetbrains` |
-| **Zed Editor** | `agentcontrol wrap zed` | `agentcontrol unwrap zed` |
-| **Cline** | `agentcontrol wrap cline` | `agentcontrol unwrap cline` |
-| **OpenCode** | `agentcontrol wrap opencode` | `agentcontrol unwrap opencode` |
-| **Antigravity** | `agentcontrol wrap antigravity` | `agentcontrol unwrap antigravity` |
-| **Codex** | `agentcontrol wrap codex` | `agentcontrol unwrap codex` |
+| Target IDE | Connect Command | Disconnect Command | Status |
+|---|---|---|---|
+| **Claude Desktop** | `agentcontrol connect claude` | `agentcontrol disconnect claude` | ✅ Verified |
+| **Cursor** | `agentcontrol connect cursor` | `agentcontrol disconnect cursor` | ✅ Verified |
+| **Antigravity IDE** | `agentcontrol connect antigravity` | `agentcontrol disconnect antigravity` | ✅ Verified |
+| **Codex CLI** | `agentcontrol connect codex` | `agentcontrol disconnect codex` | ✅ Verified |
+| **VS Code** | `agentcontrol connect vscode` | `agentcontrol disconnect vscode` | 🧪 Experimental |
+| **JetBrains** | `agentcontrol connect jetbrains` | `agentcontrol disconnect jetbrains` | 🧪 Experimental |
+| **Zed Editor** | `agentcontrol connect zed` | `agentcontrol disconnect zed` | 🧪 Experimental |
+| **Cline** | `agentcontrol connect cline` | `agentcontrol disconnect cline` | 🧪 Experimental |
+| **OpenCode** | `agentcontrol connect opencode` | `agentcontrol disconnect opencode` | 🧪 Experimental |
 
 > [!NOTE]
-> `agentcontrol protect` wraps **all** supported targets in one pass. Individual `wrap <target>` commands remain available for granular control.
+> Legacy aliases `agentcontrol wrap <target>` and `agentcontrol unwrap <target>` remain functional but `connect` / `disconnect` are the preferred canonical commands.
 
 ---
 
 ## Local Dashboard Features
 
-After running `agentcontrol protect`, the Local Dashboard opens automatically at `http://127.0.0.1:8080`. Key features include:
+After running `agentcontrol start`, the Local Developer Dashboard is available at `http://127.0.0.1:18080`. Key features include:
 
 | Feature | Description |
 |---|---|
-| **Security Posture Toggle** (FR-2.1) | Interactive SHADOW ↔ ENFORCE switch in the sidebar. Changes propagate instantly via real-time SSE. No restart needed. |
-| **Live Spend Card** (FR-2.2) | Tracks estimated dollar cost of LLM token usage in real-time (`$0.000` base, accumulates per SSE event). |
-| **Risks Blocked Counter** (FR-2.2) | Live count of tool calls that were denied (injections, sensitive path reads, policy violations). |
-| **Mission Mode Banner** (FR-2.3) | Guided onboarding: asks you to test Agent Control by telling your AI to "read /etc/shadow", proving real-time blocking. |
-| **🪄 Quick Policy Button** (FR-2.4) | Per-tool wand button in the Tool Inventory table; calls `POST /api/policy/quick-rule` to apply a standard security rule for that tool instantly. |
+| **Security Posture Toggle** | Interactive SHADOW ↔ ENFORCE switch in the sidebar. Changes propagate instantly via real-time SSE. No restart needed. |
+| **Live Spend Card** | Tracks estimated dollar cost of LLM token usage in real-time (`$0.000` base, accumulates per SSE event). |
+| **Risks Blocked Counter** | Live count of tool calls that were denied (injections, sensitive path reads, policy violations). |
+| **Mission Mode Banner** | Guided onboarding: ask your AI to "read /etc/shadow" to see real-time blocking in action. |
+| **Quick Policy Button** | Per-tool wand button in the Tool Inventory table; applies a standard security rule for that tool instantly. |
 
 ### REST & SSE API Endpoints (`/api/v1/`)
 
@@ -144,6 +138,6 @@ After running `agentcontrol protect`, the Local Dashboard opens automatically at
 
 ## How it works
 
-When you run `agentcontrol wrap <target>` (or `agentcontrol protect`), the CLI edits the application's native configuration files (e.g., `settings.json`, `config.yaml`, or extension preferences) to point outbound HTTP and MCP connections to your local Agent Control proxy. 
+When you run `agentcontrol connect <target>`, the CLI edits the application's native configuration files (e.g., `mcp.json`, `mcp_config.json`, `config.toml`) to wrap MCP server commands with `agentcontrol stdio-proxy --` and point LLM egress to `http://127.0.0.1:18080/v1`.
 
-To restore your configuration to its original state, run `agentcontrol unwrap <target>` or `agentcontrol unprotect` to restore all targets at once.
+To restore your configuration to its original state, run `agentcontrol disconnect <target>` or `agentcontrol disconnect --all` to restore all targets at once.

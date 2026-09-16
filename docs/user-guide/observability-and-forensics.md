@@ -91,7 +91,7 @@ agentcontrol cache clear
 
 ### Dashboard Visualization & Semantic Cluster Inspector
 
-The local developer dashboard (`http://127.0.0.1:8080/dashboard`) provides a dedicated **Token Economics & Cache** tab:
+The local developer dashboard (`http://127.0.0.1:18080/dashboard`) provides a dedicated **Token Economics & Cache** tab:
 1. **3 Hero Impact Cards:** Visualizes Vexa Gateway 100% Avoided Costs ($), Provider-Side Prefix Discounts ($), and Total Combined Net Value.
 2. **Proportional Contribution Bar:** Displays the exact percentage split between Gateway Zero-Egress savings vs. Upstream provider discounts.
 3. **Live Semantic Cluster Inspector:** Inspects incoming prompt queries alongside matched cluster centroids, displaying exact cosine similarity (%), latency speedup, and per-query net dollars saved.
@@ -116,7 +116,7 @@ Located at `/coverage-health`:
 ### Remediation
 Administrators can copy instant remediation commands for exposed workstations:
 ```bash
-agentcontrol wrap cursor
-agentcontrol wrap claude
+agentcontrol connect cursor
+agentcontrol connect claude
 agentcontrol status
 ```

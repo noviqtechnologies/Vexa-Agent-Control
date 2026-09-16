@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Mutex;
 use tempfile::tempdir;
 use agentcontrol::wrap::connect::{
     connect_codex_to_path, connect_vscode_continue_to_path, revert_json_target,
@@ -6,8 +7,11 @@ use agentcontrol::wrap::connect::{
 };
 use agentcontrol::wrap::manifest::OwnershipManifest;
 
+static CODEX_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn test_codex_cloud_direct_virtual_key_injection_and_manifest() {
+    let _guard = CODEX_TEST_LOCK.lock().unwrap();
     let tmp = tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
 
@@ -56,6 +60,7 @@ theme = "dracula"
 
 #[test]
 fn test_codex_local_mode_token_injection() {
+    let _guard = CODEX_TEST_LOCK.lock().unwrap();
     let tmp = tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
 

@@ -28,13 +28,13 @@ Agent Control intercepts outbound traffic from your agent, surfacing patterns in
 
 Agent Control is deployed in distinct modes depending on your operational needs:
 
-1. **One-Command Full Protection (`agentcontrol protect`)**
-   The recommended entry point for developers. A single command auto-generates a baseline `agentcontrol-policy.yaml` (with P0 DLP secret rules), discovers and atomically wraps all installed AI IDEs (Cursor, Claude Desktop, VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity, Codex), starts the local gateway proxy on `127.0.0.1:8080` (audit log: `~/.agentcontrol/audit.jsonl`), and opens the local dashboard. `agentcontrol init` is deprecated in favour of this command.
+1. **Workstation Security Gateway (`agentcontrol start` + `agentcontrol connect <target>`)**
+   The recommended entry point for developers. Start the local daemon on `127.0.0.1:18080` (with embedded local dashboard and `~/.agentcontrol/audit.jsonl` log), then connect your AI IDEs (Cursor, Claude Desktop, Antigravity, Codex, etc.) with automated zero-touch configuration.
 
-2. **Observation-Only Shadow Proxy (`agentcontrol protect --shadow`)**
-   Runs the local proxy in observation-only mode to log agent traffic and display live telemetry without active blocking. Note: `agentcontrol dev` is deprecated in favor of `agentcontrol protect` and `agentcontrol protect --shadow`.
+2. **Observation-Only Shadow Proxy (`agentcontrol start --shadow`)**
+   Runs the local proxy in observation-only mode to log agent traffic and display live telemetry without active blocking.
 
-3. **Centralized Enforcement Gateway (`agentcontrol start`)**
+3. **Centralized Enforcement Gateway (`agentcontrol start --centralized`)**
    A hardened gateway deployment that actively enforces security policies in a production or staging environment. It supports TLS, stateful sequence rules, and Zero-Downtime policy hot-reloading.
 
 4. **Agent Identity Platform (`agentcontrol identity`)**

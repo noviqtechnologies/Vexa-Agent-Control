@@ -8,7 +8,7 @@ This guide explains how to route custom AI agents (LangChain, LlamaIndex, CrewAI
 
 ```mermaid
 graph LR
-    Agent[Python / Node.js AI Agent] -->|HTTP / HTTPS Proxy| Gateway[Vexa Agent Control :8080]
+    Agent[Python / Node.js AI Agent] -->|HTTP / HTTPS Proxy| Gateway[Agent Control :18080]
     Gateway -->|Inspected & Enforced| LLM[OpenAI / Anthropic / Local LLM]
     Gateway -->|Audited MCP Calls| MCP[Remote / Local MCP Servers]
 ```
@@ -17,31 +17,31 @@ graph LR
 
 ## 1. Environment Variable Setup
 
-The simplest way to route outbound agent traffic through Vexa is via standard HTTP proxy environment variables:
+The simplest way to route outbound agent traffic through Agent Control is via standard HTTP proxy environment variables:
 
 ### Linux / macOS (Bash / Zsh)
 ```bash
-export AGENTCONTROL_PROXY_URL="http://127.0.0.1:8080"
-export HTTP_PROXY="http://127.0.0.1:8080"
-export HTTPS_PROXY="http://127.0.0.1:8080"
+export AGENTCONTROL_PROXY_URL="http://127.0.0.1:18080"
+export HTTP_PROXY="http://127.0.0.1:18080"
+export HTTPS_PROXY="http://127.0.0.1:18080"
 ```
 
 ### Windows (PowerShell)
 ```powershell
-$env:AGENTCONTROL_PROXY_URL = "http://127.0.0.1:8080"
-$env:HTTP_PROXY = "http://127.0.0.1:8080"
-$env:HTTPS_PROXY = "http://127.0.0.1:8080"
+$env:AGENTCONTROL_PROXY_URL = "http://127.0.0.1:18080"
+$env:HTTP_PROXY = "http://127.0.0.1:18080"
+$env:HTTPS_PROXY = "http://127.0.0.1:18080"
 ```
 
 ### Windows (Command Prompt - CMD)
 ```cmd
-set AGENTCONTROL_PROXY_URL=http://127.0.0.1:8080
-set HTTP_PROXY=http://127.0.0.1:8080
-set HTTPS_PROXY=http://127.0.0.1:8080
+set AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080
+set HTTP_PROXY=http://127.0.0.1:18080
+set HTTPS_PROXY=http://127.0.0.1:18080
 ```
 
 > [!TIP]
-> If Vexa Agent Control is running in Docker, the proxy port `8080` is accessible via the exact same localhost URLs across Linux, macOS, and Windows.
+> If running the standalone Team Hub in Docker, the proxy port defaults to `8080`. For the native Workstation binary daemon, the loopback port is `18080`.
 
 ---
 
@@ -79,8 +79,8 @@ payload = {
     }
 }
 
-# Send directly through the Vexa gateway endpoint
-response = requests.post("http://127.0.0.1:8080/v1/mcp", json=payload)
+# Send directly through the Agent Control gateway endpoint
+response = requests.post("http://127.0.0.1:18080/v1/mcp", json=payload)
 print(response.json())
 ```
 
@@ -92,7 +92,7 @@ print(response.json())
 ```typescript
 import { fetch, setGlobalDispatcher, ProxyAgent } from 'undici';
 
-const proxyUrl = process.env.AGENTCONTROL_PROXY_URL || 'http://127.0.0.1:8080';
+const proxyUrl = process.env.AGENTCONTROL_PROXY_URL || 'http://127.0.0.1:18080';
 const proxyAgent = new ProxyAgent(proxyUrl);
 setGlobalDispatcher(proxyAgent);
 
@@ -111,6 +111,6 @@ run();
 
 ## 4. Verifying Custom Agent Traffic
 
-1. Start the gateway: `agentcontrol protect --shadow`
+1. Start the gateway: `agentcontrol start --shadow`
 2. Run your agent script in the configured shell.
-3. Open `http://127.0.0.1:8080` to observe your agent's outbound calls and tool usage in real time.
+3. Open `http://127.0.0.1:18080` to observe your agent's outbound calls and tool usage in real time.

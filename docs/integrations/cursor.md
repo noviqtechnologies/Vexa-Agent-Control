@@ -27,14 +27,14 @@ In Cursor's `User/settings.json` (or via **Cursor Settings → Models → OpenAI
 
 ```json
 {
-  "cursor.openAI.baseUrl": "http://127.0.0.1:8080/v1",
+  "cursor.openAI.baseUrl": "http://127.0.0.1:18080/v1",
   "cursor.openAI.apiKey": "sk-vex-YOUR_VIRTUAL_KEY_HERE",
   "cursor.openAI.model": "gpt-4o"
 }
 ```
 
 > [!NOTE]
-> When Cursor submits completions to `http://127.0.0.1:8080/v1`, Agent Control validates the Virtual Key, pre-authorizes the estimated token spend against your budget, checks prompt DLP rules, and swaps the virtual token with your authoritative upstream key.
+> When Cursor submits completions to `http://127.0.0.1:18080/v1`, Agent Control validates the Virtual Key, pre-authorizes the estimated token spend against your budget, checks prompt DLP rules, and swaps the virtual token with your authoritative upstream key.
 
 ---
 
@@ -47,8 +47,8 @@ When using Cursor's native subscription tier (`api2.cursor.sh`), Agent Control i
 agentcontrol ca install
 ```
 
-When you execute `agentcontrol protect`, Agent Control automatically:
-1. Adds `"http.proxy": "http://127.0.0.1:8080"` and `"cursor.general.disableHttp2": true` to Cursor's `settings.json`.
+When you execute `agentcontrol connect cursor`, Agent Control automatically:
+1. Adds `"http.proxy": "http://127.0.0.1:18080"` and `"cursor.general.disableHttp2": true` to Cursor's `settings.json`.
 2. Sets `NODE_EXTRA_CA_CERTS` for Cursor's internal Node runtime.
 3. Decrypts loopback CONNECT streams, metering prompt and completion tokens across Tab Autocomplete, Composer, and Chat.
 
@@ -64,32 +64,33 @@ To intercept Model Context Protocol tool calls (filesystem, terminal, databases)
    ```
    Confirm `Cursor` shows `[verified]` and `EXISTS: ✔`.
 
-2. **Wrap Cursor MCP Configuration:**
+2. **Connect Cursor:**
    ```bash
-   agentcontrol wrap cursor
+   agentcontrol connect cursor
    ```
    - Automatically wraps each MCP command in `~/.cursor/mcp.json` with `agentcontrol stdio-proxy --`.
-   - Creates a timestamped backup: `mcp.json.bak.<timestamp>`.
+   - Creates a timestamped baseline backup: `mcp.json.bak.<timestamp>`.
+   - Records all mutations in `~/.agentcontrol/manifests/cursor.manifest.json`.
 
 3. **Restart Cursor IDE:**
    Restart Cursor to reload the wrapped stdio-proxy configuration.
 
 4. **Verify Live Monitoring:**
-   Ask Cursor's Composer or Chat to invoke a tool. Open the Agent Control Web Console at `http://localhost:3000` or `http://127.0.0.1:8080` to inspect live event telemetry.
+   Ask Cursor's Composer or Chat to invoke a tool. Open the Local Developer Dashboard at `http://127.0.0.1:18080` to inspect live event telemetry.
 
 ---
 
-## 4. Unwrapping Cursor
+## 4. Disconnecting Cursor
 
-To restore original settings and MCP configurations:
+To restore original settings and MCP configurations from the ownership manifest:
 ```bash
-agentcontrol unwrap cursor
+agentcontrol disconnect cursor
 ```
 To remove the local certificate from the OS trust store:
 ```bash
 agentcontrol ca uninstall
 ```
-Or reset all IDE configurations simultaneously:
+Or disconnect all managed IDE configurations simultaneously:
 ```bash
-agentcontrol unprotect
+agentcontrol disconnect --all
 ```

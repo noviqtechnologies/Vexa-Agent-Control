@@ -231,9 +231,9 @@ agentcontrol identity audit --agent my-agent --verify
 
 ---
 
-## 8. Local Dashboard & ADR Security Widgets (`agentcontrol protect`)
+## 8. Local Dashboard & ADR Security Widgets (`agentcontrol start`)
 
-Agent Control's Workstation Sidecar embedded local dashboard runs automatically at `http://127.0.0.1:8080` when you execute `agentcontrol protect`. It includes dedicated **ADR Benchmark** tabs and real-time security widgets, all served offline with zero external dependencies.
+Agent Control's Workstation Sidecar embedded local dashboard runs automatically at `http://127.0.0.1:18080` when you execute `agentcontrol start`. It includes dedicated **ADR Benchmark** tabs and real-time security widgets, all served offline with zero external dependencies.
 
 ### ADR Dashboard Widgets
 
@@ -248,10 +248,10 @@ Agent Control's Workstation Sidecar embedded local dashboard runs automatically 
 ### Launch the Dashboard
 **All OS (macOS, Linux, Windows):**
 ```bash
-agentcontrol protect
-# Dashboard auto-opens at http://127.0.0.1:8080 in Active Enforcement Mode
-# Use 'agentcontrol protect --shadow' for observation-only mode
-# (Note: 'agentcontrol dev' is deprecated in favor of 'agentcontrol protect')
+agentcontrol start
+# Dashboard auto-opens at http://127.0.0.1:18080 in Active Enforcement Mode
+# Use 'agentcontrol start --shadow' for observation-only mode
+# Connect targets using: agentcontrol connect <target>
 ```
 
 ### Deploying the Full Stack Dashboard via Helm (Production)

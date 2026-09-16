@@ -4,17 +4,17 @@ Common issues, diagnostic checks, and resolutions when installing or operating V
 
 ---
 
-## 1. Port 8080 Already in Use
+## 1. Port 18080 Already in Use
 
 **Symptom:**
 ```text
-Error: Failed to bind listener on 127.0.0.1:8080: Address already in use
+Error: Failed to bind listener on 127.0.0.1:18080: Address already in use
 ```
 
 **Resolution:**
-Specify a custom listen port:
+The daemon automatically falls back to the next available port in range `18080..=18090` and writes the active port to `~/.agentcontrol/daemon.port`. If you need to specify a port explicitly:
 ```bash
-agentcontrol protect --listen 127.0.0.1:9090
+agentcontrol start --listen 127.0.0.1:9090
 ```
 
 ---
@@ -22,11 +22,11 @@ agentcontrol protect --listen 127.0.0.1:9090
 ## 2. Tool Calls Not Appearing in Dashboard
 
 **Symptom:**
-You run `agentcontrol protect`, but tool calls made by Claude Desktop or Cursor do not appear in the dashboard or `audit.jsonl`.
+You run `agentcontrol start` and connect your assistants, but tool calls made by Claude Desktop or Cursor do not appear in the dashboard (`http://127.0.0.1:18080`) or `events.db`.
 
 **Resolution:**
 1. Check `agentcontrol status` to ensure the config shows `[verified]` and all servers are wrapped.
-2. **Restart your IDE:** AI IDEs (Claude Desktop, Cursor) read their configuration once at startup. If the IDE was already open when you ran `protect`, you must restart it.
+2. **Restart your IDE:** AI IDEs (Claude Desktop, Cursor) read their configuration once at startup. If the IDE was already open when you ran `agentcontrol connect <target>`, you must restart it.
 
 ---
 
@@ -53,13 +53,13 @@ For release v1.0.42 and earlier, native ARM64 Windows assets were not published.
 
 ---
 
-## 5. Unprotect / Backup Restoration Warning
+## 5. Disconnect / Backup Restoration Warning
 
 **Symptom:**
-`agentcontrol unprotect` warns that a backup file was modified or missing.
+`agentcontrol disconnect` warns that a backup file was modified or missing.
 
 **Resolution:**
 Force restoration from the latest available backup:
 ```bash
-agentcontrol unprotect --force
+agentcontrol disconnect --all --force
 ```

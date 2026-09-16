@@ -50,7 +50,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.83` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.85` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
@@ -82,17 +82,17 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 - **Run:**
   In a new terminal window:
   ```bash
-  # For OpenAI Codex CLI:
-  agentcontrol connect codex
-
   # For Claude Desktop:
   agentcontrol connect claude
 
-  # For VS Code Continue Extension:
-  agentcontrol connect vscode-continue
-
   # For Cursor:
   agentcontrol connect cursor
+
+  # For Antigravity IDE:
+  agentcontrol connect antigravity
+
+  # For OpenAI Codex CLI:
+  agentcontrol connect codex
   ```
 - **Expected Result:**
   - Pristine baseline backup created: `<config>.baseline.bak`.
@@ -118,9 +118,10 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
      ```
 - **Expected Result:**
   ```text
-  Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
   Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-  Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+  Target: cursor          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+  Target: antigravity     [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+  Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
   ```
 - **What changes:** Telemetry streamed live to dashboard and persisted in `~/.agentcontrol/events.db`.
 - **Undo:** Not applicable.
@@ -136,11 +137,11 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
   ```
 - **Expected Result:**
   ```text
-  ✔ Binary Integrity:          Pass (v1.0.83)
+  ✔ Binary Integrity:          Pass (v1.0.85)
   ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
   ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
   ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
-  ✔ Target Configuration:      Pass (codex: verified, claude: verified)
+  ✔ Target Configuration:      Pass (claude: verified, cursor: verified, codex: verified)
   ✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
 
   Overall Health: HEALTHY (Exit Code 0)
@@ -157,10 +158,10 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 - **Run:**
   ```bash
   # Restore specific assistant configuration:
-  agentcontrol disconnect codex
   agentcontrol disconnect claude
-  agentcontrol disconnect vscode-continue
   agentcontrol disconnect cursor
+  agentcontrol disconnect antigravity
+  agentcontrol disconnect codex
 
   # Diagnose and repair configuration drift without losing settings:
   agentcontrol repair

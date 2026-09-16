@@ -37,12 +37,11 @@
   - [2. Zero-Trust MCP Tool Firewall](#2-zero-trust-mcp-tool-firewall)
   - [3. Fail-Closed Spend Governance & Policy Enforcement](#3-fail-closed-spend-governance--policy-enforcement)
   - [4. Forensic Dossiers & Run Explorer](#4-forensic-dossiers--run-explorer)
-  - [5. Workstation Coverage Matrix & Control Health](#5-workstation-coverage-matrix--control-health)
-  - [6. Multi-Cloud OpenTofu Deployments](#6-multi-cloud-opentofu-deployments)
-  - [7. Pluggable Routing Engine & Pipeline Hooks](#7-pluggable-routing-engine--pipeline-hooks)
-  - [8. Enterprise Semantic Vector Caching](#8-enterprise-semantic-vector-caching)
-  - [9. Desired-State Routing & Verification Probe](#9-desired-state-routing--verification-probe)
-  - [10. Control Hub v2 Architecture & Multi-State Observability](#10-control-hub-v2-architecture--multi-state-observability)
+  - [5. Multi-Cloud OpenTofu Deployments](#5-multi-cloud-opentofu-deployments)
+  - [6. Pluggable Routing Engine & Pipeline Hooks](#6-pluggable-routing-engine--pipeline-hooks)
+  - [7. Enterprise Semantic Vector Caching](#7-enterprise-semantic-vector-caching)
+  - [8. Desired-State Routing & Verification Probe](#8-desired-state-routing--verification-probe)
+  - [9. Control Hub v2 Architecture & Multi-State Observability](#9-control-hub-v2-architecture--multi-state-observability)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -63,7 +62,7 @@
 **Vexa Agent Control** is an open source AI Gateway and transparent security sidecar purpose-built for AI agents, developers, and enterprise platform teams. It operates in two flexible modalities:
 
 1. **AI Gateway (Centralized Proxy Server):** Centralizes upstream LLM routing (OpenAI, Azure OpenAI, Anthropic Claude, Google Gemini, Groq, AWS Bedrock, and local models) behind standard OpenAI-compatible endpoints with virtual keys, load balancing, real-time rate limiting, and microcent budget caps.
-2. **Workstation Sentry & MCP Firewall (Transparent Local Sidecar):** Automatically wraps local agent tool configurations (Claude Desktop, Codex, VS Code Continue) to intercept Model Context Protocol (MCP) and HTTP requests, enforcing Data Loss Prevention (DLP), secret redacting, and prompt-injection defense before data leaves the workstation.
+2. **Workstation Sentry & MCP Firewall (Transparent Local Sidecar):** Automatically wraps local agent tool configurations (Claude Desktop, Cursor, Codex, Antigravity) to intercept Model Context Protocol (MCP) and HTTP requests, enforcing Data Loss Prevention (DLP), secret redacting, and prompt-injection defense before data leaves the workstation.
 
 ---
 
@@ -152,17 +151,16 @@ curl -X POST http://localhost:18080/v1/chat/completions \
 <details>
 <summary><b>2. Zero-Trust MCP Tool Firewall</b> — 1-Command IDE & Agent Protection</summary>
 
-Vexa automatically discovers, backs up, and wraps MCP configurations for **Claude Desktop**, **Codex**, and **VS Code Continue** (via `agentcontrol connect`).
+Vexa automatically discovers, backs up, and wraps MCP configurations for **Claude Desktop**, **Cursor**, **Codex**, and **Antigravity**.
 
 ### Zero-Touch Workstation Quickstart
 ```bash
-# 1. Start the local security gateway:
-agentcontrol start
+# 1. Authenticate your workstation via browser OAuth PKCE:
+agentcontrol login
 
 # 2. Connect your installed coding assistants:
 agentcontrol connect codex
 agentcontrol connect claude
-agentcontrol connect vscode-continue
 
 # 3. Check health and multi-state status:
 agentcontrol status
@@ -311,17 +309,15 @@ agentcontrol report ~/.agentcontrol/audit.jsonl --format text
 Unlike central-only gateways that are blind to rogue direct connections, Vexa maintains a live boundary map of all enrolled developer environments:
 
 - **Fleet Protection Score (%):** Continuously monitors the ratio of protected vs exposed workstations.
-- **IDE Target Audit Matrix:** Auto-discovers whether Claude Desktop, Codex, VS Code Continue, and other configured targets are wrapped or bypassing proxy controls.
+- **IDE Target Audit Matrix:** Auto-discovers whether Cursor, Claude Desktop, VS Code, JetBrains, Windsurf, Zed, or Cline are wrapped or bypassing proxy controls.
 - **24-Hour Tamper Log:** Detects and flags unauthorized configuration reversions, manual proxy bypasses, or rogue MCP servers.
 
 ```bash
 # Check local boundary status and active wrapped IDEs
 agentcontrol status
 
-# Connect a supported assistant into the zero-trust mesh
-agentcontrol connect codex
-agentcontrol connect claude
-agentcontrol connect vscode-continue
+# Wrap an IDE target into the zero-trust mesh
+agentcontrol wrap cursor
 ```
 
 [**Read the Coverage & Boundary Health Guide →**](docs/user-guide/observability-and-forensics.md#4-workstation-coverage--control-health)
@@ -329,7 +325,7 @@ agentcontrol connect vscode-continue
 </details>
 
 <details>
-<summary><b>6. Multi-Cloud OpenTofu Deployments</b> — AWS, Azure & GCP Infrastructure</summary>
+<summary><b>5. Multi-Cloud OpenTofu Deployments</b> — AWS, Azure & GCP Infrastructure</summary>
 
 Deploy production-grade, highly cost-effective (~$0–$25/mo) control hubs on serverless container infrastructure:
 
@@ -350,7 +346,7 @@ terraform apply -var-file="terraform.stage.tfvars"
 </details>
 
 <details>
-<summary><b>7. Pluggable Routing Engine & Pipeline Hooks</b> — Dynamic Model Groups & Modular Lifecycle Interception</summary>
+<summary><b>6. Pluggable Routing Engine & Pipeline Hooks</b> — Dynamic Model Groups & Modular Lifecycle Interception</summary>
 
 Tailor request routing and wire-level transformations to meet rigorous latency, cost, and data residency standards.
 
@@ -375,7 +371,7 @@ Intercept and mutate traffic at each processing phase across both raw HTTP and s
 </details>
 
 <details open>
-<summary><b>8. Enterprise Semantic Vector Caching</b> — 100% Zero-Egress Cost Elimination &amp; Sub-3ms Retrieval</summary>
+<summary><b>7. Enterprise Semantic Vector Caching</b> — 100% Zero-Egress Cost Elimination &amp; Sub-3ms Retrieval</summary>
 
 LiteLLM and native cloud providers rely on exact string prefix hashes. If a developer or automated agent asks *"how to sort numbers in python"* vs *"in python how to sort a list of numbers"*, traditional prompt caches miss completely—incurring full token rates, 1-2 second WAN latency, and egressing sensitive prompts.
 
@@ -444,7 +440,7 @@ agentcontrol cache clear
 
 ### Developer Dashboard Telemetry
 
-Open `http://127.0.0.1:18080` (Local Developer Dashboard) and navigate to **Token Economics & Cache**:
+Open `http://localhost:18080/dashboard` and navigate to **Token Economics & Cache**:
 - **3 Hero Metric Cards:** Explicitly visualizes Vexa Gateway 100% Avoided Spend vs. Provider-side prefix discounts.
 - **Proportional Attribution Bar:** Live percentage split showing direct gateway savings vs upstream provider discounts.
 - **Live Semantic Cluster Inspector:** Inspects incoming queries and cached clusters side-by-side with exact cosine similarity scores and per-query dollar savings.
@@ -456,7 +452,7 @@ Open `http://127.0.0.1:18080` (Local Developer Dashboard) and navigate to **Toke
 </details>
 
 <details>
-<summary><b>9. Desired-State Routing & Verification Probe</b> — Convergence Reconciler & Attributed Governance</summary>
+<summary><b>8. Desired-State Routing & Verification Probe</b> — Convergence Reconciler & Attributed Governance</summary>
 
 Replace fragile fire-and-forget push channels with a formal 9-state desired-state reconciler and authenticated identity verification:
 
@@ -475,7 +471,7 @@ Replace fragile fire-and-forget push channels with a formal 9-state desired-stat
 </details>
 
 <details>
-<summary><b>10. Control Hub v2 Architecture & Multi-State Observability</b> — Zero Private Key Ingestion & Signed Policy Manifests</summary>
+<summary><b>9. Control Hub v2 Architecture & Multi-State Observability</b> — Zero Private Key Ingestion & Signed Policy Manifests</summary>
 
 The enterprise Control Hub v2 provides centralized governance, multi-state capability tracking, and signed policy distributions without ever ingesting private keys:
 
@@ -684,9 +680,11 @@ agentcontrol connect claude
 
 # Connect VS Code Continue extension:
 agentcontrol connect vscode-continue
+
+# Connect Cursor:
+agentcontrol connect cursor
 ```
 
-- **Supported Targets:** `codex` (OpenAI Codex CLI), `claude` (Claude Desktop), `vscode-continue` (VS Code Continue extension).
 - **Zero Cloud Dependencies:** Automatically uses your local proxy token (`~/.agentcontrol/local.token`) and configures loopback routing (`http://127.0.0.1:18080/v1`).
 - **MCP Process Sandboxing:** Wraps MCP servers with `agentcontrol stdio-proxy` under strict memory limits and credential redaction.
 - **Baseline Backup & Ownership Manifest:** Backs up existing configs to `<config>.baseline.bak` and tracks all mutations in `~/.agentcontrol/manifests/<target>.manifest.json` for risk-free reversal.
@@ -718,7 +716,7 @@ agentcontrol status
 ```text
 Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
 Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-Target: vscode-continue [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
 ```
 
 ---
@@ -754,6 +752,7 @@ To cleanly disconnect an assistant and restore original settings at any time:
 agentcontrol disconnect codex
 agentcontrol disconnect claude
 agentcontrol disconnect vscode-continue
+agentcontrol disconnect cursor
 ```
 
 - Restores only the managed settings recorded in the `OwnershipManifest`.
@@ -875,12 +874,11 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 
 | Level | Client / IDE | Configuration Path Checked | Automatic Wrap Support |
 |---|---|---|---|
-| **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported via `agentcontrol connect claude` ([Guide](docs/integrations/claude-desktop.md)) |
-| **Verified** | **Codex** | `~/.codex/config.toml` | Supported via `agentcontrol connect codex` ([Guide](docs/integrations/codex.md)) — wraps MCP tools & injects shell environment policy |
-| **Verified** | **VS Code Continue** | `~/.vscode/settings.json` (Continue extension) | Supported via `agentcontrol connect vscode-continue` ([Guide](docs/integrations/vscode-continue.md)) |
-| **Verified** | **Antigravity** | `~/.gemini/config/mcp_config.json` (macOS/Linux) / `%USERPROFILE%\.gemini\config\mcp_config.json` (Windows) | Supported via `agentcontrol wrap antigravity` ([Guide](docs/integrations/antigravity.md)) |
-| **Verified** | **Cursor** | `~/.cursor/mcp.json` | Supported via `agentcontrol wrap cursor` ([Cursor Guide](docs/guides/cursor_governance_guide.md)) |
-| **Experimental** | JetBrains, Zed, Cline, OpenCode | User-managed path | Requires `agentcontrol status` & manual check |
+| **Verified** | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` / `~/Library/Application Support/Claude/` | Tested & fully supported ([Guide](docs/integrations/claude-desktop.md)) |
+| **Verified** | **Cursor** | `~/.cursor/mcp.json` & `User/settings.json` | Tested & fully supported ([Cursor Guide](docs/guides/cursor_governance_guide.md)) |
+| **Verified** | **Codex** | `~/.codex/config.toml` | Supported ([Guide](docs/integrations/codex.md)) — wraps MCP tools & injects shell environment policy |
+| **Verified** | **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | Tested & fully supported ([Guide](docs/integrations/antigravity.md)) |
+| **Experimental** | VS Code, JetBrains, Zed, Cline, OpenCode | User-managed / hypothetical path | Requires `agentcontrol status` & manual check |
 | **Custom Agent** | LangChain, LlamaIndex, CrewAI, AutoGen, Raw HTTP | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080` | Manual proxy routing ([Guide](docs/guides/custom-agent-http.md)) |
 
 ---

@@ -57,11 +57,20 @@ agentcontrol connect claude
 - Wraps all MCP server entries in `claude_desktop_config.json` with the stdio security proxy.
 - Direct model requests continue to route to Anthropic directly; all tool executions are monitored and governed.
 
-#### VS Code Continue Extension:
+#### Cursor IDE:
 ```bash
-agentcontrol connect vscode-continue
+agentcontrol connect cursor
 ```
-- Configures `~/.continue/config.json` to route OpenAI-compatible completions through the local proxy.
+- Automatically configures Cursor's `User/settings.json` to proxy LLM traffic through `http://127.0.0.1:18080`.
+- Wraps any configured MCP servers in `~/.cursor/mcp.json` with the stdio security proxy.
+- Records an ownership manifest for guaranteed clean reversal.
+
+#### Antigravity IDE:
+```bash
+agentcontrol connect antigravity
+```
+- Wraps all MCP server entries in `~/.gemini/antigravity/mcp_config.json` with the stdio security proxy.
+- Records an ownership manifest for guaranteed clean reversal.
 
 ---
 
@@ -77,17 +86,14 @@ Example output:
 ```text
 === Vexa Agent Control Workstation Status ===
 Daemon:    RUNNING (127.0.0.1:18080)
-Identity:  alice@company.com (dev-team)
-Device ID: dev-9f82ab41 (Verified)
+Identity:  local (local.token, ~/.agentcontrol/local.token)
 
 Target           Status               Freshness       Notes
 ----------------------------------------------------------------------------------
 codex            CONFIGURED           ACTIVE_FRESH    OpenAI endpoint routed (127.0.0.1:18080)
 claude           MCP_WRAPPED          ACTIVE_FRESH    2 MCP servers wrapped with stdio-proxy
-vscode-continue  CONFIGURED           ACTIVE_FRESH    Local proxy completions enabled
-
-Notice: For OpenAI Codex, native shell execution (bash/git) is ungoverned by local proxy.
-Notice: For Claude Desktop, direct LLM completions route directly to Anthropic.
+cursor           CONFIGURED           ACTIVE_FRESH    Local proxy completions enabled
+antigravity      MCP_WRAPPED          ACTIVE_FRESH    MCP servers wrapped with stdio-proxy
 ```
 
 ---
@@ -119,7 +125,8 @@ To cleanly disconnect an assistant and revert configurations without affecting y
 ```bash
 agentcontrol disconnect codex
 agentcontrol disconnect claude
-agentcontrol disconnect vscode-continue
+agentcontrol disconnect cursor
+agentcontrol disconnect antigravity
 ```
 
 Agent Control consults the target's `OwnershipManifest`, restores original values, unwraps MCP server commands, and preserves all user-added properties, custom themes, and keybindings.
