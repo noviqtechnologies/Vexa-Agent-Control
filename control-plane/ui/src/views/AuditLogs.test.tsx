@@ -59,16 +59,16 @@ describe('AuditLogs View', () => {
     vi.mocked(api.listEvents).mockResolvedValue(mockEvents)
     renderView()
 
-    expect(await screen.findByText('Audit Logs')).toBeInTheDocument()
+    expect(await screen.findByText('Security & DLP Logs')).toBeInTheDocument()
     expect(screen.getByText('Total Invocations')).toBeInTheDocument()
     expect(screen.getByText('Violations (Denied/Warned)')).toBeInTheDocument()
 
     // Check table headers & labels
     expect(screen.getAllByText('Agent ID / Subject').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Tool Name').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Operation & Target')).toBeInTheDocument()
     expect(screen.getAllByText('Decision').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('DLP Findings')).toBeInTheDocument()
-    expect(screen.getByText('Injection')).toBeInTheDocument()
+    expect(screen.getByText('Injection Defense')).toBeInTheDocument()
 
     // Check rows data
     expect(await screen.findByText('cursor@workstation-alpha')).toBeInTheDocument()
@@ -100,7 +100,7 @@ describe('AuditLogs View', () => {
     const inspectButtons = screen.getAllByText('Inspect')
     await user.click(inspectButtons[0])
 
-    expect(await screen.findByText('Event Inspection')).toBeInTheDocument()
+    expect(await screen.findByText('Security Event Inspection')).toBeInTheDocument()
     expect(screen.getByText('ID: evt-001')).toBeInTheDocument()
     expect(screen.getByText('Raw Event Telemetry JSON')).toBeInTheDocument()
   })

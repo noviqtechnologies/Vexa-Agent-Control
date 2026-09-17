@@ -10,6 +10,8 @@ interface OrgSummary {
   enrolled_devices: number
   license_expires_at?: string
   days_remaining: number
+  has_license_key?: boolean
+  is_evaluation_expired?: boolean
   status: string
   created_at: string
 }
@@ -78,9 +80,11 @@ export const LicenseSettings: React.FC = () => {
   }
 
   const tier = (org?.license_tier || 'developer').toLowerCase()
-  const maxDevices = org?.max_devices ?? 1
+  const maxDevices = org?.max_devices ?? 5
   const enrolledDevices = org?.enrolled_devices ?? 0
   const isUnlimited = maxDevices === -1 || maxDevices >= 999999
+  const hasLicense = Boolean(org?.has_license_key)
+  const isQuotaReached = !isUnlimited && enrolledDevices >= maxDevices && !hasLicense
 
   return (
     <div className="soc-license-page" style={{ maxWidth: '1000px', margin: '0 auto' }}>
@@ -103,6 +107,27 @@ export const LicenseSettings: React.FC = () => {
         </div>
       )}
 
+      {/* Quota Reached Alert */}
+      {isQuotaReached && (
+        <div style={{
+          padding: '14px 18px',
+          background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid rgba(245, 158, 11, 0.4)',
+          borderRadius: 'var(--radius-md, 8px)',
+          color: '#fcd34d',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '13.5px'
+        }}>
+          <span style={{ fontSize: '20px' }}>⚡</span>
+          <div style={{ flex: 1 }}>
+            <strong>Early Access Capacity Reached ({enrolledDevices}/{maxDevices} devices):</strong> You have reached the 5-device Early Access limit. Once we reach GA, up to 50 devices will be supported. To connect more than 5 devices now, please activate your Enterprise license key below.
+          </div>
+        </div>
+      )}
+
       {/* Early Access Preview Banner */}
       <div style={{
         padding: '16px 20px',
@@ -117,10 +142,10 @@ export const LicenseSettings: React.FC = () => {
         <div style={{ fontSize: '24px', lineHeight: 1 }}>🚀</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Early Access Preview
+            Early Access Preview — Up to 5 Devices
           </div>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
-            Vexa Team Hub is currently in unrestricted Early Access. Team and fleet governance features are fully unlocked for evaluation. Commercial enterprise licensing applies post-v1.0.
+            Vexa Team Hub is currently in Early Access with a 5-device limit. Fleet governance, spend caps, and SSE sync are fully unlocked with no time restriction. Activating a license key is required only to connect more than 5 devices or once GA (up to 50 devices) ships.
           </div>
           <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '12.5px' }}>
             <a href="https://discord.gg/vexasec" target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
@@ -184,12 +209,20 @@ export const LicenseSettings: React.FC = () => {
 
           <div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>License Status</div>
-            <div style={{ fontSize: '16px', fontWeight: 600, marginTop: '6px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>●</span> Active (Early Access)
+            <div style={{
+              fontSize: '16px',
+              fontWeight: 600,
+              marginTop: '6px',
+              color: hasLicense ? '#10b981' : '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>●</span> {hasLicense ? 'Active (Licensed)' : 'Active (Early Access)'}
             </div>
-            {org?.days_remaining !== undefined && org.days_remaining > 0 && (
+            {org?.license_expires_at && (
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                {org.days_remaining} days remaining
+                {`License expires: ${new Date(org.license_expires_at).toLocaleDateString()}`}
               </div>
             )}
           </div>
@@ -200,7 +233,7 @@ export const LicenseSettings: React.FC = () => {
               {tier === 'enterprise'
                 ? 'Unlimited Devices, OIDC SSO, Spend Caps, SIEM Streaming, Deep DLP'
                 : tier === 'team'
-                ? 'Up to 50 Devices (Early Access), Spend Caps, Group Policies, OTET Enrollment, Real-Time SSE Policy Push, Alerts'
+                ? 'Up to 5 Devices (Early Access — Up to 50 at GA), Spend Caps, Real-Time SSE Policy Push, Vault Key Custody, Group Policies, OTET Enrollment, Aggregated Audit, Alerts'
                 : 'Up to 5 Devices, Local Gateway, Prompt Redaction, Basic JSONL Logging'}
             </div>
           </div>
@@ -212,7 +245,7 @@ export const LicenseSettings: React.FC = () => {
         <div className="soc-card-header">
           <div>
             <div className="card-title">Activate Design Partner / Enterprise License</div>
-            <div className="soc-card-subtitle">Have an Enterprise Pilot or Design Partner token? Paste your Ed25519 license JWT below to activate custom SLA and dedicated support</div>
+            <div className="soc-card-subtitle">Required to connect more than 5 devices. Paste your Ed25519 license JWT below to activate custom SLA and expanded fleet capacity</div>
           </div>
         </div>
 

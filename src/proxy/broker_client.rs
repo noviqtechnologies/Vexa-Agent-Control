@@ -154,7 +154,6 @@ impl BrokerClient {
             .and_then(|id| id.create_assertion_token(None, None).ok());
 
         let auth_token = crate::identity::device::load_device_token()
-            .or_else(|| assertion.clone())
             // Fallback 1: shared gateway secret (set via GATEWAY_SECRET env in Docker / systemd)
             .or_else(|| std::env::var("GATEWAY_SECRET").ok().filter(|s| !s.is_empty()))
             // Fallback 2: admin token (legacy / single-binary deployments)
@@ -163,6 +162,8 @@ impl BrokerClient {
                     .ok()
                     .filter(|s| !s.is_empty())
             })
+            // Fallback 3: unenrolled device assertion
+            .or_else(|| assertion.clone())
             .unwrap_or_default();
 
         (assertion, auth_token)

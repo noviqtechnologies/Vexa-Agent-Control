@@ -1011,7 +1011,7 @@ The core gateway primitives, local CLI protections, MCP interception engine, and
 ### Open-Core Architecture & Early Access
 
 - **Community Core (Apache 2.0):** Workstation proxy, local MCP tool firewall, prompt injection protection, safe-mode execution, and JSONL audit logging. **100% Free and Open Source forever.**
-- **Team Control Hub (Early Access):** Centralized SSE policy push, OIDC group identity binding, vault credential custody, live spend ledger, and fleet governance. **Free during Early Access** (up to 50 devices).
+- **Team Control Hub (Early Access):** Centralized SSE policy push, OIDC group identity binding, vault credential custody, live spend ledger, and fleet governance. **Free for 90 days during Early Access** (up to 5 devices, expanding to 50 devices post-v1.0 GA).
 - **Enterprise & Sovereign Deployments:** Dedicated enterprise SLAs, custom DLP classifiers, air-gapped sovereign deployments, SIEM log forwarding, and compliance reporting. Available for design partners and commercial pilots.
 
 ---

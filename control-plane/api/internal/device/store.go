@@ -275,7 +275,9 @@ func (s *Store) ListDevices(ctx context.Context, orgID string) ([]DeviceComplian
 			COALESCE(r.tamper_event_count_24h, 0)
 		FROM devices d
 		LEFT JOIN device_compliance_reports r ON r.device_id = d.id
-		WHERE d.organization_id::text = $1 OR d.organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+		WHERE (d.organization_id::text = $1 OR d.organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		  AND d.state != 'REVOKED'
+		  AND d.revoked_at IS NULL
 		ORDER BY d.last_heartbeat_at DESC
 	`, orgID)
 	if err != nil {

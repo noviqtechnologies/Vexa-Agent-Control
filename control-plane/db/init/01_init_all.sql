@@ -25,9 +25,9 @@ CREATE TABLE organizations (
     name                 TEXT NOT NULL DEFAULT 'Primary Organization',
     slug                 TEXT NOT NULL DEFAULT 'default',
     contact_email        TEXT NOT NULL DEFAULT '',
-    license_tier         TEXT NOT NULL DEFAULT 'developer', -- "developer", "team", "enterprise"
+    license_tier         TEXT NOT NULL DEFAULT 'team',      -- "developer", "team", "enterprise"
     license_key_jwt      TEXT,
-    max_devices          INT NOT NULL DEFAULT 1,            -- 1 (Developer), 25 (Team), -1 (Enterprise)
+    max_devices          INT NOT NULL DEFAULT 5,            -- 1 (Developer), 5 (Early Access Team / 50 GA), -1 (Enterprise)
     license_expires_at   TIMESTAMPTZ,
     status               TEXT NOT NULL DEFAULT 'active',
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -584,9 +584,9 @@ CREATE TABLE idempotency_records (
 -- 9. PRISTINE SEED DATA
 -- ============================================================================
 
--- 1. Seed Primary Organization (Default: Team Plan, 25 devices)
+-- 1. Seed Primary Organization (Default: Team Plan Early Access, 5 devices)
 INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 25, 'active')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 5, 'active')
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Seed Default Team

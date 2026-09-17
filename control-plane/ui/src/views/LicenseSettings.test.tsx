@@ -14,9 +14,10 @@ describe('LicenseSettings View', () => {
             slug: 'acme-sec',
             contact_email: 'admin@acmesec.com',
             license_tier: 'team',
-            max_devices: 25,
-            enrolled_devices: 5,
-            days_remaining: 300,
+            max_devices: 5,
+            enrolled_devices: 2,
+            days_remaining: 85,
+            has_license_key: false,
             status: 'active',
             created_at: new Date().toISOString(),
           })
@@ -26,7 +27,7 @@ describe('LicenseSettings View', () => {
     }))
   })
 
-  it('renders organization profile and license tier card', async () => {
+  it('renders organization profile, 5-device Early Access tier, and slots remaining', async () => {
     render(<LicenseSettings />)
 
     await waitFor(() => {
@@ -35,8 +36,70 @@ describe('LicenseSettings View', () => {
       expect(screen.getByText('acme-sec')).toBeDefined()
       expect(screen.getByText('admin@acmesec.com')).toBeDefined()
       expect(screen.getByText('team')).toBeDefined()
-      expect(screen.getByText('5 / 25')).toBeDefined()
-      expect(screen.getByText(/20 device slots remaining/i)).toBeDefined()
+      expect(screen.getByText('2 / 5')).toBeDefined()
+      expect(screen.getByText(/3 device slots remaining/i)).toBeDefined()
+      expect(screen.getByText(/85 days remaining \(90-day trial\)/i)).toBeDefined()
+    })
+  })
+
+  it('displays warning alert when Early Access 5-device quota is reached', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url === '/api/v1/organization') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            id: '00000000-0000-0000-0000-000000000001',
+            name: 'Acme Security',
+            slug: 'acme-sec',
+            contact_email: 'admin@acmesec.com',
+            license_tier: 'team',
+            max_devices: 5,
+            enrolled_devices: 5,
+            days_remaining: 80,
+            has_license_key: false,
+            status: 'active',
+            created_at: new Date().toISOString(),
+          })
+        })
+      }
+      return Promise.reject(new Error('Unknown URL: ' + url))
+    }))
+
+    render(<LicenseSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Early Access Capacity Reached \(5\/5 devices\)/i)).toBeDefined()
+    })
+  })
+
+  it('displays expiration danger alert when 90-day Early Access window has elapsed', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url === '/api/v1/organization') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            id: '00000000-0000-0000-0000-000000000001',
+            name: 'Acme Security',
+            slug: 'acme-sec',
+            contact_email: 'admin@acmesec.com',
+            license_tier: 'team',
+            max_devices: 5,
+            enrolled_devices: 3,
+            days_remaining: 0,
+            has_license_key: false,
+            is_evaluation_expired: true,
+            status: 'trial_expired',
+            created_at: new Date(Date.now() - 95 * 24 * 3600 * 1000).toISOString(),
+          })
+        })
+      }
+      return Promise.reject(new Error('Unknown URL: ' + url))
+    }))
+
+    render(<LicenseSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/90-Day Early Access Evaluation Expired/i)).toBeDefined()
     })
   })
 })

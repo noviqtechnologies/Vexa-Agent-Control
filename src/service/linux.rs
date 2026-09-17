@@ -41,6 +41,7 @@ Description=Agent Control Sentry Endpoint Security Service
 Documentation=https://github.com/noviqtechnologies/Vexa-Agent-Control
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -156,15 +157,14 @@ WantedBy=default.target
                 e
             ))
         }
-        Ok(out) if !out.status.success() => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            println!(
-                "  {} systemctl enable warning: {}",
-                "⚠".yellow(),
-                stderr.trim()
-            );
-        }
-        _ => {}
+        Ok(_) => {}
+    }
+
+    // Ensure user-scope services persist across session logouts
+    if use_user_systemd {
+        let _ = Command::new("loginctl")
+            .arg("enable-linger")
+            .output();
     }
 
     // Fix 5: Verify the service is actually running

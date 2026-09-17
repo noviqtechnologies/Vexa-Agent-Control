@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
@@ -40,16 +41,35 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	maxDevices := 1
 	enrolledDevices := 0
 	features := []string{}
+	hasLicenseKey := false
+	status := "active"
+	var expiresAt interface{}
 
 	if org != nil {
 		tier = org.LicenseTier
 		maxDevices = org.MaxDevices
 		enrolledDevices = org.EnrolledDevices
 		features = license.TierToFeatures(tier)
+		hasLicenseKey = org.LicenseKeyJWT != ""
+
+		if org.LicenseExpiresAt != nil {
+			expiresAt = org.LicenseExpiresAt
+			if time.Now().After(*org.LicenseExpiresAt) {
+				status = "expired"
+			}
+		}
+		// Early Access (no license key): no expiry enforced — only the 5-device cap applies.
 	} else if h.claims != nil {
 		tier = h.claims.Tier
 		maxDevices = h.claims.MaxDevices
 		features = h.claims.Features
+		hasLicenseKey = true
+		if h.claims.ExpiresAt != nil {
+			expiresAt = h.claims.ExpiresAt.Time
+			if time.Now().After(h.claims.ExpiresAt.Time) {
+				status = "expired"
+			}
+		}
 	}
 
 	devicesRemaining := -1
@@ -67,12 +87,11 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		"devices_enrolled":  enrolledDevices,
 		"devices_remaining": devicesRemaining,
 		"features":          features,
-		"status":            "active",
+		"has_license_key":   hasLicenseKey,
+		"status":            status,
 	}
-	if org != nil && org.LicenseExpiresAt != nil {
-		resp["expires_at"] = org.LicenseExpiresAt
-	} else if h.claims != nil && h.claims.ExpiresAt != nil {
-		resp["expires_at"] = h.claims.ExpiresAt.Time
+	if expiresAt != nil {
+		resp["expires_at"] = expiresAt
 	}
 
 	w.Header().Set("Content-Type", "application/json")

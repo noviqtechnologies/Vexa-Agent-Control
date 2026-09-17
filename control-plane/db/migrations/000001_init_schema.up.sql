@@ -25,9 +25,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     name                 TEXT NOT NULL DEFAULT 'Primary Organization',
     slug                 TEXT NOT NULL DEFAULT 'default',
     contact_email        TEXT NOT NULL DEFAULT '',
-    license_tier         TEXT NOT NULL DEFAULT 'developer',
+    license_tier         TEXT NOT NULL DEFAULT 'team',
     license_key_jwt      TEXT,
-    max_devices          INT NOT NULL DEFAULT 1,
+    max_devices          INT NOT NULL DEFAULT 5,
     license_expires_at   TIMESTAMPTZ,
     status               TEXT NOT NULL DEFAULT 'active',
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -555,7 +555,7 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
 -- ============================================================================
 
 INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 25, 'active')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 5, 'active')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO teams (id, organization_id, name, description)

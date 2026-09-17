@@ -397,7 +397,7 @@ func (s *Store) GetFleetStats(ctx context.Context, organizationID string, hours 
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED'),
+			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED' AND revoked_at IS NULL),
 			(SELECT COUNT(*) FROM devices WHERE (state = 'COMPLIANT' OR state = 'ACTIVE') AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes'),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND decision = 'denied' AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),

@@ -57,7 +57,7 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 			contact_email TEXT NOT NULL DEFAULT '',
 			license_tier TEXT NOT NULL DEFAULT 'team',
 			license_key_jwt TEXT,
-			max_devices INT NOT NULL DEFAULT 50,
+			max_devices INT NOT NULL DEFAULT 5,
 			license_expires_at TIMESTAMPTZ,
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -65,12 +65,13 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		);
 
 		INSERT INTO organizations (id, name, slug, contact_email, license_tier, max_devices, status)
-		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 50, 'active')
+		VALUES ('00000000-0000-0000-0000-000000000001', 'Primary Organization', 'default', '', 'team', 5, 'active')
 		ON CONFLICT (id) DO NOTHING;
 
+		-- Ensure unlicensed Early Access organizations are capped at 5 devices
 		UPDATE organizations
-		SET license_tier = 'team', max_devices = GREATEST(max_devices, 50), updated_at = now()
-		WHERE id = '00000000-0000-0000-0000-000000000001' AND license_tier = 'developer';
+		SET max_devices = 5, updated_at = now()
+		WHERE (license_key_jwt IS NULL OR license_key_jwt = '') AND license_tier = 'team' AND max_devices != 5;
 
 		CREATE TABLE IF NOT EXISTS teams (
 			id              TEXT PRIMARY KEY,
@@ -112,7 +113,7 @@ func (s *Store) GetOrganization(ctx context.Context, idOrSlug string) (*model.Or
 			Name:        "Primary Organization",
 			Slug:        "default",
 			LicenseTier: "team",
-			MaxDevices:  50,
+			MaxDevices:  5,
 			Status:      model.OrgStatusActive,
 		}, nil
 	}
@@ -143,6 +144,11 @@ func (s *Store) GetOrganization(ctx context.Context, idOrSlug string) (*model.Or
 	}
 	org.Status = model.OrganizationStatus(statusStr)
 
+	// Ensure unlicensed Early Access organizations without custom JWT are capped at 5
+	if org.LicenseKeyJWT == "" && (org.LicenseTier == "team" || org.LicenseTier == "") && org.MaxDevices != 5 {
+		org.MaxDevices = 5
+	}
+
 	// Attach active enrolled device count
 	count, _ := s.CountEnrolledDevices(ctx, org.ID)
 	org.EnrolledDevices = count
@@ -158,7 +164,7 @@ func (s *Store) GetPrimaryOrganization(ctx context.Context) (*model.Organization
 			Name:        "Primary Organization",
 			Slug:        "default",
 			LicenseTier: "team",
-			MaxDevices:  50,
+			MaxDevices:  5,
 			Status:      model.OrgStatusActive,
 		}, nil
 	}
@@ -185,13 +191,18 @@ func (s *Store) GetPrimaryOrganization(ctx context.Context) (*model.Organization
 				Name:        "Primary Organization",
 				Slug:        "default",
 				LicenseTier: "team",
-				MaxDevices:  50,
+				MaxDevices:  5,
 				Status:      model.OrgStatusActive,
 			}, nil
 		}
 		return nil, fmt.Errorf("get primary organization: %w", err)
 	}
 	org.Status = model.OrganizationStatus(statusStr)
+
+	// Ensure unlicensed Early Access organizations without custom JWT are capped at 5
+	if org.LicenseKeyJWT == "" && (org.LicenseTier == "team" || org.LicenseTier == "") && org.MaxDevices != 5 {
+		org.MaxDevices = 5
+	}
 
 	count, _ := s.CountEnrolledDevices(ctx, org.ID)
 	org.EnrolledDevices = count
@@ -245,11 +256,16 @@ func (s *Store) CountEnrolledDevices(ctx context.Context, orgID string) (int, er
 	if s.pool == nil {
 		return 0, nil
 	}
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM devices 
 		WHERE state != 'REVOKED'
-	`).Scan(&count)
+		  AND revoked_at IS NULL
+		  AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	`, orgID).Scan(&count)
 	if err != nil {
 		// Gracefully handle "relation does not exist" (e.g. during fresh DB bootstrap)
 		return 0, nil
@@ -264,28 +280,40 @@ func (s *Store) GetOrganizationSummary(ctx context.Context, orgID string) (*mode
 		return nil, err
 	}
 
+	hasLicenseKey := org.LicenseKeyJWT != ""
 	var daysRemaining int
+	var isEvaluationExpired bool
+	status := org.Status
+
 	if org.LicenseExpiresAt != nil {
+		// Paid license key with an explicit expiry — compute days remaining.
 		diff := time.Until(*org.LicenseExpiresAt)
 		daysRemaining = int(math.Ceil(diff.Hours() / 24))
 		if daysRemaining < 0 {
 			daysRemaining = 0
 		}
+		if daysRemaining == 0 && time.Now().After(*org.LicenseExpiresAt) {
+			isEvaluationExpired = true
+			status = model.OrgStatusTrialExpired
+		}
 	} else {
+		// Early Access (no license key) or perpetual license: no time limit enforced.
 		daysRemaining = 9999
 	}
 
 	return &model.OrganizationSummary{
-		ID:               org.ID,
-		Name:             org.Name,
-		Slug:             org.Slug,
-		ContactEmail:     org.ContactEmail,
-		LicenseTier:      org.LicenseTier,
-		MaxDevices:       org.MaxDevices,
-		EnrolledDevices:  org.EnrolledDevices,
-		LicenseExpiresAt: org.LicenseExpiresAt,
-		DaysRemaining:    daysRemaining,
-		Status:           org.Status,
-		CreatedAt:        org.CreatedAt,
+		ID:                  org.ID,
+		Name:                org.Name,
+		Slug:                org.Slug,
+		ContactEmail:        org.ContactEmail,
+		LicenseTier:         org.LicenseTier,
+		MaxDevices:          org.MaxDevices,
+		EnrolledDevices:     org.EnrolledDevices,
+		LicenseExpiresAt:    org.LicenseExpiresAt,
+		DaysRemaining:       daysRemaining,
+		HasLicenseKey:       hasLicenseKey,
+		IsEvaluationExpired: isEvaluationExpired,
+		Status:              status,
+		CreatedAt:           org.CreatedAt,
 	}, nil
 }

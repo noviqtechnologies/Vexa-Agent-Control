@@ -36,17 +36,19 @@ type ActivateLicenseReq struct {
 }
 
 type OrganizationSummary struct {
-	ID               string             `json:"id"`
-	Name             string             `json:"name"`
-	Slug             string             `json:"slug"`
-	ContactEmail     string             `json:"contact_email"`
-	LicenseTier      string             `json:"license_tier"`
-	MaxDevices       int                `json:"max_devices"`
-	EnrolledDevices  int                `json:"enrolled_devices"`
-	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty"`
-	DaysRemaining    int                `json:"days_remaining"`
-	Status           OrganizationStatus `json:"status"`
-	CreatedAt        time.Time          `json:"created_at"`
+	ID                  string             `json:"id"`
+	Name                string             `json:"name"`
+	Slug                string             `json:"slug"`
+	ContactEmail        string             `json:"contact_email"`
+	LicenseTier         string             `json:"license_tier"`
+	MaxDevices          int                `json:"max_devices"`
+	EnrolledDevices     int                `json:"enrolled_devices"`
+	LicenseExpiresAt    *time.Time         `json:"license_expires_at,omitempty"`
+	DaysRemaining       int                `json:"days_remaining"`
+	HasLicenseKey       bool               `json:"has_license_key"`
+	IsEvaluationExpired bool               `json:"is_evaluation_expired"`
+	Status              OrganizationStatus `json:"status"`
+	CreatedAt           time.Time          `json:"created_at"`
 }
 
 type CreateOrgReq struct {

@@ -337,7 +337,14 @@ func (s *Store) ListDevices(ctx context.Context, organizationID, osFamily, statu
 			d.updated_at
 		FROM devices d
 		WHERE ($1 = '' OR d.os_family = $1)
-		  AND ($2 = '' OR d.state::text = $2)
+		  AND (
+		    CASE
+		      WHEN $2 = '' THEN (d.state::text != 'REVOKED' AND d.revoked_at IS NULL)
+		      WHEN $2 = 'REVOKED' THEN (d.state::text = 'REVOKED' OR d.revoked_at IS NOT NULL)
+		      WHEN $2 = 'ALL' THEN TRUE
+		      ELSE (d.state::text = $2 AND d.state::text != 'REVOKED' AND d.revoked_at IS NULL)
+		    END
+		  )
 		ORDER BY d.created_at DESC
 		LIMIT $3 OFFSET $4
 	`, osFamily, statusFilter, limit, offset)

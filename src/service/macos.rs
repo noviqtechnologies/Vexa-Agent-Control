@@ -59,14 +59,9 @@ pub fn install_macos_service(
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-        <key>Crashed</key>
-        <true/>
-    </dict>
+    <true/>
     <key>ThrottleInterval</key>
-    <integer>10</integer>
+    <integer>5</integer>
     <key>EnvironmentVariables</key>
     <dict>
         <key>AGENTCONTROL_HUB_URL</key>

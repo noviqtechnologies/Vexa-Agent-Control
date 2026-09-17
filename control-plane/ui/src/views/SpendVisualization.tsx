@@ -56,6 +56,13 @@ export default function SpendVisualization() {
   const requestCount = summary?.request_count || 0
   const deniedCount = summary?.denied_count || 0
 
+  const totalCachedTokens = summary?.total_cached_tokens || 0
+  const totalProcessedTokens = (summary?.total_input_tokens || 0) + (summary?.total_output_tokens || 0)
+  const effectiveTokenRateUSD = totalProcessedTokens > 0 && totalSettledUSD > 0
+    ? totalSettledUSD / totalProcessedTokens
+    : 0.0000025
+  const approxSavedUSD = totalCachedTokens * effectiveTokenRateUSD
+
   const timeSeriesData = (analytics?.time_series || []).map((pt) => ({
     time: new Date(pt.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     settled: microcentsToUSD(pt.settled_microcents),
@@ -130,13 +137,20 @@ export default function SpendVisualization() {
             <div className="stat-label">Cache Efficiency</div>
             <span className="soc-delta-badge delta-success">Zero-Egress</span>
           </div>
-          <div className="stat-value" style={{ color: (summary?.total_cached_tokens || 0) > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
-            {((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0)) > 0
-              ? `${(((summary?.total_cached_tokens || 0) / ((summary?.total_input_tokens || 0) + (summary?.total_cached_tokens || 0))) * 100).toFixed(1)}%`
+          <div className="stat-value" style={{ color: totalCachedTokens > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+            {((summary?.total_input_tokens || 0) + totalCachedTokens) > 0
+              ? `${(((totalCachedTokens) / ((summary?.total_input_tokens || 0) + totalCachedTokens)) * 100).toFixed(1)}%`
               : '0.0%'}
           </div>
           <div className="stat-subtext">
-            {((summary?.total_cached_tokens || 0)).toLocaleString()} cached tokens saved
+            {totalCachedTokens > 0 ? (
+              <>
+                <strong style={{ color: '#10b981' }}>~${approxSavedUSD.toFixed(4)} saved</strong>
+                <span style={{ color: 'var(--text-muted)' }}> ({totalCachedTokens.toLocaleString()} tokens)</span>
+              </>
+            ) : (
+              '0 cached tokens saved'
+            )}
           </div>
         </div>
 
@@ -197,11 +211,19 @@ export default function SpendVisualization() {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+          {totalCachedTokens > 0 && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Estimated Spend Saved</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
+                ~${approxSavedUSD.toFixed(4)} USD
+              </div>
+            </div>
+          )}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Estimated Egress Avoidance</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
-              {summary?.total_cached_tokens ? `${((summary.total_cached_tokens * 4) / 1024).toFixed(1)} KB WAN Saved` : 'Zero WAN Egress'}
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
+              {totalCachedTokens ? `${((totalCachedTokens * 4) / 1024).toFixed(1)} KB WAN Saved` : 'Zero WAN Egress'}
             </div>
           </div>
         </div>

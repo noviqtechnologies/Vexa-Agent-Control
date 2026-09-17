@@ -263,7 +263,7 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
         // 2. Transmit granular IDE telemetry to /api/v1/devices/{device_id}/telemetry
         let proxy_url = std::env::var("AGENTCONTROL_LOCAL_PROXY_URL")
             .or_else(|_| std::env::var("AGENTWALL_LOCAL_PROXY_URL"))
-            .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+            .unwrap_or_else(|_| "http://127.0.0.1:18080".to_string());
 
         let ide_statuses = crate::wrap::ide_config::scan_all_ides(&proxy_url);
         let overall = if ide_statuses
