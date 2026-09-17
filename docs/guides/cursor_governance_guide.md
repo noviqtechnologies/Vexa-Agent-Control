@@ -1,6 +1,6 @@
 # Cursor Desktop Governance & LLM Spend Guide
 
-This guide explains how **Vexa Agent Control** intercepts, tracks, and governs AI traffic in **Cursor Desktop** across Windows, macOS, and Linux—including **Cursor Free Tier** and **Bring-Your-Own-Key (BYOK)** setups.
+This guide explains how **Vexa Agent Control** intercepts, tracks, and governs AI traffic in **Cursor Desktop** across Windows, macOS, and Linux using LiteLLM-style virtual key injection and zero-trust proxying.
 
 ---
 
@@ -23,8 +23,8 @@ Cursor Desktop communicates across two distinct pathways:
                │                                │
                ▼                                ▼
        ┌───────────────┐               ┌──────────────────┐
-       │  stdio-proxy  │               │ 127.0.0.1:8080   │
-       │  (MCP Wrap)   │               │ (MITM & Egress)  │
+       │  stdio-proxy  │               │ 127.0.0.1:18080  │
+       │  (MCP Wrap)   │               │ (Proxy & Egress) │
        └───────┬───────┘               └────────┬─────────┘
                │                                │
                ▼                                ▼
@@ -44,40 +44,42 @@ Cursor Desktop communicates across two distinct pathways:
 To connect Cursor Desktop and configure the local security gateway:
 
 ```bash
+# Auto-detect mode:
 agentcontrol connect cursor
+
+# Explicit virtual key:
+agentcontrol connect cursor --key sk-vex-cursor-key-12345
+
+# Force local mode:
+agentcontrol connect cursor --mode local
 ```
 
 ### What `agentcontrol connect cursor` does automatically:
 1. **Safety Backup**: Creates an atomic baseline backup of Cursor's configuration.
-2. **Cursor Settings Configuration**: Atomically updates Cursor's `User/settings.json` (or `%APPDATA%\Cursor\User\settings.json` on Windows):
+2. **Cursor Settings Configuration**: Atomically updates Cursor's `User/settings.json` (e.g. `%APPDATA%\Cursor\User\settings.json` on Windows, `~/Library/Application Support/Cursor/User/settings.json` on macOS):
    ```json
    {
      "http.proxy": "http://127.0.0.1:18080",
-     "cursor.general.disableHttp2": true
+     "cursor.general.disableHttp2": true,
+     "cursor.general.openaiApiKey": "sk-vex-cursor-key-12345"
    }
    ```
-3. **MCP Tool Wrapping**: Wraps MCP servers in `.cursor/mcp.json` with `agentcontrol stdio-proxy`.
+3. **MCP Tool Wrapping**: Wraps MCP servers in `.cursor/mcp.json` (or within settings) with `agentcontrol stdio-proxy`.
 4. **Ownership Manifest**: Records all mutations in `~/.agentcontrol/manifests/cursor.manifest.json`.
 
 ---
 
-## Verification & Monitoring
+## Standard Output Summary
 
-### 1. Check Status & Doctor
-```bash
-agentcontrol doctor
-agentcontrol status
-```
+```text
+✔ Successfully connected Cursor IDE!
+  ✔ Configuration:     C:\Users\wasim\AppData\Roaming\Cursor\User\settings.json
+  ✔ LLM Endpoint:      http://127.0.0.1:18080
+  ✔ Auth Token:        sk-vex...2345 (Virtual Key from Control Hub)
+  ✔ MCP Servers:       0 wrapped with stdio-proxy
+  ✔ Mode:              cloud-direct
 
-### 2. Verify Live Traffic & Telemetry in Local Dashboard
-Open the Local Developer Dashboard at `http://127.0.0.1:18080` or monitor terminal status:
-```
-✔ Intercepted Cursor IDE -> Model: gpt-4o | Prompt: 1,420 tokens | Completion: 210 tokens | Cost: $0.0048
-```
-
-### 3. Check Spend Ledger Balance
-```bash
-agentcontrol spend status
+  ℹ Restart Cursor IDE to apply changes.
 ```
 
 ---
@@ -90,14 +92,16 @@ To restore Cursor's original configuration and remove proxy settings without era
 agentcontrol disconnect cursor
 ```
 
-This restores `settings.json` and `.cursor/mcp.json` from the ownership manifest.
+- Reverts `http.proxy`, `cursor.general.disableHttp2`, and `cursor.general.openaiApiKey`.
+- Restores original MCP server configs.
+- Preserves all custom themes, keybindings, and editor settings.
 
 ---
 
-## Troubleshooting
+## Verification & Monitoring
 
-| Issue | Cause | Resolution |
-|---|---|---|
-| Cursor shows `self-signed certificate in certificate chain` | Trust store not updated or Node cert env missing | Run `agentcontrol ca install` and restart Cursor. |
-| Streaming responses appear delayed or buffered | HTTP/2 frame buffering | Verify `"cursor.general.disableHttp2": true` is set in Cursor `settings.json`. |
-| LLM requests blocked with `403 Forbidden` | Spend budget cap exceeded or DLP secret detected | Check `agentcontrol spend status` or inspect DLP findings in `~/.agentcontrol/audit/`. |
+```bash
+agentcontrol doctor
+agentcontrol status
+agentcontrol spend status
+```

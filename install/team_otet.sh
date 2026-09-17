@@ -131,7 +131,7 @@ if [[ -z "$VERSION" ]]; then
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
   if [[ -z "$VERSION" ]]; then
-    VERSION="v1.0.85"
+    VERSION="v1.0.87"
   fi
 fi
 

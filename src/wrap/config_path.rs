@@ -474,6 +474,45 @@ pub fn antigravity_config_path() -> Result<PathBuf, WrapError> {
     }
 }
 
+/// Returns the absolute path to ~/.claude/settings.json for the current OS.
+///
+/// This is the Claude Code CLI settings file used to inject `env.ANTHROPIC_BASE_URL`
+/// and `env.ANTHROPIC_API_KEY` for full LLM completion governance.
+pub fn claude_code_settings_path() -> Result<PathBuf, WrapError> {
+    match std::env::consts::OS {
+        "windows" => {
+            #[cfg(windows)]
+            {
+                let homes = get_windows_user_homes();
+                for home in &homes {
+                    let candidate = home.join(r".claude\settings.json");
+                    if candidate.exists() {
+                        return Ok(candidate);
+                    }
+                }
+                if let Some(first) = homes.first() {
+                    return Ok(first.join(r".claude\settings.json"));
+                }
+            }
+            let base = dirs::home_dir().map(|h| h.join(r".claude\settings.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound(
+                    "Cannot resolve Claude Code settings path (%USERPROFILE%\\.claude\\settings.json)".to_string(),
+                )
+            })
+        }
+        _ => {
+            // macOS and Linux: ~/.claude/settings.json
+            let base = dirs::home_dir().map(|h| h.join(".claude").join("settings.json"));
+            base.ok_or_else(|| {
+                WrapError::ConfigNotFound(
+                    "Cannot resolve Claude Code settings path (~/.claude/settings.json)".to_string(),
+                )
+            })
+        }
+    }
+}
+
 /// Returns the absolute path to ~/.codex/config.toml for the current OS.
 pub fn codex_config_path() -> Result<PathBuf, WrapError> {
     match std::env::consts::OS {

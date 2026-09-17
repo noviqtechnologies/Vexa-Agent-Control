@@ -50,7 +50,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.85` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.87` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
@@ -137,7 +137,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
   ```
 - **Expected Result:**
   ```text
-  ✔ Binary Integrity:          Pass (v1.0.85)
+  ✔ Binary Integrity:          Pass (v1.0.87)
   ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
   ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
   ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)

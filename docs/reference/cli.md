@@ -21,43 +21,49 @@ agentcontrol start [OPTIONS]
 ---
 
 ### `agentcontrol connect <TARGET>`
-Connects a specific IDE or coding assistant by discovering its config, creating a timestamped backup, wrapping MCP configurations with `stdio-proxy`, and writing an ownership manifest.
+Connects a specific IDE or coding assistant (`codex`, `claude`, `claude-code`, `cursor`, `antigravity`, `vscode-continue`) by discovering its configuration, creating a baseline backup, injecting local or virtual key proxy endpoints, wrapping MCP configurations with `stdio-proxy`, and writing an ownership manifest.
 
 ```bash
-agentcontrol connect <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [OPTIONS]
+agentcontrol connect <codex|claude|claude-code|cursor|antigravity|vscode-continue> [OPTIONS]
 ```
 
 **Options:**
-- `--dry-run`: Preview config changes without modifying files.
-- `--scan-responses`: Enable response scanning for secret detection.
-- `--block-on-secrets`: Block entire response on secret detection instead of redacting.
+- `-k, --key <KEY>`: Virtual key or authentication token (e.g. `sk-vex-...`) [env: `AGENTCONTROL_VIRTUAL_KEY`].
+- `--mode <MODE>`: Connection mode: `local` or `cloud-direct`.
+- `--force`: Force connection even if client version is outside pinned supported range.
+
+#### Target Configuration Matrix:
+| Target | Config File | Injected Endpoint Keys | Auth Token Keys | MCP Wrapping |
+|---|---|---|---|---|
+| `codex` | `config.toml`<br>`auth.json` | `openai_base_url`<br>`shell_environment_policy.set.OPENAI_BASE_URL` | `shell_environment_policy.set.OPENAI_API_KEY`<br>`auth.json: OPENAI_API_KEY` | `mcp_servers.<name>` |
+| `claude` | `claude_desktop_config.json` | ℹ️ Direct Cloud Route | 🔒 Preserved | `mcpServers.<name>` |
+| `claude-code` | `~/.claude/settings.json` | `env.ANTHROPIC_BASE_URL` | `env.ANTHROPIC_API_KEY` | `mcpServers.<name>` |
+| `cursor` | `User/settings.json`<br>`mcp.json` | `http.proxy`<br>`cursor.general.disableHttp2` | `cursor.general.openaiApiKey` | `mcpServers.<name>` |
+| `antigravity` | `mcp_config.json` | `proxy_url`<br>`antigravity.proxy.baseUrl` | `api_key`<br>`antigravity.proxy.apiKey` | `mcpServers.<name>` |
+| `vscode-continue` | `User/settings.json` | `continue.models[].apiBase` | `continue.models[].apiKey` | — |
 
 ---
 
 ### `agentcontrol disconnect <TARGET>`
-Restores configuration for a specific IDE target from its ownership manifest.
+Non-destructively disconnects a client using its ownership manifest, removing injected proxy/token keys and unwrapping MCP servers while preserving all user customizations.
 
 ```bash
-agentcontrol disconnect <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [OPTIONS]
-agentcontrol disconnect --all
+agentcontrol disconnect <codex|claude|claude-code|cursor|antigravity|vscode-continue>
 ```
-
-**Options:**
-- `--force`: Force restoration even if backup metadata warnings occur.
 
 ---
 
-### `agentcontrol login`
-Authenticates with a Team Control Hub via browser OAuth 2.0 PKCE. *Required for enterprise/team users with a Control Hub. Optional for standalone workstation users (who use `agentcontrol start` directly).*
+### `agentcontrol doctor`
+Runs a read-only 7-point health diagnostic checking binary integrity, daemon reachability, token health, database status, and configuration validity.
 
 ```bash
-agentcontrol login [--no-browser]
+agentcontrol doctor [--json]
 ```
 
 ---
 
 ### `agentcontrol status`
-Inspects all supported AI IDE configurations, displaying path, existence, connection status, and verification trust level (`[verified]` vs `[unverified]`).
+Inspects all supported AI IDE configurations, displaying path, existence, connection status, and verification trust level.
 
 ```bash
 agentcontrol status
@@ -81,37 +87,11 @@ agentcontrol verify [OPTIONS]
 
 ---
 
-## Legacy Aliases (Still Functional)
-
-> [!NOTE]
-> The following commands are functional legacy aliases. The canonical commands above are preferred for new workflows.
-
-### `agentcontrol protect` *(Legacy: use `agentcontrol start` + `agentcontrol connect`)*
-Discovers installed AI IDEs, creates timestamped backups, wraps MCP configurations with `stdio-proxy`, and starts the local security gateway.
+### `agentcontrol login`
+Authenticates with a Team Control Hub via browser OAuth 2.0 PKCE.
 
 ```bash
-agentcontrol protect [--dry-run] [--shadow] [--enforce] [--listen <ADDR>] [--policy <PATH>]
-```
-
-### `agentcontrol unprotect` *(Legacy: use `agentcontrol disconnect --all`)*
-Restores all IDE configurations from their most recent timestamped backups.
-
-```bash
-agentcontrol unprotect [--dry-run] [--force]
-```
-
-### `agentcontrol wrap <TARGET>` *(Legacy: use `agentcontrol connect`)*
-Wraps MCP configurations for a specific IDE target.
-
-```bash
-agentcontrol wrap <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [--dry-run]
-```
-
-### `agentcontrol unwrap <TARGET>` *(Legacy: use `agentcontrol disconnect`)*
-Restores configuration for a specific IDE target.
-
-```bash
-agentcontrol unwrap <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|opencode> [--force]
+agentcontrol login [--no-browser]
 ```
 
 ---
@@ -120,54 +100,5 @@ agentcontrol unwrap <claude|cursor|codex|antigravity|vscode|jetbrains|zed|cline|
 Runs the event-driven filesystem watcher daemon to automatically wrap newly added MCP servers.
 
 ```bash
-agentcontrol watch [--all] [<TARGET>]
+agentcontrol watch [TARGET]
 ```
-
----
-
-### `agentcontrol dev`
-Starts the local development proxy in standalone mode.
-
-```bash
-agentcontrol dev [OPTIONS] [-- <DOWNSTREAM_CMD...>]
-```
-
-**Options:**
-- `--listen <ADDR>`: Socket address (default: `127.0.0.1:8080`).
-- `--mcp-url <URL>`: Upstream MCP server URL (default: `http://127.0.0.1:3000`).
-- `--stdio`: Enable stdio proxying.
-- `--enforce`: Enable active blocking (default is shadow mode).
-- `--learn`: Enable policy learning mode.
-- `--no-browser`: Disable browser opening.
-
----
-
-### `agentcontrol generate-policy`
-Synthesizes a lint-passing `agentcontrol-policy.yaml` from observed shadow traffic in `events.db`.
-
-```bash
-agentcontrol generate-policy [--output <PATH>] [--decay-window <DAYS>]
-```
-
----
-
-### `agentcontrol lint <POLICY_FILE>`
-Lints a YAML policy file against Schema v2 and security best practices.
-
-```bash
-agentcontrol lint agentcontrol-policy.yaml
-```
-
----
-
-### `agentcontrol enroll`
-Enrolls the workstation with a central Control Hub using a One-Time Enrollment Token.
-
-```bash
-agentcontrol enroll --token <OTET> [--hub-url <URL>]
-```
-
----
-
-### `agentcontrol service <install|uninstall|start|stop|status>`
-Manages the persistent OS background sentry service (systemd on Linux, Launchd on macOS, Windows SCM).

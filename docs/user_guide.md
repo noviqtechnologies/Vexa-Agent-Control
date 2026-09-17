@@ -237,7 +237,7 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.85)
+✔ Binary Integrity:          Pass (v1.0.87)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)

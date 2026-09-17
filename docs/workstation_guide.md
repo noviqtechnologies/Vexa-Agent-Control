@@ -284,28 +284,29 @@ Agent Control automatically patches the MCP configuration file of the target IDE
 > ```
 > To restore every IDE to its original config: `agentcontrol disconnect --all`.
 
-| IDE / Client | Connect Command | Disconnect |
-|---|---|---|
-| **Claude Desktop** *(Verified)* | `agentcontrol connect claude` | `agentcontrol disconnect claude` |
-| **Cursor** *(Verified)* | `agentcontrol connect cursor` | `agentcontrol disconnect cursor` |
-| **Antigravity IDE** *(Verified)* | `agentcontrol connect antigravity` | `agentcontrol disconnect antigravity` |
-| **Codex CLI** *(Verified)* | `agentcontrol connect codex` | `agentcontrol disconnect codex` |
-| **VS Code** *(Experimental)* | `agentcontrol connect vscode` | `agentcontrol disconnect vscode` |
-| **JetBrains IDEs** *(Experimental)* | `agentcontrol connect jetbrains` | `agentcontrol disconnect jetbrains` |
-| **Zed** *(Experimental)* | `agentcontrol connect zed` | `agentcontrol disconnect zed` |
-| **Cline** *(Experimental)* | `agentcontrol connect cline` | `agentcontrol disconnect cline` |
-| **OpenCode** *(Experimental)* | `agentcontrol connect opencode` | `agentcontrol disconnect opencode` |
+| IDE / Client | Connect Command | LLM Routing & Budgets | MCP Tool Interception | Key Custody / Injection | Disconnect |
+|---|---|:---:|:---:|:---:|---|
+| **Claude Desktop** *(Verified)* | `agentcontrol connect claude` | ℹ️ *Direct Cloud* | ✅ Full | 🔒 Preserved | `agentcontrol disconnect claude` |
+| **Cursor** *(Verified)* | `agentcontrol connect cursor` | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `agentcontrol disconnect cursor` |
+| **Google Antigravity** *(Verified)* | `agentcontrol connect antigravity` | ✅ Full | ✅ Full | ✅ Injected (`mcp_config.json`) | `agentcontrol disconnect antigravity` |
+| **Codex CLI** *(Verified)* | `agentcontrol connect codex` | ✅ Full | ✅ Full | ✅ Injected (`auth.json`) | `agentcontrol disconnect codex` |
+| **Claude Code (CLI)** *(Verified)* | `agentcontrol connect claude-code` | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `agentcontrol disconnect claude-code` |
+| **VS Code (Continue)** *(Verified)* | `agentcontrol connect vscode-continue` | ✅ Full | ✅ Full | ✅ Injected (`config.json`) | `agentcontrol disconnect vscode-continue` |
+| **JetBrains IDEs** *(Experimental)* | `agentcontrol connect jetbrains` | ✅ Full | ✅ Full | ✅ Config | `agentcontrol disconnect jetbrains` |
+| **Zed** *(Experimental)* | `agentcontrol connect zed` | ✅ Full | ✅ Full | ✅ Config | `agentcontrol disconnect zed` |
+| **Cline** *(Experimental)* | `agentcontrol connect cline` | ✅ Full | ✅ Full | ✅ Config | `agentcontrol disconnect cline` |
+| **OpenCode** *(Experimental)* | `agentcontrol connect opencode` | ✅ Full | ✅ Full | ✅ Config | `agentcontrol disconnect opencode` |
 
 **macOS / Linux (Bash / Zsh):**
 ```bash
-agentcontrol connect claude    # or cursor, antigravity, codex, vscode, jetbrains, zed, cline, opencode
-agentcontrol status            # inspect active connections and proxy health
+agentcontrol connect claude       # or claude-code, cursor, antigravity, codex, vscode-continue
+agentcontrol status               # inspect active connections and proxy health
 ```
 
 **Windows (PowerShell / CMD):**
 ```powershell
-agentcontrol.exe connect claude  # or cursor, antigravity, codex, vscode, jetbrains, zed, cline, opencode
-agentcontrol.exe status          # inspect active connections and proxy health
+agentcontrol.exe connect claude   # or claude-code, cursor, antigravity, codex, vscode-continue
+agentcontrol.exe status           # inspect active connections and proxy health
 ```
 
 > [!IMPORTANT]

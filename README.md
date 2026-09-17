@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.84-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.87-10B981.svg?style=flat-square)](Cargo.toml)
 [![Changelog](https://img.shields.io/badge/Changelog-SemVer%202.0-blueviolet.svg?style=flat-square)](CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
 [![Contributing](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
@@ -645,7 +645,7 @@ set PATH=%USERPROFILE%\.local\bin;%PATH%
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.84` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.87` (or current release).
 
 ---
 
@@ -675,15 +675,32 @@ In a new terminal window, connect your installed coding assistants with non-dest
 # Connect OpenAI Codex CLI:
 agentcontrol connect codex
 
-# Connect Anthropic Claude Desktop:
+# Connect Anthropic Claude Desktop (MCP tool governance):
 agentcontrol connect claude
+
+# Connect Anthropic Claude Code CLI (full LLM completion + spend governance):
+agentcontrol connect claude-code
+
+# Connect Cursor IDE:
+agentcontrol connect cursor
+
+# Connect Google Antigravity IDE:
+agentcontrol connect antigravity
 
 # Connect VS Code Continue extension:
 agentcontrol connect vscode-continue
-
-# Connect Cursor:
-agentcontrol connect cursor
 ```
+
+#### Client Governance & Support Matrix
+
+| Client / Agent | LLM Routing & Spend Caps | MCP Tool Interception | Virtual Key Custody | Governance Layer |
+| :--- | :---: | :---: | :---: | :--- |
+| **OpenAI Codex CLI** | ✅ Full | ✅ Full | ✅ Injected (`auth.json`) | `config.toml` (`openai_base_url`) |
+| **Anthropic Claude Code (CLI)** | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `~/.claude/settings.json` (`env.ANTHROPIC_BASE_URL`) |
+| **Cursor IDE** | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `settings.json` (`http.proxy`) |
+| **Google Antigravity IDE** | ✅ Full | ✅ Full | ✅ Injected (`mcp_config.json`) | `mcp_config.json` (`proxy_url`) |
+| **Claude Desktop (GUI)** | ℹ️ *Direct Cloud* | ✅ Full | 🔒 Preserved | `claude_desktop_config.json` (`stdio-proxy`) |
+| **VS Code (Continue)** | ✅ Full | ✅ Full | ✅ Injected (`config.json`) | `config.json` (`apiBase`) |
 
 - **Zero Cloud Dependencies:** Automatically uses your local proxy token (`~/.agentcontrol/local.token`) and configures loopback routing (`http://127.0.0.1:18080/v1`).
 - **MCP Process Sandboxing:** Wraps MCP servers with `agentcontrol stdio-proxy` under strict memory limits and credential redaction.
@@ -730,7 +747,7 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.84)
+✔ Binary Integrity:          Pass (v1.0.87)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
@@ -898,7 +915,7 @@ Every release publishes automated SHA-256 checksums alongside release assets:
 
 ```bash
 # macOS / Linux
-sha256sum -c agentcontrol_1.0.84_checksums.txt
+sha256sum -c agentcontrol_1.0.87_checksums.txt
 
 # Windows PowerShell
 Get-FileHash -Algorithm SHA256 .\agentcontrol.exe

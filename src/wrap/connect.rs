@@ -6,7 +6,7 @@
 use colored::*;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::identity::oauth::get_or_create_local_token;
 use crate::wrap::config_path;
@@ -18,6 +18,10 @@ use crate::wrap::transformer;
 pub enum ConnectTarget {
     Codex,
     Claude,
+    #[value(name = "claude-code")]
+    ClaudeCode,
+    Cursor,
+    Antigravity,
     #[value(name = "vscode-continue")]
     VscodeContinue,
 }
@@ -27,6 +31,9 @@ impl ConnectTarget {
         match self {
             Self::Codex => "codex",
             Self::Claude => "claude",
+            Self::ClaudeCode => "claude-code",
+            Self::Cursor => "cursor",
+            Self::Antigravity => "antigravity",
             Self::VscodeContinue => "vscode-continue",
         }
     }
@@ -35,6 +42,9 @@ impl ConnectTarget {
         match self {
             Self::Codex => "OpenAI Codex CLI",
             Self::Claude => "Claude Desktop",
+            Self::ClaudeCode => "Claude Code (CLI)",
+            Self::Cursor => "Cursor IDE",
+            Self::Antigravity => "Antigravity IDE",
             Self::VscodeContinue => "VS Code (Continue Extension)",
         }
     }
@@ -54,6 +64,65 @@ impl ConnectMode {
             Self::CloudDirect => "cloud-direct",
         }
     }
+}
+
+/// Result metadata from a successful connect operation.
+#[derive(Debug, Clone)]
+pub struct ConnectResult {
+    pub config_path: PathBuf,
+    pub proxy_url: String,
+    pub token_masked: String,
+    pub mode: ConnectMode,
+    pub mcp_servers_wrapped: usize,
+    pub llm_endpoint_injected: bool,
+}
+
+/// Masks a token for display (e.g. "sk-vex...ef12").
+pub fn mask_token(token: &str) -> String {
+    if token.len() > 10 {
+        format!("{}...{}", &token[..6], &token[token.len() - 4..])
+    } else {
+        "***".to_string()
+    }
+}
+
+/// Prints a standardized connect summary across all supported IDE targets.
+pub fn print_connect_summary(target: ConnectTarget, result: &ConnectResult) {
+    println!("\n{} Successfully connected {}!", "✔".green().bold(), target.display_name());
+    println!("  ✔ Configuration:     {}", result.config_path.display().to_string().cyan());
+    if result.llm_endpoint_injected {
+        println!("  ✔ LLM Endpoint:      {}", result.proxy_url.green());
+        let token_label = match result.mode {
+            ConnectMode::CloudDirect => format!("{} (Virtual Key from Control Hub)", result.token_masked.green()),
+            ConnectMode::Local => format!("{} (Local Proxy Session)", result.token_masked.green()),
+        };
+        println!("  ✔ Auth Token:        {}", token_label);
+    } else {
+        println!("  ℹ Governance:        MCP Tool Boundary (Claude Desktop routes chat to api.anthropic.com)");
+    }
+    println!("  ✔ MCP Servers:       {} wrapped with stdio-proxy", result.mcp_servers_wrapped.to_string().green());
+    println!("  ✔ Mode:              {}", result.mode.as_str().green());
+
+    // If Claude Desktop has 0 MCP servers, show actionable guidance
+    if matches!(target, ConnectTarget::Claude) && result.mcp_servers_wrapped == 0 {
+        println!();
+        println!("  {} {} {} {}",
+            "⚠".yellow().bold(),
+            "No MCP servers are configured in claude_desktop_config.json.".yellow(),
+            "Tool governance is not active yet.".yellow(),
+            "To enable:".yellow()
+        );
+        println!("    → Add an MCP server (e.g. filesystem, sqlite, GitHub) to claude_desktop_config.json,");
+        println!("      then re-run: {}", "agentcontrol connect claude".cyan());
+        println!();
+        println!("  {} {} {}",
+            "ℹ".blue().bold(),
+            "To govern Claude Code (CLI) completions, spend caps & DLP — run:".blue(),
+            "agentcontrol connect claude-code [--key sk-vex-...]" .cyan()
+        );
+    }
+
+    println!("\n  ℹ Restart {} to apply changes.", target.display_name());
 }
 
 /// Fetches assigned virtual key from Control Hub for cloud-direct mode.
@@ -114,7 +183,8 @@ pub async fn resolve_token_and_mode(
             Ok((token, ConnectMode::Local))
         }
         None => {
-            // Auto-detect mode:
+            // Auto-detect mode: prefer cloud-direct when a virtual key is available,
+            // but always fall back to local proxy mode if one is not — never hard-error.
             if crate::identity::device::is_device_enrolled() {
                 if let Some(hub_url) = crate::identity::device::load_hub_url() {
                     match fetch_assigned_virtual_key(&hub_url).await {
@@ -122,9 +192,13 @@ pub async fn resolve_token_and_mode(
                             return Ok((vk, ConnectMode::CloudDirect));
                         }
                         Ok(_) => {
-                            return Err(
-                                "Device is enrolled, but no virtual key was returned by Control Hub.\n  → Connect directly using: `agentcontrol connect <target> --key <sk-vex-...>`\n    or specify `--mode local` to connect with a local proxy token."
-                                    .to_string(),
+                            // Enrolled but Hub returned no key — fall back silently to local.
+                            eprintln!(
+                                "{} Device is enrolled, but no virtual key was returned by Control Hub; defaulting to local proxy mode.",
+                                "⚠".yellow().bold()
+                            );
+                            eprintln!(
+                                "  → To use cloud-direct mode, run: `agentcontrol connect <target> --key <sk-vex-...>`"
                             );
                         }
                         Err(e) => {
@@ -178,8 +252,16 @@ pub fn verify_client_version(target: ConnectTarget, force: bool) -> Result<(), S
             }
         }
         ConnectTarget::Claude => {
-            // Claude Desktop version >= 0.7.0, <= 0.8.x
-            // Desktop app version is typically checked via app bundle or binary if accessible
+            // Claude Desktop version checks
+        }
+        ConnectTarget::ClaudeCode => {
+            // Claude Code CLI version checks
+        }
+        ConnectTarget::Cursor => {
+            // Cursor IDE version checks
+        }
+        ConnectTarget::Antigravity => {
+            // Antigravity IDE version checks
         }
         ConnectTarget::VscodeContinue => {
             // Continue Extension version >= 0.8.0, < 1.0.0
@@ -218,12 +300,15 @@ pub async fn run_connect(
     let result = match target {
         ConnectTarget::Codex => connect_codex(&token, effective_mode),
         ConnectTarget::Claude => connect_claude(&token, effective_mode),
+        ConnectTarget::ClaudeCode => connect_claude_code(&token, effective_mode),
+        ConnectTarget::Cursor => connect_cursor(&token, effective_mode),
+        ConnectTarget::Antigravity => connect_antigravity(&token, effective_mode),
         ConnectTarget::VscodeContinue => connect_vscode_continue(&token, effective_mode),
     };
 
     match result {
-        Ok(()) => {
-            println!("\n{} Successfully connected {}!", "✔".green().bold(), target.display_name());
+        Ok(res) => {
+            print_connect_summary(target, &res);
             0
         }
         Err(e) => {
@@ -234,7 +319,7 @@ pub async fn run_connect(
 }
 
 /// Proven Codex injection: configures `OPENAI_BASE_URL` and `OPENAI_API_KEY` in `.codex/config.toml`.
-pub fn connect_codex(token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_codex(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     let home = dirs::home_dir().ok_or_else(|| "Failed to resolve user home directory".to_string())?;
     let codex_dir = home.join(".codex");
     let _ = fs::create_dir_all(&codex_dir);
@@ -243,12 +328,12 @@ pub fn connect_codex(token: &str, mode: ConnectMode) -> Result<(), String> {
 }
 
 /// Core Codex connection routine given explicit configuration path.
-pub fn connect_codex_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_codex_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     connect_codex_target_to_path("codex", config_path, token, mode)
 }
 
 /// Parameterized Codex connection routine given target manifest name and configuration path.
-pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     if let Some(parent) = config_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -277,7 +362,6 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     let mut written_values = HashMap::new();
 
     // Read top-level openai_base_url BEFORE taking a mutable borrow of root
-    // (avoids borrow conflict with `sep` which holds &mut root).
     let prev_top_url = toml_val
         .as_table()
         .and_then(|t| t.get("openai_base_url"))
@@ -343,14 +427,12 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         serde_json::Value::String(proxy_base_url.to_string()),
     );
 
-    // set_tbl / sep / root mutable borrows end here — now safe to re-borrow root
-    // to write the top-level `openai_base_url` key Codex reads for its native HTTP client.
-
     // 2. Wrap any mcp_servers
     let agentcontrol_bin = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "agentcontrol".to_string());
 
+    let mut wrapped_mcp_count = 0;
     if let Some(mcp_table) = root.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
         for (name, srv) in mcp_table.iter_mut() {
             if let Some(srv_tbl) = srv.as_table_mut() {
@@ -385,13 +467,13 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
                         format!("mcp_servers.{}.command", name),
                         serde_json::Value::String(agentcontrol_bin.clone()),
                     );
+                    wrapped_mcp_count += 1;
                 }
             }
         }
     }
 
-    // Write the top-level `openai_base_url` key Codex reads for its native HTTP client.
-    // This must come AFTER the set_tbl/sep/root borrow chain above has ended.
+    // Write the top-level `openai_base_url` key Codex reads for its native HTTP client
     if let Some(root2) = toml_val.as_table_mut() {
         root2.insert(
             "openai_base_url".to_string(),
@@ -403,8 +485,7 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     let updated_toml = toml::to_string_pretty(&toml_val).map_err(|e| format!("Failed to format TOML: {}", e))?;
     fs::write(config_path, updated_toml).map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
 
-    // Also synchronize ~/.codex/auth.json with the active API key so both Codex CLI
-    // and Codex Desktop app authenticate properly with the virtual key / local proxy token.
+    // Synchronize ~/.codex/auth.json
     if let Ok(auth_path) = crate::wrap::config_path::codex_auth_path() {
         let mut auth_json = if auth_path.exists() {
             let raw = fs::read_to_string(&auth_path).unwrap_or_default();
@@ -421,7 +502,6 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     }
 
     let post_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
-
     let managed_keys: Vec<String> = written_values.keys().cloned().collect();
     let manifest = OwnershipManifest::new(
         target_name,
@@ -435,54 +515,146 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     .with_connect_mode(mode.as_str());
     manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
-    let masked_token = if token.len() > 10 {
-        format!("{}...{}", &token[..6], &token[token.len() - 4..])
-    } else {
-        "***".to_string()
-    };
-    let token_label = match mode {
-        ConnectMode::CloudDirect => format!("{} (Virtual Key from Control Hub)", masked_token.green()),
-        ConnectMode::Local => "Bearer local-proxy-session-token".green().to_string(),
-    };
-
-    println!("  Configuration: {}", config_path.display());
-    println!("  LLM Endpoint:  {}", proxy_base_url.green());
-    println!("  Auth Token:    {}", token_label);
-    println!(
-        "  {} Native shell execution (bash/git) is UNGOVERNED by local proxy.",
-        "⚠ Notice:".yellow().bold()
-    );
-
-    Ok(())
+    Ok(ConnectResult {
+        config_path: config_path.to_path_buf(),
+        proxy_url: proxy_base_url.to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: wrapped_mcp_count,
+        llm_endpoint_injected: true,
+    })
 }
 
-/// Proven Claude Desktop wrapping: wraps `mcpServers` with stdio-proxy.
-pub fn connect_claude(_token: &str, mode: ConnectMode) -> Result<(), String> {
-    let config_path = config_path::claude_config_path().map_err(|e| format!("{}", e))?;
-    if !config_path.exists() {
-        return Err(format!(
-            "Claude Desktop config not found at {}. Please install and run Claude Desktop first.",
-            config_path.display()
-        ));
+/// Proven Claude Code (CLI) connection: injects ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY
+/// into ~/.claude/settings.json `env` block for full LLM completion governance.
+pub fn connect_claude_code(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    let settings_path = config_path::claude_code_settings_path().map_err(|e| format!("{}", e))?;
+    connect_claude_code_to_path(&settings_path, token, mode)
+}
+
+/// Core Claude Code CLI connection routine given explicit settings path.
+/// Writes `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_API_KEY` while preserving
+/// all other existing user settings in the JSON file.
+pub fn connect_claude_code_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    if let Some(parent) = settings_path.parent() {
+        let _ = fs::create_dir_all(parent);
     }
-    connect_claude_to_path(&config_path, _token, mode)
+
+    let pre_hash = if settings_path.exists() {
+        OwnershipManifest::compute_sha256(settings_path).unwrap_or_default()
+    } else {
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+    };
+
+    let raw = if settings_path.exists() {
+        fs::read_to_string(settings_path).map_err(|e| e.to_string())?
+    } else {
+        "{}".to_string()
+    };
+
+    let mut settings: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = crate::wrap::strip_json_comments(&raw);
+            serde_json::from_str(&stripped).unwrap_or_else(|_| serde_json::json!({}))
+        }
+    };
+
+    if !settings.is_object() {
+        settings = serde_json::json!({});
+    }
+
+    let proxy_base_url = "http://127.0.0.1:18080";
+
+    let mut previous_values = HashMap::new();
+    let mut written_values = HashMap::new();
+
+    // Ensure the `env` block exists
+    if settings.get("env").is_none() {
+        settings["env"] = serde_json::json!({});
+    }
+
+    // Record previous values
+    let prev_base = settings["env"].get("ANTHROPIC_BASE_URL")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_key = settings["env"].get("ANTHROPIC_API_KEY")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    previous_values.insert("env.ANTHROPIC_BASE_URL".to_string(), prev_base);
+    previous_values.insert("env.ANTHROPIC_API_KEY".to_string(), prev_key);
+
+    // Inject gateway values
+    settings["env"]["ANTHROPIC_BASE_URL"] = serde_json::json!(proxy_base_url);
+    settings["env"]["ANTHROPIC_API_KEY"] = serde_json::json!(token);
+
+    written_values.insert("env.ANTHROPIC_BASE_URL".to_string(), serde_json::json!(proxy_base_url));
+    written_values.insert("env.ANTHROPIC_API_KEY".to_string(), serde_json::json!(token));
+
+    let output_str = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    fs::write(settings_path, output_str)
+        .map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
+
+    let post_hash = OwnershipManifest::compute_sha256(settings_path).unwrap_or_default();
+    let managed_keys = vec!["env.ANTHROPIC_BASE_URL".to_string(), "env.ANTHROPIC_API_KEY".to_string()];
+
+    let manifest = OwnershipManifest::new(
+        "claude-code",
+        settings_path.to_path_buf(),
+        pre_hash,
+        post_hash,
+        managed_keys,
+        previous_values,
+        written_values,
+    )
+    .with_connect_mode(mode.as_str());
+    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+
+    Ok(ConnectResult {
+        config_path: settings_path.to_path_buf(),
+        proxy_url: proxy_base_url.to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: 0,
+        llm_endpoint_injected: true,
+    })
+}
+
+/// Proven Claude Desktop wrapping & LiteLLM-style virtual key injection.
+pub fn connect_claude(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    let config_path = config_path::claude_config_path().map_err(|e| format!("{}", e))?;
+    connect_claude_to_path(&config_path, token, mode)
 }
 
 /// Core Claude connection routine given explicit configuration path.
-pub fn connect_claude_to_path(config_path: &Path, _token: &str, mode: ConnectMode) -> Result<(), String> {
-    connect_claude_target_to_path("claude", config_path, _token, mode)
+pub fn connect_claude_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    connect_claude_target_to_path("claude", config_path, token, mode)
 }
 
 /// Parameterized Claude connection routine given target manifest name and configuration path.
-pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, _token: &str, mode: ConnectMode) -> Result<(), String> {
-    let pre_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
-    let raw = fs::read_to_string(config_path).map_err(|e| e.to_string())?;
+pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    if let Some(parent) = config_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let pre_hash = if config_path.exists() {
+        OwnershipManifest::compute_sha256(config_path).unwrap_or_default()
+    } else {
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+    };
+
+    let raw = if config_path.exists() {
+        fs::read_to_string(config_path).map_err(|e| e.to_string())?
+    } else {
+        "{}".to_string()
+    };
 
     let config: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(_) => {
             let stripped = crate::wrap::strip_json_comments(&raw);
-            serde_json::from_str(&stripped).map_err(|e| format!("Invalid JSON: {}", e))?
+            serde_json::from_str(&stripped).unwrap_or_else(|_| serde_json::json!({}))
         }
     };
 
@@ -490,19 +662,33 @@ pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, _tok
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "agentcontrol".to_string());
 
-    let mut modified = config.clone();
+    let mut modified = if config.is_object() {
+        config.clone()
+    } else {
+        serde_json::json!({})
+    };
+
     let mut previous_values = HashMap::new();
     let mut written_values = HashMap::new();
+    let mut managed_keys = Vec::new();
 
+    // Ensure mcpServers object exists for Claude Desktop
+    if modified.get("mcpServers").is_none() {
+        modified["mcpServers"] = serde_json::json!({});
+    }
+
+    // Wrap MCP servers
+    let mut wrapped_count = 0;
     if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) {
         previous_values.insert("mcpServers".to_string(), serde_json::json!(servers));
     }
 
-    let (wrapped_count, _) = transformer::wrap_all_servers(&mut modified, &agentcontrol_bin)
-        .map_err(|e| format!("Transformation failed: {}", e))?;
-
-    if let Some(servers) = modified.get("mcpServers").and_then(|v| v.as_object()) {
-        written_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+    if let Ok((cnt, _)) = transformer::wrap_all_servers(&mut modified, &agentcontrol_bin) {
+        wrapped_count = cnt;
+        if let Some(servers) = modified.get("mcpServers").and_then(|v| v.as_object()) {
+            written_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+        }
+        managed_keys.push("mcpServers".to_string());
     }
 
     let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
@@ -515,25 +701,264 @@ pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, _tok
         config_path.to_path_buf(),
         pre_hash,
         post_hash,
-        vec!["mcpServers".to_string()],
+        managed_keys,
         previous_values,
         written_values,
     )
     .with_connect_mode(mode.as_str());
     manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
-    println!("  Configuration: {}", config_path.display());
-    println!("  MCP Servers:   {} wrapped with stdio-proxy", wrapped_count.to_string().green());
-    println!(
-        "  {} Native LLM completions route out-of-band directly to Anthropic Cloud.",
-        "ℹ Notice:".blue().bold()
-    );
+    Ok(ConnectResult {
+        config_path: config_path.to_path_buf(),
+        proxy_url: "http://127.0.0.1:18080/v1".to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: wrapped_count,
+        llm_endpoint_injected: false,
+    })
+}
 
-    Ok(())
+/// Proven Cursor connection: injects proxy URL and virtual key into Cursor's `User/settings.json`.
+pub fn connect_cursor(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    let settings_path = config_path::cursor_settings_path().map_err(|e| format!("{}", e))?;
+    connect_cursor_to_path(&settings_path, token, mode)
+}
+
+/// Core Cursor connection routine given explicit settings path.
+pub fn connect_cursor_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    connect_cursor_target_to_path("cursor", settings_path, token, mode)
+}
+
+/// Parameterized Cursor connection routine given target manifest name and settings path.
+pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    if let Some(parent) = settings_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let pre_hash = if settings_path.exists() {
+        OwnershipManifest::compute_sha256(settings_path).unwrap_or_default()
+    } else {
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+    };
+
+    let raw = if settings_path.exists() {
+        fs::read_to_string(settings_path).map_err(|e| e.to_string())?
+    } else {
+        "{}".to_string()
+    };
+
+    let config: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = crate::wrap::strip_json_comments(&raw);
+            serde_json::from_str(&stripped).unwrap_or_else(|_| serde_json::json!({}))
+        }
+    };
+
+    let mut modified = if config.is_object() {
+        config.clone()
+    } else {
+        serde_json::json!({})
+    };
+
+    let mut previous_values = HashMap::new();
+    let mut written_values = HashMap::new();
+    let mut managed_keys = Vec::new();
+
+    let proxy_url = "http://127.0.0.1:18080";
+
+    // Record previous values for Cursor proxy & API key settings
+    let prev_proxy = modified.get("http.proxy").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_h2 = modified.get("cursor.general.disableHttp2").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_key = modified.get("cursor.general.openaiApiKey").cloned().unwrap_or(serde_json::Value::Null);
+
+    previous_values.insert("http.proxy".to_string(), prev_proxy);
+    previous_values.insert("cursor.general.disableHttp2".to_string(), prev_h2);
+    previous_values.insert("cursor.general.openaiApiKey".to_string(), prev_key);
+
+    // Inject active settings
+    modified["http.proxy"] = serde_json::json!(proxy_url);
+    modified["cursor.general.disableHttp2"] = serde_json::json!(true);
+    modified["cursor.general.openaiApiKey"] = serde_json::json!(token);
+
+    written_values.insert("http.proxy".to_string(), serde_json::json!(proxy_url));
+    written_values.insert("cursor.general.disableHttp2".to_string(), serde_json::json!(true));
+    written_values.insert("cursor.general.openaiApiKey".to_string(), serde_json::json!(token));
+
+    managed_keys.push("http.proxy".to_string());
+    managed_keys.push("cursor.general.disableHttp2".to_string());
+    managed_keys.push("cursor.general.openaiApiKey".to_string());
+
+    // Wrap MCP servers if present in settings.json or separate mcp.json
+    let mut wrapped_count = 0;
+    let agentcontrol_bin = std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "agentcontrol".to_string());
+
+    if modified.get("mcpServers").is_some() {
+        if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) {
+            previous_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+        }
+        if let Ok((cnt, _)) = transformer::wrap_all_servers(&mut modified, &agentcontrol_bin) {
+            wrapped_count += cnt;
+            if let Some(servers) = modified.get("mcpServers").and_then(|v| v.as_object()) {
+                written_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+            }
+            managed_keys.push("mcpServers".to_string());
+        }
+    }
+
+    let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
+    fs::write(settings_path, output_str).map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
+
+    let post_hash = OwnershipManifest::compute_sha256(settings_path).unwrap_or_default();
+
+    let manifest = OwnershipManifest::new(
+        target_name,
+        settings_path.to_path_buf(),
+        pre_hash,
+        post_hash,
+        managed_keys,
+        previous_values,
+        written_values,
+    )
+    .with_connect_mode(mode.as_str());
+    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+
+    Ok(ConnectResult {
+        config_path: settings_path.to_path_buf(),
+        proxy_url: proxy_url.to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: wrapped_count,
+        llm_endpoint_injected: true,
+    })
+}
+
+/// Proven Antigravity IDE connection: injects proxy configuration and wraps MCP servers in `.gemini/config/mcp_config.json`.
+pub fn connect_antigravity(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    let config_path = config_path::antigravity_config_path().map_err(|e| format!("{}", e))?;
+    connect_antigravity_to_path(&config_path, token, mode)
+}
+
+/// Core Antigravity connection routine given explicit configuration path.
+pub fn connect_antigravity_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    connect_antigravity_target_to_path("antigravity", config_path, token, mode)
+}
+
+/// Parameterized Antigravity connection routine given target manifest name and configuration path.
+pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    if let Some(parent) = config_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let pre_hash = if config_path.exists() {
+        OwnershipManifest::compute_sha256(config_path).unwrap_or_default()
+    } else {
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+    };
+
+    let raw = if config_path.exists() {
+        fs::read_to_string(config_path).map_err(|e| e.to_string())?
+    } else {
+        "{}".to_string()
+    };
+
+    let config: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = crate::wrap::strip_json_comments(&raw);
+            serde_json::from_str(&stripped).unwrap_or_else(|_| serde_json::json!({}))
+        }
+    };
+
+    let agentcontrol_bin = std::env::current_exe()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "agentcontrol".to_string());
+
+    let mut modified = if config.is_object() {
+        config.clone()
+    } else {
+        serde_json::json!({})
+    };
+
+    let mut previous_values = HashMap::new();
+    let mut written_values = HashMap::new();
+    let mut managed_keys = Vec::new();
+
+    let proxy_base_url = "http://127.0.0.1:18080/v1";
+
+    // Record previous values for Antigravity proxy & auth keys
+    let prev_proxy = modified.get("proxy_url").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_key = modified.get("api_key").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_anti_base = modified.get("antigravity.proxy.baseUrl").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_anti_key = modified.get("antigravity.proxy.apiKey").cloned().unwrap_or(serde_json::Value::Null);
+
+    previous_values.insert("proxy_url".to_string(), prev_proxy);
+    previous_values.insert("api_key".to_string(), prev_key);
+    previous_values.insert("antigravity.proxy.baseUrl".to_string(), prev_anti_base);
+    previous_values.insert("antigravity.proxy.apiKey".to_string(), prev_anti_key);
+
+    // Inject proxy and auth
+    modified["proxy_url"] = serde_json::json!(proxy_base_url);
+    modified["api_key"] = serde_json::json!(token);
+    modified["antigravity.proxy.baseUrl"] = serde_json::json!(proxy_base_url);
+    modified["antigravity.proxy.apiKey"] = serde_json::json!(token);
+
+    written_values.insert("proxy_url".to_string(), serde_json::json!(proxy_base_url));
+    written_values.insert("api_key".to_string(), serde_json::json!(token));
+    written_values.insert("antigravity.proxy.baseUrl".to_string(), serde_json::json!(proxy_base_url));
+    written_values.insert("antigravity.proxy.apiKey".to_string(), serde_json::json!(token));
+
+    managed_keys.push("proxy_url".to_string());
+    managed_keys.push("api_key".to_string());
+    managed_keys.push("antigravity.proxy.baseUrl".to_string());
+    managed_keys.push("antigravity.proxy.apiKey".to_string());
+
+    // Wrap MCP servers if present
+    let mut wrapped_count = 0;
+    if modified.get("mcpServers").is_some() {
+        if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) {
+            previous_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+        }
+        if let Ok((cnt, _)) = transformer::wrap_all_servers(&mut modified, &agentcontrol_bin) {
+            wrapped_count = cnt;
+            if let Some(servers) = modified.get("mcpServers").and_then(|v| v.as_object()) {
+                written_values.insert("mcpServers".to_string(), serde_json::json!(servers));
+            }
+            managed_keys.push("mcpServers".to_string());
+        }
+    }
+
+    let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
+    fs::write(config_path, output_str).map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
+
+    let post_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
+
+    let manifest = OwnershipManifest::new(
+        target_name,
+        config_path.to_path_buf(),
+        pre_hash,
+        post_hash,
+        managed_keys,
+        previous_values,
+        written_values,
+    )
+    .with_connect_mode(mode.as_str());
+    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+
+    Ok(ConnectResult {
+        config_path: config_path.to_path_buf(),
+        proxy_url: proxy_base_url.to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: wrapped_count,
+        llm_endpoint_injected: true,
+    })
 }
 
 /// Proven Continue injection: injects custom model provider into VS Code settings.
-pub fn connect_vscode_continue(token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_vscode_continue(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     let settings_path = crate::wrap::ide_config::vscode_settings_path().ok_or_else(|| {
         "Could not resolve VS Code settings.json path on this system.".to_string()
     })?;
@@ -541,12 +966,12 @@ pub fn connect_vscode_continue(token: &str, mode: ConnectMode) -> Result<(), Str
 }
 
 /// Core VS Code Continue connection routine given explicit configuration path.
-pub fn connect_vscode_continue_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_vscode_continue_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     connect_vscode_continue_target_to_path("vscode-continue", settings_path, token, mode)
 }
 
 /// Parameterized VS Code Continue connection routine given target manifest name and configuration path.
-pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: &Path, token: &str, mode: ConnectMode) -> Result<(), String> {
+pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
     let pre_hash = if settings_path.exists() {
         OwnershipManifest::compute_sha256(settings_path).unwrap_or_default()
     } else {
@@ -577,7 +1002,6 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
     });
 
     let mut models_arr = settings.get("continue.models").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    // Remove existing vexa entry if present
     models_arr.retain(|m| m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)"));
     models_arr.insert(0, vexa_model);
 
@@ -604,10 +1028,14 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
     .with_connect_mode(mode.as_str());
     manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
-    println!("  Configuration: {}", settings_path.display());
-    println!("  Continue Model: Vexa Agent Control (apiBase: {})", proxy_base_url.green());
-
-    Ok(())
+    Ok(ConnectResult {
+        config_path: settings_path.to_path_buf(),
+        proxy_url: proxy_base_url.to_string(),
+        token_masked: mask_token(token),
+        mode,
+        mcp_servers_wrapped: 0,
+        llm_endpoint_injected: true,
+    })
 }
 
 /// Disconnect a target client by non-destructively reverting managed keys using the ownership manifest.
@@ -736,6 +1164,21 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
                     );
                 }
             }
+        } else if key == "openai_base_url" {
+            let cur = root.get("openai_base_url").and_then(|v| v.as_str());
+            let written = manifest.written_values.get(key).and_then(|v| v.as_str());
+            let prev = manifest.previous_values.get(key);
+            if cur == written {
+                match prev {
+                    Some(serde_json::Value::String(s)) => {
+                        root.insert("openai_base_url".to_string(), toml::Value::String(s.clone()));
+                    }
+                    _ => {
+                        root.remove("openai_base_url");
+                    }
+                }
+                reverted_keys.push("openai_base_url".to_string());
+            }
         }
     }
 
@@ -769,7 +1212,7 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
     Ok(reverted_keys)
 }
 
-/// Revert managed keys in a JSON configuration file (e.g. Claude Desktop, VS Code Continue).
+/// Revert managed keys in a JSON configuration file (e.g. Claude Desktop, Cursor, Antigravity, VS Code Continue).
 pub fn revert_json_target(manifest: &OwnershipManifest) -> Result<Vec<String>, String> {
     let raw = fs::read_to_string(&manifest.config_path).map_err(|e| e.to_string())?;
     let mut config: serde_json::Value =
@@ -779,16 +1222,75 @@ pub fn revert_json_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
     for key in &manifest.managed_keys {
         if key == "mcpServers" {
             if let Some(prev) = manifest.previous_values.get("mcpServers") {
-                // Restore previous mcpServers or unwrap
                 if let Some(prev_obj) = prev.as_object() {
                     config["mcpServers"] = serde_json::Value::Object(prev_obj.clone());
                     reverted_keys.push("mcpServers".to_string());
+                } else if prev.is_null() {
+                    if let Some(obj) = config.as_object_mut() {
+                        obj.remove("mcpServers");
+                        reverted_keys.push("mcpServers".to_string());
+                    }
                 }
+            } else if let Some(obj) = config.as_object_mut() {
+                obj.remove("mcpServers");
+                reverted_keys.push("mcpServers".to_string());
             }
         } else if key == "continue.models" {
             if let Some(models_arr) = config.get_mut("continue.models").and_then(|m| m.as_array_mut()) {
                 models_arr.retain(|m| m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)"));
                 reverted_keys.push("continue.models".to_string());
+            }
+        } else if key.starts_with("env.") {
+            let child_key = &key[4..];
+            let written = manifest.written_values.get(key);
+            let prev = manifest.previous_values.get(key);
+
+            if let Some(env_obj) = config.get_mut("env").and_then(|v| v.as_object_mut()) {
+                if let Some(cur) = env_obj.get(child_key) {
+                    if Some(cur) == written {
+                        match prev {
+                            Some(serde_json::Value::Null) | None => {
+                                env_obj.remove(child_key);
+                            }
+                            Some(v) => {
+                                env_obj.insert(child_key.to_string(), v.clone());
+                            }
+                        }
+                        reverted_keys.push(key.clone());
+                    } else {
+                        eprintln!(
+                            "{} Key '{}' was modified externally; preserving user custom setting.",
+                            "⚠".yellow(),
+                            key
+                        );
+                    }
+                }
+            }
+        } else {
+            // General key reversal (e.g. apiUrl, apiKey, http.proxy, cursor.general.disableHttp2, cursor.general.openaiApiKey, antigravity.proxy.baseUrl, etc.)
+            let written = manifest.written_values.get(key);
+            let prev = manifest.previous_values.get(key);
+
+            if let Some(obj) = config.as_object_mut() {
+                if let Some(cur) = obj.get(key) {
+                    if Some(cur) == written {
+                        match prev {
+                            Some(serde_json::Value::Null) | None => {
+                                obj.remove(key);
+                            }
+                            Some(v) => {
+                                obj.insert(key.clone(), v.clone());
+                            }
+                        }
+                        reverted_keys.push(key.clone());
+                    } else {
+                        eprintln!(
+                            "{} Key '{}' was modified externally; preserving user custom setting.",
+                            "⚠".yellow(),
+                            key
+                        );
+                    }
+                }
             }
         }
     }
@@ -830,7 +1332,8 @@ custom_var = "keep_me"
         assert_eq!(manifest.connect_mode.as_deref(), Some("local"));
 
         let reverted = revert_toml_target(&manifest).unwrap();
-        assert_eq!(reverted.len(), 2);
+        assert!(reverted.contains(&"OPENAI_BASE_URL".to_string()));
+        assert!(reverted.contains(&"OPENAI_API_KEY".to_string()));
         let _ = OwnershipManifest::delete("codex_unit_local");
 
         let final_toml = fs::read_to_string(&codex_config).unwrap();
@@ -864,13 +1367,137 @@ theme = "nord"
         assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
         let reverted = revert_toml_target(&manifest).unwrap();
-        assert_eq!(reverted.len(), 2);
+        assert!(reverted.contains(&"OPENAI_BASE_URL".to_string()));
+        assert!(reverted.contains(&"OPENAI_API_KEY".to_string()));
         let _ = OwnershipManifest::delete("codex_unit_cloud");
 
         let final_toml = fs::read_to_string(&codex_config).unwrap();
         assert!(!final_toml.contains("OPENAI_BASE_URL"));
         assert!(!final_toml.contains("OPENAI_API_KEY"));
         assert!(final_toml.contains("theme = \"nord\""));
+    }
+
+    #[test]
+    fn test_claude_connect_and_disconnect_roundtrip() {
+        let dir = tempdir().unwrap();
+        let claude_config = dir.path().join("claude_desktop_config.json");
+        fs::write(
+            &claude_config,
+            r#"{
+  "mcpServers": {
+    "test_srv": {
+      "command": "node",
+      "args": ["server.js"]
+    }
+  },
+  "customPref": true
+}"#,
+        )
+        .unwrap();
+
+        let res = connect_claude_target_to_path("claude_unit", &claude_config, "sk-vex-claude-key", ConnectMode::CloudDirect);
+        assert!(res.is_ok());
+
+        let content = fs::read_to_string(&claude_config).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(json["customPref"], true);
+        let srv_cmd = json["mcpServers"]["test_srv"]["command"].as_str().unwrap();
+        assert!(srv_cmd.contains("agentcontrol") || srv_cmd.contains("agentwall"));
+
+        let manifest = OwnershipManifest::load("claude_unit").unwrap().unwrap();
+        assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
+
+        let reverted = revert_json_target(&manifest).unwrap();
+        assert!(reverted.contains(&"mcpServers".to_string()));
+        let _ = OwnershipManifest::delete("claude_unit");
+
+        let final_content = fs::read_to_string(&claude_config).unwrap();
+        let final_json: serde_json::Value = serde_json::from_str(&final_content).unwrap();
+        assert_eq!(final_json["customPref"], true);
+        assert_eq!(final_json["mcpServers"]["test_srv"]["command"], "node");
+    }
+
+    #[test]
+    fn test_cursor_connect_and_disconnect_roundtrip() {
+        let dir = tempdir().unwrap();
+        let cursor_settings = dir.path().join("settings.json");
+        fs::write(
+            &cursor_settings,
+            r#"{
+  "editor.fontSize": 14,
+  "cursor.general.disableHttp2": false
+}"#,
+        )
+        .unwrap();
+
+        let res = connect_cursor_target_to_path("cursor_unit", &cursor_settings, "sk-vex-cursor-key", ConnectMode::CloudDirect);
+        assert!(res.is_ok());
+
+        let content = fs::read_to_string(&cursor_settings).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(json["http.proxy"], "http://127.0.0.1:18080");
+        assert_eq!(json["cursor.general.disableHttp2"], true);
+        assert_eq!(json["cursor.general.openaiApiKey"], "sk-vex-cursor-key");
+        assert_eq!(json["editor.fontSize"], 14);
+
+        let manifest = OwnershipManifest::load("cursor_unit").unwrap().unwrap();
+        assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
+
+        let reverted = revert_json_target(&manifest).unwrap();
+        assert!(reverted.contains(&"http.proxy".to_string()));
+        assert!(reverted.contains(&"cursor.general.openaiApiKey".to_string()));
+        let _ = OwnershipManifest::delete("cursor_unit");
+
+        let final_content = fs::read_to_string(&cursor_settings).unwrap();
+        let final_json: serde_json::Value = serde_json::from_str(&final_content).unwrap();
+        assert!(final_json.get("http.proxy").is_none());
+        assert!(final_json.get("cursor.general.openaiApiKey").is_none());
+        assert_eq!(final_json["cursor.general.disableHttp2"], false); // Restored original value!
+        assert_eq!(final_json["editor.fontSize"], 14);
+    }
+
+    #[test]
+    fn test_antigravity_connect_and_disconnect_roundtrip() {
+        let dir = tempdir().unwrap();
+        let anti_config = dir.path().join("mcp_config.json");
+        fs::write(
+            &anti_config,
+            r#"{
+  "mcpServers": {
+    "local_tool": {
+      "command": "python",
+      "args": ["tool.py"]
+    }
+  },
+  "userSetting": "custom"
+}"#,
+        )
+        .unwrap();
+
+        let res = connect_antigravity_target_to_path("antigravity_unit", &anti_config, "sk-vex-anti-key", ConnectMode::CloudDirect);
+        assert!(res.is_ok());
+
+        let content = fs::read_to_string(&anti_config).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(json["proxy_url"], "http://127.0.0.1:18080/v1");
+        assert_eq!(json["api_key"], "sk-vex-anti-key");
+        assert_eq!(json["antigravity.proxy.baseUrl"], "http://127.0.0.1:18080/v1");
+        assert_eq!(json["antigravity.proxy.apiKey"], "sk-vex-anti-key");
+        assert_eq!(json["userSetting"], "custom");
+
+        let manifest = OwnershipManifest::load("antigravity_unit").unwrap().unwrap();
+        assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
+
+        let reverted = revert_json_target(&manifest).unwrap();
+        assert!(reverted.contains(&"proxy_url".to_string()));
+        assert!(reverted.contains(&"api_key".to_string()));
+        let _ = OwnershipManifest::delete("antigravity_unit");
+
+        let final_content = fs::read_to_string(&anti_config).unwrap();
+        let final_json: serde_json::Value = serde_json::from_str(&final_content).unwrap();
+        assert!(final_json.get("proxy_url").is_none());
+        assert!(final_json.get("api_key").is_none());
+        assert_eq!(final_json["userSetting"], "custom");
     }
 
     #[test]

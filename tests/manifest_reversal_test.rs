@@ -240,3 +240,196 @@ fn test_claude_manifest_reversal_preserves_user_settings() {
         serde_json::json!(["mcp-server-sqlite", "--db-path", "/data/app.db"])
     );
 }
+
+#[test]
+fn test_cursor_manifest_reversal_preserves_user_settings() {
+    let tmp = tempdir().unwrap();
+    let config_path = tmp.path().join("settings.json");
+
+    let initial_json = serde_json::json!({
+        "editor.fontSize": 14,
+        "cursor.general.disableHttp2": false
+    });
+    fs::write(&config_path, serde_json::to_string_pretty(&initial_json).unwrap()).unwrap();
+    let pre_hash = OwnershipManifest::compute_sha256(&config_path).unwrap();
+
+    let mut connected_json = initial_json.clone();
+    connected_json["http.proxy"] = serde_json::json!("http://127.0.0.1:18080");
+    connected_json["cursor.general.disableHttp2"] = serde_json::json!(true);
+    connected_json["cursor.general.openaiApiKey"] = serde_json::json!("sk-vex-cursor-123");
+    fs::write(&config_path, serde_json::to_string_pretty(&connected_json).unwrap()).unwrap();
+    let post_hash = OwnershipManifest::compute_sha256(&config_path).unwrap();
+
+    let mut previous_values = HashMap::new();
+    previous_values.insert("http.proxy".to_string(), serde_json::Value::Null);
+    previous_values.insert("cursor.general.disableHttp2".to_string(), serde_json::json!(false));
+    previous_values.insert("cursor.general.openaiApiKey".to_string(), serde_json::Value::Null);
+
+    let mut written_values = HashMap::new();
+    written_values.insert("http.proxy".to_string(), serde_json::json!("http://127.0.0.1:18080"));
+    written_values.insert("cursor.general.disableHttp2".to_string(), serde_json::json!(true));
+    written_values.insert("cursor.general.openaiApiKey".to_string(), serde_json::json!("sk-vex-cursor-123"));
+
+    let manifest = OwnershipManifest::new(
+        "cursor",
+        config_path.clone(),
+        pre_hash,
+        post_hash,
+        vec![
+            "http.proxy".to_string(),
+            "cursor.general.disableHttp2".to_string(),
+            "cursor.general.openaiApiKey".to_string(),
+        ],
+        previous_values,
+        written_values,
+    );
+
+    // User changes font size while connected
+    let mut active: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    active["editor.fontSize"] = serde_json::json!(16);
+    fs::write(&config_path, serde_json::to_string_pretty(&active).unwrap()).unwrap();
+
+    let reverted = revert_json_target(&manifest).unwrap();
+    assert!(reverted.contains(&"http.proxy".to_string()));
+    assert!(reverted.contains(&"cursor.general.disableHttp2".to_string()));
+    assert!(reverted.contains(&"cursor.general.openaiApiKey".to_string()));
+
+    let final_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    assert_eq!(final_json["editor.fontSize"], 16);
+    assert_eq!(final_json["cursor.general.disableHttp2"], false);
+    assert_eq!(final_json.get("http.proxy"), None);
+    assert_eq!(final_json.get("cursor.general.openaiApiKey"), None);
+}
+
+#[test]
+fn test_antigravity_manifest_reversal_preserves_user_settings() {
+    let tmp = tempdir().unwrap();
+    let config_path = tmp.path().join("mcp_config.json");
+
+    let initial_json = serde_json::json!({
+        "mcpServers": {
+            "fetcher": {
+                "command": "python",
+                "args": ["fetch.py"]
+            }
+        },
+        "customFlag": 42
+    });
+    fs::write(&config_path, serde_json::to_string_pretty(&initial_json).unwrap()).unwrap();
+    let pre_hash = OwnershipManifest::compute_sha256(&config_path).unwrap();
+
+    let mut connected_json = initial_json.clone();
+    connected_json["proxy_url"] = serde_json::json!("http://127.0.0.1:18080/v1");
+    connected_json["api_key"] = serde_json::json!("sk-vex-anti-456");
+    connected_json["antigravity.proxy.baseUrl"] = serde_json::json!("http://127.0.0.1:18080/v1");
+    connected_json["antigravity.proxy.apiKey"] = serde_json::json!("sk-vex-anti-456");
+    connected_json["mcpServers"]["fetcher"]["command"] = serde_json::json!("agentcontrol");
+    connected_json["mcpServers"]["fetcher"]["args"] = serde_json::json!(["stdio-proxy", "--", "python", "fetch.py"]);
+    fs::write(&config_path, serde_json::to_string_pretty(&connected_json).unwrap()).unwrap();
+    let post_hash = OwnershipManifest::compute_sha256(&config_path).unwrap();
+
+    let mut previous_values = HashMap::new();
+    previous_values.insert("proxy_url".to_string(), serde_json::Value::Null);
+    previous_values.insert("api_key".to_string(), serde_json::Value::Null);
+    previous_values.insert("antigravity.proxy.baseUrl".to_string(), serde_json::Value::Null);
+    previous_values.insert("antigravity.proxy.apiKey".to_string(), serde_json::Value::Null);
+    previous_values.insert("mcpServers".to_string(), initial_json["mcpServers"].clone());
+
+    let mut written_values = HashMap::new();
+    written_values.insert("proxy_url".to_string(), serde_json::json!("http://127.0.0.1:18080/v1"));
+    written_values.insert("api_key".to_string(), serde_json::json!("sk-vex-anti-456"));
+    written_values.insert("antigravity.proxy.baseUrl".to_string(), serde_json::json!("http://127.0.0.1:18080/v1"));
+    written_values.insert("antigravity.proxy.apiKey".to_string(), serde_json::json!("sk-vex-anti-456"));
+    written_values.insert("mcpServers".to_string(), connected_json["mcpServers"].clone());
+
+    let manifest = OwnershipManifest::new(
+        "antigravity",
+        config_path.clone(),
+        pre_hash,
+        post_hash,
+        vec![
+            "proxy_url".to_string(),
+            "api_key".to_string(),
+            "antigravity.proxy.baseUrl".to_string(),
+            "antigravity.proxy.apiKey".to_string(),
+            "mcpServers".to_string(),
+        ],
+        previous_values,
+        written_values,
+    );
+
+    let reverted = revert_json_target(&manifest).unwrap();
+    assert!(reverted.contains(&"proxy_url".to_string()));
+    assert!(reverted.contains(&"api_key".to_string()));
+    assert!(reverted.contains(&"mcpServers".to_string()));
+
+    let final_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    assert_eq!(final_json["customFlag"], 42);
+    assert_eq!(final_json.get("proxy_url"), None);
+    assert_eq!(final_json.get("api_key"), None);
+    assert_eq!(final_json["mcpServers"]["fetcher"]["command"], "python");
+    assert_eq!(final_json["mcpServers"]["fetcher"]["args"], serde_json::json!(["fetch.py"]));
+}
+
+// ─── Claude Code (CLI) Manifest Reversal Tests ────────────────────────────────
+
+#[test]
+fn test_claude_code_manifest_reversal_preserves_user_settings() {
+    use agentcontrol::wrap::connect::connect_claude_code_to_path;
+    use agentcontrol::wrap::connect::ConnectMode;
+
+    let tmp = tempdir().unwrap();
+    let settings_path = tmp.path().join("settings.json");
+
+    // Simulate user's existing ~/.claude/settings.json
+    let initial = serde_json::json!({
+        "userPreference": "vim-mode",
+        "env": {
+            "MY_API_KEY": "user-custom-key",
+            "CUSTOM_FLAG": "true"
+        }
+    });
+    fs::write(&settings_path, serde_json::to_string_pretty(&initial).unwrap()).unwrap();
+
+    // Connect
+    let token = "sk-vex-reversal-test-aabb1122334455667788990011223344";
+    let res = connect_claude_code_to_path(&settings_path, token, ConnectMode::Local);
+    assert!(res.is_ok(), "connect_claude_code_to_path failed: {:?}", res);
+
+    let after_connect: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+
+    // Verify injected
+    assert_eq!(after_connect["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18080");
+    assert_eq!(after_connect["env"]["ANTHROPIC_API_KEY"], token);
+    // Existing user env vars untouched
+    assert_eq!(after_connect["env"]["MY_API_KEY"], "user-custom-key");
+    assert_eq!(after_connect["env"]["CUSTOM_FLAG"], "true");
+    assert_eq!(after_connect["userPreference"], "vim-mode");
+
+    // Revert via manifest
+    let manifest = OwnershipManifest::load("claude-code").unwrap().expect("Manifest not found");
+    let reverted_keys = revert_json_target(&manifest).unwrap();
+    let _ = OwnershipManifest::delete("claude-code");
+
+    assert!(reverted_keys.contains(&"env.ANTHROPIC_BASE_URL".to_string()));
+    assert!(reverted_keys.contains(&"env.ANTHROPIC_API_KEY".to_string()));
+
+    let final_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+
+    // Vexa keys removed (reverted to null → absent from JSON)
+    assert!(final_json["env"].get("ANTHROPIC_BASE_URL").is_none(),
+        "ANTHROPIC_BASE_URL should be removed after disconnect");
+    assert!(final_json["env"].get("ANTHROPIC_API_KEY").is_none(),
+        "ANTHROPIC_API_KEY should be removed after disconnect");
+
+    // User's existing env vars must survive
+    assert_eq!(final_json["env"]["MY_API_KEY"], "user-custom-key",
+        "User MY_API_KEY lost after disconnect!");
+    assert_eq!(final_json["env"]["CUSTOM_FLAG"], "true",
+        "User CUSTOM_FLAG lost after disconnect!");
+    assert_eq!(final_json["userPreference"], "vim-mode",
+        "User userPreference lost after disconnect!");
+}
+

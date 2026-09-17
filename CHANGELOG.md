@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.87] - 2026-09-17
+
+### Added & Enhanced
+- **Google Antigravity IDE Governance:** Added zero-touch workstation wrapping and MCP tool interception support for Google Antigravity (`agentcontrol connect antigravity`), with comprehensive setup documentation (`docs/guides/antigravity_integration.md`).
+- **Cloud-Direct & Standalone Wrap Robustness:** Enhanced `src/wrap/connect.rs` and `src/wrap/config_path.rs` with multi-OS config path discovery, atomic manifest tracking, and robust reversal protection across Claude Desktop, Claude Code, Cursor, Codex, and Antigravity.
+- **Manifest Reversal Test Suite:** Added end-to-end integration and manifest reversal tests (`tests/connect_cloud_direct_test.rs`, `tests/manifest_reversal_test.rs`) verifying atomic proxy configuration injection and clean unwrap restoration.
+- **Documentation & Matrix Updates:** Expanded Client Governance & Support Matrix across `README.md`, `docs/guides/`, and `docs/reference/cli.md`.
+
+---
+
+## [1.0.86] - 2026-09-17
+
+### Added & Fixed
+- **Early Access Fleet Enforcement:** Standardized default 5-device Early Access cap, removed 90-day time-based trial block, and excluded revoked devices from enrollment count.
+- **Threat Intelligence & Audit Dashboard:** Surfaced comprehensive security audit telemetry and raw event inspector in the control plane web interface.
+
+---
+
 ## [1.0.85] - 2026-09-16
 
 ### Added & Fixed
@@ -118,7 +136,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.85...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.87...HEAD
+[1.0.87]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.86...v1.0.87
+[1.0.86]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.85...v1.0.86
 [1.0.85]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.84...v1.0.85
 [1.0.84]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.83...v1.0.84
 [1.0.83]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.82...v1.0.83
