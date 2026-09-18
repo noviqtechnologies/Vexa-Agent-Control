@@ -48,10 +48,13 @@ export VEXA_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
 
 ## 4. Device Enrollment Governance & Caps
 
-When an agent workstation initiates enrollment via `agentcontrol enroll --token <TOKEN> --hub-url <URL>`:
+When an agent workstation initiates enrollment via `agentcontrol login --hub <URL>` (interactive PKCE) or `agentcontrol enroll --token <TOKEN> --hub-url <URL>` (headless/MDM, requires admin-issued OTET):
 1. The Control Plane verifies that the 90-day Early Access evaluation window has not expired and that the active enrolled device count has not exceeded the license tier limit (`1` for Developer, `5` for Team during Early Access, `50` for Team at GA, unlimited for Enterprise).
 2. If the quota is full or the 90-day window has expired, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`) or `403 Forbidden` (`license_expired`). To request additional Early Access device capacity, reach out on the community Discord or email `early-access@vexasec.io`.
 3. Revoking decommissioned devices in **Device Governance** immediately excludes them from the total enrolled count, freeing up capacity for new enrollments.
+
+> [!NOTE]
+> The primary developer onboarding path is `agentcontrol login`, which handles PKCE authentication, device registration, and background service installation in a single step. The `agentcontrol enroll --token` path requires an admin-issued one-time token and is reserved for future headless/MDM/CI fleet deployment workflows (Hub-side token generation not yet available).
 
 ---
 

@@ -181,7 +181,7 @@ fn calculate_directory_size(dir: &Path) -> Result<usize, String> {
 }
 
 /// Repair active configurations against manifests and ensure background agent task exists.
-pub fn run_repair() -> i32 {
+pub async fn run_repair() -> i32 {
     println!("{}", "Vexa Agent Control — Workstation Repair Utility".bold().cyan());
     println!("Checking configuration manifests and background agent service...");
 
@@ -198,14 +198,20 @@ pub fn run_repair() -> i32 {
         println!("  {} Local proxy token is present.", "✔".green());
     }
 
-    // 2. Re-install user service / scheduled task if missing
+    // 2. Re-install user service / scheduled task if missing.
+    // called_from_login: true because self-healing is an internal recovery path
+    // that should not re-gate on the enrollment check (device is already enrolled
+    // if self-healing is running).
     let service_action = crate::service::ServiceAction::Install {
         hub_url: crate::identity::device::load_hub_url().unwrap_or_else(|| "https://app.vexasec.io".to_string()),
         gateway_secret: None,
         policy_read_secret: None,
         agent_id: None,
+        enterprise: false,
+        config: None,
+        force: false,
     };
-    let s_code = crate::service::run_service(service_action);
+    let s_code = crate::service::run_service(service_action, true, true).await;
     if s_code == 0 {
         println!("  {} Per-user background service verified and active.", "✔".green());
         repaired += 1;

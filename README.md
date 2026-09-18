@@ -663,7 +663,7 @@ agentcontrol start
   - Initializes the embedded SQLite audit engine at `~/.agentcontrol/events.db` in Write-Ahead Logging (WAL) mode.
   - Serves the **embedded Local Developer Dashboard** directly at `http://127.0.0.1:18080`.
 
-*(To run persistently in the background across restarts, run `agentcontrol service install`).*
+*(To connect to a Control Hub and register a persistent background daemon, run `agentcontrol login --hub <url>`. This handles PKCE authentication, device enrollment, and service installation in one step.)*
 
 ---
 

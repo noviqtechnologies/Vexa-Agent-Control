@@ -102,3 +102,52 @@ Runs the event-driven filesystem watcher daemon to automatically wrap newly adde
 ```bash
 agentcontrol watch [TARGET]
 ```
+
+---
+
+## Service Management Commands
+
+### `agentcontrol service install`
+Installs Agent Control as an always-on background OS service using the authoritative supervisor for your platform. Writes a self-contained, secure configuration file (`0600` permissions) to `~/.agentcontrol/daemon.json` (or system directory if `--enterprise`).
+
+```bash
+agentcontrol service install [OPTIONS]
+```
+
+**Options:**
+- `--hub-url <URL>`: Control Hub URL (default: `https://app.vexasec.io`).
+- `--enterprise`: Install as system-level daemon (requires root / Administrator). Uses Windows SCM Service, macOS LaunchDaemon, or Linux system-level systemd unit.
+- `--config <PATH>`: Custom path for saving daemon configuration JSON.
+- `--gateway-secret <SECRET>`: Optional upstream gateway secret for webhook HMAC validation.
+- `--policy-read-secret <SECRET>`: Optional secret for fetching policies from the Control Hub.
+- `--agent-id <ID>`: Friendly identifier for this workstation sent in telemetry.
+
+**Platform Supervisors:**
+| OS Platform | Standard User Mode (Default) | Enterprise / System Mode (`--enterprise`) |
+|---|---|---|
+| **Windows** | Windows User Startup (`HKCU\Run`) / Task Scheduler | Windows SCM Service (`AgentControlSentry`) |
+| **macOS** | user `LaunchAgent` (`gui/<uid>/io.vexasec.agentcontrol`) | system `LaunchDaemon` (`/Library/LaunchDaemons/`) |
+| **Linux** | user `systemd` unit (`~/.config/systemd/user/`) | system `systemd` unit (`/etc/systemd/system/`) |
+
+---
+
+### `agentcontrol service status`
+Performs an authenticated local health handshake against `http://127.0.0.1:18080/api/v1/health` and queries the authoritative OS service manager. Reports truthful multi-dimensional diagnostics (Supervisor state, listener RTT, PID, version, uptime, policy state, Hub auth, and degraded warnings).
+
+```bash
+agentcontrol service status
+```
+
+**Output States:**
+- `✔ Status: HEALTHY`: Service is supervised by the OS service manager and the daemon handshake is responsive.
+- `⚠ Status: DEGRADED (Process running unmanaged)`: Daemon is running interactively or detached, but is not managed by an OS supervisor.
+- `✖ Status: DEGRADED (Closed)`: Daemon is stopped or unreachable on `127.0.0.1:18080`.
+
+---
+
+### `agentcontrol service uninstall`
+Completely and non-destructively removes background daemon registrations across all scopes (stops running daemon, unregisters systemd/launchd/SCM/Task Scheduler/registry keys, and deletes supervisor manifests).
+
+```bash
+agentcontrol service uninstall
+```

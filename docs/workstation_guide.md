@@ -79,30 +79,40 @@ agentcontrol --version
 > [!TIP]
 > **Enterprise / Team enrollment?** Use the separate `team_otet.sh` script which handles OTET token enrollment and Sentry daemon installation. See the [Team Control Hub Guide](team_hub_guide.md).
 
-### Persistent OS Sentry Daemon & File Locking
+### Persistent OS Sentry Daemon & Always-On Governance
 
-Instead of manually running `agentcontrol start` in terminal, install Agent Control as an always-on background OS daemon with read-only file locks:
+The simplest way to register Agent Control as an always-on background daemon is through the **zero-touch login flow**, which handles authentication, device enrollment, and service registration in a single step:
 
 ```bash
-# Install persistent systemd (Linux) or launchd (macOS) service
-# All three flags are required — they must match your Control Plane API configuration.
-agentcontrol service install \
-  --hub-url       "https://hub.corp.com" \
-  --gateway-secret    "<GATEWAY_SECRET>" \
-  --policy-read-secret "<POLICY_READ_SECRET>" \
-  --agent-id      "dev-$(hostname)"   # optional: sets a friendly name in the dashboard
-
-# Check daemon status
-agentcontrol service status
+# Zero-touch: authenticate, enroll, and register background daemon in one command
+agentcontrol login --hub "https://app.vexasec.io"
 ```
 
-> [!IMPORTANT]
-> The `--gateway-secret` and `--policy-read-secret` values **must exactly match** the `GATEWAY_SECRET` and `POLICY_READ_SECRET` environment variables configured on your Control Plane API. Mismatched secrets cause HTTP 401 errors on every policy fetch. There are no safe defaults — you must supply real values.
+This opens your browser for PKCE SSO, generates a local Ed25519 device key, and automatically registers the background OS service — no separate `service install` step required.
 
-**How Sentry Protection Works:**
-- **Immutable File Locking:** Applies read-only attributes (`chmod 0444`, BSD `chflags uchg`, Windows ACL Write Deny) to `mcp.json` configs.
-- **Continuous Watcher:** File changes trigger <300ms auto-rewrapping and instant (<100ms) `TAMPER_DETECTED` alert dispatch.
-- **Windows Session 0 Scanning:** Automatically enumerates developer profile hives in `C:\Users\*` when running under `SYSTEM`.
+For advanced or scripted scenarios where you need direct service control after authentication:
+
+```bash
+# Check daemon health (works after login or service install)
+agentcontrol service status
+
+# System-level enterprise install (requires Administrator / root; no prior enrollment needed)
+agentcontrol service install --enterprise --hub-url "https://app.vexasec.io"
+
+# Completely uninstall background daemon
+agentcontrol service uninstall
+```
+
+> [!NOTE]
+> `agentcontrol service install` (without `--enterprise`) requires prior authentication via `agentcontrol login`. The `login` command already calls `service install` internally after successful PKCE authentication, so you only need `service install` directly if re-registering after an OS-level supervisor failure.
+
+**Architecture & Security Contract:**
+- **One Platform → One Authoritative Supervisor:**
+  - **Linux:** Standard user uses `systemd --user` with linger verification; enterprise mode uses `/etc/systemd/system/`.
+  - **macOS:** Standard user uses domain-scoped `LaunchAgent` (`gui/<uid>/io.vexasec.agentcontrol`); enterprise mode uses `/Library/LaunchDaemons/`.
+  - **Windows:** Standard user uses zero-admin Windows User Startup (`HKCU\Run`) or Task Scheduler; enterprise mode uses Windows SCM Service (`AgentControlSentry`).
+- **Self-Contained Configuration (`daemon.json`):** Configuration and secrets are stored in `~/.agentcontrol/daemon.json` (`0600` permissions on Unix) or `%PROGRAMDATA%\VexaAgentControl\daemon.json`, avoiding process table leaks and supervisor environment variable incompatibilities.
+- **Truthful Status Inspection:** `agentcontrol service status` conducts an authentic HTTP handshake against `/api/v1/health`, measuring latency, process PID, policy safe mode status, and Hub authentication. If the process is running manually without a registered OS service, it explicitly reports `DEGRADED (Unmanaged)`.
 
 **Permanent PATH configuration (run once — survives terminal restarts):**
 
@@ -134,19 +144,10 @@ agentcontrol.exe --version
 > [!TIP]
 > **Enterprise / Team enrollment?** Use the separate `team_otet.ps1` script instead. See the [Team Control Hub Guide](team_hub_guide.md).
 
-> **Important — Installer Elevation & Administrator Permissions:**
-> - **Enterprise Automated Deployments (Intune / SCCM / GPO / MSI):** Installer packages and GPO scripts execute under **`NT AUTHORITY\SYSTEM`** with full administrative rights. **`agentcontrol service install` runs automatically and sets all secrets at System scope.**
-> - **Manual Script Execution (`install.ps1`):** Running `install.ps1` in an elevated Administrator session installs the binary and configures the `Agent ControlSentry` SCM Service. Run `agentcontrol service install` afterwards with your real secrets:
->   ```powershell
->   # Run in an elevated (Administrator) PowerShell session:
->   agentcontrol.exe service install `
->     --hub-url            "http://localhost:8400" `
->     --gateway-secret     "<GATEWAY_SECRET>" `
->     --policy-read-secret "<POLICY_READ_SECRET>" `
->     --agent-id           "dev-workstation-01"   # optional
->   ```
->   This writes `DASHBOARD_API_URL`, `GATEWAY_SECRET`, `POLICY_READ_SECRET` (and optionally `AGENT_ID`) to the HKLM system-scope registry **before** starting the service, so Sentry reads the correct secrets on first boot.
-> - **Non-Admin Interactive Watcher:** Users without administrator access can run **`agentcontrol watch --all`** in a standard user terminal.
+> [!NOTE]
+> **Installer Elevation & Administrator Permissions:**
+> - **Standard User Mode (Default):** `agentcontrol login` handles authentication and service registration with zero administrative permissions. It registers Windows User Logon Startup (`HKCU\Run`) or Task Scheduler without UAC prompts.
+> - **Enterprise / System Mode:** Run in an elevated Administrator session with `agentcontrol service install --enterprise` to configure the system-wide SCM service `AgentControlSentry`. Enterprise mode does not require prior user-space enrollment.
 
 
 **Permanent PATH configuration (run once — survives terminal restarts):**

@@ -64,7 +64,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
   ```bash
   agentcontrol start
   ```
-  *(To register as a persistent per-user service across reboots, run `agentcontrol service install`).*
+  *(To connect this workstation to a Control Hub and register a persistent background daemon, run `agentcontrol login --hub <url>`. This handles PKCE authentication, device enrollment, and service installation in one step.)*
 - **Expected Result:**
   - Gateway starts listening on `127.0.0.1:18080`.
   - Local high-entropy token generated in `~/.agentcontrol/local.token` (`vx-local-...`).

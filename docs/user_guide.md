@@ -109,8 +109,8 @@ Agent Control adapts to your infrastructure across three operational deployment 
 | **MCP Security Scoring (0–100)** | ✓ | ✓ | ✓ | `agentcontrol scan` |
 | **Multi-IDE Auto-Wrapping (9 IDEs)** | ✓ | ✓ | ✓ | `agentcontrol protect` / `agentcontrol wrap` |
 | **Event-Driven Config Watcher Daemon** | ✓ | ✓ | ✓ | `agentcontrol watch --all` |
-| **Hardware PKI Device Enrollment** | ✓ | ✓ | ✓ | `agentcontrol enroll` |
-| **Persistent OS Sentry Service** | ✓ | ✓ | ✓ | `agentcontrol service install` |
+| **Hardware PKI Device Enrollment** | ✓ | ✓ | ✓ | `agentcontrol login` (interactive) / `agentcontrol enroll` (headless) |
+| **Persistent OS Sentry Service** | ✓ | ✓ | ✓ | Auto-registered by `agentcontrol login`; `agentcontrol service install` (advanced) |
 | **ADR Security Benchmark (303 Tasks)** | ✓ | ✓ | ✓ | `agentcontrol bench --full` |
 | **Automated Compliance Reports** | ✓ | ✓ | ✓ | `agentcontrol compliance report` |
 | **Zero Master Key Custody** | — | ✓ | ✓ | Centralized Vault / Hub Injection |
@@ -171,7 +171,7 @@ agentcontrol start
 3. 💾 **Local Audit Store:** Commits all telemetry to `~/.agentcontrol/events.db` (SQLite WAL mode).
 4. 🌐 **Local Web Console:** Serves the embedded **Local Developer Dashboard** at `http://127.0.0.1:18080`.
 
-*(To register as a persistent background user service across reboots, run `agentcontrol service install`).*
+*(To connect this workstation to a Control Hub and register a persistent background daemon, run `agentcontrol login --hub <url>`. This handles PKCE authentication, device enrollment, and service installation in one step.)*
 
 ### Step 3: Connect Your Coding Assistants (`agentcontrol connect <target>`)
 
@@ -346,34 +346,55 @@ If your IDE is installed in a non-standard location or marked as unverified in `
 
 ## 6. Hardware PKI Enrollment & OS Sentry Service
 
-For team and enterprise environments, workstations are bound to the central Control Hub using cryptographic device enrollment and persistent OS background services.
+For team and enterprise environments, workstations are bound to the central Control Hub using cryptographic device enrollment and a persistent OS background service.
 
-### Hardware-Bound Device Enrollment
+### Onboarding Path A — Zero-Touch Browser Login (Recommended for Developers)
+
+This is the **primary onboarding path** for individual developers and team members. A single command opens browser PKCE SSO, generates a local Ed25519 hardware-bound device key, registers the device with the Hub, and automatically installs the background OS sentry service:
 
 ```bash
-agentcontrol enroll --token "TOK-ONE-TIME-TOKEN" --hub-url "http://localhost:8400"
+agentcontrol login --hub "http://localhost:8400"
 ```
 
-**Cryptographic Enrollment Flow:**
-1. Generates an **Ed25519 Device Keypair** bound to OS secure storage (Windows DPAPI / macOS Keychain / Linux Secret Service `0600`).
-2. Generates an **ECDSA P-256 Keypair** and submits a Certificate Signing Request (CSR) to the Control Hub.
-3. Exchanges proof-of-possession challenges and receives an authenticated short-lived mTLS device certificate.
-4. The one-time token is consumed immediately and never stored in plain text.
+**What happens automatically:**
+1. Opens browser PKCE SSO against the Control Hub.
+2. Generates an **Ed25519 Device Keypair** in OS secure storage (Windows DPAPI / macOS Keychain / Linux Secret Service `0600`).
+3. Registers the device's public key with the Hub via `POST /api/v2/devices/enroll` (bearer-authenticated).
+4. Saves device credentials and hub URL to `~/.agentcontrol/`.
+5. Automatically calls `service install` to register the OS-level background daemon — **no separate step required**.
+
+### Onboarding Path B — Headless / MDM / CI Enrollment (Advanced)
+
+This path is reserved for **automated fleet provisioning** (Intune, SCCM, GPO, CI pipelines) where a browser is unavailable. It requires an admin-issued one-time enrollment token (OTET) from the Control Hub.
+
+> [!IMPORTANT]
+> Hub-side OTET generation (admin panel token issuance) is **not yet available in the Hub UI**. This path is reserved for future automated deployment workflows. For current interactive setup, use `agentcontrol login`.
+
+```bash
+# Headless enrollment using admin-issued one-time token
+agentcontrol enroll --token "TOK-ADMIN-ISSUED-TOKEN" --hub-url "http://localhost:8400"
+```
+
+**Cryptographic Enrollment Flow (PKI v4.0):**
+1. Generates an **Ed25519 Device Keypair** + **ECDSA P-256 CSR** (dual-key bundle).
+2. Posts challenge to `POST /api/v2/enrollment/start` with the OTET.
+3. Signs the Hub nonce with the Ed25519 private key.
+4. Posts proof to `POST /api/v2/enrollment/complete` — receives a device JWT and mTLS certificate.
+5. The one-time token is consumed immediately and never stored in plain text.
 
 ### Persistent OS Sentry Background Daemon
 
-Install Agent Control as a system-level background daemon that boots with the operating system:
+`agentcontrol login` registers the daemon automatically. For advanced scenarios or re-registration:
 
 ```bash
-# Install Sentry Daemon (Windows SCM / macOS launchd / Linux systemd)
-agentcontrol service install \
-  --hub-url "http://localhost:8400" \
-  --gateway-secret "your-gateway-secret" \
-  --policy-read-secret "your-policy-read-secret" \
-  --agent-id "dev-workstation-01"
-
-# Check daemon health
+# Check daemon health (truthful multi-dimensional status)
 agentcontrol service status
+
+# Re-register daemon after OS-level supervisor failure (requires prior enrollment)
+agentcontrol service install --hub-url "http://localhost:8400"
+
+# Enterprise / system-level install (requires Administrator; no prior enrollment needed)
+agentcontrol service install --enterprise --hub-url "http://localhost:8400"
 
 # Uninstall Sentry Daemon
 agentcontrol service uninstall

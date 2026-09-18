@@ -133,6 +133,8 @@ pub enum Commands {
     },
 
     /// Manage Agent Control persistent OS Sentry Service Daemon
+    /// (Advanced / power-user command. Run 'agentcontrol login' for zero-touch setup.)
+    #[command(hide = true)]
     Service {
         #[command(subcommand)]
         action: ServiceCliAction,
@@ -751,6 +753,20 @@ pub enum ServiceCliAction {
         /// Can also be set via the AGENT_ID environment variable.
         #[arg(long, env = "AGENT_ID")]
         agent_id: Option<String>,
+
+        /// Install as an elevated system-wide enterprise daemon (Windows SCM, macOS LaunchDaemon, Linux systemd)
+        #[arg(long, default_value_t = false)]
+        enterprise: bool,
+
+        /// Path to custom daemon configuration file
+        #[arg(long)]
+        config: Option<String>,
+
+        /// Force re-pointing the daemon to a different hub URL even when already enrolled.
+        /// Without this flag, changing the hub URL on an enrolled device prints a warning
+        /// but proceeds. Providing --force suppresses the warning.
+        #[arg(long, default_value_t = false)]
+        force: bool,
     },
     /// Remove the persistent OS background service
     Uninstall,
@@ -760,6 +776,10 @@ pub enum ServiceCliAction {
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct StartArgs {
+    /// Path to JSON daemon configuration file (defaults to ~/.agentcontrol/daemon.json or /etc/agentcontrol/daemon.json)
+    #[arg(long, env = "AGENTCONTROL_CONFIG_PATH")]
+    pub config: Option<String>,
+
     /// YAML policy file path
     #[arg(long, env = "AGENTCONTROL_POLICY_PATH")]
     pub policy: Option<String>,
@@ -971,6 +991,7 @@ impl StartArgs {
             scan_responses: false,
             block_on_secrets: false,
             max_scan_bytes: 1048576,
+            config: None,
             siem_backend: "local".to_string(),
             siem_endpoint: String::new(),
             siem_token: String::new(),

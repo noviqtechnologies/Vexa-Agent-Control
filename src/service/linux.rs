@@ -1,15 +1,13 @@
 //! Linux Systemd Service Installer module.
 //!
-//! Installs as a system-level service (root) or user-level service (~/.config/systemd/user/)
-//! when running without root. Fixes applied vs original:
-//! 1. Removed non-existent --centralized flag; corrected port 8080 → 18080
-//! 2. Proper fallback to systemd --user when not root
-//! 3. systemctl exit-code checking with informational (non-fatal) warnings
-//! 4. daemon-reload called before enable; post-enable process verification
+//! Installs as a system-level service (root/enterprise) or user-level service (~/.config/systemd/user/)
+//! when running without root. Adheres strictly to the single authoritative supervisor model.
 
 use colored::*;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
+use super::SupervisorState;
 
 fn is_root() -> bool {
     #[cfg(unix)]
@@ -24,17 +22,35 @@ fn is_root() -> bool {
 
 pub fn install_linux_service(
     bin_path: &str,
-    hub_url: &str,
+    _hub_url: &str,
     _gateway_secret: &str,
     _policy_read_secret: &str,
-    agent_id: Option<&str>,
+    _agent_id: Option<&str>,
+    enterprise: bool,
+    config_path: &Path,
+    _quiet: bool,
 ) -> Result<(), String> {
-    // Build optional AGENT_ID environment line
-    let agent_id_line = agent_id
-        .map(|id| format!("Environment=AGENT_ID=\"{}\"\n", id))
-        .unwrap_or_default();
+    let use_user_systemd = !enterprise && !is_root();
 
-    // Fix 1: removed non-existent --centralized flag; corrected port 8080 → 18080
+    let (unit_path, systemctl_args_base) = if use_user_systemd {
+        let user_dir = dirs::config_dir()
+            .map(|d| d.join("systemd/user"))
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                    .join(".config/systemd/user")
+            });
+        let _ = fs::create_dir_all(&user_dir);
+        (user_dir.join("agent-control.service"), vec!["--user"])
+    } else {
+        (std::path::PathBuf::from("/etc/systemd/system/agent-control.service"), vec![])
+    };
+
+    // 1. Scoped Pre-Cleanup: Remove legacy agentwall services and legacy XDG autostart entries
+    clean_legacy_artifacts();
+
+    // 2. Generate clean systemd unit definition passing --config flag
+    let config_path_str = config_path.display().to_string();
     let service_content = format!(
         r#"[Unit]
 Description=Agent Control Sentry Endpoint Security Service
@@ -45,13 +61,9 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart={bin} start --listen 127.0.0.1:18080
+ExecStart={bin} start --config {config}
 Restart=always
 RestartSec=5s
-Environment=AGENTCONTROL_HUB_URL="{hub}"
-Environment=DASHBOARD_API_URL="{hub}"
-{agent_id}
-# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 
@@ -59,236 +71,160 @@ PrivateTmp=true
 WantedBy=default.target
 "#,
         bin = bin_path,
-        hub = hub_url,
-        agent_id = agent_id_line,
-    );
-
-    // ── Secondary persistence: XDG autostart desktop entry ───────────────────────────
-    // Works in GNOME, KDE, XFCE and any XDG-compliant desktop environment.
-    // Acts as a belt-and-suspenders layer: even if systemd --user is unavailable
-    // (e.g. SSH session, container, minimal distro), the desktop session will start
-    // the daemon on GUI login.
-    let xdg_autostart_dir = dirs::config_dir()
-        .map(|d| d.join("autostart"))
-        .unwrap_or_else(|| {
-            dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join(".config/autostart")
-        });
-    let _ = fs::create_dir_all(&xdg_autostart_dir);
-    let desktop_entry = format!(
-        "[Desktop Entry]\nType=Application\nName=AgentControl Sentry\nExec={bin} start --listen 127.0.0.1:18080\nHidden=false\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\nComment=Vexa AgentControl endpoint security daemon\n",
-        bin = bin_path
-    );
-    let desktop_path = xdg_autostart_dir.join("io.vexasec.agentcontrol.desktop");
-    if let Err(e) = fs::write(&desktop_path, &desktop_entry) {
-        println!("  ⚠ XDG autostart entry skipped: {}", e);
-    } else {
-        println!("  ✔ XDG autostart entry written: {}", desktop_path.display());
-    }
-
-    // Fix 2: Fall back to systemd --user when not root
-    let (unit_path, use_user_systemd) = if is_root() {
-        ("/etc/systemd/system/agent-control.service".to_string(), false)
-    } else {
-        let user_dir = dirs::config_dir()
-            .map(|d| d.join("systemd/user"))
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                    .join(".config/systemd/user")
-            });
-        let _ = fs::create_dir_all(&user_dir);
-        (
-            user_dir
-                .join("agent-control.service")
-                .display()
-                .to_string(),
-            true,
-        )
-    };
-
-    println!(
-        "  Writing systemd unit to {}{}",
-        unit_path.cyan(),
-        if use_user_systemd { " (user scope)" } else { "" }
+        config = config_path_str,
     );
 
     fs::write(&unit_path, service_content).map_err(|e| {
         format!(
             "failed to write systemd unit file{}: {}",
-            if !use_user_systemd { " (try running with sudo)" } else { "" },
+            if !use_user_systemd { " (try running with sudo or without --enterprise)" } else { "" },
             e
         )
     })?;
 
-    // Build base systemctl command (with or without --user)
-    let systemctl_args_base: Vec<&str> = if use_user_systemd {
-        vec!["--user"]
-    } else {
-        vec![]
-    };
-
-    // Fix 3: daemon-reload with exit code check
+    // 3. Reload systemd daemon
     let mut reload_args = systemctl_args_base.clone();
     reload_args.push("daemon-reload");
     let reload = Command::new("systemctl").args(&reload_args).output();
-    match reload {
-        Err(e) => return Err(format!("failed to execute systemctl daemon-reload: {}", e)),
-        Ok(out) if !out.status.success() => {
+    if let Ok(out) = reload {
+        if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            println!(
-                "  {} systemctl daemon-reload warning: {}",
-                "⚠".yellow(),
-                stderr.trim()
-            );
-        }
-        _ => {}
-    }
-
-    // Fix 4: enable --now with exit code check
-    let mut enable_args = systemctl_args_base.clone();
-    enable_args.extend_from_slice(&["enable", "--now", "agent-control"]);
-    let enable = Command::new("systemctl").args(&enable_args).output();
-    match enable {
-        Err(e) => {
-            return Err(format!(
-                "failed to execute systemctl enable --now agent-control: {}",
-                e
-            ))
-        }
-        Ok(_) => {}
-    }
-
-    // Ensure user-scope services persist across session logouts
-    if use_user_systemd {
-        let _ = Command::new("loginctl")
-            .arg("enable-linger")
-            .output();
-    }
-
-    // Fix 5: Verify the service is actually running
-    let mut status_args = systemctl_args_base.clone();
-    status_args.extend_from_slice(&["is-active", "--quiet", "agent-control"]);
-    let is_active = Command::new("systemctl")
-        .args(&status_args)
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-
-    if is_active {
-        println!("  {} Service is active and running.", "✔".green().bold());
-    } else {
-        // Fallback: check if the process is in the process table
-        let running = Command::new("pgrep")
-            .args(["-x", "agentcontrol"])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-
-        if running {
-            println!("  {} agentcontrol process is running.", "✔".green().bold());
-        } else {
-            // Last-resort: spawn directly with nohup so it survives the parent process/session end.
-            // This handles no-systemd environments (containers, SSH-only boxes, WSL without systemd).
-            println!(
-                "  {} Systemd service inactive — launching daemon directly with nohup...",
-                "⚠".yellow()
-            );
-            let spawn_result = Command::new("nohup")
-                .arg(bin_path)
-                .args(["start", "--listen", "127.0.0.1:18080"])
-                .env("AGENTCONTROL_HUB_URL", hub_url)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
-            match spawn_result {
-                Ok(child) => println!(
-                    "  {} Daemon launched directly (PID: {}). Systemd will manage on next boot.",
-                    "✔".green().bold(),
-                    child.id()
-                ),
-                Err(e) => println!(
-                    "  {} Failed to launch daemon: {}. Check: systemctl{}status agent-control",
-                    "✖".red(),
-                    e,
-                    if use_user_systemd { " --user " } else { " " }
-                ),
+            if !_quiet {
+                eprintln!("  {} systemctl daemon-reload warning: {}", "⚠".yellow(), stderr.trim());
             }
         }
     }
 
-    println!(
-        "{} Agent Control Linux systemd service installed and started!",
-        "✔".green().bold()
-    );
-    println!(
-        "  Unit File:  {}",
-        unit_path.cyan()
-    );
-    println!("  Hub URL:    {}", hub_url.cyan());
-    println!("  Listen:     127.0.0.1:18080");
+    // 4. Enable and start service
+    let mut enable_args = systemctl_args_base.clone();
+    enable_args.extend_from_slice(&["enable", "--now", "agent-control"]);
+    let enable = Command::new("systemctl").args(&enable_args).output()
+        .map_err(|e| format!("failed to execute systemctl enable --now: {}", e))?;
+
+    if !enable.status.success() {
+        let stderr = String::from_utf8_lossy(&enable.stderr);
+        return Err(format!("systemctl enable --now failed: {}", stderr.trim()));
+    }
+
+    // 5. If user-scope, manage and check loginctl linger
+    if use_user_systemd {
+        let _ = Command::new("loginctl").arg("enable-linger").output();
+        if let Ok(out) = Command::new("loginctl").args(["show-user", &get_user_name(), "--property=Linger"]).output() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.contains("Linger=no") && !_quiet {
+                println!(
+                    "  {} User lingering is currently disabled. Daemon may pause upon session logout.\n     To enable background persistence across SSH/GUI logouts: 'loginctl enable-linger'",
+                    "ℹ".cyan()
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
+pub fn inspect_linux_service() -> SupervisorState {
+    // 1. Check user systemd scope
+    if let Ok(out) = Command::new("systemctl")
+        .args(["--user", "show", "agent-control", "--property=ActiveState,SubState,MainPID"])
+        .output()
+    {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.contains("ActiveState=active") {
+                let pid = stdout.lines()
+                    .find(|l| l.starts_with("MainPID="))
+                    .and_then(|l| l.strip_prefix("MainPID="))
+                    .and_then(|p| p.trim().parse::<u32>().ok())
+                    .filter(|&p| p > 0);
+                return SupervisorState::Managed {
+                    supervisor_type: "Linux systemd (User)".to_string(),
+                    target_name: "agent-control.service".to_string(),
+                    active: true,
+                    details: Some(format!("MainPID: {:?}", pid)),
+                };
+            } else if stdout.contains("ActiveState=") && !stdout.contains("ActiveState=inactive\nSubState=dead") {
+                let substate = stdout.lines().find(|l| l.starts_with("SubState=")).unwrap_or("SubState=unknown");
+                return SupervisorState::Managed {
+                    supervisor_type: "Linux systemd (User)".to_string(),
+                    target_name: "agent-control.service".to_string(),
+                    active: false,
+                    details: Some(substate.to_string()),
+                };
+            }
+        }
+    }
+
+    // 2. Check system systemd scope
+    if let Ok(out) = Command::new("systemctl")
+        .args(["show", "agent-control", "--property=ActiveState,SubState,MainPID"])
+        .output()
+    {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.contains("ActiveState=active") {
+                let pid = stdout.lines()
+                    .find(|l| l.starts_with("MainPID="))
+                    .and_then(|l| l.strip_prefix("MainPID="))
+                    .and_then(|p| p.trim().parse::<u32>().ok())
+                    .filter(|&p| p > 0);
+                return SupervisorState::Managed {
+                    supervisor_type: "Linux systemd (System)".to_string(),
+                    target_name: "agent-control.service".to_string(),
+                    active: true,
+                    details: Some(format!("MainPID: {:?}", pid)),
+                };
+            } else if stdout.contains("ActiveState=") && !stdout.contains("ActiveState=inactive\nSubState=dead") {
+                let substate = stdout.lines().find(|l| l.starts_with("SubState=")).unwrap_or("SubState=unknown");
+                return SupervisorState::Managed {
+                    supervisor_type: "Linux systemd (System)".to_string(),
+                    target_name: "agent-control.service".to_string(),
+                    active: false,
+                    details: Some(substate.to_string()),
+                };
+            }
+        }
+    }
+
+    SupervisorState::NotInstalled
+}
+
 pub fn uninstall_linux_service() -> Result<(), String> {
-    // Stop and disable both user and system variants
+    // 1. Stop and disable both user and system unit scopes
     for user_flag in &[vec!["--user"], vec![]] {
         let mut stop_args = user_flag.clone();
-        stop_args.push("stop");
-        stop_args.push("agent-control");
+        stop_args.extend_from_slice(&["stop", "agent-control"]);
         let _ = Command::new("systemctl").args(&stop_args).output();
 
         let mut disable_args = user_flag.clone();
-        disable_args.push("disable");
-        disable_args.push("agent-control");
+        disable_args.extend_from_slice(&["disable", "agent-control"]);
         let _ = Command::new("systemctl").args(&disable_args).output();
     }
 
-    // Remove unit files from both system and user locations
+    // 2. Remove unit files
     let unit_paths = [
         "/etc/systemd/system/agent-control.service".to_string(),
         "/etc/systemd/system/agentwall.service".to_string(),
         dirs::config_dir()
-            .map(|d| {
-                d.join("systemd/user/agent-control.service")
-                    .display()
-                    .to_string()
-            })
+            .map(|d| d.join("systemd/user/agent-control.service").display().to_string())
             .unwrap_or_default(),
         dirs::home_dir()
-            .map(|h| {
-                h.join(".config/systemd/user/agent-control.service")
-                    .display()
-                    .to_string()
-            })
+            .map(|h| h.join(".config/systemd/user/agent-control.service").display().to_string())
             .unwrap_or_default(),
     ];
 
     for path in &unit_paths {
-        if !path.is_empty() && std::path::Path::new(path).exists() {
+        if !path.is_empty() && Path::new(path).exists() {
             let _ = fs::remove_file(path);
         }
     }
 
-    // Kill any running agentcontrol process
+    // 3. Clean legacy desktop and process artifacts
+    clean_legacy_artifacts();
     let _ = Command::new("pkill").args(["-x", "agentcontrol"]).output();
 
-    // Remove XDG autostart entry
-    let xdg_desktop = dirs::config_dir()
-        .map(|d| d.join("autostart/io.vexasec.agentcontrol.desktop"))
-        .or_else(|| dirs::home_dir().map(|h| h.join(".config/autostart/io.vexasec.agentcontrol.desktop")));
-    if let Some(path) = xdg_desktop {
-        if path.exists() {
-            let _ = fs::remove_file(&path);
-        }
-    }
-
-    // Reload daemon for both scopes
-    let _ = Command::new("systemctl")
-        .args(["--user", "daemon-reload"])
-        .output();
+    // 4. Reload systemd
+    let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).output();
     let _ = Command::new("systemctl").arg("daemon-reload").output();
 
     println!(
@@ -296,4 +232,20 @@ pub fn uninstall_linux_service() -> Result<(), String> {
         "✔".green().bold()
     );
     Ok(())
+}
+
+fn clean_legacy_artifacts() {
+    let legacy_desktop = dirs::config_dir()
+        .map(|d| d.join("autostart/io.vexasec.agentcontrol.desktop"))
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config/autostart/io.vexasec.agentcontrol.desktop")));
+
+    if let Some(path) = legacy_desktop {
+        if path.exists() {
+            let _ = fs::remove_file(&path);
+        }
+    }
+}
+
+fn get_user_name() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "user".to_string())
 }

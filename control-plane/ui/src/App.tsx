@@ -471,96 +471,70 @@ export default function App() {
 
         <Route path="*" element={
           <RequireAuth>
-            <div className="app-shell">
-              <Sidebar
-                onLogout={logout}
-              />
+            <RequireAdmin>
+              <div className="app-shell">
+                <Sidebar
+                  onLogout={logout}
+                />
 
-              <div className="main-viewport-wrapper">
-                <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
-                <main className="main-content">
-                  <GlobalAuthBanner />
-                  {isEnforced ? (
-                    <Routes>
-                      <Route path="/admin/auth-providers" element={<AuthProviders />} />
-                      <Route path="/settings/license" element={<LicenseSettings />} />
-                      <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
-                    </Routes>
-                  ) : (
-                    <Routes>
-                      <Route path="/" element={<Navigate to="/fleet" replace />} />
-                      <Route path="/fleet" element={<FleetOverview />} />
-                      <Route path="/settings/license" element={
-                        <RequireAdmin>
-                          <LicenseSettings />
-                        </RequireAdmin>
-                      } />
-                      <Route path="/organization" element={
-                        <RequireAdmin>
-                          <LicenseSettings />
-                        </RequireAdmin>
-                      } />
-                      <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
-                      <Route path="/identity" element={<IdentityGovernance />} />
-                      <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
-                      <Route path="/policy/insights" element={<PolicyInsights />} />
-                      <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
-                      <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
-                      <Route path="/policy/edit" element={<PolicyEditor />} />
-                      <Route path="/policy/group" element={<GroupPolicyEditor />} />
-                      <Route path="/spend/limits" element={<SpendLimits />} />
-                      <Route path="/spend/requests" element={<IncreaseRequests />} />
-                      <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
-                      <Route path="/spend/visualization" element={<SpendVisualization />} />
-                      <Route path="/runs" element={<RunExplorer />} />
-                      <Route path="/coverage-health" element={<CoverageControlHealth />} />
-                      <Route path="/observability/logs" element={<ObservabilityLogs />} />
-                      <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
-                      <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />
-                      <Route path="/policy/safe-mode" element={<SafeMode />} />
-                      <Route path="/threats" element={<ThreatIntelligence />} />
-                      <Route path="/audit" element={<ObservabilityLogs />} />
-                      <Route path="/admin/auth-providers" element={
-                        <RequireAdmin>
-                          <AuthProviders />
-                        </RequireAdmin>
-                      } />
-
-                      <Route path="/admin/users" element={
-                        <RequireAdmin>
-                          <Users />
-                        </RequireAdmin>
-                      } />
-                      <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
-                      <Route path="/devices" element={<Devices />} />
-                      <Route path="/devices/tamper-log" element={<TamperLog />} />
-                      <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
-                      <Route path="/integrations/virtual-keys" element={
-                        <RequireAdmin>
-                          <VirtualKeys />
-                        </RequireAdmin>
-                      } />
-                      <Route path="/integrations/mcp-servers" element={
-                        <RequireAdmin>
-                          <McpServers />
-                        </RequireAdmin>
-                      } />
-                      <Route path="/integrations/llm-providers" element={
-                        <RequireAdmin>
-                          <LlmProviders />
-                        </RequireAdmin>
-                      } />
-                      {/* Legacy redirect */}
-                      <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
-                      <Route path="*" element={<Navigate to="/fleet" replace />} />
-                    </Routes>
-                  )}
-                </main>
+                <div className="main-viewport-wrapper">
+                  <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
+                  <main className="main-content">
+                    <GlobalAuthBanner />
+                    {isEnforced ? (
+                      <Routes>
+                        <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                        <Route path="/settings/license" element={<LicenseSettings />} />
+                        <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
+                      </Routes>
+                    ) : (
+                      <Routes>
+                        <Route path="/" element={<Navigate to="/fleet" replace />} />
+                        <Route path="/fleet" element={<FleetOverview />} />
+                        <Route path="/settings/license" element={<LicenseSettings />} />
+                        <Route path="/organization" element={<LicenseSettings />} />
+                        <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
+                        <Route path="/identity" element={<IdentityGovernance />} />
+                        <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
+                        <Route path="/policy/insights" element={<PolicyInsights />} />
+                        <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
+                        <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
+                        <Route path="/policy/edit" element={<PolicyEditor />} />
+                        <Route path="/policy/group" element={<GroupPolicyEditor />} />
+                        <Route path="/spend/limits" element={<SpendLimits />} />
+                        <Route path="/spend/requests" element={<IncreaseRequests />} />
+                        <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
+                        <Route path="/spend/visualization" element={<SpendVisualization />} />
+                        <Route path="/runs" element={<RunExplorer />} />
+                        <Route path="/coverage-health" element={<CoverageControlHealth />} />
+                        <Route path="/observability/logs" element={<ObservabilityLogs />} />
+                        <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
+                        <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />
+                        <Route path="/policy/safe-mode" element={<SafeMode />} />
+                        <Route path="/threats" element={<ThreatIntelligence />} />
+                        <Route path="/audit" element={<ObservabilityLogs />} />
+                        <Route path="/admin/auth-providers" element={<AuthProviders />} />
+                        <Route path="/admin/users" element={<Users />} />
+                        <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
+                        <Route path="/devices" element={<Devices />} />
+                        <Route path="/devices/tamper-log" element={<TamperLog />} />
+                        <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
+                        <Route path="/integrations/virtual-keys" element={<VirtualKeys />} />
+                        <Route path="/integrations/mcp-servers" element={<McpServers />} />
+                        <Route path="/integrations/llm-providers" element={<LlmProviders />} />
+                        {/* Legacy redirect */}
+                        <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
+                        <Route path="*" element={<Navigate to="/fleet" replace />} />
+                      </Routes>
+                    )}
+                  </main>
+                </div>
               </div>
-            </div>
+            </RequireAdmin>
           </RequireAuth>
         } />
       </Routes>
     </>
   )
 }
+

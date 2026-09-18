@@ -114,7 +114,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentcontrol::support::run_support_bundle(output_dir, yes).await
         }
         Commands::Repair => {
-            agentcontrol::support::run_repair()
+            agentcontrol::support::run_repair().await
         }
         Commands::Logout => {
             agentcontrol::support::run_logout()
@@ -146,6 +146,34 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             }
         }
         Commands::Enroll { token, hub_url } => {
+            // Guide users to the primary onboarding path. The PKI OTET enroll command
+            // is reserved for headless/CI/MDM provisioning where the Control Hub admin
+            // has issued a one-time enrollment token. For interactive developer setup,
+            // 'agentcontrol login' is the zero-touch path (PKCE + enroll + service install).
+            if token.is_empty() {
+                eprintln!(
+                    "{} For standard workstation setup, use:",
+                    "⚠".yellow().bold()
+                );
+                eprintln!(
+                    "    {}",
+                    "agentcontrol login --hub <control-hub-url>".cyan()
+                );
+                eprintln!(
+                    "  This opens browser PKCE authentication and automatically registers"
+                );
+                eprintln!(
+                    "  the device and background service in one step."
+                );
+                eprintln!();
+                eprintln!(
+                    "  'agentcontrol enroll --token' requires an admin-issued one-time token"
+                );
+                eprintln!(
+                    "  and is reserved for headless / MDM / CI provisioning workflows."
+                );
+                return 1;
+            }
             agentcontrol::identity::device::run_enroll(&token, &hub_url).await
         }
         #[cfg(feature = "team")]
@@ -169,11 +197,17 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     gateway_secret,
                     policy_read_secret,
                     agent_id,
+                    enterprise,
+                    config,
+                    force,
                 } => agentcontrol::service::ServiceAction::Install {
                     hub_url,
                     gateway_secret,
                     policy_read_secret,
                     agent_id,
+                    enterprise,
+                    config,
+                    force,
                 },
                 agentcontrol::cli::ServiceCliAction::Uninstall => {
                     agentcontrol::service::ServiceAction::Uninstall
@@ -182,7 +216,10 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     agentcontrol::service::ServiceAction::Status
                 }
             };
-            agentcontrol::service::run_service(act)
+            // called_from_login: false — this is an explicit CLI invocation, not
+            // the internal post-login auto-install. The enrollment pre-check applies.
+            // quiet: false — show full verbose output for explicit 'service install' command.
+            agentcontrol::service::run_service(act, false, false).await
         }
         Commands::Start(args) => {
             if args.record_payloads {
@@ -1243,6 +1280,25 @@ async fn dispatch_start(args: cli::StartArgs) -> i32 {
 async fn run_start(args: cli::StartArgs) -> i32 {
     println!("{} Loading configuration...", "ℹ".blue());
 
+    // Load self-contained daemon.json if present (user or enterprise scope)
+    let daemon_cfg = agentcontrol::service::load_daemon_config(args.config.as_deref(), false).ok().flatten()
+        .or_else(|| agentcontrol::service::load_daemon_config(None, true).ok().flatten());
+
+    if let Some(ref cfg) = daemon_cfg {
+        if !cfg.hub_url.is_empty() {
+            let _ = agentcontrol::identity::device::save_hub_url(&cfg.hub_url);
+        }
+        if let Some(ref s) = cfg.gateway_secret {
+            std::env::set_var("GATEWAY_SECRET", s);
+        }
+        if let Some(ref s) = cfg.policy_read_secret {
+            std::env::set_var("POLICY_READ_SECRET", s);
+        }
+        if let Some(ref s) = cfg.agent_id {
+            std::env::set_var("AGENT_ID", s);
+        }
+    }
+
     let is_enrolled = agentcontrol::identity::device::is_device_enrolled();
 
     let profile = args
@@ -1269,7 +1325,13 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     };
 
     let policy_path = args.policy;
-    let listen = args.listen;
+    let listen = if args.listen != "127.0.0.1:18080" {
+        args.listen
+    } else if let Some(ref cfg) = daemon_cfg {
+        cfg.listen.clone()
+    } else {
+        args.listen
+    };
     let log_path = args.log_path;
     let mcp_url = args.mcp_url;
     let agent_pid = args.agent_pid;

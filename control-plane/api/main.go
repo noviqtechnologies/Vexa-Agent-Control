@@ -285,6 +285,7 @@ func main() {
 	// Device v2 List & Revoke (Dashboard & Admin)
 	r.Route("/api/v2/devices", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
+		r.Use(middleware.RequireAdmin())
 		r.Get("/", deviceV2H.ListDevicesV2)
 		r.Delete("/{id}", deviceV2H.RevokeDevice)
 	})
@@ -328,6 +329,7 @@ func main() {
 	// Virtual Key management
 	r.Route("/api/v1/virtual-keys", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
+		r.Use(middleware.RequireAdmin())
 		r.Post("/", virtualKeyH.Create)
 		r.Get("/", virtualKeyH.List)
 		r.Get("/deleted", virtualKeyH.ListDeleted)
@@ -372,6 +374,7 @@ func main() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.DashboardAuth())
+			r.Use(middleware.RequireAdmin())
 			r.Use(middleware.RequireOrganizationFeature(db, "spend_caps"))
 			r.Get("/effective", spendV2H.GetEffective)
 			r.Get("/analytics", spendV2H.GetAnalytics)
@@ -441,6 +444,7 @@ func main() {
 	// Dashboard API
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
+		r.Use(middleware.RequireAdmin())
 
 		// Organization & License Management
 		r.With(middleware.RequireAdmin()).Get("/organization", licenseH.GetOrganization)

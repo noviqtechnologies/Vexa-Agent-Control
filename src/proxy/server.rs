@@ -931,6 +931,40 @@ async fn handle_request(
                 });
                 return Ok(json_response(StatusCode::OK, &bench_json));
             }
+            "/health" | "/api/v1/health" => {
+                use std::sync::atomic::Ordering;
+                let pid = std::process::id();
+                let binary_path = std::env::current_exe()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
+                let uptime_secs = state.gateway_start_time.elapsed().as_secs();
+                let policy_loaded = state.policy_loaded.load(Ordering::Relaxed);
+                let enrolled = crate::identity::device::is_device_enrolled();
+                let hub_url = crate::identity::device::load_hub_url();
+                let device_id = crate::identity::device::DeviceIdentity::load_or_create()
+                    .ok()
+                    .map(|d| d.device_id);
+
+                let health_payload = serde_json::json!({
+                    "schema_version": 1,
+                    "status": "healthy",
+                    "pid": pid,
+                    "binary_path": binary_path,
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "uptime_secs": uptime_secs,
+                    "listen_addr": "127.0.0.1:18080",
+                    "policy": {
+                        "loaded": policy_loaded,
+                        "path": state.policy_path.as_deref().unwrap_or("local-safe-mode"),
+                    },
+                    "auth": {
+                        "enrolled": enrolled,
+                        "hub_url": hub_url,
+                        "device_id": device_id,
+                    }
+                });
+                return Ok(json_response(StatusCode::OK, &health_payload));
+            }
             "/healthz" => {
                 return Ok(Response::builder()
                     .status(StatusCode::OK)

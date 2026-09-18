@@ -556,21 +556,30 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
 
     match provider.await_callback(&session).await {
         Ok(result) => {
-            println!("\n{} Workstation authentication successful!", "✔".green().bold());
-            println!("  Device ID:          {}", result.device_id.bold());
-            println!("  Tenant ID:          {}", result.tenant_id.cyan());
-            println!("  User ID:            {}", result.user_id.cyan());
-            println!("  Local Proxy Token:  {} (stored in ~/.agentcontrol/local.token)", "Configured".green());
+            println!("\n{} Authenticated successfully!", "✔".green().bold());
+            println!("  Signed in as:       {}", result.user_id.bold());
+            println!("  Hub:                {}", clean_hub.cyan());
+            println!("  Device ID:          {}", result.device_id.dimmed());
 
-            // Automatically configure background service
-            println!("\nConfiguring per-user background agent...");
+            // Silently register the background daemon. The login command owns
+            // all UX output; the service install runs quiet. On failure a
+            // single non-alarming hint is printed by run_service.
             let service_action = crate::service::ServiceAction::Install {
                 hub_url: clean_hub.to_string(),
                 gateway_secret: None,
                 policy_read_secret: None,
                 agent_id: Some(result.device_id),
+                enterprise: false,
+                config: None,
+                force: false,
             };
-            let _ = crate::service::run_service(service_action);
+            let svc_ok = crate::service::run_service(service_action, true, true).await == 0;
+
+            if svc_ok {
+                println!("  Background daemon:  {} (starts with your session)", "✔ Registered".green());
+            } else {
+                println!("  Background daemon:  {} (run 'agentcontrol start' manually)", "⚠ Pending".yellow());
+            }
 
             println!("\n{} Setup complete! You can now run:", "✔".green().bold());
             println!("  {}     - Check workstation health and capabilities", "agentcontrol status".cyan());

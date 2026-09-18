@@ -138,7 +138,11 @@ func TestMultiTenant_AdminEndpointsGatedForMembers(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	for _, endpoint := range []string{"/users", "/auth_providers", "/organization"} {
+	for _, endpoint := range []string{"/users", "/auth_providers", "/organization", "/fleet/overview", "/devices", "/observability/request-logs", "/spend/policies"} {
+		r.With(middleware.RequireAdmin()).Get(endpoint, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
 		// Non-admin request (e.g. zoya@agentcontrol.local)
 		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
 		req = withUserContext(req, "zoya@agentcontrol.local", "tenant-1", false, false)
@@ -162,4 +166,5 @@ func TestMultiTenant_AdminEndpointsGatedForMembers(t *testing.T) {
 		}
 	}
 }
+
 

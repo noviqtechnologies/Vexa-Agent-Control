@@ -370,7 +370,11 @@ Agent Control Control Hub provides a dedicated **Device Governance** portal (`/a
 For complete API specifications and enrollment token parameters, see the [Team & Staging Control Hub Guide](team_hub_guide.md#6-central-device-governance--fleet-health).
 
 ### Generating One-Time Enrollment Tokens (OTET)
-Admins can generate short-lived enrollment tokens via the Web Console (`+ Generate Enrollment Token`) or REST API:
+
+> [!IMPORTANT]
+> **Hub-side OTET token generation is not yet available in the Hub UI or REST API.** The `agentcontrol enroll --token` command is reserved for future headless/MDM/CI automated fleet deployment workflows. For current interactive developer onboarding, use `agentcontrol login` (see below).
+
+When the Hub supports it, admins will be able to generate short-lived enrollment tokens via the Web Console (`+ Generate Enrollment Token`) or REST API:
 
 **Linux / macOS (Bash / Zsh):**
 ```bash
@@ -389,8 +393,9 @@ Invoke-RestMethod -Uri "http://localhost:8400/api/v1/admin/enrollment-tokens" `
   -Body '{"raw_token": "TOK-892A-3F91", "max_uses": 25, "ttl_hours": 24}'
 ```
 
-### Onboarding Developer Workstations
-Developers run the onboarding script with the generated token and Hub URL:
+### Onboarding Developer Workstations (Current — Browser PKCE)
+
+The **current recommended path** for developer workstation onboarding is zero-touch browser login. Developers run a single command that handles authentication, enrollment, and background service registration automatically:
 
 **Linux / macOS (Bash):**
 ```bash

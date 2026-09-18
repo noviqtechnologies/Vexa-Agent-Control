@@ -166,7 +166,7 @@ pub async fn run_diagnostics() -> DoctorReport {
         Err(e) => (
             DiagnosticStatus::Warn,
             format!("Background daemon not responding on {} ({})", daemon_addr, e),
-            Some("Start daemon via 'agentcontrol start' or register background task with 'agentcontrol service install'.".to_string()),
+            Some("Run 'agentcontrol login --hub <url>' to authenticate and auto-register the background daemon, or 'agentcontrol start' to run it interactively.".to_string()),
         ),
     };
     report.add_check(DiagnosticCheck {
