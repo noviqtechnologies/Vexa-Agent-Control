@@ -74,11 +74,27 @@ agentcontrol connect antigravity
 
 ---
 
-### Step 3: Check Sentry Status
+### Step 3: Check Sentry & Assistant Status
 
-Verify the capability status of all supported coding assistants:
+Verify the background daemon health and capability status of all supported coding assistants:
 
 ```bash
+# Check daemon service health
+agentcontrol service status
+```
+
+Example Output:
+```text
+● Vexa Agent Control Daemon Health Inspection
+  OS Platform:        windows (x86_64)
+  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+```
+
+```bash
+# Check assistant wrapping & routing status
 agentcontrol status
 ```
 

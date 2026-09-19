@@ -11,6 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.89] - 2026-09-19
+
+### Added & Enhanced
+- **Enterprise OIDC Subject Binding & Persistence:** Added migration `000010_user_provider_subject` and updated auth handlers to reliably map IdP subject claims (`sub`) alongside corporate emails for robust single sign-on mapping.
+- **Control Hub UI Overhaul:**
+  - Added full-featured Virtual Key Management modal with scoped persona controls, quota models, and secure secret reveal.
+  - Implemented interactive Developer Quickstart (`DeveloperQuickstart.tsx`) and Developer Guide views with real-time test executions and copyable snippets.
+  - Streamlined Fleet Overview and Device Governance interfaces for improved administrative control and responsive layout hierarchy.
+- **Host-Bound Administration CLI:** Added `agentcontrol-admin break-glass` tool to generate single-use emergency owner access tokens for disaster recovery.
+- **Evaluation Period Standardization:** Standardized Early Access evaluation tier to 30 days across license engines and control plane dashboards.
+- **Cross-Platform Scripting & Docs Refresh:** Updated automated installation scripts (`cli.ps1`, `cli.sh`, `install.ps1`, `install.sh`, `team_otet.ps1`, `team_otet.sh`) and operator runbooks.
+
+---
+
+## [1.0.88] - 2026-09-18
+
+### Added & Enhanced
+- **Admin Access Control & Multi-Tenant UI Guards:** Enforced strict organization role checks and `RequireAdmin` middleware across control plane API endpoints and web views.
+- **Service Lifecycle Stabilization:** Hardened Windows/macOS/Linux background service managers and supervisor handshakes.
+- **Documentation & User Guide Synchronization:** Updated workstation and team hub deployment guides.
+
+---
+
 ## [1.0.87] - 2026-09-17
 
 ### Added & Enhanced
@@ -136,7 +159,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.87...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...HEAD
+[1.0.89]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.88...v1.0.89
+[1.0.88]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.87...v1.0.88
 [1.0.87]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.86...v1.0.87
 [1.0.86]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.85...v1.0.86
 [1.0.85]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.84...v1.0.85

@@ -122,6 +122,45 @@ func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func (h *UserHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct {
+		IsAdmin bool   `json:"is_admin"`
+		Role    string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	targetUser, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if targetUser == nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	targetUser.IsAdmin = req.IsAdmin
+	if req.Role != "" {
+		targetUser.Role = req.Role
+	} else if req.IsAdmin {
+		targetUser.Role = "ADMIN"
+	} else {
+		targetUser.Role = "MEMBER"
+	}
+
+	if err := h.store.UpdateUser(r.Context(), targetUser); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(targetUser)
+}
+
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

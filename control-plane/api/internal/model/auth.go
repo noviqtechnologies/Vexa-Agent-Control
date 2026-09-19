@@ -17,13 +17,16 @@ type AuthProvider struct {
 }
 
 type User struct {
-	ID             string    `json:"id" db:"id"`
-	OrganizationID string    `json:"organization_id" db:"organization_id"`
-	AuthProviderID *string   `json:"auth_provider_id,omitempty" db:"auth_provider_id"`
-	Email          string    `json:"email" db:"email"`
-	PasswordHash   string    `json:"-" db:"password_hash"`
-	IsAdmin        bool      `json:"is_admin" db:"is_admin"`
-	Role           string    `json:"role" db:"role"` // "OWNER", "ADMIN", "MEMBER", "VIEWER"
-	CreatedAt      time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
+	ID              string    `json:"id" db:"id"`
+	OrganizationID  string    `json:"organization_id" db:"organization_id"`
+	AuthProviderID  *string   `json:"auth_provider_id,omitempty" db:"auth_provider_id"`
+	ProviderSubject *string   `json:"provider_subject,omitempty" db:"provider_subject"`
+	ProviderIssuer  *string   `json:"provider_issuer,omitempty" db:"provider_issuer"`
+	Email           string    `json:"email" db:"email"`
+	PasswordHash    string    `json:"-" db:"password_hash"`
+	IsAdmin         bool      `json:"is_admin" db:"is_admin"`
+	Role            string    `json:"role" db:"role"` // "OWNER", "ADMIN", "MEMBER", "VIEWER"
+	CreatedAt       time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
+

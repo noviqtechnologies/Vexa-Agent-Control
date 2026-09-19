@@ -129,12 +129,13 @@ func (s *Store) UpdateAuthProvider(ctx context.Context, p *model.AuthProvider) e
 	if s.pool == nil {
 		return nil
 	}
+	// Issuer is immutable after creation to protect durable provider_subject bindings
 	_, err := s.pool.Exec(ctx, `
 		UPDATE auth_providers
 		SET name = $2,
 		    client_id = $3,
 		    client_secret = COALESCE(NULLIF($4, ''), client_secret),
-		    issuer_url = $5,
+		    issuer_url = COALESCE(NULLIF(issuer_url, ''), $5),
 		    enabled = $6,
 		    email_domains = $7,
 		    updated_at = now()

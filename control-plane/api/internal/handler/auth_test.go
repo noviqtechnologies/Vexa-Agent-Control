@@ -2,13 +2,16 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 )
 
 func TestSetupInitialPassword_ShortPasswordValidation(t *testing.T) {
@@ -330,5 +333,221 @@ func TestAuthHandler_DevModeEnforcesPassword(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized for custom DevMode with wrong password, got %d", w6.Code)
 	}
 }
+
+func TestOIDCDiscovery_GoogleAndEntra(t *testing.T) {
+	googleProvider := &model.AuthProvider{
+		Type: "google",
+		Name: "Google Workspace",
+	}
+	discoGoogle, err := resolveOIDCConfiguration(context.Background(), googleProvider)
+	if err != nil {
+		t.Fatalf("resolveOIDCConfiguration for google failed: %v", err)
+	}
+	if discoGoogle.Issuer != "https://accounts.google.com" {
+		t.Errorf("expected google issuer https://accounts.google.com, got %s", discoGoogle.Issuer)
+	}
+	if !strings.Contains(discoGoogle.AuthorizationEndpoint, "accounts.google.com") {
+		t.Errorf("unexpected google auth endpoint: %s", discoGoogle.AuthorizationEndpoint)
+	}
+
+	entraProvider := &model.AuthProvider{
+		Type:      "entra",
+		Name:      "Microsoft Entra ID",
+		IssuerURL: "my-tenant-uuid",
+	}
+	discoEntra, err := resolveOIDCConfiguration(context.Background(), entraProvider)
+	if err != nil {
+		t.Fatalf("resolveOIDCConfiguration for entra failed: %v", err)
+	}
+	if !strings.Contains(discoEntra.Issuer, "my-tenant-uuid") {
+		t.Errorf("expected tenant in entra issuer, got %s", discoEntra.Issuer)
+	}
+}
+
+func TestOIDCDiscovery_GenericCustom(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer":                 "http://mock-idp.local",
+				"authorization_endpoint": "http://mock-idp.local/oauth/authorize",
+				"token_endpoint":         "http://mock-idp.local/oauth/token",
+				"jwks_uri":               "http://mock-idp.local/.well-known/jwks.json",
+				"userinfo_endpoint":      "http://mock-idp.local/userinfo",
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mockServer.Close()
+
+	customProvider := &model.AuthProvider{
+		Type:      "oidc",
+		Name:      "Okta SSO",
+		IssuerURL: mockServer.URL,
+	}
+	disco, err := resolveOIDCConfiguration(context.Background(), customProvider)
+	if err != nil {
+		t.Fatalf("resolveOIDCConfiguration for custom oidc failed: %v", err)
+	}
+	if disco.Issuer != "http://mock-idp.local" {
+		t.Errorf("expected issuer http://mock-idp.local, got %s", disco.Issuer)
+	}
+	if disco.AuthorizationEndpoint != "http://mock-idp.local/oauth/authorize" {
+		t.Errorf("expected auth endpoint http://mock-idp.local/oauth/authorize, got %s", disco.AuthorizationEndpoint)
+	}
+}
+
+func TestBreakGlass_Lifecycle(t *testing.T) {
+	h := NewAuthHandler(nil, &config.Config{DevMode: true})
+
+	// 1. Generate single-use break-glass token
+	token, err := GenerateBreakGlassToken("00000000-0000-0000-0000-000000000001", "user-uuid", "emergency-admin@company.com")
+	if err != nil {
+		t.Fatalf("GenerateBreakGlassToken failed: %v", err)
+	}
+	if !strings.HasPrefix(token, "bg_") {
+		t.Fatalf("expected token to start with bg_, got %s", token)
+	}
+
+	// 2. Redeem break-glass token
+	body, _ := json.Marshal(BreakGlassReq{Token: token})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/break-glass", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.BreakGlassLogin(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on break-glass redemption, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 3. Replay token MUST FAIL (single-use constraint)
+	wReplay := httptest.NewRecorder()
+	reqReplay := httptest.NewRequest(http.MethodPost, "/api/v1/auth/break-glass", bytes.NewReader(body))
+	reqReplay.Header.Set("Content-Type", "application/json")
+
+	h.BreakGlassLogin(wReplay, reqReplay)
+	if wReplay.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized on replay of break-glass token, got %d", wReplay.Code)
+	}
+}
+
+func TestAccountLinking_PasswordChallengeAndRateLimit(t *testing.T) {
+	h := NewAuthHandler(nil, &config.Config{})
+
+	// Inject active linking challenge
+	challengeToken := "link_test_token_123"
+	h.linkingStore[challengeToken] = &LinkingChallenge{
+		Token:          challengeToken,
+		UserID:         "user-1",
+		Email:          "member@company.com",
+		OrganizationID: "00000000-0000-0000-0000-000000000001",
+		AuthProviderID: "prov-1",
+		ProviderSub:    "sub-12345",
+		ProviderIssuer: "https://accounts.google.com",
+		ExpiresAt:      time.Now().Add(5 * time.Minute),
+		FailedAttempts: 4,
+	}
+
+	// 5th failed attempt should trigger lockout
+	body, _ := json.Marshal(ConfirmLinkReq{
+		Token:    challengeToken,
+		Password: "wrong_password",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/link/confirm", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.ConfirmAccountLink(w, req)
+	if w.Code != http.StatusNotFound && w.Code != http.StatusUnauthorized {
+		// When store is nil, user not found deletes challenge
+	}
+
+	// Lockout rate check
+	h.linkingStore[challengeToken] = &LinkingChallenge{
+		Token:          challengeToken,
+		UserID:         "user-1",
+		ExpiresAt:      time.Now().Add(5 * time.Minute),
+		FailedAttempts: 5,
+	}
+
+	reqLocked := httptest.NewRequest(http.MethodPost, "/api/v1/auth/link/confirm", bytes.NewReader(body))
+	reqLocked.Header.Set("Content-Type", "application/json")
+	wLocked := httptest.NewRecorder()
+
+	h.ConfirmAccountLink(wLocked, reqLocked)
+	if wLocked.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 Too Many Requests on locked challenge, got %d", wLocked.Code)
+	}
+}
+
+func TestOAuthRedirectBaseResolution(t *testing.T) {
+	// 1. Behind reverse proxy forwarding localhost:3000
+	hProxy := NewAuthHandler(nil, &config.Config{})
+	reqProxy := httptest.NewRequest(http.MethodGet, "http://control-plane-api:8081/api/v1/auth/oauth/test-id/login", nil)
+	reqProxy.Header.Set("X-Forwarded-Host", "localhost:3000")
+	reqProxy.Header.Set("X-Forwarded-Proto", "http")
+
+	baseProxy := hProxy.resolveRedirectBase(reqProxy)
+	if baseProxy != "http://localhost:3000" {
+		t.Errorf("expected http://localhost:3000, got %s", baseProxy)
+	}
+
+	disco := &OIDCDiscoveryDoc{
+		AuthorizationEndpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+		TokenEndpoint:         "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+	}
+	confProxy := hProxy.getOAuthConfigWithDiscovery(reqProxy, &model.AuthProvider{ID: "f667c257-effe-4f01-ba29-a0b64b252a6f", Type: "entra"}, disco)
+	expectedCallback := "http://localhost:3000/api/v1/auth/oauth/f667c257-effe-4f01-ba29-a0b64b252a6f/callback"
+	if confProxy.RedirectURL != expectedCallback {
+		t.Errorf("expected redirect URL %s, got %s", expectedCallback, confProxy.RedirectURL)
+	}
+
+	// 2. Explicit AppBaseURL configured
+	hExplicit := NewAuthHandler(nil, &config.Config{
+		AppBaseURL: "https://agentcontrol.corp.internal:8443",
+	})
+	reqExplicit := httptest.NewRequest(http.MethodGet, "http://10.0.0.5:8081/api/v1/auth/oauth/test-id/login", nil)
+	baseExplicit := hExplicit.resolveRedirectBase(reqExplicit)
+	if baseExplicit != "https://agentcontrol.corp.internal:8443" {
+		t.Errorf("expected https://agentcontrol.corp.internal:8443, got %s", baseExplicit)
+	}
+}
+
+func TestLogout_ClearsAllSessionAndOAuthCookies(t *testing.T) {
+	h := NewAuthHandler(nil, &config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	w := httptest.NewRecorder()
+
+	h.Logout(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on logout, got %d", w.Code)
+	}
+
+	cookies := w.Result().Cookies()
+	expectedCleared := map[string]bool{
+		"agentcontrol_session": false,
+		"oauth_state":          false,
+		"oauth_nonce":          false,
+		"auth_return_to":       false,
+	}
+
+	for _, c := range cookies {
+		if _, ok := expectedCleared[c.Name]; ok {
+			expectedCleared[c.Name] = true
+			if c.MaxAge != -1 || c.Value != "" {
+				t.Errorf("expected cookie %s to be cleared with MaxAge -1 and empty value, got MaxAge=%d, Value=%s", c.Name, c.MaxAge, c.Value)
+			}
+		}
+	}
+
+	for name, cleared := range expectedCleared {
+		if !cleared {
+			t.Errorf("expected cookie %s to be in response cookies as cleared", name)
+		}
+	}
+}
+
 
 

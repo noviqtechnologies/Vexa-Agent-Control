@@ -136,4 +136,27 @@ describe('Login View', () => {
 
     expect(screen.getByText(/Your session expired due to 15 minutes of inactivity/i)).toBeDefined()
   })
+
+  it('triggers OAuth login with prompt=select_account when OAuth button is clicked', async () => {
+    await renderLogin()
+
+    const originalLocation = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { ...originalLocation, href: '' },
+    })
+
+    const msButton = screen.getByRole('button', { name: /Continue with Microsoft Entra ID/i })
+    fireEvent.click(msButton)
+
+    expect(window.location.href).toBe('/api/v1/auth/oauth/entra-1/login?prompt=select_account')
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    })
+  })
 })
+

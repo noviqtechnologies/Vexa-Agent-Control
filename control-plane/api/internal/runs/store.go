@@ -130,8 +130,8 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 		       sr.virtual_key_prefix,
 		       sr.virtual_key_alias,
 		       sr.session_id,
-		       sr.internal_user_id,
-		       sr.end_user_id,
+		       COALESCE(NULLIF(sr.internal_user_id, ''), d.owner_subject),
+		       COALESCE(NULLIF(sr.end_user_id, ''), d.owner_subject),
 		       COALESCE(sr.tags, '{}'::jsonb),
 		       COALESCE(sr.request_type, 'LLM'),
 		       COALESCE(sr.status_code, 200)
@@ -293,26 +293,30 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 	var rawStatusCode *int
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT reservation_id::text, request_id, gateway_id, project_id, provider, model, state,
-		       reserved_microcents, settled_microcents, policy_snapshot::text, price_book_version_id,
-		       created_at, settled_at, released_at, release_reason,
-		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(settled_at, released_at, now()) - created_at)) * 1000, 0)::bigint,
-		       COALESCE(ttft_ms, 0),
-		       COALESCE(input_tokens, 0),
-		       COALESCE(output_tokens, 0),
-		       COALESCE(cached_tokens, 0),
-		       virtual_key_id::text,
-		       virtual_key_hash,
-		       virtual_key_prefix,
-		       virtual_key_alias,
-		       session_id,
-		       internal_user_id,
-		       end_user_id,
-		       COALESCE(tags, '{}'::jsonb),
-		       COALESCE(request_type, 'LLM'),
-		       status_code
-		FROM spend_reservations
-		WHERE (reservation_id::text = $1 OR request_id = $1) AND organization_id = $2
+		SELECT sr.reservation_id::text, sr.request_id, sr.gateway_id, sr.project_id, sr.provider, sr.model, sr.state,
+		       sr.reserved_microcents, sr.settled_microcents, sr.policy_snapshot::text, sr.price_book_version_id,
+		       sr.created_at, sr.settled_at, sr.released_at, sr.release_reason,
+		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(sr.settled_at, sr.released_at, now()) - sr.created_at)) * 1000, 0)::bigint,
+		       COALESCE(sr.ttft_ms, 0),
+		       COALESCE(sr.input_tokens, 0),
+		       COALESCE(sr.output_tokens, 0),
+		       COALESCE(sr.cached_tokens, 0),
+		       sr.virtual_key_id::text,
+		       sr.virtual_key_hash,
+		       sr.virtual_key_prefix,
+		       sr.virtual_key_alias,
+		       sr.session_id,
+		       COALESCE(NULLIF(sr.internal_user_id, ''), dev.owner_subject),
+		       COALESCE(NULLIF(sr.end_user_id, ''), dev.owner_subject),
+		       COALESCE(sr.tags, '{}'::jsonb),
+		       COALESCE(sr.request_type, 'LLM'),
+		       sr.status_code
+		FROM spend_reservations sr
+		LEFT JOIN devices dev ON (
+			dev.organization_id = sr.organization_id
+			AND (dev.id::text = sr.gateway_id OR dev.stable_device_id = sr.gateway_id OR dev.display_name = sr.gateway_id)
+		)
+		WHERE (sr.reservation_id::text = $1 OR sr.request_id = $1) AND sr.organization_id = $2
 	`, runID, orgID).Scan(
 		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
 		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,

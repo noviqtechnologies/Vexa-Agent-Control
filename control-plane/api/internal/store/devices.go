@@ -332,10 +332,14 @@ func (s *Store) ListDevices(ctx context.Context, organizationID, osFamily, statu
 			END AS compliance_status,
 			d.first_enrolled_at,
 			d.last_heartbeat_at,
+			COALESCE(d.owner_subject, '') AS owner_subject,
+			COALESCE(ap.type, 'local') AS auth_provider_type,
 			(d.state::text = 'REVOKED') AS is_revoked,
 			d.revoked_at,
 			d.updated_at
 		FROM devices d
+		LEFT JOIN users u ON (u.organization_id = d.organization_id AND LOWER(u.email) = LOWER(d.owner_subject))
+		LEFT JOIN auth_providers ap ON ap.id = u.auth_provider_id
 		WHERE ($1 = '' OR d.os_family = $1)
 		  AND (
 		    CASE
@@ -360,7 +364,8 @@ func (s *Store) ListDevices(ctx context.Context, organizationID, osFamily, statu
 		var revokedAt *time.Time
 		if err := rows.Scan(
 			&d.DeviceID, &d.Hostname, &d.OSArch, &d.OSFamily, &d.PublicKey, &d.AgentControlVersion,
-			&d.ComplianceStatus, &d.FirstEnrolledAt, &d.LastHeartbeatAt, &d.IsRevoked, &revokedAt, &d.UpdatedAt,
+			&d.ComplianceStatus, &d.FirstEnrolledAt, &d.LastHeartbeatAt, &d.OwnerSubject, &d.AuthProviderType,
+			&d.IsRevoked, &revokedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

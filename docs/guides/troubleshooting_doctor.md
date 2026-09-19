@@ -85,3 +85,22 @@ To purge local event databases and cache while preserving baseline backups:
 agentcontrol reset-local-state
 ```
 Add `--force` to bypass the interactive confirmation prompt.
+
+---
+
+## 4. Host-Bound Emergency Break-Glass Recovery
+
+If your team's Identity Provider (Google Workspace, Entra ID, Okta, Keycloak) encounters configuration drift or downtime that locks administrators out of the Control Hub, generate a single-use 15-minute emergency recovery token directly on the server/container host:
+
+```bash
+agentcontrol-admin break-glass --email admin@agentcontrol.local
+```
+
+Redeem the token at `http://<hub-host>:8081/break-glass` or via REST API:
+```bash
+curl -X POST http://localhost:8081/api/v1/auth/break-glass \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<BREAK_GLASS_TOKEN>"}'
+```
+This restores direct Owner access and invalidates compromised sessions.
+

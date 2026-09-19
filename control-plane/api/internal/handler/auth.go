@@ -1,18 +1,22 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
@@ -45,13 +49,71 @@ func VerifyPassword(password, hash string) (bool, error) {
 	return true, nil
 }
 
-type AuthHandler struct {
-	store *store.Store
-	cfg   *config.Config
+// ── Account Linking State Store ──────────────────────────────────────────────
+
+type LinkingChallenge struct {
+	Token          string
+	UserID         string
+	Email          string
+	OrganizationID string
+	AuthProviderID string
+	ProviderSub    string
+	ProviderIssuer string
+	ExpiresAt      time.Time
+	FailedAttempts int
 }
 
+type BreakGlassRecord struct {
+	Token          string
+	OrganizationID string
+	UserID         string
+	Email          string
+	ExpiresAt      time.Time
+	Used           bool
+}
+
+type AuthHandler struct {
+	store           *store.Store
+	cfg             *config.Config
+	linkingMu       sync.Mutex
+	linkingStore    map[string]*LinkingChallenge
+	breakGlassMu    sync.Mutex
+	breakGlassStore map[string]*BreakGlassRecord
+}
+
+var globalBreakGlassStore = make(map[string]*BreakGlassRecord)
+var globalBreakGlassMu sync.Mutex
+
 func NewAuthHandler(s *store.Store, cfg *config.Config) *AuthHandler {
-	return &AuthHandler{store: s, cfg: cfg}
+	return &AuthHandler{
+		store:           s,
+		cfg:             cfg,
+		linkingStore:    make(map[string]*LinkingChallenge),
+		breakGlassStore: make(map[string]*BreakGlassRecord),
+	}
+}
+
+// GenerateBreakGlassToken generates a single-use 15-minute emergency recovery token.
+func GenerateBreakGlassToken(orgID, userID, email string) (string, error) {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	token := "bg_" + base64.RawURLEncoding.EncodeToString(bytes)
+
+	globalBreakGlassMu.Lock()
+	defer globalBreakGlassMu.Unlock()
+
+	globalBreakGlassStore[token] = &BreakGlassRecord{
+		Token:          token,
+		OrganizationID: orgID,
+		UserID:         userID,
+		Email:          email,
+		ExpiresAt:      time.Now().Add(15 * time.Minute),
+		Used:           false,
+	}
+
+	return token, nil
 }
 
 type LoginReq struct {
@@ -253,17 +315,29 @@ func isRequestSecure(r *http.Request) bool {
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	isSecure := isRequestSecure(r)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "agentcontrol_session",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   isSecure,
-		SameSite: http.SameSiteLaxMode,
+	clearCookie := func(name string) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			Expires:  time.Unix(0, 0),
+			HttpOnly: true,
+			Secure:   isSecure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	clearCookie("agentcontrol_session")
+	clearCookie("oauth_state")
+	clearCookie("oauth_nonce")
+	clearCookie("auth_return_to")
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"message": "logged out",
 	})
-	w.WriteHeader(http.StatusOK)
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -396,39 +470,121 @@ func (h *AuthHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(public)
 }
 
-func getOAuthConfig(p *model.AuthProvider, host string) *oauth2.Config {
-	scheme := "http"
-	if !strings.HasPrefix(host, "localhost") && !strings.HasPrefix(host, "127.0.0.1") {
-		scheme = "https"
-	}
-	redirectURL := fmt.Sprintf("%s://%s/api/v1/auth/oauth/%s/callback", scheme, host, p.ID)
+// ── Generic OIDC Engine & Discovery ──────────────────────────────────────────
 
-	var endpoint oauth2.Endpoint
-	var scopes []string
+type OIDCDiscoveryDoc struct {
+	Issuer                string `json:"issuer"`
+	AuthorizationEndpoint string `json:"authorization_endpoint"`
+	TokenEndpoint         string `json:"token_endpoint"`
+	JWKSURI               string `json:"jwks_uri"`
+	UserinfoEndpoint      string `json:"userinfo_endpoint"`
+}
+
+func resolveOIDCConfiguration(ctx context.Context, p *model.AuthProvider) (*OIDCDiscoveryDoc, error) {
 	if p.Type == "google" {
-		endpoint = oauth2.Endpoint{
-			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
-			TokenURL: "https://oauth2.googleapis.com/token",
-		}
-		scopes = []string{"https://www.googleapis.com/auth/userinfo.email"}
+		return &OIDCDiscoveryDoc{
+			Issuer:                "https://accounts.google.com",
+			AuthorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenEndpoint:         "https://oauth2.googleapis.com/token",
+			JWKSURI:               "https://www.googleapis.com/oauth2/v3/certs",
+			UserinfoEndpoint:      "https://openidconnect.googleapis.com/v1/userinfo",
+		}, nil
 	} else if p.Type == "entra" {
 		tenant := "common"
 		if p.IssuerURL != "" {
 			tenant = strings.TrimSpace(p.IssuerURL)
+			tenant = strings.TrimPrefix(tenant, "https://login.microsoftonline.com/")
+			tenant = strings.TrimSuffix(tenant, "/v2.0")
+			tenant = strings.Trim(tenant, "/")
+			if tenant == "" {
+				tenant = "common"
+			}
 		}
-		endpoint = oauth2.Endpoint{
-			AuthURL:  fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/authorize", tenant),
-			TokenURL: fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenant),
+		return &OIDCDiscoveryDoc{
+			Issuer:                fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", tenant),
+			AuthorizationEndpoint: fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/authorize", tenant),
+			TokenEndpoint:         fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenant),
+			JWKSURI:               fmt.Sprintf("https://login.microsoftonline.com/%s/discovery/v2.0/keys", tenant),
+			UserinfoEndpoint:      "https://graph.microsoft.com/oidc/userinfo",
+		}, nil
+	}
+
+	// Generic OIDC discovery
+	if p.IssuerURL == "" {
+		return nil, errors.New("missing issuer_url for OIDC provider")
+	}
+
+	discoURL := strings.TrimSuffix(p.IssuerURL, "/") + "/.well-known/openid-configuration"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build discovery request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch OIDC discovery document: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OIDC discovery returned HTTP %d", resp.StatusCode)
+	}
+
+	var doc OIDCDiscoveryDoc
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		return nil, fmt.Errorf("failed to parse OIDC discovery document: %w", err)
+	}
+
+	if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
+		return nil, errors.New("OIDC discovery document missing required endpoints")
+	}
+
+	return &doc, nil
+}
+
+func (h *AuthHandler) resolveRedirectBase(r *http.Request) string {
+	if h.cfg != nil && h.cfg.AppBaseURL != "" {
+		return strings.TrimRight(h.cfg.AppBaseURL, "/")
+	}
+
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		if r.TLS != nil {
+			proto = "https"
+		} else if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
+			proto = "http"
+		} else {
+			proto = "https"
 		}
-		scopes = []string{"openid", "email", "profile", "User.Read"}
+	}
+
+	return fmt.Sprintf("%s://%s", proto, host)
+}
+
+func (h *AuthHandler) getOAuthConfigWithDiscovery(r *http.Request, p *model.AuthProvider, doc *OIDCDiscoveryDoc) *oauth2.Config {
+	baseURL := h.resolveRedirectBase(r)
+	redirectURL := fmt.Sprintf("%s/api/v1/auth/oauth/%s/callback", baseURL, p.ID)
+
+	scopes := []string{"openid", "email", "profile"}
+	if p.Type == "entra" {
+		scopes = append(scopes, "User.Read")
 	}
 
 	return &oauth2.Config{
 		ClientID:     p.ClientID,
 		ClientSecret: p.ClientSecret,
 		RedirectURL:  redirectURL,
-		Endpoint:     endpoint,
-		Scopes:       scopes,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  doc.AuthorizationEndpoint,
+			TokenURL: doc.TokenEndpoint,
+		},
+		Scopes: scopes,
 	}
 }
 
@@ -440,15 +596,33 @@ func (h *AuthHandler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conf := getOAuthConfig(provider, r.Host)
+	disco, err := resolveOIDCConfiguration(r.Context(), provider)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("OIDC provider configuration error: %v", err), http.StatusBadGateway)
+		return
+	}
+
+	conf := h.getOAuthConfigWithDiscovery(r, provider, disco)
 
 	stateBytes := make([]byte, 16)
-	rand.Read(stateBytes)
+	_, _ = rand.Read(stateBytes)
 	state := base64.URLEncoding.EncodeToString(stateBytes)
+
+	nonceBytes := make([]byte, 16)
+	_, _ = rand.Read(nonceBytes)
+	nonce := base64.URLEncoding.EncodeToString(nonceBytes)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    state,
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   300,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_nonce",
+		Value:    nonce,
 		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   300,
@@ -467,8 +641,19 @@ func (h *AuthHandler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	prompt := r.URL.Query().Get("prompt")
+	if prompt == "" {
+		prompt = "select_account"
+	}
+
+	authOptions := []oauth2.AuthCodeOption{
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("nonce", nonce),
+		oauth2.SetAuthURLParam("prompt", prompt),
+	}
+
+	authURL := conf.AuthCodeURL(state, authOptions...)
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
 func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -485,59 +670,131 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conf := getOAuthConfig(provider, r.Host)
+	disco, err := resolveOIDCConfiguration(r.Context(), provider)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("OIDC provider configuration error: %v", err), http.StatusBadGateway)
+		return
+	}
+
+	conf := h.getOAuthConfigWithDiscovery(r, provider, disco)
 	code := r.FormValue("code")
 	tok, err := conf.Exchange(r.Context(), code)
 	if err != nil {
-		http.Error(w, "oauth exchange failed", http.StatusInternalServerError)
+		log.Printf("[OAuth Error] token exchange failed for provider %s (%s): %v", provider.ID, provider.Type, err)
+		http.Error(w, fmt.Sprintf("oauth exchange failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	client := conf.Client(r.Context(), tok)
-	var email string
+	// Parse and extract claims from ID Token
+	var subject, email, issuer string
+	idTokenRaw, ok := tok.Extra("id_token").(string)
+	if ok && idTokenRaw != "" {
+		token, _, _ := new(jwt.Parser).ParseUnverified(idTokenRaw, jwt.MapClaims{})
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if sub, ok := claims["sub"].(string); ok && sub != "" {
+				subject = sub
+			} else if oid, ok := claims["oid"].(string); ok && oid != "" {
+				subject = oid
+			}
 
-	if provider.Type == "google" {
-		resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-		if err == nil {
-			defer resp.Body.Close()
-			var user struct {
-				Email string `json:"email"`
+			if em, ok := claims["email"].(string); ok && em != "" {
+				email = em
+			} else if pref, ok := claims["preferred_username"].(string); ok && pref != "" {
+				email = pref
+			} else if upn, ok := claims["upn"].(string); ok && upn != "" {
+				email = upn
+			} else if un, ok := claims["unique_name"].(string); ok && un != "" {
+				email = un
 			}
-			json.NewDecoder(resp.Body).Decode(&user)
-			email = user.Email
-		}
-	} else if provider.Type == "entra" {
-		resp, err := client.Get("https://graph.microsoft.com/v1.0/me")
-		if err == nil {
-			defer resp.Body.Close()
-			var user struct {
-				Mail              string `json:"mail"`
-				UserPrincipalName string `json:"userPrincipalName"`
-			}
-			json.NewDecoder(resp.Body).Decode(&user)
-			if user.Mail != "" {
-				email = user.Mail
-			} else {
-				email = user.UserPrincipalName
+
+			if iss, ok := claims["iss"].(string); ok {
+				issuer = iss
 			}
 		}
 	}
 
-	if email == "" {
-		http.Error(w, "could not retrieve email from provider", http.StatusBadRequest)
+	// Fallback to UserInfo endpoint / Graph API if email or subject was missing
+	if email == "" || subject == "" {
+		client := conf.Client(r.Context(), tok)
+		userinfoURLs := []string{}
+		if disco.UserinfoEndpoint != "" {
+			userinfoURLs = append(userinfoURLs, disco.UserinfoEndpoint)
+		}
+		if provider.Type == "google" {
+			userinfoURLs = append(userinfoURLs, "https://openidconnect.googleapis.com/v1/userinfo")
+		} else if provider.Type == "entra" {
+			userinfoURLs = append(userinfoURLs, "https://graph.microsoft.com/oidc/userinfo", "https://graph.microsoft.com/v1.0/me")
+		}
+
+		for _, uURL := range userinfoURLs {
+			if (email != "" && subject != "") || uURL == "" {
+				break
+			}
+			resp, err := client.Get(uURL)
+			if err == nil {
+				func() {
+					defer resp.Body.Close()
+					var uinfo struct {
+						Sub               string `json:"sub"`
+						Email             string `json:"email"`
+						Mail              string `json:"mail"`
+						UserPrincipalName string `json:"userPrincipalName"`
+						PreferredUsername string `json:"preferred_username"`
+						ID                string `json:"id"`
+						OID               string `json:"oid"`
+					}
+					if json.NewDecoder(resp.Body).Decode(&uinfo) == nil {
+						if subject == "" {
+							if uinfo.Sub != "" {
+								subject = uinfo.Sub
+							} else if uinfo.ID != "" {
+								subject = uinfo.ID
+							} else if uinfo.OID != "" {
+								subject = uinfo.OID
+							}
+						}
+						if email == "" {
+							if uinfo.Email != "" {
+								email = uinfo.Email
+							} else if uinfo.Mail != "" {
+								email = uinfo.Mail
+							} else if uinfo.UserPrincipalName != "" {
+								email = uinfo.UserPrincipalName
+							} else if uinfo.PreferredUsername != "" {
+								email = uinfo.PreferredUsername
+							}
+						}
+					}
+				}()
+			}
+		}
+	}
+
+	if issuer == "" {
+		issuer = disco.Issuer
+	}
+
+	if subject == "" || email == "" {
+		log.Printf("[OAuth Error] Failed to extract identity. subject=%q, email=%q, idTokenPresent=%v", subject, email, idTokenRaw != "")
+		http.Error(w, "could not retrieve verified identity and subject from provider", http.StatusBadRequest)
 		return
 	}
 
+	// Validate allowed domain whitelist
 	domainAllowed := false
-	for _, d := range provider.EmailDomains {
-		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(d)), "@")
-		if domain == "*" || strings.HasSuffix(strings.ToLower(email), "@"+domain) {
-			domainAllowed = true
-			break
+	if len(provider.EmailDomains) == 0 {
+		domainAllowed = true
+	} else {
+		for _, d := range provider.EmailDomains {
+			domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(d)), "@")
+			if domain == "*" || strings.HasSuffix(strings.ToLower(email), "@"+domain) {
+				domainAllowed = true
+				break
+			}
 		}
 	}
 	if !domainAllowed {
-		http.Error(w, "domain not allowed", http.StatusForbidden)
+		http.Error(w, "corporate email domain not authorized for this provider", http.StatusForbidden)
 		return
 	}
 
@@ -546,22 +803,103 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		orgID = middleware.DefaultOrganizationID
 	}
 
-	user, err := h.store.GetUserByEmail(r.Context(), orgID, providerID, email)
-	if err != nil || user == nil {
-		user = &model.User{
-			OrganizationID: orgID,
-			AuthProviderID: &providerID,
-			Email:          email,
-			PasswordHash:   "",
-			IsAdmin:        false,
-			Role:           "MEMBER",
+	// ── 1. Step A: Check by durable provider_subject ─────────────────────────
+	user, err := h.store.GetUserByProviderSubject(r.Context(), orgID, providerID, subject)
+	if err == nil && user != nil {
+		isAdmin := user.IsAdmin
+		if h.cfg != nil && h.cfg.AdminEmail != "" && strings.EqualFold(user.Email, h.cfg.AdminEmail) {
+			isAdmin = true
 		}
-		_ = h.store.CreateUser(r.Context(), user)
-		user, _ = h.store.GetUserByEmail(r.Context(), orgID, providerID, email)
+		h.setSessionCookie(w, r, user.OrganizationID, user.Email, isAdmin, false)
+		h.finishAuthRedirect(w, r)
+		return
 	}
 
-	h.setSessionCookie(w, r, orgID, user.Email, user.IsAdmin, false)
+	// ── 2. Step B: Candidate Email Lookup & Ambiguity Guard ───────────────────
+	candidates, err := h.store.FindUsersByEmail(r.Context(), email)
+	if err != nil {
+		http.Error(w, "server error querying accounts", http.StatusInternalServerError)
+		return
+	}
 
+	// Ambiguity Guard: Halt immediately if multiple candidate accounts match
+	if len(candidates) > 1 {
+		http.Error(w, "Multiple accounts detected with this email. Please contact your administrator to resolve identity binding.", http.StatusConflict)
+		return
+	}
+
+	if len(candidates) == 1 {
+		cand := candidates[0]
+
+		// Disallow automatic self-service linking for privileged roles
+		if cand.Role == "ADMIN" || cand.Role == "OWNER" || cand.IsAdmin {
+			http.Error(w, "Administrative accounts cannot be automatically linked via self-service SSO. Please sign in with your administrative credentials or contact an owner.", http.StatusForbidden)
+			return
+		}
+
+		// Existing SSO member with NULL provider_subject — execute safe backfill
+		if cand.PasswordHash == "" {
+			_ = h.store.BackfillUserProviderSubject(r.Context(), orgID, providerID, cand.ID, subject, issuer)
+			isAdmin := cand.IsAdmin
+			if h.cfg != nil && h.cfg.AdminEmail != "" && strings.EqualFold(cand.Email, h.cfg.AdminEmail) {
+				isAdmin = true
+			}
+			h.setSessionCookie(w, r, cand.OrganizationID, cand.Email, isAdmin, false)
+			h.finishAuthRedirect(w, r)
+			return
+		}
+
+		// Local password user attempting to link SSO — require password confirmation
+		challengeTokenBytes := make([]byte, 24)
+		_, _ = rand.Read(challengeTokenBytes)
+		challengeToken := "link_" + base64.RawURLEncoding.EncodeToString(challengeTokenBytes)
+
+		h.linkingMu.Lock()
+		h.linkingStore[challengeToken] = &LinkingChallenge{
+			Token:          challengeToken,
+			UserID:         cand.ID,
+			Email:          cand.Email,
+			OrganizationID: orgID,
+			AuthProviderID: providerID,
+			ProviderSub:    subject,
+			ProviderIssuer: issuer,
+			ExpiresAt:      time.Now().Add(5 * time.Minute),
+			FailedAttempts: 0,
+		}
+		h.linkingMu.Unlock()
+
+		http.Redirect(w, r, fmt.Sprintf("/auth/link/confirm?token=%s", url.QueryEscape(challengeToken)), http.StatusSeeOther)
+		return
+	}
+
+	// ── 3. Step C: JIT Provisioning for new Member ───────────────────────────
+	isAdmin := false
+	role := "MEMBER"
+	if h.cfg != nil && h.cfg.AdminEmail != "" && strings.EqualFold(email, h.cfg.AdminEmail) {
+		isAdmin = true
+		role = "ADMIN"
+	}
+
+	newUser := &model.User{
+		OrganizationID:  orgID,
+		AuthProviderID:  &providerID,
+		ProviderSubject: &subject,
+		ProviderIssuer:  &issuer,
+		Email:           email,
+		PasswordHash:    "",
+		IsAdmin:         isAdmin,
+		Role:            role,
+	}
+	if err := h.store.CreateUser(r.Context(), newUser); err != nil {
+		http.Error(w, "failed to provision new user", http.StatusInternalServerError)
+		return
+	}
+
+	h.setSessionCookie(w, r, orgID, newUser.Email, isAdmin, false)
+	h.finishAuthRedirect(w, r)
+}
+
+func (h *AuthHandler) finishAuthRedirect(w http.ResponseWriter, r *http.Request) {
 	redirectTarget := "/"
 	if returnCookie, err := r.Cookie("auth_return_to"); err == nil && returnCookie != nil && returnCookie.Value != "" {
 		val := returnCookie.Value
@@ -576,8 +914,223 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 		})
 	}
-
 	http.Redirect(w, r, redirectTarget, http.StatusTemporaryRedirect)
+}
+
+// ── Multi-Step Account Linking Verification Handlers ─────────────────────────
+
+type ConfirmLinkReq struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) HandleLinkConfirmView(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	h.linkingMu.Lock()
+	challenge, exists := h.linkingStore[token]
+	h.linkingMu.Unlock()
+
+	if !exists || time.Now().After(challenge.ExpiresAt) {
+		http.Error(w, "Linking challenge expired or invalid. Please start SSO login again.", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Confirm Account Linking — Vexa Agent Control</title>
+  <style>
+    body { background: #0b1120; color: #f9fafb; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 2rem; width: 100%%; max-width: 400px; }
+    h2 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #38bdf8; }
+    p { font-size: 0.875rem; color: #9ca3af; margin-bottom: 1.5rem; line-height: 1.4; }
+    input { width: 100%%; padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #fff; margin-bottom: 1rem; box-sizing: border-box; }
+    button { width: 100%%; padding: 0.75rem; background: #38bdf8; color: #0b1120; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Link Account to Single Sign-On</h2>
+    <p>An existing account was found for <strong>%s</strong>. Enter your local password to authorize linking to your Identity Provider.</p>
+    <form method="POST" action="/api/v1/auth/link/confirm">
+      <input type="hidden" name="token" value="%s">
+      <input type="password" name="password" placeholder="Existing Account Password" required>
+      <button type="submit">Confirm & Link Account</button>
+    </form>
+  </div>
+</body>
+</html>`, html.EscapeString(challenge.Email), html.EscapeString(token))
+}
+
+func (h *AuthHandler) ConfirmAccountLink(w http.ResponseWriter, r *http.Request) {
+	var req ConfirmLinkReq
+	contentType := r.Header.Get("Content-Type")
+	if strings.Contains(contentType, "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	} else {
+		_ = r.ParseForm()
+		req.Token = r.FormValue("token")
+		req.Password = r.FormValue("password")
+	}
+
+	h.linkingMu.Lock()
+	challenge, exists := h.linkingStore[req.Token]
+	if !exists || time.Now().After(challenge.ExpiresAt) {
+		h.linkingMu.Unlock()
+		http.Error(w, "Linking challenge expired or invalid", http.StatusBadRequest)
+		return
+	}
+
+	if challenge.FailedAttempts >= 5 {
+		delete(h.linkingStore, req.Token)
+		h.linkingMu.Unlock()
+		http.Error(w, "Too many failed attempts. Linking challenge cancelled.", http.StatusTooManyRequests)
+		return
+	}
+
+	if h.store == nil {
+		delete(h.linkingStore, req.Token)
+		h.linkingMu.Unlock()
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	user, err := h.store.GetUserByID(r.Context(), challenge.UserID)
+	if err != nil || user == nil {
+		delete(h.linkingStore, req.Token)
+		h.linkingMu.Unlock()
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	ok, _ := VerifyPassword(req.Password, user.PasswordHash)
+	if !ok {
+		challenge.FailedAttempts++
+		h.linkingMu.Unlock()
+		http.Error(w, "Invalid password confirmation", http.StatusUnauthorized)
+		return
+	}
+
+	delete(h.linkingStore, req.Token)
+	h.linkingMu.Unlock()
+
+	// Bind provider subject to user
+	_ = h.store.LinkUserProviderSubject(r.Context(), user.ID, challenge.AuthProviderID, challenge.ProviderSub, challenge.ProviderIssuer)
+
+	h.setSessionCookie(w, r, user.OrganizationID, user.Email, user.IsAdmin, false)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// ── Break-Glass Emergency Recovery Handler ───────────────────────────────────
+
+func (h *AuthHandler) HandleBreakGlassView(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Emergency Break-Glass — Vexa Agent Control</title>
+  <style>
+    body { background: #0b1120; color: #f9fafb; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #111827; border: 1px solid #ef4444; border-radius: 10px; padding: 2rem; width: 100%; max-width: 440px; }
+    h2 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #ef4444; }
+    p { font-size: 0.875rem; color: #9ca3af; margin-bottom: 1.5rem; line-height: 1.4; }
+    input { width: 100%; padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #fff; margin-bottom: 1rem; box-sizing: border-box; }
+    button { width: 100%; padding: 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Emergency Break-Glass Recovery</h2>
+    <p>Redeem a single-use break-glass token generated on the Control Hub server host to recover administrative access.</p>
+    <form method="POST" action="/api/v1/auth/break-glass">
+      <input type="text" name="token" placeholder="bg_..." required>
+      <button type="submit">Redeem Recovery Token</button>
+    </form>
+  </div>
+</body>
+</html>`)
+}
+
+type BreakGlassReq struct {
+	Token string `json:"token"`
+}
+
+func (h *AuthHandler) BreakGlassLogin(w http.ResponseWriter, r *http.Request) {
+	var req BreakGlassReq
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	} else {
+		_ = r.ParseForm()
+		req.Token = r.FormValue("token")
+	}
+
+	req.Token = strings.TrimSpace(req.Token)
+	if req.Token == "" {
+		http.Error(w, "missing break-glass token", http.StatusBadRequest)
+		return
+	}
+
+	globalBreakGlassMu.Lock()
+	rec, exists := globalBreakGlassStore[req.Token]
+	if !exists || rec.Used || time.Now().After(rec.ExpiresAt) {
+		globalBreakGlassMu.Unlock()
+		http.Error(w, "break-glass token invalid or expired", http.StatusUnauthorized)
+		return
+	}
+	rec.Used = true
+	delete(globalBreakGlassStore, req.Token)
+	globalBreakGlassMu.Unlock()
+
+	// Grant emergency Owner/Admin session
+	h.setSessionCookie(w, r, rec.OrganizationID, rec.Email, true, false)
+
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":          "ok",
+			"message":         "Emergency break-glass session established.",
+			"organization_id": rec.OrganizationID,
+			"user_id":         rec.Email,
+			"role":            "OWNER",
+		})
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// ── OIDC Provider Diagnostic Endpoint ────────────────────────────────────────
+
+func (h *AuthHandler) TestAuthProvider(w http.ResponseWriter, r *http.Request) {
+	providerID := chi.URLParam(r, "provider_id")
+	provider, err := h.store.GetAuthProvider(r.Context(), "", providerID)
+	if err != nil || provider == nil {
+		http.Error(w, `{"error":"provider not found"}`, http.StatusNotFound)
+		return
+	}
+
+	disco, err := resolveOIDCConfiguration(r.Context(), provider)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":   "failed",
+			"provider": provider.Name,
+			"type":     provider.Type,
+			"error":    err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":    "healthy",
+		"provider":  provider.Name,
+		"type":      provider.Type,
+		"discovery": disco,
+	})
 }
 
 func (h *AuthHandler) HandleLoginView(w http.ResponseWriter, r *http.Request) {

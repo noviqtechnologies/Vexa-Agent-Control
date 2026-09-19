@@ -231,3 +231,48 @@ func TestBrokerV2Handler_HandleLLMStream_UpstreamErrorPropagation(t *testing.T) 
 		t.Fatalf("expected message 'Invalid temperature parameter', got %v", errResp["error"]["message"])
 	}
 }
+
+func TestBrokerV2Handler_StreamingHeaderSpoofingIgnored(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test-key")
+	mockClient := &mockProviderClient{}
+	h := &BrokerV2Handler{
+		ProviderClient: mockClient,
+	}
+
+	reqPayload := BrokerRequestPayload{
+		SchemaVersion: "1.0",
+		RequestID:     "req-stream-spoof-1",
+		Provider:      "openai",
+		Model:         "gpt-4o",
+		Stream:        true,
+		LLMMode:       "local_compat",
+		Payload:       json.RawMessage(`{"messages":[{"role":"user","content":"hello"}]}`),
+	}
+	bodyBytes, _ := json.Marshal(reqPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v3/broker/llm-stream", bytes.NewReader(bodyBytes))
+
+	// Attacker tries to inject X-AgentControl-User-Id
+	req.Header.Set("X-AgentControl-User-Id", "attacker-impersonation")
+
+	// Valid authenticated human on device
+	verifiedUser := "legitimate-human@company.com"
+	principal := &model.DevicePrincipal{
+		DeviceID:              "dev-1",
+		OrganizationID:        "00000000-0000-0000-0000-000000000001",
+		UserID:                &verifiedUser,
+		IdentitySource:        "oidc",
+		DeviceVerified:        true,
+		HumanIdentityVerified: true,
+		IdentityConfidence:    "enforced",
+		DeviceState:           model.DeviceStateCompliant,
+	}
+	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	h.HandleLLMStream(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}

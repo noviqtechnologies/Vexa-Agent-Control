@@ -455,9 +455,61 @@ func (s *Store) GetDevice(ctx context.Context, orgID, deviceID string) (*DeviceD
 }
 
 func (s *Store) ListTamperEvents(ctx context.Context, orgID string, limit, offset int) (*ListTamperEventsResponse, error) {
+	if s.pool == nil {
+		return &ListTamperEventsResponse{
+			Events:     []DeviceTamperEventLog{},
+			TotalCount: 0,
+		}, nil
+	}
+	if orgID == "" {
+		orgID = "00000000-0000-0000-0000-000000000001"
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT 
+			t.id::text AS event_id,
+			t.device_id,
+			COALESCE(NULLIF(d.display_name, ''), NULLIF(d.stable_device_id, ''), t.device_id) AS hostname,
+			COALESCE(NULLIF(d.owner_subject, ''), 'Developer') AS user_identifier,
+			COALESCE(t.target_ide, 'ide') AS ide_name,
+			'CONFIG_TAMPERED' AS event_type,
+			COALESCE(t.detected_diff, 'Configuration drift detected and remediated') AS tamper_details,
+			(t.action_taken = 'RESTORED' OR t.action_taken = 'AUTO_HEALED' OR t.action_taken = 'remediated') AS healed_successfully,
+			t.created_at AS occurred_at
+		FROM device_tamper_logs t
+		LEFT JOIN devices d ON (
+			d.organization_id = t.organization_id
+			AND (d.id::text = t.device_id OR d.stable_device_id = t.device_id OR d.display_name = t.device_id)
+		)
+		WHERE (t.organization_id::text = $1 OR t.organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		ORDER BY t.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, orgID, limit, offset)
+	if err != nil {
+		return &ListTamperEventsResponse{
+			Events:     []DeviceTamperEventLog{},
+			TotalCount: 0,
+		}, nil
+	}
+	defer rows.Close()
+
+	events := make([]DeviceTamperEventLog, 0)
+	for rows.Next() {
+		var e DeviceTamperEventLog
+		if err := rows.Scan(
+			&e.EventID, &e.DeviceID, &e.Hostname, &e.UserIdentifier,
+			&e.IdeName, &e.EventType, &e.TamperDetails, &e.HealedSuccessfully, &e.OccurredAt,
+		); err == nil {
+			events = append(events, e)
+		}
+	}
+
 	return &ListTamperEventsResponse{
-		Events:     []DeviceTamperEventLog{},
-		TotalCount: 0,
+		Events:     events,
+		TotalCount: len(events),
 	}, nil
 }
 

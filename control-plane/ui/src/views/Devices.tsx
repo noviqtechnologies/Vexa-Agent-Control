@@ -100,7 +100,9 @@ export default function Devices() {
           rawList = v2Res.devices.map(d => ({
             device_id: d.device_id,
             hostname: d.display_name || d.stable_device_id || d.device_id,
-            user_identifier: d.stable_device_id || 'workstation',
+            user_identifier: d.owner_subject || d.stable_device_id || 'workstation',
+            owner_subject: d.owner_subject,
+            auth_provider_type: d.auth_provider_type,
             os: d.os_family,
             os_version: d.architecture,
             overall_compliance: d.status === 'REVOKED' ? 'NON_COMPLIANT' : (d.last_freshness === 'STALE' ? 'OFFLINE' : 'COMPLIANT'),
@@ -502,7 +504,17 @@ export default function Devices() {
                         {d.device_id}
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{d.user_identifier || '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>🧑</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{d.owner_subject || d.user_identifier || '—'}</span>
+                        {d.auth_provider_type && (
+                          <span className="badge" style={{ fontSize: 10, padding: '1px 5px', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                            {d.auth_provider_type}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ fontSize: 13 }}>{getOsIcon(d.os)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -942,7 +954,7 @@ export default function Devices() {
                 </pre>
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Supported targets: <code>codex</code>, <code>claude</code>, <code>vscode-continue</code>. Configures ownership manifests and local proxy.
+                Supported targets: <code>cursor</code>, <code>codex</code>, <code>claude</code>, <code>claude-code</code>, <code>antigravity</code>, <code>vscode-continue</code>. Configures ownership manifests and local proxy.
               </div>
             </div>
 

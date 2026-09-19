@@ -23,7 +23,7 @@ fi
 echo "[*] Target OS: $OS | Arch: $ARCH"
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.88"
+FALLBACK_VERSION="v1.0.89"
 
 echo "[*] Fetching latest release version..."
 # 1. Primary: GitHub Releases API

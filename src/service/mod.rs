@@ -532,60 +532,53 @@ pub async fn run_service(action: ServiceAction, called_from_login: bool, quiet: 
     }
 }
 
-/// Renders a detailed, truthful multi-dimensional status report.
+/// Renders a clean, concise, cross-platform service status report.
 pub fn print_service_status(report: &DaemonHealthReport) {
-    println!("\n{} Vexa Agent Control Daemon Health Inspection", "●".green().bold());
+    println!("\n{} Vexa Agent Control Service Status", "●".green().bold());
     println!("────────────────────────────────────────────────────────────────────────────────");
-    println!("  OS Platform:        {} ({})", env::consts::OS.cyan(), env::consts::ARCH.cyan());
 
-    // 1. Supervisor State
+    // 1. Supervisor / Service Manager
     match &report.supervisor {
-        SupervisorState::Managed { supervisor_type, target_name, active, details } => {
-            let status_badge = if *active { "ACTIVE / SUPERVISED".green().bold() } else { "REGISTERED (STOPPED)".yellow().bold() };
-            println!("  Supervisor Type:    {} ({})", supervisor_type.cyan(), status_badge);
-            println!("  Service Target:     {}", target_name.cyan());
-            if let Some(d) = details {
-                println!("  Supervisor Info:    {}", d);
-            }
+        SupervisorState::Managed { supervisor_type, active, .. } => {
+            let status_badge = if *active { "Active".green().bold() } else { "Stopped".yellow().bold() };
+            println!("  Service Manager:    {} ({})", supervisor_type.cyan(), status_badge);
         }
         SupervisorState::Unmanaged { warning } => {
-            println!("  Supervisor Type:    {}", "UNMANAGED / NONE".yellow().bold());
-            println!("  ⚠ Warning:          {}", warning.yellow());
+            println!("  Service Manager:    {} ({})", "Unmanaged / Standalone".yellow().bold(), warning.yellow());
         }
         SupervisorState::NotInstalled => {
-            println!("  Supervisor Type:    {}", "NOT INSTALLED".red().bold());
-            println!("  ℹ Remediation:      Run '{}' to register supervisor.", "agentcontrol service install".cyan());
+            println!("  Service Manager:    {} (Run '{}' to install)", "Not Installed".red().bold(), "agentcontrol service install".cyan());
         }
     }
 
-    // 2. Listener & Health Handshake
+    // 2. Process, Binding & Policy
     match &report.listener {
         ListenerState::Healthy { addr, latency_ms, handshake } => {
-            println!("  Listener Binding:   {} ({} ms RTT)", addr.green(), latency_ms);
-            println!("  Daemon Process:     PID {} (v{})", handshake.pid.to_string().green(), handshake.version.green());
-            println!("  Executable Path:    {}", handshake.binary_path.cyan());
-            println!("  Daemon Uptime:      {}s", handshake.uptime_secs);
+            println!("  Daemon Process:     PID {} (v{}, uptime: {}s)", handshake.pid.to_string().green(), handshake.version.green(), handshake.uptime_secs);
+            println!("  Local Endpoint:     http://{} ({}ms RTT)", addr.green(), latency_ms);
             let pol_badge = if handshake.policy.loaded { "ACTIVE".green() } else { "LOCAL SAFE MODE".yellow() };
-            println!("  Policy State:       {} ({})", pol_badge, handshake.policy.path.as_deref().unwrap_or("none"));
-            let auth_badge = if handshake.auth.enrolled { "ENROLLED".green() } else { "NOT ENROLLED".yellow() };
-            println!("  Hub Connection:     {} ({})", auth_badge, handshake.auth.hub_url.as_deref().unwrap_or("standalone"));
+            let pol_info = handshake.policy.path.as_deref().unwrap_or("standalone");
+            println!("  Policy Mode:        {} ({})", pol_badge, pol_info);
+            let auth_badge = if handshake.auth.enrolled { "ENROLLED".green() } else { "STANDALONE".yellow() };
+            let hub_info = handshake.auth.hub_url.as_deref().unwrap_or("none");
+            println!("  Hub Connection:     {} ({})", auth_badge, hub_info);
         }
         ListenerState::OccupiedForeign { addr, message } => {
-            println!("  Listener Binding:   {} ({})", addr.red(), "CONFLICTED".red().bold());
+            println!("  Local Endpoint:     http://{} ({})", addr.red(), "CONFLICTED".red().bold());
             println!("  ⚠ Conflict:         {}", message.red());
         }
         ListenerState::Refused { addr } => {
-            println!("  Listener Binding:   {} ({})", addr.yellow(), "CLOSED / NOT RESPONDING".yellow().bold());
+            println!("  Local Endpoint:     http://{} ({})", addr.yellow(), "NOT RUNNING".yellow().bold());
         }
     }
     println!("────────────────────────────────────────────────────────────────────────────────");
 
     if report.is_healthy_managed() {
-        println!("{} Status: HEALTHY (Supervised and responsive)", "✔".green().bold());
+        println!("{} Status: HEALTHY (Daemon is running and supervised)", "✔".green().bold());
     } else if matches!(&report.listener, ListenerState::Healthy { .. }) {
-        println!("{} Status: DEGRADED (Process is running but not supervised by OS service manager)", "⚠".yellow().bold());
+        println!("{} Status: RUNNING (Process is active, not managed by OS service manager)", "ℹ".cyan().bold());
     } else {
-        println!("{} Status: DEGRADED (Daemon is not responding on 127.0.0.1:18080)", "✖".red().bold());
+        println!("{} Status: STOPPED (Daemon is not responding on 127.0.0.1:18080)", "✖".red().bold());
     }
 }
 

@@ -73,6 +73,10 @@ dashboard-api
 dashboard-api.exe
 control-plane-api
 control-plane-api.exe
+agentcontrol-admin
+agentcontrol-admin.exe
+control-plane/api/*.exe
+Microsoft/
 *.pdb
 *.zip
 vexa-mvp1/

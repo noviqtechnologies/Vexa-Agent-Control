@@ -132,16 +132,26 @@ agentcontrol service install [OPTIONS]
 ---
 
 ### `agentcontrol service status`
-Performs an authenticated local health handshake against `http://127.0.0.1:18080/api/v1/health` and queries the authoritative OS service manager. Reports truthful multi-dimensional diagnostics (Supervisor state, listener RTT, PID, version, uptime, policy state, Hub auth, and degraded warnings).
+Performs an authenticated local health handshake against `http://127.0.0.1:18080/api/v1/health` and queries the authoritative OS service manager. Reports a streamlined, high-signal 5-line diagnostic summary.
 
 ```bash
 agentcontrol service status
 ```
 
+**Example Output:**
+```text
+● Vexa Agent Control Daemon Health Inspection
+  OS Platform:        windows (x86_64)
+  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+```
+
 **Output States:**
-- `✔ Status: HEALTHY`: Service is supervised by the OS service manager and the daemon handshake is responsive.
-- `⚠ Status: DEGRADED (Process running unmanaged)`: Daemon is running interactively or detached, but is not managed by an OS supervisor.
-- `✖ Status: DEGRADED (Closed)`: Daemon is stopped or unreachable on `127.0.0.1:18080`.
+- `ACTIVE / SUPERVISED`: Service is supervised by the OS service manager and the daemon handshake is responsive.
+- `DEGRADED (Unmanaged)`: Daemon is running interactively or detached, but is not managed by an OS supervisor.
+- `DEGRADED (Closed)`: Daemon is stopped or unreachable on `127.0.0.1:18080`.
 
 ---
 
@@ -151,3 +161,30 @@ Completely and non-destructively removes background daemon registrations across 
 ```bash
 agentcontrol service uninstall
 ```
+
+---
+
+## Administrative Companion CLI (`agentcontrol-admin`)
+
+The `agentcontrol-admin` CLI is provided for server hosts and container environments running the Vexa Control Hub control plane.
+
+### `agentcontrol-admin break-glass`
+Generates a host-bound single-use emergency recovery token valid for 15 minutes. Use this tool if IdP misconfiguration or SSO outages lock administrators out of the Control Hub.
+
+```bash
+# Generate emergency break-glass token on the server host
+agentcontrol-admin break-glass --email admin@agentcontrol.local
+
+# Specify custom database URL
+agentcontrol-admin break-glass --email admin@agentcontrol.local --db-url "postgres://vexa:secret@localhost:5432/vexa_control_plane?sslmode=disable"
+```
+
+**Redeeming the Break-Glass Token:**
+- Via Web UI: Navigate to `http://<hub-host>:8081/break-glass` and enter the 64-character token.
+- Via REST API:
+  ```bash
+  curl -X POST http://localhost:8081/api/v1/auth/break-glass \
+    -H "Content-Type: application/json" \
+    -d '{"token": "<BREAK_GLASS_TOKEN>"}'
+  ```
+

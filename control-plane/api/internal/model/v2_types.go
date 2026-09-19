@@ -52,16 +52,21 @@ type StandardErrorEnvelope struct {
 type DevicePrincipal struct {
 	OrganizationID         string           `json:"organization_id"`
 	DeviceID               string           `json:"device_id"`
-	UserID                 string           `json:"user_id,omitempty"`
-	IdentitySource         string           `json:"identity_source,omitempty"` // "local_os" vs "oidc"
-	IdentityVerified       bool             `json:"identity_verified"`
-	CertificateID          string           `json:"certificate_id"`
-	CertificateSerial      string           `json:"certificate_serial"`
-	CertificateFingerprint string           `json:"certificate_fingerprint"`
+	UserID                 *string          `json:"user_id,omitempty"`
+	ProviderID             *string          `json:"provider_id,omitempty"`
+	ProviderSubject        *string          `json:"provider_subject,omitempty"`
+	IdentitySource         string           `json:"identity_source,omitempty"` // "local_os", "oidc", "ed25519_assertion", "unknown"
+	DeviceVerified         bool             `json:"device_verified"`
+	HumanIdentityVerified  bool             `json:"human_identity_verified"`
+	IdentityConfidence     string           `json:"identity_confidence,omitempty"` // "enforced", "observed", "inferred", "unknown"
+	IdentityVerified       bool             `json:"identity_verified"`             // Legacy compatibility alias (true iff DeviceVerified)
+	CertificateID          string           `json:"certificate_id,omitempty"`
+	CertificateSerial      string           `json:"certificate_serial,omitempty"`
+	CertificateFingerprint string           `json:"certificate_fingerprint,omitempty"`
 	CredentialStatus       CredentialStatus `json:"credential_status"`
 	DeviceState            DeviceState      `json:"device_state"`
-	Capabilities           []string         `json:"capabilities"`
-	RequestID              string           `json:"request_id"`
+	Capabilities           []string         `json:"capabilities,omitempty"`
+	RequestID              string           `json:"request_id,omitempty"`
 }
 
 // EnrollmentTokenRecord represents persisted OTET metadata.

@@ -387,9 +387,21 @@ agentcontrol enroll --token "TOK-ADMIN-ISSUED-TOKEN" --hub-url "http://localhost
 `agentcontrol login` registers the daemon automatically. For advanced scenarios or re-registration:
 
 ```bash
-# Check daemon health (truthful multi-dimensional status)
+# Check daemon health (streamlined 5-line high-signal status)
 agentcontrol service status
+```
 
+Example Output:
+```text
+● Vexa Agent Control Daemon Health Inspection
+  OS Platform:        windows (x86_64)
+  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+```
+
+```bash
 # Re-register daemon after OS-level supervisor failure (requires prior enrollment)
 agentcontrol service install --hub-url "http://localhost:8400"
 
@@ -400,7 +412,8 @@ agentcontrol service install --enterprise --hub-url "http://localhost:8400"
 agentcontrol service uninstall
 ```
 
-**Sentry Protection Mechanics:**
+**Sentry Protection & Identity Separation Mechanics:**
+- **Device vs. Human Principal Separation:** Hardware keys, mTLS certificates, and enrollment tokens attest strictly to device integrity (`DeviceVerified`). Human user authorization (`HumanIdentityVerified`) is independently attested via OIDC IdP or password session tokens. The streaming proxy rejects spoofed identity headers (e.g. `X-AgentControl-User-Id`) and enforces authentic session claims.
 - **Immutable File Locks:** Applies read-only attributes (`chmod 0444`, BSD `chflags uchg`, Windows ACL Write Deny) to prevent unauthorized tampering with MCP configurations.
 - **Continuous Tamper Detection:** Any manual tampering triggers `<300ms` auto-rewrapping and sends a real-time `TAMPER_DETECTED` alert to the Control Hub.
 - **Windows Session 0 Multi-User Enumeration:** When running as `SYSTEM` on Windows, automatically scans and protects developer profile hives in `C:\Users\*`.
@@ -750,11 +763,19 @@ Vexa Agent Control provides a streamlined set of 12 canonical CLI commands for d
 | `agentcontrol support-bundle` | `[--output-dir <PATH>]`, `[--yes]` | Generates a privacy-preserving diagnostic archive containing doctor report, system info, service metrics, error tail, and manifest summaries with zero secrets. |
 | `agentcontrol repair` | *(none)* | Validates configuration files against manifests; repairs missing user tasks and broken loopback endpoints without modifying custom user edits. |
 | `agentcontrol rotate-local-token` | *(none)* | Atomically rotates the 32-byte local session bearer token in `~/.agentcontrol/local.token`, updates connected configs, and notifies the running daemon. |
-| `agentcontrol service` | `install`, `uninstall`, `status` `[--hub-url <URL>]` | Manages the per-user background agent daemon (Windows scheduled user task, macOS launchd LaunchAgent, Linux systemd user service). |
+| `agentcontrol service` | `install`, `uninstall`, `status` `[--hub-url <URL>]` | Manages the per-user background agent daemon (Windows startup / Task Scheduler, macOS launchd LaunchAgent, Linux systemd user service). |
 | `agentcontrol start` | `[--listen <ADDR>]`, `[--policy <PATH>]` | Runs the local background proxy daemon listening on `127.0.0.1:18080`. |
 | `agentcontrol logout` | *(none)* | Flushes local cached tokens from OS keyring and notifies Control Hub to revoke device session. |
 | `agentcontrol reset-local-state` | `[--force]` | Interactive recovery command to purge local SQLite event ledger and cache while preserving pristine baseline backups. |
 | `agentcontrol stdio-proxy -- <cmd>` | `<command> [args...]` | Dedicated child process wrapper for MCP servers enforcing frame quotas (< 16MB), memory limits (< 64MB RSS), 60s timeouts, and parameter DLP. |
+
+### Control Plane Admin Companion CLI (`agentcontrol-admin`)
+
+For server and container host administration:
+
+| Command | Arguments / Flags | Description |
+|---|---|---|
+| `agentcontrol-admin break-glass` | `--email <EMAIL>` | Generates a single-use 15-minute emergency recovery token directly on the server host to restore Owner access during IdP lockout or misconfiguration. |
 
 ---
 

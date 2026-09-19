@@ -143,6 +143,7 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 	}
 
 	// 3. Top Entities by Dimension
+	// 3. Top Entities by Dimension
 	if groupBy == "device" {
 		query := `
 			SELECT 
@@ -170,12 +171,38 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 				}
 			}
 		}
+	} else if groupBy == "user" {
+		query := `
+			SELECT 
+				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'unattributed') AS entity_id,
+				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'Unattributed') AS entity_name,
+				COALESCE(SUM(sr.settled_microcents), 0),
+				COUNT(*)
+			FROM spend_reservations sr
+			LEFT JOIN devices d ON (
+				d.organization_id = sr.organization_id 
+				AND (d.id::text = sr.gateway_id OR d.stable_device_id = sr.gateway_id OR d.display_name = sr.gateway_id)
+			)
+			WHERE sr.organization_id = $1 AND sr.created_at >= $2
+			GROUP BY COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'unattributed')
+			ORDER BY SUM(sr.settled_microcents) DESC, COUNT(*) DESC
+			LIMIT 20
+		`
+		topRows, err := s.pool.Query(ctx, query, orgID, since)
+		if err == nil {
+			defer topRows.Close()
+			for topRows.Next() {
+				var ent SpendTopEntity
+				if err := topRows.Scan(&ent.EntityID, &ent.EntityName, &ent.SettledMicrocents, &ent.RequestCount); err == nil {
+					a.TopEntities = append(a.TopEntities, ent)
+				}
+			}
+		}
 	} else {
 		validGroupBy := map[string]string{
 			"provider": "provider",
 			"model":    "model",
 			"project":  "project_id",
-			"user":     "COALESCE(internal_user_id, end_user_id, 'unattributed')",
 			"team":     "COALESCE(virtual_key_alias, 'default')",
 		}
 		col, ok := validGroupBy[groupBy]

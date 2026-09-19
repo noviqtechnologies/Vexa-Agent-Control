@@ -375,24 +375,18 @@ export default function RunExplorer() {
                         {new Date(r.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td style={{ fontSize: 13 }}>
-                        {r.device_name && r.device_name !== r.device_id ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                              <span>💻</span>
-                              <span>{r.device_name}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {r.internal_user_id || r.end_user_id ? (
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              <span>🧑</span>
+                              <span>{r.internal_user_id || r.end_user_id}</span>
                             </span>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-                              {r.device_id.length > 18 ? `${r.device_id.slice(0, 8)}...${r.device_id.slice(-4)}` : r.device_id}
-                            </span>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          ) : null}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--text-secondary)' }}>
                             <span>💻</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                              {r.device_id ? (r.device_id.length > 18 ? `${r.device_id.slice(0, 8)}...${r.device_id.slice(-4)}` : r.device_id) : 'gateway-default'}
-                            </span>
+                            <span>{r.device_name || (r.device_id ? (r.device_id.length > 18 ? `${r.device_id.slice(0, 8)}...${r.device_id.slice(-4)}` : r.device_id) : 'gateway-default')}</span>
                           </div>
-                        )}
+                        </div>
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{r.provider?.toUpperCase()}</strong>

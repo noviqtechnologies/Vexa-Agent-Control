@@ -51,6 +51,7 @@ export default function FleetOverview() {
   const [spendPolicies, setSpendPolicies] = useState<SpendPolicyV2[]>([])
   const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
+  const [agentFilter, setAgentFilter] = useState<'all' | 'active'>('all')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -72,7 +73,15 @@ export default function FleetOverview() {
       const rawAgents = a || []
       const seen = new Set<string>()
       const dedupedAgents: AgentSummary[] = []
+      const isDummyAgent = (id?: string | null) => {
+        if (!id) return false
+        const lower = id.toLowerCase().trim()
+        return lower === 'anonymous' || lower === 'agent-local' || lower === 'unknown' || lower === 'dummy' || lower === 'test' || lower === 'none'
+      }
       for (const ag of rawAgents) {
+        if (!ag.agent_id || isDummyAgent(ag.agent_id) || isDummyAgent(ag.display_name)) {
+          continue
+        }
         const k = (ag.agent_id || ag.display_name || '').toLowerCase()
         if (k && !seen.has(k)) {
           seen.add(k)
@@ -559,7 +568,14 @@ export default function FleetOverview() {
       {/* Stat tiles */}
       {displayStats && (
         <div className="stats-grid stats-grid-7">
-          <div className="card stat-tile soc-clickable-tile" title="Total Registered AI Agents">
+          <div
+            className="card stat-tile soc-clickable-tile"
+            onClick={() => {
+              setAgentFilter('all')
+              document.getElementById('fleet-agents-panel')?.scrollIntoView?.({ behavior: 'smooth' })
+            }}
+            title="Click to view all registered AI agents"
+          >
             <div className="stat-header-row">
               <div className="stat-label">Total Agents</div>
               <span className="soc-delta-badge delta-neutral">Fleet</span>
@@ -568,7 +584,14 @@ export default function FleetOverview() {
             <div className="stat-subtext">Protected AI Agents</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" title="Active Compliant AI Agents">
+          <div
+            className="card stat-tile soc-clickable-tile"
+            onClick={() => {
+              setAgentFilter('active')
+              document.getElementById('fleet-agents-panel')?.scrollIntoView?.({ behavior: 'smooth' })
+            }}
+            title="Click to view active compliant AI agents"
+          >
             <div className="stat-header-row">
               <div className="stat-label">Active Agents</div>
               <span className="soc-delta-badge delta-success">Live</span>
@@ -577,7 +600,11 @@ export default function FleetOverview() {
             <div className="stat-subtext">Compliant & Enforcing Zero-Trust</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile" onClick={() => navigate('/observability/logs')} title="Click to view Request & Audit Logs">
+          <div
+            className="card stat-tile soc-clickable-tile"
+            onClick={() => navigate('/observability/logs?tab=security_logs')}
+            title="Click to view Tool Call & Egress Security Logs"
+          >
             <div className="stat-header-row">
               <div className="stat-label">Total Events</div>
               <span className="soc-delta-badge delta-neutral">{timeRange}</span>
@@ -586,7 +613,11 @@ export default function FleetOverview() {
             <div className="stat-subtext">Tool Calls & Egress</div>
           </div>
 
-          <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => navigate('/observability/logs?status=denied')} title="Click to filter Denied Violations">
+          <div
+            className="card stat-tile soc-clickable-tile tile-danger"
+            onClick={() => navigate('/observability/logs?tab=security_logs&decision=denied')}
+            title="Click to filter Blocked Policy Violations"
+          >
             <div className="stat-header-row">
               <div className="stat-label">Denied</div>
               <span className="soc-delta-badge delta-danger">{displayStats.denied_events > 0 ? '+Active' : '0%'}</span>
@@ -688,10 +719,30 @@ export default function FleetOverview() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="soc-split-view">
         {/* Agents table */}
-        <div className="card soc-panel">
-          <div className="soc-card-header">
-            <div className="card-title">Agents</div>
-            <span className="soc-badge">{agents.length} Registered</span>
+        <div className="card soc-panel" id="fleet-agents-panel">
+          <div className="soc-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div className="card-title">Agents</div>
+              <div className="soc-card-subtitle">Registered AI coding agents and autonomous workers</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="soc-time-toggle" role="group" aria-label="Agent Filter">
+                <button
+                  type="button"
+                  className={`soc-time-btn ${agentFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setAgentFilter('all')}
+                >
+                  All ({agents.length})
+                </button>
+                <button
+                  type="button"
+                  className={`soc-time-btn ${agentFilter === 'active' ? 'active' : ''}`}
+                  onClick={() => setAgentFilter('active')}
+                >
+                  Active ({agents.filter(a => a.status === 'active').length})
+                </button>
+              </div>
+            </div>
           </div>
           <div className="table-wrap">
             <table>
@@ -705,12 +756,24 @@ export default function FleetOverview() {
                 </tr>
               </thead>
               <tbody>
-                {agents.length === 0 ? (
-                  <tr><td colSpan={5} className="empty-state">No agents registered</td></tr>
-                ) : agents.map((a) => (
-                  <tr key={a.agent_id} className="soc-table-row">
+                {agents.filter(a => agentFilter === 'active' ? a.status === 'active' : true).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="empty-state">
+                      {agentFilter === 'active' ? 'No active agents found' : 'No agents registered'}
+                    </td>
+                  </tr>
+                ) : agents
+                    .filter(a => agentFilter === 'active' ? a.status === 'active' : true)
+                    .map((a) => (
+                  <tr
+                    key={a.agent_id}
+                    className="soc-table-row"
+                    onClick={() => navigate(`/observability/logs?tab=security_logs&agent=${encodeURIComponent(a.agent_id)}`)}
+                    title="Click to view Security & DLP events for this agent"
+                    style={{ cursor: 'pointer' }}
+                  >
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">
-                      <div>{a.display_name || a.agent_id}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.display_name || a.agent_id}</div>
                       {a.display_name && (
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                           {a.agent_id.substring(0, 16)}...
@@ -769,8 +832,8 @@ export default function FleetOverview() {
                   <button
                     type="button"
                     className="soc-btn-xs"
-                    onClick={() => navigate(`/observability/logs?search=${a.event.agent_id}`)}
-                    title="Inspect in Request & Audit Logs"
+                    onClick={() => navigate(`/observability/logs?tab=security_logs&agent=${encodeURIComponent(a.event.agent_id)}`)}
+                    title="Inspect in Security & DLP Logs"
                   >
                     Triage
                   </button>

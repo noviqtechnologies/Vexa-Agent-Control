@@ -50,7 +50,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.87` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.89` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
@@ -116,13 +116,24 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
      ```bash
      agentcontrol status
      ```
-- **Expected Result:**
-  ```text
-  Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-  Target: cursor          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-  Target: antigravity     [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
-  Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-  ```
+     ```text
+     Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+     Target: cursor          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+     Target: antigravity     [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+     Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
+     ```
+  5. Inspect background daemon service health:
+     ```bash
+     agentcontrol service status
+     ```
+     ```text
+     ● Vexa Agent Control Daemon Health Inspection
+       OS Platform:        windows (x86_64)
+       Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+       Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+       Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+       Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+     ```
 - **What changes:** Telemetry streamed live to dashboard and persisted in `~/.agentcontrol/events.db`.
 - **Undo:** Not applicable.
 
@@ -137,7 +148,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
   ```
 - **Expected Result:**
   ```text
-  ✔ Binary Integrity:          Pass (v1.0.87)
+  ✔ Binary Integrity:          Pass (v1.0.89)
   ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
   ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
   ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)

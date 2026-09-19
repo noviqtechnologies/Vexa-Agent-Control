@@ -61,11 +61,16 @@ export default function Login() {
   }
 
   const returnTo = queryParams.get('return_to')
-  const getOAuthLoginUrl = (providerId: string) => {
+  const getOAuthLoginUrl = (providerId: string, prompt = 'select_account') => {
+    const params = new URLSearchParams()
     if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
-      return `/api/v1/auth/oauth/${providerId}/login?return_to=${encodeURIComponent(returnTo)}`
+      params.set('return_to', returnTo)
     }
-    return `/api/v1/auth/oauth/${providerId}/login`
+    if (prompt) {
+      params.set('prompt', prompt)
+    }
+    const qs = params.toString()
+    return `/api/v1/auth/oauth/${providerId}/login${qs ? `?${qs}` : ''}`
   }
 
   const oauthProviders = providers.filter(p => p.type !== 'local')

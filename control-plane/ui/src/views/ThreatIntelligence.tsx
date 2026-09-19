@@ -178,7 +178,7 @@ export default function ThreatIntelligence() {
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🛡️</div>
-            <p>No threat activity recorded during this period.</p>
+            <p>No threat data in this period</p>
           </div>
         )}
       </div>
@@ -209,7 +209,7 @@ export default function ThreatIntelligence() {
                   <td colSpan={5}>
                     <div className="empty-state" style={{ padding: '32px 0' }}>
                       <div className="empty-state-icon">✔</div>
-                      <p>No threat signatures or DLP violations detected.</p>
+                      <p>No patterns detected</p>
                     </div>
                   </td>
                 </tr>
@@ -228,6 +228,24 @@ export default function ThreatIntelligence() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Developer & Workstation Threat Attribution Panel */}
+      <div className="card soc-panel" style={{ marginTop: 20 }}>
+        <div className="soc-card-header" style={{ marginBottom: 16 }}>
+          <div>
+            <div className="card-title">Developer &amp; Workstation Threat Attribution</div>
+            <div className="soc-card-subtitle">Zero-Trust correlation of DLP redactions, prompt injections, and policy events across enrolled identities</div>
+          </div>
+          <span className="soc-badge">Identity Correlated</span>
+        </div>
+
+        <div style={{ padding: '12px 16px', background: 'rgba(99, 102, 241, 0.06)', borderRadius: 6, border: '1px solid rgba(99, 102, 241, 0.2)', fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 18 }}>🛡️</span>
+          <div>
+            All security findings are continuously bound to enrolled workstation identities and developer accounts (e.g. Local Authentication, Google Workspace, and Microsoft Entra ID). Detailed per-request forensic payloads can be inspected directly in the <a href="/observability" style={{ color: '#818cf8', fontWeight: 600, textDecoration: 'underline' }}>Security &amp; DLP Logs</a>.
+          </div>
         </div>
       </div>
     </div>

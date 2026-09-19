@@ -626,11 +626,18 @@ async function main() {
                             </svg>
                           </button>
                         </div>
-                        {key.team_id && (
-                          <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
-                            Team: <strong style={{ color: '#cbd5e1' }}>{key.team_id}</strong>
-                          </span>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: '11.5px', color: '#94a3b8' }}>
+                          {key.created_by && (
+                            <span>
+                              Owner: <strong style={{ color: '#cbd5e1' }}>{key.created_by}</strong>
+                            </span>
+                          )}
+                          {key.team_id && (
+                            <span>
+                              {key.created_by ? '• ' : ''}Team: <strong style={{ color: '#cbd5e1' }}>{key.team_id}</strong>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -770,7 +777,7 @@ async function main() {
                 <div className="vk-form-grid">
                   <div className="vk-form-group full-width">
                     <label className="vk-form-label">Key Ownership Persona</label>
-                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
                         <input
                           type="radio"
@@ -781,28 +788,30 @@ async function main() {
                         />
                         <span>🧑 User / Developer</span>
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'not-allowed', opacity: 0.5, fontSize: 13 }} title="Service Account persona is disabled for now">
                         <input
                           type="radio"
                           name="ownerType"
                           value="service_account"
+                          disabled
                           checked={formOwnerType === 'service_account'}
                           onChange={() => setFormOwnerType('service_account')}
                         />
-                        <span>⚙️ Service Account (CI/CD)</span>
+                        <span>⚙️ Service Account (CI/CD) <span style={{ fontSize: 11, color: '#94a3b8' }}>(Coming soon)</span></span>
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'not-allowed', opacity: 0.5, fontSize: 13 }} title="Autonomous AI Agent persona is disabled for now">
                         <input
                           type="radio"
                           name="ownerType"
                           value="agent"
+                          disabled
                           checked={formOwnerType === 'agent'}
                           onChange={() => setFormOwnerType('agent')}
                         />
-                        <span>🤖 Autonomous AI Agent</span>
+                        <span>🤖 Autonomous AI Agent <span style={{ fontSize: 11, color: '#94a3b8' }}>(Coming soon)</span></span>
                       </label>
                     </div>
-                    <span className="vk-form-help">Declares the principal entity for risk profiling & audit attribution</span>
+                    <span className="vk-form-help">Declares the principal entity for risk profiling & audit attribution (currently restricted to User / Developer)</span>
                   </div>
 
                   <div className="vk-form-group">

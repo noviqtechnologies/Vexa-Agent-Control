@@ -169,14 +169,24 @@ func DeviceAssertionAuth(db *store.Store) func(http.Handler) http.Handler {
 				orgID = devKey.OrganizationID
 			}
 
+			var userIDPtr *string
+			var confidence = "unknown"
+			if verifiedClaims.UserID != "" {
+				userIDPtr = &verifiedClaims.UserID
+				confidence = "observed"
+			}
+
 			principal := &model.DevicePrincipal{
-				DeviceID:         deviceID,
-				OrganizationID:   orgID,
-				UserID:           verifiedClaims.UserID,
-				IdentitySource:   "ed25519_assertion",
-				IdentityVerified: true,
-				DeviceState:      model.DeviceStateCompliant,
-				RequestID:        r.Header.Get("X-Request-ID"),
+				DeviceID:              deviceID,
+				OrganizationID:        orgID,
+				UserID:                userIDPtr,
+				IdentitySource:        "ed25519_assertion",
+				DeviceVerified:        true,
+				HumanIdentityVerified: false, // Ed25519 assertion proves device key possession, not IdP-authenticated human
+				IdentityConfidence:    confidence,
+				IdentityVerified:      true, // legacy compat
+				DeviceState:           model.DeviceStateCompliant,
+				RequestID:             r.Header.Get("X-Request-ID"),
 			}
 
 			ctx := context.WithValue(r.Context(), DevicePrincipalKey, principal)

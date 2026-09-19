@@ -13,6 +13,7 @@ import Users from './views/Users'
 import SafeMode from './views/SafeMode'
 import ObservabilityLogs from './views/ObservabilityLogs'
 import Login from './views/Login'
+import DeveloperGuide from './views/DeveloperGuide'
 
 import RequireAdmin from './auth/RequireAdmin'
 import McpServers from './views/McpServers'
@@ -170,7 +171,7 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   const visibleSections = user?.is_admin
     ? CUSTOMER_NAV_SECTIONS
-    : CUSTOMER_NAV_SECTIONS.filter((s) => s.id !== 'team' && s.id !== 'integrations')
+    : []
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {}
@@ -193,7 +194,7 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
     <aside className="app-sidebar">
       {/* Brand / Logo header */}
       <div className="sidebar-brand">
-        <NavLink to="/fleet" className="brand-link">
+        <NavLink to={user?.is_admin ? "/fleet" : "/quickstart"} className="brand-link">
           <div className="brand-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -201,38 +202,48 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
           <div className="brand-text">
             <span className="brand-name">Vexa Agent Control</span>
-            <span className="brand-tag">SOC Console</span>
+            <span className="brand-tag">{user?.is_admin ? 'SOC Console' : 'Developer Hub'}</span>
           </div>
         </NavLink>
       </div>
 
-      {/* Top-level standalone Overview link */}
+      {/* Top-level standalone link: Fleet Overview (Admin) or Developer Quickstart (Member) */}
       <div className="sidebar-top-nav">
-        {isEnforced ? (
-          <div className="sidebar-nav-item single-item disabled" title="Complete Authentication Setup to unlock Fleet Overview">
-            <span className="item-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-            </span>
-            <span className="item-label">Fleet Overview</span>
-            <span className="sidebar-lock-pill">Locked</span>
-          </div>
+        {user?.is_admin ? (
+          isEnforced ? (
+            <div className="sidebar-nav-item single-item disabled" title="Complete Authentication Setup to unlock Fleet Overview">
+              <span className="item-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <span className="item-label">Fleet Overview</span>
+              <span className="sidebar-lock-pill">Locked</span>
+            </div>
+          ) : (
+            <NavLink
+              to="/fleet"
+              className={({ isActive }) => `sidebar-nav-item single-item ${isActive ? 'active' : ''}`}
+            >
+              <span className="item-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+              </span>
+              <span className="item-label">Fleet Overview</span>
+            </NavLink>
+          )
         ) : (
           <NavLink
-            to="/fleet"
+            to="/quickstart"
             className={({ isActive }) => `sidebar-nav-item single-item ${isActive ? 'active' : ''}`}
           >
-            <span className="item-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-              </svg>
-            </span>
-            <span className="item-label">Fleet Overview</span>
+            <span className="item-icon" style={{ fontSize: '15px' }}>🚀</span>
+            <span className="item-label">Developer Quickstart</span>
           </NavLink>
         )}
       </div>
@@ -439,6 +450,7 @@ function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => vo
 
 function AuthenticatedLoginRedirect() {
   const location = useLocation()
+  const { user } = useAuth()
   const params = new URLSearchParams(location.search)
   const returnTo = params.get('return_to')
   if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
@@ -448,11 +460,11 @@ function AuthenticatedLoginRedirect() {
     }
     return <Navigate to={returnTo} replace />
   }
-  return <Navigate to="/fleet" replace />
+  return <Navigate to={user?.is_admin ? "/fleet" : "/quickstart"} replace />
 }
 
 export default function App() {
-  const { authenticated, logout, needsPasswordSetup, needsAuthProviderConfig } = useAuth()
+  const { authenticated, logout, needsPasswordSetup, needsAuthProviderConfig, user } = useAuth()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const isEnforced = needsAuthProviderConfig
 
@@ -471,66 +483,65 @@ export default function App() {
 
         <Route path="*" element={
           <RequireAuth>
-            <RequireAdmin>
-              <div className="app-shell">
-                <Sidebar
-                  onLogout={logout}
-                />
+            <div className="app-shell">
+              <Sidebar
+                onLogout={logout}
+              />
 
-                <div className="main-viewport-wrapper">
-                  <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
-                  <main className="main-content">
-                    <GlobalAuthBanner />
-                    {isEnforced ? (
-                      <Routes>
-                        <Route path="/admin/auth-providers" element={<AuthProviders />} />
-                        <Route path="/settings/license" element={<LicenseSettings />} />
-                        <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
-                      </Routes>
-                    ) : (
-                      <Routes>
-                        <Route path="/" element={<Navigate to="/fleet" replace />} />
-                        <Route path="/fleet" element={<FleetOverview />} />
-                        <Route path="/settings/license" element={<LicenseSettings />} />
-                        <Route path="/organization" element={<LicenseSettings />} />
-                        <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
-                        <Route path="/identity" element={<IdentityGovernance />} />
-                        <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
-                        <Route path="/policy/insights" element={<PolicyInsights />} />
-                        <Route path="/policy/marketplace" element={<PolicyMarketplace />} />
-                        <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
-                        <Route path="/policy/edit" element={<PolicyEditor />} />
-                        <Route path="/policy/group" element={<GroupPolicyEditor />} />
-                        <Route path="/spend/limits" element={<SpendLimits />} />
-                        <Route path="/spend/requests" element={<IncreaseRequests />} />
-                        <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
-                        <Route path="/spend/visualization" element={<SpendVisualization />} />
-                        <Route path="/runs" element={<RunExplorer />} />
-                        <Route path="/coverage-health" element={<CoverageControlHealth />} />
-                        <Route path="/observability/logs" element={<ObservabilityLogs />} />
-                        <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
-                        <Route path="/policy/effective-explorer" element={<EffectivePolicyExplorer />} />
-                        <Route path="/policy/safe-mode" element={<SafeMode />} />
-                        <Route path="/threats" element={<ThreatIntelligence />} />
-                        <Route path="/audit" element={<ObservabilityLogs />} />
-                        <Route path="/admin/auth-providers" element={<AuthProviders />} />
-                        <Route path="/admin/users" element={<Users />} />
-                        <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
-                        <Route path="/devices" element={<Devices />} />
-                        <Route path="/devices/tamper-log" element={<TamperLog />} />
-                        <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
-                        <Route path="/integrations/virtual-keys" element={<VirtualKeys />} />
-                        <Route path="/integrations/mcp-servers" element={<McpServers />} />
-                        <Route path="/integrations/llm-providers" element={<LlmProviders />} />
-                        {/* Legacy redirect */}
-                        <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
-                        <Route path="*" element={<Navigate to="/fleet" replace />} />
-                      </Routes>
-                    )}
-                  </main>
-                </div>
+              <div className="main-viewport-wrapper">
+                <TopHeaderBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
+                <main className="main-content">
+                  <GlobalAuthBanner />
+                  {isEnforced ? (
+                    <Routes>
+                      <Route path="/admin/auth-providers" element={<RequireAdmin><AuthProviders /></RequireAdmin>} />
+                      <Route path="/settings/license" element={<RequireAdmin><LicenseSettings /></RequireAdmin>} />
+                      <Route path="*" element={<Navigate to="/admin/auth-providers" replace />} />
+                    </Routes>
+                  ) : (
+                    <Routes>
+                      <Route path="/" element={<Navigate to={user?.is_admin ? "/fleet" : "/quickstart"} replace />} />
+                      <Route path="/quickstart" element={<DeveloperGuide />} />
+                      <Route path="/fleet" element={<RequireAdmin><FleetOverview /></RequireAdmin>} />
+                      <Route path="/settings/license" element={<RequireAdmin><LicenseSettings /></RequireAdmin>} />
+                      <Route path="/organization" element={<RequireAdmin><LicenseSettings /></RequireAdmin>} />
+                      <Route path="/operator" element={<Navigate to="/settings/license" replace />} />
+                      <Route path="/identity" element={<RequireAdmin><IdentityGovernance /></RequireAdmin>} />
+                      <Route path="/policy" element={<Navigate to="/policy/edit" replace />} />
+                      <Route path="/policy/insights" element={<RequireAdmin><PolicyInsights /></RequireAdmin>} />
+                      <Route path="/policy/marketplace" element={<RequireAdmin><PolicyMarketplace /></RequireAdmin>} />
+                      <Route path="/policy-marketplace" element={<RequireAdmin><PolicyMarketplace /></RequireAdmin>} />
+                      <Route path="/policy/edit" element={<RequireAdmin><PolicyEditor /></RequireAdmin>} />
+                      <Route path="/policy/group" element={<RequireAdmin><GroupPolicyEditor /></RequireAdmin>} />
+                      <Route path="/spend/limits" element={<RequireAdmin><SpendLimits /></RequireAdmin>} />
+                      <Route path="/spend/requests" element={<RequireAdmin><IncreaseRequests /></RequireAdmin>} />
+                      <Route path="/spend/status" element={<Navigate to="/spend/visualization" replace />} />
+                      <Route path="/spend/visualization" element={<RequireAdmin><SpendVisualization /></RequireAdmin>} />
+                      <Route path="/runs" element={<RequireAdmin><RunExplorer /></RequireAdmin>} />
+                      <Route path="/coverage-health" element={<RequireAdmin><CoverageControlHealth /></RequireAdmin>} />
+                      <Route path="/observability/logs" element={<RequireAdmin><ObservabilityLogs /></RequireAdmin>} />
+                      <Route path="/observability" element={<Navigate to="/observability/logs" replace />} />
+                      <Route path="/policy/effective-explorer" element={<RequireAdmin><EffectivePolicyExplorer /></RequireAdmin>} />
+                      <Route path="/policy/safe-mode" element={<RequireAdmin><SafeMode /></RequireAdmin>} />
+                      <Route path="/threats" element={<RequireAdmin><ThreatIntelligence /></RequireAdmin>} />
+                      <Route path="/audit" element={<RequireAdmin><ObservabilityLogs /></RequireAdmin>} />
+                      <Route path="/admin/auth-providers" element={<RequireAdmin><AuthProviders /></RequireAdmin>} />
+                      <Route path="/admin/users" element={<RequireAdmin><Users /></RequireAdmin>} />
+                      <Route path="/admin/devices" element={<Navigate to="/devices" replace />} />
+                      <Route path="/devices" element={<RequireAdmin><Devices /></RequireAdmin>} />
+                      <Route path="/devices/tamper-log" element={<RequireAdmin><TamperLog /></RequireAdmin>} />
+                      <Route path="/integrations/ide" element={<Navigate to="/devices" replace />} />
+                      <Route path="/integrations/virtual-keys" element={<RequireAdmin><VirtualKeys /></RequireAdmin>} />
+                      <Route path="/integrations/mcp-servers" element={<RequireAdmin><McpServers /></RequireAdmin>} />
+                      <Route path="/integrations/llm-providers" element={<RequireAdmin><LlmProviders /></RequireAdmin>} />
+                      {/* Legacy redirect */}
+                      <Route path="/settings/auth" element={<Navigate to="/admin/auth-providers" replace />} />
+                      <Route path="*" element={<Navigate to={user?.is_admin ? "/fleet" : "/quickstart"} replace />} />
+                    </Routes>
+                  )}
+                </main>
               </div>
-            </RequireAdmin>
+            </div>
           </RequireAuth>
         } />
       </Routes>

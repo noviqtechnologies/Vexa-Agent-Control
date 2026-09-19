@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -133,6 +134,9 @@ func (s *Store) EnsureCoreSchema(ctx context.Context) error {
 
 		-- Dead schema cleanup: drop unreferenced legacy price_books table
 		DROP TABLE IF EXISTS price_books CASCADE;
+
+		-- Cleanup any legacy dummy/anonymous agent records
+		DELETE FROM agents WHERE LOWER(agent_id) IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '');
 	`
 	_, err := s.pool.Exec(ctx, q)
 	if err != nil {
@@ -146,6 +150,10 @@ func (s *Store) EnsureCoreSchema(ctx context.Context) error {
 // UpsertAgent ensures the agent exists within an organization.
 func (s *Store) UpsertAgent(ctx context.Context, organizationID, agentID string) error {
 	if s.pool == nil {
+		return nil
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(agentID))
+	if trimmed == "" || trimmed == "anonymous" || trimmed == "agent-local" || trimmed == "unknown" || trimmed == "dummy" || trimmed == "test" || trimmed == "none" {
 		return nil
 	}
 	if organizationID == "" {
@@ -299,7 +307,8 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 				policy_version, 
 				last_seen_at
 			FROM agents
-			WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+			WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND LOWER(agent_id) NOT IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '')
 			UNION ALL
 			SELECT 
 				COALESCE(stable_device_id, id::text) AS agent_id,
@@ -313,8 +322,11 @@ func (s *Store) ListAgents(ctx context.Context, organizationID string, limit, of
 				COALESCE(last_heartbeat_at, first_enrolled_at, created_at, now()) AS last_seen_at
 			FROM devices
 			WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND LOWER(COALESCE(stable_device_id, id::text)) NOT IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '')
 			  AND COALESCE(stable_device_id, id::text) NOT IN (
-				SELECT agent_id FROM agents WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+				SELECT agent_id FROM agents 
+				WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+				  AND LOWER(agent_id) NOT IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '')
 			  )
 		),
 		paged_agents AS (
@@ -397,8 +409,8 @@ func (s *Store) GetFleetStats(ctx context.Context, organizationID string, hours 
 	var stats FleetStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED' AND revoked_at IS NULL),
-			(SELECT COUNT(*) FROM devices WHERE (state = 'COMPLIANT' OR state = 'ACTIVE') AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes'),
+			(SELECT COUNT(*) FROM devices WHERE state != 'REVOKED' AND revoked_at IS NULL AND LOWER(COALESCE(stable_device_id, id::text)) NOT IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '')),
+			(SELECT COUNT(*) FROM devices WHERE (state = 'COMPLIANT' OR state = 'ACTIVE') AND last_heartbeat_at >= NOW() - INTERVAL '30 minutes' AND LOWER(COALESCE(stable_device_id, id::text)) NOT IN ('anonymous', 'agent-local', 'unknown', 'dummy', 'test', 'none', '')),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
 			(SELECT COUNT(*) FROM telemetry_events WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND decision = 'denied' AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
 			(SELECT COUNT(*) FROM alerts WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND created_at >= NOW() - ($2 * INTERVAL '1 hour')),
@@ -801,6 +813,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationSQL string)
 type McpServerInventoryRow struct {
 	AgentID      string `json:"agent_id"`
 	HostName     string `json:"hostname,omitempty"`
+	OwnerSubject string `json:"owner_subject,omitempty"`
 	IDETarget    string `json:"ide_target"`
 	ServerName   string `json:"server_name"`
 	Wrapped      bool   `json:"wrapped"`
@@ -838,6 +851,7 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, organizationID, agent
 		SELECT 
 			m.agent_id, 
 			COALESCE(NULLIF(dev.display_name, ''), NULLIF(dev.stable_device_id, ''), m.agent_id) AS hostname,
+			COALESCE(dev.owner_subject, 'Developer') AS owner_subject,
 			m.ide_target, 
 			m.server_name, 
 			m.wrapped, 
@@ -858,7 +872,7 @@ func (s *Store) ListMcpServersByAgent(ctx context.Context, organizationID, agent
 	for rows.Next() {
 		var sr McpServerInventoryRow
 		var lastSeen time.Time
-		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.OwnerSubject, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
 			return nil, err
 		}
 		sr.LastSeenAt = lastSeen.Format(time.RFC3339)
@@ -878,6 +892,7 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, organizationID stri
 		SELECT 
 			m.agent_id, 
 			COALESCE(NULLIF(dev.display_name, ''), NULLIF(dev.stable_device_id, ''), m.agent_id) AS hostname,
+			COALESCE(dev.owner_subject, 'Developer') AS owner_subject,
 			m.ide_target, 
 			m.server_name, 
 			m.wrapped, 
@@ -897,7 +912,7 @@ func (s *Store) ListMcpServersFleetWide(ctx context.Context, organizationID stri
 	for rows.Next() {
 		var sr McpServerInventoryRow
 		var lastSeen time.Time
-		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
+		if err := rows.Scan(&sr.AgentID, &sr.HostName, &sr.OwnerSubject, &sr.IDETarget, &sr.ServerName, &sr.Wrapped, &sr.PathVerified, &lastSeen); err != nil {
 			return nil, err
 		}
 		sr.LastSeenAt = lastSeen.Format(time.RFC3339)
@@ -914,6 +929,9 @@ func (s *Store) EnsureAllSchemas(ctx context.Context) error {
 	}
 	if err := s.EnsureCoreSchema(ctx); err != nil {
 		log.Printf("EnsureCoreSchema warning: %v", err)
+	}
+	if err := s.EnsureUsersSchema(ctx); err != nil {
+		log.Printf("EnsureUsersSchema warning: %v", err)
 	}
 	if err := s.EnsureAuthProvidersSchema(ctx); err != nil {
 		log.Printf("EnsureAuthProvidersSchema warning: %v", err)
@@ -938,6 +956,9 @@ func (s *Store) EnsureAllSchemas(ctx context.Context) error {
 	}
 	if err := s.EnsureAuditEventsSchema(ctx); err != nil {
 		log.Printf("EnsureAuditEventsSchema warning: %v", err)
+	}
+	if err := s.EnsureIdempotencySchema(ctx); err != nil {
+		log.Printf("EnsureIdempotencySchema warning: %v", err)
 	}
 	return nil
 }

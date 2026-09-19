@@ -82,6 +82,10 @@ type Config struct {
 	LegacySingleTenantMode bool
 	LegacyTenantID         string
 
+	// AppBaseURL is the optional public base URL (e.g. http://localhost:3000 or https://hub.corp.com)
+	// used for constructing OAuth redirect URIs. If empty, falls back to X-Forwarded-Host/Host headers.
+	AppBaseURL string
+
 	// DevMode disables auth requirements. Requires BOTH DEV_MODE=true AND
 	// ALLOW_DEV_MODE=true to activate — prevents accidental copy-paste of
 	// dev config into production Helm values.
@@ -250,6 +254,14 @@ func Load() (*Config, error) {
 		}
 	}
 
+	appBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
+	if appBaseURL == "" {
+		appBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_URL")), "/")
+	}
+	if appBaseURL == "" {
+		appBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("AGENTCONTROL_PUBLIC_URL")), "/")
+	}
+
 	return &Config{
 		Port:                        port,
 		DatabaseURL:                 dbURL,
@@ -273,6 +285,7 @@ func Load() (*Config, error) {
 		LicenseKey:                  licenseKey,
 		LegacySingleTenantMode:      legacySingleTenant,
 		LegacyTenantID:              legacyTenantID,
+		AppBaseURL:                  appBaseURL,
 		DevMode:                     devMode,
 	}, nil
 }

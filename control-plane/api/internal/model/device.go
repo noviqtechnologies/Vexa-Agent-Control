@@ -15,6 +15,8 @@ type Device struct {
 	IDEChecksums       map[string]interface{} `json:"ide_checksums"`
 	FirstEnrolledAt   time.Time              `json:"first_enrolled_at"`
 	LastHeartbeatAt   time.Time              `json:"last_heartbeat_at"`
+	OwnerSubject      string                 `json:"owner_subject,omitempty"`
+	AuthProviderType  string                 `json:"auth_provider_type,omitempty"`
 	IsRevoked         bool                   `json:"is_revoked"`
 	RevokedAt         *time.Time             `json:"revoked_at,omitempty"`
 	UpdatedAt         time.Time              `json:"updated_at"`

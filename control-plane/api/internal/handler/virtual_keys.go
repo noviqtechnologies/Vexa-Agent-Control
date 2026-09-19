@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
@@ -113,13 +114,28 @@ func (h *VirtualKeyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		budgetPeriod = "monthly"
 	}
 
+	createdBy := "admin"
+	if hUser := r.Header.Get("X-AgentControl-User-Id"); hUser != "" {
+		createdBy = hUser
+	} else if hUser := r.Header.Get("X-User-Email"); hUser != "" {
+		createdBy = hUser
+	} else if cookie, err := r.Cookie("agentcontrol_session"); err == nil && cookie != nil && cookie.Value != "" {
+		if sess, err := session.Validate(cookie.Value); err == nil && sess != nil && sess.UserID != "" {
+			createdBy = sess.UserID
+		}
+	} else if cookie, err := r.Cookie("agentwall_session"); err == nil && cookie != nil && cookie.Value != "" {
+		if sess, err := session.Validate(cookie.Value); err == nil && sess != nil && sess.UserID != "" {
+			createdBy = sess.UserID
+		}
+	}
+
 	vk := store.VirtualKey{
 		TenantID:                tenantID,
 		KeyHash:                 keyHash,
 		KeyPrefix:               keyPrefix,
 		Name:                    req.Name,
 		TeamID:                  req.TeamID,
-		CreatedBy:               "admin",
+		CreatedBy:               createdBy,
 		CreatedAt:               time.Now().UTC(),
 		ExpiresAt:               req.ExpiresAt,
 		AllowedIPs:              req.AllowedIPs,

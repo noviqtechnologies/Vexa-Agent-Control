@@ -63,3 +63,25 @@ When an agent workstation initiates enrollment via `agentcontrol login --hub <UR
 - **Full Sovereign Ownership:** Every database table (`users`, `devices`, `policies`, `provider_keys`, `virtual_keys`, `spend_ledger`) is bounded by your private `organization_id`.
 - **Air-Gap Compatibility:** License verification requires zero outbound connectivity. All public keys are embedded and verified with Ed25519 math.
 - **Fail-Closed Gateways:** If a device is revoked or compromised, gateways immediately sever brokered credential access.
+
+---
+
+## 6. OIDC Federation & Enterprise Identity Management
+
+Organization Admins can configure OIDC Identity Providers (Google Workspace, Microsoft Entra ID, Okta, Auth0, Keycloak, Clerk) under **Auth Providers & SSO** (`/settings/auth-providers`).
+
+### Core Guarantees:
+1. **Durable Subject Binding:** Users are bound to their immutable `provider_subject` (`sub` claim) rather than mutable email strings.
+2. **Ambiguity Guard:** If an SSO user logs in and multiple local accounts share that email address, automatic linking halts with an explicit error to prevent account takeover.
+3. **Safe Account Linking:** Local password `MEMBER` users require a password confirmation challenge before binding external SSO identities. Privileged `ADMIN` and `OWNER` accounts cannot be linked self-service.
+4. **Endpoint Diagnostics:** Admins can test IdP discovery and JWKS connectivity at any time using `POST /api/v1/auth/providers/{id}/test`.
+
+### Host-Bound Emergency Break-Glass Recovery
+If an IdP configuration error, expired certificate, or network outage locks administrators out of the Hub, generate a single-use 15-minute emergency recovery token directly on the host:
+
+```bash
+agentcontrol-admin break-glass --email admin@agentcontrol.local
+```
+
+Redeem the token at `http://<hub-host>:8081/break-glass` to immediately restore Owner access and invalidate compromised sessions.
+

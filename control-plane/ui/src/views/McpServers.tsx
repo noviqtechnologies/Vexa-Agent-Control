@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 interface McpServer {
   agent_id: string
   hostname?: string
+  owner_subject?: string
   ide_target: string
   server_name: string
   wrapped: boolean
@@ -284,7 +285,7 @@ export default function McpServers() {
           <table className="soc-table">
             <thead>
               <tr>
-                <th>Host Name</th>
+                <th>Host &amp; Developer</th>
                 <th>IDE Target</th>
                 <th>Server Name</th>
                 <th>Wrapped</th>
@@ -306,9 +307,13 @@ export default function McpServers() {
                 filteredServers.map((s, i) => (
                   <tr key={`${s.agent_id}-${s.ide_target}-${s.server_name}-${i}`} className="soc-table-row">
                     <td>
-                      <span className="soc-host-badge font-mono">
+                      <div className="soc-host-badge font-mono">
                         {getHostname(s)}
-                      </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, fontSize: 11, color: 'var(--text-muted)' }}>
+                        <span>🧑</span>
+                        <span>{s.owner_subject || 'Developer'}</span>
+                      </div>
                     </td>
                     <td>
                       <span className={`soc-ide-pill ${getIdeBadgeClass(s.ide_target)}`}>

@@ -80,7 +80,10 @@ export default function TamperLog() {
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} className="text-mono-id">{e.event_id.substring(0, 8)}...</td>
                     <td>
                       <div><strong>{e.hostname}</strong></div>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{e.user_identifier}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <span style={{ fontSize: 11 }}>🧑</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{e.user_identifier || 'Unassigned'}</span>
+                      </div>
                     </td>
                     <td><span className="badge badge-info">{e.ide_name}</span></td>
                     <td>{getEventBadge(e.event_type)}</td>

@@ -11,7 +11,7 @@
 
 [![Website](https://img.shields.io/badge/Website-vexasec.io-7C3AED.svg?style=flat-square&logo=google-chrome&logoColor=white)](https://vexasec.io/)
 [![Open Source License](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.87-10B981.svg?style=flat-square)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.89-10B981.svg?style=flat-square)](Cargo.toml)
 [![Changelog](https://img.shields.io/badge/Changelog-SemVer%202.0-blueviolet.svg?style=flat-square)](CHANGELOG.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
 [![Contributing](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
@@ -479,6 +479,8 @@ The enterprise Control Hub v2 provides centralized governance, multi-state capab
 - **Signed Device Assertions (`X-Device-Authorization`):** Workstation daemons sign every gateway transaction using short-lived (300s) Ed25519 assertions with sliding 5-minute replay nonce deduplication (`jti`).
 - **Multi-State Capability Vectors:** Replaces binary compliance with verified operational states: `CONFIGURED` (proxy locked), `MCP_WRAPPED` (tools routed), and `TRAFFIC_VERIFIED` (attested transactions).
 - **Freshness Tiers:** Continuous liveness tracking categorized into `ACTIVE_FRESH` (≤ 15m), `ACTIVE_RECENT` (≤ 24h), and `STALE` (&gt; 24h).
+- **Generic OIDC & Durable Subject Identity:** Open-core support for Google Workspace, Microsoft Entra ID, Okta, Auth0, Keycloak, and custom OIDC providers bound to immutable `provider_subject` identifiers with safe multi-step account linking.
+- **Host-Bound Break-Glass Recovery:** Server/container CLI (`agentcontrol-admin break-glass`) generating single-use 15-minute emergency recovery tokens with tenant-wide session invalidation.
 - **Cryptographically Signed Effective Policies:** Control Hub distributes canonical JSON policy manifests signed with an Ed25519 authority key (`GET /api/v2/policy/effective`).
 - **Cryptographic Audit Checkpoints:** Telemetry events are sequentially hash-chained (`event_hash` / `prev_event_hash`) and sealed into verifiable checkpoints (`GET /api/v2/audit/checkpoints`).
 
@@ -545,12 +547,14 @@ docker compose -f docker-compose.team.yml up -d
 
 **Windows (PowerShell):**
 ```powershell
+# Note: For production or non-loopback exposure, set a secure high-entropy token:
+$ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N")
 docker run -d `
   --name agentcontrol `
   -p 8080:8080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
+  -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" `
   ghcr.io/noviqtechnologies/agentcontrol:latest `
   start --listen 0.0.0.0:8080
 ```
@@ -562,19 +566,21 @@ docker run -d ^
   -p 8080:8080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
+  -e AGENTCONTROL_ADMIN_TOKEN="your-secure-random-token-here" ^
   ghcr.io/noviqtechnologies/agentcontrol:latest ^
   start --listen 0.0.0.0:8080
 ```
 
 **macOS / Linux / WSL (Bash / Zsh):**
 ```bash
+# Generate high-entropy admin token
+ADMIN_TOKEN=$(openssl rand -hex 16)
 docker run -d \
   --name agentcontrol \
   -p 8080:8080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
+  -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ghcr.io/noviqtechnologies/agentcontrol:latest \
   start --listen 0.0.0.0:8080
 ```
@@ -588,9 +594,9 @@ docker run -d \
    *(Status should show `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
 
 2. **Test Admin API:**
-   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
-   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
-   - **Windows (CMD):** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer your-secure-random-token-here" http://localhost:8080/`
 
 3. **Stream Live Logs:**
    ```bash
@@ -645,7 +651,7 @@ set PATH=%USERPROFILE%\.local\bin;%PATH%
 agentcontrol.exe --version
 ```
 
-- **Expected Result:** Prints `agentcontrol 1.0.87` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.89` (or current release).
 
 ---
 
@@ -736,6 +742,21 @@ Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 AC
 Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
 ```
 
+Check background daemon supervisor health:
+
+```bash
+agentcontrol service status
+```
+
+```text
+● Vexa Agent Control Daemon Health Inspection
+  OS Platform:        windows (x86_64)
+  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+```
+
 ---
 
 ### Step 5: Run Health Diagnostics (`agentcontrol doctor`)
@@ -747,7 +768,7 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.87)
+✔ Binary Integrity:          Pass (v1.0.89)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
@@ -852,6 +873,7 @@ Before writing any configuration, here is the complete footprint of Vexa Agent C
 | **Baseline Backups** | `~/.agentcontrol/backups/*.baseline.bak` | `%USERPROFILE%\.agentcontrol\backups\*.baseline.bak` |
 | **State & Audit Logs** | `~/.agentcontrol/audit.jsonl` | `%USERPROFILE%\.agentcontrol\audit.jsonl` |
 | **Local TCP Port** | `127.0.0.1:18080` (loopback only) | `127.0.0.1:18080` (loopback only) |
+| **Root CA / TLS Trust** | **None (Zero-CA architecture)**. Workstation protection operates via direct client wrapping (`agentcontrol wrap`). Run `agentcontrol repair` to clean any legacy CA. | **None (Zero-CA architecture)**. Workstation protection operates via direct client wrapping (`agentcontrol wrap`). Run `agentcontrol repair` to clean any legacy CA. |
 
 ---
 

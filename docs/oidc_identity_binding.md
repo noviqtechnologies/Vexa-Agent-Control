@@ -566,3 +566,95 @@ agentcontrol verify-log audit.log --key-file hmac.key
 ### 5. Group Claims Not Matching Policy Rules
 * **Cause:** The `group_claim_key` in policy configuration does not match the actual JSON key emitted by your IdP (e.g. using `groups` instead of `cognito:groups` or `roles`), or claim value formats differ (e.g. GUIDs vs string names).
 * **Fix:** Inspect the unencrypted JWT token payload to confirm the exact claim key name and array contents, then update `groups[].claims` in `agentcontrol-policy.yaml`.
+
+---
+
+## 9. Durable `provider_subject` & Ambiguity-Safe Account Linking
+
+Agent Control binds external OIDC users to their durable, immutable **`provider_subject`** (the OIDC `sub` claim) rather than mutable email strings.
+
+### Key Identity Invariants:
+1. **Durable Subject Mapping:** A user account is permanently bound to `(organization_id, auth_provider_id, provider_subject)` with a database unique index.
+2. **Ambiguity Guard:** If an incoming OIDC login matches multiple candidate accounts in the organization by email, automated linking halts immediately with HTTP `409 Conflict`.
+3. **Safe Migration Backfill:** Existing SSO users with `provider_subject = NULL` are automatically backfilled on their next valid cryptographic OIDC login using the ID token `sub` claim.
+4. **Immutable Issuer Invariant:** In `auth_providers`, `issuer_url` cannot be changed after creation. Changing an IdP issuer requires provisioning a new auth provider ID.
+
+---
+
+## 10. Multi-Step Linking & Administrative Privilege Protection
+
+To prevent identity hijacking and privilege escalation, Agent Control enforces strict role-based linking boundaries:
+
+```
+OIDC Verified Login
+       │
+       ▼
+Matching Account Found?
+       │
+       ├── No ──────────► JIT Provision New User (Role: MEMBER)
+       │
+       └── Yes
+            │
+            ├── Role is ADMIN or OWNER?
+            │     └─► ⛔ BLOCKED (HTTP 403 Forbidden)
+            │         Requires explicit linking authorization in Admin Console
+            │
+            └── Role is MEMBER with Local Password?
+                  └─► 🔒 Issue 5-Minute Single-Use Linking Challenge
+                      Redirects to `/auth/link/confirm`
+                      Requires local password verification (Max 5 attempts)
+```
+
+- **Administrative Accounts (`ADMIN` / `OWNER`):** Self-service automatic linking is blocked. Administrators must sign in using local credentials or authorize identity binding from within the Admin Console.
+- **Member Accounts (`MEMBER`):** Local password users are issued a single-use 5-minute linking challenge token (`/auth/link/confirm`). The user must enter their existing password to authorize binding the OIDC subject.
+
+---
+
+## 11. IdP Diagnostic Probes & Host-Bound Break-Glass Recovery
+
+### 1. Real-Time OIDC Diagnostic Probe
+Validate IdP connectivity, endpoint discovery, and JWKS reachability:
+
+```bash
+curl -X POST http://localhost:8085/api/v1/auth/providers/{provider_id}/test \
+  -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>"
+```
+
+**Response Example:**
+```json
+{
+  "status": "healthy",
+  "provider": "Google Workspace",
+  "type": "google",
+  "discovery": {
+    "issuer": "https://accounts.google.com",
+    "authorization_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "token_endpoint": "https://oauth2.googleapis.com/token",
+    "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
+    "userinfo_endpoint": "https://openidconnect.googleapis.com/v1/userinfo"
+  }
+}
+```
+
+### 2. Host-Bound Break-Glass Recovery CLI
+If IdP configuration errors lock administrators out of the Control Hub, generate an emergency recovery token directly on the server host:
+
+```bash
+# Execute on the Control Hub server or container:
+agentcontrol-admin break-glass --org-id 00000000-0000-0000-0000-000000000001 --email admin@agentcontrol.local
+```
+
+```text
+✔ Emergency Break-Glass Token Generated
+────────────────────────────────────────────────────────────────────────
+  Organization ID: 00000000-0000-0000-0000-000000000001
+  Target Admin:    admin@agentcontrol.local
+  Recovery Token:  bg_dGVzdF9icmVha19nbGFzc190b2tlbg
+  Redemption URL:  http://127.0.0.1:8081/break-glass
+  Validity:        15 minutes (Single-Use Only)
+────────────────────────────────────────────────────────────────────────
+⚠ WARNING: Redeeming this token will grant emergency owner access.
+```
+
+Redeem the token at `http://localhost:8081/break-glass` or via `POST /api/v1/auth/break-glass`. Upon redemption, all prior tenant sessions are invalidated and an emergency owner session is established.
+

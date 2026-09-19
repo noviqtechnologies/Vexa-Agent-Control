@@ -78,6 +78,17 @@ When you update `agentcontrol-policy.yaml` on the Hub:
 
 ---
 
+## Step 4: Configuring OIDC SSO & Break-Glass Recovery
+
+1. **Configure OIDC SSO:** In the Hub Web Console at `https://<HUB_HOST>/settings/auth-providers`, select your provider (Google Workspace, Microsoft Entra ID, Okta, Keycloak, or Generic OIDC) and enter your Client ID, Secret, and Issuer URL.
+2. **Emergency Break-Glass:** If an SSO misconfiguration locks you out of the Hub, execute the break-glass CLI on the server container host:
+   ```bash
+   docker compose -f docker-compose.team.secure.yml exec control-plane /app/agentcontrol-admin break-glass --email admin@yourcompany.com
+   ```
+   Redeem the 15-minute token at `https://<HUB_HOST>/break-glass` to restore Owner access immediately.
+
+---
+
 ## Maintenance & Backups
 
 - **Data Persistence:** Hub PostgreSQL database is persisted in the `vexa-postgres-data` Docker volume.
@@ -89,3 +100,4 @@ When you update `agentcontrol-policy.yaml` on the Hub:
   ```bash
   docker compose -f docker-compose.team.secure.yml down
   ```
+

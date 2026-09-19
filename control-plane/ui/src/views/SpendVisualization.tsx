@@ -319,8 +319,9 @@ export default function SpendVisualization() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {isDevice && <span style={{ fontSize: 15 }}>💻</span>}
+                      {groupBy === 'user' && <span style={{ fontSize: 15 }}>🧑</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <strong style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: isDevice && hasDistinctName ? 'inherit' : 'var(--font-mono)' }}>
+                        <strong style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: (isDevice || groupBy === 'user') && hasDistinctName ? 'inherit' : 'var(--font-mono)' }}>
                           {displayName}
                         </strong>
                         {hasDistinctName && (

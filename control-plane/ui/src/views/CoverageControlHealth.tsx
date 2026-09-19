@@ -87,7 +87,7 @@ export default function CoverageControlHealth() {
       <div className="stats-grid stats-grid-5">
         <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('all')}>
           <div className="stat-header-row">
-            <div className="stat-label">Fleet Protection Score</div>
+            <div className="stat-label">FLEET PROTECTION SCORE</div>
             <span className={`soc-delta-badge ${score >= 90 ? 'delta-success' : score >= 70 ? 'delta-warning' : 'delta-danger'}`}>
               Health
             </span>
@@ -105,7 +105,7 @@ export default function CoverageControlHealth() {
 
         <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('protected')}>
           <div className="stat-header-row">
-            <div className="stat-label">Protected Workstations</div>
+            <div className="stat-label">PROTECTED WORKSTATIONS</div>
             <span className="soc-delta-badge delta-success">Live</span>
           </div>
           <div className="stat-value" style={{ color: '#10b981' }}>
@@ -250,7 +250,10 @@ export default function CoverageControlHealth() {
                         </div>
                       </td>
                       <td style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>
-                        {w.user_identifier}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>🧑</span>
+                          <span style={{ color: '#f8fafc' }}>{w.user_identifier || 'Unassigned'}</span>
+                        </div>
                       </td>
                       <td style={{ fontSize: 12.5 }}>
                         <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{w.os}</span>

@@ -305,6 +305,7 @@ export default function DeviceGovernance() {
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #333' }}>
                 <th style={{ padding: '12px' }}>Device ID</th>
                 <th style={{ padding: '12px' }}>Hostname</th>
+                <th style={{ padding: '12px' }}>Developer / Owner</th>
                 <th style={{ padding: '12px' }}>OS & Arch</th>
                 <th style={{ padding: '12px' }}>Status</th>
                 <th style={{ padding: '12px' }}>Wrapped IDEs</th>
@@ -317,6 +318,17 @@ export default function DeviceGovernance() {
                 <tr key={d.device_id} style={{ borderBottom: '1px solid #222' }}>
                   <td style={{ padding: '12px', fontFamily: 'monospace' }}>{d.device_id}</td>
                   <td style={{ padding: '12px', fontWeight: 500 }}>{d.hostname}</td>
+                  <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>🧑</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{d.owner_subject || 'Unassigned'}</span>
+                      {d.auth_provider_type && (
+                        <span className="badge" style={{ fontSize: 10, padding: '1px 5px', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                          {d.auth_provider_type}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px' }}>
                     <span className="badge" style={{ textTransform: 'uppercase', fontSize: '11px' }}>
                       {d.os_family} / {d.os_arch}

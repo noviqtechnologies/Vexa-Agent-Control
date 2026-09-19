@@ -265,7 +265,7 @@ func (h *DeviceV2Handler) AcknowledgeAssignment(w http.ResponseWriter, r *http.R
 		http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated device is not the target of this assignment"}}`, http.StatusForbidden)
 		return
 	}
-	if targetAsgn.TargetType == "user" && principal.UserID != "" && targetAsgn.TargetID != principal.UserID {
+	if targetAsgn.TargetType == "user" && principal.UserID != nil && *principal.UserID != "" && targetAsgn.TargetID != *principal.UserID {
 		http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated user is not the target of this assignment"}}`, http.StatusForbidden)
 		return
 	}
@@ -302,8 +302,8 @@ func (h *DeviceV2Handler) SubmitVerificationProbe(w http.ResponseWriter, r *http
 	if req.DeviceID == "" {
 		req.DeviceID = principal.DeviceID
 	}
-	if req.UserID == "" {
-		req.UserID = principal.UserID
+	if req.UserID == "" && principal.UserID != nil {
+		req.UserID = *principal.UserID
 	}
 
 	if req.AssignmentID != "" {
@@ -312,7 +312,7 @@ func (h *DeviceV2Handler) SubmitVerificationProbe(w http.ResponseWriter, r *http
 				http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated device is not the target of verified assignment"}}`, http.StatusForbidden)
 				return
 			}
-			if asgn.TargetType == "user" && principal.UserID != "" && asgn.TargetID != principal.UserID {
+			if asgn.TargetType == "user" && principal.UserID != nil && *principal.UserID != "" && asgn.TargetID != *principal.UserID {
 				http.Error(w, `{"error":{"code":"forbidden_assignment_target","message":"authenticated user is not the target of verified assignment"}}`, http.StatusForbidden)
 				return
 			}
@@ -365,7 +365,11 @@ func (h *DeviceV2Handler) ListDeviceAssignments(w http.ResponseWriter, r *http.R
 		orgID = store.DefaultOrgID
 	}
 
-	assignments, err := h.Store.ListAssignmentsForDevice(r.Context(), orgID, principal.DeviceID, principal.UserID)
+	var targetUserID string
+	if principal.UserID != nil {
+		targetUserID = *principal.UserID
+	}
+	assignments, err := h.Store.ListAssignmentsForDevice(r.Context(), orgID, principal.DeviceID, targetUserID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":{"code":"list_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)
 		return
@@ -538,6 +542,8 @@ func (h *DeviceV2Handler) ListDevicesV2(w http.ResponseWriter, r *http.Request) 
 		DeviceID         string    `json:"device_id"`
 		StableDeviceID   string    `json:"stable_device_id"`
 		DisplayName      string    `json:"display_name"`
+		OwnerSubject     string    `json:"owner_subject,omitempty"`
+		AuthProviderType string    `json:"auth_provider_type,omitempty"`
 		OSFamily         string    `json:"os_family"`
 		Architecture     string    `json:"architecture"`
 		Status           string    `json:"status"`
@@ -579,6 +585,8 @@ func (h *DeviceV2Handler) ListDevicesV2(w http.ResponseWriter, r *http.Request) 
 			DeviceID:         d.DeviceID,
 			StableDeviceID:   d.DeviceID,
 			DisplayName:      d.Hostname,
+			OwnerSubject:     d.OwnerSubject,
+			AuthProviderType: d.AuthProviderType,
 			OSFamily:         d.OSFamily,
 			Architecture:     d.OSArch,
 			Status:           status,

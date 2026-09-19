@@ -177,3 +177,45 @@ curl -X POST https://console.vexasec.io/api/v1/operator/organizations/<ORG_ID>/r
     "is_trial": false
   }'
 ```
+
+---
+
+## 8. Host-Bound Emergency Break-Glass Recovery
+
+When IdP misconfigurations, certificate expirations, or third-party outages lock administrators out of the Control Hub, operators can generate a single-use break-glass token directly on the server or container host.
+
+### 1. Generating the Break-Glass Token
+Execute on the Control Hub server or within the Docker container:
+```bash
+agentcontrol-admin break-glass --org-id 00000000-0000-0000-0000-000000000001 --email admin@agentcontrol.local
+```
+
+**Output:**
+```text
+✔ Emergency Break-Glass Token Generated
+────────────────────────────────────────────────────────────────────────
+  Organization ID: 00000000-0000-0000-0000-000000000001
+  Target Admin:    admin@agentcontrol.local
+  Recovery Token:  bg_dGVzdF9icmVha19nbGFzc190b2tlbg
+  Redemption URL:  http://127.0.0.1:8081/break-glass
+  Validity:        15 minutes (Single-Use Only)
+────────────────────────────────────────────────────────────────────────
+⚠ WARNING: Redeeming this token will grant emergency owner access.
+```
+
+### 2. Redeeming the Token
+1. Open `http://<hub-url>/break-glass` in your browser.
+2. Enter the recovery token (`bg_...`) and submit.
+3. Upon redemption, all previous tenant sessions are invalidated and an emergency Owner session is issued.
+
+---
+
+## 9. OIDC Provider Diagnostic Probing
+
+Verify provider connectivity, discovery metadata, and JWKS key retrieval in real time:
+
+```bash
+curl -X POST https://console.vexasec.io/api/v1/auth/providers/<PROVIDER_ID>/test \
+  -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>"
+```
+

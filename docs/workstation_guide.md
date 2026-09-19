@@ -95,7 +95,19 @@ For advanced or scripted scenarios where you need direct service control after a
 ```bash
 # Check daemon health (works after login or service install)
 agentcontrol service status
+```
 
+Example Output:
+```text
+● Vexa Agent Control Daemon Health Inspection
+  OS Platform:        windows (x86_64)
+  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
+  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
+  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
+```
+
+```bash
 # System-level enterprise install (requires Administrator / root; no prior enrollment needed)
 agentcontrol service install --enterprise --hub-url "https://app.vexasec.io"
 
@@ -113,6 +125,7 @@ agentcontrol service uninstall
   - **Windows:** Standard user uses zero-admin Windows User Startup (`HKCU\Run`) or Task Scheduler; enterprise mode uses Windows SCM Service (`AgentControlSentry`).
 - **Self-Contained Configuration (`daemon.json`):** Configuration and secrets are stored in `~/.agentcontrol/daemon.json` (`0600` permissions on Unix) or `%PROGRAMDATA%\VexaAgentControl\daemon.json`, avoiding process table leaks and supervisor environment variable incompatibilities.
 - **Truthful Status Inspection:** `agentcontrol service status` conducts an authentic HTTP handshake against `/api/v1/health`, measuring latency, process PID, policy safe mode status, and Hub authentication. If the process is running manually without a registered OS service, it explicitly reports `DEGRADED (Unmanaged)`.
+- **Zero-Trust Identity Separation:** Device keys verify hardware identity (`DeviceVerified`), while human developer identities are attested via OIDC / Hub tokens (`HumanIdentityVerified`). External user spoofing headers (`X-AgentControl-User-Id`) are strictly rejected.
 
 **Permanent PATH configuration (run once — survives terminal restarts):**
 

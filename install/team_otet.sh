@@ -23,7 +23,7 @@ fi
 PROD_HUB_URL="https://console.vexasec.io"
 STAGE_HUB_URL="https://console-stage.vexasec.io"
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.88"
+FALLBACK_VERSION="v1.0.89"
 
 VERSION="${AGENTCONTROL_VERSION:-}"
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"

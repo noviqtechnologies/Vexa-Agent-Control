@@ -365,18 +365,46 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 
 	// 5. Record Request Attribution for Identity Verification (REQ-VER-003)
 	if h.Store != nil {
-		devID := principal.DeviceID
-		userID := principal.UserID
-		if userID == "" {
-			userID = r.Header.Get("X-AgentControl-User-Id")
+		devID := "unknown"
+		var userID string
+		var idSource string
+		var idVerified bool
+
+		if principal != nil {
+			devID = principal.DeviceID
+			if principal.UserID != nil && *principal.UserID != "" {
+				userID = *principal.UserID
+				idSource = principal.IdentitySource
+				if idSource == "" {
+					idSource = "oidc"
+				}
+				idVerified = principal.HumanIdentityVerified
+			} else {
+				// No authenticated human attached to device principal
+				headerUser := r.Header.Get("X-AgentControl-User-Id")
+				if headerUser != "" {
+					userID = headerUser
+					idSource = "unverified_header"
+					idVerified = false
+				} else {
+					userID = "local-workstation"
+					idSource = "local_os"
+					idVerified = false
+				}
+			}
+		} else {
+			headerUser := r.Header.Get("X-AgentControl-User-Id")
+			if headerUser != "" {
+				userID = headerUser
+				idSource = "unverified_header"
+				idVerified = false
+			} else {
+				userID = "local-workstation"
+				idSource = "local_os"
+				idVerified = false
+			}
 		}
-		if userID == "" {
-			userID = "local-workstation"
-		}
-		idSource := principal.IdentitySource
-		if idSource == "" {
-			idSource = "local_os"
-		}
+
 		asgnID := r.Header.Get("X-AgentControl-Assignment-Id")
 		if asgnID == "" {
 			asgnID = r.Header.Get("X-Assignment-ID")
@@ -396,7 +424,7 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			DeviceID:         devID,
 			UserID:           userID,
 			IdentitySource:   idSource,
-			IdentityVerified: principal.IdentityVerified,
+			IdentityVerified: idVerified,
 			AssignmentID:     asgnIDPtr,
 			Provider:         req.Provider,
 			Model:            req.Model,
@@ -743,22 +771,44 @@ func (h *BrokerV2Handler) handleStreamingDispatch(
 	if h.Store != nil {
 		principal, _ := middleware.GetDevicePrincipal(r.Context())
 		devID := "unknown"
-		userID := "local-workstation"
-		idSource := "local_os"
-		idVerified := false
+		var userID string
+		var idSource string
+		var idVerified bool
+
 		if principal != nil {
 			devID = principal.DeviceID
-			if principal.UserID != "" {
-				userID = principal.UserID
-			}
-			if principal.IdentitySource != "" {
+			if principal.UserID != nil && *principal.UserID != "" {
+				userID = *principal.UserID
 				idSource = principal.IdentitySource
+				if idSource == "" {
+					idSource = "oidc"
+				}
+				idVerified = principal.HumanIdentityVerified
+			} else {
+				headerUser := r.Header.Get("X-AgentControl-User-Id")
+				if headerUser != "" {
+					userID = headerUser
+					idSource = "unverified_header"
+					idVerified = false
+				} else {
+					userID = "local-workstation"
+					idSource = "local_os"
+					idVerified = false
+				}
 			}
-			idVerified = principal.IdentityVerified
+		} else {
+			headerUser := r.Header.Get("X-AgentControl-User-Id")
+			if headerUser != "" {
+				userID = headerUser
+				idSource = "unverified_header"
+				idVerified = false
+			} else {
+				userID = "local-workstation"
+				idSource = "local_os"
+				idVerified = false
+			}
 		}
-		if u := r.Header.Get("X-AgentControl-User-Id"); u != "" {
-			userID = u
-		}
+
 		assignmentID := r.Header.Get("X-AgentControl-Assignment-Id")
 		if assignmentID == "" {
 			assignmentID = r.Header.Get("X-Assignment-ID")

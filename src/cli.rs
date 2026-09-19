@@ -133,8 +133,6 @@ pub enum Commands {
     },
 
     /// Manage Agent Control persistent OS Sentry Service Daemon
-    /// (Advanced / power-user command. Run 'agentcontrol login' for zero-touch setup.)
-    #[command(hide = true)]
     Service {
         #[command(subcommand)]
         action: ServiceCliAction,

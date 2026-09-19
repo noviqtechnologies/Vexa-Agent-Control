@@ -47,6 +47,15 @@ const mockAlerts: RedactedAlert[] = [
   },
 ]
 
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
+
 vi.mock('../api/client', async () => {
   const actual = await vi.importActual<typeof import('../api/client')>('../api/client')
   return {
@@ -109,7 +118,7 @@ describe('FleetOverview', () => {
     expect(screen.getByText('15')).toBeInTheDocument()
   })
 
-  it('renders agent stat tiles with correct titles', async () => {
+  it('renders agent stat tiles with correct titles and navigation/click actions', async () => {
     vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
     vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
     vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
@@ -123,9 +132,23 @@ describe('FleetOverview', () => {
 
     const totalAgentsTile = screen.getByText('Total Agents').closest('.stat-tile')!
     const activeTile = screen.getByText('Active Agents').closest('.stat-tile')!
+    const totalEventsTile = screen.getByText('Total Events').closest('.stat-tile')!
+    const deniedTile = screen.getByText('Denied').closest('.stat-tile')!
 
-    expect(totalAgentsTile.getAttribute('title')).toBe('Total Registered AI Agents')
-    expect(activeTile.getAttribute('title')).toBe('Active Compliant AI Agents')
+    expect(totalAgentsTile.getAttribute('title')).toBe('Click to view all registered AI agents')
+    expect(activeTile.getAttribute('title')).toBe('Click to view active compliant AI agents')
+
+    // Click Total Events -> navigate to /observability/logs?tab=security_logs
+    fireEvent.click(totalEventsTile)
+    expect(mockNavigate).toHaveBeenCalledWith('/observability/logs?tab=security_logs')
+
+    // Click Denied -> navigate to /observability/logs?tab=security_logs&decision=denied
+    fireEvent.click(deniedTile)
+    expect(mockNavigate).toHaveBeenCalledWith('/observability/logs?tab=security_logs&decision=denied')
+
+    // Click Total Agents & Active Agents
+    fireEvent.click(activeTile)
+    fireEvent.click(totalAgentsTile)
   })
 
   it('renders agent table', async () => {

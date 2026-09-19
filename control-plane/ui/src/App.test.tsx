@@ -74,7 +74,7 @@ describe('App routing', () => {
     expect(await screen.findByTestId('license-settings')).toBeInTheDocument()
   })
 
-  it('blocks non-admin user with Access Denied screen', async () => {
+  it('directs non-admin member to /quickstart and shows Developer Quickstart navigation while restricting /fleet', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -88,11 +88,31 @@ describe('App routing', () => {
       }),
     }))
 
-    renderAt('/fleet')
+    renderAt('/quickstart')
+    expect(await screen.findByText(/Developer Quickstart & Gateway Setup/i)).toBeInTheDocument()
+    expect(screen.getByText('Developer Quickstart')).toBeInTheDocument()
+    expect(screen.queryByText('Team & Organization')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fleet Overview')).not.toBeInTheDocument()
+  })
+
+  it('blocks non-admin user from admin routes with Access Denied screen', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        user_id: 'developer@example.com',
+        organization_id: '00000000-0000-0000-0000-000000000001',
+        tenant_id: '00000000-0000-0000-0000-000000000001',
+        organization_name: 'Acme Corp',
+        is_admin: false,
+        is_saas_operator: false,
+        role: 'MEMBER',
+      }),
+    }))
+
+    renderAt('/admin/users')
     expect(await screen.findByText(/Access Restricted: Administrator Role Required/i)).toBeInTheDocument()
-    expect(screen.getByText(/developer@example.com/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/developer@example.com/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/Member \(Non-Admin\)/i)).toBeInTheDocument()
-    expect(screen.queryByTestId('fleet-overview')).not.toBeInTheDocument()
   })
 })
 

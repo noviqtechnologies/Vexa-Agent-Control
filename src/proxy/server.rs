@@ -689,6 +689,14 @@ fn is_ip_loopback(addr: &std::net::IpAddr) -> bool {
     }
 }
 
+fn is_insecure_default_token(token: &str) -> bool {
+    let lower = token.trim().to_lowercase();
+    matches!(
+        lower.as_str(),
+        "admin123456" | "admin" | "admin123!" | "admin12345678" | "password" | "root" | "123456"
+    )
+}
+
 fn is_authorized_management(
     client_ip: &str,
     auth_header: Option<&str>,
@@ -697,8 +705,23 @@ fn is_authorized_management(
     if is_loopback(client_ip) {
         return true;
     }
+    let is_dev_mode = std::env::var("AGENTCONTROL_DEV_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     if let Some(auth) = auth_header {
         if let Some(token) = auth.strip_prefix("Bearer ") {
+            let token = token.trim();
+            if token.is_empty() {
+                return false;
+            }
+            if !is_dev_mode && is_insecure_default_token(token) {
+                eprintln!(
+                    "[SECURITY] Rejected insecure default admin token from client IP {}. Configure a secure high-entropy AGENTCONTROL_ADMIN_TOKEN or enable dev mode.",
+                    client_ip
+                );
+                return false;
+            }
             if let Some(expected) = admin_token {
                 if !expected.is_empty() && token == expected {
                     return true;
@@ -2892,5 +2915,30 @@ mod tests {
         assert!(!is_loopback("127.0.0.1.attacker.com")); // Subdomain prefix spoofing
         assert!(!is_loopback("127.attacker.com"));
         assert!(!is_loopback("192.168.1.1:8080"));
+    }
+
+    #[test]
+    fn test_is_insecure_default_token() {
+        assert!(is_insecure_default_token("admin123456"));
+        assert!(is_insecure_default_token("Admin123456"));
+        assert!(is_insecure_default_token("admin"));
+        assert!(is_insecure_default_token("admin123!"));
+        assert!(is_insecure_default_token("password"));
+        assert!(is_insecure_default_token("root"));
+        assert!(!is_insecure_default_token("secr3t_t0k3n_x98234jkhsdf"));
+    }
+
+    #[test]
+    fn test_is_authorized_management() {
+        // Loopback is always authorized
+        assert!(is_authorized_management("127.0.0.1", None, None));
+        assert!(is_authorized_management("::1", None, None));
+
+        // Non-loopback with weak token is rejected outside dev mode
+        assert!(!is_authorized_management("192.168.1.50", Some("Bearer admin123456"), Some("admin123456")));
+
+        // Non-loopback with high-entropy token is accepted when matching
+        assert!(is_authorized_management("192.168.1.50", Some("Bearer secr3t_token_983214"), Some("secr3t_token_983214")));
+        assert!(!is_authorized_management("192.168.1.50", Some("Bearer wrong_token"), Some("secr3t_token_983214")));
     }
 }

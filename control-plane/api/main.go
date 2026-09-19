@@ -257,6 +257,8 @@ func main() {
 	r.Post("/api/v1/auth/token", pkceH.Token)
 	r.Get("/login", authH.HandleLoginView)
 	r.Post("/login", authH.Login)
+	r.Get("/auth/link/confirm", authH.HandleLinkConfirmView)
+	r.Get("/break-glass", authH.HandleBreakGlassView)
 
 	legacyAuthCfg := middleware.LegacyAuthConfig{
 		LegacySingleTenantMode: true,
@@ -420,9 +422,14 @@ func main() {
 	r.Route("/api/v1/auth", func(r chi.Router) {
 		r.Post("/login", authH.Login)
 		r.Post("/logout", authH.Logout)
+		r.Get("/logout", authH.Logout)
 		r.Get("/providers", authH.ListPublicProviders)
 		r.Get("/oauth/{provider_id}/login", authH.OAuthLogin)
 		r.Get("/oauth/{provider_id}/callback", authH.OAuthCallback)
+		r.Post("/link/confirm", authH.ConfirmAccountLink)
+		r.Post("/break-glass", authH.BreakGlassLogin)
+		r.Post("/providers/{provider_id}/test", authH.TestAuthProvider)
+		r.Get("/providers/{provider_id}/test", authH.TestAuthProvider)
 		r.With(middleware.DashboardAuth()).Get("/me", authH.Me)
 		r.With(middleware.DashboardAuth()).Post("/setup-initial-password", authH.SetupInitialPassword)
 	})
@@ -444,7 +451,6 @@ func main() {
 	// Dashboard API
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.DashboardAuth())
-		r.Use(middleware.RequireAdmin())
 
 		// Organization & License Management
 		r.With(middleware.RequireAdmin()).Get("/organization", licenseH.GetOrganization)
@@ -515,6 +521,9 @@ func main() {
 		// Users
 		r.With(middleware.RequireAdmin()).Get("/users", userH.List)
 		r.With(middleware.RequireAdmin()).Post("/users", userH.Create)
+		r.With(middleware.RequireAdmin()).Put("/users/{id}/role", userH.UpdateRole)
+		r.With(middleware.RequireAdmin()).Patch("/users/{id}/role", userH.UpdateRole)
+		r.With(middleware.RequireAdmin()).Put("/users/{id}", userH.UpdateRole)
 		r.Post("/users/{id}/password", userH.UpdatePassword)
 		r.Put("/users/{id}/password", userH.UpdatePassword)
 		r.With(middleware.RequireAdmin()).Delete("/users/{id}", userH.Delete)

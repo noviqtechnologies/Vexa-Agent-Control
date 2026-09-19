@@ -966,6 +966,8 @@ export interface RotationResult {
 export interface Device {
   device_id: string
   hostname: string
+  owner_subject?: string
+  auth_provider_type?: string
   os_arch: string
   os_family: string
   public_key: string
@@ -1110,6 +1112,8 @@ export interface SentryDeviceSummary {
   device_id: string
   hostname: string
   user_identifier: string
+  owner_subject?: string
+  auth_provider_type?: string
   os: string
   os_version: string
   overall_compliance: 'COMPLIANT' | 'NON_COMPLIANT' | 'OFFLINE'
@@ -1160,6 +1164,8 @@ export interface SentryDeviceDetail {
   organization_id: string
   hostname: string
   user_identifier: string
+  owner_subject?: string
+  auth_provider_type?: string
   os: string
   os_version: string
   public_key: string
@@ -1203,6 +1209,8 @@ export interface DeviceV2Item {
   device_id: string
   stable_device_id: string
   display_name: string
+  owner_subject?: string
+  auth_provider_type?: string
   os_family: string
   architecture: string
   status: string

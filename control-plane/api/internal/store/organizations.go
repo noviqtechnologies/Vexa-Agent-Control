@@ -90,6 +90,8 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 			id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 			auth_provider_id  UUID,
+			provider_subject  TEXT,
+			provider_issuer   TEXT,
 			email             TEXT NOT NULL,
 			password_hash     TEXT,
 			is_admin          BOOLEAN NOT NULL DEFAULT false,
@@ -100,8 +102,10 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 	`
-	_, err := s.pool.Exec(ctx, q)
-	return err
+	if _, err := s.pool.Exec(ctx, q); err != nil {
+		return err
+	}
+	return s.EnsureUsersSchema(ctx)
 }
 
 

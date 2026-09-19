@@ -103,15 +103,29 @@ Gateway                                               Control Hub API
 
 ---
 
-## 2. OIDC Identity Binding
+## 2. OIDC Identity Binding & SSO Federation
 
 Agent Control supports two distinct authentication paths:
 
 ### Path A: Instant Local Team Management (Default)
 Org Admins can immediately invite colleagues under **Users & Roles** using standard email and password credentials. No IdP configuration required.
 
-### Path B: Enterprise SSO Federation (Optional)
-When corporate identity compliance is required, bind your corporate Identity Provider (Okta, Microsoft Entra ID, Google Workspace, Keycloak) under **Auth Providers & SSO**.
+### Path B: OIDC & Enterprise SSO Federation
+When corporate identity compliance is required, bind your corporate Identity Provider under **Auth Providers & SSO**:
+- **Supported Providers:** Built-in presets for **Google Workspace** and **Microsoft Entra ID**, plus standard OpenID Connect discovery for **Okta**, **Auth0**, **Keycloak**, and **Clerk**.
+- **Durable Subject Mapping:** All users are permanently bound to `provider_subject` (the OIDC `sub` claim), ensuring identity continuity even if corporate email addresses change.
+- **Ambiguity Guard:** Prevents automated linking if multiple candidate user records match by email.
+- **Multi-Step Linking:** Local password `MEMBER` accounts require password verification challenge (`/auth/link/confirm`) before binding external SSO identities. Privileged `ADMIN` and `OWNER` accounts require explicit administrative authorization.
+- **OIDC Health Diagnostics:** Verify IdP endpoints and JWKS key retrieval via `POST /api/v1/auth/providers/{id}/test`.
+
+### Path C: Host-Bound Emergency Break-Glass Recovery
+If IdP configuration errors lock administrators out of the Control Hub, generate a single-use 15-minute emergency recovery token directly on the server/container host:
+```bash
+agentcontrol-admin break-glass --email admin@agentcontrol.local
+```
+Redeem the token at `http://localhost:8081/break-glass` or via `POST /api/v1/auth/break-glass` to instantly regain Owner access and invalidate compromised sessions.
+
+For complete identity architecture and claim mappings, see → [OIDC Identity Binding Guide](oidc_identity_binding.md).
 
 ---
 
