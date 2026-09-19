@@ -84,10 +84,10 @@ export default function CoverageControlHealth() {
       </div>
 
       {/* Top KPI Banner */}
-      <div className="stats-grid soc-stats-grid">
+      <div className="stats-grid stats-grid-5">
         <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('all')}>
           <div className="stat-header-row">
-            <div className="stat-label">FLEET PROTECTION SCORE</div>
+            <div className="stat-label">Fleet Protection Score</div>
             <span className={`soc-delta-badge ${score >= 90 ? 'delta-success' : score >= 70 ? 'delta-warning' : 'delta-danger'}`}>
               Health
             </span>
@@ -105,7 +105,7 @@ export default function CoverageControlHealth() {
 
         <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('protected')}>
           <div className="stat-header-row">
-            <div className="stat-label">PROTECTED WORKSTATIONS</div>
+            <div className="stat-label">Protected Workstations</div>
             <span className="soc-delta-badge delta-success">Live</span>
           </div>
           <div className="stat-value" style={{ color: '#10b981' }}>
@@ -116,7 +116,7 @@ export default function CoverageControlHealth() {
 
         <div className="card stat-tile soc-clickable-tile tile-danger" onClick={() => setFilter('action_needed')}>
           <div className="stat-header-row">
-            <div className="stat-label">EXPOSED / UNWRAPPED</div>
+            <div className="stat-label">Exposed / Unwrapped</div>
             <span className="soc-delta-badge delta-danger">{exposedCount > 0 ? 'Urgent' : '0'}</span>
           </div>
           <div className="stat-value" style={{ color: exposedCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
@@ -127,7 +127,7 @@ export default function CoverageControlHealth() {
 
         <div className="card stat-tile soc-clickable-tile tile-warning" onClick={() => setFilter('stale')}>
           <div className="stat-header-row">
-            <div className="stat-label">STALE HEARTBEATS</div>
+            <div className="stat-label">Stale Heartbeats</div>
             <span className="soc-delta-badge delta-warning">{staleCount > 0 ? 'Review' : '0'}</span>
           </div>
           <div className="stat-value" style={{ color: staleCount > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
@@ -138,7 +138,7 @@ export default function CoverageControlHealth() {
 
         <div className="card stat-tile soc-clickable-tile tile-danger">
           <div className="stat-header-row">
-            <div className="stat-label">TAMPER DETECTIONS (24H)</div>
+            <div className="stat-label">Tamper Detections</div>
             <span className="soc-delta-badge delta-danger">24H</span>
           </div>
           <div className="stat-value" style={{ color: (summary?.tamper_alerts_24h ?? 0) > 0 ? '#ef4444' : 'var(--text-muted)' }}>
@@ -210,8 +210,9 @@ export default function CoverageControlHealth() {
           <div className="loading" style={{ height: 220 }}>Inspecting workstation boundary health...</div>
         ) : filteredWorkstations.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize: 15, fontWeight: 500 }}>No developer workstations found matching the criteria.</p>
-            <p style={{ fontSize: 13, marginTop: 4 }}>Deploy and authenticate the Agent Control workstation daemon (<code>agentcontrol login</code>) to observe developer coverage.</p>
+            <div className="empty-state-icon">🛡️</div>
+            <p>No developer workstations found matching the criteria.</p>
+            <p>Deploy and authenticate the Agent Control workstation daemon (<code>agentcontrol login</code>) to observe developer coverage.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -233,29 +234,29 @@ export default function CoverageControlHealth() {
                   const isExposed = w.health_state === 'EXPOSED'
 
                   const badgeClass = isProtected
-                    ? 'green'
+                    ? 'badge-success'
                     : isExposed
-                    ? 'red'
+                    ? 'badge-danger'
                     : isStale
-                    ? 'amber'
-                    : 'red'
+                    ? 'badge-warning'
+                    : 'badge-danger'
 
                   return (
                     <tr key={w.device_id} className="runs-table-row">
                       <td>
-                        <strong style={{ fontSize: 13 }}>{w.hostname}</strong>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        <strong style={{ fontSize: 13.5, color: '#f8fafc' }}>{w.hostname}</strong>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
                           {w.device_id.slice(0, 10)}...
                         </div>
                       </td>
-                      <td style={{ fontSize: 13 }}>
+                      <td style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>
                         {w.user_identifier}
                       </td>
-                      <td style={{ fontSize: 12 }}>
-                        <span style={{ textTransform: 'capitalize' }}>{w.os}</span>
+                      <td style={{ fontSize: 12.5 }}>
+                        <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{w.os}</span>
                         <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>v{w.os_version}</span>
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {w.last_heartbeat_at ? (
                           new Date(w.last_heartbeat_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                         ) : (
@@ -263,14 +264,16 @@ export default function CoverageControlHealth() {
                         )}
                       </td>
                       <td>
-                        <span className={`badge ${badgeClass}`}>
-                          {w.health_state}
-                        </span>
-                        {w.tamper_count_24h > 0 && (
-                          <span className="badge red" style={{ marginLeft: 6 }} title="Tamper events detected in last 24h">
-                            🚨 {w.tamper_count_24h} Tamper
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className={`badge ${badgeClass}`}>
+                            {w.health_state}
                           </span>
-                        )}
+                          {w.tamper_count_24h > 0 && (
+                            <span className="badge badge-danger" title="Tamper events detected in last 24h">
+                              🚨 {w.tamper_count_24h} Tamper
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -279,12 +282,7 @@ export default function CoverageControlHealth() {
                             return (
                               <span
                                 key={ide.id}
-                                className={`badge ${isEnforced ? 'green' : 'gray'}`}
-                                style={{
-                                  fontSize: 11,
-                                  opacity: isEnforced ? 1 : 0.45,
-                                  border: isEnforced ? '1px solid rgba(16, 185, 129, 0.4)' : '1px dashed var(--border)',
-                                }}
+                                className={`soc-ide-chip ${isEnforced ? 'enforced' : 'unenforced'}`}
                                 title={`${ide.name}: ${ide.status}`}
                               >
                                 {isEnforced ? '🛡️' : '○'} {ide.name}

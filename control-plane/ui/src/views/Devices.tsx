@@ -347,7 +347,7 @@ export default function Devices() {
       </div>
 
       {/* Summary Metric Cards */}
-      <div className="stats-grid soc-stats-grid">
+      <div className="stats-grid stats-grid-4">
         <div className="card stat-tile soc-clickable-tile" onClick={() => setFilter('')} title="Filter All Enrolled Workstations">
           <div className="stat-header-row">
             <div className="stat-label">Total Enrolled Devices</div>
@@ -386,22 +386,34 @@ export default function Devices() {
       </div>
 
       {/* Sentry Compliance Posture Guide Card */}
-      <div className="card soc-panel" style={{ padding: '18px 22px', marginBottom: '24px' }}>
-        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span>🛡️</span> Understanding Multi-State Observability & Capability Vectors
+      <div className="card soc-panel" style={{ padding: '20px 24px', marginBottom: '24px' }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: '14px', fontWeight: 600 }}>
+          <span style={{ fontSize: 16 }}>🛡️</span> Understanding Multi-State Observability & Capability Vectors
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16, 185, 129, 0.25)', backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
-            <span style={{ color: 'var(--success)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● CAPABILITY VECTORS</span>
-            Indicates operational layers verified on endpoint: <code>CONFIGURED</code> (local proxy locked), <code>MCP_WRAPPED</code> (tools routed), and <code>TRAFFIC_VERIFIED</code> (attested LLM transactions).
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+          <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm, 8px)', border: '1px solid rgba(16, 185, 129, 0.25)', backgroundColor: 'rgba(16, 185, 129, 0.04)' }}>
+            <span style={{ color: '#34d399', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: '6px' }}>
+              ● CAPABILITY VECTORS
+            </span>
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              Operational layers verified on endpoint: <code className="soc-cap-chip">CONFIGURED</code> (local proxy locked), <code className="soc-cap-chip">MCP_WRAPPED</code> (tools routed), and <code className="soc-cap-chip">TRAFFIC_VERIFIED</code> (attested LLM transactions).
+            </p>
           </div>
-          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.25)', backgroundColor: 'rgba(245, 158, 11, 0.05)' }}>
-            <span style={{ color: 'var(--warning)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● FRESHNESS TIERS</span>
-            Continuous liveness tracking: <code>ACTIVE_FRESH</code> (≤ 15m), <code>ACTIVE_RECENT</code> (≤ 24h), or <code>STALE</code> (&gt; 24h since last authenticated telemetry exchange).
+          <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm, 8px)', border: '1px solid rgba(245, 158, 11, 0.25)', backgroundColor: 'rgba(245, 158, 11, 0.04)' }}>
+            <span style={{ color: '#fbbf24', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: '6px' }}>
+              ● FRESHNESS TIERS
+            </span>
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              Continuous liveness tracking: <code className="soc-cap-chip" style={{ color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.3)' }}>ACTIVE_FRESH</code> (≤ 15m), <code className="soc-cap-chip" style={{ color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.3)' }}>ACTIVE_RECENT</code> (≤ 24h), or <code className="soc-cap-chip" style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}>STALE</code> (&gt; 24h since last exchange).
+            </p>
           </div>
-          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.05)' }}>
-            <span style={{ color: 'var(--text-muted)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>● ED25519 IDENTITY ASSERTIONS</span>
-            Workstation agent assertions are signed using non-exportable hardware or OS-keyring Ed25519 keys with sliding replay protection.
+          <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm, 8px)', border: '1px solid rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.04)' }}>
+            <span style={{ color: '#94a3b8', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: '6px' }}>
+              ● ED25519 IDENTITY ASSERTIONS
+            </span>
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              Workstation agent assertions are signed using non-exportable hardware or OS-keyring Ed25519 keys with sliding replay protection.
+            </p>
           </div>
         </div>
       </div>
@@ -442,8 +454,9 @@ export default function Devices() {
           <div className="loading" style={{ padding: '32px' }}>Loading fleet devices...</div>
         ) : filteredDevices.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>No enrolled developer workstations found.</p>
-            <p style={{ fontSize: 13, marginTop: 6 }}>Run <code>agentcontrol login</code> on a developer workstation or click <strong>"+ Onboard Workstation"</strong> above to view setup instructions.</p>
+            <div className="empty-state-icon">💻</div>
+            <p>No enrolled developer workstations found.</p>
+            <p>Run <code>agentcontrol login</code> on a developer workstation or click <strong>"+ Onboard Workstation"</strong> above to view setup instructions.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -462,7 +475,7 @@ export default function Devices() {
               </thead>
               <tbody>
                 {filteredDevices.map((d, idx) => (
-                  <tr key={d.device_id || idx} style={{ transition: 'background-color 0.15s ease' }}>
+                  <tr key={d.device_id || idx}>
                     <td style={{ fontWeight: 600 }}>
                       <button
                         type="button"
@@ -471,45 +484,46 @@ export default function Devices() {
                           background: 'none',
                           border: 'none',
                           padding: 0,
-                          color: 'var(--accent-primary, #60a5fa)',
+                          color: '#60a5fa',
                           cursor: 'pointer',
                           fontWeight: 600,
                           textAlign: 'left',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 6,
+                          fontSize: '13.5px',
                         }}
                         title="Click to inspect workstation details, IDE configs, and public keys"
                       >
                         <span>{d.hostname || 'Unknown Host'}</span>
                         <span style={{ fontSize: 11, opacity: 0.7 }}>🔍</span>
                       </button>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
                         {d.device_id}
                       </div>
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{d.user_identifier || '—'}</td>
-                    <td>{getOsIcon(d.os)}</td>
+                    <td style={{ fontSize: 13 }}>{getOsIcon(d.os)}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         {(d as any).capability_vector && (d as any).capability_vector.length > 0 ? (
                           (d as any).capability_vector.map((c: string, ci: number) => (
-                            <span key={ci} className="badge badge-info" style={{ fontSize: 10, padding: '2px 6px' }}>
+                            <span key={ci} className="soc-cap-chip">
                               {c}
                             </span>
                           ))
                         ) : (
-                          <span className="badge badge-info" style={{ fontSize: 10 }}>CONFIGURED</span>
+                          <span className="soc-cap-chip">CONFIGURED</span>
                         )}
                       </div>
                     </td>
                     <td>
                       {(d as any).last_freshness === 'ACTIVE_FRESH' || getEffectiveCompliance(d) === 'COMPLIANT' ? (
-                        <span className="badge badge-success" style={{ fontSize: 11 }}>🟢 FRESH (&lt;15m)</span>
+                        <span className="soc-freshness-pill fresh">● FRESH (&lt;15m)</span>
                       ) : (d as any).last_freshness === 'ACTIVE_RECENT' ? (
-                        <span className="badge badge-warning" style={{ fontSize: 11 }}>🟡 RECENT (&lt;24h)</span>
+                        <span className="soc-freshness-pill recent">● RECENT (&lt;24h)</span>
                       ) : (
-                        <span className="badge badge-secondary" style={{ fontSize: 11 }}>🔴 STALE (&gt;24h)</span>
+                        <span className="soc-freshness-pill stale">● STALE (&gt;24h)</span>
                       )}
                     </td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
@@ -520,16 +534,7 @@ export default function Devices() {
                       <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         <button
                           type="button"
-                          className="btn btn-sm"
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: '11px',
-                            backgroundColor: 'var(--bg-surface-2, #27272a)',
-                            color: 'var(--text-main, #f4f4f5)',
-                            border: '1px solid var(--border, #3f3f46)',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                          }}
+                          className="soc-btn-inspect"
                           onClick={() => handleInspectDevice(d.device_id)}
                           title="Inspect deep telemetry, IDE configs, and tamper history"
                         >
@@ -537,8 +542,8 @@ export default function Devices() {
                         </button>
                         {d.enrollment_status !== 'REVOKED' && d.overall_compliance !== 'NON_COMPLIANT' ? (
                           <button
-                            className="btn btn-sm btn-danger"
-                            style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'var(--danger, #ef4444)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            type="button"
+                            className="soc-btn-revoke"
                             onClick={() => openRevokeModal(d.device_id, d.hostname)}
                             title="Revoke device PKI and gateway access"
                           >
@@ -549,16 +554,8 @@ export default function Devices() {
                             <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Revoked</span>
                             <button
                               type="button"
-                              className="btn btn-sm"
-                              style={{
-                                padding: '3px 8px',
-                                fontSize: '11px',
-                                backgroundColor: 'transparent',
-                                color: 'var(--danger, #ef4444)',
-                                border: '1px solid rgba(239, 68, 68, 0.4)',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                              }}
+                              className="soc-btn-revoke"
+                              style={{ padding: '3px 8px', fontSize: '11px' }}
                               onClick={() => handleDeleteDevice(d.device_id, d.hostname)}
                               title="Permanently remove revoked device from fleet inventory"
                             >

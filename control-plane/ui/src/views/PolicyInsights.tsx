@@ -117,7 +117,7 @@ export default function PolicyInsights() {
 
       {/* Stat tiles */}
       {status && (
-        <div className="stats-grid soc-stats-grid">
+        <div className="stats-grid stats-grid-4">
           <div className="card stat-tile soc-clickable-tile">
             <div className="stat-header-row">
               <div className="stat-label">Engine Status</div>

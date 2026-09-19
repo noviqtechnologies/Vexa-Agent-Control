@@ -189,7 +189,7 @@ export default function DeviceGovernance() {
       </div>
 
       {/* Stats Summary Tiles */}
-      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="stats-grid stats-grid-4">
         <div className="card stat-tile soc-clickable-tile" onClick={() => setStatusFilter('')} style={{ cursor: 'pointer' }}>
           <div className="stat-value">{totalDevices}</div>
           <div className="stat-label">Total Enrolled Devices</div>

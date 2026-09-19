@@ -116,7 +116,7 @@ export default function IdentityGovernance() {
       </div>
 
       {/* Summary stats */}
-      <div className="stats-grid soc-stats-grid">
+      <div className="stats-grid stats-grid-4">
         <div className="card stat-tile soc-clickable-tile">
           <div className="stat-header-row">
             <div className="stat-label">Total Credentials</div>
@@ -127,7 +127,7 @@ export default function IdentityGovernance() {
         </div>
         <div className="card stat-tile soc-clickable-tile">
           <div className="stat-header-row">
-            <div className="stat-label">Active</div>
+            <div className="stat-label">Active Credentials</div>
             <span className="soc-delta-badge delta-success">Live</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--success)' }}>
@@ -137,7 +137,7 @@ export default function IdentityGovernance() {
         </div>
         <div className="card stat-tile soc-clickable-tile tile-danger">
           <div className="stat-header-row">
-            <div className="stat-label">Expired</div>
+            <div className="stat-label">Expired / Revoked</div>
             <span className="soc-delta-badge delta-danger">Revoked</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--danger)' }}>
@@ -161,31 +161,31 @@ export default function IdentityGovernance() {
       </div>
 
       {/* Identity Posture Reference Guide */}
-      <div className="card soc-panel" style={{ padding: '18px 22px', marginBottom: '24px' }}>
-        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <div className="card soc-panel" style={{ padding: '20px 24px', marginBottom: '24px' }}>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>
           <span>🔐</span> Understanding Agent Identity & Scoped Credentials
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
           Agent Control enforces least-privilege Zero-Trust identity binding for AI daemons.
-          Credentials define tool scopes (e.g. <code>mcp:tools:execute</code>) and strict TTLs. Gateway proxies auto-rotate tokens based on security policies.
-        </div>
+          Credentials define tool scopes (e.g. <code className="soc-cap-chip">mcp:tools:execute</code>) and strict TTLs. Gateway proxies auto-rotate tokens based on security policies.
+        </p>
       </div>
 
       {/* Modal / Onboard Info */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ background: '#18181b', padding: '24px', borderRadius: '8px', maxWidth: '600px', width: '90%', border: '1px solid #27272a' }}>
-            <h3 style={{ marginTop: 0, color: '#f4f4f5' }}>Register / Issue Agent Credential</h3>
-            <p style={{ fontSize: '13px', color: '#a1a1aa' }}>
+        <div className="modal-overlay" onClick={() => setShowModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-surface-1, #18181b)', padding: '24px', borderRadius: '12px', maxWidth: '640px', width: '100%', border: '1px solid var(--border-default, #27272a)', boxShadow: '0 20px 30px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ marginTop: 0, color: '#f8fafc', fontSize: 17, fontWeight: 600 }}>Register / Issue Agent Credential</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               Credentials are issued automatically during agent onboarding or ingested via the control-plane ingest API:
             </p>
-            <pre style={{ background: '#09090b', padding: '12px', borderRadius: '6px', overflowX: 'auto', fontSize: '12px', color: '#38bdf8' }}>
+            <pre style={{ background: '#09090b', padding: '14px', borderRadius: '8px', overflowX: 'auto', fontSize: '12px', color: '#38bdf8', border: '1px solid rgba(255,255,255,0.08)', margin: '14px 0' }}>
               {sampleCurl}
             </pre>
-            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="soc-btn-secondary"
                 onClick={() => {
                   navigator.clipboard.writeText(sampleCurl)
                   setCopiedCurl(true)
@@ -196,7 +196,7 @@ export default function IdentityGovernance() {
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="soc-btn-primary"
                 onClick={() => setShowModal(false)}
               >
                 Close
@@ -208,13 +208,13 @@ export default function IdentityGovernance() {
 
       {/* Credential cards */}
       {credentials.length === 0 ? (
-        <div className="card empty-state" style={{ padding: '32px', textAlign: 'center' }}>
-          <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#a1a1aa' }}>
-            No agent credentials registered yet.
-          </p>
+        <div className="card soc-panel empty-state">
+          <div className="empty-state-icon">🔐</div>
+          <p>No agent credentials registered yet.</p>
+          <p style={{ marginBottom: 16 }}>Register or issue cryptographically signed agent credentials to bind daemons to granular tool scopes and security policies.</p>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="soc-btn-secondary"
             onClick={() => setShowModal(true)}
           >
             How to Ingest Credentials

@@ -69,7 +69,7 @@ export default function ThreatIntelligence() {
       </div>
 
       {summary && (
-        <div className="stats-grid soc-stats-grid">
+        <div className="stats-grid stats-grid-6">
           <div className="card stat-tile soc-clickable-tile">
             <div className="stat-header-row">
               <div className="stat-label">Total Findings</div>
@@ -81,7 +81,7 @@ export default function ThreatIntelligence() {
           <div className="card stat-tile soc-clickable-tile tile-info">
             <div className="stat-header-row">
               <div className="stat-label">DLP Violations</div>
-              <span className="soc-delta-badge delta-neutral">Data</span>
+              <span className="soc-delta-badge delta-info">Data</span>
             </div>
             <div className="stat-value" style={{ color: THREAT_COLORS.dlp }}>{summary.dlp_total.toLocaleString()}</div>
             <div className="stat-subtext">Redacted / blocked secrets</div>
@@ -122,7 +122,7 @@ export default function ThreatIntelligence() {
       )}
 
       <div className="card soc-panel">
-        <div className="soc-card-header">
+        <div className="soc-card-header" style={{ marginBottom: 16 }}>
           <div>
             <div className="card-title">Threat Timeline ({hours}h)</div>
             <div className="soc-card-subtitle">Telemetry trajectory of DLP violations, prompt injections, and semantic threats</div>
@@ -132,18 +132,18 @@ export default function ThreatIntelligence() {
 
         {timeline.length > 0 ? (
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={timeline}>
+            <AreaChart data={timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradDlp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.dlp} stopOpacity={0.3} />
+                  <stop offset="5%" stopColor={THREAT_COLORS.dlp} stopOpacity={0.35} />
                   <stop offset="95%" stopColor={THREAT_COLORS.dlp} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gradInj" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.injection} stopOpacity={0.3} />
+                  <stop offset="5%" stopColor={THREAT_COLORS.injection} stopOpacity={0.35} />
                   <stop offset="95%" stopColor={THREAT_COLORS.injection} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gradSem" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.semantic} stopOpacity={0.3} />
+                  <stop offset="5%" stopColor={THREAT_COLORS.semantic} stopOpacity={0.35} />
                   <stop offset="95%" stopColor={THREAT_COLORS.semantic} stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -151,20 +151,21 @@ export default function ThreatIntelligence() {
                 dataKey="hour"
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 tickFormatter={(v: string) => v.split(' ')[1] || v}
-                axisLine={false}
+                axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                 tickLine={false}
               />
               <YAxis
                 tick={{ fill: '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
+                allowDecimals={false}
               />
               <Tooltip
                 contentStyle={{
                   background: '#0e131f',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.15)',
                   borderRadius: 8,
-                  fontSize: 13,
+                  fontSize: 12.5,
                   boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
                   color: '#f8fafc',
                 }}
@@ -175,12 +176,15 @@ export default function ThreatIntelligence() {
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="empty-state">No threat data in this period</div>
+          <div className="empty-state">
+            <div className="empty-state-icon">🛡️</div>
+            <p>No threat activity recorded during this period.</p>
+          </div>
         )}
       </div>
 
       <div className="card soc-panel">
-        <div className="soc-card-header">
+        <div className="soc-card-header" style={{ marginBottom: 16 }}>
           <div>
             <div className="card-title">Top Threat Patterns</div>
             <div className="soc-card-subtitle">Most frequently triggered signatures, DLP entities, and injection heuristics</div>
@@ -193,26 +197,33 @@ export default function ThreatIntelligence() {
             <thead>
               <tr>
                 <th>Type</th>
-                <th>Pattern</th>
+                <th>Pattern Name</th>
                 <th>Category</th>
                 <th>Total Hits</th>
-                <th>Events</th>
+                <th>Events Affected</th>
               </tr>
             </thead>
             <tbody>
               {patterns.length === 0 ? (
-                <tr><td colSpan={5} className="empty-state">No patterns detected</td></tr>
+                <tr>
+                  <td colSpan={5}>
+                    <div className="empty-state" style={{ padding: '32px 0' }}>
+                      <div className="empty-state-icon">✔</div>
+                      <p>No threat signatures or DLP violations detected.</p>
+                    </div>
+                  </td>
+                </tr>
               ) : patterns.map((p, i) => (
-                <tr key={`${p.type}-${p.pattern_name}-${i}`} className="soc-table-row">
+                <tr key={`${p.type}-${p.pattern_name}-${i}`}>
                   <td>
                     <span className={`badge badge-${p.type === 'injection' ? 'danger' : p.type === 'dlp' ? 'info' : 'warning'}`}>
-                      {p.type}
+                      {p.type.toUpperCase()}
                     </span>
                   </td>
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} className="text-mono-id">{p.pattern_name}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{p.category || '—'}</td>
-                  <td><strong>{p.total_count.toLocaleString()}</strong></td>
-                  <td>{p.event_count.toLocaleString()}</td>
+                  <td><strong style={{ color: '#f8fafc' }}>{p.total_count.toLocaleString()}</strong></td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{p.event_count.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

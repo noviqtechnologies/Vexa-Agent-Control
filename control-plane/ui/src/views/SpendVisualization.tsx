@@ -98,7 +98,7 @@ export default function SpendVisualization() {
       </div>
 
       {/* 5-KPI High-Level Summary Grid */}
-      <div className="stats-grid soc-stats-grid" style={{ marginBottom: 24 }}>
+      <div className="stats-grid stats-grid-5" style={{ marginBottom: 24 }}>
         <div className="card stat-tile soc-clickable-tile">
           <div className="stat-header-row">
             <div className="stat-label">Total Settled Spend</div>
@@ -173,9 +173,10 @@ export default function SpendVisualization() {
         className="card"
         style={{
           marginBottom: 24,
-          padding: '16px 20px',
+          padding: '18px 22px',
           background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(56, 189, 248, 0.06) 100%)',
-          borderColor: 'rgba(16, 185, 129, 0.35)',
+          border: '1px solid rgba(16, 185, 129, 0.35)',
+          borderRadius: 'var(--radius, 12px)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -186,43 +187,44 @@ export default function SpendVisualization() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div
             style={{
-              fontSize: '1.6rem',
+              fontSize: '1.4rem',
               background: 'rgba(16, 185, 129, 0.15)',
               width: 44,
               height: 44,
-              borderRadius: 8,
+              borderRadius: 10,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               border: '1px solid rgba(16, 185, 129, 0.3)',
+              flexShrink: 0,
             }}
           >
             ⚡
           </div>
           <div>
-            <div style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '14.5px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               Enterprise Semantic Vector Caching &amp; Token Economics
-              <span className="soc-live-pill" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+              <span className="soc-live-pill" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.35)', fontSize: '10px' }}>
                 100% ZERO-EGRESS AVOIDED SPEND
               </span>
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.45 }}>
               Combined Dual-Tier Advantage: Sub-millisecond exact SHA-256 (L1) &amp; vector cosine similarity (L2) with partitioned in-memory vector cache / optional Qdrant integration. Eliminates WAN roundtrip latency (~2.4ms vs ~1,200ms) and prevents prompt data egress.
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0 }}>
           {totalCachedTokens > 0 && (
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Estimated Spend Saved</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Estimated Spend Saved</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
                 ~${approxSavedUSD.toFixed(4)} USD
               </div>
             </div>
           )}
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Estimated Egress Avoidance</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Estimated Egress Avoidance</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
               {totalCachedTokens ? `${((totalCachedTokens * 4) / 1024).toFixed(1)} KB WAN Saved` : 'Zero WAN Egress'}
             </div>
           </div>

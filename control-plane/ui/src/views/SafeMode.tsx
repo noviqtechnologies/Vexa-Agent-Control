@@ -64,7 +64,7 @@ export default function SafeMode() {
       </div>
 
       {/* Status tiles */}
-      <div className="stats-grid soc-stats-grid" style={{ marginBottom: 24 }}>
+      <div className="stats-grid stats-grid-5">
         <div className="card stat-tile soc-clickable-tile">
           <div className="stat-header-row">
             <div className="stat-label">Safe Mode Status</div>
@@ -97,7 +97,7 @@ export default function SafeMode() {
             <span className="soc-delta-badge delta-danger">FS Lock</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--danger)' }}>10</div>
-          <div className="stat-subtext">SSH, AWS, .env & shadow protection</div>
+          <div className="stat-subtext">SSH, AWS, .env & shadow</div>
         </div>
 
         <div className="card stat-tile soc-clickable-tile tile-warning">
@@ -111,37 +111,40 @@ export default function SafeMode() {
 
         <div className="card stat-tile soc-clickable-tile tile-info">
           <div className="stat-header-row">
-            <div className="stat-label">Network / SSRF Rules</div>
-            <span className="soc-delta-badge delta-neutral">Egress</span>
+            <div className="stat-label">Network / SSRF</div>
+            <span className="soc-delta-badge delta-info">Egress</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--accent)' }}>1</div>
           <div className="stat-subtext">Cloud metadata IMDS filter</div>
         </div>
       </div>
 
-      <div className="card soc-panel" style={{ marginBottom: 24 }}>
-        <div className="soc-card-header">
-          <div>
-            <div className="card-title">How Safe Mode Works</div>
-            <div className="soc-card-subtitle">Zero-configuration baseline protecting every agent execution</div>
+      <div className="card soc-panel" style={{ marginBottom: 24, padding: '20px 24px' }}>
+        <div className="soc-card-header" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🛡️</span>
+            <div>
+              <div className="card-title">How Safe Mode Works</div>
+              <div className="soc-card-subtitle">Zero-configuration baseline protecting every agent execution</div>
+            </div>
           </div>
           <span className="soc-live-pill">ZERO-CONFIG</span>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
           Safe Mode is <strong style={{ color: 'var(--text-primary)' }}>enabled by default</strong> and
           cannot be disabled at runtime. It applies before the policy engine — it protects agents even
-          in shadow mode (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'rgba(255,255,255,0.07)', padding: '1px 5px', borderRadius: 3 }}>agentcontrol dev</code>)
+          in shadow mode (<code className="soc-cap-chip">agentcontrol dev</code>)
           where no policy file is loaded. Each rule targets only the relevant parameter type (file
           path, command, or URL), minimizing false positives.
         </p>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 0 }}>
-          Source: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>src/policy/safe_mode.rs</code>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10, marginBottom: 0 }}>
+          Source: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#94a3b8' }}>src/policy/safe_mode.rs</code>
         </p>
       </div>
 
       {byCategory.map(({ category, rules }) => (
         <div className="card soc-panel" key={category} style={{ marginBottom: 24 }}>
-          <div className="soc-card-header">
+          <div className="soc-card-header" style={{ marginBottom: 16 }}>
             <div>
               <div className="card-title">{category}</div>
               <div className="soc-card-subtitle">{rules.length} active built-in protection patterns</div>
@@ -160,10 +163,12 @@ export default function SafeMode() {
               </thead>
               <tbody>
                 {rules.map(rule => (
-                  <tr key={rule.name} className="soc-table-row">
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{rule.name}</td>
+                  <tr key={rule.name}>
+                    <td style={{ fontWeight: 600, color: '#f8fafc', fontSize: 13 }}>{rule.name}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      {rule.pattern}
+                      <code style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 4 }}>
+                        {rule.pattern}
+                      </code>
                     </td>
                     <td>
                       <span className={`badge ${RISK_BADGE[rule.riskLevel]}`}>

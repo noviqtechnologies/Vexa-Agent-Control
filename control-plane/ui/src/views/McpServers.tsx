@@ -168,7 +168,7 @@ export default function McpServers() {
       )}
 
       {/* KPI Summary Tiles */}
-      <div className="stats-grid soc-stats-grid">
+      <div className="stats-grid stats-grid-4">
         <div className="card stat-tile">
           <div className="stat-header-row">
             <span className="stat-label">Total MCP Servers</span>

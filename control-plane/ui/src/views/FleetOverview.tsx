@@ -558,7 +558,7 @@ export default function FleetOverview() {
 
       {/* Stat tiles */}
       {displayStats && (
-        <div className="stats-grid soc-stats-grid">
+        <div className="stats-grid stats-grid-7">
           <div className="card stat-tile soc-clickable-tile" title="Total Registered AI Agents">
             <div className="stat-header-row">
               <div className="stat-label">Total Agents</div>
