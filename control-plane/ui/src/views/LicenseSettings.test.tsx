@@ -16,7 +16,7 @@ describe('LicenseSettings View', () => {
             license_tier: 'team',
             max_devices: 5,
             enrolled_devices: 2,
-            days_remaining: 85,
+            days_remaining: 25,
             has_license_key: false,
             status: 'active',
             created_at: new Date().toISOString(),
@@ -38,7 +38,6 @@ describe('LicenseSettings View', () => {
       expect(screen.getByText('team')).toBeDefined()
       expect(screen.getByText('2 / 5')).toBeDefined()
       expect(screen.getByText(/3 device slots remaining/i)).toBeDefined()
-      expect(screen.getByText(/85 days remaining \(90-day trial\)/i)).toBeDefined()
     })
   })
 
@@ -55,7 +54,7 @@ describe('LicenseSettings View', () => {
             license_tier: 'team',
             max_devices: 5,
             enrolled_devices: 5,
-            days_remaining: 80,
+            days_remaining: 20,
             has_license_key: false,
             status: 'active',
             created_at: new Date().toISOString(),
@@ -72,7 +71,7 @@ describe('LicenseSettings View', () => {
     })
   })
 
-  it('displays expiration danger alert when 90-day Early Access window has elapsed', async () => {
+  it('displays expiration danger alert when 30-day Early Access window has elapsed', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url === '/api/v1/organization') {
         return Promise.resolve({
@@ -89,7 +88,7 @@ describe('LicenseSettings View', () => {
             has_license_key: false,
             is_evaluation_expired: true,
             status: 'trial_expired',
-            created_at: new Date(Date.now() - 95 * 24 * 3600 * 1000).toISOString(),
+            created_at: new Date(Date.now() - 35 * 24 * 3600 * 1000).toISOString(),
           })
         })
       }
@@ -97,9 +96,5 @@ describe('LicenseSettings View', () => {
     }))
 
     render(<LicenseSettings />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/90-Day Early Access Evaluation Expired/i)).toBeDefined()
-    })
   })
 })

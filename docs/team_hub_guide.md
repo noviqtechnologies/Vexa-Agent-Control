@@ -141,7 +141,7 @@ Route high-risk tool execution prompts (e.g. `DROP DATABASE`, `aws iam attach-us
 ## 6. Multi-Tenant Teams & Zero-Trust BYOK
 
 The Team Control Hub provides isolated organization boundaries where all telemetry and credentials are scoped to your private organization UUID:
-- **Early Access Evaluation:** Enjoy full Team Hub capabilities for 90 days of evaluation with up to 5 devices (expanding to 50 devices post-v1.0 GA).
+- **Early Access Evaluation:** Enjoy full Team Hub capabilities for 30 days of evaluation with up to 5 devices (expanding to 50 devices post-v1.0 GA).
 - **Fleet Governance:** Real-time device enrollment tracking with automatic quota enforcement and instant capacity reclamation upon device revocation.
 - **Seamless Upgrade:** Converting to a dedicated Enterprise SLA or connecting > 5 devices occurs in-place via cryptographically signed Ed25519 tokens.
 
