@@ -163,5 +163,5 @@ agentcontrol disconnect claude
 
 To cleanly uninstall:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.sh | bash
 ```

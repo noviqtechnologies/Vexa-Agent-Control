@@ -337,7 +337,7 @@ To restore all IDE configurations and remove Agent Control binaries:
   agentcontrol service uninstall
 
   # 3. Run uninstaller script to remove binary and local files
-  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.sh | bash
   ```
 
 * **Windows (PowerShell):**
@@ -349,7 +349,7 @@ To restore all IDE configurations and remove Agent Control binaries:
   agentcontrol.exe service uninstall
 
   # 3. Run uninstaller script
-  irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
+  irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.ps1 | iex
   ```
 
 ### Kubernetes Helm Uninstallation

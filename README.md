@@ -966,12 +966,12 @@ To remove the binary, service daemons, and purge state files:
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.ps1 | iex
 ```
 
 Read the full [Removal & Recovery Guide](docs/reference/removal-and-recovery.md).

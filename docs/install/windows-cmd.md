@@ -96,5 +96,5 @@ agentcontrol.exe disconnect claude
 
 To cleanly uninstall:
 ```cmd
-powershell.exe -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex"
+powershell.exe -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.ps1 | iex"
 ```

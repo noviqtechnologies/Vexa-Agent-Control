@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.87"
+FALLBACK_VERSION="v1.0.88"
 
 if [[ -z "$VERSION" ]]; then
   echo "[*] Fetching latest release version from GitHub..."
@@ -88,12 +88,21 @@ echo "[*] Target version: $VERSION"
 
 LOCALBIN="$HOME/.local/bin"
 mkdir -p "$LOCALBIN"
+
 INSTALLED_VERSION=""
-if command -v agentcontrol &>/dev/null || [ -f "${LOCALBIN}/agentcontrol" ]; then
-  INSTALLED_VERSION=$("${LOCALBIN}/agentcontrol" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+BIN_FOR_VER=""
+if [ -x "${LOCALBIN}/agentcontrol" ]; then
+  BIN_FOR_VER="${LOCALBIN}/agentcontrol"
+elif command -v agentcontrol &>/dev/null; then
+  BIN_FOR_VER="$(command -v agentcontrol)"
 fi
 
-if [[ -n "$INSTALLED_VERSION" && "v${INSTALLED_VERSION}" == "$VERSION" ]]; then
+if [ -n "$BIN_FOR_VER" ]; then
+  INSTALLED_VERSION=$("$BIN_FOR_VER" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+fi
+
+RAW_TARGET_VER="${VERSION#v}"
+if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" == "$RAW_TARGET_VER" ]]; then
   echo ""
   echo "[✓] Vexa Agent Control $VERSION is already installed and up to date."
   exit 0
@@ -168,13 +177,16 @@ if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
 fi
 
 echo "[*] Installing binary to ${LOCALBIN}/agentcontrol..."
-cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
-chmod +x "${LOCALBIN}/agentcontrol"
+# Atomic file replacement avoids 'Text file busy' when daemon is running
+cp "$BINARY_PATH" "${LOCALBIN}/.agentcontrol.new"
+chmod +x "${LOCALBIN}/.agentcontrol.new"
+mv -f "${LOCALBIN}/.agentcontrol.new" "${LOCALBIN}/agentcontrol"
 
 QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
 if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
-  cp "$QUICKSTART_SRC" "${LOCALBIN}/quickstart_agent.py"
-  chmod +x "${LOCALBIN}/quickstart_agent.py"
+  cp "$QUICKSTART_SRC" "${LOCALBIN}/.quickstart_agent.py.new"
+  chmod +x "${LOCALBIN}/.quickstart_agent.py.new"
+  mv -f "${LOCALBIN}/.quickstart_agent.py.new" "${LOCALBIN}/quickstart_agent.py"
 fi
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then

@@ -22,6 +22,8 @@ fi
 
 PROD_HUB_URL="https://console.vexasec.io"
 STAGE_HUB_URL="https://console-stage.vexasec.io"
+REPO="noviqtechnologies/Vexa-Agent-Control"
+FALLBACK_VERSION="v1.0.88"
 
 VERSION="${AGENTCONTROL_VERSION:-}"
 TOKEN="${AGENTCONTROL_TOKEN:-${AGENTCONTROL_ENROLLMENT_TOKEN:-${AGENTWALL_TOKEN:-${AGENTWALL_ENROLLMENT_TOKEN:-}}}}"
@@ -121,17 +123,27 @@ if [[ -z "$TOKEN" ]]; then
 fi
 
 LOCALBIN="${HOME}/.local/bin"
-REPO="noviqtechnologies/Vexa-Agent-Control"
 
 if [[ -z "$VERSION" ]]; then
-  echo "[*] Fetching latest release version..."
-  VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
+  echo "[*] Fetching latest release version from GitHub..."
+  # 1. Primary: GitHub Releases API
+  VERSION=$(curl -sSf -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
     | grep '"tag_name"' \
     | head -1 \
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
+  # 2. Secondary: HTTP Redirect Scraping (immune to API 403 rate limits)
   if [[ -z "$VERSION" ]]; then
-    VERSION="v1.0.87"
+    VERSION=$(curl -sSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+      | grep -i "^location:" \
+      | sed -e 's/.*tag\///' \
+      | tr -d '\r\n' || true)
+  fi
+
+  # 3. Tertiary: Fallback version
+  if [[ -z "$VERSION" ]]; then
+    echo "[!] Notice: GitHub API resolution rate-limited or offline. Falling back to: ${FALLBACK_VERSION}"
+    VERSION="$FALLBACK_VERSION"
   fi
 fi
 
@@ -198,8 +210,18 @@ if [[ -z "$BINARY_PATH" || ! -f "$BINARY_PATH" ]]; then
   exit 1
 fi
 
-mv "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
-chmod +x "${LOCALBIN}/agentcontrol"
+# Atomic replacement avoids 'Text file busy' when daemon is running
+cp "$BINARY_PATH" "${LOCALBIN}/.agentcontrol.new"
+chmod +x "${LOCALBIN}/.agentcontrol.new"
+mv -f "${LOCALBIN}/.agentcontrol.new" "${LOCALBIN}/agentcontrol"
+
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+  elif [[ -f "$HOME/.zshrc" ]] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zshrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+  fi
+fi
 
 echo "[*] Initializing Enterprise Device Governance..."
 echo "[*] Step 1/3: PKI Device Enrollment..."
@@ -209,7 +231,7 @@ if ! "${LOCALBIN}/agentcontrol" enroll --token "$TOKEN" --hub-url "$HUB_URL"; th
 fi
 
 SHOULD_INSTALL_SERVICE="false"
-if [[ "$INSTALL_SERVICE" == "true" ]] || [[ "$INSTALL_SERVICE" != "false" ]]; then
+if [[ "$INSTALL_SERVICE" == "true" ]] || [[ -z "$INSTALL_SERVICE" ]]; then
   SHOULD_INSTALL_SERVICE="true"
 fi
 

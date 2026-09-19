@@ -8,19 +8,20 @@ This guide details both automated and manual procedures for cleanly removing Vex
 
 ### macOS / Linux / WSL
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.sh | bash
 ```
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.ps1 | iex
 ```
 
 ### What the Uninstaller Does:
 1. Calls `agentcontrol unprotect --force` to restore all original IDE configurations from backups.
 2. Stops and unregisters OS background daemon services (systemd / Launchd / Windows SCM).
-3. Deletes binary executables from `~/.local/bin/` (`%USERPROFILE%\.local\bin`).
-4. Purges local state directories (`~/.agentcontrol`, `~/.agent-control`, `~/.agentwall`).
+3. Cleans any Root CA certificates from the OS trust store (macOS Keychain / Windows Certificate Store).
+4. Deletes binary executables from `~/.local/bin/` (`%USERPROFILE%\.local\bin`).
+5. Purges local state directories (`~/.agentcontrol`, `~/.agent-control`, `~/.agentwall`).
 
 ---
 

@@ -125,5 +125,5 @@ agentcontrol.exe disconnect claude
 
 To completely uninstall Vexa Agent Control and clean up all state files:
 ```powershell
-irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/uninstall/uninstall.ps1 | iex
 ```

@@ -15,6 +15,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Force TLS 1.2 — required by GitHub releases
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $IsAdmin = $false
 try {
     $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -80,23 +83,39 @@ if (!$Token) {
     exit 1
 }
 
-$ArchStr = "x86_64"
-if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64") {
-    $ArchStr = "aarch64"
+$ArchMap = @{
+    "AMD64" = "x86_64"
+    "ARM64" = "aarch64"
 }
+$ArchEnv = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64") { "ARM64" } else { "AMD64" }
+$ArchStr = $ArchMap[$ArchEnv]
+if (-not $ArchStr) { $ArchStr = "x86_64" }
 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
+$FallbackVersion = "v1.0.88"
 
 if (!$Version) {
-    $ReleasesUrl = "https://api.github.com/repos/$Repo/releases?per_page=1"
+    Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan
     try {
-        $ReleaseJson = Invoke-RestMethod -Uri $ReleasesUrl -Headers @{ "User-Agent" = "AgentControl-Installer" }
-        $Version = $ReleaseJson[0].tag_name
+        $ReleaseJson = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
+            -Headers @{ "User-Agent" = "AgentControl-Installer" }
+        $Version = $ReleaseJson.tag_name
     } catch {
-        $Version = "v1.0.87"
-    }
-    if (-not $Version) {
-        $Version = "v1.0.87"
+        # Secondary: HTTP Redirect Scraping
+        try {
+            $Req = [System.Net.WebRequest]::Create("https://github.com/$Repo/releases/latest")
+            $Req.AllowAutoRedirect = $false
+            $Resp = $Req.GetResponse()
+            $Location = $Resp.GetResponseHeader("Location")
+            $Resp.Close()
+            if ($Location -match "tag/(v?[0-9.]+)") {
+                $Version = $Matches[1]
+            }
+        } catch { }
+
+        if (-not $Version) {
+            $Version = $FallbackVersion
+        }
     }
 }
 
@@ -120,7 +139,20 @@ $TempExtract = Join-Path $env:TEMP "agentcontrol_extract"
 if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force | Out-Null }
 
 Write-Host "[*] Downloading asset package: $DownloadUrl..." -ForegroundColor $ColorCyan
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing
+$MaxRetries = 3
+for ($i = 1; $i -le $MaxRetries; $i++) {
+    try {
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing
+        break
+    } catch {
+        if ($i -eq $MaxRetries) {
+            Write-Host "Download failed after $MaxRetries attempts: $_" -ForegroundColor $ColorRed
+            throw "Failed to download $DownloadUrl"
+        }
+        Write-Host "Attempt $i failed, retrying in $($i * 2)s..." -ForegroundColor $ColorYellow
+        Start-Sleep -Seconds ($i * 2)
+    }
+}
 
 Write-Host "[*] Verifying cryptographic SHA-256 checksum..." -ForegroundColor $ColorCyan
 try {
@@ -128,8 +160,8 @@ try {
     $ChecksumsContent = Get-Content $TempChecksums -Raw
     $MatchedLine = ($ChecksumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($AssetName) } | Select-Object -First 1)
     if ($MatchedLine) {
-        $ExpectedHash = ($MatchedLine.Trim() -split "\s+")[0].ToLower()
-        $ActualHash = (Get-FileHash -Path $TempZip -Algorithm SHA256).Hash.ToLower()
+        $ExpectedHash = ($MatchedLine.Trim() -split "\s+")[0].ToUpper()
+        $ActualHash = (Get-FileHash -Path $TempZip -Algorithm SHA256).Hash.ToUpper()
         if ($ExpectedHash -ne $ActualHash) {
             Write-Host "[!] FATAL: Cryptographic Checksum Mismatch!" -ForegroundColor $ColorRed
             Write-Host "    Expected: $ExpectedHash" -ForegroundColor $ColorYellow
@@ -150,7 +182,12 @@ try {
 
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
-$ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol.exe" | Select-Object -First 1
+$ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol.exe" |
+    Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+if (-not $ExtractedBin) {
+    $ExtractedBin = Get-ChildItem -Path $TempExtract -Recurse -Filter "agentcontrol*" |
+        Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+}
 
 # Gracefully stop running service and kill any lingering user processes to avoid binary file-lock
 $RunningService = Get-Service AgentControlSentry -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
@@ -159,7 +196,7 @@ if ($RunningService) {
     Stop-Service AgentControlSentry -Force -ErrorAction SilentlyContinue
 }
 Get-Process agentcontrol -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 300
 
 try {
     Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
@@ -171,6 +208,15 @@ try {
     Copy-Item -Path $ExtractedBin.FullName -Destination $FinalBinaryPath -Force
 }
 Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
+Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+
+# Update PATH
+$CurrentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
+if ($CurrentPath -notlike "*$LocalBinDir*") {
+    $NewPath = "$LocalBinDir;$CurrentPath".Replace(";;", ";")
+    [Environment]::SetEnvironmentVariable("PATH", $NewPath, [EnvironmentVariableTarget]::User)
+    $env:Path = "$LocalBinDir;$env:Path"
+}
 
 Write-Host "[*] Step 1/3: PKI Device Enrollment..." -ForegroundColor $ColorCyan
 & $FinalBinaryPath enroll --token $Token --hub-url $HubUrl
@@ -203,4 +249,3 @@ Write-Host "Next steps:" -ForegroundColor $ColorGreen
 Write-Host "  agentcontrol status" -ForegroundColor $ColorGreen
 Write-Host "  agentcontrol connect codex" -ForegroundColor $ColorGreen
 Write-Host ""
-

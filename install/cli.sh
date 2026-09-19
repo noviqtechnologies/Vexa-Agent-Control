@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo "[*] Vexa Agent Control CLI Workstation Installer"
 
@@ -23,16 +23,27 @@ fi
 echo "[*] Target OS: $OS | Arch: $ARCH"
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
+FALLBACK_VERSION="v1.0.88"
 
 echo "[*] Fetching latest release version..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+# 1. Primary: GitHub Releases API
+VERSION=$(curl -sSf -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
   | grep '"tag_name"' \
   | head -1 \
   | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || true)
 
+# 2. Secondary: HTTP Redirect Scraping (immune to API rate limits)
 if [[ -z "$VERSION" ]]; then
-  echo "[!] Notice: GitHub API resolution failed. Falling back to: v1.0.87"
-  VERSION="v1.0.87"
+  VERSION=$(curl -sSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+    | grep -i "^location:" \
+    | sed -e 's/.*tag\///' \
+    | tr -d '\r\n' || true)
+fi
+
+# 3. Tertiary: Fallback version
+if [[ -z "$VERSION" ]]; then
+  echo "[!] Notice: GitHub API resolution rate-limited or offline. Falling back to: ${FALLBACK_VERSION}"
+  VERSION="$FALLBACK_VERSION"
 fi
 
 if [[ "$VERSION" != v* ]]; then
@@ -43,9 +54,17 @@ echo "[*] Using version: $VERSION"
 
 LOCALBIN="$HOME/.local/bin"
 mkdir -p "$LOCALBIN"
+
 INSTALLED_VERSION=""
-if command -v agentcontrol &>/dev/null || [ -f "${LOCALBIN}/agentcontrol" ]; then
-  INSTALLED_VERSION=$("${LOCALBIN}/agentcontrol" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+BIN_FOR_VER=""
+if [ -x "${LOCALBIN}/agentcontrol" ]; then
+  BIN_FOR_VER="${LOCALBIN}/agentcontrol"
+elif command -v agentcontrol &>/dev/null; then
+  BIN_FOR_VER="$(command -v agentcontrol)"
+fi
+
+if [ -n "$BIN_FOR_VER" ]; then
+  INSTALLED_VERSION=$("$BIN_FOR_VER" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 fi
 
 RAW_VER="${VERSION#v}"
@@ -67,14 +86,18 @@ else
   trap 'rm -rf "$TEMPDIR"' EXIT
 
   echo "[*] Downloading $ASSET_URL..."
-  curl -sSL "$ASSET_URL" -o "${TEMPDIR}/asset.zip"
+  if ! curl -fsSL "$ASSET_URL" -o "${TEMPDIR}/asset.zip"; then
+    echo "[!] Download failed from $ASSET_URL"
+    exit 1
+  fi
 
   if [ ! -f "${TEMPDIR}/asset.zip" ]; then
     echo "[!] Download failed."
     exit 1
   fi
 
-  if curl -sSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
+  echo "[*] Verifying cryptographic SHA-256 checksum..."
+  if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
     EXPECTED_HASH=$(grep "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk '{print $1}' || true)
     if [[ -n "$EXPECTED_HASH" ]]; then
       ACTUAL_HASH=""
@@ -83,12 +106,17 @@ else
       elif command -v shasum &>/dev/null; then
         ACTUAL_HASH=$(shasum -a 256 "${TEMPDIR}/asset.zip" | awk '{print $1}')
       fi
-      if [[ -n "$ACTUAL_HASH" && "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
-        echo "[!] Checksum mismatch!"
+      if [[ -z "$ACTUAL_HASH" || "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
+        echo "[!] Checksum mismatch or unable to calculate digest! Aborting."
         exit 1
       fi
       echo "[✓] Cryptographic SHA-256 checksum verified."
+    else
+      echo "[!] Asset not found in checksums.txt. Aborting."
+      exit 1
     fi
+  else
+    echo "[!] Warning: Checksums manifest unavailable."
   fi
 
   unzip -q -o "${TEMPDIR}/asset.zip" -d "$TEMPDIR"
@@ -99,8 +127,10 @@ else
     exit 1
   fi
 
-  cp "$BINARY_PATH" "${LOCALBIN}/agentcontrol"
-  chmod +x "${LOCALBIN}/agentcontrol"
+  # Atomic replacement avoids 'Text file busy'
+  cp "$BINARY_PATH" "${LOCALBIN}/.agentcontrol.new"
+  chmod +x "${LOCALBIN}/.agentcontrol.new"
+  mv -f "${LOCALBIN}/.agentcontrol.new" "${LOCALBIN}/agentcontrol"
 
   QUICKSTART_SRC=$(find "$TEMPDIR" -name "quickstart_agent.py" | head -1 || true)
   if [[ -n "$QUICKSTART_SRC" && -f "$QUICKSTART_SRC" ]]; then
