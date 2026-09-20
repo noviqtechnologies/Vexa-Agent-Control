@@ -265,7 +265,7 @@ func (s *Store) ListVirtualKeys(ctx context.Context, organizationID string) ([]V
 		organizationID = DefaultOrgID
 	}
 	query := `SELECT ` + virtualKeySelectColumns + ` FROM virtual_keys
-	WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	WHERE organization_id = $1::uuid
 	  AND status != 'revoked'
 	ORDER BY created_at DESC`
 
@@ -295,9 +295,9 @@ func (s *Store) GetVirtualKeyByID(ctx context.Context, organizationID, id string
 		organizationID = DefaultOrgID
 	}
 	query := `SELECT ` + virtualKeySelectColumns + ` FROM virtual_keys
-	WHERE id::text = $1`
+	WHERE id = $1::uuid AND organization_id = $2::uuid`
 
-	k, err := scanVirtualKey(s.pool.QueryRow(ctx, query, id))
+	k, err := scanVirtualKey(s.pool.QueryRow(ctx, query, id, organizationID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrVirtualKeyNotFound
@@ -307,13 +307,16 @@ func (s *Store) GetVirtualKeyByID(ctx context.Context, organizationID, id string
 	return k, nil
 }
 
-// GetVirtualKeyByHash resolves an active key or valid rotating previous key during grace periods.
+// GetVirtualKeyByHash resolves an active key or valid rotating previous key during grace periods,
+// dynamically checking that the key has not expired.
 func (s *Store) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*VirtualKey, error) {
 	if s.pool == nil {
 		return nil, ErrVirtualKeyNotFound
 	}
 	query := `SELECT ` + virtualKeySelectColumns + ` FROM virtual_keys
-	WHERE key_hash = $1 AND status != 'revoked'`
+	WHERE key_hash = $1 
+	  AND status != 'revoked'
+	  AND (expires_at IS NULL OR expires_at > NOW())`
 
 	k, err := scanVirtualKey(s.pool.QueryRow(ctx, query, keyHash))
 	if err == nil {
@@ -321,7 +324,10 @@ func (s *Store) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*Virtu
 	}
 
 	fallbackQuery := `SELECT ` + virtualKeySelectColumns + ` FROM virtual_keys
-	WHERE previous_key_hash = $1 AND previous_key_expires_at > NOW() AND status != 'revoked'`
+	WHERE previous_key_hash = $1 
+	  AND status != 'revoked'
+	  AND previous_key_expires_at > NOW() 
+	  AND (expires_at IS NULL OR expires_at > NOW())`
 
 	k, err = scanVirtualKey(s.pool.QueryRow(ctx, fallbackQuery, keyHash))
 	if err != nil {
@@ -333,7 +339,7 @@ func (s *Store) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*Virtu
 	return k, nil
 }
 
-// RotateVirtualKey rotates a key with a grace period for the old key.
+// RotateVirtualKey rotates a key with a grace period for the old key, strictly scoped to the tenant.
 func (s *Store) RotateVirtualKey(ctx context.Context, organizationID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*VirtualKey, error) {
 	if s.pool == nil {
 		return nil, ErrVirtualKeyNotFound
@@ -348,10 +354,10 @@ func (s *Store) RotateVirtualKey(ctx context.Context, organizationID, id string,
 	    key_hash = $2,
 	    key_prefix = $3,
 	    status = 'rotating'
-	WHERE id::text = $4
+	WHERE id = $4::uuid AND organization_id = $5::uuid AND status != 'revoked'
 	RETURNING ` + virtualKeySelectColumns
 
-	rotated, err := scanVirtualKey(s.pool.QueryRow(ctx, query, graceExpires, newKeyHash, newKeyPrefix, id))
+	rotated, err := scanVirtualKey(s.pool.QueryRow(ctx, query, graceExpires, newKeyHash, newKeyPrefix, id, organizationID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrVirtualKeyNotFound
@@ -380,7 +386,7 @@ func (s *Store) RotateVirtualKey(ctx context.Context, organizationID, id string,
 	return rotated, nil
 }
 
-// UpdateVirtualKey updates mutable governance policies and metadata for an existing virtual key.
+// UpdateVirtualKey updates mutable governance policies and metadata for an existing virtual key strictly scoped to the tenant.
 func (s *Store) UpdateVirtualKey(ctx context.Context, organizationID, id string, p UpdateVirtualKeyParams) (*VirtualKey, error) {
 	if s.pool == nil {
 		return nil, ErrVirtualKeyNotFound
@@ -463,10 +469,11 @@ func (s *Store) UpdateVirtualKey(ctx context.Context, organizationID, id string,
 		status = *p.Status
 	}
 
-	tagsJSON, _ := json.Marshal(existing.Tags)
+	tags := existing.Tags
 	if p.Tags != nil {
-		tagsJSON, _ = json.Marshal(p.Tags)
+		tags = p.Tags
 	}
+	tagsJSON, _ := json.Marshal(tags)
 
 	query := `UPDATE virtual_keys
 	SET name = $1,
@@ -482,19 +489,19 @@ func (s *Store) UpdateVirtualKey(ctx context.Context, organizationID, id string,
 	    allowed_ips = $11,
 	    status = $12,
 	    tags = $13
-	WHERE id::text = $14
+	WHERE id = $14::uuid AND organization_id = $15::uuid
 	RETURNING ` + virtualKeySelectColumns
 
 	updated, err := scanVirtualKey(s.pool.QueryRow(ctx, query,
 		name, teamID, ownerType, budgetPeriod, budgetMicrocents,
-		maxRPM, maxTPM, maxConcurrent, allowedModels, allowedRoutes, allowedIPs,
-		status, tagsJSON, id,
+		maxRPM, maxTPM, maxConcurrent, allowedModels, allowedRoutes, allowedIPs, status, tagsJSON,
+		id, organizationID,
 	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrVirtualKeyNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("update virtual key: %w", err)
 	}
 
 	_ = s.InsertAuditEvent(ctx, organizationID, &AuditEvent{
@@ -530,7 +537,7 @@ func (s *Store) DeleteVirtualKey(ctx context.Context, organizationID, id string)
 	return s.DeleteVirtualKeyWithActor(ctx, organizationID, id, "system", "user_revoked")
 }
 
-// DeleteVirtualKeyWithActor marks a key as revoked and records tombstone metadata.
+// DeleteVirtualKeyWithActor marks a key as revoked and records tombstone metadata, strictly scoped to the tenant.
 func (s *Store) DeleteVirtualKeyWithActor(ctx context.Context, organizationID, id, actorSubject, reason string) error {
 	if s.pool == nil {
 		return nil
@@ -546,8 +553,8 @@ func (s *Store) DeleteVirtualKeyWithActor(ctx context.Context, organizationID, i
 	    deleted_at = NOW(),
 	    deleted_by = $2,
 	    deleted_reason = $3
-	WHERE id::text = $1`
-	tag, err := s.pool.Exec(ctx, query, id, actorSubject, reason)
+	WHERE id = $1::uuid AND organization_id = $4::uuid AND status != 'revoked'`
+	tag, err := s.pool.Exec(ctx, query, id, actorSubject, reason, organizationID)
 	if err != nil {
 		return err
 	}
@@ -575,7 +582,7 @@ func (s *Store) DeleteVirtualKeyWithActor(ctx context.Context, organizationID, i
 	return nil
 }
 
-// ListDeletedVirtualKeys returns tombstoned/revoked virtual keys for compliance auditing.
+// ListDeletedVirtualKeys returns tombstoned/revoked virtual keys for compliance auditing strictly for the tenant.
 func (s *Store) ListDeletedVirtualKeys(ctx context.Context, organizationID string, limit, offset int) ([]VirtualKey, error) {
 	if s == nil || s.pool == nil {
 		return []VirtualKey{}, nil
@@ -588,7 +595,7 @@ func (s *Store) ListDeletedVirtualKeys(ctx context.Context, organizationID strin
 	}
 
 	query := `SELECT ` + virtualKeySelectColumns + ` FROM virtual_keys
-	WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	WHERE organization_id = $1::uuid
 	  AND (status = 'revoked' OR deleted_at IS NOT NULL)
 	ORDER BY COALESCE(deleted_at, created_at) DESC
 	LIMIT $2 OFFSET $3`
@@ -611,27 +618,52 @@ func (s *Store) ListDeletedVirtualKeys(ctx context.Context, organizationID strin
 	return keys, nil
 }
 
-// IncrementVirtualKeySpend executes atomic Compare-And-Swap (CAS) preflight reservation check.
+// IncrementVirtualKeySpend executes atomic Compare-And-Swap (CAS) preflight reservation check,
+// disambiguating between key not found/wrong tenant/revoked and budget exceeded.
 func (s *Store) IncrementVirtualKeySpend(ctx context.Context, organizationID, id string, deltaMicrocents int64) (int64, error) {
 	if s.pool == nil {
 		return 0, nil
 	}
-	query := `UPDATE virtual_keys
-	SET spent_microcents = spent_microcents + $1
-	WHERE id::text = $2
-	  AND status != 'revoked'
-	  AND (monthly_budget_microcents = 0 OR (spent_microcents + $1) <= monthly_budget_microcents)
-	RETURNING spent_microcents`
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
 
-	var newSpent int64
-	err := s.pool.QueryRow(ctx, query, deltaMicrocents, id).Scan(&newSpent)
+	query := `
+	WITH key_info AS (
+		SELECT id, spent_microcents, monthly_budget_microcents, status
+		FROM virtual_keys
+		WHERE id = $1::uuid AND organization_id = $2::uuid
+	),
+	updated AS (
+		UPDATE virtual_keys
+		SET spent_microcents = spent_microcents + $3
+		WHERE id = $1::uuid AND organization_id = $2::uuid
+		  AND status = 'active'
+		  AND (monthly_budget_microcents = 0 OR (spent_microcents + $3) <= monthly_budget_microcents)
+		RETURNING spent_microcents
+	)
+	SELECT 
+		(SELECT count(*) FROM key_info) AS key_exists,
+		COALESCE((SELECT status FROM key_info), '') AS key_status,
+		(SELECT spent_microcents FROM updated) AS new_spent`
+
+	var keyExists int64
+	var keyStatus string
+	var newSpent *int64
+
+	err := s.pool.QueryRow(ctx, query, id, organizationID, deltaMicrocents).Scan(&keyExists, &keyStatus, &newSpent)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, ErrVirtualKeyBudgetExceeded
-		}
 		return 0, err
 	}
-	return newSpent, nil
+
+	if keyExists == 0 || keyStatus != "active" {
+		return 0, ErrVirtualKeyNotFound
+	}
+	if newSpent == nil {
+		return 0, ErrVirtualKeyBudgetExceeded
+	}
+
+	return *newSpent, nil
 }
 
 func (s *Store) ResetVirtualKeySpend(ctx context.Context, organizationID, id string) error {
@@ -641,10 +673,13 @@ func (s *Store) ResetVirtualKeySpend(ctx context.Context, organizationID, id str
 	if organizationID == "" {
 		organizationID = DefaultOrgID
 	}
-	query := `UPDATE virtual_keys SET spent_microcents = 0 WHERE id::text = $1`
-	_, err := s.pool.Exec(ctx, query, id)
+	query := `UPDATE virtual_keys SET spent_microcents = 0 WHERE id = $1::uuid AND organization_id = $2::uuid`
+	tag, err := s.pool.Exec(ctx, query, id, organizationID)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrVirtualKeyNotFound
 	}
 
 	_ = s.InsertAuditEvent(ctx, organizationID, &AuditEvent{

@@ -42,6 +42,7 @@
   - [7. Enterprise Semantic Vector Caching](#7-enterprise-semantic-vector-caching)
   - [8. Desired-State Routing & Verification Probe](#8-desired-state-routing--verification-probe)
   - [9. Control Hub v2 Architecture & Multi-State Observability](#9-control-hub-v2-architecture--multi-state-observability)
+  - [10. Admin-Governed Scoped Virtual Keys](#10-admin-governed-scoped-virtual-keys)
 - [Choose Your Deployment Path](#choose-your-deployment-path)
 - [Docker Quickstart (2 Minutes)](#docker-quickstart-2-minutes)
 - [10-Minute Workstation Quickstart](#10-minute-workstation-quickstart)
@@ -485,6 +486,21 @@ The enterprise Control Hub v2 provides centralized governance, multi-state capab
 - **Cryptographic Audit Checkpoints:** Telemetry events are sequentially hash-chained (`event_hash` / `prev_event_hash`) and sealed into verifiable checkpoints (`GET /api/v2/audit/checkpoints`).
 
 [**Read the Control Hub v2 API Reference →**](docs/guides/control_hub_api_guide.md) · [**SOC Web Console User Guide →**](docs/guides/web_console_user_guide.md)
+
+</details>
+
+<details>
+<summary><b>10. Admin-Governed Scoped Virtual Keys</b> — Zero-Trust Client Tokens & Atomic Spend Caps</summary>
+
+Issue, govern, rotate, and monitor fine-grained developer tokens without credential sprawl or unmonitored spending:
+
+- **Admin-Only Explicit Provisioning:** Keys are never auto-minted on onboarding; administrators explicitly provision keys tailored with model allowlists, spend caps, and CIDR IP restrictions.
+- **Atomic Preflight Spend Reservations:** Concurrency-safe Compare-And-Swap (CAS) spend tracking in PostgreSQL and Valkey preventing parallel requests from overdrawing budget pools.
+- **Dynamic Key Expiration & Zero-Downtime Rotation:** Secrets expire dynamically at the authentication boundary, supporting configurable dual-key grace periods for seamless rotation without client downtime.
+- **Universal Client Compatibility:** Drop-in support for Cursor IDE (`OPENAI_BASE_URL`), Claude Code CLI (`ANTHROPIC_BASE_URL`), OpenAI Python/TS SDKs, and cURL.
+- **Multi-Tenant Isolation:** Complete cryptographic and database partition isolation ensuring keys, audit trails, and spend ledgers remain strictly bound to their parent organization.
+
+[**Read the Virtual Keys Administration Guide →**](docs/organization_admin_guide.md#7-scoped-virtual-keys-administration--governance) · [**Architecture Spec →**](docs/reference/virtual-keys-architecture.md)
 
 </details>
 

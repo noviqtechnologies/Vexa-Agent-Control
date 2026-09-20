@@ -77,6 +77,8 @@ docs/
 | SemVer & Release Governance | [Versioning & Releases](reference/versioning-and-releases.md) |
 | Clean Uninstall / Rollback | [Removal & Recovery Guide](reference/removal-and-recovery.md) |
 | Organization & License Setup | [Organization Admin Guide](organization_admin_guide.md) |
+| Scoped Virtual Keys Admin | [Organization Admin Guide: Virtual Keys](organization_admin_guide.md#7-scoped-virtual-keys-administration--governance) |
+| Virtual Keys Architecture | [Virtual Keys Architecture Spec](reference/virtual-keys-architecture.md) |
 | Migrating from `AGENTWALL_*` | [Legacy Migration Guide](reference/legacy-migration.md) |
 
 ---

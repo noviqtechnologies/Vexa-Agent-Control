@@ -39,6 +39,8 @@ type mockStore struct {
 	agentExistsFunc          func(ctx context.Context, tenantID, agentID string) (bool, error)
 	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
 	updateVirtualKeyFunc         func(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error)
+	getVirtualKeyByHashFunc      func(ctx context.Context, keyHash string) (*store.VirtualKey, error)
+	incrementVirtualKeySpendFunc func(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error)
 }
 
 func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error) {
@@ -210,6 +212,9 @@ func (m *mockStore) GetVirtualKeyByID(ctx context.Context, tenantID, id string) 
 	return nil, store.ErrVirtualKeyNotFound
 }
 func (m *mockStore) GetVirtualKeyByHash(ctx context.Context, keyHash string) (*store.VirtualKey, error) {
+	if m.getVirtualKeyByHashFunc != nil {
+		return m.getVirtualKeyByHashFunc(ctx, keyHash)
+	}
 	return nil, store.ErrVirtualKeyNotFound
 }
 func (m *mockStore) RotateVirtualKey(ctx context.Context, tenantID, id string, newKeyHash, newKeyPrefix string, gracePeriod time.Duration) (*store.VirtualKey, error) {
@@ -231,6 +236,9 @@ func (m *mockStore) ListDeletedVirtualKeys(ctx context.Context, tenantID string,
 	return nil, nil
 }
 func (m *mockStore) IncrementVirtualKeySpend(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error) {
+	if m.incrementVirtualKeySpendFunc != nil {
+		return m.incrementVirtualKeySpendFunc(ctx, tenantID, id, deltaMicrocents)
+	}
 	return 0, nil
 }
 func (m *mockStore) ResetVirtualKeySpend(ctx context.Context, tenantID, id string) error {

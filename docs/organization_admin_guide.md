@@ -85,3 +85,59 @@ agentcontrol-admin break-glass --email admin@agentcontrol.local
 
 Redeem the token at `http://<hub-host>:8081/break-glass` to immediately restore Owner access and invalidate compromised sessions.
 
+---
+
+## 7. Scoped Virtual Keys Administration & Governance
+
+Vexa Agent Control allows organization administrators to issue and govern **Scoped Virtual Keys** for human developers, client tools, and automation.
+
+### Admin-Only Provisioning Workflow
+Under the Zero Trust security model, virtual keys are **not automatically issued** during onboarding. An Organization Administrator explicitly provisions keys tailored to specific developer workloads:
+
+1. In the Web Console, navigate to **Scoped Virtual Keys** (`/virtual-keys`).
+2. Click **Issue Virtual Key** (`#btn-issue-virtual-key`).
+3. Configure the governance policy:
+   - **Key Ownership Persona**: Restricted to `🧑 User / Developer` (Service Accounts and Autonomous Agents are reserved for future releases).
+   - **Key Name**: Descriptive identifier (e.g. `alice-cursor-ide`, `evals-harness`).
+   - **Team / Developer ID**: Attribution identifier (e.g. `alice@acme.com`, `core-backend`).
+   - **Monthly Spend Budget ($ USD)**: Financial limit enforced atomically (e.g. `$50.00`).
+   - **Rate Limits**: Maximum requests per minute (`RPM`), tokens per minute (`TPM`), and concurrent in-flight requests.
+   - **Model Allowlists**: Model wildcard filters (e.g. `claude-3-5-sonnet*`, `gpt-4o-mini`).
+   - **CIDR IP Allowlists**: Restrict execution to approved corporate egress IPs or developer VPN blocks.
+4. Click **Issue**. The raw secret (`sk-vex-...`) is displayed **once**. Deliver the secret securely to the developer.
+
+### Developer Client Integration
+
+#### Cursor IDE / VS Code
+In Cursor Settings ➔ Models ➔ OpenAI API Key / Base URL override:
+- **Base URL**: `https://<agentcontrol-host>/v1`
+- **API Key**: `sk-vex-<secret>`
+
+#### Claude Code CLI
+```bash
+export ANTHROPIC_BASE_URL="https://<agentcontrol-host>"
+export ANTHROPIC_API_KEY="sk-vex-<secret>"
+claude
+```
+
+#### OpenAI Python SDK
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://<agentcontrol-host>/v1",
+    api_key="sk-vex-<secret>"
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello Agent Control"}]
+)
+print(response.choices[0].message.content)
+```
+
+### Zero-Downtime Rotation & Revocation
+- **Zero-Downtime Rotation**: Admins can rotate active keys with a configurable grace period (default: 3600 seconds). Both old and new secrets authenticate cleanly until the grace period elapses.
+- **Immediate Revocation**: Clicking Revoke invalidates the key hash and evicts all connected edge proxy caches via real-time SSE invalidation events.
+
+

@@ -75,24 +75,24 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 		vk, err = h.store.GetVirtualKeyByHash(r.Context(), keyHash)
 		if err != nil {
 			if errors.Is(err, store.ErrVirtualKeyNotFound) {
-				http.Error(w, `{"error":{"code":"invalid_virtual_key","message":"Invalid or revoked virtual key"}}`, http.StatusUnauthorized)
+				writeBrokerJSONError(w, http.StatusUnauthorized, "invalid_virtual_key", "Invalid, expired, or revoked virtual key")
 				return
 			}
-			http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
+			writeBrokerJSONError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred while validating virtual key")
 			return
 		}
 		tenantID = vk.TenantID
 	} else {
 		tenantID = getTenantID(r)
 		if tenantID == "" {
-			http.Error(w, `{"error":{"code":"auth_required","message":"Authorization header or virtual key required"}}`, http.StatusUnauthorized)
+			writeBrokerJSONError(w, http.StatusUnauthorized, "auth_required", "Authorization header or virtual key required")
 			return
 		}
 	}
 
 	var req BrokerV3DispatchPayload
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":{"code":"invalid_request","message":"Malformed JSON request body"}}`, http.StatusBadRequest)
+		writeBrokerJSONError(w, http.StatusBadRequest, "invalid_request", "Malformed JSON request body")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if !modelAllowed {
-				http.Error(w, fmt.Sprintf(`{"error":{"code":"model_not_allowed","message":"Model '%s' is not permitted for this virtual key"}}`, req.Model), http.StatusForbidden)
+				writeBrokerJSONError(w, http.StatusForbidden, "model_not_allowed", fmt.Sprintf("Model '%s' is not permitted for this virtual key", req.Model))
 				return
 			}
 		}
@@ -128,18 +128,21 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 			_, err := h.valkeyClient.ReserveSpend(r.Context(), vk.ID, estimatedMicrocents, vk.MonthlyBudgetMicrocents)
 			if err != nil {
 				if errors.Is(err, valkey.ErrBudgetCapExceeded) {
-					http.Error(w, `{"error":{"code":"budget_exceeded","message":"Monthly spend budget exceeded for this virtual key"}}`, http.StatusPaymentRequired)
+					writeBrokerJSONError(w, http.StatusPaymentRequired, "budget_exceeded", "Monthly spend budget exceeded for this virtual key")
 					return
 				}
+				// Fail-closed on connection or infrastructure error
+				writeBrokerJSONError(w, http.StatusServiceUnavailable, "spend_service_unavailable", "Unable to verify spend budget reservation")
+				return
 			}
 		} else {
 			_, err := h.store.IncrementVirtualKeySpend(r.Context(), tenantID, vk.ID, estimatedMicrocents)
 			if err != nil {
 				if errors.Is(err, store.ErrVirtualKeyBudgetExceeded) {
-					http.Error(w, `{"error":{"code":"budget_exceeded","message":"Monthly spend budget exceeded for this virtual key"}}`, http.StatusPaymentRequired)
+					writeBrokerJSONError(w, http.StatusPaymentRequired, "budget_exceeded", "Monthly spend budget exceeded for this virtual key")
 					return
 				}
-				http.Error(w, fmt.Sprintf(`{"error":{"code":"internal_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
+				writeBrokerJSONError(w, http.StatusServiceUnavailable, "spend_service_unavailable", "Unable to record spend reservation")
 				return
 			}
 		}
@@ -149,10 +152,10 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 	providerSecret, err := h.store.GetDecryptedProviderKey(r.Context(), tenantID, req.Provider, h.kmsProvider)
 	if err != nil {
 		if errors.Is(err, store.ErrProviderKeyNotFound) {
-			http.Error(w, fmt.Sprintf(`{"error":{"code":"provider_unconfigured","message":"No provider API key configured for '%s'"}}`, req.Provider), http.StatusNotFound)
+			writeBrokerJSONError(w, http.StatusNotFound, "provider_unconfigured", fmt.Sprintf("No provider API key configured for '%s'", req.Provider))
 			return
 		}
-		http.Error(w, fmt.Sprintf(`{"error":{"code":"kms_error","message":%q}}`, err.Error()), http.StatusInternalServerError)
+		writeBrokerJSONError(w, http.StatusInternalServerError, "kms_error", "Internal encryption service error")
 		return
 	}
 
@@ -187,7 +190,7 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 
 		llmResp, _, err := h.providerClient.ForwardLLMRequest(r.Context(), req.Provider, req.Model, false, req.Payload, providerSecret)
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":{"code":"upstream_error","message":%q}}`, err.Error()), http.StatusBadGateway)
+			writeBrokerJSONError(w, http.StatusBadGateway, "upstream_error", "The upstream provider request failed")
 			return
 		}
 
