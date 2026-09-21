@@ -23,7 +23,7 @@ fn test_finops_budget_exceeded_error_formatting() {
     // Verify standard IDE-facing JSON error structure
     let ide_error_payload = json!({
         "error": {
-            "message": format!("Vexa FinOps: Monthly spend budget limit reached ($100.00 / $100.00). Contact your administrator."),
+            "message": "Vexa FinOps: Monthly spend budget limit reached ($100.00 / $100.00). Contact your administrator.",
             "type": "budget_exceeded",
             "code": "BUDGET_EXCEEDED"
         }

@@ -23,10 +23,7 @@ pub fn wrap_generic(
     let is_toml = config_path.extension().and_then(|e| e.to_str()) == Some("toml");
     let raw = fs::read_to_string(&config_path).map_err(WrapError::Io)?;
 
-    let agentcontrol_bin = std::env::current_exe()
-        .map_err(|e| WrapError::NoBinaryPath(e.to_string()))?
-        .to_string_lossy()
-        .to_string();
+    let agentcontrol_bin = super::resolve_wrapper_binary();
 
     if is_toml {
         let mut toml_val: toml::Value = toml::from_str(&raw)

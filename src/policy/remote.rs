@@ -197,49 +197,108 @@ pub async fn fetch_policy_yaml(
 }
 
 /// Path to local offline cached policy: `~/.agentcontrol/cached_policy.yaml`
-pub fn cached_policy_path() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|h| h.join(".agentcontrol").join("cached_policy.yaml"))
+/// Authenticated and signed policy cache envelope (Gate 5).
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct AuthenticatedPolicyCache {
+    pub schema_version: u32,
+    pub version_hash: String,
+    pub timestamp: u64,
+    pub yaml_content: String,
+    pub hmac_signature: String,
 }
 
-/// Save validated policy and its cryptographic hash to local cache
+pub fn cached_policy_envelope_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".agentcontrol").join("cached_policy.json"))
+}
+
+pub fn compute_cache_hmac(version_hash: &str, timestamp: u64, yaml: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+
+    let secret = crate::identity::device::load_device_token()
+        .or_else(|| std::env::var("POLICY_READ_SECRET").ok())
+        .or_else(|| std::env::var("AGENTCONTROL_SESSION_SECRET").ok())
+        .unwrap_or_else(|| "agentcontrol-offline-policy-cache-secret".to_string());
+
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(version_hash.as_bytes());
+    mac.update(&timestamp.to_be_bytes());
+    mac.update(yaml.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Save validated policy and its cryptographic signature to authenticated local cache
 pub fn save_cached_policy(yaml: &str, raw_hash: &str) {
-    if let Some(path) = cached_policy_path() {
-        let _ = crate::wrap::journal::write_file_durable(&path, yaml.as_bytes());
-        let hash_path = path.with_extension("sha256");
-        let _ = crate::wrap::journal::write_file_durable(&hash_path, raw_hash.as_bytes());
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-            let _ = std::fs::set_permissions(&hash_path, std::fs::Permissions::from_mode(0o600));
+    if let Some(path) = cached_policy_envelope_path() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let sig = compute_cache_hmac(raw_hash, ts, yaml);
+        let envelope = AuthenticatedPolicyCache {
+            schema_version: 1,
+            version_hash: raw_hash.to_string(),
+            timestamp: ts,
+            yaml_content: yaml.to_string(),
+            hmac_signature: sig,
+        };
+
+        if let Ok(bytes) = serde_json::to_vec_pretty(&envelope) {
+            let _ = crate::wrap::journal::write_file_durable(&path, &bytes);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            }
         }
     }
 }
 
-/// Load and verify cached policy from local disk
+/// Load and cryptographically verify cached policy from local disk
 pub fn load_cached_policy() -> Option<(String, String)> {
-    let path = cached_policy_path()?;
-    let hash_path = path.with_extension("sha256");
-    if path.exists() && hash_path.exists() {
-        if let (Ok(content), Ok(saved_hash)) = (
-            std::fs::read_to_string(&path),
-            std::fs::read_to_string(&hash_path),
-        ) {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(content.as_bytes());
-            let computed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
-            if saved_hash.trim() == computed_hash || saved_hash.trim() == &computed_hash[7..] {
-                return Some((content, computed_hash));
-            } else {
-                logging::log_event(
-                    Level::Error,
-                    "cached_policy_hash_mismatch",
-                    serde_json::json!({
-                        "saved_hash": saved_hash.trim(),
-                        "computed_hash": computed_hash,
-                    }),
+    let path = cached_policy_envelope_path()?;
+    if path.exists() {
+        if let Ok(data) = std::fs::read(&path) {
+            if let Ok(envelope) = serde_json::from_slice::<AuthenticatedPolicyCache>(&data) {
+                // 1. Verify content SHA256 matches raw_hash
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(envelope.yaml_content.as_bytes());
+                let computed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
+                if envelope.version_hash.trim() != computed_hash
+                    && envelope.version_hash.trim() != &computed_hash[7..]
+                {
+                    logging::log_event(
+                        Level::Error,
+                        "cached_policy_hash_mismatch",
+                        serde_json::json!({
+                            "saved_hash": envelope.version_hash,
+                            "computed_hash": computed_hash,
+                        }),
+                    );
+                    return None;
+                }
+
+                // 2. Verify HMAC cryptographic signature
+                let expected_sig = compute_cache_hmac(
+                    &envelope.version_hash,
+                    envelope.timestamp,
+                    &envelope.yaml_content,
                 );
+                if envelope.hmac_signature == expected_sig {
+                    return Some((envelope.yaml_content, computed_hash));
+                } else {
+                    logging::log_event(
+                        Level::Error,
+                        "cached_policy_signature_invalid",
+                        serde_json::json!({
+                            "reason": "HMAC signature mismatch on cached policy envelope",
+                        }),
+                    );
+                    return None;
+                }
             }
         }
     }

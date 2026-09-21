@@ -46,11 +46,8 @@ pub fn wrap_claude(dry_run: bool, scan_responses: bool) -> Result<WrapResult, Wr
         return Err(WrapError::NoMcpServers);
     }
 
-    // 4. Get absolute agentwall binary path
-    let agentwall_bin = std::env::current_exe()
-        .map_err(|e| WrapError::NoBinaryPath(e.to_string()))?
-        .to_string_lossy()
-        .to_string();
+    // 4. Get canonical agentcontrol wrapper binary path
+    let agentwall_bin = super::resolve_wrapper_binary();
 
     // 5. Check if all servers are already wrapped (idempotency)
     let servers = config["mcpServers"]

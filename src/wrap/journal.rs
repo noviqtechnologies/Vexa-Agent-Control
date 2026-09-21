@@ -18,11 +18,10 @@ use std::path::{Path, PathBuf};
 
 use crate::wrap::manifest::OwnershipManifest;
 
-/// Durable atomic file writing helper with sync_all and rename.
+/// Durable atomic file writing helper with sync_all, rename, and parent directory fsync.
 pub fn write_file_durable(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
     let tmp_path = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
     {
         let mut file = fs::File::create(&tmp_path)?;
@@ -31,6 +30,9 @@ pub fn write_file_durable(path: &Path, bytes: &[u8]) -> io::Result<()> {
         file.sync_all()?;
     }
     fs::rename(&tmp_path, path)?;
+    if let Ok(dir) = fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
     Ok(())
 }
 
@@ -81,18 +83,19 @@ impl ProtectJournal {
         Ok(dir.join("protect_journal.json"))
     }
 
-    /// Record target and capture byte preimages for all its files before modification
+    /// Record target and capture byte preimages for all its files before modification.
+    /// Fails closed if an existing file cannot be read.
     pub fn record_target_start(
         &mut self,
         target: &str,
         files_to_record: &[&Path],
         manifest_target: &str,
-    ) {
+    ) -> io::Result<()> {
         let mut file_entries = Vec::new();
         for file_path in files_to_record {
             let existed = file_path.exists();
             let bytes = if existed {
-                fs::read(file_path).ok()
+                Some(fs::read(file_path)?)
             } else {
                 None
             };
@@ -114,15 +117,17 @@ impl ProtectJournal {
                 manifest_target: manifest_target.to_string(),
             },
         );
+        Ok(())
     }
 
-    /// Add an auxiliary file (e.g. auth.json) to an already started target entry
-    pub fn record_auxiliary_file(&mut self, target: &str, file_path: &Path) {
+    /// Add an auxiliary file (e.g. auth.json) to an already started target entry.
+    /// Fails closed if the file exists but cannot be read.
+    pub fn record_auxiliary_file(&mut self, target: &str, file_path: &Path) -> io::Result<()> {
         if let Some(entry) = self.entries.get_mut(target) {
             if !entry.files.iter().any(|f| f.path == file_path) {
                 let existed = file_path.exists();
                 let bytes = if existed {
-                    fs::read(file_path).ok()
+                    Some(fs::read(file_path)?)
                 } else {
                     None
                 };
@@ -133,6 +138,7 @@ impl ProtectJournal {
                 });
             }
         }
+        Ok(())
     }
 
     /// Record target successfully modified
@@ -179,7 +185,12 @@ impl ProtectJournal {
     pub fn delete_file() -> io::Result<()> {
         let path = Self::journal_path()?;
         if path.exists() {
-            fs::remove_file(path)?;
+            fs::remove_file(&path)?;
+            if let Some(parent) = path.parent() {
+                if let Ok(dir) = fs::File::open(parent) {
+                    let _ = dir.sync_all();
+                }
+            }
         }
         Ok(())
     }
@@ -189,7 +200,13 @@ impl ProtectJournal {
         Self::delete_file()
     }
 
-    /// Roll back all attempted and in-progress targets in reverse order
+    /// Commit transaction upon completion by deleting the journal file durably.
+    pub fn commit(&self) -> io::Result<()> {
+        Self::delete_file()
+    }
+
+    /// Roll back all attempted and in-progress targets in reverse order.
+    /// Strictly propagates write, removal, manifest, and journal deletion errors.
     pub fn rollback(&self) -> Result<Vec<String>, String> {
         let mut rolled_back = Vec::new();
         let mut attempted_rev = self.targets_attempted.clone();
@@ -200,18 +217,36 @@ impl ProtectJournal {
                 for file_entry in entry.files.iter().rev() {
                     if file_entry.existed_before {
                         if let Some(ref bytes) = file_entry.pre_mutation_bytes {
-                            let _ = write_file_durable(&file_entry.path, bytes);
+                            write_file_durable(&file_entry.path, bytes).map_err(|e| {
+                                format!(
+                                    "Failed to restore preimage for {}: {}",
+                                    file_entry.path.display(),
+                                    e
+                                )
+                            })?;
                         }
                     } else if file_entry.path.exists() {
-                        let _ = fs::remove_file(&file_entry.path);
+                        fs::remove_file(&file_entry.path).map_err(|e| {
+                            format!(
+                                "Failed to remove newly created file {}: {}",
+                                file_entry.path.display(),
+                                e
+                            )
+                        })?;
                     }
                 }
                 // Also remove ownership manifest if created
-                let _ = OwnershipManifest::delete(&entry.manifest_target);
+                OwnershipManifest::delete(&entry.manifest_target).map_err(|e| {
+                    format!(
+                        "Failed to delete manifest for {}: {}",
+                        entry.manifest_target, e
+                    )
+                })?;
                 rolled_back.push(target.clone());
             }
         }
-        let _ = Self::delete_file();
+        Self::delete_file()
+            .map_err(|e| format!("Failed to delete journal during rollback: {}", e))?;
         Ok(rolled_back)
     }
 
@@ -272,7 +307,9 @@ mod tests {
         fs::write(&config_file, r#"{"original": true}"#).unwrap();
 
         let mut journal = ProtectJournal::new("local-gateway");
-        journal.record_target_start("test_target", &[&config_file], "test_manifest");
+        journal
+            .record_target_start("test_target", &[&config_file], "test_manifest")
+            .unwrap();
         journal.record_target_success("test_target");
 
         // Simulate modification
@@ -299,7 +336,9 @@ mod tests {
 
         let mut journal = ProtectJournal::new("local-gateway");
         // Target is started (in attempted list) but NEVER marked success
-        journal.record_target_start("in_flight_target", &[&config_file], "in_flight_manifest");
+        journal
+            .record_target_start("in_flight_target", &[&config_file], "in_flight_manifest")
+            .unwrap();
 
         // Interrupted midway after mutating file
         fs::write(&config_file, r#"{"corrupt_partial": true}"#).unwrap();

@@ -21,6 +21,31 @@ pub use connect::{run_connect, run_disconnect, ConnectMode, ConnectTarget};
 use crate::cli::{UnwrapTarget, WatchTarget, WrapTarget};
 use colored::*;
 
+/// Resolves the canonical binary command/path to invoke Agent Control as an MCP wrapper.
+/// - In production: uses absolute `current_exe()` if it represents `agentcontrol` or `agentwall`.
+/// - In tests or development: falls back to "agentcontrol" (or `AGENTCONTROL_BIN` override).
+pub fn resolve_wrapper_binary() -> String {
+    if let Ok(bin) = std::env::var("AGENTCONTROL_BIN") {
+        if !bin.trim().is_empty() {
+            return bin.trim().to_string();
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let name = exe
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
+        if (name.starts_with("agentcontrol") || name.starts_with("agentwall"))
+            && !name.contains("test")
+            && !name.contains("bench")
+        {
+            return exe.to_string_lossy().to_string();
+        }
+    }
+    "agentcontrol".to_string()
+}
+
 /// Errors from wrap/unwrap operations.
 #[derive(Debug)]
 pub enum WrapError {
@@ -765,7 +790,18 @@ pub fn run_protect_orchestration(
                 files_to_record.push(ap.as_path());
             }
 
-            journal.record_target_start(target.as_str(), &files_to_record, target.as_str());
+            if let Err(e) =
+                journal.record_target_start(target.as_str(), &files_to_record, target.as_str())
+            {
+                eprintln!(
+                    "    ✖ Failed to capture preimages for {}: {}",
+                    target.display_name().red(),
+                    e
+                );
+                eprintln!("    Aborting protection to ensure fail-closed integrity.");
+                let _ = journal.rollback();
+                return 1;
+            }
             if let Err(e) = journal.save() {
                 eprintln!("    ✖ Failed to update protection journal: {}", e);
                 eprintln!("    Aborting protection to ensure fail-closed integrity.");
@@ -811,8 +847,15 @@ pub fn run_protect_orchestration(
             }
         }
 
-        // All targets configured successfully! Commit transaction by deleting the journal.
-        let _ = journal.delete();
+        // All targets configured successfully! Commit transaction by deleting the journal durably.
+        if let Err(e) = journal.commit() {
+            eprintln!(
+                "    ✖ Failed to commit protection transaction journal: {}",
+                e
+            );
+            let _ = journal.rollback();
+            return 1;
+        }
     }
 
     println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());

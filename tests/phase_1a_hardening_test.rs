@@ -192,13 +192,18 @@ fn test_protect_journal_transaction_and_rollback() {
     fs::write(&config_b, r#"{"initial_b": true}"#).unwrap();
 
     let mut journal = ProtectJournal::new("local-gateway");
-    journal.record_target_start("target_a", &[&config_a], "target_a_manifest");
+    journal
+        .record_target_start("target_a", &[&config_a], "target_a_manifest")
+        .unwrap();
     // Mutate config_a
     fs::write(&config_a, "mutated_a = true\n").unwrap();
     journal.record_target_success("target_a");
 
-    journal.record_target_start("target_b", &[&config_b], "target_b_manifest");
+    journal
+        .record_target_start("target_b", &[&config_b], "target_b_manifest")
+        .unwrap();
     // Mutate config_b
+
     fs::write(&config_b, r#"{"mutated_b": true}"#).unwrap();
     journal.record_target_success("target_b");
 

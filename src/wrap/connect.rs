@@ -1183,9 +1183,7 @@ pub fn connect_antigravity_target_to_path(
         }
     };
 
-    let agentcontrol_bin = std::env::current_exe()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "agentcontrol".to_string());
+    let agentcontrol_bin = crate::wrap::resolve_wrapper_binary();
 
     let mut modified = if config.is_object() {
         config.clone()

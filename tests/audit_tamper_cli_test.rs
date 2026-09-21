@@ -6,6 +6,7 @@
 //! 3. No fail-open fallback occurs when an audit key exists.
 
 use agentcontrol::audit::logger::{AuditLogger, AuditLoggerConfig};
+use agentcontrol::audit::maintenance::run_verify_db;
 use std::fs;
 use tempfile::tempdir;
 
@@ -13,7 +14,9 @@ use tempfile::tempdir;
 async fn test_audit_verification_tamper_detection() {
     let dir = tempdir().unwrap();
     let audit_file = dir.path().join("audit.jsonl");
+    let key_file = dir.path().join("audit.key");
     let secret = b"super-secret-hmac-key-32-bytes!!".to_vec();
+    fs::write(&key_file, &secret).unwrap();
 
     // Create a valid audit logger and write entries
     let logger = AuditLogger::new(AuditLoggerConfig {
@@ -60,23 +63,22 @@ async fn test_audit_verification_tamper_detection() {
         .await
         .unwrap();
 
-    // Verify valid chain with secret directly
-    let valid_res = agentcontrol::audit::verifier::verify_chain_with_secret(&audit_file, &secret);
-    assert!(matches!(
-        valid_res,
-        agentcontrol::audit::verifier::VerifyResult::Valid { entry_count: 2 }
-    ));
+    // 1. Untampered: run_verify_db MUST return 0 (PASSED)
+    let exit_code = run_verify_db(Some(audit_file.clone()), None);
+    assert_eq!(
+        exit_code, 0,
+        "run_verify_db must return 0 for untampered audit log"
+    );
 
-    // Now tamper with the payload of entry 1
+    // 2. Now tamper with the payload of entry 1
     let content = fs::read_to_string(&audit_file).unwrap();
     let tampered_content = content.replace("/etc/hosts", "/etc/shadow");
     fs::write(&audit_file, tampered_content).unwrap();
 
-    // Verification MUST detect HMAC mismatch and fail
-    let tampered_res =
-        agentcontrol::audit::verifier::verify_chain_with_secret(&audit_file, &secret);
-    assert!(matches!(
-        tampered_res,
-        agentcontrol::audit::verifier::VerifyResult::Invalid { entry_index: 0, .. }
-    ));
+    // 3. Tampered: run_verify_db MUST return 1 (FAILED)
+    let tampered_exit_code = run_verify_db(Some(audit_file.clone()), None);
+    assert_eq!(
+        tampered_exit_code, 1,
+        "run_verify_db must return non-zero exit code (1) when log payload is tampered"
+    );
 }

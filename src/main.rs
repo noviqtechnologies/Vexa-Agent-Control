@@ -1985,13 +1985,27 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     }
 
     // Background file-system watcher — active when --policy <file> is provided.
-    // Monitors the policy YAML file for on-disk changes and hot-reloads the in-memory
-    // policy without any restart (last-write-wins alongside the SSE subscriber above).
+    // In Team mode, central remote policy strictly dominates and local file watching is suppressed
+    // unless break-glass override is explicitly declared via AGENTCONTROL_BREAK_GLASS=true (Gate 5).
     if let Some(ref watch_path) = policy_path {
-        agentcontrol::policy::policy_file_watcher::start_policy_file_watcher(
-            watch_path.clone(),
-            state.clone(),
-        );
+        let is_break_glass = std::env::var("AGENTCONTROL_BREAK_GLASS")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !profile.is_team() || is_break_glass {
+            agentcontrol::policy::policy_file_watcher::start_policy_file_watcher(
+                watch_path.clone(),
+                state.clone(),
+            );
+        } else {
+            agentcontrol::logging::log_event(
+                agentcontrol::logging::Level::Warn,
+                "local_policy_watcher_suppressed",
+                serde_json::json!({
+                    "reason": "Team mode enforces central remote policy governance; local file watching suppressed without AGENTCONTROL_BREAK_GLASS=true",
+                    "path": watch_path,
+                }),
+            );
+        }
     }
 
     // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)

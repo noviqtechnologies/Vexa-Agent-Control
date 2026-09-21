@@ -293,7 +293,17 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
         }
     });
 
-    let target_key = base_dir.join("audit.key");
+    let target_key = if let Ok(kpath) = std::env::var("AGENTCONTROL_AUDIT_KEY") {
+        PathBuf::from(kpath)
+    } else if let Some(parent) = target_audit.parent() {
+        if parent.join("audit.key").exists() {
+            parent.join("audit.key")
+        } else {
+            base_dir.join("audit.key")
+        }
+    } else {
+        base_dir.join("audit.key")
+    };
 
     if target_audit.exists() {
         print!(

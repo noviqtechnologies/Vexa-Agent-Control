@@ -20,11 +20,13 @@ fn test_multi_file_preimage_atomic_rollback() {
     fs::write(&aux_auth, b"{\"api_key\": \"secret-user-key\"}\n").unwrap();
 
     let mut journal = ProtectJournal::new("local-gateway");
-    journal.record_target_start(
-        "codex_test",
-        &[&main_config, &aux_auth],
-        "codex_manifest_test",
-    );
+    journal
+        .record_target_start(
+            "codex_test",
+            &[&main_config, &aux_auth],
+            "codex_manifest_test",
+        )
+        .unwrap();
 
     // Simulate mutation across both files
     write_file_durable(
@@ -65,12 +67,16 @@ fn test_in_flight_target_interruption_rollback() {
     let mut journal = ProtectJournal::new("local-gateway");
 
     // Target 1 completes
-    journal.record_target_start("cursor", &[&config1], "cursor_manifest");
+    journal
+        .record_target_start("cursor", &[&config1], "cursor_manifest")
+        .unwrap();
     write_file_durable(&config1, b"{\"cursor_wrapped\": true}").unwrap();
     journal.record_target_success("cursor");
 
     // Target 2 starts and mutates file, but process crashes before success is recorded
-    journal.record_target_start("claude", &[&config2], "claude_manifest");
+    journal
+        .record_target_start("claude", &[&config2], "claude_manifest")
+        .unwrap();
     write_file_durable(&config2, b"{\"claude_partial_corruption\": true}").unwrap();
 
     // Rollback must restore BOTH target 1 (completed) and target 2 (in-flight/attempted)
@@ -101,4 +107,31 @@ fn test_corrupted_journal_quarantine() {
             b"{ invalid json corrupt truncated ..."
         );
     }
+}
+
+#[test]
+fn test_unreadable_preimage_fails_closed() {
+    let dir = tempdir().unwrap();
+    let locked_file = dir.path().join("locked_config.json");
+    fs::write(&locked_file, b"{\"secure\": true}").unwrap();
+
+    let mut journal = ProtectJournal::new("local-gateway");
+
+    // Non-existent auxiliary file records None without error
+    let non_existent = dir.path().join("does_not_exist.json");
+    let res = journal.record_target_start("test_non_existent", &[&non_existent], "manifest_test");
+    assert!(
+        res.is_ok(),
+        "Non-existent initial file should record as non-existent"
+    );
+
+    // Existing file records byte preimage correctly
+    let res_existing =
+        journal.record_target_start("test_existing", &[&locked_file], "manifest_test");
+    assert!(res_existing.is_ok());
+    let entry = journal.entries.get("test_existing").unwrap();
+    assert_eq!(
+        entry.files[0].pre_mutation_bytes,
+        Some(b"{\"secure\": true}".to_vec())
+    );
 }
