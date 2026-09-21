@@ -80,10 +80,10 @@ for line in sys.stdin:
     script
 }
 
-/// Write a JSON-RPC message to the proxy stdin and read back one response line.
+/// Write a JSON-RPC message to the proxy stdin and read back one response line with timeout.
 fn send_and_recv(
     stdin: &mut impl Write,
-    stdout: &mut impl BufRead,
+    stdout_rx: &std::sync::mpsc::Receiver<String>,
     msg: serde_json::Value,
 ) -> serde_json::Value {
     let line = serde_json::to_string(&msg).unwrap() + "\n";
@@ -91,9 +91,10 @@ fn send_and_recv(
         .write_all(line.as_bytes())
         .expect("write to proxy stdin");
     stdin.flush().expect("flush proxy stdin");
-    let mut resp = String::new();
-    stdout.read_line(&mut resp).expect("read from proxy stdout");
-    serde_json::from_str(resp.trim()).unwrap_or(serde_json::Value::Null)
+    match stdout_rx.recv_timeout(Duration::from_secs(10)) {
+        Ok(resp) => serde_json::from_str(resp.trim()).unwrap_or(serde_json::Value::Null),
+        Err(e) => panic!("Timed out waiting for response from stdio-proxy: {:?}", e),
+    }
 }
 
 #[test]
@@ -120,12 +121,13 @@ fn test_stdio_proxy_process_integration() {
     let upstream_script = write_echo_upstream(dir.path());
     let hit_log = dir.path().join("upstream_hits.log");
 
-    // Spawn: agentcontrol stdio-proxy -- python3 <echo_upstream.py>
+    // Spawn: agentcontrol stdio-proxy -- python3 -u <echo_upstream.py>
     let mut proxy = Command::new(&binary)
         .current_dir(dir.path())
-        .args(["stdio-proxy", "--", "python3"])
+        .args(["stdio-proxy", "--", "python3", "-u"])
         .arg(&upstream_script)
         .env("UPSTREAM_HIT_LOG", &hit_log)
+        .env("PYTHONUNBUFFERED", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -133,7 +135,22 @@ fn test_stdio_proxy_process_integration() {
         .expect("spawn agentcontrol stdio-proxy");
 
     let mut proxy_stdin = proxy.stdin.take().expect("proxy stdin");
-    let mut stdout_reader = BufReader::new(proxy.stdout.take().expect("proxy stdout"));
+    let (stdout_tx, stdout_rx) = std::sync::mpsc::channel();
+    let stdout = proxy.stdout.take().expect("proxy stdout");
+
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        while let Ok(n) = reader.read_line(&mut line) {
+            if n == 0 {
+                break;
+            }
+            if stdout_tx.send(line.clone()).is_err() {
+                break;
+            }
+            line.clear();
+        }
+    });
 
     // Brief pause for child processes to initialise.
     std::thread::sleep(Duration::from_millis(200));
@@ -141,7 +158,7 @@ fn test_stdio_proxy_process_integration() {
     // ── Test 1: Safe tools/call — must reach the upstream ────────────────────────
     let safe_resp = send_and_recv(
         &mut proxy_stdin,
-        &mut stdout_reader,
+        &stdout_rx,
         serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -158,7 +175,7 @@ fn test_stdio_proxy_process_integration() {
     // ── Test 2: DLP-blocked call — must NOT reach the upstream ───────────────────
     let dlp_resp = send_and_recv(
         &mut proxy_stdin,
-        &mut stdout_reader,
+        &stdout_rx,
         serde_json::json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -180,7 +197,7 @@ fn test_stdio_proxy_process_integration() {
     // ── Test 3: Injection-blocked call — must NOT reach the upstream ─────────────
     let inj_resp = send_and_recv(
         &mut proxy_stdin,
-        &mut stdout_reader,
+        &stdout_rx,
         serde_json::json!({
             "jsonrpc": "2.0",
             "id": 3,
@@ -201,7 +218,7 @@ fn test_stdio_proxy_process_integration() {
 
     // Close stdin so the proxy receives EOF and exits cleanly.
     drop(proxy_stdin);
-    let _status = proxy.wait().expect("wait for proxy");
+    let _ = proxy.wait();
 
     // ── Assert upstream reachability ─────────────────────────────────────────────
     // The echo upstream appends one line per tools/call it receives.
