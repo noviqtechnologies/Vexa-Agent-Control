@@ -794,6 +794,8 @@ pub fn run_protect_orchestration(
         "agentcontrol verify".bold().cyan()
     );
 
+    connect::print_upstream_provider_status();
+
     if dry_run {
         println!(
             "\n  {} Dry run completed. No files modified and gateway not started.\n",

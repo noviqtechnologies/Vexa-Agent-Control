@@ -189,6 +189,75 @@ pub fn print_connect_summary(target: ConnectTarget, result: &ConnectResult) {
     println!("\n  ℹ Restart {} to apply changes.", target.display_name());
 }
 
+/// Upstream provider key status structure for testing and programmatic inspection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DetectedProviderKey {
+    pub env_var: &'static str,
+    pub label: &'static str,
+    pub masked_key: String,
+}
+
+/// Inspects the environment and .env files to detect configured upstream LLM provider keys.
+pub fn detect_upstream_provider_keys() -> Vec<DetectedProviderKey> {
+    let providers = [
+        ("ANTHROPIC_API_KEY", "Anthropic"),
+        ("OPENAI_API_KEY", "OpenAI"),
+        ("GEMINI_API_KEY", "Google Gemini"),
+        ("DEEPSEEK_API_KEY", "DeepSeek"),
+        ("GROQ_API_KEY", "Groq"),
+    ];
+
+    let mut detected = Vec::new();
+    for (env_var, label) in &providers {
+        let val = crate::proxy::llm_proxy::get_env_or_dotenv(env_var)
+            .or_else(|| {
+                if *env_var == "GEMINI_API_KEY" {
+                    crate::proxy::llm_proxy::get_env_or_dotenv("GOOGLE_API_KEY")
+                } else {
+                    None
+                }
+            });
+        if let Some(key) = val {
+            if !key.is_empty() {
+                detected.push(DetectedProviderKey {
+                    env_var,
+                    label,
+                    masked_key: mask_token(&key),
+                });
+            }
+        }
+    }
+    detected
+}
+
+/// Prints a clear, proactive, OS-aware guidance banner regarding upstream provider keys.
+pub fn print_upstream_provider_status() {
+    let detected = detect_upstream_provider_keys();
+
+    if !detected.is_empty() {
+        println!("\n  {} Upstream LLM Provider Credentials Detected:", "🔑".green().bold());
+        for item in &detected {
+            println!("    ✔ {:<18} : {}", item.env_var.green().bold(), item.masked_key.cyan());
+        }
+    } else {
+        println!("\n  {} No upstream LLM provider API keys detected!", "⚠".yellow().bold());
+        println!("    IDE chat prompts will fail with 'missing_provider_api_key' until an upstream key is configured.");
+        println!();
+        println!("    {} To configure an upstream key for standalone usage:", "👉".cyan().bold());
+
+        if cfg!(target_os = "windows") {
+            println!("      • PowerShell:  {}", "$env:ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan());
+            println!("                     {}", "$env:OPENAI_API_KEY=\"sk-proj-...\"".cyan());
+            println!("      • CMD:         {}", "set ANTHROPIC_API_KEY=sk-ant-...".cyan());
+        } else {
+            println!("      • Shell:       {}", "export ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan());
+            println!("                     {}", "export OPENAI_API_KEY=\"sk-proj-...\"".cyan());
+        }
+        println!("      • .env File:   {}", "Add ANTHROPIC_API_KEY=sk-ant-... to .env in your project root".cyan());
+        println!("      • Local Models:{}", " Run Ollama (http://localhost:11434) or LM Studio".cyan());
+    }
+}
+
 /// Fetches assigned virtual key from Control Hub for cloud-direct mode.
 pub async fn fetch_assigned_virtual_key(hub_url: &str) -> Result<Option<String>, String> {
     match crate::policy::remote_keys::fetch_active_provider_keys(hub_url).await {
@@ -1597,5 +1666,22 @@ theme = "nord"
         let final_json: serde_json::Value = serde_json::from_str(&final_content).unwrap();
         assert_eq!(final_json["editor.fontSize"], 14);
         assert_eq!(final_json["continue.models"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_detect_upstream_provider_keys() {
+        std::env::set_var("ANTHROPIC_API_KEY", "sk-ant-test-auth-12345678");
+        let detected = detect_upstream_provider_keys();
+        let anthropic = detected.iter().find(|d| d.env_var == "ANTHROPIC_API_KEY");
+        assert!(anthropic.is_some());
+        let anthropic = anthropic.unwrap();
+        assert_eq!(anthropic.label, "Anthropic");
+        assert!(anthropic.masked_key.starts_with("sk-ant"));
+        assert!(anthropic.masked_key.ends_with("5678"));
+
+        // Test that print_upstream_provider_status runs without panicking
+        print_upstream_provider_status();
+
+        std::env::remove_var("ANTHROPIC_API_KEY");
     }
 }

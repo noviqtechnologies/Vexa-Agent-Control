@@ -1915,6 +1915,7 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         "Listening on:".bold(),
         listen.green().underline()
     );
+    agentcontrol::wrap::connect::print_upstream_provider_status();
     println!("{} Press Ctrl+C to stop", "⌨".blue());
     println!("{}", "-".repeat(60).cyan());
 
@@ -2683,6 +2684,7 @@ async fn run_dev(
         "Listening on:".bold(),
         listen.green().underline()
     );
+    agentcontrol::wrap::connect::print_upstream_provider_status();
     println!("{} Press Ctrl+C to stop", "⌨".blue());
     println!("{}", "-".repeat(60).cyan());
 
