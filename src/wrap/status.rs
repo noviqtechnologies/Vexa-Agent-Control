@@ -51,6 +51,39 @@ pub struct IdeIntegrationSummary {
     pub disclosures: Vec<String>,
 }
 
+fn is_target_managed(target_name: &str, path: &Path) -> (bool, bool) {
+    let manifest_name = match target_name {
+        "Claude Desktop" => "claude",
+        "Claude Code" => "claude-code",
+        "Cursor" => "cursor",
+        "Codex" => "codex",
+        "Antigravity" => "antigravity",
+        "VS Code" => "vscode-continue",
+        other => other,
+    };
+
+    if let Ok(Some(manifest)) = super::manifest::OwnershipManifest::load(manifest_name) {
+        let has_proxy_key = manifest.managed_keys.iter().any(|k| {
+            k.contains("proxy")
+                || k.contains("OPENAI_BASE_URL")
+                || k.contains("ANTHROPIC_BASE_URL")
+                || k == "continue.models"
+        });
+        return (has_proxy_key, true);
+    }
+
+    // Direct content inspection fallback
+    if let Ok(content) = std::fs::read_to_string(path) {
+        let has_proxy_url = content.contains("127.0.0.1:18080")
+            || content.contains("localhost:18080")
+            || (content.contains("OPENAI_BASE_URL") && content.contains("18080"))
+            || (content.contains("ANTHROPIC_BASE_URL") && content.contains("18080"));
+        return (has_proxy_url, false);
+    }
+
+    (false, false)
+}
+
 pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
     let targets = gather_all();
     targets
@@ -76,6 +109,15 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
                 Err(e) => (format!("Path error: {}", e), false, false, 0, 0),
             };
 
+            let (is_proxied, _has_manifest) = if exists {
+                match &t.path_result {
+                    Ok(p) => is_target_managed(t.name, p),
+                    Err(_) => (false, false),
+                }
+            } else {
+                (false, false)
+            };
+
             let mut states = Vec::new();
             let mut disclosures = Vec::new();
 
@@ -86,15 +128,19 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
                 if is_wrapped {
                     states.push(TargetState::McpWrapped);
                 }
-                if t.name == "Claude Desktop" {
-                    disclosures.push("LLM completions route out-of-band directly to Anthropic Cloud; MCP tools governed via stdio-proxy.".to_string());
-                } else {
+                if is_proxied {
                     states.push(TargetState::Configured);
                     states.push(TargetState::BypassPossible);
                 }
 
-                if t.name == "Codex" {
-                    disclosures.push("Native shell execution (bash/git) is UNGOVERNED by local proxy.".to_string());
+                if t.name == "Claude Desktop" {
+                    disclosures.push("LLM completions route out-of-band directly to Anthropic Cloud; MCP tools governed via stdio-proxy.".to_string());
+                } else if is_proxied {
+                    if t.name == "Codex" {
+                        disclosures.push("Native shell execution (bash/git) is UNGOVERNED by local proxy.".to_string());
+                    }
+                } else {
+                    disclosures.push("Target configuration exists on disk but is not pointed to Agent Control (Unmanaged).".to_string());
                 }
             }
 
@@ -112,6 +158,7 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
         })
         .collect()
 }
+
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -280,11 +327,11 @@ pub fn print_all_targets(json: bool) {
             let llm_routing = if !s.exists {
                 "NOT_DETECTED".to_string()
             } else if s.name == "Claude Desktop" {
-                "DIRECT_CLOUD".to_string()
+                "DIRECT_CLOUD (Anthropic)".to_string()
             } else if s.states.contains(&TargetState::Configured) {
                 "PROXIED (18080)".to_string()
             } else {
-                "NOT_CONFIGURED".to_string()
+                "UNMANAGED".to_string()
             };
 
             let mcp_gov = if !s.exists {
@@ -331,9 +378,6 @@ pub fn print_all_targets(json: bool) {
         println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
         return;
     }
-
-    // Only send snapshot in interactive table mode
-    gather_and_send_mcp_servers_snapshot();
 
     println!();
     println!(
@@ -524,6 +568,9 @@ pub fn gather_servers_for_snapshot(
 }
 
 pub fn gather_and_send_mcp_servers_snapshot() {
+    if !crate::identity::device::is_device_enrolled() {
+        return;
+    }
     let token_opt = std::env::var("AGENT_ID")
         .ok()
         .or_else(crate::identity::device::load_device_token)

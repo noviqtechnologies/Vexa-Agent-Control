@@ -10,6 +10,7 @@ pub mod connect;
 pub mod file_lock;
 pub mod generic_ide;
 pub mod ide_config;
+pub mod journal;
 pub mod manifest;
 pub mod status;
 pub mod transformer;
@@ -371,7 +372,7 @@ pub fn run_watch(all: bool, target: Option<WatchTarget>) -> i32 {
     watch::run_watch(all, target)
 }
 
-/// Executes `agentcontrol unprotect` — restores configurations across all supported IDE targets from backups (FR-1.4).
+/// Executes `agentcontrol unprotect` — restores configurations across all supported IDE targets from manifests with backup fallback (FR-1.4).
 pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
     println!(
         "{} Unprotecting all IDE configurations...",
@@ -383,7 +384,65 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
         );
     }
 
-    let targets = vec![
+    // 1. Recover from stale transaction journal if present
+    let _ = journal::ProtectJournal::recover_if_stale();
+
+    let mut disconnected_count = 0;
+    let mut err_count = 0;
+
+    // 2. Disconnect any manifest-managed targets (System B - primary)
+    let manifests = manifest::OwnershipManifest::list_all().unwrap_or_default();
+    let mut manifest_targets = std::collections::HashSet::new();
+
+    for m in &manifests {
+        manifest_targets.insert(m.target.clone());
+        if let Some(target) = ConnectTarget::from_target_name(&m.target) {
+            if dry_run {
+                println!(
+                    "  ℹ {}: Would revert managed keys from ownership manifest",
+                    target.display_name().bold()
+                );
+                disconnected_count += 1;
+            } else {
+                let code = connect::run_disconnect(target);
+                if code == 0 {
+                    disconnected_count += 1;
+                } else {
+                    err_count += 1;
+                }
+            }
+        } else {
+            if dry_run {
+                println!("  ℹ {}: Would revert manifest", m.target.bold());
+                disconnected_count += 1;
+            } else {
+                let is_toml = m.config_path.extension().and_then(|e| e.to_str()) == Some("toml");
+                let res = if is_toml {
+                    connect::revert_toml_target(m)
+                } else {
+                    connect::revert_json_target(m)
+                };
+                match res {
+                    Ok(keys) => {
+                        let _ = manifest::OwnershipManifest::delete(&m.target);
+                        println!(
+                            "  ✔ {}: Reverted managed keys: {}",
+                            m.target.bold(),
+                            keys.join(", ").cyan()
+                        );
+                        disconnected_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("  ✖ {}: {}", m.target.red(), e);
+                        err_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: Legacy .bak restore for any targets not covered by manifests (System A)
+    let legacy_targets = vec![
         ("Claude Desktop", UnwrapTarget::Claude { force }),
         ("Cursor", UnwrapTarget::Cursor { force }),
         ("Codex", UnwrapTarget::Codex { force }),
@@ -395,17 +454,10 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
         ("Antigravity", UnwrapTarget::Antigravity { force }),
     ];
 
-    let mut restored_count = 0;
-    let mut no_backup_count = 0;
-    let mut err_count = 0;
-
-    for (name, target) in targets {
-        if dry_run {
-            println!(
-                "  ℹ {}: Would attempt unwrap and restore backup",
-                name.bold()
-            );
-            restored_count += 1;
+    let mut legacy_restored = 0;
+    for (name, target) in legacy_targets {
+        let t_str = name.to_lowercase().replace(' ', "-");
+        if manifest_targets.contains(&t_str) || manifest_targets.contains(&name.to_lowercase()) {
             continue;
         }
 
@@ -431,19 +483,14 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
 
         match res {
             Ok(r) => {
-                restored_count += 1;
+                legacy_restored += 1;
                 println!(
-                    "  ✔ {}: Restored config from {}",
+                    "  ✔ {}: Restored config from legacy backup {}",
                     name.bold(),
                     r.backup_path.display().to_string().cyan()
                 );
             }
-            Err(WrapError::NoBackupFound) => {
-                no_backup_count += 1;
-            }
-            Err(WrapError::ConfigNotFound(_)) => {
-                // Not installed, skip
-            }
+            Err(WrapError::NoBackupFound) | Err(WrapError::ConfigNotFound(_)) => {}
             Err(e) => {
                 err_count += 1;
                 eprintln!("  ✖ {}: {}", name.red(), e);
@@ -453,9 +500,9 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
 
     println!();
     println!(
-        "✔ Restored: {}, No Backups Needed: {}, Errors: {}",
-        restored_count.to_string().bold(),
-        no_backup_count.to_string().dimmed(),
+        "✔ Disconnected: {}, Legacy Restored: {}, Errors: {}",
+        disconnected_count.to_string().bold(),
+        legacy_restored.to_string().cyan(),
         err_count.to_string().red()
     );
     if err_count > 0 {
@@ -512,7 +559,34 @@ pub fn open_browser(url: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Executes `agentcontrol protect` — Automated discovery, atomic wrapping, gateway startup, and dashboard launch (FR-1.1, FR-1.2, FR-1.3).
+fn check_listener_available_or_running(listen: &str) -> Result<(), String> {
+    match std::net::TcpListener::bind(listen) {
+        Ok(listener) => {
+            drop(listener);
+            Ok(())
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                if let Ok(addr) = listen.parse::<std::net::SocketAddr>() {
+                    if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)).is_ok() {
+                        return Ok(());
+                    }
+                }
+                Err(format!(
+                    "Port {} is already in use by another process that is not responding. Refusing to modify IDE configurations.",
+                    listen
+                ))
+            } else {
+                Err(format!(
+                    "Cannot bind to {}: {}. Refusing to modify IDE configurations.",
+                    listen, e
+                ))
+            }
+        }
+    }
+}
+
+/// Executes `agentcontrol protect` — Automated discovery, transactional wrapping, and gateway startup (FR-1.1, FR-1.2, FR-1.3).
 pub fn run_protect_orchestration(
     dry_run: bool,
     no_browser: bool,
@@ -521,7 +595,22 @@ pub fn run_protect_orchestration(
     enforce: bool,
     policy: &str,
 ) -> i32 {
-    // Step 0: Ensure baseline policy exists and is valid BEFORE mutating client configurations
+    // Step 0: Check and recover from any stale uncommitted transaction
+    if let Err(e) = journal::ProtectJournal::recover_if_stale() {
+        eprintln!("\n  {} Failed to recover stale protect journal: {}", "✘".red().bold(), e);
+        return 1;
+    }
+
+    // Step 1: Pre-flight check listener availability BEFORE touching any client configurations
+    if !dry_run {
+        if let Err(e) = check_listener_available_or_running(listen) {
+            eprintln!("\n  {} Pre-flight check failed: {}", "✘".red().bold(), e);
+            eprintln!("  Actionable fix: Free up the address or specify a different listener via --listen <IP:PORT>.");
+            return 1;
+        }
+    }
+
+    // Step 2: Ensure baseline policy exists and is valid BEFORE mutating client configurations
     let policy_path = std::path::Path::new(policy);
     if !policy_path.exists() {
         if !dry_run {
@@ -604,13 +693,85 @@ pub fn run_protect_orchestration(
         }
     }
 
+    // Step 3: Discover installed AI clients
     println!(
-        "\n  {} Discovered & Wrapped MCP Configurations:",
+        "\n  {} Discovering and Protecting Workstation Clients:",
         "✔".green().bold()
     );
-    run_wrap_all(dry_run, false);
 
+    let detected_targets: Vec<ConnectTarget> = connect::ALL_CONNECT_TARGETS
+        .iter()
+        .copied()
+        .filter(|t| connect::is_target_installed(*t))
+        .collect();
 
+    if detected_targets.is_empty() {
+        println!("    ℹ 0 supported AI clients detected on workstation.");
+        println!("    ℹ Supported: Cursor, Claude Desktop, Claude Code (CLI), Codex, Antigravity, VS Code (Continue).");
+        println!("    ℹ To route custom agents or CLI tools through the gateway, set:");
+        println!("      export AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080");
+        println!("      export HTTP_PROXY=http://127.0.0.1:18080");
+    } else if dry_run {
+        for target in &detected_targets {
+            let path = connect::get_target_config_path(*target)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "unknown".to_string());
+            println!("    ℹ [DRY RUN] Would protect {}: config at {}", target.display_name().bold(), path.cyan());
+        }
+    } else {
+        let local_token = crate::identity::oauth::get_or_create_local_token()
+            .unwrap_or_else(|_| "vx-local-session".to_string());
+        let mut journal = journal::ProtectJournal::new("local-gateway");
+
+        for target in &detected_targets {
+            let config_path = match connect::get_target_config_path(*target) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("    ✖ {}: {}", target.display_name().red(), e);
+                    continue;
+                }
+            };
+
+            journal.record_target_start(target.as_str(), &config_path, target.as_str());
+            if let Err(e) = journal.save() {
+                eprintln!("    ✖ Failed to update protection journal: {}", e);
+                eprintln!("    Aborting protection to ensure fail-closed integrity.");
+                let _ = journal.rollback();
+                return 1;
+            }
+
+            match connect::connect_target(*target, &local_token, connect::ConnectMode::Local) {
+                Ok(res) => {
+                    connect::print_connect_summary(*target, &res);
+                    journal.record_target_success(target.as_str());
+                    if let Err(e) = journal.save() {
+                        eprintln!("    ✖ Failed to save protection journal progress: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "\n  {} Failed to configure {}: {}",
+                        "✘".red().bold(),
+                        target.display_name(),
+                        e
+                    );
+                    eprintln!("  {} Rolling back all workstation modifications (fail-closed)...", "⚡".yellow());
+                    match journal.rollback() {
+                        Ok(reverted) => {
+                            eprintln!("  ✔ Successfully rolled back: {}", reverted.join(", ").cyan());
+                        }
+                        Err(rb_err) => {
+                            eprintln!("  ✖ Rollback error: {}", rb_err.red());
+                        }
+                    }
+                    return 1;
+                }
+            }
+        }
+
+        // All targets configured successfully! Commit transaction by deleting the journal.
+        let _ = journal.delete();
+    }
 
     println!("\n  {} Gateway Runtime Status:", "📊".cyan().bold());
     println!(
@@ -654,6 +815,7 @@ pub fn run_protect_orchestration(
 
     0
 }
+
 
 #[cfg(test)]
 mod tests {

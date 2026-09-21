@@ -126,6 +126,9 @@ pub struct PolicyFile {
 
     /// Optional policy metadata, including client attribution for spend management.
     pub metadata: Option<PolicyMetadata>,
+
+    /// Optional explicit allowed egress providers list (hostnames or wildcards like *.openai.azure.com).
+    pub allowed_providers: Option<Vec<String>>,
 }
 
 /// Policy metadata block including attribution tags (client_id, project_id, cost_center)
@@ -159,6 +162,8 @@ pub struct LlmConfig {
     pub model_groups: Option<Vec<ModelGroupConfig>>,
     /// Semantic vector caching configuration.
     pub semantic_cache: Option<SemanticCacheConfig>,
+    /// Optional allowed cloud provider hostnames or wildcard patterns.
+    pub allowed_providers: Option<Vec<String>>,
 }
 
 /// Nested Qdrant configuration block for semantic caching.

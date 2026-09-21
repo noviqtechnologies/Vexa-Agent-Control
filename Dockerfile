@@ -69,7 +69,7 @@ COPY policy.example.yaml /app/policy.example.yaml
 RUN mkdir -p /var/log/agentcontrol && chmod 755 /var/log/agentcontrol
 
 # Non-root user for security
-RUN useradd -r -s /bin/false -d /app agentcontrol && \
+RUN useradd -r -u 10001 -s /bin/false -d /app agentcontrol && \
     chown -R agentcontrol:agentcontrol /app /var/log/agentcontrol
 USER agentcontrol
 

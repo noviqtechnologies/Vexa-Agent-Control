@@ -65,6 +65,7 @@ async fn test_boundary_1_policy_identity_dlp_interaction() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let (state, _dir) = create_test_proxy_state(Some(policy.clone()));
@@ -259,6 +260,7 @@ async fn test_boundary_3_external_network_mock_upstream_forwarding() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let (mut state_struct, _dir) = create_test_proxy_state(Some(policy.clone()));
@@ -313,6 +315,7 @@ async fn test_boundary_3_external_network_unreachable_upstream_graceful_handling
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let (mut state_struct, _dir) = create_test_proxy_state(Some(policy.clone()));
@@ -371,6 +374,7 @@ async fn test_boundary_4_state_rate_limit_multi_step_exhaustion() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let (mut state_struct, _dir) = create_test_proxy_state(Some(policy.clone()));
@@ -438,6 +442,7 @@ async fn test_boundary_4_state_lifecycle_dynamic_policy_hot_reload() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let (state, _dir) = create_test_proxy_state(Some(initial_policy.clone()));
@@ -485,7 +490,9 @@ async fn test_boundary_4_state_lifecycle_dynamic_policy_hot_reload() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
+
 
     {
         let mut policy_guard = state.policy.write().unwrap();

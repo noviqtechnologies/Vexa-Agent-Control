@@ -91,6 +91,24 @@ pub enum Commands {
     /// Flush local workstation credentials and invalidate session
     Logout,
 
+    /// Create a consistent online backup of local databases and audit logs (ADR 0.6)
+    Backup {
+        /// Optional destination directory (defaults to ~/.agentcontrol/backups)
+        #[arg(long)]
+        output_dir: Option<std::path::PathBuf>,
+    },
+
+    /// Verify the cryptographic HMAC chain of audit.jsonl and SQLite integrity of events.db (ADR 0.6)
+    #[command(name = "verify-db")]
+    VerifyDb {
+        /// Optional custom path to audit.jsonl (defaults to ~/.agentcontrol/audit.jsonl)
+        #[arg(long)]
+        audit_path: Option<std::path::PathBuf>,
+        /// Optional custom path to events.db (defaults to ~/.agentcontrol/events.db)
+        #[arg(long)]
+        db_path: Option<std::path::PathBuf>,
+    },
+
     /// Purge local telemetry events and cache while preserving baseline config backups
     #[command(name = "reset-local-state")]
     ResetLocalState {
@@ -927,47 +945,141 @@ pub struct StartArgs {
     pub connection_timeout_secs: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Serialize, serde::Deserialize)]
 pub enum DeploymentProfile {
+    #[value(name = "local-gateway", alias = "local-enforce", alias = "gateway")]
+    LocalGateway,
+    #[value(name = "local-firewall", alias = "firewall", alias = "air-gapped")]
+    LocalFirewall,
+    #[value(name = "team-gateway", alias = "team-enforce", alias = "team", alias = "dedicated-enforce", alias = "enterprise")]
+    TeamGateway,
+    #[value(name = "container-sidecar", alias = "sidecar", alias = "container")]
+    ContainerSidecar,
+    #[value(name = "local-shadow", alias = "shadow")]
     LocalShadow,
-    LocalEnforce,
-    TeamEnforce,
-    DedicatedEnforce,
 }
 
 impl DeploymentProfile {
-    pub fn parse(s: &str) -> Self {
+    pub fn try_parse(s: &str) -> Result<Self, String> {
         match s.to_ascii_lowercase().as_str() {
-            "local-enforce" | "local_enforce" | "enforce" => Self::LocalEnforce,
-            "team-enforce" | "team_enforce" | "team" => Self::TeamEnforce,
-            "dedicated-enforce" | "dedicated_enforce" | "dedicated" | "enterprise" => {
-                Self::DedicatedEnforce
+            "local-gateway" | "local_gateway" | "local-enforce" | "local_enforce" | "enforce" | "gateway" => {
+                Ok(Self::LocalGateway)
             }
-            _ => Self::LocalShadow,
+            "local-firewall" | "local_firewall" | "firewall" | "air-gapped" | "air_gapped" => {
+                Ok(Self::LocalFirewall)
+            }
+            "team-gateway" | "team_gateway" | "team-enforce" | "team_enforce" | "team" | "dedicated-enforce" | "dedicated_enforce" | "dedicated" | "enterprise" => {
+                Ok(Self::TeamGateway)
+            }
+            "container-sidecar" | "container_sidecar" | "sidecar" | "container" => {
+                Ok(Self::ContainerSidecar)
+            }
+            "local-shadow" | "local_shadow" | "shadow" => {
+                Ok(Self::LocalShadow)
+            }
+            unknown => Err(format!(
+                "Unknown deployment profile '{}'. Valid profiles: local-gateway, local-firewall, team-gateway, container-sidecar",
+                unknown
+            )),
         }
+    }
+
+    /// Legacy parse function mapping unknown strings cleanly to an error or safe default with warning
+    pub fn parse(s: &str) -> Self {
+        Self::try_parse(s).unwrap_or_else(|e| {
+            eprintln!("⚠ {}", e);
+            Self::LocalGateway
+        })
     }
 
     pub fn is_enforce(&self) -> bool {
         !matches!(self, Self::LocalShadow)
     }
 
+    #[allow(non_upper_case_globals)]
+    pub const TeamEnforce: DeploymentProfile = DeploymentProfile::TeamGateway;
+    #[allow(non_upper_case_globals)]
+    pub const DedicatedEnforce: DeploymentProfile = DeploymentProfile::TeamGateway;
+    #[allow(non_upper_case_globals)]
+    pub const LocalEnforce: DeploymentProfile = DeploymentProfile::LocalGateway;
+
+    pub fn is_team(&self) -> bool {
+        matches!(self, Self::TeamGateway)
+    }
+
+    pub fn is_air_gapped(&self) -> bool {
+        matches!(self, Self::LocalFirewall)
+    }
+
     pub fn default_scan_responses(&self) -> bool {
-        matches!(self, Self::TeamEnforce | Self::DedicatedEnforce)
+        matches!(self, Self::TeamGateway)
     }
 
     pub fn default_fail_closed(&self) -> bool {
-        matches!(self, Self::TeamEnforce | Self::DedicatedEnforce)
+        matches!(self, Self::TeamGateway)
     }
 
     pub fn name(&self) -> &'static str {
         match self {
+            Self::LocalGateway => "local-gateway",
+            Self::LocalFirewall => "local-firewall",
+            Self::TeamGateway => "team-gateway",
+            Self::ContainerSidecar => "container-sidecar",
             Self::LocalShadow => "local-shadow",
-            Self::LocalEnforce => "local-enforce",
-            Self::TeamEnforce => "team-enforce",
-            Self::DedicatedEnforce => "dedicated-enforce",
         }
     }
 }
+
+/// Durable operational profile record saved at ~/.agentcontrol/profile.json
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PersistedProfileRecord {
+    pub profile: DeploymentProfile,
+    pub updated_at: String,
+    pub version: String,
+}
+
+impl PersistedProfileRecord {
+    pub fn profile_path() -> Option<std::path::PathBuf> {
+        dirs::home_dir().map(|h| h.join(".agentcontrol").join("profile.json"))
+    }
+
+    pub fn load() -> Option<DeploymentProfile> {
+        let path = Self::profile_path()?;
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(rec) = serde_json::from_str::<PersistedProfileRecord>(&content) {
+                    return Some(rec.profile);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn save(profile: DeploymentProfile) -> std::io::Result<()> {
+        if let Some(path) = Self::profile_path() {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let rec = PersistedProfileRecord {
+                profile,
+                updated_at: chrono::Utc::now().to_rfc3339(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            };
+            let json = serde_json::to_string_pretty(&rec)?;
+            std::fs::write(&path, json)?;
+        }
+        Ok(())
+    }
+}
+
+pub fn save_persisted_profile(profile: DeploymentProfile) -> std::io::Result<()> {
+    PersistedProfileRecord::save(profile)
+}
+
+pub fn load_persisted_profile() -> Option<DeploymentProfile> {
+    PersistedProfileRecord::load()
+}
+
 
 impl StartArgs {
     pub fn centralized_default() -> Self {

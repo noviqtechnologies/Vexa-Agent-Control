@@ -767,11 +767,13 @@ pub async fn run_enroll(token: &str, hub_url: &str) -> i32 {
 
     let _ = save_device_token(&complete_data.device.id);
     let _ = save_hub_url(clean_hub);
+    let _ = crate::cli::save_persisted_profile(crate::cli::DeploymentProfile::TeamGateway);
 
     println!();
     println!("{} Device enrolled successfully!", "✔".green().bold());
     println!("  Device ID:          {}", complete_data.device.id.cyan());
     println!("  Control Hub URL:    {}", clean_hub.cyan());
+    println!("  Runtime Profile:    {}", "team-gateway".green());
     println!(
         "  Initial State:      {}",
         complete_data.device.state.yellow()

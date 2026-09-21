@@ -150,22 +150,21 @@ curl -X POST http://localhost:18080/v1/chat/completions \
 </details>
 
 <details>
-<summary><b>2. Zero-Trust MCP Tool Firewall</b> — 1-Command IDE & Agent Protection</summary>
+<summary><b>2. Zero-Trust MCP Tool Firewall & Workstation Sentry</b> — 1-Command IDE Protection & Reversal</summary>
 
-Vexa automatically discovers, backs up, and wraps MCP configurations for **Claude Desktop**, **Cursor**, **Codex**, and **Antigravity**.
+Vexa automatically discovers, verifies listener ports, journals atomic changes, and wraps configurations for **Claude Desktop**, **Cursor**, **Codex**, and **Antigravity**.
 
-### Zero-Touch Workstation Quickstart
+### 1-Command Workstation Protection
 ```bash
-# 1. Authenticate your workstation via browser OAuth PKCE:
-agentcontrol login
+# 1. Start gateway & protect all detected coding assistants with atomic rollback safety:
+agentcontrol protect
 
-# 2. Connect your installed coding assistants:
-agentcontrol connect codex
-agentcontrol connect claude
-
-# 3. Check health and multi-state status:
+# 2. Check health, verified port, and owned-key integrity:
 agentcontrol status
 agentcontrol doctor
+
+# 3. Cleanly unprotect all assistants and restore pristine original settings anytime:
+agentcontrol unprotect
 ```
 
 ### Automated 4-Point Live Verification Suite
@@ -180,10 +179,10 @@ agentcontrol verify
 ✔ [1/4] Safe Tool Execution (read_file)         ➔ POLICY ALLOWED
 ✔ [2/4] DLP Exfiltration Guard (AWS Secret)    ➔ BLOCKED [DLP-01-HIGH-ENTROPY]
 ✔ [3/4] Prompt Injection (System Override)     ➔ BLOCKED [INJ-04-OVERRIDE]
-✔ [4/4] Workstation Client Sentry (IDE Config)  ➔ PROTECTED
+✔ [4/4] Workstation Client Sentry (IDE Config)  ➔ PROTECTED (OWNED_KEYS_VERIFIED)
 ```
 
-[**Read the Cursor Governance Guide →**](docs/guides/cursor_governance_guide.md) · [**Claude Desktop Guide →**](docs/integrations/claude-desktop.md)
+[**Read the Workstation Guide →**](docs/workstation_guide.md) · [**Cursor Guide →**](docs/integrations/cursor.md) · [**Claude Desktop Guide →**](docs/integrations/claude-desktop.md)
 
 </details>
 
@@ -521,6 +520,19 @@ Issue, govern, rotate, and monitor fine-grained developer tokens without credent
 
 Choose the setup that matches your goal:
 
+### 🚀 Option 0: Developer Standalone Gateway (Loopback-Only & Non-Root)
+
+*Best for local developers wanting zero external services, zero Control Hub dependencies, non-root execution (UID 10001), and strict host loopback binding (`127.0.0.1:18080`).*
+
+```bash
+docker compose -f docker-compose.standalone.yml up -d
+```
+- **Local Dashboard:** [http://127.0.0.1:18080](http://127.0.0.1:18080)
+- **Security Posture:** Bound strictly to host loopback, all Linux capabilities dropped, absolute dormancy (zero outbound telemetry or Control Hub connections).
+- **Audit & SQLite Storage:** Persisted locally to Docker named volumes.
+
+---
+
 ### 🌟 Option 1: Full-Stack Control Hub with Web UI (Recommended for Team Hub Evaluation)
 
 *Best for exploring the complete team platform: visual policy editor, audit logs, PostgreSQL storage, and real-time React web console.*
@@ -679,58 +691,52 @@ Launch the local security gateway and governance proxy on your workstation:
 agentcontrol start
 ```
 
-- **What happens automatically:**
-  - Binds locally to `127.0.0.1:18080` (or dynamic fallback `18080..=18090` written to `~/.agentcontrol/daemon.port`).
-  - Initializes a high-entropy local bearer token in `~/.agentcontrol/local.token` (restricted with POSIX `0600` / Windows ACL permissions).
-  - Initializes the embedded SQLite audit engine at `~/.agentcontrol/events.db` in Write-Ahead Logging (WAL) mode.
-  - Serves the **embedded Local Developer Dashboard** directly at `http://127.0.0.1:18080`.
+### Step 2: Protect Your Workstation in 1 Command (`agentcontrol protect`)
 
-*(To connect to a Control Hub and register a persistent background daemon, run `agentcontrol login --hub <url>`. This handles PKCE authentication, device enrollment, and service installation in one step.)*
-
----
-
-### Step 3: Connect Your Coding Assistants (`agentcontrol connect <target>`)
-
-In a new terminal window, connect your installed coding assistants with non-destructive ownership tracking:
+Protect all detected AI coding assistants with atomic transaction safety:
 
 ```bash
-# Connect OpenAI Codex CLI:
-agentcontrol connect codex
-
-# Connect Anthropic Claude Desktop (MCP tool governance):
-agentcontrol connect claude
-
-# Connect Anthropic Claude Code CLI (full LLM completion + spend governance):
-agentcontrol connect claude-code
-
-# Connect Cursor IDE:
-agentcontrol connect cursor
-
-# Connect Google Antigravity IDE:
-agentcontrol connect antigravity
-
-# Connect VS Code Continue extension:
-agentcontrol connect vscode-continue
+agentcontrol protect
 ```
 
-#### Client Governance & Support Matrix
+- **What happens automatically:**
+  - **Listener Pre-Flight:** Binds locally to `127.0.0.1:18080` (or fallback port `18080..=18090` written to `~/.agentcontrol/daemon.port`) and verifies responsiveness *before* mutating any configuration files.
+  - **Target Discovery:** Automatically scans for installed assistants: **Cursor**, **Claude Desktop**, **Claude Code**, **OpenAI Codex**, and **Google Antigravity**.
+  - **Transaction Journal (`~/.agentcontrol/protect_journal.json`):** Stages mutations and snapshots previous file states with `0600` permissions. If any file write fails, Agent Control automatically halts and executes an immediate fail-closed rollback.
+  - **Authoritative Ownership Manifests:** Records exact managed keys in `~/.agentcontrol/manifests/<target>.manifest.json` ensuring complete, non-destructive reversibility.
+  - **Local Storage Initialized:** Embedded SQLite database created at `~/.agentcontrol/events.db` (WAL mode) and HMAC-SHA256 audit log at `~/.agentcontrol/audit.jsonl`.
+  - **Embedded Dashboard Available:** Serves the Local Developer Dashboard directly at `http://127.0.0.1:18080`.
 
-| Client / Agent | LLM Routing & Spend Caps | MCP Tool Interception | Virtual Key Custody | Governance Layer |
-| :--- | :---: | :---: | :---: | :--- |
-| **OpenAI Codex CLI** | ✅ Full | ✅ Full | ✅ Injected (`auth.json`) | `config.toml` (`openai_base_url`) |
-| **Anthropic Claude Code (CLI)** | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `~/.claude/settings.json` (`env.ANTHROPIC_BASE_URL`) |
-| **Cursor IDE** | ✅ Full | ✅ Full | ✅ Injected (`settings.json`) | `settings.json` (`http.proxy`) |
-| **Google Antigravity IDE** | ✅ Full | ✅ Full | ✅ Injected (`mcp_config.json`) | `mcp_config.json` (`proxy_url`) |
-| **Claude Desktop (GUI)** | ℹ️ *Direct Cloud* | ✅ Full | 🔒 Preserved | `claude_desktop_config.json` (`stdio-proxy`) |
-| **VS Code (Continue)** | ✅ Full | ✅ Full | ✅ Injected (`config.json`) | `config.json` (`apiBase`) |
-
-- **Zero Cloud Dependencies:** Automatically uses your local proxy token (`~/.agentcontrol/local.token`) and configures loopback routing (`http://127.0.0.1:18080/v1`).
-- **MCP Process Sandboxing:** Wraps MCP servers with `agentcontrol stdio-proxy` under strict memory limits and credential redaction.
-- **Baseline Backup & Ownership Manifest:** Backs up existing configs to `<config>.baseline.bak` and tracks all mutations in `~/.agentcontrol/manifests/<target>.manifest.json` for risk-free reversal.
+*(Alternatively, to run only the background proxy without modifying IDE configuration files, run `agentcontrol start`.)*
 
 ---
 
-### Step 4: Experience Live Protection in the Local Developer Dashboard (`http://127.0.0.1:18080`)
+### Step 3: Verified Client Routing & Interception Boundaries
+
+Agent Control is completely transparent about what is governed versus what runs direct:
+
+| Client / Agent | Interception Method | Completion Routing | MCP Tool Governance | Boundary Disclosure |
+| :--- | :--- | :---: | :---: | :--- |
+| **Cursor IDE** | `settings.json` (`http.proxy`) | ✅ Proxied (18080) | ✅ Proxied (18080) | Full proxying for all IDE model requests & MCP tools |
+| **Anthropic Claude Code (CLI)** | `settings.json` (`ANTHROPIC_BASE_URL`) | ✅ Proxied (18080) | ✅ Proxied (18080) | Full proxying via environment base URL override |
+| **Google Antigravity IDE** | `mcp_config.json` (`proxy_url`) | ✅ Proxied (18080) | ✅ Proxied (18080) | Full proxying for configured agent workspaces |
+| **Claude Desktop (GUI)** | `claude_desktop_config.json` (`stdio-proxy`) | ℹ️ *Direct Cloud* | ✅ Proxied (18080) | **Tool Boundary Only:** MCP tools are sandboxed via stdio-proxy; completion traffic connects directly to Anthropic |
+| **OpenAI Codex CLI** | Shell Wrapper (`codex-intercept.sh`) | ✅ Proxied (18080) | ✅ Proxied (18080) | Intercepts commands executed through the wrapper |
+
+> [!IMPORTANT]
+> **Enforcement Boundary Guarantee:**
+> Agent Control enforces controls strictly at the configured client and proxy layers. It does **not** claim kernel-level network packet filtering or universal OS raw socket capture. Unconfigured terminal commands or third-party processes bypass the proxy unless routed to `http://127.0.0.1:18080`.
+
+To connect or disconnect individual assistants selectively:
+```bash
+agentcontrol connect cursor
+agentcontrol connect claude
+agentcontrol disconnect claude
+```
+
+---
+
+### Step 4: Experience Live Protection in the Local Dashboard (`http://127.0.0.1:18080`)
 
 Open the embedded **Local Developer Dashboard** in your web browser:
 
@@ -738,13 +744,13 @@ Open the embedded **Local Developer Dashboard** in your web browser:
 http://127.0.0.1:18080
 ```
 
-- **Zero-Dependency Local UI:** Rendered 100% locally from the running binary — no Node.js, React build steps, or external services required.
+- **Absolute Standalone Dormancy:** Under `local-gateway` mode, zero data, telemetry, or pings leave your machine. No Control Hub dependencies.
 - **Interactive Developer Experience:**
-  1. **Prompt Your Assistant:** Ask your connected assistant (e.g. Codex or Claude Desktop) to write code or execute a tool call.
-  2. **Activity Stream (Live SSE):** Watch intercepted LLM completions and MCP tool executions stream in real time.
-  3. **Detections & DLP:** Observe automatic parameter secret redactions (`[REDACTED:API_KEY]`, `[REDACTED:CONNECTION_STRING]`) and prompt injection shield triggers.
-  4. **Token Economics & Cache:** Track real-time token spend, budget burn-down, and cache hits.
-  5. **Live Policy Wizard:** Review active safe-mode rules and tune tool permissions interactively.
+  1. **Prompt Your Assistant:** Ask Cursor or Claude Desktop to generate code or read a file.
+  2. **Live SSE Activity Stream:** Watch intercepted LLM completions and MCP tool executions in real time.
+  3. **Inline DLP Redaction:** Credentials and secrets are automatically redacted (`[REDACTED:API_KEY]`).
+  4. **Prompt Injection Shield:** Heuristic multi-pattern detection halts jailbreak attempts.
+  5. **Token Economics:** Real-time token spend tracking with sub-3ms semantic cache hits.
 
 Inspect verified target capabilities and freshness tiers from your terminal:
 
@@ -752,66 +758,64 @@ Inspect verified target capabilities and freshness tiers from your terminal:
 agentcontrol status
 ```
 
-```text
-Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-Target: vscode-continue [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
-```
-
-Check background daemon supervisor health:
-
-```bash
-agentcontrol service status
-```
-
-```text
-● Vexa Agent Control Daemon Health Inspection
-  OS Platform:        windows (x86_64)
-  Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
-  Listener Binding:   127.0.0.1:18080 (20 ms RTT)
-  Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
-```
-
 ---
 
-### Step 5: Run Health Diagnostics (`agentcontrol doctor`)
+### Step 5: Dual-Store Maintenance & Cryptographic Verification
 
-Execute a 7-point health and security verification check:
+Agent Control maintains two distinct local data stores: `events.db` (SQLite WAL for dashboard metrics) and `audit.jsonl` (tamper-evident HMAC-SHA256 hash-chained audit log).
 
+#### 1. Consistent Online Backup (`agentcontrol backup`)
+Create an atomic, permission-restricted backup of both data stores without interrupting live proxy traffic:
+```bash
+agentcontrol backup
+```
+- Performs live SQLite `wal_checkpoint(TRUNCATE)` and safe `VACUUM INTO` for a fully defragmented snapshot of `events.db`.
+- Atomically copies `audit.jsonl`, session key `audit.key`, and ownership manifests into `~/.agentcontrol/backups/backup_<timestamp>` with `0700`/`0600` permissions.
+
+#### 2. Cryptographic Integrity Check (`agentcontrol verify-db`)
+Verify database health and cryptographic proof of non-tampering:
+```bash
+agentcontrol verify-db
+```
+- Runs SQLite `PRAGMA integrity_check;` on `events.db`.
+- Recomputes HMAC-SHA256 signatures for every entry in `audit.jsonl` from line 0 to EOF using `audit.key` to detect any byte-level modifications.
+
+#### 3. Health Diagnostics (`agentcontrol doctor`)
 ```bash
 agentcontrol doctor
 ```
 
-```text
-✔ Binary Integrity:          Pass (v1.0.89)
-✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
-✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
-✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
-✔ Target Configuration:      Pass (codex: verified, claude: verified)
-✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
+---
 
-Overall Health: HEALTHY (Exit Code 0)
+### Step 6: 1-Command Clean Reversal Anytime (`agentcontrol unprotect`)
+
+To restore all coding assistants to their original configurations:
+
+```bash
+agentcontrol unprotect
 ```
 
-*(Use `agentcontrol doctor --json` for machine-readable output in CI/CD).*
+- Restores original settings from `OwnershipManifest` records.
+- Unwraps MCP servers back to their original commands and arguments.
+- **Developer Preserving:** Custom user themes, fonts, keybindings, and extensions remain 100% untouched.
 
 ---
 
-### Step 6: Non-Destructive Reversal Anytime (`agentcontrol disconnect <target>`)
+### Step 7: Seamless In-Place Upgrade to Team Hub
 
-To cleanly disconnect an assistant and restore original settings at any time:
+When your team is ready for centralized policy governance, spend caps, and fleet telemetry, upgrade your workstation in seconds without modifying wrapped IDE client files:
 
 ```bash
-agentcontrol disconnect codex
-agentcontrol disconnect claude
-agentcontrol disconnect vscode-continue
-agentcontrol disconnect cursor
+# Browser PKCE OAuth authentication:
+agentcontrol login
+
+# Or headless enrollment using One-Time Enrollment Token (OTET):
+agentcontrol enroll --token <OTET> --hub https://console.vexasec.io
 ```
 
-- Restores only the managed settings recorded in the `OwnershipManifest`.
-- Unwraps MCP servers back to their original commands and arguments.
-- **Developer Preserving:** Any custom themes, model settings, keybindings, or personal tool configs added while connected are preserved completely.
+- **Zero Client Disruption:** Automatically transitions runtime profile from `local-gateway` to `team-gateway` in `~/.agentcontrol/profile.json`. Connected IDEs continue routing seamlessly.
+- **Offline Cache Resilience:** If the Control Hub becomes unreachable, Agent Control falls back to the cryptographically verified local cache (`~/.agentcontrol/cached_policy.yaml`) and enters `STATUS: DEGRADED (Offline Enforcement Active)`. It **never fails open**.
+- **Clean Logout:** Run `agentcontrol logout` to flush team credentials and return to standalone `local-gateway` mode while keeping all IDE protections intact.
 
 ---
 

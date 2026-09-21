@@ -3,6 +3,7 @@
 pub mod adaptive_timeout;
 pub mod broker_client;
 pub mod codec;
+pub mod connector;
 pub mod db;
 pub mod egress;
 pub mod embedding_batcher;

@@ -632,6 +632,23 @@ fn compile_policy_yaml(
         }
     });
 
+    let mut allowed_providers = Vec::new();
+    if let Some(ref llm) = policy_file.llm {
+        if let Some(ref providers) = llm.allowed_providers {
+            allowed_providers.extend(providers.clone());
+        }
+        if let Some(ref prs) = llm.providers {
+            for p in prs {
+                if p.action.eq_ignore_ascii_case("allow") {
+                    allowed_providers.push(p.name.clone());
+                }
+            }
+        }
+    }
+    if let Some(ref ap) = policy_file.allowed_providers {
+        allowed_providers.extend(ap.clone());
+    }
+
     PolicyLoadResult::Loaded {
         policy: CompiledPolicy {
             tools: compiled_tools,
@@ -647,6 +664,7 @@ fn compile_policy_yaml(
             schema_drift: policy_file.schema_drift,
             fail_closed,
             attribution,
+            allowed_providers,
         },
         raw_hash,
         warnings,

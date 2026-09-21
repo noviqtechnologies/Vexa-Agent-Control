@@ -32,7 +32,9 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     }
+
 }
 
 fn allow_tool(name: &str, params: Vec<CompiledParam>) -> CompiledTool {

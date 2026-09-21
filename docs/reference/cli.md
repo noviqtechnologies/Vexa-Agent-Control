@@ -6,6 +6,29 @@ Comprehensive reference for all `agentcontrol` subcommands, options, flags, and 
 
 ## Core Commands
 
+### `agentcontrol protect`
+One-command protection for your entire workstation. Discovers all installed coding assistants, binds and verifies the listener port, records pre-mutation states in `~/.agentcontrol/protect_journal.json`, applies atomic configuration updates, and generates `OwnershipManifest` records. Halts immediately and executes fail-closed rollback if any target fails.
+
+```bash
+agentcontrol protect [OPTIONS]
+```
+
+**Options:**
+- `--policy <PATH>`: Path to custom YAML policy file.
+- `--shadow`: Run in observation-only mode without blocking requests.
+- `--dry-run`: Preview planned modifications without altering files.
+
+---
+
+### `agentcontrol unprotect`
+One-command complete reversal. Reads ownership manifests for all protected assistants and restores original configurations cleanly, unwrapping MCP stdio proxies and removing injected proxy settings while preserving user themes, fonts, and keybindings.
+
+```bash
+agentcontrol unprotect
+```
+
+---
+
 ### `agentcontrol start`
 Starts the local security gateway proxy daemon on `127.0.0.1:18080` (default) and auto-generates a local bearer token at `~/.agentcontrol/local.token`.
 
@@ -16,6 +39,7 @@ agentcontrol start [OPTIONS]
 **Options:**
 - `--listen <ADDR>`: Gateway listen address (default: `127.0.0.1:18080`).
 - `--policy <PATH>`: Path to YAML policy file (default: `agentcontrol-policy.yaml`).
+- `--profile <PROFILE>`: Deployment profile: `local-gateway`, `local-firewall`, `team-gateway`, `container-sidecar`.
 - `--shadow-mode`: Start in observation/audit mode without actively blocking calls.
 
 ---
@@ -87,11 +111,51 @@ agentcontrol verify [OPTIONS]
 
 ---
 
-### `agentcontrol login`
-Authenticates with a Team Control Hub via browser OAuth 2.0 PKCE.
+### `agentcontrol backup`
+Creates an atomic, consistent online backup of local data stores without interrupting running proxies.
+- Executes `PRAGMA wal_checkpoint(TRUNCATE);` and `VACUUM INTO` on `events.db` to produce a fully compacted database snapshot.
+- Copies `audit.jsonl`, `audit.key`, active ownership manifests, and `profile.json` into a timestamped directory with `0700`/`0600` permissions.
 
 ```bash
-agentcontrol login [--no-browser]
+agentcontrol backup [--output-dir <PATH>]
+```
+
+---
+
+### `agentcontrol verify-db`
+Performs comprehensive offline cryptographic and relational integrity checks:
+- Runs SQLite `PRAGMA integrity_check;` on `events.db`.
+- Recomputes HMAC-SHA256 signatures for every entry in `audit.jsonl` from line 0 to EOF using `audit.key` to verify tamper-evidence.
+
+```bash
+agentcontrol verify-db [--audit-path <PATH>] [--db-path <PATH>]
+```
+
+---
+
+### `agentcontrol login`
+Authenticates with a Team Control Hub via browser OAuth 2.0 PKCE and transitions the operational profile from `local-gateway` to `team-gateway` in `~/.agentcontrol/profile.json` without modifying wrapped IDE client configurations.
+
+```bash
+agentcontrol login [--hub <URL>] [--no-browser]
+```
+
+---
+
+### `agentcontrol enroll`
+Enrolls the workstation in Team fleet governance headlessly using a One-Time Enrollment Token (OTET).
+
+```bash
+agentcontrol enroll --token <OTET> [--hub-url <URL>]
+```
+
+---
+
+### `agentcontrol logout`
+Flushes local team credentials, invalidates active sessions, and transitions the runtime profile back to `local-gateway` while preserving all connected IDE client settings.
+
+```bash
+agentcontrol logout
 ```
 
 ---

@@ -697,6 +697,17 @@ fn is_insecure_default_token(token: &str) -> bool {
     )
 }
 
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
+}
+
 fn is_authorized_management(
     client_ip: &str,
     auth_header: Option<&str>,
@@ -723,18 +734,119 @@ fn is_authorized_management(
                 return false;
             }
             if let Some(expected) = admin_token {
-                if !expected.is_empty() && token == expected {
+                if !expected.is_empty() && constant_time_eq(token.as_bytes(), expected.as_bytes()) {
                     return true;
                 }
             }
             if let Ok(admin_tok) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
-                if !admin_tok.is_empty() && token == admin_tok {
+                if !admin_tok.is_empty() && constant_time_eq(token.as_bytes(), admin_tok.as_bytes()) {
+                    return true;
+                }
+            }
+            if let Ok(local_tok) = crate::identity::oauth::get_or_create_local_token() {
+                if !local_tok.is_empty() && constant_time_eq(token.as_bytes(), local_tok.as_bytes()) {
                     return true;
                 }
             }
         }
     }
     false
+}
+
+fn is_authorized_mutation(
+    _client_ip: &str,
+    auth_header: Option<&str>,
+    admin_token: Option<&str>,
+    origin_header: Option<&str>,
+    sec_fetch_site: Option<&str>,
+) -> Result<(), (StatusCode, &'static str, &'static str)> {
+    // 1. Browser CSRF Origin / Sec-Fetch-Site validation (ADR 0.5)
+    if let Some(sec_site) = sec_fetch_site {
+        if sec_site.eq_ignore_ascii_case("cross-site") {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "csrf_cross_site_rejected",
+                "Cross-site browser requests to management endpoints are forbidden",
+            ));
+        }
+    }
+
+    if let Some(origin) = origin_header {
+        let is_allowed_origin = origin == "http://127.0.0.1:18080"
+            || origin == "http://localhost:18080"
+            || origin.starts_with("http://127.0.0.1:")
+            || origin.starts_with("http://localhost:");
+        if !is_allowed_origin {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "csrf_origin_rejected",
+                "Origin header is not in the allowed local management origins list",
+            ));
+        }
+    }
+
+    // 2. Token verification: mandatory even on loopback for mutation endpoints (ADR 0.5)
+    let token = match auth_header.and_then(|h| h.strip_prefix("Bearer ")) {
+        Some(t) => t.trim(),
+        None => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "bearer_token_required",
+                "State-altering management mutation requires Bearer authentication",
+            ));
+        }
+    };
+
+    if token.is_empty() {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "empty_bearer_token",
+            "Bearer token cannot be empty",
+        ));
+    }
+
+    let is_dev_mode = std::env::var("AGENTCONTROL_DEV_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if !is_dev_mode && is_insecure_default_token(token) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "insecure_token",
+            "Insecure default admin token rejected. Configure a high-entropy token.",
+        ));
+    }
+
+    let mut matched = false;
+    if let Some(expected) = admin_token {
+        if !expected.is_empty() && constant_time_eq(token.as_bytes(), expected.as_bytes()) {
+            matched = true;
+        }
+    }
+    if !matched {
+        if let Ok(expected_env) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
+            if !expected_env.is_empty() && constant_time_eq(token.as_bytes(), expected_env.as_bytes()) {
+                matched = true;
+            }
+        }
+    }
+    if !matched {
+        if let Ok(local_tok) = crate::identity::oauth::get_or_create_local_token() {
+            if !local_tok.is_empty() && constant_time_eq(token.as_bytes(), local_tok.as_bytes()) {
+                matched = true;
+            }
+        }
+    }
+
+    if matched {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid_bearer_token",
+            "Invalid management bearer token",
+        ))
+    }
 }
 
 /// Handle a single HTTP request
@@ -779,8 +891,16 @@ async fn handle_request(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    // Gate all management/admin routes from unauthenticated network access (P1-1, P1-2)
-    let is_management_route = path == "/"
+    // Gate all management/admin routes and enforce CSRF / Bearer defenses (ADR 0.5)
+    let is_mutation_route = path == "/reload"
+        || path == "/api/policy/reload"
+        || path.starts_with("/api/v1/cache/")
+        || path.starts_with("/api/cache/")
+        || path.starts_with("/api/v1/hitl/respond")
+        || (method == hyper::Method::POST && (path == "/api/mode" || path.starts_with("/api/self-healing/")));
+
+    let is_management_route = is_mutation_route
+        || path == "/"
         || path.starts_with("/api/stats")
         || path.starts_with("/api/events")
         || path.starts_with("/api/integrations")
@@ -799,7 +919,30 @@ async fn handle_request(
             .headers()
             .get(hyper::header::AUTHORIZATION)
             .and_then(|h| h.to_str().ok());
-        if !is_authorized_management(client_ip, auth_hdr, state.admin_token.as_deref()) {
+        let origin_hdr = req
+            .headers()
+            .get(hyper::header::ORIGIN)
+            .and_then(|h| h.to_str().ok());
+        let sec_fetch_site = req
+            .headers()
+            .get("Sec-Fetch-Site")
+            .and_then(|h| h.to_str().ok());
+
+        if is_mutation_route {
+            if let Err((status, code, msg)) = is_authorized_mutation(
+                client_ip,
+                auth_hdr,
+                state.admin_token.as_deref(),
+                origin_hdr,
+                sec_fetch_site,
+            ) {
+                let err = serde_json::json!({
+                    "error": code,
+                    "message": msg
+                });
+                return Ok(json_response(status, &err));
+            }
+        } else if !is_authorized_management(client_ip, auth_hdr, state.admin_token.as_deref()) {
             let err = serde_json::json!({
                 "error": "admin_authorization_required",
                 "message": "Management endpoints are restricted to loopback interface or require Bearer AGENTCONTROL_ADMIN_TOKEN"
@@ -1418,49 +1561,38 @@ async fn handle_request(
         return Ok(json_response(StatusCode::BAD_REQUEST, &err));
     }
 
-    // Section 6: HITL approval response endpoint (POST or GET)
-    if (method == hyper::Method::POST || method == hyper::Method::GET)
-        && path.starts_with("/api/v1/hitl/respond")
-    {
+    // Section 6: HITL approval response endpoint (POST only with JSON payload — ADR 0.5)
+    if method == hyper::Method::GET && path.starts_with("/api/v1/hitl/respond") {
+        let err = serde_json::json!({
+            "error": "method_not_allowed",
+            "message": "GET requests for HITL decisions are prohibited (localhost CSRF defense). Use authenticated POST with JSON payload."
+        });
+        return Ok(json_response(StatusCode::METHOD_NOT_ALLOWED, &err));
+    }
+
+    if method == hyper::Method::POST && path.starts_with("/api/v1/hitl/respond") {
         let mut request_id = String::new();
         let mut decision = String::new();
         let mut signed_hmac = String::new();
 
-        if method == hyper::Method::POST {
-            if let Ok(collected) = req.into_body().collect().await {
-                let body_bytes = collected.to_bytes();
-                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                    request_id = val
-                        .get("request_id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    decision = val
-                        .get("decision")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    signed_hmac = val
-                        .get("signed_hmac")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                }
-            }
-        } else if let Some(query) = req.uri().query() {
-            for pair in query.split('&') {
-                let mut parts = pair.splitn(2, '=');
-                if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
-                    let decoded_v = urlencoding::decode(v)
-                        .unwrap_or(std::borrow::Cow::Borrowed(v))
-                        .to_string();
-                    match k {
-                        "request_id" => request_id = decoded_v,
-                        "decision" => decision = decoded_v,
-                        "signed_hmac" => signed_hmac = decoded_v,
-                        _ => {}
-                    }
-                }
+        if let Ok(collected) = req.into_body().collect().await {
+            let body_bytes = collected.to_bytes();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                request_id = val
+                    .get("request_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                decision = val
+                    .get("decision")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                signed_hmac = val
+                    .get("signed_hmac")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
             }
         }
 

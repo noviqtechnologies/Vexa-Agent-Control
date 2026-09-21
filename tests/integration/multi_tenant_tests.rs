@@ -27,6 +27,7 @@ async fn test_concurrency_and_isolation_100_sessions() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -114,6 +115,7 @@ async fn test_rate_limiting_isolation() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -230,6 +232,7 @@ async fn test_cycle_detection_isolation() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -331,6 +334,7 @@ async fn test_hot_reload_policy_isolation() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     // Policy 2 (Denies everything)
@@ -348,6 +352,7 @@ async fn test_hot_reload_policy_isolation() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let state = create_mock_proxy_state(Some(policy_v1.clone()));
@@ -440,6 +445,7 @@ async fn test_dynamic_tool_history_max() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -497,6 +503,7 @@ async fn test_session_ttl_expiry() {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     };
 
     let session = SessionContext::new(

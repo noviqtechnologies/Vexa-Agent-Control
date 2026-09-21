@@ -74,6 +74,7 @@ fn make_policy(n: usize) -> CompiledPolicy {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     }
 }
 
@@ -121,6 +122,7 @@ fn make_policy_with_schema() -> CompiledPolicy {
         schema_drift: None,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     }
 }
 

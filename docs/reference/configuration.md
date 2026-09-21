@@ -10,11 +10,13 @@ All environment variables follow the canonical `AGENTCONTROL_*` prefix:
 
 | Variable | Description | Default |
 |---|---|---|
-| `AGENTCONTROL_LISTEN` | Gateway listen address | `127.0.0.1:8080` |
+| `AGENTCONTROL_PROFILE` | Runtime operational deployment profile (`local-gateway`, `local-firewall`, `team-gateway`, `container-sidecar`) | `local-gateway` |
+| `AGENTCONTROL_LISTEN` | Gateway listen address | `127.0.0.1:18080` |
 | `AGENTCONTROL_POLICY_PATH` | Path to YAML policy file | `agentcontrol-policy.yaml` |
 | `AGENTCONTROL_LOG_PATH` | Path to durable JSONL audit log | `~/.agentcontrol/audit.jsonl` |
 | `AGENTCONTROL_DB_PATH` | Path to local SQLite event database | `~/.agentcontrol/events.db` |
-| `AGENTCONTROL_PROXY_URL` | Upstream proxy URL for custom agents | `http://127.0.0.1:8080` |
+| `AGENTCONTROL_PROXY_URL` | Upstream proxy URL for custom agents | `http://127.0.0.1:18080` |
+| `AGENTCONTROL_CONTAINER_BRIDGE_MODE` | Allow container bridge gateway loopback binding | `false` |
 | `AGENTCONTROL_SHADOW_MODE` | Observation mode (log without blocking) | `false` |
 | `AGENTCONTROL_ENROLLMENT_TOKEN` | One-Time Enrollment Token (OTET) | — |
 | `AGENTCONTROL_HUB_URL` | Control Hub base URL | `https://console.vexasec.io` |
@@ -37,6 +39,15 @@ version: "2.0"
 mode: "enforce" # "enforce" or "shadow"
 
 default_action: "deny" # Default-deny security posture
+
+# Governed Upstream Provider Allowlist (Egress Classifier)
+allowed_providers:
+  - "api.openai.com:443"
+  - "api.anthropic.com:443"
+  - "api.groq.com:443"
+  - "generativelanguage.googleapis.com:443"
+  - "*.openai.azure.com:443"
+  - "bedrock-runtime.*.amazonaws.com:443"
 
 # Global DLP Secret Detectors
 dlp:

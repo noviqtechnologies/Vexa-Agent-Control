@@ -57,51 +57,39 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 
 ---
 
-### Step 2: Start Local Gateway Daemon (`agentcontrol start`)
+### Step 2: Protect Your Workstation in 1 Command (`agentcontrol protect`)
 
-- **Goal:** Start the local security gateway and proxy daemon on `127.0.0.1:18080`.
+- **Goal:** Automatically discover all installed AI assistants, verify listener responsiveness, and safely wrap configurations with atomic transaction rollback.
 - **Run:**
   ```bash
-  agentcontrol start
+  agentcontrol protect
   ```
-  *(To connect this workstation to a Control Hub and register a persistent background daemon, run `agentcontrol login --hub <url>`. This handles PKCE authentication, device enrollment, and service installation in one step.)*
+  *(To start only the background security proxy without modifying IDE client files, run `agentcontrol start`.)*
 - **Expected Result:**
-  - Gateway starts listening on `127.0.0.1:18080`.
-  - Local high-entropy token generated in `~/.agentcontrol/local.token` (`vx-local-...`).
-  - Embedded SQLite audit store initialized at `~/.agentcontrol/events.db` (WAL mode).
+  - Pre-flight check verifies listener port `18080`.
+  - Staged atomic transaction journal created at `~/.agentcontrol/protect_journal.json`.
+  - Discovers installed assistants: **Cursor**, **Claude Desktop**, **Claude Code**, **OpenAI Codex**, and **Google Antigravity**.
+  - All target files safely updated; ownership manifests written to `~/.agentcontrol/manifests/<target>.manifest.json`.
   - Embedded Local Developer Dashboard available at `http://127.0.0.1:18080`.
-- **If it fails:** Ensure port 18080 is free or check fallback port in `~/.agentcontrol/daemon.port`.
-- **What changes:** Local token and SQLite audit database initialized; gateway process active.
-- **Undo:** Stop the daemon (`Ctrl+C` or `agentcontrol service uninstall`).
+- **What changes:** Target config files updated; ownership manifests and SQLite/audit storage initialized.
+- **Undo:** Run `agentcontrol unprotect` (see Step 6).
 
 ---
 
-### Step 3: Connect Your AI Coding Assistants (`agentcontrol connect <target>`)
+### Step 3: Verified Client Routing & Enforcement Boundaries
 
-- **Goal:** Configure target assistants to route completions and MCP tools through Agent Control with baseline backups and ownership manifests.
-- **Run:**
-  In a new terminal window:
+- **Goal:** Understand exact routing paths and enforcement boundaries per assistant:
+  - **Cursor IDE:** All LLM completion and MCP tool traffic routed through `127.0.0.1:18080` via `http.proxy`.
+  - **Claude Code CLI:** Environment variable `ANTHROPIC_BASE_URL` routes all commands through the proxy.
+  - **Google Antigravity IDE:** Intercepted via `mcp_config.json` (`proxy_url`).
+  - **Claude Desktop:** MCP tools intercepted via child process `agentcontrol stdio-proxy`. Model completions connect directly to Anthropic cloud (*Tool Boundary Only*).
+  - **OpenAI Codex CLI:** Shell wrapper script (`codex-intercept.sh`) intercepts Codex invocations.
+- **Enforcement Boundary Guarantee:** Agent Control enforces controls strictly at the configured client and proxy layers. It does **not** capture raw OS network sockets or unmanaged terminal processes.
+- **Selective Management:** Connect or disconnect assistants individually:
   ```bash
-  # For Claude Desktop:
-  agentcontrol connect claude
-
-  # For Cursor:
   agentcontrol connect cursor
-
-  # For Antigravity IDE:
-  agentcontrol connect antigravity
-
-  # For OpenAI Codex CLI:
-  agentcontrol connect codex
+  agentcontrol disconnect claude
   ```
-- **Expected Result:**
-  - Pristine baseline backup created: `<config>.baseline.bak`.
-  - Ownership manifest created: `~/.agentcontrol/manifests/<target>.manifest.json`.
-  - Injected loopback routing (`127.0.0.1:18080`) using local token or child MCP `agentcontrol stdio-proxy` wrapper.
-  - Synthetic 1-token loopback probe verifies communication.
-- **If it fails:** Check if assistant is installed or pinned version matches supported range (`agentcontrol doctor`).
-- **What changes:** Target config updated; ownership manifest recorded.
-- **Undo:** Run `agentcontrol disconnect <target>` (see Step 6).
 
 ---
 
@@ -110,85 +98,86 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
 - **Goal:** Experience real-time governance, parameter DLP, and token telemetry in the embedded Local Developer Dashboard as tools execute.
 - **Run:**
   1. Open the Local Developer Dashboard in your browser: `http://127.0.0.1:18080`.
-  2. Ask your connected coding assistant (e.g., Codex or Claude Desktop) to perform a coding task or run a tool call.
+  2. Ask your connected assistant (e.g. Cursor or Claude Desktop) to perform a coding task or tool call.
   3. Watch real-time SSE telemetry in the **Activity Stream**, inspect blocked prompt injections or redacted secrets in **Detections & DLP**, and check **Token Economics & Cache**.
   4. Inspect active status and freshness tiers from your terminal:
      ```bash
      agentcontrol status
      ```
      ```text
-     Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
      Target: cursor          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
-     Target: antigravity     [CONFIGURED, PROBE_VERIFIED]                   (🟢 ACTIVE_FRESH)
+     Target: claude          [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
      Target: codex           [CONFIGURED, PROBE_VERIFIED, TRAFFIC_VERIFIED]  (🟢 ACTIVE_FRESH)
      ```
-  5. Inspect background daemon service health:
-     ```bash
-     agentcontrol service status
-     ```
-     ```text
-     ● Vexa Agent Control Daemon Health Inspection
-       OS Platform:        windows (x86_64)
-       Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-       Daemon Process:     PID 25936 (v1.0.89) | Up 23s
-       Listener Binding:   127.0.0.1:18080 (20 ms RTT)
-       Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
-     ```
-- **What changes:** Telemetry streamed live to dashboard and persisted in `~/.agentcontrol/events.db`.
+- **What changes:** Telemetry streamed live to dashboard and persisted locally in `~/.agentcontrol/events.db`.
 - **Undo:** Not applicable.
 
 ---
 
-### Step 5: Run Diagnostic Health Suite (`agentcontrol doctor`)
+### Step 5: Dual-Store Maintenance & Diagnostics (`backup`, `verify-db`, `doctor`)
 
-- **Goal:** Verify complete workstation health, background daemon, target configurations, and local security invariants.
+- **Goal:** Manage local SQLite database and cryptographic HMAC audit logs safely.
 - **Run:**
   ```bash
+  # 1. Consistent live backup (SQLite WAL VACUUM INTO + HMAC audit log):
+  agentcontrol backup
+
+  # 2. Cryptographic and database verification:
+  agentcontrol verify-db
+
+  # 3. Overall health diagnostics:
   agentcontrol doctor
   ```
 - **Expected Result:**
-  ```text
-  ✔ Binary Integrity:          Pass (v1.0.89)
-  ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
-  ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
-  ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
-  ✔ Target Configuration:      Pass (claude: verified, cursor: verified, codex: verified)
-  ✔ Security Hygiene:          Pass (Zero plaintext keys detected in env)
-
-  Overall Health: HEALTHY (Exit Code 0)
-  ```
-- **If it fails:** Review diagnostic output for actionable error codes and run `agentcontrol repair`.
-- **What changes:** None (read-only diagnostic inspection).
-- **Undo:** Not applicable.
+  - `backup`: Produces an atomic snapshot in `~/.agentcontrol/backups/backup_<timestamp>` with restricted permissions (`0700`/`0600`).
+  - `verify-db`: Validates SQLite `PRAGMA integrity_check;` on `events.db` and verifies the full HMAC-SHA256 hash chain of `audit.jsonl` from line 0 to EOF.
+  - `doctor`: Reports 7-point health check passing with Exit Code 0.
+- **What changes:** Backup snapshot written if requested.
+- **Undo:** Delete backup folder when no longer needed.
 
 ---
 
-### Step 6: Non-Destructive Disconnect & Revert Anytime (`agentcontrol disconnect <target>`)
+### Step 6: 1-Command Clean Reversal Anytime (`agentcontrol unprotect`)
 
-- **Goal:** Safely restore target configurations from ownership manifests without erasing custom user settings.
+- **Goal:** Safely restore all target assistant configurations without losing user customizations.
 - **Run:**
   ```bash
-  # Restore specific assistant configuration:
-  agentcontrol disconnect claude
-  agentcontrol disconnect cursor
-  agentcontrol disconnect antigravity
-  agentcontrol disconnect codex
+  # Revert all assistants at once:
+  agentcontrol unprotect
 
-  # Diagnose and repair configuration drift without losing settings:
-  agentcontrol repair
+  # Or revert a specific assistant:
+  agentcontrol disconnect cursor
   ```
 - **Expected Result:**
   ```text
-  [✓] Successfully disconnected codex. Restored original configuration from manifest.
+  [✓] Successfully unprotected all assistants. Original configurations restored from manifests.
   ```
-- **What changes:** Injected Agent Control keys are reverted to previous values (or deleted if previously absent), while user-added keys remain untouched.
-- **Undo:** Reconnect at any time with `agentcontrol connect <target>`.
+- **What changes:** Injected Agent Control keys are reverted to previous values, preserving custom themes, fonts, keybindings, and extensions.
+
+---
+
+### Step 7: Seamless In-Place Upgrade to Team Hub
+
+- **Goal:** Transition from standalone developer mode to centralized Team governance without disrupting connected IDEs.
+- **Run:**
+  ```bash
+  # Browser PKCE OAuth authentication:
+  agentcontrol login
+
+  # Or headless device enrollment:
+  agentcontrol enroll --token <OTET> --hub https://console.vexasec.io
+  ```
+- **Expected Result:**
+  - Profile state transitions from `local-gateway` to `team-gateway` in `~/.agentcontrol/profile.json`.
+  - Existing wrapped IDE configurations remain completely intact.
+  - Offline resilience: If Control Hub disconnects, Agent Control enforces the verified cached policy (`~/.agentcontrol/cached_policy.yaml`) and never fails open.
+  - Return to standalone mode anytime via `agentcontrol logout`.
 
 ---
 
 ## Next Steps
 
 - [User Guide](user_guide.md) — Master operational manual for developer workstations and enterprise fleets.
-- [Workstation Guide](guides/workstation.md) — 4-stage lifecycle: Observe (Shadow Mode) → Validate → Enforce → Restore.
-- [Custom Agent HTTP Guide](guides/custom-agent-http.md) — Route LangChain, LlamaIndex, or CrewAI agents.
-- [Troubleshooting & Doctor Guide](guides/troubleshooting_doctor.md) — Deep dive into diagnostic exit codes and recovery workflows.
+- [Workstation Guide](workstation_guide.md) — Deep dive into ownership manifests, port verification, and transaction journals.
+- [Docker Deployment](guides/docker-deployment.md) — Standalone non-root compose (`docker-compose.standalone.yml`) and full-stack deployment.
+- [CLI Reference](reference/cli.md) — Complete CLI command and flag specifications.

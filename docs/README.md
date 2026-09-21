@@ -63,7 +63,11 @@ docs/
 
 | Goal | Recommended Guide |
 |---|---|
-| Deploy with Docker / Compose | [Docker Deployment Guide](guides/docker-deployment.md) |
+| Protect Workstation (1 Command) | [10-Minute Developer Quickstart](quickstart.md#step-2-protect-your-workstation-in-1-command-agentcontrol-protect) |
+| Non-Destructive Reversal / Unprotect | [10-Minute Developer Quickstart](quickstart.md#step-6-1-command-clean-reversal-anytime-agentcontrol-unprotect) |
+| Dual-Store Backup & Verification | [CLI Reference: backup & verify-db](reference/cli.md#agentcontrol-backup) |
+| Deploy Standalone Docker (Loopback Only) | [Docker Deployment Guide](guides/docker-deployment.md) |
+| Deploy with Full-Stack Team Compose | [Docker Deployment Guide](guides/docker-deployment.md) |
 | Install binary on macOS | [macOS Installation Guide](install/macos.md) |
 | Install binary on Linux | [Linux Installation Guide](install/linux.md) |
 | Install binary on Windows | [Windows PowerShell Guide](install/windows-powershell.md) |

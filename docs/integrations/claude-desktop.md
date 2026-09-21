@@ -54,6 +54,10 @@ Running `agentcontrol wrap claude` automatically transforms the configuration in
 
 All tool calls pass through the local proxy where they are evaluated against Data Loss Prevention (DLP) patterns, prompt injection checks, rate limits, and approval policies.
 
+> [!IMPORTANT]
+> **Interception Boundary (Tool Boundary Only):**
+> Claude Desktop does not support standard HTTP proxy settings for model completions. Therefore, `agentcontrol connect claude` strictly governs the **MCP tool execution boundary** via child process `stdio-proxy`. Completion prompts and model answers connect directly to Anthropic's cloud endpoints unless system-wide proxy interception is configured.
+
 ---
 
 ## 2. Configuring Virtual Keys in MCP Server Environments

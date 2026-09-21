@@ -1,6 +1,7 @@
 //! Security audit logging, SIEM integration, and cryptographic audit verifier subsystem.
 
 pub mod logger;
+pub mod maintenance;
 pub mod outbox;
 pub mod siem;
 pub mod verifier;

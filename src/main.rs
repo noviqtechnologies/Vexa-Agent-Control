@@ -119,6 +119,12 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         Commands::Logout => {
             agentcontrol::support::run_logout()
         }
+        Commands::Backup { output_dir } => {
+            agentcontrol::audit::maintenance::run_backup(output_dir)
+        }
+        Commands::VerifyDb { audit_path, db_path } => {
+            agentcontrol::audit::maintenance::run_verify_db(audit_path, db_path)
+        }
         Commands::ResetLocalState { force } => {
             agentcontrol::support::run_reset_local_state(force)
         }
@@ -803,9 +809,10 @@ fn print_gateway_startup_banner(
     } else {
         match profile {
             cli::DeploymentProfile::LocalShadow => "SHADOW (Observation Only; Non-Enforcing)".yellow().bold(),
-            cli::DeploymentProfile::LocalEnforce => "LOCAL ENFORCE (DLP + Injection Guard)".green().bold(),
-            cli::DeploymentProfile::TeamEnforce => "TEAM ENFORCE (Hub Sync + Policy Lock)".green().bold(),
-            cli::DeploymentProfile::DedicatedEnforce => "DEDICATED ENFORCE (Enterprise CMEK + SIEM)".purple().bold(),
+            cli::DeploymentProfile::LocalGateway => "LOCAL GATEWAY (Developer LLM Proxy Active)".green().bold(),
+            cli::DeploymentProfile::LocalFirewall => "LOCAL FIREWALL (Air-Gapped Local-Only Enforcement)".cyan().bold(),
+            cli::DeploymentProfile::TeamGateway => "TEAM GATEWAY (Fleet Governed + Control Hub)".green().bold(),
+            cli::DeploymentProfile::ContainerSidecar => "CONTAINER SIDECAR (Hardened Sidecar Enforcement)".blue().bold(),
         }
     };
 
@@ -819,8 +826,10 @@ fn print_gateway_startup_banner(
         "STRICT_PERM_FILE (Headless Linux 0600 Mode)"
     };
 
-    let enroll_status = if is_enrolled {
+    let enroll_status = if is_enrolled && matches!(profile, cli::DeploymentProfile::TeamGateway) {
         "Enrolled (Control Hub)".green()
+    } else if is_enrolled {
+        "Local Standalone (Hub enrollment dormant)".dimmed()
     } else {
         "Local Standalone".dimmed()
     };
@@ -1301,28 +1310,31 @@ async fn run_start(args: cli::StartArgs) -> i32 {
 
     let is_enrolled = agentcontrol::identity::device::is_device_enrolled();
 
-    let profile = args
-        .profile
-        .as_deref()
-        .map(cli::DeploymentProfile::parse)
-        .unwrap_or(if args.shadow_mode {
-            cli::DeploymentProfile::LocalShadow
-        } else if args.centralized || is_enrolled {
-            cli::DeploymentProfile::TeamEnforce
-        } else {
-            cli::DeploymentProfile::LocalEnforce
-        });
+    let profile = if let Some(p_str) = args.profile.as_deref() {
+        match cli::DeploymentProfile::try_parse(p_str) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{} {}", "✖".red(), e);
+                return 1;
+            }
+        }
+    } else if args.shadow_mode {
+        cli::DeploymentProfile::LocalShadow
+    } else if let Some(persisted) = cli::PersistedProfileRecord::load() {
+        persisted
+    } else if args.centralized || is_enrolled {
+        cli::DeploymentProfile::TeamGateway
+    } else {
+        cli::DeploymentProfile::LocalGateway
+    };
+
+    let _ = cli::PersistedProfileRecord::save(profile);
 
     let scan_responses = args.scan_responses || profile.default_scan_responses();
     let block_on_secrets = args.block_on_secrets || profile.default_fail_closed();
     let shadow_mode = args.shadow_mode || matches!(profile, cli::DeploymentProfile::LocalShadow);
     let dry_run = args.dry_run;
-    let effective_profile_name = match profile {
-        cli::DeploymentProfile::LocalShadow => "local-shadow".to_string(),
-        cli::DeploymentProfile::LocalEnforce => "local-enforce".to_string(),
-        cli::DeploymentProfile::TeamEnforce => "team-enforce".to_string(),
-        cli::DeploymentProfile::DedicatedEnforce => "dedicated-enforce".to_string(),
-    };
+    let effective_profile_name = profile.name().to_string();
 
     let policy_path = args.policy;
     let listen = if args.listen != "127.0.0.1:18080" {
@@ -1351,6 +1363,9 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     let tls_key = args.tls_key;
     let centralized = args.centralized;
 
+    // Check and recover from any stale or interrupted protect transaction
+    let _ = agentcontrol::wrap::journal::ProtectJournal::recover_if_stale();
+
     print_gateway_startup_banner(&listen, &mcp_url, &profile, shadow_mode, is_enrolled);
 
     // Parse kill mode
@@ -1369,15 +1384,19 @@ async fn run_start(args: cli::StartArgs) -> i32 {
 
     // NFR-203: Startup self-check
     // 1. Load policy — priority order:
-    //    a) DASHBOARD_API_URL or load_hub_url() is set → fetch active policy from PostgreSQL via dashboard API
+    //    a) If profile is TeamGateway and load_hub_url() is set → fetch active policy from PostgreSQL via dashboard API
     //    b) --policy <file> is set    → load from local YAML file (fallback / dev override)
     //    c) neither                   → Safe Mode (no policy enforcement, audit only)
-    let dashboard_api_url = agentcontrol::identity::device::load_hub_url();
+    let dashboard_api_url = if matches!(profile, cli::DeploymentProfile::TeamGateway) {
+        agentcontrol::identity::device::load_hub_url()
+    } else {
+        None
+    };
     let policy_read_secret_env = std::env::var("POLICY_READ_SECRET")
         .ok()
         .filter(|s| !s.is_empty());
 
-    if is_enrolled {
+    if is_enrolled && matches!(profile, cli::DeploymentProfile::TeamGateway) {
         if let Some(ref hub) = dashboard_api_url {
             println!(
                 "{} Device enrolled — active enterprise governance via {} (central-enforce)",
@@ -1460,9 +1479,13 @@ async fn run_start(args: cli::StartArgs) -> i32 {
             (None, "sha256:none".to_string(), vec![], false)
         };
 
-    // Initialize dashboard client early for SpendLedger sync
-    let dashboard_client = agentcontrol::control_plane_client::client::DashboardClient::from_env()
-        .map(std::sync::Arc::new);
+    // Initialize dashboard client early for SpendLedger sync (active only in Team mode with enrollment)
+    let dashboard_client = if profile.is_team() && is_enrolled {
+        agentcontrol::control_plane_client::client::DashboardClient::from_env()
+            .map(std::sync::Arc::new)
+    } else {
+        None
+    };
 
     // --- FR-120: Spend Caps License Validation ---
     let spend_ledger = if let Some(ref policy) = compiled_policy {
@@ -1804,11 +1827,9 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         println!("{} {} {}", "📊".green(), "FR-23 Dashboard:".bold(), msg);
     }
 
-    // Background policy push subscriber — active when Hub URL is configured or enrolled.
-    // Listens for Server-Sent Events (SSE) from the Hub to instantly hot-swap
-    // the policy in memory. Runs regardless of whether --policy was provided so
-    // that live updates from the Policy Editor are seamlessly applied (last-write-wins).
-    {
+    // Background policy push subscriber — active when in Team mode and enrolled.
+    // In local-gateway and local-firewall modes, this is completely dormant (ADR 0.3).
+    if profile.is_team() && is_enrolled {
         let sse_api_url = agentcontrol::identity::device::load_hub_url();
         if let Some(api_url) = sse_api_url {
             let sub_state = state.clone();
@@ -1837,16 +1858,16 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     }
 
     // Background device heartbeat emitter — periodic health ping to Hub (Sprint 4)
-    // Only active on developer workstations (sentry mode); disabled in centralized server gateway mode.
-    if !centralized {
+    // Active strictly in team-gateway mode when enrolled; completely dormant in local modes (ADR 0.3).
+    if profile.is_team() && is_enrolled {
         tokio::spawn(async move {
             agentcontrol::control_plane_client::heartbeat::start_heartbeat_loop(60).await;
         });
     }
 
     // Background provider keys and routing reconciler (REQ-DSM-004 / REQ-DSM-005)
-    // 60-second pull convergence loop ensuring eventually consistent desired-state
-    {
+    // 60-second pull convergence loop active strictly in team-gateway mode when enrolled.
+    if profile.is_team() && is_enrolled {
         let poll_hub_url = agentcontrol::identity::device::load_hub_url();
         if let Some(hub_url) = poll_hub_url {
             let poll_state = state.clone();

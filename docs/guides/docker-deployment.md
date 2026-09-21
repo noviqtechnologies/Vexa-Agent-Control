@@ -39,6 +39,21 @@ Ensure the following ports are free on your host machine:
 
 Choose the deployment setup matching your goal:
 
+### 🚀 Option 0: Hardened Standalone Gateway (Loopback-Only & Non-Root)
+
+For individual developers who want an isolated local gateway running in Docker without deploying PostgreSQL, React web console, or Control Hub:
+
+```bash
+docker compose -f docker-compose.standalone.yml up -d
+```
+
+- **Host Binding:** Strictly bound to `127.0.0.1:18080:18080` (preventing LAN or cross-network exposure).
+- **Security Profile:** Non-root execution (`10001:10001`), dropped Linux capabilities (`cap_drop: ALL`).
+- **Absolute Dormancy:** Zero background telemetry, no heartbeats, zero Control Hub network connections.
+- **Embedded Dashboard:** Open `http://127.0.0.1:18080` in your browser.
+
+---
+
 ### 🌟 Option A: Full-Stack Control Hub with Web Management UI (Recommended for Evaluation)
 
 For evaluating the complete Vexa Agent Control platform — including the **PostgreSQL database**, **Central Control Plane API**, **React Web Management Console**, and **Agent Control Gateway** — use Docker Compose:

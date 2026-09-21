@@ -30,6 +30,8 @@ pub struct CompiledPolicy {
     pub fail_closed: bool,
     /// Client attribution metadata for spend tracking and multi-tenancy
     pub attribution: Option<crate::spend::types::AttributionContext>,
+    /// Explicit allowed provider endpoints for egress filtering
+    pub allowed_providers: Vec<String>,
 }
 
 impl Default for CompiledPolicy {
@@ -48,6 +50,7 @@ impl Default for CompiledPolicy {
             schema_drift: None,
             fail_closed: true,
             attribution: None,
+            allowed_providers: Vec::new(),
         }
     }
 }

@@ -48,7 +48,71 @@ impl ConnectTarget {
             Self::VscodeContinue => "VS Code (Continue Extension)",
         }
     }
+
+    pub fn from_target_name(name: &str) -> Option<Self> {
+        match name {
+            "codex" => Some(Self::Codex),
+            "claude" => Some(Self::Claude),
+            "claude-code" => Some(Self::ClaudeCode),
+            "cursor" => Some(Self::Cursor),
+            "antigravity" => Some(Self::Antigravity),
+            "vscode-continue" | "vscode_continue" => Some(Self::VscodeContinue),
+            _ => None,
+        }
+    }
 }
+
+pub const ALL_CONNECT_TARGETS: &[ConnectTarget] = &[
+    ConnectTarget::Codex,
+    ConnectTarget::Claude,
+    ConnectTarget::ClaudeCode,
+    ConnectTarget::Cursor,
+    ConnectTarget::Antigravity,
+    ConnectTarget::VscodeContinue,
+];
+
+pub fn get_target_config_path(target: ConnectTarget) -> Result<PathBuf, String> {
+    match target {
+        ConnectTarget::Codex => {
+            let home = dirs::home_dir().ok_or_else(|| "Failed to resolve user home directory".to_string())?;
+            Ok(home.join(".codex").join("config.toml"))
+        }
+        ConnectTarget::Claude => config_path::claude_config_path().map_err(|e| format!("{}", e)),
+        ConnectTarget::ClaudeCode => config_path::claude_code_settings_path().map_err(|e| format!("{}", e)),
+        ConnectTarget::Cursor => config_path::cursor_settings_path().map_err(|e| format!("{}", e)),
+        ConnectTarget::Antigravity => config_path::antigravity_config_path().map_err(|e| format!("{}", e)),
+        ConnectTarget::VscodeContinue => {
+            crate::wrap::ide_config::vscode_settings_path().ok_or_else(|| "Could not resolve VS Code settings.json path".to_string())
+        }
+    }
+}
+
+pub fn is_target_installed(target: ConnectTarget) -> bool {
+    match get_target_config_path(target) {
+        Ok(path) => {
+            if path.exists() {
+                true
+            } else if let Some(parent) = path.parent() {
+                parent.exists()
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+pub fn connect_target(target: ConnectTarget, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+    match target {
+        ConnectTarget::Codex => connect_codex(token, mode),
+        ConnectTarget::Claude => connect_claude(token, mode),
+        ConnectTarget::ClaudeCode => connect_claude_code(token, mode),
+        ConnectTarget::Cursor => connect_cursor(token, mode),
+        ConnectTarget::Antigravity => connect_antigravity(token, mode),
+        ConnectTarget::VscodeContinue => connect_vscode_continue(token, mode),
+    }
+}
+
 
 /// Operation mode for connect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]

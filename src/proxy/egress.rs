@@ -9,50 +9,22 @@ use crate::proxy::handler::ProxyState;
 use crate::proxy::session::SessionContext;
 
 pub fn is_blocked_ssrf_target(host: &str) -> bool {
-    let mut h = host.trim().to_lowercase();
-    if h.is_empty() {
-        return false;
-    }
-
-    // Strip port if present on IPv4 or hostname
-    if let Some((base, port)) = h.rsplit_once(':') {
-        if !base.contains(':') && port.chars().all(|c| c.is_ascii_digit()) {
-            h = base.to_string();
-        }
-    }
-
-    // Strip bracket notation for IPv6
-    if h.starts_with('[') {
-        if let Some(idx) = h.find(']') {
-            h = h[1..idx].to_string();
-        }
-    }
-
-    // Cloud metadata endpoints
-    if h == "169.254.169.254"
-        || h == "fd00:ec2::254"
-        || h == "metadata.google.internal"
-        || h == "metadata"
-        || h == "instance-data"
+    let canonical = match super::connector::canonicalize_host(host) {
+        Ok(c) => c,
+        Err(_) => return true,
+    };
+    if canonical == "169.254.169.254"
+        || canonical == "fd00:ec2::254"
+        || canonical == "metadata.google.internal"
+        || canonical == "metadata"
+        || canonical == "instance-data"
+        || canonical == "localhost"
+        || canonical.ends_with(".localhost")
     {
         return true;
     }
-    // Check link-local (169.254.0.0/16) and loopback bouncing
-    if let Ok(ip) = h.parse::<std::net::IpAddr>() {
-        match ip {
-            std::net::IpAddr::V4(v4) => {
-                if v4.is_link_local() || v4.is_loopback() {
-                    return true;
-                }
-            }
-            std::net::IpAddr::V6(v6) => {
-                if v6.is_loopback() {
-                    return true;
-                }
-            }
-        }
-    } else if h == "localhost" || h.ends_with(".localhost") {
-        return true;
+    if let Ok(ip) = canonical.parse::<std::net::IpAddr>() {
+        return super::connector::classify_ip(ip, false).is_err();
     }
     false
 }
@@ -70,42 +42,71 @@ pub async fn handle_egress(
         .authority()
         .map(|a| a.host().to_string())
         .unwrap_or_default();
+    let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or_else(|| {
+        if method == hyper::Method::CONNECT {
+            443
+        } else {
+            80
+        }
+    });
 
-    // Non-relay SSRF defense (PRD §3.3)
     let allow_loopback = std::env::var("AGENTCONTROL_ALLOW_LOOPBACK_EGRESS")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
-    if (!allow_loopback || (!target_host.starts_with("127.") && !target_host.starts_with("localhost") && target_host != "::1")) && is_blocked_ssrf_target(&target_host) {
-        crate::logging::log_event(
-            crate::logging::Level::Warn,
-            "ssrf_target_blocked",
-            serde_json::json!({
-                "target_host": target_host,
-                "session_id": session.session_id,
-                "client_ip": _client_ip,
-            }),
-        );
-        return Ok(Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .header("X-AgentControl-Block-Reason", "ssrf_protection")
-            .body(Full::new(Bytes::from(
-                "Vexa Agent Control Blocked: Target matches restricted cloud metadata or link-local SSRF address",
-            )))
-            .unwrap());
-    }
+
+    let custom_providers: Vec<String> = state
+        .policy
+        .read()
+        .ok()
+        .and_then(|p| p.as_ref().map(|pol| pol.allowed_providers.clone()))
+        .unwrap_or_default();
+
+    // ADR 0.2: Unified destination classifier, provider allowlist, and pinned DNS resolution
+    let (pinned_addr, canonical_host) = match super::connector::classify_and_resolve_destination(
+        &target_host,
+        target_port,
+        &state.effective_profile,
+        allow_loopback,
+        &custom_providers,
+    )
+    .await
+    {
+        Ok(res) => res,
+        Err(err) => {
+            crate::logging::log_event(
+                crate::logging::Level::Warn,
+                "egress_destination_blocked",
+                serde_json::json!({
+                    "target_host": target_host,
+                    "target_port": target_port,
+                    "reason": err.to_string(),
+                    "block_code": err.as_header_str(),
+                    "session_id": session.session_id,
+                    "client_ip": _client_ip,
+                }),
+            );
+            return Ok(Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("X-AgentControl-Block-Reason", err.as_header_str())
+                .body(Full::new(Bytes::from(format!(
+                    "Vexa Agent Control Blocked: {}",
+                    err
+                ))))
+                .unwrap());
+        }
+    };
 
     // 1. CONNECT proxying
     if method == hyper::Method::CONNECT {
-        let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(443);
-
         // Tier 3: If host is an allowlisted LLM domain and CA manager is present, perform MITM decryption & spend tracking
         if let Some(ca_mgr) = &state.ca_manager {
-            if crate::ca::is_interceptable_host(&target_host, None) {
+            if crate::ca::is_interceptable_host(&canonical_host, None) {
                 let mitm_engine = super::mitm::MitmEngine::new(ca_mgr.clone(), state.clone());
                 let sid = session.session_id.clone();
                 let isub = session.identity_sub.clone();
                 let igroups = session.identity_groups.clone();
                 let client_ip_str = _client_ip.to_string();
+                let target_host_clone = canonical_host.clone();
 
                 tokio::task::spawn(async move {
                     match hyper::upgrade::on(req).await {
@@ -113,7 +114,7 @@ pub async fn handle_egress(
                             mitm_engine
                                 .handle_tunnel(
                                     upgraded,
-                                    target_host,
+                                    target_host_clone,
                                     target_port,
                                     sid,
                                     isub,
@@ -132,29 +133,28 @@ pub async fn handle_egress(
             }
         }
 
-        let target_url = format!("{}:{}", target_host, target_port);
         let session_id = session.session_id.clone();
         let state_clone = state.clone();
         let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let start_time = std::time::Instant::now();
+        let target_host_report = canonical_host.clone();
 
         tokio::task::spawn(async move {
-            // Fix AW-BUG-004: track actual connection outcome for accurate audit logging.
-            // Default to failure (502/deny); only set success (200/allow) when TCP connect succeeds.
             let mut final_status: i64 = 502;
             let mut final_verdict = "deny".to_string();
 
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
                     let mut upgraded = hyper_util::rt::TokioIo::new(upgraded);
-                    match tokio::net::TcpStream::connect(&target_url).await {
+                    // ADR 0.2: Dial the evaluated, pinned concrete SocketAddr (immune to DNS rebinding)
+                    match tokio::net::TcpStream::connect(pinned_addr).await {
                         Ok(mut server) => {
                             final_status = 200;
                             final_verdict = "allow".to_string();
                             let _ = tokio::io::copy_bidirectional(&mut upgraded, &mut server).await;
                         }
                         Err(e) => {
-                            eprintln!("Tunnel connection failed to {}: {}", target_url, e);
+                            eprintln!("Tunnel connection failed to {}: {}", pinned_addr, e);
                         }
                     }
                 }
@@ -167,7 +167,7 @@ pub async fn handle_egress(
                 session_id,
                 transport: "http_connect".to_string(),
                 method: Some("CONNECT".to_string()),
-                target_host,
+                target_host: target_host_report,
                 target_port: Some(target_port as i64),
                 url_path: None,
                 request_headers: None,
@@ -196,19 +196,14 @@ pub async fn handle_egress(
 
     // 2. WebSockets proxying
     if hyper_tungstenite::is_upgrade_request(&req) {
-        let target_host = uri
-            .authority()
-            .map(|a| a.host().to_string())
-            .unwrap_or_default();
-        let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(80);
         let url_path = uri
             .path_and_query()
             .map(|pq| pq.as_str().to_string())
             .unwrap_or_default();
         let target_url_str = if target_port == 443 {
-            format!("wss://{}{}", target_host, url_path)
+            format!("wss://{}{}", canonical_host, url_path)
         } else {
-            format!("ws://{}:{}{}", target_host, target_port, url_path)
+            format!("ws://{}:{}{}", canonical_host, target_port, url_path)
         };
 
         // Fix AW-BUG-003: handle malformed WebSocket upgrade gracefully instead
@@ -337,11 +332,7 @@ pub async fn handle_egress(
     }
 
     // 3. Standard fetch proxying
-    let target_host = uri
-        .authority()
-        .map(|a| a.host().to_string())
-        .unwrap_or_default();
-    let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or(80);
+    let target_host = canonical_host.clone();
     let url_path = uri
         .path_and_query()
         .map(|pq| pq.as_str().to_string())

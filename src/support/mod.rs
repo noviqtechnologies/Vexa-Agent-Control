@@ -275,8 +275,21 @@ pub fn run_logout() -> i32 {
     let _ = CredentialStore::delete("refresh_token");
     let _ = CredentialStore::delete("device_token");
 
+    // Clean up Hub connection metadata and cached remote policy
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".agentcontrol");
+        let _ = std::fs::remove_file(dir.join("hub_url.txt"));
+        let _ = std::fs::remove_file(dir.join("device_token.txt"));
+        let _ = std::fs::remove_file(dir.join("cached_policy.yaml"));
+        let _ = std::fs::remove_file(dir.join("cached_policy.sha256"));
+        let _ = std::fs::remove_file(dir.join("agentcontrol-policy.cached.yaml"));
+    }
+
+    // Persist operational state transition back to LocalGateway (ADR 0.1, 0.7)
+    let _ = crate::cli::save_persisted_profile(crate::cli::DeploymentProfile::LocalGateway);
+
     println!(
-        "{} Workstation credentials flushed successfully. Run 'agentcontrol login' to re-authenticate.",
+        "{} Workstation credentials flushed. Profile transitioned to local-gateway.\n  Workstation IDE client configurations preserved. Run 'agentcontrol login' to re-authenticate.",
         "✔".green().bold()
     );
     0

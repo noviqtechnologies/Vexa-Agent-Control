@@ -27,18 +27,20 @@ Vexa Agent Control protects developer workstations through two complementary pil
 
 ---
 
-## Integrations Support Matrix
+## Integrations Support & Enforcement Matrix
 
-| Client / IDE | Trust Level | MCP Wrapping Support | Virtual Key / LLM Proxy Method | Config Path (macOS) | Config Path (Linux) | Config Path (Windows) |
-|---|---|---|---|---|---|---|
-| **ChatGPT Codex** | **Verified** | `agentcontrol wrap codex` | `[shell_environment_policy.set]` | `~/.codex/config.toml` | `~/.codex/config.toml` | `%USERPROFILE%\.codex\config.toml` |
-| **Claude Desktop** | **Verified** | `agentcontrol wrap claude` | `mcpServers.<srv>.env` block | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| **Cursor IDE** | **Verified** | `agentcontrol wrap cursor` | `cursor.openAI.baseUrl` + `apiKey` | `~/.cursor/mcp.json` & `User/settings.json` | `~/.cursor/mcp.json` & `User/settings.json` | `%USERPROFILE%\.cursor\mcp.json` & `%APPDATA%\Cursor\User\settings.json` |
-| **Antigravity** | **Verified** | `agentcontrol wrap antigravity` | IDE Settings & Environment | `~/.gemini/antigravity/mcp_config.json` | `~/.gemini/antigravity/mcp_config.json` | `%USERPROFILE%\.gemini\antigravity\mcp_config.json` |
-| **VS Code / Copilot**| *Experimental* | `agentcontrol wrap vscode` | `User/settings.json` proxy | `~/Library/Application Support/Code/User/settings.json` | `~/.config/Code/User/settings.json` | `%APPDATA%\Code\User\settings.json` |
-| **Cline / Roo Code** | **Verified** | Automated via Extension | Direct `baseURL` + Virtual Key | Extension Global Storage | Extension Global Storage | Extension Global Storage |
-| **OpenCode** | *Experimental* | `agentcontrol wrap opencode`| `provider.baseUrl` in config | `~/.config/opencode/config.json` | `~/.config/opencode/config.json` | `%USERPROFILE%\.config\opencode\config.json` |
-| **CLI / SDKs** | **Verified** | Process Environment | `OPENAI_BASE_URL` env var | Shell Profile (`.zshrc` / `.bashrc`) | Shell Profile (`.bashrc`) | Windows User Environment / PowerShell Profile |
+| Client / IDE | Trust Level | Routing Method | Interception Scope | MCP Sandboxing | Config Path |
+|---|---|---|---|---|---|
+| **Cursor IDE** | **Verified** | `settings.json` (`http.proxy`) | **Full Proxying** (Completions & Tools) | `agentcontrol connect cursor` | `~/.cursor/mcp.json` & `settings.json` |
+| **Claude Code CLI** | **Verified** | `settings.json` (`env.ANTHROPIC_BASE_URL`) | **Full Proxying** (CLI commands & Tools) | `agentcontrol connect claude-code` | `~/.claude/settings.json` |
+| **Claude Desktop** | **Verified** | `claude_desktop_config.json` | **Tool Boundary Only** (Completions Direct) | `agentcontrol connect claude` | `claude_desktop_config.json` |
+| **ChatGPT Codex** | **Verified** | `config.toml` + Shell Wrapper | **Wrapper Execution** (Intercepted Shell) | `agentcontrol connect codex` | `~/.codex/config.toml` |
+| **Antigravity IDE** | **Verified** | `mcp_config.json` (`proxy_url`) | **Full Proxying** (Configured Workspaces) | `agentcontrol connect antigravity` | `~/.gemini/antigravity/mcp_config.json` |
+| **VS Code / Continue** | **Verified** | `settings.json` (`apiBase`) | **Full Proxying** (Extension Requests) | `agentcontrol connect vscode-continue` | `User/settings.json` |
+
+> [!IMPORTANT]
+> **Boundary Model Disclosure:**
+> Protection is strictly enforced at the client configuration and proxy layer (`127.0.0.1:18080`). Agent Control does **not** perform kernel-level packet inspection or OS raw socket capture. Unconfigured terminal commands or arbitrary child processes run outside wrapped configurations will connect directly to destination endpoints without hitting the gateway.
 
 ---
 
@@ -49,15 +51,15 @@ Vexa Agent Control protects developer workstations through two complementary pil
 - **macOS / Linux:** `~/.codex/config.toml`
 ```toml
 [shell_environment_policy.set]
-OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"
 OPENAI_API_KEY = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
 OPENAI_MODEL = "o3-mini"
-HTTP_PROXY = "http://127.0.0.1:8080"
-HTTPS_PROXY = "http://127.0.0.1:8080"
+HTTP_PROXY = "http://127.0.0.1:18080"
+HTTPS_PROXY = "http://127.0.0.1:18080"
 ```
 *(⚠️ Never place `openai_api_key` under `[features]` or top-level; it causes a fatal `config_load` error).*
 
-### 2. Claude Desktop
+### 2. Claude Desktop (Tool Boundary Only)
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
@@ -66,11 +68,7 @@ HTTPS_PROXY = "http://127.0.0.1:8080"
   "mcpServers": {
     "agent": {
       "command": "agentcontrol",
-      "args": ["stdio-proxy", "--", "node", "runner.js"],
-      "env": {
-        "OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
-        "OPENAI_API_KEY": "sk-vex-YOUR_VIRTUAL_KEY_HERE"
-      }
+      "args": ["stdio-proxy", "--", "node", "runner.js"]
     }
   }
 }
@@ -82,21 +80,20 @@ HTTPS_PROXY = "http://127.0.0.1:8080"
 - **Linux:** `~/.config/Cursor/User/settings.json`
 ```json
 {
-  "cursor.openAI.baseUrl": "http://127.0.0.1:8080/v1",
-  "cursor.openAI.apiKey": "sk-vex-YOUR_VIRTUAL_KEY_HERE",
-  "cursor.openAI.model": "gpt-4o"
+  "http.proxy": "http://127.0.0.1:18080",
+  "cursor.general.disableHttp2": true
 }
 ```
 
 ### 4. Terminal Agents & SDKs (Aider, Continue, Python, Node.js)
 - **Windows (PowerShell):**
   ```powershell
-  $env:OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+  $env:OPENAI_BASE_URL = "http://127.0.0.1:18080/v1"
   $env:OPENAI_API_KEY  = "sk-vex-YOUR_VIRTUAL_KEY_HERE"
   ```
 - **macOS & Linux (Bash / Zsh):**
   ```bash
-  export OPENAI_BASE_URL="http://127.0.0.1:8080/v1"
+  export OPENAI_BASE_URL="http://127.0.0.1:18080/v1"
   export OPENAI_API_KEY="sk-vex-YOUR_VIRTUAL_KEY_HERE"
   ```
 

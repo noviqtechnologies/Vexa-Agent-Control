@@ -1,0 +1,55 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# VEXA AGENT CONTROL — STANDALONE LOCAL GATEWAY (DOCKER COMPOSE)
+# ══════════════════════════════════════════════════════════════════════════════
+# Runs Vexa Agent Control in Developer Standalone profile (`local-gateway`):
+#   - Bound strictly to host loopback (127.0.0.1:18080)
+#   - Non-root UID/GID (10001:10001)
+#   - Dropped Linux capabilities (cap_drop: ALL)
+#   - Absolute dormancy: zero outbound telemetry or Control Hub connections
+#   - Local SQLite events.db and HMAC audit.jsonl persisted to local volume
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: vexa-agentcontrol-standalone
+
+services:
+  agentcontrol:
+    container_name: vexa-agentcontrol-standalone
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: noviq/agentcontrol:standalone
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      # Bound strictly to loopback on host to prevent LAN/cross-network exposure
+      - "127.0.0.1:18080:18080"
+    volumes:
+      - ./agentcontrol-policy.yaml:/app/agentcontrol-policy.yaml:ro
+      - agentcontrol-data:/app/.agentcontrol
+      - agentcontrol-logs:/var/log/agentcontrol
+    environment:
+      AGENTCONTROL_PROFILE: "local-gateway"
+      AGENTCONTROL_LISTEN: "0.0.0.0:18080"
+      AGENTCONTROL_CONTAINER_BRIDGE_MODE: "true"
+      AGENTCONTROL_LOG_PATH: "/var/log/agentcontrol/audit.jsonl"
+      AGENTCONTROL_RECORD_PAYLOADS: "false"
+    command:
+      - "start"
+      - "--profile"
+      - "local-gateway"
+      - "--policy"
+      - "/app/agentcontrol-policy.yaml"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:18080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  agentcontrol-data:
+  agentcontrol-logs:

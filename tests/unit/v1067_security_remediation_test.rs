@@ -58,21 +58,21 @@ fn test_profile_configuration_matrix() {
             expected_enforce: true,
             expected_scan_responses: false,
             expected_fail_closed: false,
-            expected_name: "local-enforce",
+            expected_name: "local-gateway",
         },
         MatrixCase {
             profile_str: "team-enforce",
             expected_enforce: true,
             expected_scan_responses: true,
             expected_fail_closed: true,
-            expected_name: "team-enforce",
+            expected_name: "team-gateway",
         },
         MatrixCase {
             profile_str: "dedicated-enforce",
             expected_enforce: true,
             expected_scan_responses: true,
             expected_fail_closed: true,
-            expected_name: "dedicated-enforce",
+            expected_name: "team-gateway",
         },
     ];
 

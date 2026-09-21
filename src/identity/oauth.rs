@@ -560,6 +560,10 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
             println!("  Signed in as:       {}", result.user_id.bold());
             println!("  Hub:                {}", clean_hub.cyan());
             println!("  Device ID:          {}", result.device_id.dimmed());
+            println!("  Runtime Profile:    {}", "team-gateway".green());
+
+            // Persist operational state transition to TeamGateway (ADR 0.1, 0.7)
+            let _ = crate::cli::save_persisted_profile(crate::cli::DeploymentProfile::TeamGateway);
 
             // Silently register the background daemon. The login command owns
             // all UX output; the service install runs quiet. On failure a

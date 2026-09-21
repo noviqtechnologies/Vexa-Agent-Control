@@ -17,6 +17,7 @@
 //! gateway never silently fails to start because the dashboard is temporarily
 //! unavailable during a rolling deployment.
 
+use colored::Colorize;
 use crate::logging::{self, Level};
 use crate::policy::loader::{load_policy_from_str, PolicyLoadResult};
 use serde::Deserialize;
@@ -195,6 +196,50 @@ pub async fn fetch_policy_yaml(
     }
 }
 
+/// Path to local offline cached policy: `~/.agentcontrol/cached_policy.yaml`
+pub fn cached_policy_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".agentcontrol").join("cached_policy.yaml"))
+}
+
+/// Save validated policy and its cryptographic hash to local cache
+pub fn save_cached_policy(yaml: &str, raw_hash: &str) {
+    if let Some(path) = cached_policy_path() {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, yaml);
+        let hash_path = path.with_extension("sha256");
+        let _ = std::fs::write(&hash_path, raw_hash);
+    }
+}
+
+/// Load and verify cached policy from local disk
+pub fn load_cached_policy() -> Option<(String, String)> {
+    let path = cached_policy_path()?;
+    let hash_path = path.with_extension("sha256");
+    if path.exists() && hash_path.exists() {
+        if let (Ok(content), Ok(saved_hash)) = (std::fs::read_to_string(&path), std::fs::read_to_string(&hash_path)) {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            let computed_hash = format!("sha256:{}", hex::encode(hasher.finalize()));
+            if saved_hash.trim() == computed_hash || saved_hash.trim() == &computed_hash[7..] {
+                return Some((content, computed_hash));
+            } else {
+                logging::log_event(
+                    Level::Error,
+                    "cached_policy_hash_mismatch",
+                    serde_json::json!({
+                        "saved_hash": saved_hash.trim(),
+                        "computed_hash": computed_hash,
+                    }),
+                );
+            }
+        }
+    }
+    None
+}
+
 /// Fetch policy from the dashboard API and compile it.
 ///
 /// Returns `PolicyLoadResult::Loaded` on success,
@@ -215,8 +260,11 @@ pub async fn load_remote_policy(
                     "yaml_bytes": yaml.len()
                 }),
             );
-            // Compile using the same path as the file loader (FR-103)
-            load_policy_from_str(&yaml, None)
+            let res = load_policy_from_str(&yaml, None);
+            if let PolicyLoadResult::Loaded { ref raw_hash, .. } = res {
+                save_cached_policy(&yaml, raw_hash);
+            }
+            res
         }
         Ok(None) => {
             logging::log_event(
@@ -237,10 +285,28 @@ pub async fn load_remote_policy(
                 "policy_fetch_remote_failed",
                 serde_json::json!({ "error": &e }),
             );
+            // Check offline cache before degrading
+            if let Some((cached_yaml, cached_hash)) = load_cached_policy() {
+                eprintln!(
+                    "{} [POLICY:OFFLINE_CACHE_ACTIVE] Using verified cached policy ({})",
+                    colored::Colorize::yellow("⚠").bold(),
+                    colored::Colorize::cyan(cached_hash.as_str())
+                );
+                logging::log_event(
+                    Level::Warn,
+                    "policy_offline_cache_activated",
+                    serde_json::json!({
+                        "hash": cached_hash,
+                        "fallback_reason": e,
+                    }),
+                );
+                return load_policy_from_str(&cached_yaml, None);
+            }
             PolicyLoadResult::Degraded { reason: e }
         }
     }
 }
+
 
 /// Background polling task. Runs indefinitely, waking every `interval_secs`
 /// seconds to check whether the policy version has changed.

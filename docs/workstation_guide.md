@@ -61,9 +61,9 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 
 > [!TIP]
 > **Prefer Running with Docker?**
-> If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker run`:
+> If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker compose -f docker-compose.standalone.yml up -d` or `docker run`:
 > ```bash
-> docker run -d --name agentcontrol -p 8080:8080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:8080
+> docker run -d --name agentcontrol -p 127.0.0.1:18080:18080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:18080 --container-bridge-mode
 > ```
 > See the full [Docker Deployment Guide](guides/docker-deployment.md).
 
@@ -186,34 +186,35 @@ agentcontrol.exe --version
 
 ## 3. Step-by-Step: Getting Started
 
-### Step 1 — Start Gateway & Connect Your Coding Assistants
+### Step 1 — Protect Workstation in 1 Command (`agentcontrol protect`)
 
-The recommended standalone developer onboarding flow requires zero administrative elevation and zero Control Hub:
-
-1. Start the local security gateway — it auto-generates a `local.token` and begins listening on `127.0.0.1:18080`.
-2. Connect your installed AI coding assistants with scoped target injection.
-3. Verify comprehensive health with `agentcontrol doctor` and inspect status with `agentcontrol status`.
+The recommended standalone developer flow automatically discovers all installed assistants, verifies listener responsiveness, and applies atomic, journaled configuration updates:
 
 ```bash
-# 1. Start the local security gateway:
-agentcontrol start
+# 1-command protection with transaction journal safety:
+agentcontrol protect
 
-# 2. Connect installed coding assistants:
-agentcontrol connect claude
-agentcontrol connect cursor
-agentcontrol connect antigravity
-agentcontrol connect codex
-
-# 3. Check health and multi-state status:
-agentcontrol doctor
+# Check verified ports, status, and health:
 agentcontrol status
+agentcontrol doctor
+
+# Cleanly unprotect all assistants anytime:
+agentcontrol unprotect
 ```
 
-> [!NOTE]
-> **Team / Enterprise users:** If your organization has a Control Hub, authenticate first with `agentcontrol login` (browser OAuth PKCE) before running `agentcontrol connect`.
+#### Individual Assistant Connection (Alternative)
+You can also connect or disconnect assistants selectively:
+```bash
+agentcontrol connect cursor
+agentcontrol connect claude
+agentcontrol connect codex
+agentcontrol disconnect cursor
+```
 
 **What You Achieve:**
-Zero-elevation target governance with pristine baseline backups (`.baseline.bak`) and ownership manifests (`~/.agentcontrol/manifests/<target>.manifest.json`). Cleanly disconnect at any time with `agentcontrol disconnect <target>`.
+- **Transaction Safety:** Mutations are journaled in `~/.agentcontrol/protect_journal.json`. If an error occurs, Agent Control rolls back immediately with zero corrupted configuration files.
+- **Port Verification:** The gateway binds and tests the listener before any file writes, ensuring client configs point to the actual active port.
+- **Zero-Elevation Governance:** Pristine baseline backups (`.baseline.bak`) and ownership manifests (`~/.agentcontrol/manifests/<target>.manifest.json`). Cleanly revert all changes with `agentcontrol unprotect`.
 
 ---
 

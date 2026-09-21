@@ -107,6 +107,7 @@ mod tests {
             schema_drift: None,
             fail_closed: false,
             attribution: None,
+            allowed_providers: vec![],
         }
     }
 

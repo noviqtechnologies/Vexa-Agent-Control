@@ -90,6 +90,7 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
     let reader = BufReader::new(file);
     let mut prev_hmac = ZERO_HMAC.to_string();
     let mut count: u64 = 0;
+    let mut total_entries: u64 = 0;
 
     for (line_num, raw) in reader.lines().enumerate() {
         let raw = match raw {
@@ -105,11 +106,12 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
             Err(msg) => return VerifyResult::Error(msg),
         };
 
-        // Rotation seed resets the per-segment index counter.
+        // Rotation seed or new daemon session segment resets the per-segment index counter.
         if entry.event == "log_rotation_seed" {
             handle_rotation_seed(&entry, &mut count, &mut prev_hmac);
-        } else if entry.entry_index == 0 && count == 0 {
-            // First entry in a fresh file — initialise prev_hmac sentinel.
+        } else if entry.entry_index == 0 && entry.prev_hmac == ZERO_HMAC {
+            // First entry or new session segment initialized with ZERO_HMAC sentinel.
+            count = 0;
             prev_hmac = ZERO_HMAC.to_string();
         }
 
@@ -129,13 +131,14 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
 
         prev_hmac = entry.hmac.unwrap_or_default();
         count += 1;
+        total_entries += 1;
     }
 
-    if count == 0 {
+    if total_entries == 0 {
         return VerifyResult::Error("log file contains no audit entries".to_string());
     }
 
-    VerifyResult::Valid { entry_count: count }
+    VerifyResult::Valid { entry_count: total_entries }
 }
 
 /// Verify the HMAC chain with full HMAC recomputation using the session secret.
@@ -153,6 +156,7 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
     let reader = BufReader::new(file);
     let mut prev_hmac = ZERO_HMAC.to_string();
     let mut count: u64 = 0;
+    let mut total_entries: u64 = 0;
 
     for (line_num, raw) in reader.lines().enumerate() {
         let raw = match raw {
@@ -168,9 +172,12 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
             Err(msg) => return VerifyResult::Error(msg),
         };
 
-        // Rotation seed.
+        // Rotation seed or new daemon session segment.
         if entry.event == "log_rotation_seed" {
             handle_rotation_seed(&entry, &mut count, &mut prev_hmac);
+        } else if entry.entry_index == 0 && entry.prev_hmac == ZERO_HMAC {
+            count = 0;
+            prev_hmac = ZERO_HMAC.to_string();
         }
 
         if entry.entry_index != count {
@@ -204,25 +211,26 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
 
         let mut mac = HmacSha256::new_from_slice(session_secret).expect("HMAC key length is valid");
         mac.update(canonical.as_bytes());
-        let computed = hex::encode(mac.finalize().into_bytes());
+        let computed_hmac = hex::encode(mac.finalize().into_bytes());
 
-        if computed != stored_hmac {
+        if computed_hmac != stored_hmac {
             return VerifyResult::Invalid {
-                entry_index: verify_entry.entry_index,
+                entry_index: entry.entry_index,
                 reason: format!(
-                    "HMAC mismatch at entry {} — payload has been modified",
-                    verify_entry.entry_index
+                    "HMAC mismatch at entry {} — payload has been modified (stored {}, computed {})",
+                    entry.entry_index, stored_hmac, computed_hmac
                 ),
             };
         }
 
         prev_hmac = stored_hmac;
         count += 1;
+        total_entries += 1;
     }
 
-    if count == 0 {
+    if total_entries == 0 {
         return VerifyResult::Error("log file contains no audit entries".to_string());
     }
 
-    VerifyResult::Valid { entry_count: count }
+    VerifyResult::Valid { entry_count: total_entries }
 }

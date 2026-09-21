@@ -30,7 +30,9 @@ fn create_test_state_with_drift(
         schema_drift: drift_config,
         fail_closed: false,
         attribution: None,
+        allowed_providers: vec![],
     });
+
 
     (state, dir)
 }
