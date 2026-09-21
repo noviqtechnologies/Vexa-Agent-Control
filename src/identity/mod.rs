@@ -62,18 +62,21 @@ pub mod audit_log;
 pub mod create;
 pub mod credential;
 pub mod device;
-pub mod oauth;
-pub mod storage;
 pub mod inspect;
 pub mod ipc;
 pub mod keys;
+pub mod oauth;
 pub mod rotate;
 pub mod scope;
 pub mod scope_validator;
+pub mod storage;
 pub mod transcript;
 pub mod vault;
 
-pub use oauth::{AuthProvider, AuthError, DeviceEnrollmentResult, LoginSession, SmbBrowserAuthProvider, TokenPair};
+pub use oauth::{
+    AuthError, AuthProvider, DeviceEnrollmentResult, LoginSession, SmbBrowserAuthProvider,
+    TokenPair,
+};
 
 #[cfg(test)]
 mod transcript_test;

@@ -462,29 +462,32 @@ impl SpendLedger {
 
                         let mut records = Vec::new();
                         if let Ok(mut stmt) = conn.prepare(&query) {
-                            let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
-                                let ts_secs: i64 = row.get(0)?;
-                                let ts_str = chrono::DateTime::from_timestamp(ts_secs, 0)
-                                    .map(|dt| dt.to_rfc3339())
-                                    .unwrap_or_default();
-                                let cost_cents: u64 = row.get(11)?;
-                                Ok(SpendExportRecord {
-                                    timestamp: ts_str,
-                                    request_id: row.get(1)?,
-                                    client_id: row.get(2)?,
-                                    project_id: row.get(3)?,
-                                    cost_center: row.get(4)?,
-                                    agent_id: row.get(5)?,
-                                    provider: row.get(6)?,
-                                    model: row.get(7)?,
-                                    input_tokens: row.get(8)?,
-                                    output_tokens: row.get(9)?,
-                                    total_tokens: row.get(10)?,
-                                    cost_cents,
-                                    cost_usd: cost_cents as f64 / 100.0,
-                                    is_estimated: row.get::<_, i64>(12)? == 1,
-                                })
-                            });
+                            let rows = stmt.query_map(
+                                rusqlite::params_from_iter(params_vec.iter()),
+                                |row| {
+                                    let ts_secs: i64 = row.get(0)?;
+                                    let ts_str = chrono::DateTime::from_timestamp(ts_secs, 0)
+                                        .map(|dt| dt.to_rfc3339())
+                                        .unwrap_or_default();
+                                    let cost_cents: u64 = row.get(11)?;
+                                    Ok(SpendExportRecord {
+                                        timestamp: ts_str,
+                                        request_id: row.get(1)?,
+                                        client_id: row.get(2)?,
+                                        project_id: row.get(3)?,
+                                        cost_center: row.get(4)?,
+                                        agent_id: row.get(5)?,
+                                        provider: row.get(6)?,
+                                        model: row.get(7)?,
+                                        input_tokens: row.get(8)?,
+                                        output_tokens: row.get(9)?,
+                                        total_tokens: row.get(10)?,
+                                        cost_cents,
+                                        cost_usd: cost_cents as f64 / 100.0,
+                                        is_estimated: row.get::<_, i64>(12)? == 1,
+                                    })
+                                },
+                            );
                             if let Ok(mapped) = rows {
                                 for r in mapped.flatten() {
                                     records.push(r);
@@ -495,7 +498,9 @@ impl SpendLedger {
                     }
                     SpendCmd::ListBudgets { responder } => {
                         let mut budgets = Vec::new();
-                        if let Ok(mut stmt) = conn.prepare("SELECT scope_type, scope_key, cap_cents, period FROM spend_budgets") {
+                        if let Ok(mut stmt) = conn.prepare(
+                            "SELECT scope_type, scope_key, cap_cents, period FROM spend_budgets",
+                        ) {
                             let rows = stmt.query_map([], |row| {
                                 let s_type: String = row.get(0)?;
                                 let s_key: String = row.get(1)?;
@@ -512,7 +517,11 @@ impl SpendLedger {
                                     "monthly" => BudgetPeriod::Monthly,
                                     _ => BudgetPeriod::Daily,
                                 };
-                                Ok(BudgetConfig { scope, cap_cents, period })
+                                Ok(BudgetConfig {
+                                    scope,
+                                    cap_cents,
+                                    period,
+                                })
                             });
                             if let Ok(mapped) = rows {
                                 for b in mapped.flatten() {
@@ -522,7 +531,10 @@ impl SpendLedger {
                         }
                         let _ = responder.send(budgets);
                     }
-                    SpendCmd::GetSpend { agent_id, responder } => {
+                    SpendCmd::GetSpend {
+                        agent_id,
+                        responder,
+                    } => {
                         let now = chrono::Utc::now();
                         let period_start = now
                             .date_naive()
@@ -545,7 +557,8 @@ impl SpendLedger {
 
                         let spend = AgentSpend {
                             agent_id,
-                            period_start: chrono::DateTime::from_timestamp(period_start, 0).unwrap_or_default(),
+                            period_start: chrono::DateTime::from_timestamp(period_start, 0)
+                                .unwrap_or_default(),
                             spent_cents,
                             cap_cents,
                             is_estimated: false,
@@ -617,7 +630,14 @@ impl SpendLedger {
     /// Query usage records for export.
     pub async fn export_usage(&self, filter: SpendExportFilter) -> Vec<SpendExportRecord> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(SpendCmd::ExportUsage { filter, responder: tx }).is_err() {
+        if self
+            .cmd_tx
+            .send(SpendCmd::ExportUsage {
+                filter,
+                responder: tx,
+            })
+            .is_err()
+        {
             return Vec::new();
         }
         rx.await.unwrap_or_default()
@@ -626,25 +646,51 @@ impl SpendLedger {
     /// List active budgets.
     pub async fn list_budgets(&self) -> Vec<BudgetConfig> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(SpendCmd::ListBudgets { responder: tx }).is_err() {
+        if self
+            .cmd_tx
+            .send(SpendCmd::ListBudgets { responder: tx })
+            .is_err()
+        {
             return Vec::new();
         }
         rx.await.unwrap_or_default()
     }
 
     /// Set a budget cap.
-    pub async fn set_budget(&self, scope: BudgetScope, cap_cents: u64, period: BudgetPeriod) -> Result<(), String> {
+    pub async fn set_budget(
+        &self,
+        scope: BudgetScope,
+        cap_cents: u64,
+        period: BudgetPeriod,
+    ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(SpendCmd::SetBudget { scope, cap_cents, period, responder: tx }).is_err() {
+        if self
+            .cmd_tx
+            .send(SpendCmd::SetBudget {
+                scope,
+                cap_cents,
+                period,
+                responder: tx,
+            })
+            .is_err()
+        {
             return Err("Spend ledger unavailable".to_string());
         }
-        rx.await.unwrap_or_else(|_| Err("No response from ledger".to_string()))
+        rx.await
+            .unwrap_or_else(|_| Err("No response from ledger".to_string()))
     }
 
     /// Get current spend for an agent.
     pub async fn get_spend(&self, agent_id: String) -> Option<AgentSpend> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd_tx.send(SpendCmd::GetSpend { agent_id, responder: tx }).is_err() {
+        if self
+            .cmd_tx
+            .send(SpendCmd::GetSpend {
+                agent_id,
+                responder: tx,
+            })
+            .is_err()
+        {
             return None;
         }
         rx.await.unwrap_or(None)
@@ -736,7 +782,10 @@ mod tests {
             .check_and_increment("agent-capped".to_string(), vec![], 6)
             .await;
         match res2 {
-            SpendCheckResult::BudgetExhausted { cap_cents, spent_cents } => {
+            SpendCheckResult::BudgetExhausted {
+                cap_cents,
+                spent_cents,
+            } => {
                 assert_eq!(cap_cents, 10);
                 assert_eq!(spent_cents, 5);
             }

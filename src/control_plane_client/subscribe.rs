@@ -109,9 +109,19 @@ pub async fn start_policy_subscriber(
                                 );
 
                                 // Extract yaml and optional expected hash from JSON wrapper or raw string
-                                let (yaml_str, expected_hash) = if let Ok(v) = serde_json::from_str::<serde_json::Value>(&message.data) {
-                                    let content = v.get("content").and_then(|c| c.as_str()).map(String::from).unwrap_or_else(|| message.data.clone());
-                                    let hash = v.get("sha256").or_else(|| v.get("hash")).and_then(|h| h.as_str()).map(String::from);
+                                let (yaml_str, expected_hash) = if let Ok(v) =
+                                    serde_json::from_str::<serde_json::Value>(&message.data)
+                                {
+                                    let content = v
+                                        .get("content")
+                                        .and_then(|c| c.as_str())
+                                        .map(String::from)
+                                        .unwrap_or_else(|| message.data.clone());
+                                    let hash = v
+                                        .get("sha256")
+                                        .or_else(|| v.get("hash"))
+                                        .and_then(|h| h.as_str())
+                                        .map(String::from);
                                     (content, hash)
                                 } else {
                                     (message.data.clone(), None)
@@ -125,7 +135,9 @@ pub async fn start_policy_subscriber(
                                     } => {
                                         // If an explicit hash was provided in the SSE envelope, verify it
                                         if let Some(ref exp) = expected_hash {
-                                            if !raw_hash.ends_with(exp.trim()) && !exp.trim().ends_with(&raw_hash) {
+                                            if !raw_hash.ends_with(exp.trim())
+                                                && !exp.trim().ends_with(&raw_hash)
+                                            {
                                                 logging::log_event(
                                                     Level::Error,
                                                     "sse_policy_hash_mismatch",
@@ -139,7 +151,9 @@ pub async fn start_policy_subscriber(
                                         }
 
                                         // Persist to local offline cache
-                                        crate::policy::remote::save_cached_policy(&yaml_str, &raw_hash);
+                                        crate::policy::remote::save_cached_policy(
+                                            &yaml_str, &raw_hash,
+                                        );
 
                                         let mut w = state.policy.write().unwrap();
                                         *w = Some(policy);

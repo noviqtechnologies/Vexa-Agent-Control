@@ -1,8 +1,8 @@
 // src/proxy/db.rs
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot};
 
 use rusqlite::{params, Connection, Transaction};
@@ -544,7 +544,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let events = mgr.get_events(10).await.unwrap();
-        let saved = events.iter().find(|e| e.session_id == "test-sess-redact").unwrap();
+        let saved = events
+            .iter()
+            .find(|e| e.session_id == "test-sess-redact")
+            .unwrap();
 
         // Raw payloads MUST be redacted
         assert_eq!(saved.request_body, None);
@@ -588,13 +591,15 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let events = mgr.get_events(10).await.unwrap();
-        let saved = events.iter().find(|e| e.session_id == "test-sess-opt-in").unwrap();
+        let saved = events
+            .iter()
+            .find(|e| e.session_id == "test-sess-opt-in")
+            .unwrap();
 
         // Raw payloads preserved when opted-in
         assert_eq!(saved.request_body, Some("DEBUG PROMPT".to_string()));
         assert_eq!(saved.response_body, Some("DEBUG RESPONSE".to_string()));
     }
 }
-
 
 // The module is deliberately lightweight; higher‑level code should call `insert` and `get_events`.

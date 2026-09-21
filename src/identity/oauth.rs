@@ -24,7 +24,10 @@ pub trait AuthProvider: Send + Sync {
     async fn initiate_login(&self) -> Result<LoginSession, AuthError>;
 
     /// Await loopback HTTP callback and complete device enrollment.
-    async fn await_callback(&self, session: &LoginSession) -> Result<DeviceEnrollmentResult, AuthError>;
+    async fn await_callback(
+        &self,
+        session: &LoginSession,
+    ) -> Result<DeviceEnrollmentResult, AuthError>;
 
     /// Refresh short-lived access credentials using device refresh token.
     async fn refresh_access_token(&self, refresh_token: &str) -> Result<TokenPair, AuthError>;
@@ -187,7 +190,12 @@ pub fn open_browser(url: &str) {
         if status.is_err() {
             // Fallback to powershell Start-Process
             let _ = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-Command", &format!("Start-Process '{}'", url.replace('\'', "''"))])
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    &format!("Start-Process '{}'", url.replace('\'', "''")),
+                ])
                 .spawn();
         }
     }
@@ -257,10 +265,18 @@ impl AuthProvider for SmbBrowserAuthProvider {
         })
     }
 
-    async fn await_callback(&self, session: &LoginSession) -> Result<DeviceEnrollmentResult, AuthError> {
+    async fn await_callback(
+        &self,
+        session: &LoginSession,
+    ) -> Result<DeviceEnrollmentResult, AuthError> {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", session.callback_port))
             .await
-            .map_err(|e| AuthError::PortUnavailable(format!("Could not bind to port {}: {}", session.callback_port, e)))?;
+            .map_err(|e| {
+                AuthError::PortUnavailable(format!(
+                    "Could not bind to port {}: {}",
+                    session.callback_port, e
+                ))
+            })?;
 
         // Await callback with 120-second timeout
         let accept_future = async {
@@ -319,10 +335,15 @@ impl AuthProvider for SmbBrowserAuthProvider {
             Ok::<(String, String), AuthError>((code, state))
         };
 
-        let (code, state) = match tokio::time::timeout(Duration::from_secs(120), accept_future).await {
-            Ok(res) => res?,
-            Err(_) => return Err(AuthError::Timeout("Browser did not return within 120 seconds".to_string())),
-        };
+        let (code, state) =
+            match tokio::time::timeout(Duration::from_secs(120), accept_future).await {
+                Ok(res) => res?,
+                Err(_) => {
+                    return Err(AuthError::Timeout(
+                        "Browser did not return within 120 seconds".to_string(),
+                    ))
+                }
+            };
 
         if state != session.state {
             return Err(AuthError::InvalidState);
@@ -344,7 +365,11 @@ impl AuthProvider for SmbBrowserAuthProvider {
         let mut token_resp = client.post(&token_url).json(&token_payload).send().await;
         if token_resp.is_err() || !token_resp.as_ref().unwrap().status().is_success() {
             // Try fallback endpoint
-            token_resp = client.post(&fallback_token_url).json(&token_payload).send().await;
+            token_resp = client
+                .post(&fallback_token_url)
+                .json(&token_payload)
+                .send()
+                .await;
         }
 
         // Process token response or use structured fallback for dev/offline testing
@@ -353,10 +378,26 @@ impl AuthProvider for SmbBrowserAuthProvider {
                 let json: serde_json::Value = resp.json().await.map_err(|e| {
                     AuthError::HubError(format!("Failed to parse token response JSON: {}", e))
                 })?;
-                let access = json.get("access_token").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                let refresh = json.get("refresh_token").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                let tenant = json.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("tenant-default").to_string();
-                let user = json.get("user_id").and_then(|v| v.as_str()).unwrap_or("user-default").to_string();
+                let access = json
+                    .get("access_token")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let refresh = json
+                    .get("refresh_token")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let tenant = json
+                    .get("tenant_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("tenant-default")
+                    .to_string();
+                let user = json
+                    .get("user_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("user-default")
+                    .to_string();
                 (access, refresh, tenant, user)
             }
             Ok(resp) => {
@@ -375,8 +416,9 @@ impl AuthProvider for SmbBrowserAuthProvider {
         };
 
         // Load or create local Ed25519 device identity
-        let device_identity = DeviceIdentity::load_or_create()
-            .map_err(|e| AuthError::CryptoError(format!("Failed to initialize device identity: {}", e)))?;
+        let device_identity = DeviceIdentity::load_or_create().map_err(|e| {
+            AuthError::CryptoError(format!("Failed to initialize device identity: {}", e))
+        })?;
 
         // Register device Ed25519 public key with Control Hub (/api/v2/devices/enroll)
         let enroll_url = format!("{}/api/v2/devices/enroll", self.hub_url);
@@ -423,8 +465,9 @@ impl AuthProvider for SmbBrowserAuthProvider {
         let _ = save_hub_url(&self.hub_url);
 
         // Generate persistent local proxy bearer token
-        let local_token = get_or_create_local_token()
-            .map_err(|e| AuthError::StorageError(format!("Failed to save local proxy token: {}", e)))?;
+        let local_token = get_or_create_local_token().map_err(|e| {
+            AuthError::StorageError(format!("Failed to save local proxy token: {}", e))
+        })?;
 
         Ok(DeviceEnrollmentResult {
             device_id: device_identity.device_id,
@@ -454,7 +497,10 @@ impl AuthProvider for SmbBrowserAuthProvider {
             .map_err(|e| AuthError::NetworkError(format!("Token refresh failed: {}", e)))?;
 
         if !resp.status().is_success() {
-            return Err(AuthError::HubError(format!("Refresh rejected: HTTP {}", resp.status())));
+            return Err(AuthError::HubError(format!(
+                "Refresh rejected: HTTP {}",
+                resp.status()
+            )));
         }
 
         let json: serde_json::Value = resp
@@ -462,9 +508,20 @@ impl AuthProvider for SmbBrowserAuthProvider {
             .await
             .map_err(|e| AuthError::HubError(format!("Failed to parse refresh JSON: {}", e)))?;
 
-        let access_token = json.get("access_token").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let new_refresh = json.get("refresh_token").and_then(|v| v.as_str()).unwrap_or(refresh_token).to_string();
-        let expires_in = json.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(3600);
+        let access_token = json
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let new_refresh = json
+            .get("refresh_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or(refresh_token)
+            .to_string();
+        let expires_in = json
+            .get("expires_in")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3600);
 
         let _ = CredentialStore::set("access_token", &access_token);
         let _ = CredentialStore::set("refresh_token", &new_refresh);
@@ -492,7 +549,10 @@ impl AuthProvider for SmbBrowserAuthProvider {
             .map_err(|e| AuthError::NetworkError(format!("Revoke request failed: {}", e)))?;
 
         if !resp.status().is_success() {
-            return Err(AuthError::HubError(format!("Revocation failed: HTTP {}", resp.status())));
+            return Err(AuthError::HubError(format!(
+                "Revocation failed: HTTP {}",
+                resp.status()
+            )));
         }
 
         // Clean up local credentials
@@ -529,7 +589,12 @@ fn parse_callback_params(path: &str) -> Result<(String, String), AuthError> {
 /// Main entry point for `agentcontrol login` command.
 pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
     let clean_hub = hub_url.trim_end_matches('/');
-    println!("{}", "Vexa Agent Control — Workstation Authentication".bold().cyan());
+    println!(
+        "{}",
+        "Vexa Agent Control — Workstation Authentication"
+            .bold()
+            .cyan()
+    );
     println!("Connecting to Vexa Cloud Hub at {}", clean_hub.yellow());
 
     let provider = SmbBrowserAuthProvider::new(clean_hub);
@@ -552,7 +617,10 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
         println!("Please navigate to the URL above to complete sign-in.");
     }
 
-    println!("Waiting for authentication callback on port {}...", session.callback_port);
+    println!(
+        "Waiting for authentication callback on port {}...",
+        session.callback_port
+    );
 
     match provider.await_callback(&session).await {
         Ok(result) => {
@@ -580,14 +648,26 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
             let svc_ok = crate::service::run_service(service_action, true, true).await == 0;
 
             if svc_ok {
-                println!("  Background daemon:  {} (starts with your session)", "✔ Registered".green());
+                println!(
+                    "  Background daemon:  {} (starts with your session)",
+                    "✔ Registered".green()
+                );
             } else {
-                println!("  Background daemon:  {} (run 'agentcontrol start' manually)", "⚠ Pending".yellow());
+                println!(
+                    "  Background daemon:  {} (run 'agentcontrol start' manually)",
+                    "⚠ Pending".yellow()
+                );
             }
 
             println!("\n{} Setup complete! You can now run:", "✔".green().bold());
-            println!("  {}     - Check workstation health and capabilities", "agentcontrol status".cyan());
-            println!("  {} - Connect a client (e.g. codex, claude)", "agentcontrol connect codex".cyan());
+            println!(
+                "  {}     - Check workstation health and capabilities",
+                "agentcontrol status".cyan()
+            );
+            println!(
+                "  {} - Connect a client (e.g. codex, claude)",
+                "agentcontrol connect codex".cyan()
+            );
             0
         }
         Err(e) => {
@@ -611,7 +691,8 @@ mod tests {
         // Verify challenge is SHA256 of verifier
         let mut hasher = Sha256::new();
         hasher.update(verifier.as_bytes());
-        let expected_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize());
+        let expected_challenge =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize());
         assert_eq!(challenge, expected_challenge);
     }
 
@@ -643,7 +724,9 @@ mod tests {
     async fn test_initiate_login_session() {
         let provider = SmbBrowserAuthProvider::new("https://app.vexasec.io");
         let session = provider.initiate_login().await.unwrap();
-        assert!(session.auth_url.contains("https://app.vexasec.io/oauth/authorize"));
+        assert!(session
+            .auth_url
+            .contains("https://app.vexasec.io/oauth/authorize"));
         assert!(session.auth_url.contains("code_challenge="));
         assert!(session.auth_url.contains("code_challenge_method=S256"));
         assert!(session.callback_port >= 18085 && session.callback_port <= 18090);

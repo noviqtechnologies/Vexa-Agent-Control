@@ -34,7 +34,6 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         attribution: None,
         allowed_providers: vec![],
     }
-
 }
 
 fn allow_tool(name: &str, params: Vec<CompiledParam>) -> CompiledTool {

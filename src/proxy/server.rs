@@ -648,7 +648,9 @@ pub fn validate_host_header(
 }
 
 /// Validate browser Origin header to protect local agents against Web-to-Localhost CSRF / Drive-by attacks.
-pub fn validate_origin_header(headers: &hyper::HeaderMap) -> Result<(), (StatusCode, &'static str)> {
+pub fn validate_origin_header(
+    headers: &hyper::HeaderMap,
+) -> Result<(), (StatusCode, &'static str)> {
     if let Some(origin_val) = headers.get(hyper::header::ORIGIN) {
         if let Ok(origin_str) = origin_val.to_str() {
             let origin_trimmed = origin_str.trim();
@@ -739,12 +741,14 @@ fn is_authorized_management(
                 }
             }
             if let Ok(admin_tok) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
-                if !admin_tok.is_empty() && constant_time_eq(token.as_bytes(), admin_tok.as_bytes()) {
+                if !admin_tok.is_empty() && constant_time_eq(token.as_bytes(), admin_tok.as_bytes())
+                {
                     return true;
                 }
             }
             if let Ok(local_tok) = crate::identity::oauth::get_or_create_local_token() {
-                if !local_tok.is_empty() && constant_time_eq(token.as_bytes(), local_tok.as_bytes()) {
+                if !local_tok.is_empty() && constant_time_eq(token.as_bytes(), local_tok.as_bytes())
+                {
                     return true;
                 }
             }
@@ -825,7 +829,9 @@ fn is_authorized_mutation(
     }
     if !matched {
         if let Ok(expected_env) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
-            if !expected_env.is_empty() && constant_time_eq(token.as_bytes(), expected_env.as_bytes()) {
+            if !expected_env.is_empty()
+                && constant_time_eq(token.as_bytes(), expected_env.as_bytes())
+            {
                 matched = true;
             }
         }
@@ -897,7 +903,8 @@ async fn handle_request(
         || path.starts_with("/api/v1/cache/")
         || path.starts_with("/api/cache/")
         || path.starts_with("/api/v1/hitl/respond")
-        || (method == hyper::Method::POST && (path == "/api/mode" || path.starts_with("/api/self-healing/")));
+        || (method == hyper::Method::POST
+            && (path == "/api/mode" || path.starts_with("/api/self-healing/")));
 
     let is_management_route = is_mutation_route
         || path == "/"
@@ -2169,9 +2176,7 @@ fn to_proto_dlp_category(
         crate::policy::dlp::SecretCategory::DatabaseUri => {
             control_plane_proto::event::SecretCategory::DatabaseUri
         }
-        crate::policy::dlp::SecretCategory::Pii => {
-            control_plane_proto::event::SecretCategory::Pii
-        }
+        crate::policy::dlp::SecretCategory::Pii => control_plane_proto::event::SecretCategory::Pii,
         crate::policy::dlp::SecretCategory::HighEntropy => {
             control_plane_proto::event::SecretCategory::HighEntropy
         }
@@ -2201,7 +2206,6 @@ fn to_proto_dlp_category(
         }
     }
 }
-
 
 /// Create a JSON response
 pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response<BoxBody> {
@@ -3077,10 +3081,22 @@ mod tests {
         assert!(is_authorized_management("::1", None, None));
 
         // Non-loopback with weak token is rejected outside dev mode
-        assert!(!is_authorized_management("192.168.1.50", Some("Bearer admin123456"), Some("admin123456")));
+        assert!(!is_authorized_management(
+            "192.168.1.50",
+            Some("Bearer admin123456"),
+            Some("admin123456")
+        ));
 
         // Non-loopback with high-entropy token is accepted when matching
-        assert!(is_authorized_management("192.168.1.50", Some("Bearer secr3t_token_983214"), Some("secr3t_token_983214")));
-        assert!(!is_authorized_management("192.168.1.50", Some("Bearer wrong_token"), Some("secr3t_token_983214")));
+        assert!(is_authorized_management(
+            "192.168.1.50",
+            Some("Bearer secr3t_token_983214"),
+            Some("secr3t_token_983214")
+        ));
+        assert!(!is_authorized_management(
+            "192.168.1.50",
+            Some("Bearer wrong_token"),
+            Some("secr3t_token_983214")
+        ));
     }
 }

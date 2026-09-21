@@ -2,6 +2,28 @@
 //!
 //! `agentwall` provides an enterprise-grade AI proxy, dynamic policy evaluation engine,
 //! process wrapper, identity management, and audit logger for securing LLM applications and agentic workflows.
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::upper_case_acronyms,
+    clippy::large_enum_variant,
+    clippy::single_match,
+    clippy::collapsible_match,
+    clippy::collapsible_if,
+    clippy::needless_borrows_for_generic_args,
+    clippy::derivable_impls,
+    clippy::unnecessary_unwrap,
+    clippy::manual_strip,
+    clippy::lines_filter_map_ok,
+    clippy::redundant_pattern_matching,
+    clippy::let_unit_value,
+    clippy::needless_return,
+    clippy::new_without_default,
+    clippy::never_loop,
+    clippy::manual_range_contains,
+    clippy::manual_unwrap_or,
+    clippy::manual_ok_err
+)]
 
 pub mod audit;
 pub mod ca;

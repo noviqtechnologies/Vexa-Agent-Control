@@ -399,7 +399,11 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
         const PROCESS_TERMINATE: DWORD = 0x0001;
 
         extern "system" {
-            fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+            fn OpenProcess(
+                dwDesiredAccess: DWORD,
+                bInheritHandle: BOOL,
+                dwProcessId: DWORD,
+            ) -> HANDLE;
             fn CreateJobObjectW(lpJobAttributes: *mut c_void, lpName: *const u16) -> HANDLE;
             fn SetInformationJobObject(
                 hJob: HANDLE,
@@ -424,8 +428,9 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
             }
 
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.basic_limit_information.limit_flags =
-                JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_JOB_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
+                | JOB_OBJECT_LIMIT_JOB_MEMORY
+                | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             info.process_memory_limit = max_bytes;
             info.job_memory_limit = max_bytes;
 

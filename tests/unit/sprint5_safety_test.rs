@@ -260,7 +260,6 @@ async fn test_us103_credential_scope_strict_mode() {
         allowed_providers: vec![],
     };
 
-
     let state = ProxyState::mock_test_with_strict_scope(true);
     *state.policy.write().unwrap() = Some(policy.clone());
 

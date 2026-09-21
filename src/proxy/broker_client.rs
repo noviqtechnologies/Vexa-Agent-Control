@@ -50,7 +50,10 @@ pub struct BudgetExceededDetail {
 #[derive(Debug)]
 pub enum BrokerError {
     BudgetExceeded(String),
-    Http { status: reqwest::StatusCode, body: String },
+    Http {
+        status: reqwest::StatusCode,
+        body: String,
+    },
     Other(String),
 }
 
@@ -155,7 +158,11 @@ impl BrokerClient {
 
         let auth_token = crate::identity::device::load_device_token()
             // Fallback 1: shared gateway secret (set via GATEWAY_SECRET env in Docker / systemd)
-            .or_else(|| std::env::var("GATEWAY_SECRET").ok().filter(|s| !s.is_empty()))
+            .or_else(|| {
+                std::env::var("GATEWAY_SECRET")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+            })
             // Fallback 2: admin token (legacy / single-binary deployments)
             .or_else(|| {
                 std::env::var("AGENTCONTROL_ADMIN_TOKEN")
@@ -202,14 +209,22 @@ impl BrokerClient {
             let status = resp.status();
             let err_body = resp.text().await.unwrap_or_default();
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                let msg = if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
-                    parsed.error.and_then(|e| e.message).or(parsed.message).unwrap_or(err_body)
-                } else {
-                    err_body
-                };
+                let msg =
+                    if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
+                        parsed
+                            .error
+                            .and_then(|e| e.message)
+                            .or(parsed.message)
+                            .unwrap_or(err_body)
+                    } else {
+                        err_body
+                    };
                 return Err(Box::new(BrokerError::BudgetExceeded(msg)));
             }
-            return Err(Box::new(BrokerError::Http { status, body: err_body }));
+            return Err(Box::new(BrokerError::Http {
+                status,
+                body: err_body,
+            }));
         }
 
         let parsed = resp.json::<BrokerLLMResponse>().await?;
@@ -250,21 +265,32 @@ impl BrokerClient {
             let status = resp.status();
             let err_body = resp.text().await.unwrap_or_default();
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                let msg = if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
-                    parsed.error.and_then(|e| e.message).or(parsed.message).unwrap_or(err_body)
-                } else {
-                    err_body
-                };
+                let msg =
+                    if let Ok(parsed) = serde_json::from_str::<BudgetExceededPayload>(&err_body) {
+                        parsed
+                            .error
+                            .and_then(|e| e.message)
+                            .or(parsed.message)
+                            .unwrap_or(err_body)
+                    } else {
+                        err_body
+                    };
                 return Err(Box::new(BrokerError::BudgetExceeded(msg)));
             }
-            return Err(Box::new(BrokerError::Http { status, body: err_body }));
+            return Err(Box::new(BrokerError::Http {
+                status,
+                body: err_body,
+            }));
         }
 
         Ok(resp)
     }
 
     /// Dispatches a stream cancellation signal to upstream gateway within 500ms (Task 3.3).
-    pub async fn cancel_brokered_stream(&self, request_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn cancel_brokered_stream(
+        &self,
+        request_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let endpoint = format!(
             "{}/api/v3/gateway-broker/llm-stream/{}/cancel",
             self.base_url.trim_end_matches('/'),

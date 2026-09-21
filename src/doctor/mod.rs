@@ -59,7 +59,9 @@ impl DoctorReport {
         if check.status == DiagnosticStatus::Fail {
             self.overall_status = DiagnosticStatus::Fail;
             self.exit_code = 1;
-        } else if check.status == DiagnosticStatus::Warn && self.overall_status != DiagnosticStatus::Fail {
+        } else if check.status == DiagnosticStatus::Warn
+            && self.overall_status != DiagnosticStatus::Fail
+        {
             self.overall_status = DiagnosticStatus::Warn;
             self.exit_code = 2;
         }
@@ -79,7 +81,10 @@ pub async fn run_diagnostics() -> DoctorReport {
         category: "Binary".to_string(),
         name: "Binary Integrity".to_string(),
         status: DiagnosticStatus::Pass,
-        message: format!("v{} ({}-{}) at {}", report.version, report.os, report.arch, exe_path),
+        message: format!(
+            "v{} ({}-{}) at {}",
+            report.version, report.os, report.arch, exe_path
+        ),
         details: Some(serde_json::json!({
             "version": report.version,
             "os": report.os,
@@ -102,7 +107,10 @@ pub async fn run_diagnostics() -> DoctorReport {
         };
         (
             DiagnosticStatus::Pass,
-            format!("Device enrolled with Control Hub (Storage: {})", storage_desc),
+            format!(
+                "Device enrolled with Control Hub (Storage: {})",
+                storage_desc
+            ),
             storage_desc,
             None,
         )
@@ -111,7 +119,10 @@ pub async fn run_diagnostics() -> DoctorReport {
             DiagnosticStatus::Warn,
             "Device not enrolled with Control Hub.".to_string(),
             "NOT_ENROLLED",
-            Some("Run 'agentcontrol login' to authenticate and provision device credentials.".to_string()),
+            Some(
+                "Run 'agentcontrol login' to authenticate and provision device credentials."
+                    .to_string(),
+            ),
         )
     };
     report.add_check(DiagnosticCheck {
@@ -132,7 +143,10 @@ pub async fn run_diagnostics() -> DoctorReport {
     let (token_status, token_msg, token_remedy) = if local_token_path.exists() {
         (
             DiagnosticStatus::Pass,
-            format!("Persistent local proxy token exists at {}", local_token_path.display()),
+            format!(
+                "Persistent local proxy token exists at {}",
+                local_token_path.display()
+            ),
             None,
         )
     } else {
@@ -228,7 +242,8 @@ pub async fn run_diagnostics() -> DoctorReport {
             let mut drift_count = 0;
             for m in &manifests {
                 if m.config_path.exists() {
-                    let cur_hash = OwnershipManifest::compute_sha256(&m.config_path).unwrap_or_default();
+                    let cur_hash =
+                        OwnershipManifest::compute_sha256(&m.config_path).unwrap_or_default();
                     if cur_hash != m.post_mutation_hash_sha256 {
                         drift_count += 1;
                     }
@@ -252,7 +267,10 @@ pub async fn run_diagnostics() -> DoctorReport {
                     category: "Targets".to_string(),
                     name: "Target Configurations".to_string(),
                     status: DiagnosticStatus::Pass,
-                    message: format!("{} connected target(s) match ownership manifests cleanly.", manifests.len()),
+                    message: format!(
+                        "{} connected target(s) match ownership manifests cleanly.",
+                        manifests.len()
+                    ),
                     details: Some(serde_json::json!({ "total_targets": manifests.len() })),
                     remediation: None,
                 });
@@ -263,7 +281,9 @@ pub async fn run_diagnostics() -> DoctorReport {
                 category: "Targets".to_string(),
                 name: "Target Configurations".to_string(),
                 status: DiagnosticStatus::Pass,
-                message: "No connected targets yet. Run 'agentcontrol connect <target>' to configure.".to_string(),
+                message:
+                    "No connected targets yet. Run 'agentcontrol connect <target>' to configure."
+                        .to_string(),
                 details: None,
                 remediation: None,
             });
@@ -286,7 +306,9 @@ pub async fn run_diagnostics() -> DoctorReport {
             category: "Security".to_string(),
             name: "Root CA Invariant".to_string(),
             status: DiagnosticStatus::Pass,
-            message: "No unauthorized Root CA in OS trust store (Zero-CA security invariant verified).".to_string(),
+            message:
+                "No unauthorized Root CA in OS trust store (Zero-CA security invariant verified)."
+                    .to_string(),
             details: None,
             remediation: None,
         });
@@ -300,7 +322,10 @@ pub async fn run_doctor(json: bool) -> i32 {
     let report = run_diagnostics().await;
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        );
         return report.exit_code;
     }
 
@@ -319,12 +344,7 @@ pub async fn run_doctor(json: bool) -> i32 {
             DiagnosticStatus::Fail => "✖".red(),
         };
 
-        println!(
-            "  {} {:<28} {}",
-            icon,
-            check.name.bold(),
-            check.message
-        );
+        println!("  {} {:<28} {}", icon, check.name.bold(), check.message);
         if let Some(remedy) = &check.remediation {
             println!("     └─ {} {}", "Remedy:".dimmed(), remedy.cyan());
         }

@@ -1,10 +1,10 @@
 //! Windows Service Control Manager (SCM) Installer module.
 
 #[cfg(windows)]
+use super::SupervisorState;
+#[cfg(windows)]
 use colored::*;
 use std::path::Path;
-#[cfg(windows)]
-use super::SupervisorState;
 
 #[cfg(windows)]
 fn sanitize_url(url: &str) -> String {
@@ -167,7 +167,10 @@ fn install_windows_user_task(
 
             if !reg_out.status.success() {
                 let err = String::from_utf8_lossy(&reg_out.stderr);
-                return Err(format!("Windows User Startup registration failed: {}", err.trim()));
+                return Err(format!(
+                    "Windows User Startup registration failed: {}",
+                    err.trim()
+                ));
             }
         }
     }
@@ -195,15 +198,24 @@ fn install_windows_user_task(
 }
 
 #[cfg(windows)]
-fn install_windows_scm(bin_path: &str, _clean_hub_url: &str, config_path: &Path) -> Result<(), String> {
-    let bin_with_args = format!("\"{}\" start --config \"{}\"", bin_path, config_path.display());
+fn install_windows_scm(
+    bin_path: &str,
+    _clean_hub_url: &str,
+    config_path: &Path,
+) -> Result<(), String> {
+    let bin_with_args = format!(
+        "\"{}\" start --config \"{}\"",
+        bin_path,
+        config_path.display()
+    );
 
     let sc_output = std::process::Command::new("sc.exe")
         .args(&[
-            "create", "AgentControlSentry",
+            "create",
+            "AgentControlSentry",
             &format!("binPath= {}", bin_with_args),
             "start= auto",
-            "DisplayName= Vexa Agent Control Security Sentry"
+            "DisplayName= Vexa Agent Control Security Sentry",
         ])
         .output()
         .map_err(|e| format!("Failed to execute sc.exe: {}", e))?;
@@ -217,7 +229,12 @@ fn install_windows_scm(bin_path: &str, _clean_hub_url: &str, config_path: &Path)
 
     // Configure recovery actions
     let _ = std::process::Command::new("sc.exe")
-        .args(&["failure", "AgentControlSentry", "reset= 86400", "actions= restart/10000/restart/30000/restart/60000"])
+        .args(&[
+            "failure",
+            "AgentControlSentry",
+            "reset= 86400",
+            "actions= restart/10000/restart/30000/restart/60000",
+        ])
         .output();
 
     let _ = std::process::Command::new("sc.exe")
@@ -333,8 +350,12 @@ pub fn uninstall_windows_service() -> Result<(), String> {
         .output();
 
     // 2. Stop and delete SCM service if present
-    let _ = std::process::Command::new("sc.exe").args(&["stop", "AgentControlSentry"]).output();
-    let _ = std::process::Command::new("sc.exe").args(&["delete", "AgentControlSentry"]).output();
+    let _ = std::process::Command::new("sc.exe")
+        .args(&["stop", "AgentControlSentry"])
+        .output();
+    let _ = std::process::Command::new("sc.exe")
+        .args(&["delete", "AgentControlSentry"])
+        .output();
 
     // 3. Remove exact legacy HKCU\Run entry
     let _ = std::process::Command::new("powershell")

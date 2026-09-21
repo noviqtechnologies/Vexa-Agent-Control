@@ -148,7 +148,11 @@ mod tests {
         fs::write(&config_file, r#"{"custom": true}"#).unwrap();
 
         let pre_hash = OwnershipManifest::compute_sha256(&config_file).unwrap();
-        fs::write(&config_file, r#"{"custom": true, "openai_base_url": "http://127.0.0.1:18080"}"#).unwrap();
+        fs::write(
+            &config_file,
+            r#"{"custom": true, "openai_base_url": "http://127.0.0.1:18080"}"#,
+        )
+        .unwrap();
         let post_hash = OwnershipManifest::compute_sha256(&config_file).unwrap();
 
         assert_ne!(pre_hash, post_hash);
@@ -175,6 +179,9 @@ mod tests {
         assert_eq!(manifest.manifest_version, "1.1");
         assert_eq!(manifest.pre_mutation_hash_sha256, pre_hash);
         assert_eq!(manifest.post_mutation_hash_sha256, post_hash);
-        assert_eq!(manifest.written_values.get("openai_base_url"), written.get("openai_base_url"));
+        assert_eq!(
+            manifest.written_values.get("openai_base_url"),
+            written.get("openai_base_url")
+        );
     }
 }

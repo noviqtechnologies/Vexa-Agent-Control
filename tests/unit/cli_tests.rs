@@ -1,10 +1,12 @@
 //! Unit tests for CLI surface compliance, canonical commands, port standardization,
 //! and structured diagnostic/status contracts (PRD §2.1, §5.1, §5.3).
 
-use clap::{CommandFactory, Parser};
 use agentcontrol::cli::{CacheCommands, Cli, Commands};
 use agentcontrol::doctor::{run_diagnostics, DiagnosticCheck, DiagnosticStatus, DoctorReport};
-use agentcontrol::wrap::status::{FreshnessTier, StatusEndpoints, StatusReport, TargetState, TargetStatusDetails};
+use agentcontrol::wrap::status::{
+    FreshnessTier, StatusEndpoints, StatusReport, TargetState, TargetStatusDetails,
+};
+use clap::{CommandFactory, Parser};
 
 #[test]
 fn test_cli_canonical_commands_visible() {
@@ -65,7 +67,12 @@ fn test_cli_legacy_commands_hidden_but_functional() {
         let sub = subcommands
             .iter()
             .find(|s| s.get_name() == name)
-            .unwrap_or_else(|| panic!("Expected backwards-compatible subcommand '{}' to exist", name));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Expected backwards-compatible subcommand '{}' to exist",
+                    name
+                )
+            });
         assert!(
             sub.is_hide_set(),
             "Legacy subcommand '{}' MUST be hidden in --help",
@@ -75,7 +82,10 @@ fn test_cli_legacy_commands_hidden_but_functional() {
 
     // Verify backward compatibility: legacy commands can still be parsed
     let parsed_wrap = Cli::try_parse_from(["agentcontrol", "wrap"]);
-    assert!(parsed_wrap.is_ok(), "Hidden legacy 'wrap' must parse successfully");
+    assert!(
+        parsed_wrap.is_ok(),
+        "Hidden legacy 'wrap' must parse successfully"
+    );
 
     let parsed_validate = Cli::try_parse_from([
         "agentcontrol",
@@ -87,7 +97,10 @@ fn test_cli_legacy_commands_hidden_but_functional() {
         "--payload",
         "payload.json",
     ]);
-    assert!(parsed_validate.is_ok(), "Hidden legacy 'validate' must parse successfully");
+    assert!(
+        parsed_validate.is_ok(),
+        "Hidden legacy 'validate' must parse successfully"
+    );
 }
 
 #[test]
@@ -95,14 +108,18 @@ fn test_cli_status_json_flag_parsing() {
     // Default: json is false
     let parsed_default = Cli::try_parse_from(["agentcontrol", "status"]).unwrap();
     match *parsed_default.command {
-        Commands::Status { json } => assert!(!json, "Expected status json flag to be false by default"),
+        Commands::Status { json } => {
+            assert!(!json, "Expected status json flag to be false by default")
+        }
         _ => panic!("Expected Commands::Status"),
     }
 
     // Explicit: --json is true
     let parsed_json = Cli::try_parse_from(["agentcontrol", "status", "--json"]).unwrap();
     match *parsed_json.command {
-        Commands::Status { json } => assert!(json, "Expected status json flag to be true with --json"),
+        Commands::Status { json } => {
+            assert!(json, "Expected status json flag to be true with --json")
+        }
         _ => panic!("Expected Commands::Status"),
     }
 }
@@ -189,13 +206,15 @@ fn test_status_report_serialization_and_disclosures() {
         ],
     };
 
-    let serialized = serde_json::to_string_pretty(&report).expect("StatusReport serialization failed");
+    let serialized =
+        serde_json::to_string_pretty(&report).expect("StatusReport serialization failed");
     assert!(serialized.contains("\"Claude Desktop\""));
     assert!(serialized.contains("DIRECT_CLOUD"));
     assert!(serialized.contains("http://127.0.0.1:18080/v1"));
     assert!(serialized.contains("Native shell execution (bash/git) is UNGOVERNED"));
 
-    let deserialized: StatusReport = serde_json::from_str(&serialized).expect("StatusReport deserialization failed");
+    let deserialized: StatusReport =
+        serde_json::from_str(&serialized).expect("StatusReport deserialization failed");
     assert_eq!(deserialized.version, "1.0.87");
     assert_eq!(deserialized.targets.len(), 1);
     assert_eq!(deserialized.targets[0].wrapped_servers, 2);
@@ -254,7 +273,10 @@ fn test_doctor_report_remediation_and_exit_code_contract() {
 #[tokio::test]
 async fn test_doctor_run_diagnostics_executes_safely() {
     let report = run_diagnostics().await;
-    assert!(!report.checks.is_empty(), "Doctor should execute multiple diagnostic checks");
+    assert!(
+        !report.checks.is_empty(),
+        "Doctor should execute multiple diagnostic checks"
+    );
     assert!(!report.version.is_empty());
     assert!(!report.os.is_empty());
 

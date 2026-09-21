@@ -1,9 +1,9 @@
-use hyper::header::{HeaderMap, HeaderValue, AUTHORIZATION, FORWARDED, HOST, ORIGIN};
-use hyper::StatusCode;
 use agentcontrol::proxy::security::{
     is_strict_loopback_addr, sanitize_inbound_headers, validate_ambient_browser_origin,
     validate_persistent_token, validate_rfc3986_authority, LEGACY_SENTINEL_TOKENS,
 };
+use hyper::header::{HeaderMap, HeaderValue, AUTHORIZATION, FORWARDED, HOST, ORIGIN};
+use hyper::StatusCode;
 use std::net::SocketAddr;
 
 #[test]
@@ -72,7 +72,10 @@ fn test_proxy_header_stripping() {
     headers.insert("x-forwarded-for", HeaderValue::from_static("192.168.1.1"));
     headers.insert("X-Real-IP", HeaderValue::from_static("172.16.0.1"));
     headers.insert("x-real-ip", HeaderValue::from_static("8.8.8.8"));
-    headers.insert(FORWARDED, HeaderValue::from_static("for=10.0.0.1;by=127.0.0.1"));
+    headers.insert(
+        FORWARDED,
+        HeaderValue::from_static("for=10.0.0.1;by=127.0.0.1"),
+    );
     headers.insert("forwarded", HeaderValue::from_static("for=10.0.0.2"));
     headers.insert(HOST, HeaderValue::from_static("127.0.0.1:18080"));
 
@@ -90,7 +93,10 @@ fn test_proxy_header_stripping() {
 #[test]
 fn test_ambient_browser_blocking_rejects_external_origin() {
     let mut headers = HeaderMap::new();
-    headers.insert(ORIGIN, HeaderValue::from_static("https://malicious-site.com"));
+    headers.insert(
+        ORIGIN,
+        HeaderValue::from_static("https://malicious-site.com"),
+    );
 
     let res = validate_ambient_browser_origin(&headers);
     assert!(res.is_err());

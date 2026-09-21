@@ -17,6 +17,8 @@
 //! cargo test -p agentcontrol --test integration stdio_process_integration -- --nocapture
 //! ```
 
+#![allow(clippy::type_complexity)]
+
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -307,7 +309,10 @@ fn test_stdio_proxy_process_integration() {
             safe.1
         );
         assert!(safe.2.is_none(), "Safe event must have no DLP findings");
-        assert!(safe.3.is_none(), "Safe event must have no injection findings");
+        assert!(
+            safe.3.is_none(),
+            "Safe event must have no injection findings"
+        );
     } else {
         eprintln!(
             "[WARN] events.db not found at {}; skipping DB persistence check. \

@@ -168,7 +168,13 @@ impl AttributionContext {
         }
         let sanitized: String = trimmed
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .take(64)
             .collect();
         if sanitized.is_empty() {
@@ -319,7 +325,8 @@ mod tests {
         assert!(!clean.contains(','));
         assert!(!clean.contains('<'));
         assert!(!clean.contains(' '));
-        assert!(clean.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'));
+        assert!(clean
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'));
     }
 }
-

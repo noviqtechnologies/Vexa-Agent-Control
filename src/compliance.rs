@@ -111,12 +111,20 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
 
     // Cryptographic HMAC chain verification via crate::audit::verifier
     let (hmac_chain_valid, hmac_details) = match crate::audit::verifier::verify_chain(log_path) {
-        crate::audit::verifier::VerifyResult::Valid { entry_count } => {
-            (true, format!("HMAC audit chain verified across {} entries", entry_count))
-        }
-        crate::audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
-            (false, format!("HMAC audit chain BROKEN at entry {}: {}", entry_index, reason))
-        }
+        crate::audit::verifier::VerifyResult::Valid { entry_count } => (
+            true,
+            format!("HMAC audit chain verified across {} entries", entry_count),
+        ),
+        crate::audit::verifier::VerifyResult::Invalid {
+            entry_index,
+            reason,
+        } => (
+            false,
+            format!(
+                "HMAC audit chain BROKEN at entry {}: {}",
+                entry_index, reason
+            ),
+        ),
         crate::audit::verifier::VerifyResult::Error(e) => {
             (false, format!("HMAC chain verification failed: {}", e))
         }
@@ -127,14 +135,22 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
             framework: "SOC 2 Type II".to_string(),
             control_id: "CC6.1".to_string(),
             control_title: "Logical Access Controls & Least Privilege".to_string(),
-            status: if hmac_chain_valid { "EVIDENCE_COLLECTED".to_string() } else { "TAMPERING_DETECTED".to_string() },
+            status: if hmac_chain_valid {
+                "EVIDENCE_COLLECTED".to_string()
+            } else {
+                "TAMPERING_DETECTED".to_string()
+            },
             evidence: hmac_details,
         },
         ControlMapping {
             framework: "SOC 2 Type II".to_string(),
             control_id: "CC6.6".to_string(),
             control_title: "Boundary & Perimeter Defense for AI Agents".to_string(),
-            status: if injection_blocked > 0 { "EVIDENCE_COLLECTED".to_string() } else { "OBSERVED".to_string() },
+            status: if injection_blocked > 0 {
+                "EVIDENCE_COLLECTED".to_string()
+            } else {
+                "OBSERVED".to_string()
+            },
             evidence: format!(
                 "Blocked {} unauthorized injection attempts across {} calls",
                 injection_blocked, total_records
@@ -144,7 +160,11 @@ pub fn generate_report(log_path: &Path, format: &str) -> Result<String, String> 
             framework: "ISO 27001:2022".to_string(),
             control_id: "A.8.12".to_string(),
             control_title: "Data Leakage Prevention (DLP)".to_string(),
-            status: if secret_redactions > 0 { "EVIDENCE_COLLECTED".to_string() } else { "MONITORED".to_string() },
+            status: if secret_redactions > 0 {
+                "EVIDENCE_COLLECTED".to_string()
+            } else {
+                "MONITORED".to_string()
+            },
             evidence: format!(
                 "Performed inline masking on {} secret instances",
                 secret_redactions
@@ -311,7 +331,11 @@ mod tests {
             .append(true)
             .open(&log_path)
             .unwrap();
-        writeln!(f, "{{\"entry_index\":2,\"prev_hmac\":\"badhmac\",\"hmac\":\"fake\"}}").unwrap();
+        writeln!(
+            f,
+            "{{\"entry_index\":2,\"prev_hmac\":\"badhmac\",\"hmac\":\"fake\"}}"
+        )
+        .unwrap();
 
         let report_json = generate_report(&log_path, "json").unwrap();
         let report: ComplianceReport = serde_json::from_str(&report_json).unwrap();
@@ -320,4 +344,3 @@ mod tests {
         assert_eq!(report.control_mappings[0].status, "TAMPERING_DETECTED");
     }
 }
-

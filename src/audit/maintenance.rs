@@ -17,9 +17,15 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
     };
 
     let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let dest_dir = output_dir.unwrap_or_else(|| base_dir.join("backups").join(format!("backup_{}", ts)));
+    let dest_dir =
+        output_dir.unwrap_or_else(|| base_dir.join("backups").join(format!("backup_{}", ts)));
 
-    println!("{}", "Vexa Agent Control — Dual-Store Atomic Backup".bold().cyan());
+    println!(
+        "{}",
+        "Vexa Agent Control — Dual-Store Atomic Backup"
+            .bold()
+            .cyan()
+    );
     println!("  Destination: {}", dest_dir.display().to_string().yellow());
 
     if let Err(e) = std::fs::create_dir_all(&dest_dir) {
@@ -83,7 +89,12 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
                     }
                 }
                 Err(e) => {
-                    eprintln!("{} Failed to open source SQLite DB at {}: {}", "✖".red(), src_db.display(), e);
+                    eprintln!(
+                        "{} Failed to open source SQLite DB at {}: {}",
+                        "✖".red(),
+                        src_db.display(),
+                        e
+                    );
                 }
             }
             break;
@@ -91,7 +102,10 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
     }
 
     if !db_found {
-        println!("  {} SQLite Database: not found (no traffic recorded yet)", "ℹ".dimmed());
+        println!(
+            "  {} SQLite Database: not found (no traffic recorded yet)",
+            "ℹ".dimmed()
+        );
     }
 
     // 2. Back up audit.jsonl
@@ -109,7 +123,8 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&dest_log, std::fs::Permissions::from_mode(0o600));
+                    let _ =
+                        std::fs::set_permissions(&dest_log, std::fs::Permissions::from_mode(0o600));
                 }
                 println!("  {} Audit Log: audit.jsonl ({} bytes)", "✔".green(), bytes);
                 backed_up_items += 1;
@@ -119,7 +134,10 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
     }
 
     if !log_found {
-        println!("  {} Audit Log: not found (no tool audit logs recorded yet)", "ℹ".dimmed());
+        println!(
+            "  {} Audit Log: not found (no tool audit logs recorded yet)",
+            "ℹ".dimmed()
+        );
     }
 
     // 3. Back up audit.key
@@ -132,7 +150,11 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = std::fs::set_permissions(&dest_key, std::fs::Permissions::from_mode(0o600));
             }
-            println!("  {} Audit HMAC Key: audit.key ({} bytes)", "✔".green(), bytes);
+            println!(
+                "  {} Audit HMAC Key: audit.key ({} bytes)",
+                "✔".green(),
+                bytes
+            );
             backed_up_items += 1;
         }
     }
@@ -154,7 +176,11 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
                 }
             }
             if count > 0 {
-                println!("  {} Manifests: {} client ownership records archived", "✔".green(), count);
+                println!(
+                    "  {} Manifests: {} client ownership records archived",
+                    "✔".green(),
+                    count
+                );
                 backed_up_items += 1;
             }
         }
@@ -165,7 +191,11 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
     if src_profile.exists() {
         let dest_profile = dest_dir.join("profile.json");
         if let Ok(bytes) = std::fs::copy(&src_profile, &dest_profile) {
-            println!("  {} Profile State: profile.json ({} bytes)", "✔".green(), bytes);
+            println!(
+                "  {} Profile State: profile.json ({} bytes)",
+                "✔".green(),
+                bytes
+            );
             backed_up_items += 1;
         }
     }
@@ -180,7 +210,10 @@ pub fn run_backup(output_dir: Option<PathBuf>) -> i32 {
         );
         0
     } else {
-        println!("{} No active databases or logs to back up.", "ℹ".yellow().bold());
+        println!(
+            "{} No active databases or logs to back up.",
+            "ℹ".yellow().bold()
+        );
         0
     }
 }
@@ -192,7 +225,12 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
         None => PathBuf::from(".agentcontrol"),
     };
 
-    println!("{}", "Vexa Agent Control — Cryptographic & Database Verification".bold().cyan());
+    println!(
+        "{}",
+        "Vexa Agent Control — Cryptographic & Database Verification"
+            .bold()
+            .cyan()
+    );
 
     let mut had_error = false;
 
@@ -210,7 +248,8 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
         print!("  Checking SQLite events.db ({}) ... ", target_db.display());
         match rusqlite::Connection::open(&target_db) {
             Ok(conn) => {
-                let integrity_res: Result<String, _> = conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0));
+                let integrity_res: Result<String, _> =
+                    conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0));
                 match integrity_res {
                     Ok(ref s) if s.eq_ignore_ascii_case("ok") => {
                         println!("{}", "PASSED (status: ok)".green().bold());
@@ -231,23 +270,36 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
             }
         }
     } else {
-        println!("  {} SQLite events.db: Not found (no traffic recorded yet)", "ℹ".dimmed());
+        println!(
+            "  {} SQLite events.db: Not found (no traffic recorded yet)",
+            "ℹ".dimmed()
+        );
     }
 
     // 2. Verify audit.jsonl HMAC chain
-    let target_audit = audit_path.unwrap_or_else(|| {
+    let env_audit_path = std::env::var("AGENTCONTROL_LOG_PATH")
+        .ok()
+        .or_else(|| std::env::var("AGENTCONTROL_AUDIT_PATH").ok())
+        .map(PathBuf::from);
+
+    let target_audit = audit_path.or(env_audit_path).unwrap_or_else(|| {
         let direct = base_dir.join("audit.jsonl");
         if direct.exists() {
             direct
-        } else {
+        } else if base_dir.join("logs").join("audit.jsonl").exists() {
             base_dir.join("logs").join("audit.jsonl")
+        } else {
+            PathBuf::from("/var/log/agentcontrol/audit.jsonl")
         }
     });
 
     let target_key = base_dir.join("audit.key");
 
     if target_audit.exists() {
-        print!("  Checking Audit Log HMAC chain ({}) ... ", target_audit.display());
+        print!(
+            "  Checking Audit Log HMAC chain ({}) ... ",
+            target_audit.display()
+        );
         let key_opt = if target_key.exists() {
             std::fs::read(&target_key).ok()
         } else {
@@ -264,31 +316,17 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
                         entry_count
                     );
                 }
-                crate::audit::verifier::VerifyResult::Invalid { .. } => {
-                    // If file contains multi-session entries signed with rotated ephemeral keys, verify hash-chain continuity
-                    let chain_res = crate::audit::verifier::verify_chain(&target_audit);
-                    match chain_res {
-                        crate::audit::verifier::VerifyResult::Valid { entry_count } => {
-                            println!(
-                                "{} ({} entries, cryptographic hash-chain intact across sessions)",
-                                "PASSED".green().bold(),
-                                entry_count
-                            );
-                        }
-                        crate::audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
-                            println!(
-                                "{} (break at entry {}: {})",
-                                "FAILED".red().bold(),
-                                entry_index,
-                                reason
-                            );
-                            had_error = true;
-                        }
-                        crate::audit::verifier::VerifyResult::Error(e) => {
-                            println!("{} ({})", "ERROR".red().bold(), e);
-                            had_error = true;
-                        }
-                    }
+                crate::audit::verifier::VerifyResult::Invalid {
+                    entry_index,
+                    reason,
+                } => {
+                    println!(
+                        "{} (HMAC verification failed at entry {}: {})",
+                        "FAILED".red().bold(),
+                        entry_index,
+                        reason
+                    );
+                    had_error = true;
                 }
                 crate::audit::verifier::VerifyResult::Error(e) => {
                     println!("{} ({})", "ERROR".red().bold(), e);
@@ -296,17 +334,20 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
                 }
             }
         } else {
-            // Secret not found, run chain continuity verification
+            // Secret not found, run chain continuity verification (unauthenticated forensic mode)
             let res = crate::audit::verifier::verify_chain(&target_audit);
             match res {
                 crate::audit::verifier::VerifyResult::Valid { entry_count } => {
                     println!(
                         "{} ({} entries checked for chain continuity; audit.key missing for payload HMAC recomputation)",
-                        "PASSED".yellow().bold(),
+                        "PASSED (unauthenticated chain continuity)".yellow().bold(),
                         entry_count
                     );
                 }
-                crate::audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
+                crate::audit::verifier::VerifyResult::Invalid {
+                    entry_index,
+                    reason,
+                } => {
                     println!(
                         "{} (break at entry {}: {})",
                         "FAILED".red().bold(),
@@ -322,15 +363,24 @@ pub fn run_verify_db(audit_path: Option<PathBuf>, db_path: Option<PathBuf>) -> i
             }
         }
     } else {
-        println!("  {} Audit Log audit.jsonl: Not found (no tool audit logs recorded yet)", "ℹ".dimmed());
+        println!(
+            "  {} Audit Log audit.jsonl: Not found (no tool audit logs recorded yet)",
+            "ℹ".dimmed()
+        );
     }
 
     println!();
     if had_error {
-        eprintln!("{} One or more data stores failed integrity verification.", "✖".red().bold());
+        eprintln!(
+            "{} One or more data stores failed integrity verification.",
+            "✖".red().bold()
+        );
         1
     } else {
-        println!("{} All verified data stores are intact and cryptographically consistent.", "✔".green().bold());
+        println!(
+            "{} All verified data stores are intact and cryptographically consistent.",
+            "✔".green().bold()
+        );
         0
     }
 }

@@ -48,6 +48,7 @@ impl MitmEngine {
         upgraded: hyper::upgrade::Upgraded,
         target_host: String,
         target_port: u16,
+        pinned_addr: std::net::SocketAddr,
         session_id: String,
         identity_sub: Option<String>,
         identity_groups: Vec<String>,
@@ -107,6 +108,7 @@ impl MitmEngine {
                     state,
                     &target_host,
                     target_port,
+                    pinned_addr,
                     &sid,
                     isub.as_deref(),
                     &igroups,
@@ -154,6 +156,7 @@ async fn handle_mitm_http_request(
     state: Arc<ProxyState>,
     target_host: &str,
     target_port: u16,
+    pinned_addr: std::net::SocketAddr,
     session_id: &str,
     identity_sub: Option<&str>,
     identity_groups: &[String],
@@ -513,10 +516,11 @@ async fn handle_mitm_http_request(
         }
     }
 
-    // 3. Forward to Upstream Server with Streaming
+    // 3. Forward to Upstream Server with Streaming via Pinned Socket Transport
     let reqwest_method = reqwest::Method::from_bytes(method.as_str().as_bytes())?;
-    let upstream_req = state
-        .http_client
+    let pinned_client =
+        crate::proxy::connector::create_governed_pinned_client(target_host, pinned_addr, 30);
+    let upstream_req = pinned_client
         .request(reqwest_method, &upstream_url)
         .headers(req_headers)
         .body(body_bytes);

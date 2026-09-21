@@ -6,24 +6,28 @@
 //! 4. Localhost CSRF & Bearer Mutation Defenses (P0)
 //! 5. Strict DeploymentProfile ValueEnum & Operational State (P1)
 
-use std::fs;
-use tempfile::tempdir;
 use agentcontrol::cli::{DeploymentProfile, PersistedProfileRecord};
 use agentcontrol::proxy::connector::{
-    canonicalize_host, classify_ip, is_allowed_provider_host, classify_and_resolve_destination, EgressBlockReason,
+    canonicalize_host, classify_and_resolve_destination, classify_ip, is_allowed_provider_host,
+    EgressBlockReason,
 };
+use agentcontrol::wrap::connect::{connect_codex_target_to_path, revert_toml_target, ConnectMode};
 use agentcontrol::wrap::journal::ProtectJournal;
 use agentcontrol::wrap::manifest::OwnershipManifest;
-use agentcontrol::wrap::connect::{
-    connect_codex_target_to_path, revert_toml_target,
-    ConnectMode,
-};
+use std::fs;
+use tempfile::tempdir;
 
 #[test]
 fn test_destination_canonicalization_and_provider_allowlist() {
     // 1. Host canonicalization
-    assert_eq!(canonicalize_host("API.ANTHROPIC.COM").unwrap(), "api.anthropic.com");
-    assert_eq!(canonicalize_host("api.openai.com.").unwrap(), "api.openai.com");
+    assert_eq!(
+        canonicalize_host("API.ANTHROPIC.COM").unwrap(),
+        "api.anthropic.com"
+    );
+    assert_eq!(
+        canonicalize_host("api.openai.com.").unwrap(),
+        "api.openai.com"
+    );
     assert_eq!(canonicalize_host("127.0.0.1:18080").unwrap(), "127.0.0.1");
     assert!(canonicalize_host("").is_err());
     assert!(canonicalize_host("user:pass@api.openai.com").is_err());
@@ -32,9 +36,15 @@ fn test_destination_canonicalization_and_provider_allowlist() {
     let custom = vec!["custom.llm.corp".to_string(), "*.internal.ai".to_string()];
     assert!(is_allowed_provider_host("api.openai.com", &custom));
     assert!(is_allowed_provider_host("api.anthropic.com", &custom));
-    assert!(is_allowed_provider_host("generativelanguage.googleapis.com", &custom));
+    assert!(is_allowed_provider_host(
+        "generativelanguage.googleapis.com",
+        &custom
+    ));
     assert!(is_allowed_provider_host("myorg.openai.azure.com", &custom));
-    assert!(is_allowed_provider_host("bedrock-runtime.us-east-1.amazonaws.com", &custom));
+    assert!(is_allowed_provider_host(
+        "bedrock-runtime.us-east-1.amazonaws.com",
+        &custom
+    ));
     assert!(is_allowed_provider_host("api.groq.com", &custom));
     assert!(is_allowed_provider_host("custom.llm.corp", &custom));
     assert!(is_allowed_provider_host("llm.internal.ai", &custom));
@@ -54,9 +64,18 @@ fn test_ip_range_classification_and_egress_blocks() {
     );
 
     // RFC 1918 Private ranges
-    assert!(matches!(classify_ip("10.0.0.1".parse().unwrap(), false), Err(EgressBlockReason::BlockedPrivateSubnet(_))));
-    assert!(matches!(classify_ip("172.16.0.1".parse().unwrap(), false), Err(EgressBlockReason::BlockedPrivateSubnet(_))));
-    assert!(matches!(classify_ip("192.168.1.1".parse().unwrap(), false), Err(EgressBlockReason::BlockedPrivateSubnet(_))));
+    assert!(matches!(
+        classify_ip("10.0.0.1".parse().unwrap(), false),
+        Err(EgressBlockReason::BlockedPrivateSubnet(_))
+    ));
+    assert!(matches!(
+        classify_ip("172.16.0.1".parse().unwrap(), false),
+        Err(EgressBlockReason::BlockedPrivateSubnet(_))
+    ));
+    assert!(matches!(
+        classify_ip("192.168.1.1".parse().unwrap(), false),
+        Err(EgressBlockReason::BlockedPrivateSubnet(_))
+    ));
 
     // RFC 6598 CGNAT
     assert_eq!(
@@ -77,15 +96,10 @@ fn test_ip_range_classification_and_egress_blocks() {
 
 #[tokio::test]
 async fn test_classify_and_resolve_destination_air_gapped_profile() {
-    let err = classify_and_resolve_destination(
-        "api.anthropic.com",
-        443,
-        "local-firewall",
-        false,
-        &[],
-    )
-    .await
-    .unwrap_err();
+    let err =
+        classify_and_resolve_destination("api.anthropic.com", 443, "local-firewall", false, &[])
+            .await
+            .unwrap_err();
 
     assert!(matches!(err, EgressBlockReason::BlockedAirGapped(_)));
 }
@@ -111,17 +125,44 @@ async fn test_classify_and_resolve_destination_unallowlisted_provider() {
 #[test]
 fn test_strict_deployment_profile_parsing() {
     // Valid profiles
-    assert_eq!(DeploymentProfile::try_parse("local-gateway").unwrap(), DeploymentProfile::LocalGateway);
-    assert_eq!(DeploymentProfile::try_parse("local-firewall").unwrap(), DeploymentProfile::LocalFirewall);
-    assert_eq!(DeploymentProfile::try_parse("team-gateway").unwrap(), DeploymentProfile::TeamGateway);
-    assert_eq!(DeploymentProfile::try_parse("container-sidecar").unwrap(), DeploymentProfile::ContainerSidecar);
-    assert_eq!(DeploymentProfile::try_parse("local-shadow").unwrap(), DeploymentProfile::LocalShadow);
+    assert_eq!(
+        DeploymentProfile::try_parse("local-gateway").unwrap(),
+        DeploymentProfile::LocalGateway
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("local-firewall").unwrap(),
+        DeploymentProfile::LocalFirewall
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("team-gateway").unwrap(),
+        DeploymentProfile::TeamGateway
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("container-sidecar").unwrap(),
+        DeploymentProfile::ContainerSidecar
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("local-shadow").unwrap(),
+        DeploymentProfile::LocalShadow
+    );
 
     // Aliases
-    assert_eq!(DeploymentProfile::try_parse("gateway").unwrap(), DeploymentProfile::LocalGateway);
-    assert_eq!(DeploymentProfile::try_parse("air-gapped").unwrap(), DeploymentProfile::LocalFirewall);
-    assert_eq!(DeploymentProfile::try_parse("team").unwrap(), DeploymentProfile::TeamGateway);
-    assert_eq!(DeploymentProfile::try_parse("sidecar").unwrap(), DeploymentProfile::ContainerSidecar);
+    assert_eq!(
+        DeploymentProfile::try_parse("gateway").unwrap(),
+        DeploymentProfile::LocalGateway
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("air-gapped").unwrap(),
+        DeploymentProfile::LocalFirewall
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("team").unwrap(),
+        DeploymentProfile::TeamGateway
+    );
+    assert_eq!(
+        DeploymentProfile::try_parse("sidecar").unwrap(),
+        DeploymentProfile::ContainerSidecar
+    );
 
     // Unknown string rejected with error
     let err = DeploymentProfile::try_parse("invalid-profile-name").unwrap_err();
@@ -151,12 +192,12 @@ fn test_protect_journal_transaction_and_rollback() {
     fs::write(&config_b, r#"{"initial_b": true}"#).unwrap();
 
     let mut journal = ProtectJournal::new("local-gateway");
-    journal.record_target_start("target_a", &config_a, "target_a_manifest");
+    journal.record_target_start("target_a", &[&config_a], "target_a_manifest");
     // Mutate config_a
     fs::write(&config_a, "mutated_a = true\n").unwrap();
     journal.record_target_success("target_a");
 
-    journal.record_target_start("target_b", &config_b, "target_b_manifest");
+    journal.record_target_start("target_b", &[&config_b], "target_b_manifest");
     // Mutate config_b
     fs::write(&config_b, r#"{"mutated_b": true}"#).unwrap();
     journal.record_target_success("target_b");
@@ -167,7 +208,10 @@ fn test_protect_journal_transaction_and_rollback() {
 
     // Both files restored to pre-mutation content
     assert_eq!(fs::read_to_string(&config_a).unwrap(), "initial_a = true\n");
-    assert_eq!(fs::read_to_string(&config_b).unwrap(), r#"{"initial_b": true}"#);
+    assert_eq!(
+        fs::read_to_string(&config_b).unwrap(),
+        r#"{"initial_b": true}"#
+    );
 }
 
 #[test]
@@ -177,7 +221,12 @@ fn test_manifest_based_workstation_roundtrip() {
     fs::write(&codex_file, "custom_user_key = \"preserved\"\n").unwrap();
 
     // 1. Connect
-    let res = connect_codex_target_to_path("phase1a_codex_test", &codex_file, "vx-test-token", ConnectMode::Local);
+    let res = connect_codex_target_to_path(
+        "phase1a_codex_test",
+        &codex_file,
+        "vx-test-token",
+        ConnectMode::Local,
+    );
     assert!(res.is_ok());
 
     let post_content = fs::read_to_string(&codex_file).unwrap();
@@ -186,7 +235,9 @@ fn test_manifest_based_workstation_roundtrip() {
     assert!(post_content.contains("custom_user_key"));
 
     // 2. Disconnect using manifest
-    let manifest = OwnershipManifest::load("phase1a_codex_test").unwrap().unwrap();
+    let manifest = OwnershipManifest::load("phase1a_codex_test")
+        .unwrap()
+        .unwrap();
     let reverted = revert_toml_target(&manifest).unwrap();
     assert!(reverted.contains(&"OPENAI_BASE_URL".to_string()));
     assert!(reverted.contains(&"OPENAI_API_KEY".to_string()));

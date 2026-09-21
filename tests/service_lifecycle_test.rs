@@ -34,7 +34,10 @@ fn test_daemon_config_serialization_and_defaults() {
     assert_eq!(loaded.hub_url, "https://hub.example.com");
     assert_eq!(loaded.listen, "127.0.0.1:18080");
     assert_eq!(loaded.gateway_secret, Some("gw_secret_123".to_string()));
-    assert_eq!(loaded.policy_read_secret, Some("pol_secret_456".to_string()));
+    assert_eq!(
+        loaded.policy_read_secret,
+        Some("pol_secret_456".to_string())
+    );
     assert_eq!(loaded.agent_id, Some("agent_test_789".to_string()));
     assert!(!loaded.enterprise);
 }

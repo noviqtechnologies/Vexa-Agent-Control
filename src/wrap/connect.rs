@@ -74,16 +74,20 @@ pub const ALL_CONNECT_TARGETS: &[ConnectTarget] = &[
 pub fn get_target_config_path(target: ConnectTarget) -> Result<PathBuf, String> {
     match target {
         ConnectTarget::Codex => {
-            let home = dirs::home_dir().ok_or_else(|| "Failed to resolve user home directory".to_string())?;
+            let home = dirs::home_dir()
+                .ok_or_else(|| "Failed to resolve user home directory".to_string())?;
             Ok(home.join(".codex").join("config.toml"))
         }
         ConnectTarget::Claude => config_path::claude_config_path().map_err(|e| format!("{}", e)),
-        ConnectTarget::ClaudeCode => config_path::claude_code_settings_path().map_err(|e| format!("{}", e)),
-        ConnectTarget::Cursor => config_path::cursor_settings_path().map_err(|e| format!("{}", e)),
-        ConnectTarget::Antigravity => config_path::antigravity_config_path().map_err(|e| format!("{}", e)),
-        ConnectTarget::VscodeContinue => {
-            crate::wrap::ide_config::vscode_settings_path().ok_or_else(|| "Could not resolve VS Code settings.json path".to_string())
+        ConnectTarget::ClaudeCode => {
+            config_path::claude_code_settings_path().map_err(|e| format!("{}", e))
         }
+        ConnectTarget::Cursor => config_path::cursor_settings_path().map_err(|e| format!("{}", e)),
+        ConnectTarget::Antigravity => {
+            config_path::antigravity_config_path().map_err(|e| format!("{}", e))
+        }
+        ConnectTarget::VscodeContinue => crate::wrap::ide_config::vscode_settings_path()
+            .ok_or_else(|| "Could not resolve VS Code settings.json path".to_string()),
     }
 }
 
@@ -102,7 +106,11 @@ pub fn is_target_installed(target: ConnectTarget) -> bool {
     }
 }
 
-pub fn connect_target(target: ConnectTarget, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_target(
+    target: ConnectTarget,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     match target {
         ConnectTarget::Codex => connect_codex(token, mode),
         ConnectTarget::Claude => connect_claude(token, mode),
@@ -112,7 +120,6 @@ pub fn connect_target(target: ConnectTarget, token: &str, mode: ConnectMode) -> 
         ConnectTarget::VscodeContinue => connect_vscode_continue(token, mode),
     }
 }
-
 
 /// Operation mode for connect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -152,37 +159,55 @@ pub fn mask_token(token: &str) -> String {
 
 /// Prints a standardized connect summary across all supported IDE targets.
 pub fn print_connect_summary(target: ConnectTarget, result: &ConnectResult) {
-    println!("\n{} Successfully connected {}!", "✔".green().bold(), target.display_name());
-    println!("  ✔ Configuration:     {}", result.config_path.display().to_string().cyan());
+    println!(
+        "\n{} Successfully connected {}!",
+        "✔".green().bold(),
+        target.display_name()
+    );
+    println!(
+        "  ✔ Configuration:     {}",
+        result.config_path.display().to_string().cyan()
+    );
     if result.llm_endpoint_injected {
         println!("  ✔ LLM Endpoint:      {}", result.proxy_url.green());
         let token_label = match result.mode {
-            ConnectMode::CloudDirect => format!("{} (Virtual Key from Control Hub)", result.token_masked.green()),
+            ConnectMode::CloudDirect => format!(
+                "{} (Virtual Key from Control Hub)",
+                result.token_masked.green()
+            ),
             ConnectMode::Local => format!("{} (Local Proxy Session)", result.token_masked.green()),
         };
         println!("  ✔ Auth Token:        {}", token_label);
     } else {
         println!("  ℹ Governance:        MCP Tool Boundary (Claude Desktop routes chat to api.anthropic.com)");
     }
-    println!("  ✔ MCP Servers:       {} wrapped with stdio-proxy", result.mcp_servers_wrapped.to_string().green());
+    println!(
+        "  ✔ MCP Servers:       {} wrapped with stdio-proxy",
+        result.mcp_servers_wrapped.to_string().green()
+    );
     println!("  ✔ Mode:              {}", result.mode.as_str().green());
 
     // If Claude Desktop has 0 MCP servers, show actionable guidance
     if matches!(target, ConnectTarget::Claude) && result.mcp_servers_wrapped == 0 {
         println!();
-        println!("  {} {} {} {}",
+        println!(
+            "  {} {} {} {}",
             "⚠".yellow().bold(),
             "No MCP servers are configured in claude_desktop_config.json.".yellow(),
             "Tool governance is not active yet.".yellow(),
             "To enable:".yellow()
         );
         println!("    → Add an MCP server (e.g. filesystem, sqlite, GitHub) to claude_desktop_config.json,");
-        println!("      then re-run: {}", "agentcontrol connect claude".cyan());
+        println!(
+            "      then re-run: {}",
+            "agentcontrol connect claude".cyan()
+        );
         println!();
-        println!("  {} {} {}",
+        println!(
+            "  {} {} {}",
             "ℹ".blue().bold(),
             "To govern Claude Code (CLI) completions, spend caps & DLP — run:".blue(),
-            "agentcontrol connect claude-code [--key sk-vex-...]" .cyan()
+            "agentcontrol connect claude-code [--key sk-vex-...]".cyan()
         );
     }
 
@@ -209,14 +234,13 @@ pub fn detect_upstream_provider_keys() -> Vec<DetectedProviderKey> {
 
     let mut detected = Vec::new();
     for (env_var, label) in &providers {
-        let val = crate::proxy::llm_proxy::get_env_or_dotenv(env_var)
-            .or_else(|| {
-                if *env_var == "GEMINI_API_KEY" {
-                    crate::proxy::llm_proxy::get_env_or_dotenv("GOOGLE_API_KEY")
-                } else {
-                    None
-                }
-            });
+        let val = crate::proxy::llm_proxy::get_env_or_dotenv(env_var).or_else(|| {
+            if *env_var == "GEMINI_API_KEY" {
+                crate::proxy::llm_proxy::get_env_or_dotenv("GOOGLE_API_KEY")
+            } else {
+                None
+            }
+        });
         if let Some(key) = val {
             if !key.is_empty() {
                 detected.push(DetectedProviderKey {
@@ -235,26 +259,60 @@ pub fn print_upstream_provider_status() {
     let detected = detect_upstream_provider_keys();
 
     if !detected.is_empty() {
-        println!("\n  {} Upstream LLM Provider Credentials Detected:", "🔑".green().bold());
+        println!(
+            "\n  {} Upstream LLM Provider Credentials Detected:",
+            "🔑".green().bold()
+        );
         for item in &detected {
-            println!("    ✔ {:<18} : {}", item.env_var.green().bold(), item.masked_key.cyan());
+            println!(
+                "    ✔ {:<18} : {}",
+                item.env_var.green().bold(),
+                item.masked_key.cyan()
+            );
         }
     } else {
-        println!("\n  {} No upstream LLM provider API keys detected!", "⚠".yellow().bold());
+        println!(
+            "\n  {} No upstream LLM provider API keys detected!",
+            "⚠".yellow().bold()
+        );
         println!("    IDE chat prompts will fail with 'missing_provider_api_key' until an upstream key is configured.");
         println!();
-        println!("    {} To configure an upstream key for standalone usage:", "👉".cyan().bold());
+        println!(
+            "    {} To configure an upstream key for standalone usage:",
+            "👉".cyan().bold()
+        );
 
         if cfg!(target_os = "windows") {
-            println!("      • PowerShell:  {}", "$env:ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan());
-            println!("                     {}", "$env:OPENAI_API_KEY=\"sk-proj-...\"".cyan());
-            println!("      • CMD:         {}", "set ANTHROPIC_API_KEY=sk-ant-...".cyan());
+            println!(
+                "      • PowerShell:  {}",
+                "$env:ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan()
+            );
+            println!(
+                "                     {}",
+                "$env:OPENAI_API_KEY=\"sk-proj-...\"".cyan()
+            );
+            println!(
+                "      • CMD:         {}",
+                "set ANTHROPIC_API_KEY=sk-ant-...".cyan()
+            );
         } else {
-            println!("      • Shell:       {}", "export ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan());
-            println!("                     {}", "export OPENAI_API_KEY=\"sk-proj-...\"".cyan());
+            println!(
+                "      • Shell:       {}",
+                "export ANTHROPIC_API_KEY=\"sk-ant-...\"".cyan()
+            );
+            println!(
+                "                     {}",
+                "export OPENAI_API_KEY=\"sk-proj-...\"".cyan()
+            );
         }
-        println!("      • .env File:   {}", "Add ANTHROPIC_API_KEY=sk-ant-... to .env in your project root".cyan());
-        println!("      • Local Models:{}", " Run Ollama (http://localhost:11434) or LM Studio".cyan());
+        println!(
+            "      • .env File:   {}",
+            "Add ANTHROPIC_API_KEY=sk-ant-... to .env in your project root".cyan()
+        );
+        println!(
+            "      • Local Models:{}",
+            " Run Ollama (http://localhost:11434) or LM Studio".cyan()
+        );
     }
 }
 
@@ -361,9 +419,15 @@ pub fn verify_client_version(target: ConnectTarget, force: bool) -> Result<(), S
     match target {
         ConnectTarget::Codex => {
             // Codex CLI check: semver >= 0.1.0, < 0.4.0
-            if let Ok(output) = std::process::Command::new("codex").arg("--version").output() {
+            if let Ok(output) = std::process::Command::new("codex")
+                .arg("--version")
+                .output()
+            {
                 let ver_str = String::from_utf8_lossy(&output.stdout);
-                let ver_clean = ver_str.trim().trim_start_matches("codex ").trim_start_matches('v');
+                let ver_clean = ver_str
+                    .trim()
+                    .trim_start_matches("codex ")
+                    .trim_start_matches('v');
                 if !ver_clean.is_empty() {
                     let parts: Vec<&str> = ver_clean.split('.').collect();
                     if parts.len() >= 2 {
@@ -453,7 +517,8 @@ pub async fn run_connect(
 
 /// Proven Codex injection: configures `OPENAI_BASE_URL` and `OPENAI_API_KEY` in `.codex/config.toml`.
 pub fn connect_codex(token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Failed to resolve user home directory".to_string())?;
+    let home =
+        dirs::home_dir().ok_or_else(|| "Failed to resolve user home directory".to_string())?;
     let codex_dir = home.join(".codex");
     let _ = fs::create_dir_all(&codex_dir);
     let config_path = codex_dir.join("config.toml");
@@ -461,12 +526,21 @@ pub fn connect_codex(token: &str, mode: ConnectMode) -> Result<ConnectResult, St
 }
 
 /// Core Codex connection routine given explicit configuration path.
-pub fn connect_codex_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_codex_to_path(
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     connect_codex_target_to_path("codex", config_path, token, mode)
 }
 
 /// Parameterized Codex connection routine given target manifest name and configuration path.
-pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_codex_target_to_path(
+    target_name: &str,
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     if let Some(parent) = config_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -488,7 +562,8 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     let mut toml_val: toml::Value = if pre_content.trim().is_empty() {
         toml::Value::Table(toml::map::Map::new())
     } else {
-        toml::from_str(&pre_content).map_err(|e| format!("Failed to parse {}: {}", config_path.display(), e))?
+        toml::from_str(&pre_content)
+            .map_err(|e| format!("Failed to parse {}: {}", config_path.display(), e))?
     };
 
     let mut previous_values = HashMap::new();
@@ -503,7 +578,9 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         .unwrap_or(serde_json::Value::Null);
 
     // 1. Configure shell_environment_policy
-    let root = toml_val.as_table_mut().ok_or_else(|| "Config root is not a TOML table".to_string())?;
+    let root = toml_val
+        .as_table_mut()
+        .ok_or_else(|| "Config root is not a TOML table".to_string())?;
     let sep = root
         .entry("shell_environment_policy".to_string())
         .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
@@ -511,7 +588,10 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         .ok_or_else(|| "shell_environment_policy is not a table".to_string())?;
 
     if !sep.contains_key("inherit") {
-        sep.insert("inherit".to_string(), toml::Value::String("core".to_string()));
+        sep.insert(
+            "inherit".to_string(),
+            toml::Value::String("core".to_string()),
+        );
     }
 
     let set_tbl = sep
@@ -532,8 +612,14 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         .map(|s| serde_json::Value::String(s.to_string()))
         .unwrap_or(serde_json::Value::Null);
 
-    previous_values.insert("shell_environment_policy.set.OPENAI_BASE_URL".to_string(), prev_base);
-    previous_values.insert("shell_environment_policy.set.OPENAI_API_KEY".to_string(), prev_key);
+    previous_values.insert(
+        "shell_environment_policy.set.OPENAI_BASE_URL".to_string(),
+        prev_base,
+    );
+    previous_values.insert(
+        "shell_environment_policy.set.OPENAI_API_KEY".to_string(),
+        prev_key,
+    );
     previous_values.insert("openai_base_url".to_string(), prev_top_url);
 
     // Clean up legacy HTTP_PROXY if pointing to old port 8080
@@ -544,8 +630,14 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     }
 
     // Inject AgentControl values into shell_environment_policy.set
-    set_tbl.insert("OPENAI_BASE_URL".to_string(), toml::Value::String(proxy_base_url.to_string()));
-    set_tbl.insert("OPENAI_API_KEY".to_string(), toml::Value::String(token.to_string()));
+    set_tbl.insert(
+        "OPENAI_BASE_URL".to_string(),
+        toml::Value::String(proxy_base_url.to_string()),
+    );
+    set_tbl.insert(
+        "OPENAI_API_KEY".to_string(),
+        toml::Value::String(token.to_string()),
+    );
 
     written_values.insert(
         "shell_environment_policy.set.OPENAI_BASE_URL".to_string(),
@@ -569,13 +661,23 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     if let Some(mcp_table) = root.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
         for (name, srv) in mcp_table.iter_mut() {
             if let Some(srv_tbl) = srv.as_table_mut() {
-                let cur_cmd = srv_tbl.get("command").and_then(|c| c.as_str()).unwrap_or("");
-                if !cur_cmd.contains("agentcontrol") && !cur_cmd.contains("agentwall") && !cur_cmd.is_empty() {
+                let cur_cmd = srv_tbl
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
+                if !cur_cmd.contains("agentcontrol")
+                    && !cur_cmd.contains("agentwall")
+                    && !cur_cmd.is_empty()
+                {
                     let orig_cmd = cur_cmd.to_string();
                     let orig_args: Vec<String> = srv_tbl
                         .get("args")
                         .and_then(|a| a.as_array())
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
                         .unwrap_or_default();
 
                     previous_values.insert(
@@ -590,7 +692,10 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
                     let mut new_args = vec!["stdio-proxy".to_string(), "--".to_string(), orig_cmd];
                     new_args.extend(orig_args);
 
-                    srv_tbl.insert("command".to_string(), toml::Value::String(agentcontrol_bin.clone()));
+                    srv_tbl.insert(
+                        "command".to_string(),
+                        toml::Value::String(agentcontrol_bin.clone()),
+                    );
                     srv_tbl.insert(
                         "args".to_string(),
                         toml::Value::Array(new_args.into_iter().map(toml::Value::String).collect()),
@@ -615,14 +720,17 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
     }
 
     // Write updated TOML
-    let updated_toml = toml::to_string_pretty(&toml_val).map_err(|e| format!("Failed to format TOML: {}", e))?;
-    fs::write(config_path, updated_toml).map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
+    let updated_toml =
+        toml::to_string_pretty(&toml_val).map_err(|e| format!("Failed to format TOML: {}", e))?;
+    fs::write(config_path, updated_toml)
+        .map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
 
     // Synchronize ~/.codex/auth.json
     if let Ok(auth_path) = crate::wrap::config_path::codex_auth_path() {
         let mut auth_json = if auth_path.exists() {
             let raw = fs::read_to_string(&auth_path).unwrap_or_default();
-            serde_json::from_str::<serde_json::Value>(&raw).unwrap_or_else(|_| serde_json::json!({}))
+            serde_json::from_str::<serde_json::Value>(&raw)
+                .unwrap_or_else(|_| serde_json::json!({}))
         } else {
             serde_json::json!({})
         };
@@ -631,7 +739,10 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         if let Some(parent) = auth_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(&auth_path, serde_json::to_string_pretty(&auth_json).unwrap_or_default());
+        let _ = fs::write(
+            &auth_path,
+            serde_json::to_string_pretty(&auth_json).unwrap_or_default(),
+        );
     }
 
     let post_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
@@ -646,7 +757,9 @@ pub fn connect_codex_target_to_path(target_name: &str, config_path: &Path, token
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: config_path.to_path_buf(),
@@ -668,7 +781,11 @@ pub fn connect_claude_code(token: &str, mode: ConnectMode) -> Result<ConnectResu
 /// Core Claude Code CLI connection routine given explicit settings path.
 /// Writes `env.ANTHROPIC_BASE_URL` and `env.ANTHROPIC_API_KEY` while preserving
 /// all other existing user settings in the JSON file.
-pub fn connect_claude_code_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_claude_code_to_path(
+    settings_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     if let Some(parent) = settings_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -708,10 +825,12 @@ pub fn connect_claude_code_to_path(settings_path: &Path, token: &str, mode: Conn
     }
 
     // Record previous values
-    let prev_base = settings["env"].get("ANTHROPIC_BASE_URL")
+    let prev_base = settings["env"]
+        .get("ANTHROPIC_BASE_URL")
         .cloned()
         .unwrap_or(serde_json::Value::Null);
-    let prev_key = settings["env"].get("ANTHROPIC_API_KEY")
+    let prev_key = settings["env"]
+        .get("ANTHROPIC_API_KEY")
         .cloned()
         .unwrap_or(serde_json::Value::Null);
 
@@ -722,15 +841,24 @@ pub fn connect_claude_code_to_path(settings_path: &Path, token: &str, mode: Conn
     settings["env"]["ANTHROPIC_BASE_URL"] = serde_json::json!(proxy_base_url);
     settings["env"]["ANTHROPIC_API_KEY"] = serde_json::json!(token);
 
-    written_values.insert("env.ANTHROPIC_BASE_URL".to_string(), serde_json::json!(proxy_base_url));
-    written_values.insert("env.ANTHROPIC_API_KEY".to_string(), serde_json::json!(token));
+    written_values.insert(
+        "env.ANTHROPIC_BASE_URL".to_string(),
+        serde_json::json!(proxy_base_url),
+    );
+    written_values.insert(
+        "env.ANTHROPIC_API_KEY".to_string(),
+        serde_json::json!(token),
+    );
 
     let output_str = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     fs::write(settings_path, output_str)
         .map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
 
     let post_hash = OwnershipManifest::compute_sha256(settings_path).unwrap_or_default();
-    let managed_keys = vec!["env.ANTHROPIC_BASE_URL".to_string(), "env.ANTHROPIC_API_KEY".to_string()];
+    let managed_keys = vec![
+        "env.ANTHROPIC_BASE_URL".to_string(),
+        "env.ANTHROPIC_API_KEY".to_string(),
+    ];
 
     let manifest = OwnershipManifest::new(
         "claude-code",
@@ -742,7 +870,9 @@ pub fn connect_claude_code_to_path(settings_path: &Path, token: &str, mode: Conn
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: settings_path.to_path_buf(),
@@ -761,12 +891,21 @@ pub fn connect_claude(token: &str, mode: ConnectMode) -> Result<ConnectResult, S
 }
 
 /// Core Claude connection routine given explicit configuration path.
-pub fn connect_claude_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_claude_to_path(
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     connect_claude_target_to_path("claude", config_path, token, mode)
 }
 
 /// Parameterized Claude connection routine given target manifest name and configuration path.
-pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_claude_target_to_path(
+    target_name: &str,
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     if let Some(parent) = config_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -825,7 +964,8 @@ pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, toke
     }
 
     let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
-    fs::write(config_path, output_str).map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
+    fs::write(config_path, output_str)
+        .map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
 
     let post_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
 
@@ -839,7 +979,9 @@ pub fn connect_claude_target_to_path(target_name: &str, config_path: &Path, toke
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: config_path.to_path_buf(),
@@ -858,12 +1000,21 @@ pub fn connect_cursor(token: &str, mode: ConnectMode) -> Result<ConnectResult, S
 }
 
 /// Core Cursor connection routine given explicit settings path.
-pub fn connect_cursor_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_cursor_to_path(
+    settings_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     connect_cursor_target_to_path("cursor", settings_path, token, mode)
 }
 
 /// Parameterized Cursor connection routine given target manifest name and settings path.
-pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_cursor_target_to_path(
+    target_name: &str,
+    settings_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     if let Some(parent) = settings_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -901,9 +1052,18 @@ pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, to
     let proxy_url = "http://127.0.0.1:18080";
 
     // Record previous values for Cursor proxy & API key settings
-    let prev_proxy = modified.get("http.proxy").cloned().unwrap_or(serde_json::Value::Null);
-    let prev_h2 = modified.get("cursor.general.disableHttp2").cloned().unwrap_or(serde_json::Value::Null);
-    let prev_key = modified.get("cursor.general.openaiApiKey").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_proxy = modified
+        .get("http.proxy")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_h2 = modified
+        .get("cursor.general.disableHttp2")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_key = modified
+        .get("cursor.general.openaiApiKey")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     previous_values.insert("http.proxy".to_string(), prev_proxy);
     previous_values.insert("cursor.general.disableHttp2".to_string(), prev_h2);
@@ -915,8 +1075,14 @@ pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, to
     modified["cursor.general.openaiApiKey"] = serde_json::json!(token);
 
     written_values.insert("http.proxy".to_string(), serde_json::json!(proxy_url));
-    written_values.insert("cursor.general.disableHttp2".to_string(), serde_json::json!(true));
-    written_values.insert("cursor.general.openaiApiKey".to_string(), serde_json::json!(token));
+    written_values.insert(
+        "cursor.general.disableHttp2".to_string(),
+        serde_json::json!(true),
+    );
+    written_values.insert(
+        "cursor.general.openaiApiKey".to_string(),
+        serde_json::json!(token),
+    );
 
     managed_keys.push("http.proxy".to_string());
     managed_keys.push("cursor.general.disableHttp2".to_string());
@@ -942,7 +1108,8 @@ pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, to
     }
 
     let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
-    fs::write(settings_path, output_str).map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
+    fs::write(settings_path, output_str)
+        .map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
 
     let post_hash = OwnershipManifest::compute_sha256(settings_path).unwrap_or_default();
 
@@ -956,7 +1123,9 @@ pub fn connect_cursor_target_to_path(target_name: &str, settings_path: &Path, to
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: settings_path.to_path_buf(),
@@ -975,12 +1144,21 @@ pub fn connect_antigravity(token: &str, mode: ConnectMode) -> Result<ConnectResu
 }
 
 /// Core Antigravity connection routine given explicit configuration path.
-pub fn connect_antigravity_to_path(config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_antigravity_to_path(
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     connect_antigravity_target_to_path("antigravity", config_path, token, mode)
 }
 
 /// Parameterized Antigravity connection routine given target manifest name and configuration path.
-pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_antigravity_target_to_path(
+    target_name: &str,
+    config_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     if let Some(parent) = config_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -1022,10 +1200,22 @@ pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path,
     let proxy_base_url = "http://127.0.0.1:18080/v1";
 
     // Record previous values for Antigravity proxy & auth keys
-    let prev_proxy = modified.get("proxy_url").cloned().unwrap_or(serde_json::Value::Null);
-    let prev_key = modified.get("api_key").cloned().unwrap_or(serde_json::Value::Null);
-    let prev_anti_base = modified.get("antigravity.proxy.baseUrl").cloned().unwrap_or(serde_json::Value::Null);
-    let prev_anti_key = modified.get("antigravity.proxy.apiKey").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_proxy = modified
+        .get("proxy_url")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_key = modified
+        .get("api_key")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_anti_base = modified
+        .get("antigravity.proxy.baseUrl")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let prev_anti_key = modified
+        .get("antigravity.proxy.apiKey")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     previous_values.insert("proxy_url".to_string(), prev_proxy);
     previous_values.insert("api_key".to_string(), prev_key);
@@ -1040,8 +1230,14 @@ pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path,
 
     written_values.insert("proxy_url".to_string(), serde_json::json!(proxy_base_url));
     written_values.insert("api_key".to_string(), serde_json::json!(token));
-    written_values.insert("antigravity.proxy.baseUrl".to_string(), serde_json::json!(proxy_base_url));
-    written_values.insert("antigravity.proxy.apiKey".to_string(), serde_json::json!(token));
+    written_values.insert(
+        "antigravity.proxy.baseUrl".to_string(),
+        serde_json::json!(proxy_base_url),
+    );
+    written_values.insert(
+        "antigravity.proxy.apiKey".to_string(),
+        serde_json::json!(token),
+    );
 
     managed_keys.push("proxy_url".to_string());
     managed_keys.push("api_key".to_string());
@@ -1064,7 +1260,8 @@ pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path,
     }
 
     let output_str = serde_json::to_string_pretty(&modified).map_err(|e| e.to_string())?;
-    fs::write(config_path, output_str).map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
+    fs::write(config_path, output_str)
+        .map_err(|e| format!("Failed to write {}: {}", config_path.display(), e))?;
 
     let post_hash = OwnershipManifest::compute_sha256(config_path).unwrap_or_default();
 
@@ -1078,7 +1275,9 @@ pub fn connect_antigravity_target_to_path(target_name: &str, config_path: &Path,
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: config_path.to_path_buf(),
@@ -1099,12 +1298,21 @@ pub fn connect_vscode_continue(token: &str, mode: ConnectMode) -> Result<Connect
 }
 
 /// Core VS Code Continue connection routine given explicit configuration path.
-pub fn connect_vscode_continue_to_path(settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_vscode_continue_to_path(
+    settings_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     connect_vscode_continue_target_to_path("vscode-continue", settings_path, token, mode)
 }
 
 /// Parameterized VS Code Continue connection routine given target manifest name and configuration path.
-pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: &Path, token: &str, mode: ConnectMode) -> Result<ConnectResult, String> {
+pub fn connect_vscode_continue_target_to_path(
+    target_name: &str,
+    settings_path: &Path,
+    token: &str,
+    mode: ConnectMode,
+) -> Result<ConnectResult, String> {
     let pre_hash = if settings_path.exists() {
         OwnershipManifest::compute_sha256(settings_path).unwrap_or_default()
     } else {
@@ -1115,7 +1323,8 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
 
     let mut settings: serde_json::Value = if settings_path.exists() {
         let raw = fs::read_to_string(settings_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&crate::wrap::strip_json_comments(&raw)).unwrap_or_else(|_| serde_json::json!({}))
+        serde_json::from_str(&crate::wrap::strip_json_comments(&raw))
+            .unwrap_or_else(|_| serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
@@ -1123,7 +1332,10 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
     let mut previous_values = HashMap::new();
     let mut written_values = HashMap::new();
 
-    let prev_provider = settings.get("continue.models").cloned().unwrap_or(serde_json::Value::Null);
+    let prev_provider = settings
+        .get("continue.models")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     previous_values.insert("continue.models".to_string(), prev_provider);
 
     let vexa_model = serde_json::json!({
@@ -1134,18 +1346,30 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
         "apiKey": token
     });
 
-    let mut models_arr = settings.get("continue.models").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    models_arr.retain(|m| m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)"));
+    let mut models_arr = settings
+        .get("continue.models")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    models_arr.retain(|m| {
+        m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)")
+    });
     models_arr.insert(0, vexa_model);
 
     settings["continue.models"] = serde_json::Value::Array(models_arr.clone());
-    written_values.insert("continue.models".to_string(), serde_json::Value::Array(models_arr));
+    written_values.insert(
+        "continue.models".to_string(),
+        serde_json::Value::Array(models_arr),
+    );
 
     if let Some(parent) = settings_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    fs::write(settings_path, serde_json::to_string_pretty(&settings).unwrap())
-        .map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
+    fs::write(
+        settings_path,
+        serde_json::to_string_pretty(&settings).unwrap(),
+    )
+    .map_err(|e| format!("Failed to write {}: {}", settings_path.display(), e))?;
 
     let post_hash = OwnershipManifest::compute_sha256(settings_path).unwrap_or_default();
 
@@ -1159,7 +1383,9 @@ pub fn connect_vscode_continue_target_to_path(target_name: &str, settings_path: 
         written_values,
     )
     .with_connect_mode(mode.as_str());
-    manifest.save().map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
+    manifest
+        .save()
+        .map_err(|e| format!("Failed to save ownership manifest: {}", e))?;
 
     Ok(ConnectResult {
         config_path: settings_path.to_path_buf(),
@@ -1221,7 +1447,10 @@ pub fn run_disconnect(target: ConnectTarget) -> i32 {
                 "✔".green().bold(),
                 target.display_name()
             );
-            println!("  Reverted managed settings: {}", reverted_keys.join(", ").cyan());
+            println!(
+                "  Reverted managed settings: {}",
+                reverted_keys.join(", ").cyan()
+            );
             println!("  All user custom configurations and unrelated keys preserved.");
             0
         }
@@ -1235,10 +1464,13 @@ pub fn run_disconnect(target: ConnectTarget) -> i32 {
 /// Revert managed keys in a TOML configuration file (e.g. Codex).
 pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, String> {
     let raw = fs::read_to_string(&manifest.config_path).map_err(|e| e.to_string())?;
-    let mut toml_val: toml::Value = toml::from_str(&raw).map_err(|e| format!("Invalid TOML: {}", e))?;
+    let mut toml_val: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("Invalid TOML: {}", e))?;
     let mut reverted_keys = Vec::new();
 
-    let root = toml_val.as_table_mut().ok_or_else(|| "Root is not a TOML table".to_string())?;
+    let root = toml_val
+        .as_table_mut()
+        .ok_or_else(|| "Root is not a TOML table".to_string())?;
 
     for key in &manifest.managed_keys {
         if key == "shell_environment_policy.set.OPENAI_BASE_URL" {
@@ -1255,7 +1487,10 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
                 if cur == written {
                     match prev {
                         Some(serde_json::Value::String(s)) => {
-                            set_tbl.insert("OPENAI_BASE_URL".to_string(), toml::Value::String(s.clone()));
+                            set_tbl.insert(
+                                "OPENAI_BASE_URL".to_string(),
+                                toml::Value::String(s.clone()),
+                            );
                         }
                         _ => {
                             set_tbl.remove("OPENAI_BASE_URL");
@@ -1283,7 +1518,10 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
                 if cur == written {
                     match prev {
                         Some(serde_json::Value::String(s)) => {
-                            set_tbl.insert("OPENAI_API_KEY".to_string(), toml::Value::String(s.clone()));
+                            set_tbl.insert(
+                                "OPENAI_API_KEY".to_string(),
+                                toml::Value::String(s.clone()),
+                            );
                         }
                         _ => {
                             set_tbl.remove("OPENAI_API_KEY");
@@ -1304,7 +1542,10 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
             if cur == written {
                 match prev {
                     Some(serde_json::Value::String(s)) => {
-                        root.insert("openai_base_url".to_string(), toml::Value::String(s.clone()));
+                        root.insert(
+                            "openai_base_url".to_string(),
+                            toml::Value::String(s.clone()),
+                        );
                     }
                     _ => {
                         root.remove("openai_base_url");
@@ -1319,14 +1560,22 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
     if let Some(mcp_table) = root.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
         for (name, srv) in mcp_table.iter_mut() {
             if let Some(srv_tbl) = srv.as_table_mut() {
-                let cur_cmd = srv_tbl.get("command").and_then(|c| c.as_str()).unwrap_or("");
+                let cur_cmd = srv_tbl
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
                 if cur_cmd.contains("agentcontrol") || cur_cmd.contains("agentwall") {
                     let cmd_key = format!("mcp_servers.{}.command", name);
                     let args_key = format!("mcp_servers.{}.args", name);
-                    if let Some(serde_json::Value::String(orig_cmd)) = manifest.previous_values.get(&cmd_key) {
-                        srv_tbl.insert("command".to_string(), toml::Value::String(orig_cmd.clone()));
+                    if let Some(serde_json::Value::String(orig_cmd)) =
+                        manifest.previous_values.get(&cmd_key)
+                    {
+                        srv_tbl
+                            .insert("command".to_string(), toml::Value::String(orig_cmd.clone()));
                     }
-                    if let Some(serde_json::Value::Array(orig_args)) = manifest.previous_values.get(&args_key) {
+                    if let Some(serde_json::Value::Array(orig_args)) =
+                        manifest.previous_values.get(&args_key)
+                    {
                         let toml_args: Vec<toml::Value> = orig_args
                             .iter()
                             .filter_map(|v| v.as_str().map(|s| toml::Value::String(s.to_string())))
@@ -1339,8 +1588,10 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
         }
     }
 
-    let updated_toml = toml::to_string_pretty(&toml_val).map_err(|e| format!("Failed to format TOML: {}", e))?;
-    fs::write(&manifest.config_path, updated_toml).map_err(|e| format!("Failed to write: {}", e))?;
+    let updated_toml =
+        toml::to_string_pretty(&toml_val).map_err(|e| format!("Failed to format TOML: {}", e))?;
+    fs::write(&manifest.config_path, updated_toml)
+        .map_err(|e| format!("Failed to write: {}", e))?;
 
     Ok(reverted_keys)
 }
@@ -1349,7 +1600,8 @@ pub fn revert_toml_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
 pub fn revert_json_target(manifest: &OwnershipManifest) -> Result<Vec<String>, String> {
     let raw = fs::read_to_string(&manifest.config_path).map_err(|e| e.to_string())?;
     let mut config: serde_json::Value =
-        serde_json::from_str(&crate::wrap::strip_json_comments(&raw)).map_err(|e| format!("Invalid JSON: {}", e))?;
+        serde_json::from_str(&crate::wrap::strip_json_comments(&raw))
+            .map_err(|e| format!("Invalid JSON: {}", e))?;
     let mut reverted_keys = Vec::new();
 
     for key in &manifest.managed_keys {
@@ -1369,8 +1621,13 @@ pub fn revert_json_target(manifest: &OwnershipManifest) -> Result<Vec<String>, S
                 reverted_keys.push("mcpServers".to_string());
             }
         } else if key == "continue.models" {
-            if let Some(models_arr) = config.get_mut("continue.models").and_then(|m| m.as_array_mut()) {
-                models_arr.retain(|m| m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)"));
+            if let Some(models_arr) = config
+                .get_mut("continue.models")
+                .and_then(|m| m.as_array_mut())
+            {
+                models_arr.retain(|m| {
+                    m.get("title").and_then(|t| t.as_str()) != Some("Vexa Agent Control (Managed)")
+                });
                 reverted_keys.push("continue.models".to_string());
             }
         } else if key.starts_with("env.") {
@@ -1453,7 +1710,12 @@ custom_var = "keep_me"
         )
         .unwrap();
 
-        let res = connect_codex_target_to_path("codex_unit_local", &codex_config, "vx-local-test123", ConnectMode::Local);
+        let res = connect_codex_target_to_path(
+            "codex_unit_local",
+            &codex_config,
+            "vx-local-test123",
+            ConnectMode::Local,
+        );
         assert!(res.is_ok());
 
         let configured_toml = fs::read_to_string(&codex_config).unwrap();
@@ -1461,7 +1723,9 @@ custom_var = "keep_me"
         assert!(configured_toml.contains("OPENAI_API_KEY = \"vx-local-test123\""));
         assert!(configured_toml.contains("theme = \"dark\""));
 
-        let manifest = OwnershipManifest::load("codex_unit_local").unwrap().unwrap();
+        let manifest = OwnershipManifest::load("codex_unit_local")
+            .unwrap()
+            .unwrap();
         assert_eq!(manifest.connect_mode.as_deref(), Some("local"));
 
         let reverted = revert_toml_target(&manifest).unwrap();
@@ -1488,7 +1752,12 @@ theme = "nord"
         )
         .unwrap();
 
-        let res = connect_codex_target_to_path("codex_unit_cloud", &codex_config, "sk-vex-998877665544", ConnectMode::CloudDirect);
+        let res = connect_codex_target_to_path(
+            "codex_unit_cloud",
+            &codex_config,
+            "sk-vex-998877665544",
+            ConnectMode::CloudDirect,
+        );
         assert!(res.is_ok());
 
         let configured_toml = fs::read_to_string(&codex_config).unwrap();
@@ -1496,7 +1765,9 @@ theme = "nord"
         assert!(configured_toml.contains("OPENAI_API_KEY = \"sk-vex-998877665544\""));
         assert!(configured_toml.contains("theme = \"nord\""));
 
-        let manifest = OwnershipManifest::load("codex_unit_cloud").unwrap().unwrap();
+        let manifest = OwnershipManifest::load("codex_unit_cloud")
+            .unwrap()
+            .unwrap();
         assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
         let reverted = revert_toml_target(&manifest).unwrap();
@@ -1528,7 +1799,12 @@ theme = "nord"
         )
         .unwrap();
 
-        let res = connect_claude_target_to_path("claude_unit", &claude_config, "sk-vex-claude-key", ConnectMode::CloudDirect);
+        let res = connect_claude_target_to_path(
+            "claude_unit",
+            &claude_config,
+            "sk-vex-claude-key",
+            ConnectMode::CloudDirect,
+        );
         assert!(res.is_ok());
 
         let content = fs::read_to_string(&claude_config).unwrap();
@@ -1563,7 +1839,12 @@ theme = "nord"
         )
         .unwrap();
 
-        let res = connect_cursor_target_to_path("cursor_unit", &cursor_settings, "sk-vex-cursor-key", ConnectMode::CloudDirect);
+        let res = connect_cursor_target_to_path(
+            "cursor_unit",
+            &cursor_settings,
+            "sk-vex-cursor-key",
+            ConnectMode::CloudDirect,
+        );
         assert!(res.is_ok());
 
         let content = fs::read_to_string(&cursor_settings).unwrap();
@@ -1607,18 +1888,28 @@ theme = "nord"
         )
         .unwrap();
 
-        let res = connect_antigravity_target_to_path("antigravity_unit", &anti_config, "sk-vex-anti-key", ConnectMode::CloudDirect);
+        let res = connect_antigravity_target_to_path(
+            "antigravity_unit",
+            &anti_config,
+            "sk-vex-anti-key",
+            ConnectMode::CloudDirect,
+        );
         assert!(res.is_ok());
 
         let content = fs::read_to_string(&anti_config).unwrap();
         let json: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(json["proxy_url"], "http://127.0.0.1:18080/v1");
         assert_eq!(json["api_key"], "sk-vex-anti-key");
-        assert_eq!(json["antigravity.proxy.baseUrl"], "http://127.0.0.1:18080/v1");
+        assert_eq!(
+            json["antigravity.proxy.baseUrl"],
+            "http://127.0.0.1:18080/v1"
+        );
         assert_eq!(json["antigravity.proxy.apiKey"], "sk-vex-anti-key");
         assert_eq!(json["userSetting"], "custom");
 
-        let manifest = OwnershipManifest::load("antigravity_unit").unwrap().unwrap();
+        let manifest = OwnershipManifest::load("antigravity_unit")
+            .unwrap()
+            .unwrap();
         assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
         let reverted = revert_json_target(&manifest).unwrap();
@@ -1645,7 +1936,12 @@ theme = "nord"
         )
         .unwrap();
 
-        let res = connect_vscode_continue_target_to_path("vscode_continue_unit", &settings_path, "sk-vex-continue-key", ConnectMode::CloudDirect);
+        let res = connect_vscode_continue_target_to_path(
+            "vscode_continue_unit",
+            &settings_path,
+            "sk-vex-continue-key",
+            ConnectMode::CloudDirect,
+        );
         assert!(res.is_ok());
 
         let content = fs::read_to_string(&settings_path).unwrap();
@@ -1655,7 +1951,9 @@ theme = "nord"
         assert_eq!(models[0]["apiKey"], "sk-vex-continue-key");
         assert_eq!(models[0]["apiBase"], "http://127.0.0.1:18080/v1");
 
-        let manifest = OwnershipManifest::load("vscode_continue_unit").unwrap().unwrap();
+        let manifest = OwnershipManifest::load("vscode_continue_unit")
+            .unwrap()
+            .unwrap();
         assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
         let reverted = revert_json_target(&manifest).unwrap();

@@ -506,7 +506,8 @@ pub fn claude_code_settings_path() -> Result<PathBuf, WrapError> {
             let base = dirs::home_dir().map(|h| h.join(".claude").join("settings.json"));
             base.ok_or_else(|| {
                 WrapError::ConfigNotFound(
-                    "Cannot resolve Claude Code settings path (~/.claude/settings.json)".to_string(),
+                    "Cannot resolve Claude Code settings path (~/.claude/settings.json)"
+                        .to_string(),
                 )
             })
         }

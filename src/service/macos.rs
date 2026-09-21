@@ -3,11 +3,11 @@
 //! Installs as a LaunchDaemon (system-level, boot-time) or LaunchAgent (user-level, login-time).
 //! Adheres strictly to the single-authoritative-supervisor architecture with zero overlapping crontab/nohup fallbacks.
 
+use super::SupervisorState;
 use colored::*;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use super::SupervisorState;
 
 #[cfg(unix)]
 fn get_current_uid() -> u32 {
@@ -51,7 +51,9 @@ pub fn install_macos_service(
     } else {
         let user_plist = dirs::home_dir()
             .map(|h| h.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist"))
-            .unwrap_or_else(|| std::path::PathBuf::from("/Library/LaunchDaemons/io.vexasec.agentcontrol.plist"));
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from("/Library/LaunchDaemons/io.vexasec.agentcontrol.plist")
+            });
         let user_logs = dirs::home_dir()
             .map(|h| h.join("Library/Logs/AgentControl"))
             .unwrap_or_else(|| std::path::PathBuf::from("/tmp/agentcontrol-logs"));
@@ -64,7 +66,10 @@ pub fn install_macos_service(
     }
 
     let stdout_log = log_dir.join("agent-control.log").display().to_string();
-    let stderr_log = log_dir.join("agent-control-error.log").display().to_string();
+    let stderr_log = log_dir
+        .join("agent-control-error.log")
+        .display()
+        .to_string();
 
     // 1. Scoped Pre-Cleanup: Remove legacy crontab entries and unregister legacy plists
     clean_legacy_crontab();
@@ -72,7 +77,11 @@ pub fn install_macos_service(
         .args(["bootout", "system/io.vexasec.agentwall"])
         .output();
     let _ = Command::new("launchctl")
-        .args(["unload", "-w", "/Library/LaunchDaemons/io.vexasec.agentwall.plist"])
+        .args([
+            "unload",
+            "-w",
+            "/Library/LaunchDaemons/io.vexasec.agentwall.plist",
+        ])
         .output();
 
     // 2. Generate clean plist definition passing --config flag
@@ -121,36 +130,48 @@ pub fn install_macos_service(
 
     // 3. Register and activate with modern domain-targeted launchctl
     if is_daemon {
-        let _ = Command::new("launchctl").args(["bootout", "system/io.vexasec.agentcontrol"]).output();
-        let _ = Command::new("launchctl").args(["unload", "-w", &target_str]).output();
+        let _ = Command::new("launchctl")
+            .args(["bootout", "system/io.vexasec.agentcontrol"])
+            .output();
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", &target_str])
+            .output();
 
         let bootstrap_out = Command::new("launchctl")
             .args(["bootstrap", "system", &target_str])
             .output();
 
         match bootstrap_out {
-            Ok(o) if o.status.success() => {},
+            Ok(o) if o.status.success() => {}
             _ => {
                 // Fallback to load -w for legacy macOS
-                let _ = Command::new("launchctl").args(["load", "-w", &target_str]).output();
+                let _ = Command::new("launchctl")
+                    .args(["load", "-w", &target_str])
+                    .output();
             }
         }
     } else {
         let domain = format!("gui/{}", uid);
         let service_target = format!("gui/{}/io.vexasec.agentcontrol", uid);
 
-        let _ = Command::new("launchctl").args(["bootout", &service_target]).output();
-        let _ = Command::new("launchctl").args(["unload", "-w", &target_str]).output();
+        let _ = Command::new("launchctl")
+            .args(["bootout", &service_target])
+            .output();
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", &target_str])
+            .output();
 
         let bootstrap_out = Command::new("launchctl")
             .args(["bootstrap", &domain, &target_str])
             .output();
 
         match bootstrap_out {
-            Ok(o) if o.status.success() => {},
+            Ok(o) if o.status.success() => {}
             _ => {
                 // Fallback to load -w for legacy macOS
-                let _ = Command::new("launchctl").args(["load", "-w", &target_str]).output();
+                let _ = Command::new("launchctl")
+                    .args(["load", "-w", &target_str])
+                    .output();
             }
         }
     }
@@ -163,14 +184,21 @@ pub fn inspect_macos_service() -> SupervisorState {
     let user_target = format!("gui/{}/io.vexasec.agentcontrol", uid);
 
     // 1. Check user LaunchAgent via modern launchctl print
-    if let Ok(out) = Command::new("launchctl").args(["print", &user_target]).output() {
+    if let Ok(out) = Command::new("launchctl")
+        .args(["print", &user_target])
+        .output()
+    {
         if out.status.success() {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            let pid = stdout.lines()
+            let pid = stdout
+                .lines()
                 .find(|l| l.trim().starts_with("pid = "))
                 .and_then(|l| l.trim().strip_prefix("pid = "))
                 .and_then(|p| p.trim().parse::<u32>().ok());
-            let state_line = stdout.lines().find(|l| l.trim().starts_with("state = ")).unwrap_or("state = active");
+            let state_line = stdout
+                .lines()
+                .find(|l| l.trim().starts_with("state = "))
+                .unwrap_or("state = active");
             return SupervisorState::Managed {
                 supervisor_type: "macOS launchd (LaunchAgent)".to_string(),
                 target_name: "io.vexasec.agentcontrol".to_string(),
@@ -181,10 +209,14 @@ pub fn inspect_macos_service() -> SupervisorState {
     }
 
     // 2. Check system LaunchDaemon via modern launchctl print
-    if let Ok(out) = Command::new("launchctl").args(["print", "system/io.vexasec.agentcontrol"]).output() {
+    if let Ok(out) = Command::new("launchctl")
+        .args(["print", "system/io.vexasec.agentcontrol"])
+        .output()
+    {
         if out.status.success() {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            let pid = stdout.lines()
+            let pid = stdout
+                .lines()
                 .find(|l| l.trim().starts_with("pid = "))
                 .and_then(|l| l.trim().strip_prefix("pid = "))
                 .and_then(|p| p.trim().parse::<u32>().ok());
@@ -222,35 +254,49 @@ pub fn uninstall_macos_service() -> Result<(), String> {
     let user_target = format!("gui/{}/io.vexasec.agentcontrol", uid);
 
     let daemon_plist = "/Library/LaunchDaemons/io.vexasec.agentcontrol.plist";
-    let agent_plist = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist"));
+    let agent_plist =
+        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist"));
 
     // Bootout / Unload current targets
-    let _ = Command::new("launchctl").args(["bootout", &user_target]).output();
-    let _ = Command::new("launchctl").args(["bootout", "system/io.vexasec.agentcontrol"]).output();
+    let _ = Command::new("launchctl")
+        .args(["bootout", &user_target])
+        .output();
+    let _ = Command::new("launchctl")
+        .args(["bootout", "system/io.vexasec.agentcontrol"])
+        .output();
 
     if std::path::Path::new(daemon_plist).exists() {
-        let _ = Command::new("launchctl").args(["unload", "-w", daemon_plist]).output();
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", daemon_plist])
+            .output();
         let _ = fs::remove_file(daemon_plist);
     }
 
     if let Some(path) = &agent_plist {
         if path.exists() {
-            let _ = Command::new("launchctl").args(["unload", "-w", &path.display().to_string()]).output();
+            let _ = Command::new("launchctl")
+                .args(["unload", "-w", &path.display().to_string()])
+                .output();
             let _ = fs::remove_file(path);
         }
     }
 
     // Clean up legacy plists
     let legacy_daemon = "/Library/LaunchDaemons/io.vexasec.agentwall.plist";
-    let legacy_agent = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
+    let legacy_agent =
+        dirs::home_dir().map(|h| h.join("Library/LaunchAgents/io.vexasec.agentwall.plist"));
 
     if std::path::Path::new(legacy_daemon).exists() {
-        let _ = Command::new("launchctl").args(["unload", "-w", legacy_daemon]).output();
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w", legacy_daemon])
+            .output();
         let _ = fs::remove_file(legacy_daemon);
     }
     if let Some(path) = legacy_agent {
         if path.exists() {
-            let _ = Command::new("launchctl").args(["unload", "-w", &path.display().to_string()]).output();
+            let _ = Command::new("launchctl")
+                .args(["unload", "-w", &path.display().to_string()])
+                .output();
             let _ = fs::remove_file(path);
         }
     }
@@ -270,7 +316,10 @@ pub fn uninstall_macos_service() -> Result<(), String> {
 
 fn clean_legacy_crontab() {
     let cron_marker = "agentcontrol";
-    let existing_cron = Command::new("crontab").arg("-l").output().ok()
+    let existing_cron = Command::new("crontab")
+        .arg("-l")
+        .output()
+        .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_default();
     if existing_cron.contains(cron_marker) || existing_cron.contains("agentwall") {
@@ -281,7 +330,10 @@ fn clean_legacy_crontab() {
             .collect();
         let _ = Command::new("sh")
             .arg("-c")
-            .arg(format!("echo '{}' | crontab -", cleaned.replace('\'', "'\\''")))
+            .arg(format!(
+                "echo '{}' | crontab -",
+                cleaned.replace('\'', "'\\''")
+            ))
             .output();
     }
 }

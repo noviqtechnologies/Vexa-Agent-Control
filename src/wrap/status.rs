@@ -159,7 +159,6 @@ pub fn get_all_integrations_summary() -> Vec<IdeIntegrationSummary> {
         .collect()
 }
 
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PathVerification {
@@ -375,14 +374,19 @@ pub fn print_all_targets(json: bool) {
                 "Binary 'COMPLIANT' state is retired; independent capability states reflect actual workstation posture.".to_string(),
             ],
         };
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        );
         return;
     }
 
     println!();
     println!(
         "{} {}",
-        "Vexa Agent Control — Target Governance & Capability Posture".bold().white(),
+        "Vexa Agent Control — Target Governance & Capability Posture"
+            .bold()
+            .white(),
         format!("(v{})", env!("CARGO_PKG_VERSION")).cyan()
     );
     println!("{}", "─".repeat(105).dimmed());
@@ -434,12 +438,22 @@ pub fn print_all_targets(json: bool) {
             } else {
                 ""
             };
-            println!("    • {:<14} [{}]{}", t.target.bold(), names.join(", ").blue(), note.dimmed());
+            println!(
+                "    • {:<14} [{}]{}",
+                t.target.bold(),
+                names.join(", ").blue(),
+                note.dimmed()
+            );
         }
     }
 
     println!();
-    println!("{}", "  SECURITY BOUNDARIES & DISCLOSURES (No Sugar Coating):".bold().yellow());
+    println!(
+        "{}",
+        "  SECURITY BOUNDARIES & DISCLOSURES (No Sugar Coating):"
+            .bold()
+            .yellow()
+    );
     println!(
         "    ⚠ Bypass Vector: Native shell commands (bash/git) run out-of-band and are UNGOVERNED by local proxy."
     );

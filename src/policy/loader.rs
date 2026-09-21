@@ -621,7 +621,10 @@ fn compile_policy_yaml(
                 attr.project_id.as_deref().unwrap_or("default"),
                 attr.cost_center.as_deref().unwrap_or("default"),
             ))
-        } else if meta.client_id.is_some() || meta.project_id.is_some() || meta.cost_center.is_some() {
+        } else if meta.client_id.is_some()
+            || meta.project_id.is_some()
+            || meta.cost_center.is_some()
+        {
             Some(crate::spend::types::AttributionContext::new(
                 meta.client_id.as_deref().unwrap_or("default"),
                 meta.project_id.as_deref().unwrap_or("default"),
@@ -803,7 +806,10 @@ pub fn find_policy_file_upward(start_dir: &Path) -> Option<PathBuf> {
         }
     }
     if let Some(home_dir) = dirs::home_dir() {
-        let dot_config = home_dir.join(".config").join("agentcontrol").join("policy.yaml");
+        let dot_config = home_dir
+            .join(".config")
+            .join("agentcontrol")
+            .join("policy.yaml");
         if dot_config.is_file() {
             return Some(dot_config);
         }
@@ -845,10 +851,18 @@ pub fn resolve_active_policy_with_dir(
 
     if let Some(p) = explicit_path {
         if p.exists() {
-            if let PolicyLoadResult::Loaded { policy: explicit_policy, .. } = load_policy(p, issuer_override.clone()) {
+            if let PolicyLoadResult::Loaded {
+                policy: explicit_policy,
+                ..
+            } = load_policy(p, issuer_override.clone())
+            {
                 if let Some(ref repo_path) = discovered_repo_path {
                     if repo_path != p {
-                        if let PolicyLoadResult::Loaded { policy: repo_policy, .. } = load_policy(repo_path, issuer_override.clone()) {
+                        if let PolicyLoadResult::Loaded {
+                            policy: repo_policy,
+                            ..
+                        } = load_policy(repo_path, issuer_override.clone())
+                        {
                             match repo_policy.merge_with_central(&explicit_policy) {
                                 Ok(merged) => {
                                     crate::logging::log_event(
@@ -886,7 +900,9 @@ pub fn resolve_active_policy_with_dir(
     }
 
     if let Some(discovered_path) = discovered_repo_path {
-        if let PolicyLoadResult::Loaded { policy, .. } = load_policy(&discovered_path, issuer_override) {
+        if let PolicyLoadResult::Loaded { policy, .. } =
+            load_policy(&discovered_path, issuer_override)
+        {
             return (Some(policy), Some(discovered_path));
         }
     }
@@ -949,9 +965,14 @@ mod tests {
         std::fs::write(&central_file, "version: \"2.0\"\ndefault_action: deny\ntools:\n  - name: tool_a\n    action: allow\n  - name: tool_b\n    action: deny\n").unwrap();
 
         let repo_file = dir.path().join(".agentcontrol.yaml");
-        std::fs::write(&repo_file, "version: \"2.0\"\ndefault_action: deny\ntools:\n  - name: tool_a\n    action: deny\n").unwrap();
+        std::fs::write(
+            &repo_file,
+            "version: \"2.0\"\ndefault_action: deny\ntools:\n  - name: tool_a\n    action: deny\n",
+        )
+        .unwrap();
 
-        let (policy_opt, _) = resolve_active_policy_with_dir(Some(&central_file), Some(dir.path()), None);
+        let (policy_opt, _) =
+            resolve_active_policy_with_dir(Some(&central_file), Some(dir.path()), None);
         assert!(policy_opt.is_some());
         let policy = policy_opt.unwrap();
         // Central permitted tool_a, but repo tightened it to deny
@@ -959,4 +980,3 @@ mod tests {
         assert_eq!(tool_a.action, "deny");
     }
 }
-

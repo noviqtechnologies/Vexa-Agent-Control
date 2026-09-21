@@ -138,7 +138,9 @@ pub fn verify_chain(log_path: &Path) -> VerifyResult {
         return VerifyResult::Error("log file contains no audit entries".to_string());
     }
 
-    VerifyResult::Valid { entry_count: total_entries }
+    VerifyResult::Valid {
+        entry_count: total_entries,
+    }
 }
 
 /// Verify the HMAC chain with full HMAC recomputation using the session secret.
@@ -232,5 +234,7 @@ pub fn verify_chain_with_secret(log_path: &Path, session_secret: &[u8]) -> Verif
         return VerifyResult::Error("log file contains no audit entries".to_string());
     }
 
-    VerifyResult::Valid { entry_count: total_entries }
+    VerifyResult::Valid {
+        entry_count: total_entries,
+    }
 }

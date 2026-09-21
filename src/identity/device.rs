@@ -127,7 +127,11 @@ impl DeviceIdentity {
     }
 
     /// Generate an Ed25519-signed JWT device assertion for authenticating against the Control Hub (PRD §FR-10.4).
-    pub fn create_assertion_token(&self, tenant_id: Option<&str>, user_id: Option<&str>) -> Result<String, String> {
+    pub fn create_assertion_token(
+        &self,
+        tenant_id: Option<&str>,
+        user_id: Option<&str>,
+    ) -> Result<String, String> {
         use base64::engine::general_purpose::URL_SAFE_NO_PAD;
         use serde_json::json;
 
@@ -307,7 +311,6 @@ pub fn save_device_token(token: &str) -> Result<(), String> {
 pub fn load_device_token() -> Option<String> {
     crate::identity::storage::CredentialStore::get("device_token").unwrap_or(None)
 }
-
 
 /// Persist enrolled Control Hub API URL to ~/.agentcontrol/hub_url and ProgramData (Windows) or /etc (Unix)
 pub fn save_hub_url(url: &str) -> Result<(), String> {

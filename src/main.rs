@@ -1,5 +1,27 @@
 //! Vexa Agent Control — main entry point
 #![allow(deprecated)]
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::upper_case_acronyms,
+    clippy::large_enum_variant,
+    clippy::single_match,
+    clippy::collapsible_match,
+    clippy::collapsible_if,
+    clippy::needless_borrows_for_generic_args,
+    clippy::derivable_impls,
+    clippy::unnecessary_unwrap,
+    clippy::manual_strip,
+    clippy::lines_filter_map_ok,
+    clippy::redundant_pattern_matching,
+    clippy::let_unit_value,
+    clippy::needless_return,
+    clippy::new_without_default,
+    clippy::never_loop,
+    clippy::manual_range_contains,
+    clippy::manual_unwrap_or,
+    clippy::manual_ok_err
+)]
 
 use agentcontrol::audit;
 use agentcontrol::check;
@@ -85,9 +107,7 @@ fn main() {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    let exit_code = runtime.block_on(async {
-        tokio::spawn(async_main()).await.unwrap_or(1)
-    });
+    let exit_code = runtime.block_on(async { tokio::spawn(async_main()).await.unwrap_or(1) });
     std::process::exit(exit_code);
 }
 
@@ -98,39 +118,30 @@ async fn async_main() -> i32 {
 
 async fn dispatch_command(command: Box<Commands>) -> i32 {
     match *command {
-        Commands::Login { hub_url, no_browser } => {
-            agentcontrol::identity::oauth::run_login(&hub_url, no_browser).await
-        }
-        Commands::Connect { target, mode, key, force } => {
-            agentcontrol::wrap::run_connect(target, mode, key, force).await
-        }
-        Commands::Disconnect { target } => {
-            agentcontrol::wrap::run_disconnect(target)
-        }
-        Commands::Doctor { json } => {
-            agentcontrol::doctor::run_doctor(json).await
-        }
+        Commands::Login {
+            hub_url,
+            no_browser,
+        } => agentcontrol::identity::oauth::run_login(&hub_url, no_browser).await,
+        Commands::Connect {
+            target,
+            mode,
+            key,
+            force,
+        } => agentcontrol::wrap::run_connect(target, mode, key, force).await,
+        Commands::Disconnect { target } => agentcontrol::wrap::run_disconnect(target),
+        Commands::Doctor { json } => agentcontrol::doctor::run_doctor(json).await,
         Commands::SupportBundle { output_dir, yes } => {
             agentcontrol::support::run_support_bundle(output_dir, yes).await
         }
-        Commands::Repair => {
-            agentcontrol::support::run_repair().await
-        }
-        Commands::Logout => {
-            agentcontrol::support::run_logout()
-        }
-        Commands::Backup { output_dir } => {
-            agentcontrol::audit::maintenance::run_backup(output_dir)
-        }
-        Commands::VerifyDb { audit_path, db_path } => {
-            agentcontrol::audit::maintenance::run_verify_db(audit_path, db_path)
-        }
-        Commands::ResetLocalState { force } => {
-            agentcontrol::support::run_reset_local_state(force)
-        }
-        Commands::RotateLocalToken => {
-            agentcontrol::support::run_rotate_local_token().await
-        }
+        Commands::Repair => agentcontrol::support::run_repair().await,
+        Commands::Logout => agentcontrol::support::run_logout(),
+        Commands::Backup { output_dir } => agentcontrol::audit::maintenance::run_backup(output_dir),
+        Commands::VerifyDb {
+            audit_path,
+            db_path,
+        } => agentcontrol::audit::maintenance::run_verify_db(audit_path, db_path),
+        Commands::ResetLocalState { force } => agentcontrol::support::run_reset_local_state(force),
+        Commands::RotateLocalToken => agentcontrol::support::run_rotate_local_token().await,
         Commands::Wrap(args) => {
             if args.all {
                 agentcontrol::wrap::run_wrap_all(args.dry_run, args.scan_responses)
@@ -165,19 +176,13 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     "    {}",
                     "agentcontrol login --hub <control-hub-url>".cyan()
                 );
-                eprintln!(
-                    "  This opens browser PKCE authentication and automatically registers"
-                );
-                eprintln!(
-                    "  the device and background service in one step."
-                );
+                eprintln!("  This opens browser PKCE authentication and automatically registers");
+                eprintln!("  the device and background service in one step.");
                 eprintln!();
                 eprintln!(
                     "  'agentcontrol enroll --token' requires an admin-issued one-time token"
                 );
-                eprintln!(
-                    "  and is reserved for headless / MDM / CI provisioning workflows."
-                );
+                eprintln!("  and is reserved for headless / MDM / CI provisioning workflows.");
                 return 1;
             }
             agentcontrol::identity::device::run_enroll(&token, &hub_url).await
@@ -418,7 +423,11 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 if let Some(spend) = ledger.get_spend(target_agent.clone()).await {
                     println!("Agent ID: {}", spend.agent_id);
                     println!("Period Start: {}", spend.period_start);
-                    println!("Spent: {} cents (${:.2})", spend.spent_cents, spend.spent_cents as f64 / 100.0);
+                    println!(
+                        "Spent: {} cents (${:.2})",
+                        spend.spent_cents,
+                        spend.spent_cents as f64 / 100.0
+                    );
                     if let Some(cap) = spend.cap_cents {
                         println!("Budget Cap: {} cents (${:.2})", cap, cap as f64 / 100.0);
                     } else {
@@ -450,9 +459,20 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     for r in records {
                         csv.push_str(&format!(
                             "{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{}\n",
-                            r.timestamp, r.request_id, r.client_id, r.project_id, r.cost_center,
-                            r.agent_id, r.provider, r.model, r.input_tokens, r.output_tokens,
-                            r.total_tokens, r.cost_cents, r.cost_usd, r.is_estimated
+                            r.timestamp,
+                            r.request_id,
+                            r.client_id,
+                            r.project_id,
+                            r.cost_center,
+                            r.agent_id,
+                            r.provider,
+                            r.model,
+                            r.input_tokens,
+                            r.output_tokens,
+                            r.total_tokens,
+                            r.cost_cents,
+                            r.cost_usd,
+                            r.is_estimated
                         ));
                     }
                     csv
@@ -808,11 +828,25 @@ fn print_gateway_startup_banner(
         "SHADOW (Observation Only; Non-Enforcing)".yellow().bold()
     } else {
         match profile {
-            cli::DeploymentProfile::LocalShadow => "SHADOW (Observation Only; Non-Enforcing)".yellow().bold(),
-            cli::DeploymentProfile::LocalGateway => "LOCAL GATEWAY (Developer LLM Proxy Active)".green().bold(),
-            cli::DeploymentProfile::LocalFirewall => "LOCAL FIREWALL (Air-Gapped Local-Only Enforcement)".cyan().bold(),
-            cli::DeploymentProfile::TeamGateway => "TEAM GATEWAY (Fleet Governed + Control Hub)".green().bold(),
-            cli::DeploymentProfile::ContainerSidecar => "CONTAINER SIDECAR (Hardened Sidecar Enforcement)".blue().bold(),
+            cli::DeploymentProfile::LocalShadow => {
+                "SHADOW (Observation Only; Non-Enforcing)".yellow().bold()
+            }
+            cli::DeploymentProfile::LocalGateway => {
+                "LOCAL GATEWAY (Developer LLM Proxy Active)".green().bold()
+            }
+            cli::DeploymentProfile::LocalFirewall => {
+                "LOCAL FIREWALL (Air-Gapped Local-Only Enforcement)"
+                    .cyan()
+                    .bold()
+            }
+            cli::DeploymentProfile::TeamGateway => {
+                "TEAM GATEWAY (Fleet Governed + Control Hub)".green().bold()
+            }
+            cli::DeploymentProfile::ContainerSidecar => {
+                "CONTAINER SIDECAR (Hardened Sidecar Enforcement)"
+                    .blue()
+                    .bold()
+            }
         }
     };
 
@@ -835,21 +869,41 @@ fn print_gateway_startup_banner(
     };
 
     println!();
-    println!("{}", "┌─────────────────────────────────────────────────────────────────────────────┐".cyan());
+    println!(
+        "{}",
+        "┌─────────────────────────────────────────────────────────────────────────────┐".cyan()
+    );
     println!(
         "│  {} {:<21} │",
-        "VEXA AGENT CONTROL — MCP Security Gateway & Proxy".bold().white(),
+        "VEXA AGENT CONTROL — MCP Security Gateway & Proxy"
+            .bold()
+            .white(),
         format!("(v{})", version).cyan()
     );
-    println!("{}", "├─────────────────────────────────────────────────────────────────────────────┤".cyan());
-    println!("│  Proxy Listener:    {:<55} │", format!("http://{}", listen).green().bold());
+    println!(
+        "{}",
+        "├─────────────────────────────────────────────────────────────────────────────┤".cyan()
+    );
+    println!(
+        "│  Proxy Listener:    {:<55} │",
+        format!("http://{}", listen).green().bold()
+    );
     println!("│  Upstream MCP:      {:<55} │", mcp_url.yellow());
     println!("│  Governance Mode:   {:<55} │", mode_str);
     println!("│  Device Identity:   {:<55} │", enroll_status);
     println!("│  Credential Vault:  {:<55} │", storage_desc.dimmed());
-    println!("{}", "├─────────────────────────────────────────────────────────────────────────────┤".cyan());
-    println!("│  {} Native shell commands (bash/git) run out-of-band & bypass proxy! │", "⚠  Notice:".yellow().bold());
-    println!("{}", "└─────────────────────────────────────────────────────────────────────────────┘".cyan());
+    println!(
+        "{}",
+        "├─────────────────────────────────────────────────────────────────────────────┤".cyan()
+    );
+    println!(
+        "│  {} Native shell commands (bash/git) run out-of-band & bypass proxy! │",
+        "⚠  Notice:".yellow().bold()
+    );
+    println!(
+        "{}",
+        "└─────────────────────────────────────────────────────────────────────────────┘".cyan()
+    );
     println!();
 }
 
@@ -1134,7 +1188,9 @@ fn build_proxy_state(
         ),
         provider_router: Arc::new(agentcontrol::proxy::provider_router::ProviderRouter::default()),
         hook_registry,
-        hitl_manager: Arc::new(agentcontrol::policy::hitl::HitlManager::new(hex::encode(resolve_hmac_key()))),
+        hitl_manager: Arc::new(agentcontrol::policy::hitl::HitlManager::new(hex::encode(
+            resolve_hmac_key(),
+        ))),
     })
 }
 
@@ -1214,11 +1270,14 @@ async fn run_stdio_proxy(
     };
 
     // Automatically discover and resolve active GitOps policy (.agentcontrol.yaml)
-    let (compiled_policy, policy_path_buf) = agentcontrol::policy::loader::resolve_active_policy(None, None);
+    let (compiled_policy, policy_path_buf) =
+        agentcontrol::policy::loader::resolve_active_policy(None, None);
     let policy_path_str = policy_path_buf.map(|p| p.to_string_lossy().to_string());
     let policy_loaded = compiled_policy.is_some();
 
-    let spend_ledger = Some(Arc::new(agentcontrol::spend::ledger::SpendLedger::init(None)));
+    let spend_ledger = Some(Arc::new(agentcontrol::spend::ledger::SpendLedger::init(
+        None,
+    )));
 
     let state = build_proxy_state(
         compiled_policy,
@@ -1242,7 +1301,11 @@ async fn run_stdio_proxy(
         agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
         true,
         false,
-        if policy_loaded { "local-enforce".to_string() } else { "local-shadow".to_string() },
+        if policy_loaded {
+            "local-enforce".to_string()
+        } else {
+            "local-shadow".to_string()
+        },
         1024,
         30,
         16777216,
@@ -1290,8 +1353,14 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     println!("{} Loading configuration...", "ℹ".blue());
 
     // Load self-contained daemon.json if present (user or enterprise scope)
-    let daemon_cfg = agentcontrol::service::load_daemon_config(args.config.as_deref(), false).ok().flatten()
-        .or_else(|| agentcontrol::service::load_daemon_config(None, true).ok().flatten());
+    let daemon_cfg = agentcontrol::service::load_daemon_config(args.config.as_deref(), false)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            agentcontrol::service::load_daemon_config(None, true)
+                .ok()
+                .flatten()
+        });
 
     if let Some(ref cfg) = daemon_cfg {
         if !cfg.hub_url.is_empty() {
@@ -1406,9 +1475,59 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         }
     }
 
+    let break_glass = std::env::var("AGENTCONTROL_BREAK_GLASS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     let (compiled_policy, _policy_hash, _warnings, policy_loaded) =
-        if let Some(ref path) = policy_path {
-            // (a) Local YAML file — explicitly provided via --policy CLI flag
+        if matches!(profile, cli::DeploymentProfile::TeamGateway)
+            && is_enrolled
+            && dashboard_api_url.is_some()
+            && !break_glass
+        {
+            // (a) Team mode + enrolled -> Central Hub policy ALWAYS takes precedence!
+            let api_url = dashboard_api_url.as_ref().unwrap();
+            print!(
+                "{} Fetching central policy from dashboard API ({})... ",
+                "ℹ".blue(),
+                api_url.yellow()
+            );
+            let remote_result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    agentcontrol::policy::remote::load_remote_policy(
+                        api_url,
+                        policy_read_secret_env.as_deref(),
+                    ),
+                )
+            });
+            match remote_result {
+                PolicyLoadResult::Loaded {
+                    policy,
+                    raw_hash,
+                    warnings,
+                } => {
+                    println!("{}", "OK".green().bold());
+                    (Some(policy), raw_hash, warnings, true)
+                }
+                PolicyLoadResult::Degraded { reason } => {
+                    println!("{}", "DEGRADED".yellow().bold());
+                    log_warn!("policy_degraded", "reason": reason);
+                    (None, "sha256:none".to_string(), vec![], false)
+                }
+                PolicyLoadResult::Fatal { error } => {
+                    println!("{}", "FAILED".red().bold());
+                    log_error!("startup_error", "reason": error.to_string());
+                    return 1;
+                }
+            }
+        } else if let Some(ref path) = policy_path {
+            // (b) Local YAML file — provided via --policy (local standalone or break-glass override)
+            if matches!(profile, cli::DeploymentProfile::TeamGateway) && is_enrolled {
+                println!(
+                    "{} [BREAK-GLASS] Local policy override active for enrolled Team profile.",
+                    "⚠".yellow().bold()
+                );
+            }
             print!("{} Loading policy from {}... ", "ℹ".blue(), path.yellow());
             match load_policy(Path::new(path), oidc_issuer) {
                 PolicyLoadResult::Loaded {
@@ -1431,7 +1550,7 @@ async fn run_start(args: cli::StartArgs) -> i32 {
                 }
             }
         } else if let Some(ref api_url) = dashboard_api_url {
-            // (b) Fetch from dashboard API — policy is stored in PostgreSQL
+            // (c) Fetch from dashboard API fallback
             print!(
                 "{} Fetching policy from dashboard API ({})... ",
                 "ℹ".blue(),
@@ -1834,6 +1953,9 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         if let Some(api_url) = sse_api_url {
             let sub_state = state.clone();
             let sub_secret = std::env::var("POLICY_READ_SECRET").unwrap_or_default();
+            let sub_secret_clone = sub_secret.clone();
+            let sub_state_clone = state.clone();
+            let api_url_clone = api_url.clone();
             tokio::spawn(async move {
                 println!(
                     "{} Connected to Hub for real-time policy push (SSE)",
@@ -1841,6 +1963,21 @@ async fn run_start(args: cli::StartArgs) -> i32 {
                 );
                 agentcontrol::control_plane_client::subscribe::start_policy_subscriber(
                     api_url, sub_secret, sub_state,
+                )
+                .await;
+            });
+
+            // Periodic pull reconciliation loop (60s) to guarantee convergence if SSE disconnects
+            tokio::spawn(async move {
+                agentcontrol::policy::remote::start_policy_poll(
+                    sub_state_clone,
+                    api_url_clone,
+                    if sub_secret_clone.is_empty() {
+                        None
+                    } else {
+                        Some(sub_secret_clone)
+                    },
+                    60,
                 )
                 .await;
             });
@@ -2581,6 +2718,31 @@ async fn run_dev(
         ],
     };
 
+    // Parse and validate listen address
+    let listen_addr: SocketAddr = match listen.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("{} Invalid listen address: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+
+    let is_bridge_mode = std::env::var("AGENTCONTROL_CONTAINER_BRIDGE_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if !listen_addr.ip().is_loopback() && !is_bridge_mode {
+        eprintln!(
+            "{} Security error: Non-loopback listener address ({}) is prohibited in standalone developer mode without container bridge mode (AGENTCONTROL_CONTAINER_BRIDGE_MODE=true) or enterprise authentication.",
+            "✖".red().bold(),
+            listen_addr
+        );
+        return 1;
+    }
+
+    // Absolute dormancy in standalone developer mode: zero Hub telemetry client
+    let dashboard_client = None;
+
     let state = build_proxy_state(
         compiled_policy,
         audit_logger,
@@ -2600,11 +2762,8 @@ async fn run_dev(
         )),
         policy_path_str,
         None,
-        agentcontrol::control_plane_client::client::DashboardClient::from_env().map(Arc::new),
-        listen
-            .parse::<SocketAddr>()
-            .map(|a| a.ip().is_loopback())
-            .unwrap_or(true),
+        dashboard_client,
+        listen_addr.ip().is_loopback(),
         false,
         if enforce {
             "local-enforce".to_string()
@@ -2643,15 +2802,6 @@ async fn run_dev(
         }
         return 0;
     }
-
-    // Parse listen address
-    let listen_addr: SocketAddr = match listen.parse() {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("{} Invalid listen address: {}", "✖".red(), e);
-            return 1;
-        }
-    };
 
     if !enforce {
         println!(

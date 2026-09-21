@@ -1520,7 +1520,8 @@ pub async fn handle_request(
                                         if let Some(clean_event) = sanitize_sse_block(&text) {
                                             has_emitted_content = true;
                                             streamed_chunks_count += 1;
-                                            streamed_tokens_est += (clean_event.len() as u64 / 4).max(1);
+                                            streamed_tokens_est +=
+                                                (clean_event.len() as u64 / 4).max(1);
                                             if tx
                                                 .send(Ok(hyper::body::Frame::data(Bytes::from(
                                                     clean_event,
@@ -1538,10 +1539,16 @@ pub async fn handle_request(
                                                         "tokens_settled": streamed_tokens_est
                                                     }),
                                                 );
-                                                let broker_cancel = crate::proxy::broker_client::BrokerClient::new(crate::identity::device::load_hub_url());
-                                                let req_id_cancel = req_uuid_for_broker_stream.clone();
+                                                let broker_cancel =
+                                                    crate::proxy::broker_client::BrokerClient::new(
+                                                        crate::identity::device::load_hub_url(),
+                                                    );
+                                                let req_id_cancel =
+                                                    req_uuid_for_broker_stream.clone();
                                                 tokio::spawn(async move {
-                                                    let _ = broker_cancel.cancel_brokered_stream(&req_id_cancel).await;
+                                                    let _ = broker_cancel
+                                                        .cancel_brokered_stream(&req_id_cancel)
+                                                        .await;
                                                 });
                                                 return;
                                             }
@@ -2852,9 +2859,14 @@ pub async fn handle_request(
                             .clone()
                             .unwrap_or_else(|| "anonymous".to_string());
                         let groups = session_clone.identity_groups.clone();
-                        let tot = total_tokens_val.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
+                        let tot = total_tokens_val
+                            .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
                         let cost_cents = if let Some(pricing) = &state_clone.pricing_table {
-                            pricing.estimate_cents(&model_clone, prompt_tokens_val as u64, completion_tokens_val as u64)
+                            pricing.estimate_cents(
+                                &model_clone,
+                                prompt_tokens_val as u64,
+                                completion_tokens_val as u64,
+                            )
                         } else {
                             (tot * 3 / 1000).max(1)
                         };
@@ -2864,7 +2876,9 @@ pub async fn handle_request(
                         let prov = provider_name_clone.clone();
                         let mdl = model_clone.clone();
                         tokio::spawn(async move {
-                            let _ = ledger_clone.check_and_increment(agent_id.clone(), groups, cost_cents).await;
+                            let _ = ledger_clone
+                                .check_and_increment(agent_id.clone(), groups, cost_cents)
+                                .await;
                             ledger_clone.settle_usage(
                                 req_id,
                                 agent_id,
@@ -3168,18 +3182,29 @@ pub async fn handle_request(
                         .unwrap_or_else(|| "anonymous".to_string());
                     let groups = session.identity_groups.clone();
                     let cost_cents = if let Some(pricing) = &state.pricing_table {
-                        pricing.estimate_cents(&model, prompt_tokens_val as u64, completion_tokens_val as u64)
+                        pricing.estimate_cents(
+                            &model,
+                            prompt_tokens_val as u64,
+                            completion_tokens_val as u64,
+                        )
                     } else {
-                        ((total_tokens.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)) * 3 / 1000).max(1)
+                        ((total_tokens
+                            .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64))
+                            * 3
+                            / 1000)
+                            .max(1)
                     };
                     let ledger_clone = ledger.clone();
                     let attr = req_attribution.clone();
                     let req_id = req_uuid.clone();
                     let prov = provider_name.clone();
                     let mdl = model.clone();
-                    let total_tok = total_tokens.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
+                    let total_tok =
+                        total_tokens.unwrap_or((prompt_tokens_val + completion_tokens_val) as u64);
                     tokio::spawn(async move {
-                        let _ = ledger_clone.check_and_increment(agent_id.clone(), groups, cost_cents).await;
+                        let _ = ledger_clone
+                            .check_and_increment(agent_id.clone(), groups, cost_cents)
+                            .await;
                         ledger_clone.settle_usage(
                             req_id,
                             agent_id,

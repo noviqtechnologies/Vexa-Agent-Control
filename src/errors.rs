@@ -49,12 +49,22 @@ impl ErrorCode {
 
     pub fn default_message(&self) -> &'static str {
         match self {
-            Self::AuthRequired => "Authentication required. Run 'agentcontrol login' to authenticate.",
-            Self::AuthExpired => "Device session expired. Re-authenticate via 'agentcontrol login'.",
-            Self::DeviceRevoked => "Device credentials revoked by administrator. Contact your security team.",
-            Self::KeyringUnavailable => "OS Keyring service is unavailable. Check system credentials provider.",
+            Self::AuthRequired => {
+                "Authentication required. Run 'agentcontrol login' to authenticate."
+            }
+            Self::AuthExpired => {
+                "Device session expired. Re-authenticate via 'agentcontrol login'."
+            }
+            Self::DeviceRevoked => {
+                "Device credentials revoked by administrator. Contact your security team."
+            }
+            Self::KeyringUnavailable => {
+                "OS Keyring service is unavailable. Check system credentials provider."
+            }
             Self::PortUnavailable => "Required loopback port is in use by another process.",
-            Self::ConfigConflict => "Configuration conflict detected between user edits and managed settings.",
+            Self::ConfigConflict => {
+                "Configuration conflict detected between user edits and managed settings."
+            }
             Self::BudgetExceeded => "Monthly or daily AI spend budget has been reached.",
             Self::McpPolicyDenied => "MCP tool invocation blocked by security policy rule.",
             Self::GatewayTimeout => "Gateway broker timed out while connecting upstream.",

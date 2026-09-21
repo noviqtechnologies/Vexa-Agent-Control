@@ -1,7 +1,7 @@
-use hyper::header::{HeaderMap, HeaderValue, ORIGIN};
-use hyper::StatusCode;
 use agentcontrol::proxy::egress::is_blocked_ssrf_target;
 use agentcontrol::proxy::server::validate_origin_header;
+use hyper::header::{HeaderMap, HeaderValue, ORIGIN};
+use hyper::StatusCode;
 
 #[test]
 fn test_origin_header_validation_allows_desktop_and_local() {

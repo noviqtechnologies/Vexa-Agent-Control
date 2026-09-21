@@ -55,7 +55,10 @@ fn test_offline_cached_policy_integrity() {
     // When content is tampered with:
     save_cached_policy("tampered content: evil", &expected_hash);
     let tampered = load_cached_policy();
-    assert!(tampered.is_none(), "Tampered policy must fail hash verification");
+    assert!(
+        tampered.is_none(),
+        "Tampered policy must fail hash verification"
+    );
 }
 
 #[test]
@@ -120,7 +123,10 @@ fn test_audit_hmac_chain_verification_and_tamper_detection() {
 
     // 4. Verify HMAC recomputation catches single-field payload modification
     match verify_chain_with_secret(&log_path, secret) {
-        VerifyResult::Invalid { entry_index, reason } => {
+        VerifyResult::Invalid {
+            entry_index,
+            reason,
+        } => {
             assert_eq!(entry_index, 2);
             assert!(reason.contains("HMAC mismatch"));
         }
@@ -143,9 +149,13 @@ fn test_dual_store_backup_and_sqlite_vacuum() {
     // Create an isolated test SQLite database and verify it with run_verify_db
     let test_db = backup_dir.path().join("verified_events.db");
     let conn = rusqlite::Connection::open(&test_db).unwrap();
-    conn.execute("CREATE TABLE test_tab (id INTEGER PRIMARY KEY);", []).unwrap();
+    conn.execute("CREATE TABLE test_tab (id INTEGER PRIMARY KEY);", [])
+        .unwrap();
     drop(conn);
 
-    let verify_code = run_verify_db(Some(backup_dir.path().join("nonexistent_audit.jsonl")), Some(test_db));
+    let verify_code = run_verify_db(
+        Some(backup_dir.path().join("nonexistent_audit.jsonl")),
+        Some(test_db),
+    );
     assert_eq!(verify_code, 0);
 }

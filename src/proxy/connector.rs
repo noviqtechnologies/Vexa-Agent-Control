@@ -31,13 +31,31 @@ impl fmt::Display for EgressBlockReason {
             Self::BlockedMalformedTarget(msg) => write!(f, "Malformed target authority: {}", msg),
             Self::BlockedAirGapped(msg) => write!(f, "Air-gapped profile violation: {}", msg),
             Self::BlockedProviderNotAllowlisted(host) => {
-                write!(f, "Host '{}' is not in the approved LLM provider allowlist", host)
+                write!(
+                    f,
+                    "Host '{}' is not in the approved LLM provider allowlist",
+                    host
+                )
             }
-            Self::BlockedPort(port) => write!(f, "Port {} is not authorized for cloud provider egress", port),
-            Self::BlockedLoopback => write!(f, "Loopback egress target blocked (localhost/127.0.0.0/8/::1)"),
-            Self::BlockedPrivateSubnet(ip) => write!(f, "Private subnet target blocked (RFC 1918 / ULA: {})", ip),
-            Self::BlockedCgnat => write!(f, "Shared / CGNAT target blocked (RFC 6598: 100.64.0.0/10)"),
-            Self::BlockedLinkLocal => write!(f, "Link-local / cloud metadata target blocked (169.254.0.0/16 / fe80::/10)"),
+            Self::BlockedPort(port) => write!(
+                f,
+                "Port {} is not authorized for cloud provider egress",
+                port
+            ),
+            Self::BlockedLoopback => write!(
+                f,
+                "Loopback egress target blocked (localhost/127.0.0.0/8/::1)"
+            ),
+            Self::BlockedPrivateSubnet(ip) => {
+                write!(f, "Private subnet target blocked (RFC 1918 / ULA: {})", ip)
+            }
+            Self::BlockedCgnat => {
+                write!(f, "Shared / CGNAT target blocked (RFC 6598: 100.64.0.0/10)")
+            }
+            Self::BlockedLinkLocal => write!(
+                f,
+                "Link-local / cloud metadata target blocked (169.254.0.0/16 / fe80::/10)"
+            ),
             Self::BlockedMulticast => write!(f, "Multicast or reserved target blocked"),
             Self::BlockedDnsResolutionFailed(msg) => write!(f, "DNS resolution failed: {}", msg),
         }
@@ -109,12 +127,16 @@ pub fn is_allowed_provider_host(host: &str, custom_providers: &[String]) -> bool
 pub fn canonicalize_host(raw_host: &str) -> Result<String, EgressBlockReason> {
     let mut h = raw_host.trim().to_ascii_lowercase();
     if h.is_empty() {
-        return Err(EgressBlockReason::BlockedMalformedTarget("Host is empty".into()));
+        return Err(EgressBlockReason::BlockedMalformedTarget(
+            "Host is empty".into(),
+        ));
     }
 
     // Disallow userinfo (@) in host authority
     if h.contains('@') {
-        return Err(EgressBlockReason::BlockedMalformedTarget("Userinfo (@) not allowed in authority".into()));
+        return Err(EgressBlockReason::BlockedMalformedTarget(
+            "Userinfo (@) not allowed in authority".into(),
+        ));
     }
 
     // Strip bracket notation for IPv6
@@ -122,7 +144,9 @@ pub fn canonicalize_host(raw_host: &str) -> Result<String, EgressBlockReason> {
         if let Some(idx) = h.find(']') {
             h = h[1..idx].to_string();
         } else {
-            return Err(EgressBlockReason::BlockedMalformedTarget("Unclosed IPv6 bracket".into()));
+            return Err(EgressBlockReason::BlockedMalformedTarget(
+                "Unclosed IPv6 bracket".into(),
+            ));
         }
     } else if let Some((base, port)) = h.rsplit_once(':') {
         // If there's a port on IPv4 or hostname, strip it
@@ -137,12 +161,17 @@ pub fn canonicalize_host(raw_host: &str) -> Result<String, EgressBlockReason> {
     }
 
     if h.is_empty() {
-        return Err(EgressBlockReason::BlockedMalformedTarget("Host is empty after stripping".into()));
+        return Err(EgressBlockReason::BlockedMalformedTarget(
+            "Host is empty after stripping".into(),
+        ));
     }
 
     // Check for illegal characters
-    if h.contains('/') || h.contains('\\') || h.contains('?') || h.contains('#') || h.contains(' ') {
-        return Err(EgressBlockReason::BlockedMalformedTarget("Host contains illegal URI characters".into()));
+    if h.contains('/') || h.contains('\\') || h.contains('?') || h.contains('#') || h.contains(' ')
+    {
+        return Err(EgressBlockReason::BlockedMalformedTarget(
+            "Host contains illegal URI characters".into(),
+        ));
     }
 
     Ok(h)
@@ -271,7 +300,9 @@ pub async fn classify_and_resolve_destination(
         // Enforce cloud provider allowlist
         if is_local_gateway {
             if !is_allowed_provider_host(&canonical_host, custom_providers) {
-                return Err(EgressBlockReason::BlockedProviderNotAllowlisted(canonical_host));
+                return Err(EgressBlockReason::BlockedProviderNotAllowlisted(
+                    canonical_host,
+                ));
             }
             // Enforce standard TLS port 443 for cloud LLM providers
             if target_port != 443 {
@@ -298,9 +329,11 @@ pub async fn classify_and_resolve_destination(
         }
     }
 
-    approved_addr.map(|addr| (addr, canonical_host)).ok_or_else(|| {
-        EgressBlockReason::BlockedDnsResolutionFailed("No address records returned".into())
-    })
+    approved_addr
+        .map(|addr| (addr, canonical_host))
+        .ok_or_else(|| {
+            EgressBlockReason::BlockedDnsResolutionFailed("No address records returned".into())
+        })
 }
 
 /// Create a governed, safe HTTP client with redirects disabled and ambient proxies neutralized.
@@ -313,14 +346,36 @@ pub fn create_governed_client(timeout_secs: u64) -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
+/// Create a governed, safe HTTP client pinned directly to an approved SocketAddr,
+/// with DNS re-resolution disabled, redirects disabled, and ambient proxies neutralized.
+pub fn create_governed_pinned_client(
+    canonical_host: &str,
+    pinned_addr: SocketAddr,
+    timeout_secs: u64,
+) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .resolve(canonical_host, pinned_addr)
+        .build()
+        .unwrap_or_else(|_| create_governed_client(timeout_secs))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_canonicalize_host() {
-        assert_eq!(canonicalize_host("api.openai.com.").unwrap(), "api.openai.com");
-        assert_eq!(canonicalize_host("API.ANTHROPIC.COM").unwrap(), "api.anthropic.com");
+        assert_eq!(
+            canonicalize_host("api.openai.com.").unwrap(),
+            "api.openai.com"
+        );
+        assert_eq!(
+            canonicalize_host("API.ANTHROPIC.COM").unwrap(),
+            "api.anthropic.com"
+        );
         assert_eq!(canonicalize_host("[::1]").unwrap(), "::1");
         assert_eq!(canonicalize_host("127.0.0.1:8080").unwrap(), "127.0.0.1");
         assert!(canonicalize_host("user:pass@api.openai.com").is_err());
@@ -333,9 +388,15 @@ mod tests {
         assert!(is_allowed_provider_host("api.openai.com", &custom));
         assert!(is_allowed_provider_host("api.anthropic.com", &custom));
         assert!(is_allowed_provider_host("api.groq.com", &custom));
-        assert!(is_allowed_provider_host("generativelanguage.googleapis.com", &custom));
+        assert!(is_allowed_provider_host(
+            "generativelanguage.googleapis.com",
+            &custom
+        ));
         assert!(is_allowed_provider_host("myorg.openai.azure.com", &custom));
-        assert!(is_allowed_provider_host("bedrock-runtime.us-east-1.amazonaws.com", &custom));
+        assert!(is_allowed_provider_host(
+            "bedrock-runtime.us-east-1.amazonaws.com",
+            &custom
+        ));
         assert!(is_allowed_provider_host("custom.llm.corp", &custom));
         assert!(is_allowed_provider_host("agent.internal.ai", &custom));
 
@@ -386,29 +447,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_classify_and_resolve_destination_air_gapped() {
-        let err = classify_and_resolve_destination(
-            "api.openai.com",
-            443,
-            "local-firewall",
-            false,
-            &[],
-        )
-        .await
-        .unwrap_err();
+        let err =
+            classify_and_resolve_destination("api.openai.com", 443, "local-firewall", false, &[])
+                .await
+                .unwrap_err();
         assert!(matches!(err, EgressBlockReason::BlockedAirGapped(_)));
     }
 
     #[tokio::test]
     async fn test_classify_and_resolve_destination_unallowlisted() {
-        let err = classify_and_resolve_destination(
-            "example.com",
-            443,
-            "local-gateway",
-            false,
-            &[],
-        )
-        .await
-        .unwrap_err();
+        let err = classify_and_resolve_destination("example.com", 443, "local-gateway", false, &[])
+            .await
+            .unwrap_err();
         assert_eq!(
             err,
             EgressBlockReason::BlockedProviderNotAllowlisted("example.com".to_string())

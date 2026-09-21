@@ -1,5 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use agentcontrol::proxy::broker_client::BrokerLLMRequest;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::json;
 
 fn bench_broker_request_construction(c: &mut Criterion) {

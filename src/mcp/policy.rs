@@ -45,7 +45,10 @@ impl JsonRpcError {
     pub fn policy_violation(reason: &str) -> Self {
         Self {
             code: -32001,
-            message: format!("Policy Violation: Sensitive Parameter Detected ({})", reason),
+            message: format!(
+                "Policy Violation: Sensitive Parameter Detected ({})",
+                reason
+            ),
             data: None,
         }
     }
@@ -77,7 +80,8 @@ fn get_api_key_regex() -> &'static Regex {
 
 fn get_private_key_regex() -> &'static Regex {
     PRIVATE_KEY_REGEX.get_or_init(|| {
-        Regex::new(r#"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----"#).unwrap()
+        Regex::new(r#"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----"#)
+            .unwrap()
     })
 }
 
@@ -90,12 +94,8 @@ fn get_conn_string_regex() -> &'static Regex {
 /// Computes the maximum nesting depth of a JSON structure.
 pub fn calculate_json_depth(val: &Value) -> usize {
     match val {
-        Value::Array(arr) => {
-            1 + arr.iter().map(calculate_json_depth).max().unwrap_or(0)
-        }
-        Value::Object(obj) => {
-            1 + obj.values().map(calculate_json_depth).max().unwrap_or(0)
-        }
+        Value::Array(arr) => 1 + arr.iter().map(calculate_json_depth).max().unwrap_or(0),
+        Value::Object(obj) => 1 + obj.values().map(calculate_json_depth).max().unwrap_or(0),
         _ => 1,
     }
 }
@@ -111,7 +111,9 @@ pub fn scan_and_redact_text(text: &str) -> (String, Vec<DlpFinding>) {
             pattern_type: "API_KEY",
             match_preview: "[REDACTED:API_KEY]".to_string(),
         });
-        current = api_key_re.replace_all(&current, "[REDACTED:API_KEY]").to_string();
+        current = api_key_re
+            .replace_all(&current, "[REDACTED:API_KEY]")
+            .to_string();
     }
 
     let priv_key_re = get_private_key_regex();
@@ -120,7 +122,9 @@ pub fn scan_and_redact_text(text: &str) -> (String, Vec<DlpFinding>) {
             pattern_type: "PRIVATE_KEY",
             match_preview: "[REDACTED:PRIVATE_KEY]".to_string(),
         });
-        current = priv_key_re.replace_all(&current, "[REDACTED:PRIVATE_KEY]").to_string();
+        current = priv_key_re
+            .replace_all(&current, "[REDACTED:PRIVATE_KEY]")
+            .to_string();
     }
 
     let conn_str_re = get_conn_string_regex();
@@ -129,7 +133,9 @@ pub fn scan_and_redact_text(text: &str) -> (String, Vec<DlpFinding>) {
             pattern_type: "CONNECTION_STRING",
             match_preview: "[REDACTED:CONNECTION_STRING]".to_string(),
         });
-        current = conn_str_re.replace_all(&current, "[REDACTED:CONNECTION_STRING]").to_string();
+        current = conn_str_re
+            .replace_all(&current, "[REDACTED:CONNECTION_STRING]")
+            .to_string();
     }
 
     (current, findings)

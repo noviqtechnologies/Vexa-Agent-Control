@@ -9,21 +9,44 @@
 //! protect run left an uncommitted `protect_journal.json`, it is automatically detected
 //! and rolled back before new operations proceed.
 
+use colored::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use colored::*;
 
 use crate::wrap::manifest::OwnershipManifest;
+
+/// Durable atomic file writing helper with sync_all and rename.
+pub fn write_file_durable(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp_path = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
+    {
+        let mut file = fs::File::create(&tmp_path)?;
+        use std::io::Write;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+    }
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
+/// Pre-mutation preimage for an individual configuration or auxiliary file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JournalFilePreimage {
+    pub path: PathBuf,
+    pub existed_before: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pre_mutation_bytes: Option<Vec<u8>>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct JournalTargetEntry {
     pub target: String,
-    pub config_path: PathBuf,
-    pub existed_before: bool,
-    pub pre_mutation_content: Option<String>,
+    pub files: Vec<JournalFilePreimage>,
     pub manifest_target: String,
 }
 
@@ -58,26 +81,58 @@ impl ProtectJournal {
         Ok(dir.join("protect_journal.json"))
     }
 
-    /// Record target before modification
-    pub fn record_target_start(&mut self, target: &str, config_path: &Path, manifest_target: &str) {
-        let existed = config_path.exists();
-        let content = if existed {
-            fs::read_to_string(config_path).ok()
-        } else {
-            None
-        };
+    /// Record target and capture byte preimages for all its files before modification
+    pub fn record_target_start(
+        &mut self,
+        target: &str,
+        files_to_record: &[&Path],
+        manifest_target: &str,
+    ) {
+        let mut file_entries = Vec::new();
+        for file_path in files_to_record {
+            let existed = file_path.exists();
+            let bytes = if existed {
+                fs::read(file_path).ok()
+            } else {
+                None
+            };
+            file_entries.push(JournalFilePreimage {
+                path: file_path.to_path_buf(),
+                existed_before: existed,
+                pre_mutation_bytes: bytes,
+            });
+        }
 
-        self.targets_attempted.push(target.to_string());
+        if !self.targets_attempted.contains(&target.to_string()) {
+            self.targets_attempted.push(target.to_string());
+        }
         self.entries.insert(
             target.to_string(),
             JournalTargetEntry {
                 target: target.to_string(),
-                config_path: config_path.to_path_buf(),
-                existed_before: existed,
-                pre_mutation_content: content,
+                files: file_entries,
                 manifest_target: manifest_target.to_string(),
             },
         );
+    }
+
+    /// Add an auxiliary file (e.g. auth.json) to an already started target entry
+    pub fn record_auxiliary_file(&mut self, target: &str, file_path: &Path) {
+        if let Some(entry) = self.entries.get_mut(target) {
+            if !entry.files.iter().any(|f| f.path == file_path) {
+                let existed = file_path.exists();
+                let bytes = if existed {
+                    fs::read(file_path).ok()
+                } else {
+                    None
+                };
+                entry.files.push(JournalFilePreimage {
+                    path: file_path.to_path_buf(),
+                    existed_before: existed,
+                    pre_mutation_bytes: bytes,
+                });
+            }
+        }
     }
 
     /// Record target successfully modified
@@ -87,15 +142,12 @@ impl ProtectJournal {
         }
     }
 
-    /// Save journal atomically to disk
+    /// Save journal atomically and durably to disk
     pub fn save(&self) -> io::Result<()> {
         let path = Self::journal_path()?;
-        let json = serde_json::to_string_pretty(self)
+        let json = serde_json::to_vec_pretty(self)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let tmp_path = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
-        fs::write(&tmp_path, json)?;
-        fs::rename(&tmp_path, &path)?;
-        Ok(())
+        write_file_durable(&path, &json)
     }
 
     /// Load existing journal from disk
@@ -108,6 +160,19 @@ impl ProtectJournal {
         let journal: Self = serde_json::from_str(&content)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Ok(Some(journal))
+    }
+
+    /// Quarantine corrupted journal file by renaming it with a timestamp
+    pub fn quarantine_corrupted_journal() -> io::Result<Option<PathBuf>> {
+        let path = Self::journal_path()?;
+        if path.exists() {
+            let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+            let quarantine_path = path.with_extension(format!("corrupt.{}", ts));
+            fs::rename(&path, &quarantine_path)?;
+            Ok(Some(quarantine_path))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Delete journal file from disk upon successful commit
@@ -124,19 +189,22 @@ impl ProtectJournal {
         Self::delete_file()
     }
 
-
-    /// Roll back all completed targets in reverse order
+    /// Roll back all attempted and in-progress targets in reverse order
     pub fn rollback(&self) -> Result<Vec<String>, String> {
         let mut rolled_back = Vec::new();
-        for target in self.targets_completed.iter().rev() {
+        let mut attempted_rev = self.targets_attempted.clone();
+        attempted_rev.reverse();
+
+        for target in &attempted_rev {
             if let Some(entry) = self.entries.get(target) {
-                if entry.existed_before {
-                    if let Some(ref content) = entry.pre_mutation_content {
-                        fs::write(&entry.config_path, content)
-                            .map_err(|e| format!("Failed to restore {}: {}", entry.config_path.display(), e))?;
+                for file_entry in entry.files.iter().rev() {
+                    if file_entry.existed_before {
+                        if let Some(ref bytes) = file_entry.pre_mutation_bytes {
+                            let _ = write_file_durable(&file_entry.path, bytes);
+                        }
+                    } else if file_entry.path.exists() {
+                        let _ = fs::remove_file(&file_entry.path);
                     }
-                } else if entry.config_path.exists() {
-                    let _ = fs::remove_file(&entry.config_path);
                 }
                 // Also remove ownership manifest if created
                 let _ = OwnershipManifest::delete(&entry.manifest_target);
@@ -162,7 +230,11 @@ impl ProtectJournal {
                         eprintln!(
                             "  {} Rolled back targets: {}",
                             "✔".green(),
-                            if reverted.is_empty() { "none".to_string() } else { reverted.join(", ") }
+                            if reverted.is_empty() {
+                                "none".to_string()
+                            } else {
+                                reverted.join(", ")
+                            }
                         );
                         Ok(true)
                     }
@@ -174,8 +246,14 @@ impl ProtectJournal {
             }
             Ok(None) => Ok(false),
             Err(e) => {
-                eprintln!("{} Warning: failed to parse protect journal: {}", "⚠".yellow(), e);
-                let _ = Self::delete_file();
+                eprintln!("{} Warning: failed to parse protect journal: {}. Quarantining corrupted journal...", "⚠".yellow(), e);
+                if let Ok(Some(qpath)) = Self::quarantine_corrupted_journal() {
+                    eprintln!(
+                        "  {} Quarantined unreadable journal to: {}",
+                        "✔".green(),
+                        qpath.display().to_string().cyan()
+                    );
+                }
                 Ok(false)
             }
         }
@@ -194,17 +272,44 @@ mod tests {
         fs::write(&config_file, r#"{"original": true}"#).unwrap();
 
         let mut journal = ProtectJournal::new("local-gateway");
-        journal.record_target_start("test_target", &config_file, "test_manifest");
+        journal.record_target_start("test_target", &[&config_file], "test_manifest");
         journal.record_target_success("test_target");
 
         // Simulate modification
         fs::write(&config_file, r#"{"modified": true}"#).unwrap();
+        assert_eq!(
+            fs::read_to_string(&config_file).unwrap(),
+            r#"{"modified": true}"#
+        );
 
-        // Rollback
-        let rolled_back = journal.rollback().unwrap();
-        assert_eq!(rolled_back, vec!["test_target"]);
+        // Roll back
+        let reverted = journal.rollback().unwrap();
+        assert_eq!(reverted, vec!["test_target"]);
+        assert_eq!(
+            fs::read_to_string(&config_file).unwrap(),
+            r#"{"original": true}"#
+        );
+    }
 
-        let restored = fs::read_to_string(&config_file).unwrap();
-        assert_eq!(restored, r#"{"original": true}"#);
+    #[test]
+    fn test_protect_journal_in_progress_rollback() {
+        let dir = tempdir().unwrap();
+        let config_file = dir.path().join("in_flight_config.json");
+        fs::write(&config_file, r#"{"clean": true}"#).unwrap();
+
+        let mut journal = ProtectJournal::new("local-gateway");
+        // Target is started (in attempted list) but NEVER marked success
+        journal.record_target_start("in_flight_target", &[&config_file], "in_flight_manifest");
+
+        // Interrupted midway after mutating file
+        fs::write(&config_file, r#"{"corrupt_partial": true}"#).unwrap();
+
+        // Roll back must restore in-progress target too
+        let reverted = journal.rollback().unwrap();
+        assert_eq!(reverted, vec!["in_flight_target"]);
+        assert_eq!(
+            fs::read_to_string(&config_file).unwrap(),
+            r#"{"clean": true}"#
+        );
     }
 }

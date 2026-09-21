@@ -42,13 +42,16 @@ pub async fn handle_egress(
         .authority()
         .map(|a| a.host().to_string())
         .unwrap_or_default();
-    let target_port = uri.authority().and_then(|a| a.port_u16()).unwrap_or_else(|| {
-        if method == hyper::Method::CONNECT {
-            443
-        } else {
-            80
-        }
-    });
+    let target_port = uri
+        .authority()
+        .and_then(|a| a.port_u16())
+        .unwrap_or_else(|| {
+            if method == hyper::Method::CONNECT {
+                443
+            } else {
+                80
+            }
+        });
 
     let allow_loopback = std::env::var("AGENTCONTROL_ALLOW_LOOPBACK_EGRESS")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -116,6 +119,7 @@ pub async fn handle_egress(
                                     upgraded,
                                     target_host_clone,
                                     target_port,
+                                    pinned_addr,
                                     sid,
                                     isub,
                                     igroups,
@@ -254,8 +258,28 @@ pub async fn handle_egress(
         tokio::task::spawn(async move {
             match websocket.await {
                 Ok(client_ws) => {
-                    // Connect to target WebSocket server
-                    let target_ws = tokio_tungstenite::connect_async(&target_url_str).await;
+                    // Connect to target WebSocket server via pinned SocketAddr (immune to DNS rebinding)
+                    let target_ws = match tokio::net::TcpStream::connect(pinned_addr).await {
+                        Ok(tcp_stream) => {
+                            if target_port == 443 || target_url_str.starts_with("wss://") {
+                                tokio_tungstenite::client_async_tls_with_config(
+                                    &target_url_str,
+                                    tcp_stream,
+                                    None,
+                                    None,
+                                )
+                                .await
+                            } else {
+                                tokio_tungstenite::client_async(
+                                    &target_url_str,
+                                    tokio_tungstenite::MaybeTlsStream::Plain(tcp_stream),
+                                )
+                                .await
+                            }
+                        }
+                        Err(e) => Err(tokio_tungstenite::tungstenite::Error::Io(e)),
+                    };
+
                     match target_ws {
                         Ok((server_ws, _)) => {
                             use futures_util::{SinkExt, StreamExt};
@@ -494,8 +518,9 @@ pub async fn handle_egress(
         }
     }
 
-    let req_builder = state
-        .http_client
+    let pinned_client =
+        super::connector::create_governed_pinned_client(&target_host, pinned_addr, 30);
+    let req_builder = pinned_client
         .request(reqwest_method, uri.to_string())
         .headers(req_headers)
         .body(body_bytes);

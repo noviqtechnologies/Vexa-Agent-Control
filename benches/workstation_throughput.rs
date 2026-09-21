@@ -1,5 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use agentcontrol::mcp::policy::{inspect_jsonrpc_frame, scan_and_redact_text};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use serde_json::json;
 
 fn bench_jsonrpc_frame_inspection(c: &mut Criterion) {
@@ -86,5 +86,9 @@ fn bench_parameter_dlp_redaction(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_jsonrpc_frame_inspection, bench_parameter_dlp_redaction);
+criterion_group!(
+    benches,
+    bench_jsonrpc_frame_inspection,
+    bench_parameter_dlp_redaction
+);
 criterion_main!(benches);

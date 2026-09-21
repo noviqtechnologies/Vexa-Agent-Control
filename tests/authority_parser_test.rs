@@ -1,6 +1,6 @@
+use agentcontrol::proxy::server::{is_loopback, validate_host_header};
 use hyper::header::{HeaderMap, HeaderValue, HOST};
 use hyper::StatusCode;
-use agentcontrol::proxy::server::{is_loopback, validate_host_header};
 
 #[test]
 fn test_authority_parser_valid_loopback() {

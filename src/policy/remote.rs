@@ -17,9 +17,9 @@
 //! gateway never silently fails to start because the dashboard is temporarily
 //! unavailable during a rolling deployment.
 
-use colored::Colorize;
 use crate::logging::{self, Level};
 use crate::policy::loader::{load_policy_from_str, PolicyLoadResult};
+use colored::Colorize;
 use serde::Deserialize;
 
 /// JSON shape returned by GET /api/v1/policy/active or /api/v2/device/policy/active
@@ -204,12 +204,15 @@ pub fn cached_policy_path() -> Option<std::path::PathBuf> {
 /// Save validated policy and its cryptographic hash to local cache
 pub fn save_cached_policy(yaml: &str, raw_hash: &str) {
     if let Some(path) = cached_policy_path() {
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let _ = std::fs::write(&path, yaml);
+        let _ = crate::wrap::journal::write_file_durable(&path, yaml.as_bytes());
         let hash_path = path.with_extension("sha256");
-        let _ = std::fs::write(&hash_path, raw_hash);
+        let _ = crate::wrap::journal::write_file_durable(&hash_path, raw_hash.as_bytes());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            let _ = std::fs::set_permissions(&hash_path, std::fs::Permissions::from_mode(0o600));
+        }
     }
 }
 
@@ -218,7 +221,10 @@ pub fn load_cached_policy() -> Option<(String, String)> {
     let path = cached_policy_path()?;
     let hash_path = path.with_extension("sha256");
     if path.exists() && hash_path.exists() {
-        if let (Ok(content), Ok(saved_hash)) = (std::fs::read_to_string(&path), std::fs::read_to_string(&hash_path)) {
+        if let (Ok(content), Ok(saved_hash)) = (
+            std::fs::read_to_string(&path),
+            std::fs::read_to_string(&hash_path),
+        ) {
             use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
             hasher.update(content.as_bytes());
@@ -306,7 +312,6 @@ pub async fn load_remote_policy(
         }
     }
 }
-
 
 /// Background polling task. Runs indefinitely, waking every `interval_secs`
 /// seconds to check whether the policy version has changed.

@@ -31,5 +31,8 @@ fn test_finops_budget_exceeded_error_formatting() {
 
     assert_eq!(ide_error_payload["error"]["code"], "BUDGET_EXCEEDED");
     assert_eq!(ide_error_payload["error"]["type"], "budget_exceeded");
-    assert!(ide_error_payload["error"]["message"].as_str().unwrap().contains("Contact your administrator."));
+    assert!(ide_error_payload["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Contact your administrator."));
 }

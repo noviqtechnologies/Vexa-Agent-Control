@@ -235,7 +235,8 @@ impl HitlManager {
             #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
             {
                 // Linux / BSD: Check for GUI display server
-                let has_display = std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
+                let has_display =
+                    std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
 
                 if has_display {
                     // Try zenity first

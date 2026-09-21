@@ -33,7 +33,6 @@ fn create_test_state_with_drift(
         allowed_providers: vec![],
     });
 
-
     (state, dir)
 }
 

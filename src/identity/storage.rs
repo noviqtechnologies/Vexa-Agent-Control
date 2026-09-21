@@ -22,7 +22,9 @@ impl StorageType {
     pub fn description(&self) -> &'static str {
         match self {
             Self::OsKeyring => "OS Native Keyring / Credential Vault",
-            Self::StrictPermFile => "STRICT_PERM_FILE (Headless Mode; Filesystem Access Control Only)",
+            Self::StrictPermFile => {
+                "STRICT_PERM_FILE (Headless Mode; Filesystem Access Control Only)"
+            }
             Self::WindowsUserFallback => "Windows User Application Data Store",
         }
     }
@@ -196,4 +198,3 @@ mod tests {
         assert_eq!(after_delete.unwrap(), None);
     }
 }
-

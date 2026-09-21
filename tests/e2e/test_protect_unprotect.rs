@@ -237,9 +237,7 @@ mod unprotect_tests {
         if generic_ide::wrap_generic("Cursor", config_path.clone(), false).is_err() {
             return; // Skip if env cannot wrap (e.g. no binary resolution)
         }
-        if let Ok(_) =
-            generic_ide::unwrap_generic("Cursor", config_path.clone(), /*force=*/ false)
-        {
+        if generic_ide::unwrap_generic("Cursor", config_path.clone(), /*force=*/ false).is_ok() {
             let restored = fs::read_to_string(&config_path).unwrap();
             assert_eq!(
                 original, restored,

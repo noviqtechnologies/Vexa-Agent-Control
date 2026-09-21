@@ -172,7 +172,8 @@ impl LocalKeyCache {
                 let m_lower = m.to_lowercase();
                 m_lower == "*"
                     || m_lower == model_lower
-                    || (m_lower.ends_with('*') && model_lower.starts_with(&m_lower[..m_lower.len() - 1]))
+                    || (m_lower.ends_with('*')
+                        && model_lower.starts_with(&m_lower[..m_lower.len() - 1]))
             });
             if !matched {
                 return Err(format!(

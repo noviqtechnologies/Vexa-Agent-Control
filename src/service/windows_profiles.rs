@@ -48,27 +48,24 @@ pub fn enumerate_user_profiles() -> Vec<PathBuf> {
 pub fn resolve_all_profile_ide_configs(ide_filename: &str) -> Vec<PathBuf> {
     let mut results = Vec::new();
     for profile in enumerate_user_profiles() {
-        let appdata_roaming = profile.join("AppData").join("Roaming");
-        if appdata_roaming.exists() {
-            let target = match ide_filename {
-                "claude" => appdata_roaming
-                    .join("Claude")
-                    .join("claude_desktop_config.json"),
-                "cursor" => appdata_roaming
-                    .join("Cursor")
-                    .join("User")
-                    .join("globalStorage")
-                    .join("storage.json"),
-                "vscode" => appdata_roaming
-                    .join("Code")
-                    .join("User")
-                    .join("settings.json"),
-                "cline" => appdata_roaming.join("Cline").join("mcp_settings.json"),
-                "zed" => appdata_roaming.join("Zed").join("settings.json"),
-                _ => appdata_roaming.join(ide_filename).join("mcp_config.json"),
-            };
-            results.push(target);
-        }
+        #[cfg(windows)]
+        let base_dir = profile.join("AppData").join("Roaming");
+        #[cfg(not(windows))]
+        let base_dir = profile.join(".config");
+
+        let target = match ide_filename {
+            "claude" => base_dir.join("Claude").join("claude_desktop_config.json"),
+            "cursor" => base_dir
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+                .join("storage.json"),
+            "vscode" => base_dir.join("Code").join("User").join("settings.json"),
+            "cline" => base_dir.join("Cline").join("mcp_settings.json"),
+            "zed" => base_dir.join("Zed").join("settings.json"),
+            _ => base_dir.join(ide_filename).join("mcp_config.json"),
+        };
+        results.push(target);
     }
     results
 }

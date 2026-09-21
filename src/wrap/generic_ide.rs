@@ -372,21 +372,21 @@ pub fn unwrap_generic(
                 if set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:18080/v1")
                     || set_tbl.get("OPENAI_BASE_URL").and_then(|v| v.as_str())
-                    == Some("http://127.0.0.1:8080/v1")
+                        == Some("http://127.0.0.1:8080/v1")
                 {
                     set_tbl.remove("OPENAI_BASE_URL");
                 }
                 if set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:18080")
                     || set_tbl.get("HTTP_PROXY").and_then(|v| v.as_str())
-                    == Some("http://127.0.0.1:8080")
+                        == Some("http://127.0.0.1:8080")
                 {
                     set_tbl.remove("HTTP_PROXY");
                 }
                 if set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str())
                     == Some("http://127.0.0.1:18080")
                     || set_tbl.get("HTTPS_PROXY").and_then(|v| v.as_str())
-                    == Some("http://127.0.0.1:8080")
+                        == Some("http://127.0.0.1:8080")
                 {
                     set_tbl.remove("HTTPS_PROXY");
                 }

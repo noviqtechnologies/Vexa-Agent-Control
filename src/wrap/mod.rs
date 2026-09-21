@@ -16,7 +16,7 @@ pub mod status;
 pub mod transformer;
 pub mod watch;
 
-pub use connect::{ConnectMode, ConnectTarget, run_connect, run_disconnect};
+pub use connect::{run_connect, run_disconnect, ConnectMode, ConnectTarget};
 
 use crate::cli::{UnwrapTarget, WatchTarget, WrapTarget};
 use colored::*;
@@ -384,8 +384,10 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
         );
     }
 
-    // 1. Recover from stale transaction journal if present
-    let _ = journal::ProtectJournal::recover_if_stale();
+    // 1. Recover from stale transaction journal if present (only when not dry-run)
+    if !dry_run {
+        let _ = journal::ProtectJournal::recover_if_stale();
+    }
 
     let mut disconnected_count = 0;
     let mut err_count = 0;
@@ -458,6 +460,14 @@ pub fn run_unprotect_all(dry_run: bool, force: bool) -> i32 {
     for (name, target) in legacy_targets {
         let t_str = name.to_lowercase().replace(' ', "-");
         if manifest_targets.contains(&t_str) || manifest_targets.contains(&name.to_lowercase()) {
+            continue;
+        }
+
+        if dry_run {
+            println!(
+                "  ℹ [DRY RUN] {}: Would check for legacy backup",
+                name.bold()
+            );
             continue;
         }
 
@@ -568,7 +578,12 @@ fn check_listener_available_or_running(listen: &str) -> Result<(), String> {
         Err(e) => {
             if e.kind() == std::io::ErrorKind::AddrInUse {
                 if let Ok(addr) = listen.parse::<std::net::SocketAddr>() {
-                    if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)).is_ok() {
+                    if std::net::TcpStream::connect_timeout(
+                        &addr,
+                        std::time::Duration::from_millis(500),
+                    )
+                    .is_ok()
+                    {
                         return Ok(());
                     }
                 }
@@ -597,7 +612,11 @@ pub fn run_protect_orchestration(
 ) -> i32 {
     // Step 0: Check and recover from any stale uncommitted transaction
     if let Err(e) = journal::ProtectJournal::recover_if_stale() {
-        eprintln!("\n  {} Failed to recover stale protect journal: {}", "✘".red().bold(), e);
+        eprintln!(
+            "\n  {} Failed to recover stale protect journal: {}",
+            "✘".red().bold(),
+            e
+        );
         return 1;
     }
 
@@ -716,7 +735,11 @@ pub fn run_protect_orchestration(
             let path = connect::get_target_config_path(*target)
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| "unknown".to_string());
-            println!("    ℹ [DRY RUN] Would protect {}: config at {}", target.display_name().bold(), path.cyan());
+            println!(
+                "    ℹ [DRY RUN] Would protect {}: config at {}",
+                target.display_name().bold(),
+                path.cyan()
+            );
         }
     } else {
         let local_token = crate::identity::oauth::get_or_create_local_token()
@@ -732,7 +755,17 @@ pub fn run_protect_orchestration(
                 }
             };
 
-            journal.record_target_start(target.as_str(), &config_path, target.as_str());
+            let mut files_to_record = vec![config_path.as_path()];
+            let auth_path_opt = if *target == ConnectTarget::Codex {
+                crate::wrap::config_path::codex_auth_path().ok()
+            } else {
+                None
+            };
+            if let Some(ref ap) = auth_path_opt {
+                files_to_record.push(ap.as_path());
+            }
+
+            journal.record_target_start(target.as_str(), &files_to_record, target.as_str());
             if let Err(e) = journal.save() {
                 eprintln!("    ✖ Failed to update protection journal: {}", e);
                 eprintln!("    Aborting protection to ensure fail-closed integrity.");
@@ -746,6 +779,9 @@ pub fn run_protect_orchestration(
                     journal.record_target_success(target.as_str());
                     if let Err(e) = journal.save() {
                         eprintln!("    ✖ Failed to save protection journal progress: {}", e);
+                        eprintln!("    Aborting protection to ensure fail-closed integrity.");
+                        let _ = journal.rollback();
+                        return 1;
                     }
                 }
                 Err(e) => {
@@ -755,10 +791,16 @@ pub fn run_protect_orchestration(
                         target.display_name(),
                         e
                     );
-                    eprintln!("  {} Rolling back all workstation modifications (fail-closed)...", "⚡".yellow());
+                    eprintln!(
+                        "  {} Rolling back all workstation modifications (fail-closed)...",
+                        "⚡".yellow()
+                    );
                     match journal.rollback() {
                         Ok(reverted) => {
-                            eprintln!("  ✔ Successfully rolled back: {}", reverted.join(", ").cyan());
+                            eprintln!(
+                                "  ✔ Successfully rolled back: {}",
+                                reverted.join(", ").cyan()
+                            );
                         }
                         Err(rb_err) => {
                             eprintln!("  ✖ Rollback error: {}", rb_err.red());
@@ -817,7 +859,6 @@ pub fn run_protect_orchestration(
 
     0
 }
-
 
 #[cfg(test)]
 mod tests {

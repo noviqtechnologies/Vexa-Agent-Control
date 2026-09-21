@@ -62,7 +62,13 @@ impl DurableOutbox {
         queue_capacity: usize,
         worker_concurrency: usize,
     ) -> Self {
-        Self::new_with_db_path(siem_exporter, dashboard_client, queue_capacity, worker_concurrency, None)
+        Self::new_with_db_path(
+            siem_exporter,
+            dashboard_client,
+            queue_capacity,
+            worker_concurrency,
+            None,
+        )
     }
 
     /// Internal constructor allowing custom SQLite DB path (for isolated unit tests).
@@ -265,7 +271,8 @@ mod tests {
             ts: "2026-09-11T12:00:00Z".to_string(),
             session_id: "test-sess-spool".to_string(),
             entry_index: 42,
-            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             hmac: Some("abcdef123456".to_string()),
             event: "tool_allow".to_string(),
             tool_name: Some("read_file".to_string()),
@@ -289,14 +296,15 @@ mod tests {
 
         // Connect directly to SQLite to verify the spool row was created
         let conn = Connection::open(&db_path).unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM outbox_spool WHERE event_id = 'test-sess-spool-42'",
-            [],
-            |r| r.get(0)
-        ).unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM outbox_spool WHERE event_id = 'test-sess-spool-42'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         // Since no exporter is attached, the worker exports immediately and cleans it up,
         // or if simulated, row was spooled.
         assert!(count == 0 || count == 1);
     }
 }
-

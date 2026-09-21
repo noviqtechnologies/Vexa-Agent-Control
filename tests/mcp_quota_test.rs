@@ -76,15 +76,29 @@ fn test_mcp_parameter_dlp_and_redaction() {
     assert_eq!(findings.len(), 3);
 
     let args = inspected.get("params").unwrap().get("arguments").unwrap();
-    assert_eq!(args.get("api_key").unwrap().as_str().unwrap(), "[REDACTED:API_KEY]");
-    assert_eq!(args.get("conn").unwrap().as_str().unwrap(), "[REDACTED:CONNECTION_STRING]");
-    assert_eq!(args.get("cert").unwrap().as_str().unwrap(), "[REDACTED:PRIVATE_KEY]");
-    assert_eq!(args.get("safe_param").unwrap().as_str().unwrap(), "regular text");
+    assert_eq!(
+        args.get("api_key").unwrap().as_str().unwrap(),
+        "[REDACTED:API_KEY]"
+    );
+    assert_eq!(
+        args.get("conn").unwrap().as_str().unwrap(),
+        "[REDACTED:CONNECTION_STRING]"
+    );
+    assert_eq!(
+        args.get("cert").unwrap().as_str().unwrap(),
+        "[REDACTED:PRIVATE_KEY]"
+    );
+    assert_eq!(
+        args.get("safe_param").unwrap().as_str().unwrap(),
+        "regular text"
+    );
 
     // 2. Policy violation block mode (block_on_sensitive = true)
     let err = inspect_jsonrpc_frame(&bytes, true).unwrap_err();
     assert_eq!(err.code, -32001);
-    assert!(err.message.contains("Policy Violation: Sensitive Parameter Detected"));
+    assert!(err
+        .message
+        .contains("Policy Violation: Sensitive Parameter Detected"));
 }
 
 #[test]

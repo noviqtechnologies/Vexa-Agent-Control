@@ -17,12 +17,18 @@ use crate::wrap::manifest::OwnershipManifest;
 const MAX_BUNDLE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Secondary defense regex pattern to intercept and redact any accidentally included secrets.
-const SECRET_PATTERN: &str = r"(sk-[a-zA-Z0-9_-]{20,}|Bearer [a-zA-Z0-9._-]{20,}|BEGIN[ A-Z0-9_-]*PRIVATE KEY)";
+const SECRET_PATTERN: &str =
+    r"(sk-[a-zA-Z0-9_-]{20,}|Bearer [a-zA-Z0-9._-]{20,}|BEGIN[ A-Z0-9_-]*PRIVATE KEY)";
 
 /// Generates a sanitized diagnostic support bundle using strict structural allowlisting.
 pub async fn run_support_bundle(output_dir: Option<PathBuf>, yes: bool) -> i32 {
     if !yes {
-        println!("{}", "Vexa Agent Control — Diagnostic Support Bundle Generator".bold().cyan());
+        println!(
+            "{}",
+            "Vexa Agent Control — Diagnostic Support Bundle Generator"
+                .bold()
+                .cyan()
+        );
         println!("This tool collects strictly allowlisted, sanitized diagnostic information:");
         println!("  • Operating system, architecture, and agent binary versions");
         println!("  • Diagnostic health check results (exit codes and status flags)");
@@ -43,8 +49,14 @@ pub async fn run_support_bundle(output_dir: Option<PathBuf>, yes: bool) -> i32 {
 
     match create_support_bundle(output_dir).await {
         Ok(bundle_path) => {
-            println!("\n{} Support bundle generated successfully!", "✔".green().bold());
-            println!("  Archive Directory: {}", bundle_path.display().to_string().cyan());
+            println!(
+                "\n{} Support bundle generated successfully!",
+                "✔".green().bold()
+            );
+            println!(
+                "  Archive Directory: {}",
+                bundle_path.display().to_string().cyan()
+            );
             println!("  Size limit:        < 10 MB (Enforced)");
             println!("  Privacy check:     Allowlisted structural files only, zero secrets or prompt payloads.");
             0
@@ -62,7 +74,8 @@ pub async fn create_support_bundle(output_dir: Option<PathBuf>) -> Result<PathBu
     let base_dir = output_dir.unwrap_or_else(|| PathBuf::from("."));
     let bundle_dir = base_dir.join(format!("agentcontrol-support-{}", timestamp));
 
-    fs::create_dir_all(&bundle_dir).map_err(|e| format!("Failed to create bundle directory: {}", e))?;
+    fs::create_dir_all(&bundle_dir)
+        .map_err(|e| format!("Failed to create bundle directory: {}", e))?;
 
     let secret_re = Regex::new(SECRET_PATTERN).map_err(|e| e.to_string())?;
 
@@ -75,7 +88,11 @@ pub async fn create_support_bundle(output_dir: Option<PathBuf>) -> Result<PathBu
         "timestamp": chrono::Utc::now().to_rfc3339(),
         "current_exe": std::env::current_exe().ok().map(|p| p.display().to_string()),
     });
-    write_sanitized_file(&bundle_dir.join("system_info.json"), &serde_json::to_string_pretty(&sys_info).unwrap(), &secret_re)?;
+    write_sanitized_file(
+        &bundle_dir.join("system_info.json"),
+        &serde_json::to_string_pretty(&sys_info).unwrap(),
+        &secret_re,
+    )?;
 
     // File 2: doctor_report.json
     let doctor_report = run_diagnostics().await;
@@ -164,7 +181,8 @@ fn write_sanitized_file(path: &Path, content: &str, secret_re: &Regex) -> Result
 
     // Secondary defense: redact any secret pattern matches
     let sanitized = secret_re.replace_all(content, "[REDACTED_SECRET]");
-    fs::write(path, sanitized.as_bytes()).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    fs::write(path, sanitized.as_bytes())
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     Ok(())
 }
 
@@ -182,7 +200,12 @@ fn calculate_directory_size(dir: &Path) -> Result<usize, String> {
 
 /// Repair active configurations against manifests and ensure background agent task exists.
 pub async fn run_repair() -> i32 {
-    println!("{}", "Vexa Agent Control — Workstation Repair Utility".bold().cyan());
+    println!(
+        "{}",
+        "Vexa Agent Control — Workstation Repair Utility"
+            .bold()
+            .cyan()
+    );
     println!("Checking configuration manifests and background agent service...");
 
     let mut repaired = 0;
@@ -203,7 +226,8 @@ pub async fn run_repair() -> i32 {
     // that should not re-gate on the enrollment check (device is already enrolled
     // if self-healing is running).
     let service_action = crate::service::ServiceAction::Install {
-        hub_url: crate::identity::device::load_hub_url().unwrap_or_else(|| "https://app.vexasec.io".to_string()),
+        hub_url: crate::identity::device::load_hub_url()
+            .unwrap_or_else(|| "https://app.vexasec.io".to_string()),
         gateway_secret: None,
         policy_read_secret: None,
         agent_id: None,
@@ -213,7 +237,10 @@ pub async fn run_repair() -> i32 {
     };
     let s_code = crate::service::run_service(service_action, true, true).await;
     if s_code == 0 {
-        println!("  {} Per-user background service verified and active.", "✔".green());
+        println!(
+            "  {} Per-user background service verified and active.",
+            "✔".green()
+        );
         repaired += 1;
     }
 
@@ -221,7 +248,11 @@ pub async fn run_repair() -> i32 {
     if let Ok(manifests) = OwnershipManifest::list_all() {
         for m in manifests {
             if m.config_path.exists() {
-                println!("  {} Target '{}' configuration validated.", "✔".green(), m.target);
+                println!(
+                    "  {} Target '{}' configuration validated.",
+                    "✔".green(),
+                    m.target
+                );
             }
         }
     }
@@ -241,11 +272,7 @@ pub async fn run_repair() -> i32 {
                 repaired += 1;
             }
             Err(e) => {
-                println!(
-                    "  {} Failed to remove legacy Root CA: {}",
-                    "⚠".yellow(),
-                    e
-                );
+                println!("  {} Failed to remove legacy Root CA: {}", "⚠".yellow(), e);
                 println!(
                     "     └─ Manual removal command: certutil -delstore -user Root \"{}\"",
                     crate::ca::CA_COMMON_NAME
@@ -328,13 +355,19 @@ pub fn run_reset_local_state(force: bool) -> i32 {
         }
     }
 
-    println!("{} Local telemetry and cache reset successfully.", "✔".green().bold());
+    println!(
+        "{} Local telemetry and cache reset successfully.",
+        "✔".green().bold()
+    );
     0
 }
 
 /// Rotate the persistent local HTTP proxy bearer token and update all connected client configs (Task 2.6).
 pub async fn run_rotate_local_token() -> i32 {
-    println!("{}", "Rotating authentication token for connected targets...".cyan());
+    println!(
+        "{}",
+        "Rotating authentication token for connected targets...".cyan()
+    );
 
     let new_token = match rotate_local_token() {
         Ok(t) => t,
@@ -351,11 +384,15 @@ pub async fn run_rotate_local_token() -> i32 {
         if manifest.config_path.exists() {
             let is_cloud_direct = manifest.connect_mode.as_deref() == Some("cloud-direct");
             let effective_token = if is_cloud_direct {
-                let hub_url = crate::identity::device::load_hub_url().unwrap_or_else(|| "https://app.vexasec.io".to_string());
+                let hub_url = crate::identity::device::load_hub_url()
+                    .unwrap_or_else(|| "https://app.vexasec.io".to_string());
                 match crate::wrap::connect::fetch_assigned_virtual_key(&hub_url).await {
                     Ok(Some(vk)) if !vk.trim().is_empty() => Some(vk),
                     _ => {
-                        println!("  {} Could not re-fetch virtual key from Control Hub for Codex.", "⚠".yellow());
+                        println!(
+                            "  {} Could not re-fetch virtual key from Control Hub for Codex.",
+                            "⚠".yellow()
+                        );
                         None
                     }
                 }
@@ -372,7 +409,10 @@ pub async fn run_rotate_local_token() -> i32 {
                             .and_then(|p| p.get_mut("set"))
                             .and_then(|s| s.as_table_mut())
                         {
-                            set_tbl.insert("OPENAI_API_KEY".to_string(), toml::Value::String(tok.clone()));
+                            set_tbl.insert(
+                                "OPENAI_API_KEY".to_string(),
+                                toml::Value::String(tok.clone()),
+                            );
                             manifest.written_values.insert(
                                 "shell_environment_policy.set.OPENAI_API_KEY".to_string(),
                                 serde_json::Value::String(tok.clone()),
@@ -380,9 +420,13 @@ pub async fn run_rotate_local_token() -> i32 {
                             if let Ok(formatted) = toml::to_string_pretty(&toml_val) {
                                 let _ = fs::write(&manifest.config_path, formatted);
                                 manifest.post_mutation_hash_sha256 =
-                                    OwnershipManifest::compute_sha256(&manifest.config_path).unwrap_or_default();
+                                    OwnershipManifest::compute_sha256(&manifest.config_path)
+                                        .unwrap_or_default();
                                 let _ = manifest.save();
-                                println!("  {} Updated Codex configuration with refreshed token.", "✔".green());
+                                println!(
+                                    "  {} Updated Codex configuration with refreshed token.",
+                                    "✔".green()
+                                );
                                 updated_targets += 1;
                             }
                         }
@@ -397,7 +441,8 @@ pub async fn run_rotate_local_token() -> i32 {
         if manifest.config_path.exists() {
             let is_cloud_direct = manifest.connect_mode.as_deref() == Some("cloud-direct");
             let effective_token = if is_cloud_direct {
-                let hub_url = crate::identity::device::load_hub_url().unwrap_or_else(|| "https://app.vexasec.io".to_string());
+                let hub_url = crate::identity::device::load_hub_url()
+                    .unwrap_or_else(|| "https://app.vexasec.io".to_string());
                 match crate::wrap::connect::fetch_assigned_virtual_key(&hub_url).await {
                     Ok(Some(vk)) if !vk.trim().is_empty() => Some(vk),
                     _ => {
@@ -411,10 +456,17 @@ pub async fn run_rotate_local_token() -> i32 {
 
             if let Some(tok) = effective_token {
                 if let Ok(raw) = fs::read_to_string(&manifest.config_path) {
-                    if let Ok(mut config) = serde_json::from_str::<serde_json::Value>(&crate::wrap::strip_json_comments(&raw)) {
-                        if let Some(models) = config.get_mut("continue.models").and_then(|m| m.as_array_mut()) {
+                    if let Ok(mut config) = serde_json::from_str::<serde_json::Value>(
+                        &crate::wrap::strip_json_comments(&raw),
+                    ) {
+                        if let Some(models) = config
+                            .get_mut("continue.models")
+                            .and_then(|m| m.as_array_mut())
+                        {
                             for m in models.iter_mut() {
-                                if m.get("title").and_then(|t| t.as_str()) == Some("Vexa Agent Control (Managed)") {
+                                if m.get("title").and_then(|t| t.as_str())
+                                    == Some("Vexa Agent Control (Managed)")
+                                {
                                     m["apiKey"] = serde_json::Value::String(tok.clone());
                                 }
                             }
@@ -422,11 +474,18 @@ pub async fn run_rotate_local_token() -> i32 {
                                 "continue.models".to_string(),
                                 serde_json::Value::Array(models.clone()),
                             );
-                            let _ = fs::write(&manifest.config_path, serde_json::to_string_pretty(&config).unwrap());
+                            let _ = fs::write(
+                                &manifest.config_path,
+                                serde_json::to_string_pretty(&config).unwrap(),
+                            );
                             manifest.post_mutation_hash_sha256 =
-                                OwnershipManifest::compute_sha256(&manifest.config_path).unwrap_or_default();
+                                OwnershipManifest::compute_sha256(&manifest.config_path)
+                                    .unwrap_or_default();
                             let _ = manifest.save();
-                            println!("  {} Updated VS Code Continue with refreshed token.", "✔".green());
+                            println!(
+                                "  {} Updated VS Code Continue with refreshed token.",
+                                "✔".green()
+                            );
                             updated_targets += 1;
                         }
                     }
@@ -451,7 +510,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_support_bundle() {
         let dir = tempdir().unwrap();
-        let bundle_dir = create_support_bundle(Some(dir.path().to_path_buf())).await.unwrap();
+        let bundle_dir = create_support_bundle(Some(dir.path().to_path_buf()))
+            .await
+            .unwrap();
 
         assert!(bundle_dir.exists());
         assert!(bundle_dir.join("system_info.json").exists());
@@ -469,7 +530,8 @@ mod tests {
     #[test]
     fn test_secret_redaction() {
         let secret_re = Regex::new(SECRET_PATTERN).unwrap();
-        let text = "Here is a secret: sk-1234567890123456789012 and Bearer my_secret_token_1234567890.";
+        let text =
+            "Here is a secret: sk-1234567890123456789012 and Bearer my_secret_token_1234567890.";
         let redacted = secret_re.replace_all(text, "[REDACTED_SECRET]");
         assert!(!redacted.contains("sk-1234567890123456789012"));
         assert!(!redacted.contains("my_secret_token_1234567890"));

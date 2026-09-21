@@ -945,13 +945,21 @@ pub struct StartArgs {
     pub connection_timeout_secs: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Serialize, serde::Deserialize,
+)]
 pub enum DeploymentProfile {
     #[value(name = "local-gateway", alias = "local-enforce", alias = "gateway")]
     LocalGateway,
     #[value(name = "local-firewall", alias = "firewall", alias = "air-gapped")]
     LocalFirewall,
-    #[value(name = "team-gateway", alias = "team-enforce", alias = "team", alias = "dedicated-enforce", alias = "enterprise")]
+    #[value(
+        name = "team-gateway",
+        alias = "team-enforce",
+        alias = "team",
+        alias = "dedicated-enforce",
+        alias = "enterprise"
+    )]
     TeamGateway,
     #[value(name = "container-sidecar", alias = "sidecar", alias = "container")]
     ContainerSidecar,
@@ -1079,7 +1087,6 @@ pub fn save_persisted_profile(profile: DeploymentProfile) -> std::io::Result<()>
 pub fn load_persisted_profile() -> Option<DeploymentProfile> {
     PersistedProfileRecord::load()
 }
-
 
 impl StartArgs {
     pub fn centralized_default() -> Self {

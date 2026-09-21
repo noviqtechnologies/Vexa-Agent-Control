@@ -1,12 +1,12 @@
-use std::fs;
-use std::sync::Mutex;
-use tempfile::tempdir;
 use agentcontrol::wrap::connect::{
     connect_antigravity_to_path, connect_claude_code_to_path, connect_claude_to_path,
     connect_codex_to_path, connect_cursor_to_path, connect_vscode_continue_to_path,
     revert_json_target, revert_toml_target, ConnectMode,
 };
 use agentcontrol::wrap::manifest::OwnershipManifest;
+use std::fs;
+use std::sync::Mutex;
+use tempfile::tempdir;
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -42,10 +42,14 @@ theme = "dracula"
     );
 
     // Verify manifest
-    let manifest = OwnershipManifest::load("codex").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("codex")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
     assert_eq!(
-        manifest.written_values.get("shell_environment_policy.set.OPENAI_API_KEY"),
+        manifest
+            .written_values
+            .get("shell_environment_policy.set.OPENAI_API_KEY"),
         Some(&serde_json::Value::String(virtual_key.to_string()))
     );
 
@@ -78,7 +82,9 @@ fn test_codex_local_mode_token_injection() {
     assert!(updated_toml.contains(&format!("OPENAI_API_KEY = \"{}\"", local_token)));
     assert!(updated_toml.contains("OPENAI_BASE_URL = \"http://127.0.0.1:18080/v1\""));
 
-    let manifest = OwnershipManifest::load("codex").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("codex")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("local"));
 
     let reverted = revert_toml_target(&manifest).unwrap();
@@ -120,7 +126,9 @@ fn test_claude_cloud_direct_injects_api_url_and_key_and_reverts() {
     let git_cmd = json["mcpServers"]["git"]["command"].as_str().unwrap();
     assert!(git_cmd.contains("agentcontrol") || git_cmd.contains("agentwall"));
 
-    let manifest = OwnershipManifest::load("claude").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("claude")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
     let reverted = revert_json_target(&manifest).unwrap();
@@ -160,7 +168,9 @@ fn test_claude_local_mode_token_injection() {
     let calc_cmd = json["mcpServers"]["calc"]["command"].as_str().unwrap();
     assert!(calc_cmd.contains("agentcontrol") || calc_cmd.contains("agentwall"));
 
-    let manifest = OwnershipManifest::load("claude").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("claude")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("local"));
 
     let reverted = revert_json_target(&manifest).unwrap();
@@ -196,7 +206,9 @@ fn test_cursor_cloud_direct_and_revert() {
     assert_eq!(json["cursor.general.openaiApiKey"], virtual_key);
     assert_eq!(json["editor.fontSize"], 15);
 
-    let manifest = OwnershipManifest::load("cursor").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("cursor")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
     let reverted = revert_json_target(&manifest).unwrap();
@@ -238,15 +250,22 @@ fn test_antigravity_cloud_direct_and_revert() {
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
     assert_eq!(json["proxy_url"], "http://127.0.0.1:18080/v1");
     assert_eq!(json["api_key"], virtual_key);
-    assert_eq!(json["antigravity.proxy.baseUrl"], "http://127.0.0.1:18080/v1");
+    assert_eq!(
+        json["antigravity.proxy.baseUrl"],
+        "http://127.0.0.1:18080/v1"
+    );
     assert_eq!(json["antigravity.proxy.apiKey"], virtual_key);
     assert_eq!(json["customKey"], "preserved");
 
     // MCP server command should be wrapped
-    let calc_cmd = json["mcpServers"]["calculator"]["command"].as_str().unwrap();
+    let calc_cmd = json["mcpServers"]["calculator"]["command"]
+        .as_str()
+        .unwrap();
     assert!(calc_cmd.contains("agentcontrol") || calc_cmd.contains("agentwall"));
 
-    let manifest = OwnershipManifest::load("antigravity").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("antigravity")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
     let reverted = revert_json_target(&manifest).unwrap();
@@ -275,17 +294,22 @@ fn test_vscode_continue_cloud_direct_virtual_key() {
     fs::write(&settings_path, initial_settings).unwrap();
 
     let virtual_key = "sk-vex-continue-virtual-key-9999";
-    let res = connect_vscode_continue_to_path(&settings_path, virtual_key, ConnectMode::CloudDirect);
+    let res =
+        connect_vscode_continue_to_path(&settings_path, virtual_key, ConnectMode::CloudDirect);
     assert!(res.is_ok());
 
     let raw = fs::read_to_string(&settings_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    let models = json["continue.models"].as_array().expect("continue.models missing");
+    let models = json["continue.models"]
+        .as_array()
+        .expect("continue.models missing");
     assert_eq!(models.len(), 1);
     assert_eq!(models[0]["apiKey"], virtual_key);
     assert_eq!(models[0]["apiBase"], "http://127.0.0.1:18080/v1");
 
-    let manifest = OwnershipManifest::load("vscode-continue").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("vscode-continue")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
 
     let reverted = revert_json_target(&manifest).unwrap();
@@ -311,7 +335,11 @@ fn test_claude_code_local_mode_token_injection() {
         "theme": "dark",
         "model": "claude-opus-4-5"
     });
-    fs::write(&settings_path, serde_json::to_string_pretty(&initial).unwrap()).unwrap();
+    fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&initial).unwrap(),
+    )
+    .unwrap();
 
     let local_token = "vx-local-aabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd";
     let res = connect_claude_code_to_path(&settings_path, local_token, ConnectMode::Local);
@@ -322,21 +350,24 @@ fn test_claude_code_local_mode_token_injection() {
 
     // Verify env block written
     assert_eq!(
-        updated["env"]["ANTHROPIC_BASE_URL"],
-        "http://127.0.0.1:18080",
+        updated["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18080",
         "ANTHROPIC_BASE_URL not injected"
     );
     assert_eq!(
-        updated["env"]["ANTHROPIC_API_KEY"],
-        local_token,
+        updated["env"]["ANTHROPIC_API_KEY"], local_token,
         "ANTHROPIC_API_KEY not injected"
     );
     // User settings preserved
     assert_eq!(updated["theme"], "dark", "User 'theme' setting lost!");
-    assert_eq!(updated["model"], "claude-opus-4-5", "User 'model' setting lost!");
+    assert_eq!(
+        updated["model"], "claude-opus-4-5",
+        "User 'model' setting lost!"
+    );
 
     // Manifest created
-    let manifest = OwnershipManifest::load("claude-code").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("claude-code")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("local"));
     assert_eq!(
         manifest.written_values.get("env.ANTHROPIC_API_KEY"),
@@ -352,8 +383,14 @@ fn test_claude_code_local_mode_token_injection() {
     let final_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
     // env keys removed (null → absent)
-    assert!(final_json.get("env").and_then(|e| e.get("ANTHROPIC_BASE_URL")).is_none());
-    assert!(final_json.get("env").and_then(|e| e.get("ANTHROPIC_API_KEY")).is_none());
+    assert!(final_json
+        .get("env")
+        .and_then(|e| e.get("ANTHROPIC_BASE_URL"))
+        .is_none());
+    assert!(final_json
+        .get("env")
+        .and_then(|e| e.get("ANTHROPIC_API_KEY"))
+        .is_none());
     // User settings survive
     assert_eq!(final_json["theme"], "dark");
 }
@@ -369,12 +406,19 @@ fn test_claude_code_cloud_direct_virtual_key() {
 
     let virtual_key = "sk-vex-deadbeef00112233445566778899aabbccddeeff00112233445566778899aabb";
     let res = connect_claude_code_to_path(&settings_path, virtual_key, ConnectMode::CloudDirect);
-    assert!(res.is_ok(), "connect_claude_code_to_path cloud-direct failed: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "connect_claude_code_to_path cloud-direct failed: {:?}",
+        res
+    );
 
     let updated: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
 
-    assert_eq!(updated["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18080");
+    assert_eq!(
+        updated["env"]["ANTHROPIC_BASE_URL"],
+        "http://127.0.0.1:18080"
+    );
     assert_eq!(updated["env"]["ANTHROPIC_API_KEY"], virtual_key);
 
     // ConnectResult shows llm_endpoint_injected = true
@@ -383,7 +427,9 @@ fn test_claude_code_cloud_direct_virtual_key() {
     assert_eq!(result.proxy_url, "http://127.0.0.1:18080");
 
     // Manifest mode is cloud-direct
-    let manifest = OwnershipManifest::load("claude-code").unwrap().expect("Manifest not found");
+    let manifest = OwnershipManifest::load("claude-code")
+        .unwrap()
+        .expect("Manifest not found");
     assert_eq!(manifest.connect_mode.as_deref(), Some("cloud-direct"));
     let _ = OwnershipManifest::delete("claude-code");
 }
@@ -402,7 +448,11 @@ fn test_claude_code_connect_preserves_existing_env_and_user_keys() {
             "DEBUG": "1"
         }
     });
-    fs::write(&settings_path, serde_json::to_string_pretty(&initial).unwrap()).unwrap();
+    fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&initial).unwrap(),
+    )
+    .unwrap();
 
     let token = "sk-vex-cafebabe00112233445566778899aabbccddeeff";
     let res = connect_claude_code_to_path(&settings_path, token, ConnectMode::Local);
@@ -412,10 +462,16 @@ fn test_claude_code_connect_preserves_existing_env_and_user_keys() {
         serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
 
     // Vexa values injected
-    assert_eq!(updated["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:18080");
+    assert_eq!(
+        updated["env"]["ANTHROPIC_BASE_URL"],
+        "http://127.0.0.1:18080"
+    );
     assert_eq!(updated["env"]["ANTHROPIC_API_KEY"], token);
     // Existing env vars preserved
-    assert_eq!(updated["env"]["MY_CUSTOM_VAR"], "hello", "User env var lost!");
+    assert_eq!(
+        updated["env"]["MY_CUSTOM_VAR"], "hello",
+        "User env var lost!"
+    );
     assert_eq!(updated["env"]["DEBUG"], "1", "User DEBUG env var lost!");
     // Other user settings preserved
     assert_eq!(updated["customSetting"], true, "User customSetting lost!");

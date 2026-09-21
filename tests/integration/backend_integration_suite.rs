@@ -493,7 +493,6 @@ async fn test_boundary_4_state_lifecycle_dynamic_policy_hot_reload() {
         allowed_providers: vec![],
     };
 
-
     {
         let mut policy_guard = state.policy.write().unwrap();
         *policy_guard = Some(updated_policy.clone());

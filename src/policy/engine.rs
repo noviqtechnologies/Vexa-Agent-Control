@@ -610,7 +610,9 @@ impl CompiledPolicy {
 
         // 2. Rate limiting: take stricter limit if > 0
         if self.max_calls_per_second > 0 {
-            if merged.max_calls_per_second == 0 || self.max_calls_per_second < merged.max_calls_per_second {
+            if merged.max_calls_per_second == 0
+                || self.max_calls_per_second < merged.max_calls_per_second
+            {
                 merged.max_calls_per_second = self.max_calls_per_second;
             }
         }
@@ -666,7 +668,9 @@ impl CompiledPolicy {
         // 4. LLM allowed models: strict intersection
         if let (Some(central_llm), Some(repo_llm)) = (&central.llm, &self.llm) {
             let mut merged_llm = central_llm.clone();
-            if let (Some(central_allowed), Some(repo_allowed)) = (&central_llm.allowed_models, &repo_llm.allowed_models) {
+            if let (Some(central_allowed), Some(repo_allowed)) =
+                (&central_llm.allowed_models, &repo_llm.allowed_models)
+            {
                 let intersection: Vec<String> = repo_allowed
                     .iter()
                     .filter(|m| central_allowed.contains(m))
@@ -690,12 +694,18 @@ impl CompiledPolicy {
         // 5. Spend caps: minimum tokens / ceiling
         if let (Some(central_spend), Some(repo_spend)) = (&central.spend_caps, &self.spend_caps) {
             let mut merged_spend = central_spend.clone();
-            if let (Some(c_max), Some(r_max)) = (central_spend.max_tokens_per_session, repo_spend.max_tokens_per_session) {
+            if let (Some(c_max), Some(r_max)) = (
+                central_spend.max_tokens_per_session,
+                repo_spend.max_tokens_per_session,
+            ) {
                 merged_spend.max_tokens_per_session = Some(c_max.min(r_max));
             } else if repo_spend.max_tokens_per_session.is_some() {
                 merged_spend.max_tokens_per_session = repo_spend.max_tokens_per_session;
             }
-            if let (Some(c_conc), Some(r_conc)) = (central_spend.concurrency_ceiling, repo_spend.concurrency_ceiling) {
+            if let (Some(c_conc), Some(r_conc)) = (
+                central_spend.concurrency_ceiling,
+                repo_spend.concurrency_ceiling,
+            ) {
                 merged_spend.concurrency_ceiling = Some(c_conc.min(r_conc));
             }
             merged.spend_caps = Some(merged_spend);
@@ -877,7 +887,11 @@ tools:
         let central = CompiledPolicy::from_yaml_str(central_yaml).unwrap();
         let repo = CompiledPolicy::from_yaml_str(repo_yaml).unwrap();
         let merged = repo.merge_with_central(&central).unwrap();
-        let tool = merged.tools.iter().find(|t| t.name == "dangerous_exec").unwrap();
+        let tool = merged
+            .tools
+            .iter()
+            .find(|t| t.name == "dangerous_exec")
+            .unwrap();
         assert_eq!(tool.action, "deny");
     }
 
@@ -934,7 +948,8 @@ metadata:
         let repo_bad = CompiledPolicy::from_yaml_str(repo_yaml_violation).unwrap();
         let merged_bad = repo_bad.merge_with_central(&central);
         assert!(merged_bad.is_err());
-        assert!(merged_bad.unwrap_err().contains("violates Central Tenant Boundary"));
+        assert!(merged_bad
+            .unwrap_err()
+            .contains("violates Central Tenant Boundary"));
     }
 }
-
