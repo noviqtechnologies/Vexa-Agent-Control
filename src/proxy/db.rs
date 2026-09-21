@@ -32,7 +32,7 @@ pub struct EgressEvent {
     pub policy_rule: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct DbStats {
     pub total_events: i64,
     pub unique_tools: i64,

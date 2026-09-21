@@ -663,10 +663,10 @@
 
     <div class="sidebar-footer">
       <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span>Gateway: <strong id="sidebar-gw-port">127.0.0.1:8080</strong></span>
+        <span>Gateway: <strong id="sidebar-gw-port">127.0.0.1:18080</strong></span>
         <span class="badge green" id="sidebar-gw-badge">LIVE</span>
       </div>
-      <div id="sidebar-version" style="color: var(--text-muted); font-size: 0.68rem;">v1.0.40 Standalone Dev</div>
+      <div id="sidebar-version" style="color: var(--text-muted); font-size: 0.68rem;">v1.0.89 Standalone Dev</div>
     </div>
   </nav>
 
@@ -1014,7 +1014,7 @@
           <div class="card-grid-3">
             <div class="card">
               <div class="card-label">HTTP Listener</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--accent);">127.0.0.1:8080</div>
+              <div class="card-value" style="font-size: 1.2rem; color: var(--accent);" id="gw-listener-host">127.0.0.1:18080</div>
               <div class="card-meta">Binding: Loopback only</div>
             </div>
             <div class="card">
@@ -1351,7 +1351,7 @@
                   <div style="font-size: 1.8rem; margin-bottom: 8px;">🧠</div>
                   <strong>No semantic cache hits recorded yet</strong>
                   <p style="font-size: 0.8rem; margin-top: 4px;">
-                    Send agent prompts through port 8080 to observe real-time vector matching and cost avoidance.
+                    Send agent prompts through port 18080 to observe real-time vector matching and cost avoidance.
                   </p>
                 </td>
               </tr>
@@ -1676,6 +1676,13 @@
       } catch (e) {
         console.warn("Gateway status refresh failed:", e);
       }
+
+      // Sync active host port to UI
+      const activeHost = window.location.host || '127.0.0.1:18080';
+      const sidePort = document.getElementById('sidebar-gw-port');
+      if (sidePort) sidePort.textContent = activeHost;
+      const gwHostEl = document.getElementById('gw-listener-host');
+      if (gwHostEl) gwHostEl.textContent = activeHost;
     }
 
     function renderIntegrationsTable(integrations) {
@@ -2291,7 +2298,7 @@
             <div style="font-size: 1.8rem; margin-bottom: 8px;">🧠</div>
             <strong>No semantic cache hits recorded yet</strong>
             <p style="font-size: 0.8rem; margin-top: 4px;">
-              Send agent prompts through port 8080 to observe real-time vector matching and cost avoidance.
+              Send agent prompts through port 18080 to observe real-time vector matching and cost avoidance.
             </p>
           </td>
         </tr>`;

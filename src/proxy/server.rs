@@ -1087,13 +1087,23 @@ async fn handle_request(
                 return Ok(json_response(StatusCode::OK, &resp));
             }
             "/api/benchmark" => {
+                let stats = state.db_manager.get_stats().await.unwrap_or_default();
+                let total = stats.total_events;
+                let risk = stats.risk_flag_count;
+                let safe = (total - risk).max(0);
+                let score = if total > 0 {
+                    ((safe as f64 / total as f64) * 100.0).round()
+                } else {
+                    100.0
+                };
                 let bench_json = serde_json::json!({
-                    "score": 88.1,
-                    "grade": "Grade A",
-                    "tasks_executed": 303,
-                    "categories_tested": 17,
-                    "categories_total": 17,
-                    "status": "passed"
+                    "score": score,
+                    "grade": if score >= 90.0 { "Grade A" } else if score >= 75.0 { "Grade B" } else { "Grade C" },
+                    "tasks_executed": total,
+                    "unique_tools": stats.unique_tools,
+                    "risk_flag_count": risk,
+                    "safe_events": safe,
+                    "status": "active"
                 });
                 return Ok(json_response(StatusCode::OK, &bench_json));
             }
