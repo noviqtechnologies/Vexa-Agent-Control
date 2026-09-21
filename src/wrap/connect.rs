@@ -653,9 +653,7 @@ pub fn connect_codex_target_to_path(
     );
 
     // 2. Wrap any mcp_servers
-    let agentcontrol_bin = std::env::current_exe()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "agentcontrol".to_string());
+    let agentcontrol_bin = crate::wrap::resolve_wrapper_binary();
 
     let mut wrapped_mcp_count = 0;
     if let Some(mcp_table) = root.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
@@ -930,9 +928,7 @@ pub fn connect_claude_target_to_path(
         }
     };
 
-    let agentcontrol_bin = std::env::current_exe()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "agentcontrol".to_string());
+    let agentcontrol_bin = crate::wrap::resolve_wrapper_binary();
 
     let mut modified = if config.is_object() {
         config.clone()
@@ -1090,9 +1086,7 @@ pub fn connect_cursor_target_to_path(
 
     // Wrap MCP servers if present in settings.json or separate mcp.json
     let mut wrapped_count = 0;
-    let agentcontrol_bin = std::env::current_exe()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "agentcontrol".to_string());
+    let agentcontrol_bin = crate::wrap::resolve_wrapper_binary();
 
     if modified.get("mcpServers").is_some() {
         if let Some(servers) = config.get("mcpServers").and_then(|v| v.as_object()) {
