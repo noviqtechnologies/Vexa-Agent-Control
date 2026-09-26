@@ -554,9 +554,18 @@ pub(crate) async fn resolve_session(
             }
         }
 
+        let enrolled_user = crate::identity::device::load_user_email();
+        let session_sub = enrolled_user.clone().or_else(|| {
+            let u = crate::identity::device::get_current_user();
+            if u.is_empty() || u == "unknown" {
+                None
+            } else {
+                Some(u)
+            }
+        });
         let session = Arc::new(super::session::SessionContext::new_with_scope(
-            None,
-            None,
+            session_sub,
+            enrolled_user,
             vec![],
             current_policy,
             Some(client_ip.to_string()),

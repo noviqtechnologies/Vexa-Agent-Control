@@ -243,7 +243,7 @@ func main() {
 	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
 	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
 	runH := handler.NewRunHandler(spendStore, db, deviceStore)
-	observabilityH := handler.NewObservabilityHandler(spendStore, db)
+	observabilityH := handler.NewObservabilityHandler(spendStore, db, deviceStore)
 	effectivePolicyH := handler.NewEffectivePolicyHandler(spendStore, db, deviceStore)
 	sessionH := handler.NewSessionHandler(spendStore, db)
 	coverageHealthH := handler.NewCoverageHealthHandler(deviceStore)
@@ -319,14 +319,13 @@ func main() {
 		r.Post("/llm-requests", brokerV2H.HandleLLMRequest)
 		r.Post("/llm-stream", brokerV2H.HandleLLMStream)
 		r.Post("/llm-stream/{id}/cancel", brokerV2H.CancelStream)
+		r.Post("/dispatch", brokerV3H.Dispatch)
 	})
 
 	// Effective signed policy manifest & Telemetry v2 Ingestion / Audit Checkpoints
 	r.Get("/api/v2/policy/effective", effectivePolicyH.GetEffectiveSigned)
 	r.Post("/api/v2/telemetry/ingest", ingestH.PostTelemetryIngest)
 	r.Get("/api/v2/audit/checkpoints", ingestH.GetAuditCheckpoints)
-
-	r.Post("/api/v3/broker/dispatch", brokerV3H.Dispatch)
 
 	// Virtual Key management
 	r.Route("/api/v1/virtual-keys", func(r chi.Router) {
@@ -393,6 +392,7 @@ func main() {
 	// 6. Device Governance
 	r.Post("/api/v1/devices/enroll", deviceH.EnrollDevice)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/devices/{id}/telemetry", deviceH.RecordTelemetry)
+	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/devices/{id}/client-logs", deviceH.RecordClientLogs)
 	r.Post("/api/v1/enroll", enrollmentH.PostEnroll)
 
 	// Gateway API Spec endpoints
@@ -416,6 +416,7 @@ func main() {
 		r.Post("/spend-snapshots", spendH.SyncSnapshot)
 		r.Post("/heartbeat", heartbeatH.PostHeartbeat)
 		r.Post("/tamper-log", deviceAdminH.PostTamperLog)
+		r.Post("/request-logs", ingestH.PostRequestLogs)
 	})
 
 	// Auth Routes
@@ -470,6 +471,7 @@ func main() {
 		r.Route("/observability", func(r chi.Router) {
 			r.Get("/request-logs", observabilityH.ListRequestLogs)
 			r.Get("/request-logs/stream", observabilityH.StreamRequestLogs)
+			r.Get("/client-logs", observabilityH.ListClientLogs)
 			r.Get("/audit-logs", observabilityH.ListAuditLogs)
 			r.Get("/deleted-keys", observabilityH.ListDeletedKeys)
 			r.Get("/deleted-teams", observabilityH.ListDeletedTeams)

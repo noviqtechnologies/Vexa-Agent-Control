@@ -174,8 +174,8 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 	} else if groupBy == "user" {
 		query := `
 			SELECT 
-				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'unattributed') AS entity_id,
-				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'Unattributed') AS entity_name,
+				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(d.owner_subject, ''), 'unattributed') AS entity_id,
+				COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(d.owner_subject, ''), 'Unattributed') AS entity_name,
 				COALESCE(SUM(sr.settled_microcents), 0),
 				COUNT(*)
 			FROM spend_reservations sr
@@ -184,7 +184,7 @@ func (s *Store) GetSpendAnalytics(ctx context.Context, orgID string, hours int, 
 				AND (d.id::text = sr.gateway_id OR d.stable_device_id = sr.gateway_id OR d.display_name = sr.gateway_id)
 			)
 			WHERE sr.organization_id = $1 AND sr.created_at >= $2
-			GROUP BY COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(d.owner_subject, ''), 'unattributed')
+			GROUP BY COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(d.owner_subject, ''), 'unattributed')
 			ORDER BY SUM(sr.settled_microcents) DESC, COUNT(*) DESC
 			LIMIT 20
 		`

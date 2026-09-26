@@ -37,9 +37,21 @@ Agent Control intercepts agent tool calls and validates incoming OIDC JSON Web T
 
 1. **Bearer Token Extraction:** Agents pass an OIDC JWT in the `Authorization: Bearer <token>` HTTP header.
 2. **Automatic OIDC Discovery & JWKS Caching:** The gateway automatically fetches `{issuer}/.well-known/openid-configuration`, discovers the `jwks_uri`, and caches public RSA (RS256) and EC (ES256) signing keys in RAM (with configurable TTL rotation).
-3. **Token Verification:** Validates algorithm (`RS256` or `ES256`), signature (`kid`), expiration (`exp`), issuer (`iss`), and audience (`aud`).
-4. **Group Claim Extraction:** Dynamically extracts user/agent group memberships using the configured `group_claim_key` (e.g., `groups`, `cognito:groups`, `roles`).
-5. **Policy Matching:** Matches extracted group claims (`groups[].claims`) or agent subject (`agents[].sub`) to rulesets defined in `agentcontrol-policy.yaml`. Deny rules beat allow rules across matching groups.
+3. **Cryptographic Token Verification:** Validates algorithm (`RS256` or `ES256`), signature (`kid`), expiration (`exp`), issuer (`iss`), audience (`aud`), and matching `oauth_nonce`. Unverified parsing is strictly blocked on authentication paths.
+4. **Canonical Identity Mapping:** The human identity is bound to the immutable tuple `(organization_id, provider_id, identity_issuer, identity_subject)` in `user_identities`. Email is treated strictly as mutable display metadata.
+5. **Sender-Constrained DPoP Binding:** Access tokens issued to developer workstations embed a `cnf.jkt` claim containing the SHA-256 thumbprint of the workstation's local Ed25519 key. Stolen tokens cannot be used from other machines.
+6. **Transactional Token Rotation:** Refresh tokens rotate atomically under PostgreSQL `SELECT ... FOR UPDATE` row locks; replaying an already-consumed token immediately revokes the entire token family.
+7. **Group & Team Claim Extraction:** Dynamically extracts team/group memberships using the configured `group_claim_key` (e.g., `groups`, `roles`) and resolves team spend caps server-side.
+8. **Policy Matching:** Matches claims to rulesets defined in `agentcontrol-policy.yaml`. Deny rules beat allow rules across matching groups.
+
+---
+
+## 2.1 Native CLI Authentication Flow (RFC 8252 & RFC 8628)
+
+When developers execute `agentcontrol login --hub https://hub.company.com`:
+- **Ephemeral Loopback (RFC 8252):** The CLI binds to `127.0.0.1:0` (ephemeral port allocated by OS) and retains the open listener throughout authorization and callback receipt, eliminating local port-stealing race conditions.
+- **Headless & Remote SSH Fallback (RFC 8628):** In remote SSH sessions or with `--no-browser`, the CLI falls back to the Device Authorization Grant, displaying a one-time verification URL and 8-character user code.
+- **Credential Custody:** Delivered session tokens are stored in the platform's native OS Credential Store (Windows Credential Manager, macOS Keychain, Linux Secret Service) with 0600 POSIX file fallback.
 
 ---
 

@@ -321,7 +321,7 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
           fontSize: '11.5px',
         }}>
           <div style={{ fontWeight: 600, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>🚀</span> Early Access Beta
+            <span>🚀</span> Early Access
           </div>
           <div style={{ color: 'var(--text-muted)', margin: '4px 0 6px', lineHeight: 1.3, fontSize: '11px' }}>
             Feedback or edge-case support:
@@ -405,6 +405,9 @@ function TopHeaderBar({ onOpenCommandPalette }: { onOpenCommandPalette: () => vo
       <div className="header-breadcrumbs">
         <span className="live-indicator-dot" title="Real-time SOC connection active" />
         <span className="header-env-tag">{workspaceLabel}</span>
+        <span className="header-early-access-badge">
+          <span>🚀</span> Early Access
+        </span>
         {isEnforced && (
           <span className="soc-locked-banner-pill">
             🔒 Initial Setup Required • Console Locked

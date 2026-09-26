@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/session"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
@@ -392,6 +394,9 @@ type DeviceEnrollRequestV2 struct {
 	ClientPlatform  string `json:"client_platform"`
 	Platform        string `json:"platform"`
 	AgentVersion    string `json:"agent_version"`
+	OwnerSubject    string `json:"owner_subject"`
+	UserID          string `json:"user_id"`
+	UserEmail       string `json:"user_email"`
 }
 
 // POST /api/v2/devices/enroll
@@ -450,7 +455,27 @@ func (h *DeviceV2Handler) EnrollDeviceV2(w http.ResponseWriter, r *http.Request)
 		agentVersion = "1.0.0"
 	}
 
-	dev, key, err := h.Store.EnrollDeviceV2(r.Context(), orgID, deviceID, displayName, platform, agentVersion, req.PublicKey)
+	ownerSubject := strings.TrimSpace(req.OwnerSubject)
+	if ownerSubject == "" {
+		ownerSubject = strings.TrimSpace(req.UserEmail)
+	}
+	if ownerSubject == "" {
+		ownerSubject = strings.TrimSpace(req.UserID)
+	}
+	if ownerSubject == "" {
+		if p := middleware.RequestPrincipalFromContext(r.Context()); p != nil && p.SubjectID != "" {
+			ownerSubject = p.SubjectID
+		}
+	}
+	if ownerSubject == "" {
+		if cookie, err := r.Cookie("agentcontrol_session"); err == nil && cookie != nil && cookie.Value != "" {
+			if sess, err := session.Validate(cookie.Value); err == nil && sess != nil && sess.UserID != "" {
+				ownerSubject = sess.UserID
+			}
+		}
+	}
+
+	dev, key, err := h.Store.EnrollDeviceV2(r.Context(), orgID, deviceID, displayName, platform, agentVersion, req.PublicKey, ownerSubject)
 	if err != nil {
 		log.Printf("[enroll-v2] failed to enroll device: %v", err)
 		http.Error(w, fmt.Sprintf(`{"error":{"code":"enrollment_failed","message":%q}}`, err.Error()), http.StatusInternalServerError)

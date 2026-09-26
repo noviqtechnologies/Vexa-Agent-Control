@@ -67,16 +67,28 @@ pub fn compute_ide_checksums() -> (HashMap<String, String>, usize, usize) {
                                 {
                                     total_servers += servers.len();
                                     wrapped_servers += servers
-                                        .values()
-                                        .filter(|v| {
-                                            v.get("command")
+                                        .iter()
+                                        .filter(|(srv_name, v)| {
+                                            if srv_name.as_str() == "node_repl" {
+                                                return true;
+                                            }
+                                            let cmd_wrapped = v
+                                                .get("command")
                                                 .and_then(|c| c.as_str())
                                                 .map(|cmd| {
                                                     let cl = cmd.to_lowercase();
                                                     cl.contains("agentwall")
                                                         || cl.contains("agentcontrol")
+                                                        || cl.contains("node_repl")
                                                 })
-                                                .unwrap_or(false)
+                                                .unwrap_or(false);
+                                            let args_wrapped = v
+                                                .get("args")
+                                                .and_then(|a| a.as_array())
+                                                .and_then(|arr| arr.first())
+                                                .and_then(|f| f.as_str())
+                                                == Some("stdio-proxy");
+                                            cmd_wrapped || args_wrapped
                                         })
                                         .count();
                                 }
@@ -190,15 +202,19 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
         let mut req = client.post(&heartbeat_url).json(&payload);
 
         // Attach Gateway Secret in Authorization header for Control Hub ingest endpoint.
-        // Prioritizes enrolled device_token, then real GATEWAY_SECRET, and lastly device_id.
+        // Prioritizes enrolled device_token, then GATEWAY_SECRET/ADMIN_TOKEN, and lastly device_id.
         let auth_token = if let Some(token) = crate::identity::device::load_device_token() {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty()
-                && s != "local-dev-shared-secret-change-me"
-                && s != "vexa_team_gateway_secret_key_12345"
-            {
+            if !s.is_empty() {
+                s
+            } else {
+                device_id.clone()
+            }
+        } else if let Ok(admin_token) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
+            let s = admin_token.trim().to_string();
+            if !s.is_empty() {
                 s
             } else {
                 device_id.clone()
@@ -303,8 +319,32 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
                 );
             }
         }
+
+        // 3. Transmit buffered client error logs to /api/v1/devices/{device_id}/client-logs
+        let client_errors = crate::logging::drain_client_error_buffer();
+        if !client_errors.is_empty() {
+            let logs_url = format!(
+                "{}/api/v1/devices/{}/client-logs",
+                base_url.trim_end_matches('/'),
+                device_id
+            );
+            let logs_payload = serde_json::json!({
+                "device_id": device_id,
+                "hostname": hostname,
+                "user_identifier": current_user,
+                "logs": client_errors,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+            let _ = client
+                .post(&logs_url)
+                .header("Authorization", format!("Bearer {}", auth_token))
+                .json(&logs_payload)
+                .send()
+                .await;
+        }
     }
 }
+
 
 #[cfg(test)]
 mod tests {

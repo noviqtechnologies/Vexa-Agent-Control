@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // KMSProvider defines the interface for envelope encryption master key operations.
@@ -38,7 +39,16 @@ func NewLocalMasterKeyProvider() (*LocalMasterKeyProvider, error) {
 			return nil, fmt.Errorf("invalid VEXA_MASTER_KEY: must be 32 bytes hex-encoded")
 		}
 	} else {
-		// 32-byte deterministic fallback key for testing environments
+		env := strings.ToLower(os.Getenv("ENV"))
+		appEnv := strings.ToLower(os.Getenv("APP_ENV"))
+		nodeEnv := strings.ToLower(os.Getenv("NODE_ENV"))
+		isProduction := env == "production" || appEnv == "production" || nodeEnv == "production"
+
+		if isProduction {
+			return nil, errors.New("FATAL: VEXA_MASTER_KEY or AGENTCONTROL_MASTER_KEY must be configured in production (static fallback is blocked)")
+		}
+
+		// Development & testing fallback only
 		key = []byte("vexa-master-key-32-bytes-secure!")
 	}
 

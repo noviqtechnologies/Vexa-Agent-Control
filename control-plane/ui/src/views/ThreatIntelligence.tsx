@@ -50,7 +50,7 @@ export default function ThreatIntelligence() {
         <div className="soc-header-controls">
           <div className="soc-time-toggle" role="group" aria-label="Telemetry Time Range">
             {[
-              { label: '6H', val: 6 },
+              { label: '1H', val: 1 },
               { label: '24H', val: 24 },
               { label: '7D', val: 168 },
               { label: '30D', val: 720 },
@@ -73,7 +73,9 @@ export default function ThreatIntelligence() {
           <div className="card stat-tile soc-clickable-tile">
             <div className="stat-header-row">
               <div className="stat-label">Total Findings</div>
-              <span className="soc-delta-badge delta-neutral">{hours}h</span>
+              <span className="soc-delta-badge delta-neutral">
+                {hours === 1 ? '1h' : hours === 24 ? '24h' : hours === 168 ? '7d' : hours === 720 ? '30d' : `${hours}h`}
+              </span>
             </div>
             <div className="stat-value">{totalFindings.toLocaleString()}</div>
             <div className="stat-subtext">Security violations detected</div>
@@ -121,67 +123,131 @@ export default function ThreatIntelligence() {
         </div>
       )}
 
-      <div className="card soc-panel">
-        <div className="soc-card-header" style={{ marginBottom: 16 }}>
-          <div>
-            <div className="card-title">Threat Timeline ({hours}h)</div>
-            <div className="soc-card-subtitle">Telemetry trajectory of DLP violations, prompt injections, and semantic threats</div>
-          </div>
-          <span className="soc-live-pill">LIVE STREAM</span>
-        </div>
+      {(() => {
+        const isDayGrain = hours > 24
+        const displayTimeline = isDayGrain
+          ? (() => {
+              const dayMap = new Map<string, { hour: string; dlp: number; injection: number; semantic: number }>()
+              for (const item of timeline) {
+                const dayKey = item.hour.split(' ')[0] || item.hour.slice(0, 10)
+                const existing = dayMap.get(dayKey) || { hour: dayKey, dlp: 0, injection: 0, semantic: 0 }
+                existing.dlp += item.dlp || 0
+                existing.injection += item.injection || 0
+                existing.semantic += item.semantic || 0
+                dayMap.set(dayKey, existing)
+              }
+              return Array.from(dayMap.values())
+            })()
+          : timeline
 
-        {timeline.length > 0 ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradDlp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.dlp} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={THREAT_COLORS.dlp} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradInj" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.injection} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={THREAT_COLORS.injection} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradSem" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={THREAT_COLORS.semantic} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={THREAT_COLORS.semantic} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="hour"
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                tickFormatter={(v: string) => v.split(' ')[1] || v}
-                axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: '#0e131f',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 8,
-                  fontSize: 12.5,
-                  boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
-                  color: '#f8fafc',
-                }}
-              />
-              <Area type="monotone" dataKey="dlp" name="DLP Violations" stroke={THREAT_COLORS.dlp} fill="url(#gradDlp)" strokeWidth={2} />
-              <Area type="monotone" dataKey="injection" name="Injection Attempts" stroke={THREAT_COLORS.injection} fill="url(#gradInj)" strokeWidth={2} />
-              <Area type="monotone" dataKey="semantic" name="Semantic Anomalies" stroke={THREAT_COLORS.semantic} fill="url(#gradSem)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">🛡️</div>
-            <p>No threat data in this period</p>
+        const formatTimelineTick = (v: string) => {
+          if (isDayGrain) {
+            const parts = v.split('-')
+            if (parts.length >= 3) {
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+              const m = parseInt(parts[1], 10) - 1
+              const d = parseInt(parts[2], 10)
+              if (m >= 0 && m < 12 && !isNaN(d)) {
+                return `${monthNames[m]} ${d}`
+              }
+            }
+            return v
+          }
+          return v.split(' ')[1] || v
+        }
+
+        const timelineTitle = hours === 1
+          ? 'Threat Timeline (1H - Hourly)'
+          : hours === 24
+          ? 'Threat Timeline (24H - Hourly)'
+          : hours === 168
+          ? 'Threat Timeline (7D - Daily)'
+          : hours === 720
+          ? 'Threat Timeline (30D - Daily)'
+          : `Threat Timeline (${hours}h)`
+
+        return (
+          <div className="card soc-panel">
+            <div className="soc-card-header" style={{ marginBottom: 16 }}>
+              <div>
+                <div className="card-title">{timelineTitle}</div>
+                <div className="soc-card-subtitle">
+                  {isDayGrain
+                    ? 'Daily aggregated telemetry trajectory of DLP violations, prompt injections, and semantic threats'
+                    : 'Telemetry trajectory of DLP violations, prompt injections, and semantic threats'}
+                </div>
+              </div>
+              <span className="soc-live-pill">LIVE STREAM</span>
+            </div>
+
+            {displayTimeline.length > 0 ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={displayTimeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradDlp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={THREAT_COLORS.dlp} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={THREAT_COLORS.dlp} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradInj" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={THREAT_COLORS.injection} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={THREAT_COLORS.injection} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradSem" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={THREAT_COLORS.semantic} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={THREAT_COLORS.semantic} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tickFormatter={formatTimelineTick}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    labelFormatter={(label: any) => {
+                      if (isDayGrain && typeof label === 'string') {
+                        const parts = label.split('-')
+                        if (parts.length >= 3) {
+                          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                          const m = parseInt(parts[1], 10) - 1
+                          const d = parseInt(parts[2], 10)
+                          if (m >= 0 && m < 12 && !isNaN(d)) {
+                            return `${monthNames[m]} ${d}, ${parts[0]}`
+                          }
+                        }
+                      }
+                      return String(label)
+                    }}
+                    contentStyle={{
+                      background: '#0e131f',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: 8,
+                      fontSize: 12.5,
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                      color: '#f8fafc',
+                    }}
+                  />
+                  <Area type="monotone" dataKey="dlp" name="DLP Violations" stroke={THREAT_COLORS.dlp} fill="url(#gradDlp)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="injection" name="Injection Attempts" stroke={THREAT_COLORS.injection} fill="url(#gradInj)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="semantic" name="Semantic Anomalies" stroke={THREAT_COLORS.semantic} fill="url(#gradSem)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-state-icon">🛡️</div>
+                <p>No threat data in this period</p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        )
+      })()}
 
       <div className="card soc-panel">
         <div className="soc-card-header" style={{ marginBottom: 16 }}>

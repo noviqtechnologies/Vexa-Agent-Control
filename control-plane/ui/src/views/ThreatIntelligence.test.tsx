@@ -125,7 +125,7 @@ describe('ThreatIntelligence', () => {
     expect(screen.getByText('24H')).toBeInTheDocument()
   })
 
-  it('renders page header', async () => {
+  it('updates queries and timeline header when clicking 7D and 1H toggles', async () => {
     vi.mocked(api.getThreatSummary).mockResolvedValue(mockSummary)
     vi.mocked(api.getThreatTimeline).mockResolvedValue(mockTimeline)
     vi.mocked(api.getTopThreatPatterns).mockResolvedValue(mockPatterns)
@@ -135,6 +135,28 @@ describe('ThreatIntelligence', () => {
     await waitFor(() => {
       expect(screen.getByText('Threat Intelligence')).toBeInTheDocument()
     })
-    expect(screen.getByText('DLP violations, injection attempts, and semantic anomalies')).toBeInTheDocument()
+
+    // Click 7D button
+    const sevenDayBtn = screen.getByText('7D')
+    sevenDayBtn.click()
+
+    await waitFor(() => {
+      expect(api.getThreatSummary).toHaveBeenCalledWith(168)
+      expect(api.getThreatTimeline).toHaveBeenCalledWith(168)
+      expect(api.getTopThreatPatterns).toHaveBeenCalledWith(168)
+      expect(screen.getByText('Threat Timeline (7D - Daily)')).toBeInTheDocument()
+    })
+
+    // Click 1H button
+    const oneHourBtn = screen.getByText('1H')
+    oneHourBtn.click()
+
+    await waitFor(() => {
+      expect(api.getThreatSummary).toHaveBeenCalledWith(1)
+      expect(api.getThreatTimeline).toHaveBeenCalledWith(1)
+      expect(api.getTopThreatPatterns).toHaveBeenCalledWith(1)
+      expect(screen.getByText('Threat Timeline (1H - Hourly)')).toBeInTheDocument()
+    })
   })
 })
+

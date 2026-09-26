@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -294,4 +295,84 @@ func (h *IngestHandler) GetAuditCheckpoints(w http.ResponseWriter, r *http.Reque
 		"total_count": len(checkpoints),
 	})
 }
+
+// PostRequestLogs handles POST /api/v1/ingest/request-logs from the gateway.
+func (h *IngestHandler) PostRequestLogs(w http.ResponseWriter, r *http.Request) {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, `{"error":"failed to read request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	var logs []model.LlmRequestLog
+
+	// 1. Attempt to decode as a single object
+	var single model.LlmRequestLog
+	if err := json.Unmarshal(bodyBytes, &single); err == nil && single.Valid() {
+		logs = append(logs, single)
+	} else {
+		// 2. Attempt to decode as slice
+		var list []model.LlmRequestLog
+		if err := json.Unmarshal(bodyBytes, &list); err == nil {
+			logs = list
+		} else {
+			// 3. Attempt to decode as wrapped object {"logs": [...]} or {"request_logs": [...]}
+			var wrapped struct {
+				Logs        []model.LlmRequestLog `json:"logs"`
+				RequestLogs []model.LlmRequestLog `json:"request_logs"`
+			}
+			if err := json.Unmarshal(bodyBytes, &wrapped); err == nil {
+				if len(wrapped.Logs) > 0 {
+					logs = wrapped.Logs
+				} else if len(wrapped.RequestLogs) > 0 {
+					logs = wrapped.RequestLogs
+				}
+			}
+		}
+	}
+
+	if len(logs) == 0 {
+		http.Error(w, `{"error":"invalid or empty request logs payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	tenantID := middleware.ResolveTenantScope(r)
+	if tenantID == "" {
+		tenantID = middleware.TenantIDFromContext(ctx)
+	}
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	var deviceID string
+	if dev, ok := ctx.Value(middleware.DevicePrincipalKey).(*model.DevicePrincipal); ok && dev != nil && dev.DeviceID != "" {
+		deviceID = dev.DeviceID
+	}
+
+	accepted := 0
+	for _, l := range logs {
+		logItem := l
+		if !logItem.Valid() {
+			continue
+		}
+		if (logItem.DeviceID == nil || *logItem.DeviceID == "") && deviceID != "" {
+			logItem.DeviceID = &deviceID
+		}
+		if err := h.store.InsertRequestLog(ctx, tenantID, &logItem); err != nil {
+			log.Printf("failed to insert request log %s: %v", logItem.RequestID, err)
+			continue
+		}
+		accepted++
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "accepted",
+		"accepted": accepted,
+		"total":    len(logs),
+	})
+}
+
 

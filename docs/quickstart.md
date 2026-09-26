@@ -50,10 +50,31 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.89` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.90` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
+
+---
+
+### Alternative: Zero-Touch Team Onboarding (SSO + Central Provider Key Custody)
+
+If your company runs a **Vexa Team Hub**, you do not need individual provider keys or local policy files:
+
+```bash
+# 1. Authenticate with your corporate Google Workspace or Microsoft Entra ID
+agentcontrol login --hub https://hub.yourcompany.com
+
+# 2. Connect your AI coding assistant with zero secrets on disk
+agentcontrol connect cursor
+agentcontrol connect claude-code
+```
+
+- **How it works:**
+  1. Opens your default browser for Google Workspace or Entra ID single sign-on.
+  2. Ephemeral loopback callback safely persists sender-constrained session credentials into your OS Credential Store (Windows Credential Manager, macOS Keychain, Linux Secret Service).
+  3. IDE configurations are pointed to `http://127.0.0.1:18080` with **zero provider secrets** on your local drive.
+  4. Requests are authoritatively attributed to your corporate email and team budget at the Hub, while company upstream master keys stay safely in the server KMS vault.
 
 ---
 

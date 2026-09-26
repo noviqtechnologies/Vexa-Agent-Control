@@ -512,6 +512,22 @@ export interface UpdateVirtualKeyRequest {
   status?: string
 }
 
+export interface ClientLogItem {
+  id: string
+  organization_id: string
+  device_id: string
+  hostname?: string
+  user_identifier?: string
+  timestamp: string
+  level: string
+  event: string
+  error_code?: string
+  message?: string
+  origin?: string
+  request_id?: string
+  details?: Record<string, any>
+}
+
 export const api = {
   // Virtual Keys (Pillar 1)
   listVirtualKeys: async () => {
@@ -744,6 +760,30 @@ export const api = {
     const res = await fetch(`/api/v1/observability/request-logs?${qs.toString()}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
     return res.json() as Promise<{ organization_id: string; request_logs: RunSummary[]; total: number; data_freshness: string; confidence: string }>
+  },
+
+  listClientLogs: async (params?: {
+    limit?: number
+    offset?: number
+    hours?: number
+    device_id?: string
+    level?: string
+    event?: string
+    request_id?: string
+    search?: string
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.offset) qs.set('offset', String(params.offset))
+    if (params?.hours) qs.set('hours', String(params.hours))
+    if (params?.device_id) qs.set('device_id', params.device_id)
+    if (params?.level) qs.set('level', params.level)
+    if (params?.event) qs.set('event', params.event)
+    if (params?.request_id) qs.set('request_id', params.request_id)
+    if (params?.search) qs.set('search', params.search)
+    const res = await fetch(`/api/v1/observability/client-logs?${qs.toString()}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+    return res.json() as Promise<{ organization_id: string; client_logs: ClientLogItem[]; total: number; data_freshness: string }>
   },
 
   listAuditLogs: async (params?: { limit?: number; offset?: number; object_id?: string; table_name?: string; action?: string; changed_by?: string }) => {

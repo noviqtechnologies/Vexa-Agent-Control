@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.90] - 2026-09-26
+
+### Added & Enhanced
+- **Hardened Standalone Foundation & Architectural Remediation:** Completed comprehensive standalone security hardening across all enforcement gates, closing all open remediation review feedback items identified in the v10.0 architectural audit.
+- **OIDC Identity Binding & Device Security:** Added `oidc_verifier.go`, OIDC verification test suite (`oidc_verification_test.go`), OAuth token refresh tests (`oauth_refresh_test.go`), and device-security integration tests (`devices_security_test.go`) for robust identity-bound device authorization.
+- **Team Identity & Device Binding Migration:** Added DB migration `000011_team_identity_and_device_binding` with up/down scripts to bind device records to team identity subjects.
+- **Request & Client Logs Storage Layer:** Introduced `request_logs.go` and `team_identity.go` store modules for persistent observability log persistence and team-identity resolution.
+- **Control Hub Observability UI:** Added `ClientLogsTab.tsx` component for agent client-side log inspection in the Observability & Logs dashboard. Refined `RequestLogsTab.tsx`, `ObservabilityLogs.tsx/css`, and `ThreatIntelligence.tsx` for improved UX and responsive layout.
+- **Fleet & Device Governance Improvements:** Streamlined `FleetOverview.tsx`, `Devices.tsx`, and `LicenseSettings.tsx` with corrected team-value reporting and navigation fixes.
+- **Wrapper Binary Resolution:** Unified `resolve_wrapper_binary` across all IDE connect targets (`connect.rs`) eliminating per-target resolution divergence.
+- **Benchmark & Telemetry Accuracy:** Eliminated hardcoded dummy benchmark numbers; dynamic host-sync metrics now sourced from live runtime data.
+
+### Fixed
+- **Integration Test Reliability:** Eliminated stdio integration test hang via channel timeout and unbuffered stream handling in `tests/e2e/spend_test.rs`.
+- **Spend & Audit Subsystems:** Corrected spend reservation types, analytics aggregation, and audit outbox flushing for consistent telemetry under load.
+- **Proxy & LLM Gateway:** Fixed edge cases in `llm_proxy.rs` and `server.rs` affecting streaming response handling under reconnect scenarios.
+
+---
+
 ## [1.0.89] - 2026-09-19
 
 ### Added & Enhanced
@@ -159,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...HEAD
+[1.0.90]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...v1.0.90
 [1.0.89]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.88...v1.0.89
 [1.0.88]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.87...v1.0.88
 [1.0.87]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.86...v1.0.87

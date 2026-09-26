@@ -30,6 +30,7 @@ type mockStore struct {
 	upsertAgentFunc       func(ctx context.Context, tenantID, agentID string) error
 	insertEventFunc       func(ctx context.Context, tenantID string, e *model.RedactedEvent) error
 	insertAlertFunc       func(ctx context.Context, tenantID string, a *model.RedactedAlert) error
+	insertRequestLogFunc  func(ctx context.Context, tenantID string, log *model.LlmRequestLog) error
 	upsertCredentialFunc  func(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
 	listRecentAlertsFunc  func(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)
 	getThreatSummaryFunc    func(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
@@ -106,6 +107,12 @@ func (m *mockStore) InsertEvent(ctx context.Context, tenantID string, e *model.R
 func (m *mockStore) InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error {
 	if m.insertAlertFunc != nil {
 		return m.insertAlertFunc(ctx, tenantID, a)
+	}
+	return nil
+}
+func (m *mockStore) InsertRequestLog(ctx context.Context, tenantID string, log *model.LlmRequestLog) error {
+	if m.insertRequestLogFunc != nil {
+		return m.insertRequestLogFunc(ctx, tenantID, log)
 	}
 	return nil
 }
@@ -383,7 +390,7 @@ func TestFleetHandler_ListAgents_Pagination(t *testing.T) {
 	}
 }
 
-func TestFleetHandler_GetHeatmap_CapsAt168Hours(t *testing.T) {
+func TestFleetHandler_GetHeatmap_CapsAt720Hours(t *testing.T) {
 	var capturedHours int
 	ms := &mockStore{
 		getDecisionHeatmapFn: func(_ context.Context, _ string, hours int) ([]store.DecisionBreakdown, error) {
@@ -393,15 +400,15 @@ func TestFleetHandler_GetHeatmap_CapsAt168Hours(t *testing.T) {
 	}
 	h := NewFleetHandler(ms)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/heatmap?hours=500", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/heatmap?hours=1000", nil)
 	rr := httptest.NewRecorder()
 	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 	}
-	if capturedHours != 168 {
-		t.Errorf("hours capped = %d, want 168", capturedHours)
+	if capturedHours != 720 {
+		t.Errorf("hours capped = %d, want 720", capturedHours)
 	}
 }
 
@@ -663,6 +670,83 @@ func TestIngestHandler_PostCredential_MissingRequiredFields(t *testing.T) {
 				t.Errorf("status = %d, want %d", rr.Code, http.StatusUnprocessableEntity)
 			}
 		})
+	}
+}
+
+func TestIngestHandler_PostRequestLogs_SingleSuccess(t *testing.T) {
+	var capturedLog *model.LlmRequestLog
+	ms := &mockStore{
+		insertRequestLogFunc: func(_ context.Context, _ string, l *model.LlmRequestLog) error {
+			capturedLog = l
+			return nil
+		},
+	}
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
+
+	body := `{
+		"request_id": "req-12345",
+		"session_id": "sess-abc",
+		"model": "gpt-4o",
+		"provider": "openai",
+		"is_streaming": true,
+		"prompt_tokens": 100,
+		"completion_tokens": 50,
+		"total_tokens": 150,
+		"latency_ms": 250.5,
+		"status_code": 200,
+		"verdict": "allow"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/request-logs", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.PostRequestLogs(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	if capturedLog == nil || capturedLog.RequestID != "req-12345" {
+		t.Fatalf("expected captured log req-12345, got %+v", capturedLog)
+	}
+	if capturedLog.PromptTokens != 100 || capturedLog.CompletionTokens != 50 {
+		t.Errorf("expected 100/50 tokens, got %d/%d", capturedLog.PromptTokens, capturedLog.CompletionTokens)
+	}
+}
+
+func TestIngestHandler_PostRequestLogs_BatchSuccess(t *testing.T) {
+	count := 0
+	ms := &mockStore{
+		insertRequestLogFunc: func(_ context.Context, _ string, l *model.LlmRequestLog) error {
+			count++
+			return nil
+		},
+	}
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
+
+	body := `[
+		{"request_id": "req-1", "model": "claude-3-5-sonnet", "provider": "anthropic", "status_code": 200},
+		{"request_id": "req-2", "model": "gpt-4o", "provider": "openai", "status_code": 200}
+	]`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/request-logs", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.PostRequestLogs(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusCreated)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 logs inserted, got %d", count)
+	}
+}
+
+func TestIngestHandler_PostRequestLogs_Invalid(t *testing.T) {
+	ms := &mockStore{}
+	h := NewIngestHandler(ms, sse.NewBroker(), nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest/request-logs", strings.NewReader(`{invalid json`))
+	rr := httptest.NewRecorder()
+	h.PostRequestLogs(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }
 

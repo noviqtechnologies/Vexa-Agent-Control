@@ -1,25 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import RequestLogsTab from '../components/observability/RequestLogsTab'
+import ClientLogsTab from '../components/observability/ClientLogsTab'
 import AuditLogsTab from '../components/observability/AuditLogsTab'
 import DeletedKeysTab from '../components/observability/DeletedKeysTab'
 import DeletedTeamsTab from '../components/observability/DeletedTeamsTab'
 import AuditLogs from './AuditLogs'
 import './ObservabilityLogs.css'
 
-type TabType = 'security_logs' | 'request_logs' | 'audit' | 'deleted_keys' | 'deleted_teams'
+type TabType = 'security_logs' | 'request_logs' | 'client_logs' | 'audit' | 'deleted_keys' | 'deleted_teams'
 
 export default function ObservabilityLogs() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as TabType | null
   const [activeTab, setActiveTab] = useState<TabType>(
-    tabParam === 'security_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams'
+    tabParam === 'security_logs' || tabParam === 'client_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams'
       ? tabParam
       : 'request_logs'
   )
 
   useEffect(() => {
-    if (tabParam && (tabParam === 'security_logs' || tabParam === 'request_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams')) {
+    if (tabParam && (tabParam === 'security_logs' || tabParam === 'request_logs' || tabParam === 'client_logs' || tabParam === 'audit' || tabParam === 'deleted_keys' || tabParam === 'deleted_teams')) {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -34,7 +35,7 @@ export default function ObservabilityLogs() {
       <div className="page-header soc-page-header obs-page-header">
         <div className="obs-header-left">
           <h1>Observability & Logs</h1>
-          <p>Real-time gateway traffic telemetry, immutable management audit ledger, and compliance tombstone tracking.</p>
+          <p>Real-time gateway traffic telemetry, workstation client diagnostic errors, immutable management audit ledger, and compliance tombstone tracking.</p>
         </div>
       </div>
 
@@ -53,6 +54,13 @@ export default function ObservabilityLogs() {
           onClick={() => handleTabChange('request_logs')}
         >
           Request Logs
+        </button>
+        <button
+          type="button"
+          className={`obs-tab-btn ${activeTab === 'client_logs' ? 'active' : ''}`}
+          onClick={() => handleTabChange('client_logs')}
+        >
+          Client & Gateway Logs
         </button>
         <button
           type="button"
@@ -81,6 +89,7 @@ export default function ObservabilityLogs() {
       <div className="obs-tab-content">
         {activeTab === 'security_logs' && <AuditLogs />}
         {activeTab === 'request_logs' && <RequestLogsTab />}
+        {activeTab === 'client_logs' && <ClientLogsTab />}
         {activeTab === 'audit' && <AuditLogsTab />}
         {activeTab === 'deleted_keys' && <DeletedKeysTab />}
         {activeTab === 'deleted_teams' && <DeletedTeamsTab />}
@@ -88,3 +97,4 @@ export default function ObservabilityLogs() {
     </div>
   )
 }
+

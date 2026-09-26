@@ -6,25 +6,83 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
-
-// ObservabilityHandler handles unified Request Logs, Audit Logs, and Deleted Entities.
+// ObservabilityHandler handles unified Request Logs, Client Logs, Audit Logs, and Deleted Entities.
 type ObservabilityHandler struct {
-	spendStore *spend.Store
-	store      *store.Store
+	spendStore  *spend.Store
+	store       *store.Store
+	deviceStore *device.Store
 }
 
 // NewObservabilityHandler creates a new ObservabilityHandler.
-func NewObservabilityHandler(ss *spend.Store, st *store.Store) *ObservabilityHandler {
+func NewObservabilityHandler(ss *spend.Store, st *store.Store, ds *device.Store) *ObservabilityHandler {
 	return &ObservabilityHandler{
-		spendStore: ss,
-		store:      st,
+		spendStore:  ss,
+		store:       st,
+		deviceStore: ds,
 	}
 }
+
+// ListClientLogs handles GET /api/v1/observability/client-logs
+func (h *ObservabilityHandler) ListClientLogs(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
+	if tenantID == "" {
+		tenantID = middleware.TenantIDFromContext(r.Context())
+	}
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	hours := queryInt(r, "hours", 24)
+	if hours <= 0 || hours > 720 {
+		hours = 24
+	}
+
+	limit := queryInt(r, "limit", 50)
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	offset := queryInt(r, "offset", 0)
+
+	q := device.ClientLogQuery{
+		Limit:     limit,
+		Offset:    offset,
+		DeviceID:  r.URL.Query().Get("device_id"),
+		Level:     r.URL.Query().Get("level"),
+		Event:     r.URL.Query().Get("event"),
+		RequestID: r.URL.Query().Get("request_id"),
+		Search:    r.URL.Query().Get("search"),
+		Since:     time.Now().UTC().Add(-time.Duration(hours) * time.Hour),
+	}
+
+	var logs []device.ClientLogEntry
+	var err error
+	if h.deviceStore != nil {
+		logs, err = h.deviceStore.ListClientLogs(r.Context(), tenantID, q)
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to list client logs: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	if logs == nil {
+		logs = []device.ClientLogEntry{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"organization_id": tenantID,
+		"client_logs":     logs,
+		"total":           len(logs),
+		"data_freshness":  time.Now().UTC().Format(time.RFC3339),
+		"confidence":      "observed",
+	})
+}
+
 
 // ListRequestLogs handles GET /api/v1/observability/request-logs
 func (h *ObservabilityHandler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {

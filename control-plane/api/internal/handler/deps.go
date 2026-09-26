@@ -27,6 +27,7 @@ type DataStore interface {
 	ResolveTenantIDForAgent(ctx context.Context, agentID string) string
 	InsertEvent(ctx context.Context, tenantID string, e *model.RedactedEvent) error
 	InsertAlert(ctx context.Context, tenantID string, a *model.RedactedAlert) error
+	InsertRequestLog(ctx context.Context, tenantID string, log *model.LlmRequestLog) error
 	UpsertCredential(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
 
 	ListRecentAlerts(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)

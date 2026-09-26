@@ -94,3 +94,30 @@ type McpServerSnapshot struct {
 	AgentID string                   `json:"agent_id"`
 	Servers []SanitizedMcpServerMeta `json:"servers"`
 }
+
+type LlmRequestLog struct {
+	RequestID        string  `json:"request_id"`
+	SessionID        string  `json:"session_id"`
+	KeyHash          *string `json:"key_hash,omitempty"`
+	Model            string  `json:"model"`
+	Provider         string  `json:"provider"`
+	IsStreaming      bool    `json:"is_streaming"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	LatencyMs        float64 `json:"latency_ms"`
+	StatusCode       int     `json:"status_code"`
+	Verdict          string  `json:"verdict"`
+	IdentitySub      *string `json:"identity_sub,omitempty"`
+	IdentityEmail    *string `json:"identity_email,omitempty"`
+	RequestIP        *string `json:"request_ip,omitempty"`
+	TimestampMs      int64   `json:"timestamp_ms"`
+	IsEstimated      bool    `json:"is_estimated"`
+	Protocol         string  `json:"protocol"`
+	DeviceID         *string `json:"device_id,omitempty"`
+}
+
+func (l *LlmRequestLog) Valid() bool {
+	return l != nil && l.RequestID != ""
+}
+

@@ -191,6 +191,11 @@ type SpendEvent struct {
 // AuthorizeRequest is the payload sent by the gateway before dispatching an LLM call.
 type AuthorizeRequest struct {
 	GatewayID          string `json:"gateway_id,omitempty"`
+	DeviceName         string `json:"device_name,omitempty"`
+	SessionID          string `json:"session_id,omitempty"`
+	InternalUserID     string `json:"internal_user_id,omitempty"`
+	VirtualKeyPrefix   string `json:"virtual_key_prefix,omitempty"`
+	VirtualKeyAlias    string `json:"virtual_key_alias,omitempty"`
 	RequestID          string `json:"request_id"`
 	IdempotencyKey     string `json:"idempotency_key"`
 	ProjectID          string `json:"project_id"`
@@ -228,6 +233,7 @@ type SettleRequest struct {
 	UsageSource       string `json:"usage_source,omitempty"`
 	Status            int    `json:"status"`
 	RequestHash       string `json:"request_hash"`
+	TTFTMs            int64  `json:"ttft_ms,omitempty"`
 }
 
 // SettleResponse returns the final settlement summary.

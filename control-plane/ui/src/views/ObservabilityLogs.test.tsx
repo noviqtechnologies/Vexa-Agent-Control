@@ -163,8 +163,9 @@ describe('ObservabilityLogs View', () => {
       expect(screen.getByText('$0.0018')).toBeInTheDocument()
       expect(screen.getByText('$0.0015')).toBeInTheDocument()
       expect(screen.getByText('$0.00')).toBeInTheDocument()
-      expect(screen.getByText('vk-abc12')).toBeInTheDocument()
+      expect(screen.getByText(/vk-abc12/)).toBeInTheDocument()
       expect(screen.getAllByText(/73fc9665/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText('N/A').length).toBeGreaterThan(0)
     })
   })
 
@@ -265,7 +266,7 @@ describe('ObservabilityLogs View', () => {
     })
   })
 
-  it('renders Export Excel button and User / Host column with device fallback', async () => {
+  it('renders Export Excel button and User / Host columns with device fallback', async () => {
     vi.mocked(api.listRequestLogs).mockResolvedValueOnce({
       organization_id: 'tenant-1',
       request_logs: [
@@ -307,7 +308,8 @@ describe('ObservabilityLogs View', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('User / Host')).toBeInTheDocument()
+      expect(screen.getByText('User')).toBeInTheDocument()
+      expect(screen.getByText('Host')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument()
       expect(screen.getByText(/win-dev-01/)).toBeInTheDocument()
     })

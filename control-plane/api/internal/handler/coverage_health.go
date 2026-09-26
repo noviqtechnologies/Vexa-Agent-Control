@@ -173,7 +173,7 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 		if strings.ToUpper(d.EnrollmentStatus) == "REVOKED" {
 			healthState = "REVOKED"
 			revokedCount++
-		} else if d.LastHeartbeatAt == nil || now.Sub(*d.LastHeartbeatAt) > 3*time.Minute || d.OverallCompliance == "OFFLINE" {
+		} else if d.LastHeartbeatAt == nil || now.Sub(*d.LastHeartbeatAt) > 15*time.Minute || d.OverallCompliance == "OFFLINE" {
 			healthState = "STALE"
 			staleCount++
 		} else if d.TamperCount24h > 0 || d.OverallCompliance == "NON_COMPLIANT" {

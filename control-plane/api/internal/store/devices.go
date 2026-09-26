@@ -404,21 +404,12 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 	var principal model.DevicePrincipal
 	var stateStr string
 
-	// 1. Direct match against devices table
+	// 1. Direct exact match against devices table (UUID or stable_device_id)
 	err := s.pool.QueryRow(ctx, `
 		SELECT id::text, organization_id::text, state::text
 		FROM devices
-		WHERE (
-			id::text = $1 
-			OR stable_device_id = $1 
-			OR LOWER(stable_device_id) = LOWER($1)
-			OR LOWER(display_name) = LOWER($1) 
-			OR $1 ILIKE '%' || display_name || '%'
-			OR $1 ILIKE '%' || stable_device_id || '%'
-			OR display_name ILIKE '%' || $1 || '%'
-			OR stable_device_id ILIKE '%' || $1 || '%'
-		)
-		AND state != 'REVOKED'
+		WHERE (id::text = $1 OR stable_device_id = $1)
+		  AND state != 'REVOKED'
 		LIMIT 1
 	`, token).Scan(&principal.DeviceID, &principal.OrganizationID, &stateStr)
 	if err == nil && principal.OrganizationID != "" {
@@ -433,12 +424,11 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 		return &principal, true
 	}
 
-	// 2. Fallback: look up enrollment_transactions by stable_device_id, then resolve the linked device
+	// 2. Fallback: look up enrollment_transactions by exact stable_device_id or transaction ID
 	err = s.pool.QueryRow(ctx, `
 		SELECT d.id::text, d.organization_id::text, d.state::text
 		FROM enrollment_transactions et
-		JOIN devices d ON d.organization_id = et.organization_id
-		    AND (d.stable_device_id = et.stable_device_id OR LOWER(d.display_name) = LOWER(et.display_name))
+		JOIN devices d ON d.organization_id = et.organization_id AND d.stable_device_id = et.stable_device_id
 		WHERE (et.stable_device_id = $1 OR et.id::text = $1)
 		  AND et.status = 'COMPLETED'
 		  AND d.state != 'REVOKED'
@@ -452,27 +442,6 @@ func (s *Store) ResolveDevicePrincipal(ctx context.Context, token string) (*mode
 			principal.DeviceState = model.DeviceStateCompliant
 		}
 		return &principal, true
-	}
-
-	// 3. Fallback: try matching any device in the org if token looks like a UUID
-	// (covers the case where device_token was saved from a prior server's device.id)
-	if len(token) == 36 {
-		err = s.pool.QueryRow(ctx, `
-			SELECT d.id::text, d.organization_id::text, d.state::text
-			FROM devices d
-			WHERE d.state != 'REVOKED'
-			ORDER BY d.last_heartbeat_at DESC NULLS LAST
-			LIMIT 1
-		`).Scan(&principal.DeviceID, &principal.OrganizationID, &stateStr)
-		if err == nil && principal.OrganizationID != "" {
-			principal.CredentialStatus = model.CredentialStatusActive
-			if stateStr == "NON_COMPLIANT" {
-				principal.DeviceState = model.DeviceStateNonCompliant
-			} else {
-				principal.DeviceState = model.DeviceStateCompliant
-			}
-			return &principal, true
-		}
 	}
 
 	return nil, false
@@ -736,15 +705,21 @@ func (s *Store) UpdateDeviceCapabilityVector(ctx context.Context, organizationID
 	return err
 }
 
-// EnrollDeviceV2 registers or updates a device record with public key bytes.
-func (s *Store) EnrollDeviceV2(ctx context.Context, organizationID, deviceID, displayName, platform, agentVersion, publicKeyBytes string) (*model.DeviceRecord, *DeviceKey, error) {
+// EnrollDeviceV2 registers or updates a device record with public key bytes and owner subject.
+func (s *Store) EnrollDeviceV2(ctx context.Context, organizationID, deviceID, displayName, platform, agentVersion, publicKeyBytes string, ownerSubject ...string) (*model.DeviceRecord, *DeviceKey, error) {
 	now := time.Now()
+	owner := ""
+	if len(ownerSubject) > 0 {
+		owner = strings.TrimSpace(ownerSubject[0])
+	}
+
 	if s.pool == nil {
 		d := &model.DeviceRecord{
 			ID:              deviceID,
 			OrganizationID:  organizationID,
 			StableDeviceID:  deviceID,
 			DisplayName:     displayName,
+			OwnerSubject:    owner,
 			State:           model.DeviceStateCompliant,
 			FirstEnrolledAt: now,
 			LastHeartbeatAt: &now,
@@ -783,21 +758,22 @@ func (s *Store) EnrollDeviceV2(ctx context.Context, organizationID, deviceID, di
 	err = tx.QueryRow(ctx, `
 		INSERT INTO devices (
 			organization_id, stable_device_id, display_name, os_family, architecture,
-			daemon_version, public_key, state, last_freshness, first_enrolled_at, last_heartbeat_at, created_at, updated_at
+			daemon_version, public_key, state, last_freshness, first_enrolled_at, last_heartbeat_at, owner_subject, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'COMPLIANT', 'ACTIVE_FRESH', now(), now(), now(), now())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'COMPLIANT', 'ACTIVE_FRESH', now(), now(), NULLIF($8, ''), now(), now())
 		ON CONFLICT (stable_device_id) DO UPDATE SET
 			display_name    = EXCLUDED.display_name,
 			os_family       = EXCLUDED.os_family,
 			architecture    = EXCLUDED.architecture,
 			daemon_version  = EXCLUDED.daemon_version,
 			public_key      = EXCLUDED.public_key,
+			owner_subject   = COALESCE(NULLIF(EXCLUDED.owner_subject, ''), devices.owner_subject),
 			state           = 'COMPLIANT',
 			last_freshness  = 'ACTIVE_FRESH',
 			last_heartbeat_at = now(),
 			updated_at      = now()
 		RETURNING id::text, organization_id::text, stable_device_id, display_name, os_family, architecture, state, first_enrolled_at, last_heartbeat_at
-	`, organizationID, deviceID, displayName, osFamily, arch, agentVersion, publicKeyBytes).Scan(
+	`, organizationID, deviceID, displayName, osFamily, arch, agentVersion, publicKeyBytes, owner).Scan(
 		&d.ID, &d.OrganizationID, &d.StableDeviceID, &d.DisplayName, &d.OSFamily, &d.Architecture, &d.State, &d.FirstEnrolledAt, &lastHb,
 	)
 	if err != nil {

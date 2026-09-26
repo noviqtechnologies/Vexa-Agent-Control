@@ -83,6 +83,16 @@ pub struct SpendV2AuthorizeReq {
     pub input_token_estimate: i64,
     pub max_output_tokens: i64,
     pub request_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_user_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_key_prefix: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_key_alias: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +124,8 @@ pub struct SpendV2SettleReq {
     pub usage_source: Option<String>,
     pub status: i32,
     pub request_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttft_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

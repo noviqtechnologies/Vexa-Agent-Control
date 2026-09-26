@@ -120,3 +120,22 @@ agentcontrol connect cursor
 agentcontrol connect claude
 agentcontrol status
 ```
+
+---
+
+## 5. Workstation Client & Gateway Error Logs
+
+Client-side drops, stream disconnects (e.g. `stream disconnected before completion: stream closed before response.completed`), policy blocks, and upstream socket errors are captured in real-time across Windows, macOS, and Linux.
+
+### Cross-OS Local Storage
+Logs are automatically written as structured JSON Lines (`agentcontrol.jsonl`) with size-capped rolling retention (max 10MB per file, 5 archives):
+- **Windows:** `%LOCALAPPDATA%\AgentControl\logs\agentcontrol.jsonl`
+- **macOS:** `~/Library/Logs/AgentControl/agentcontrol.jsonl`
+- **Linux:** `~/.local/state/agentcontrol/logs/agentcontrol.jsonl`
+
+### Central Management Console
+Navigate to **Observability & Logs > Client & Gateway Logs** in the Console UI to view:
+- Real-time fleet error streaming (5s auto-refresh)
+- Filter by Device ID, Hostname, Severity (`ERROR`, `WARN`, `INFO`), and Request ID
+- Diagnostic payload inspector drawer with full error traces and correlation links to Run Dossiers
+

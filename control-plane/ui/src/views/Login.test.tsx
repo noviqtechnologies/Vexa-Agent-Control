@@ -158,5 +158,21 @@ describe('Login View', () => {
       value: originalLocation,
     })
   })
+
+  it('opens and closes the security details modal with accurate cryptographic details', async () => {
+    await renderLogin()
+
+    const secBtn = screen.getByRole('button', { name: /View security details/i })
+    fireEvent.click(secBtn)
+
+    expect(screen.getByText('Vexa Security & Compliance Center')).toBeDefined()
+    expect(screen.getByText(/HMAC-SHA256 Cryptographic Audit Chain/i)).toBeDefined()
+    expect(screen.queryByText(/FIPS 140-3/i)).toBeNull()
+
+    const closeBtn = screen.getByRole('button', { name: /Close Security Center/i })
+    fireEvent.click(closeBtn)
+
+    expect(screen.queryByText('Vexa Security & Compliance Center')).toBeNull()
+  })
 })
 

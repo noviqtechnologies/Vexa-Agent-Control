@@ -24,8 +24,43 @@ func (h *DeviceHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/v1/devices", func(r chi.Router) {
 		r.Post("/enroll", h.EnrollDevice)
 		r.Post("/{id}/telemetry", h.RecordTelemetry)
+		r.Post("/{id}/client-logs", h.RecordClientLogs)
 	})
 }
+
+// RecordClientLogs handles POST /api/v1/devices/{id}/client-logs
+func (h *DeviceHandler) RecordClientLogs(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	if deviceID == "" {
+		http.Error(w, `{"error":"missing_device_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req device.ClientLogsIngestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+		return
+	}
+	req.DeviceID = deviceID
+
+	orgID := middleware.ResolveTenantScope(r)
+	if orgID == "" {
+		orgID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	if err := h.store.RecordClientLogs(r.Context(), orgID, req.DeviceID, req.Hostname, req.UserIdentifier, req.Logs); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"acknowledged": true,
+		"count":        len(req.Logs),
+	})
+}
+
 
 // EnrollDevice handles POST /api/v1/devices/enroll
 func (h *DeviceHandler) EnrollDevice(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +137,7 @@ func (h *DeviceHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	for i := range resp {
 		if strings.ToUpper(resp[i].EnrollmentStatus) == "REVOKED" || strings.ToUpper(resp[i].OverallCompliance) == "NON_COMPLIANT" {
 			nonCompliantCount++
-		} else if resp[i].LastHeartbeatAt == nil || now.Sub(*resp[i].LastHeartbeatAt) > 3*time.Minute {
+		} else if resp[i].LastHeartbeatAt == nil || now.Sub(*resp[i].LastHeartbeatAt) > 15*time.Minute {
 			resp[i].OverallCompliance = "OFFLINE"
 			offlineCount++
 		} else {

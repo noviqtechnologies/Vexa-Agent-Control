@@ -255,16 +255,42 @@ func (s *Store) authorizeTx(ctx context.Context, orgID string, req *AuthorizeReq
 	expiresAt := now.Add(5 * time.Minute)
 	policySnapshotBytes, _ := json.Marshal(activePolicies)
 
+	var sessionID *string
+	if req.SessionID != "" {
+		sessionID = &req.SessionID
+	}
+	var internalUserID *string
+	if req.InternalUserID != "" {
+		internalUserID = &req.InternalUserID
+	}
+	var vkPrefix *string
+	if req.VirtualKeyPrefix != "" {
+		vkPrefix = &req.VirtualKeyPrefix
+	}
+	var vkAlias *string
+	if req.VirtualKeyAlias != "" {
+		vkAlias = &req.VirtualKeyAlias
+	}
+
+	tagsMap := map[string]any{}
+	if req.DeviceName != "" {
+		tagsMap["device_name"] = req.DeviceName
+		tagsMap["hostname"] = req.DeviceName
+	}
+	tagsJSON, _ := json.Marshal(tagsMap)
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO spend_reservations (
 			organization_id, request_id, gateway_id, project_id, state,
 			reserved_microcents, settled_microcents, currency, expires_at,
 			policy_snapshot, price_book_version_id, provider, model,
-			input_tokens_estimated, max_output_tokens, created_at
-		) VALUES ($1, $2, $3, $4, 'AUTHORIZED', $5, 0, 'USD', $6, $7, $8, $9, $10, $11, $12, now())
+			input_tokens_estimated, max_output_tokens, session_id, internal_user_id,
+			virtual_key_prefix, virtual_key_alias, tags, created_at
+		) VALUES ($1, $2, $3, $4, 'AUTHORIZED', $5, 0, 'USD', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())
 		RETURNING reservation_id
 	`, orgID, req.RequestID, req.GatewayID, req.ProjectID, reserveMicrocents, expiresAt,
-		policySnapshotBytes, activePriceBookID, req.Provider, req.Model, req.InputTokenEstimate, req.MaxOutputTokens).
+		policySnapshotBytes, activePriceBookID, req.Provider, req.Model, req.InputTokenEstimate, req.MaxOutputTokens,
+		sessionID, internalUserID, vkPrefix, vkAlias, tagsJSON).
 		Scan(&reservationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert spend reservation: %w", err)
@@ -462,9 +488,10 @@ func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *
 		    output_tokens = $3,
 		    cached_tokens = $4,
 		    status_code = $5,
+		    ttft_ms = CASE WHEN $6::int > 0 THEN $6::int ELSE ttft_ms END,
 		    settled_at = now()
-		WHERE reservation_id = $6 AND organization_id = $7
-	`, actualCost, req.InputTokens, req.OutputTokens, req.CachedInputTokens, status, reservationID, orgID)
+		WHERE reservation_id = $7 AND organization_id = $8
+	`, actualCost, req.InputTokens, req.OutputTokens, req.CachedInputTokens, status, req.TTFTMs, reservationID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update reservation: %w", err)
 	}
@@ -485,6 +512,7 @@ func (s *Store) settleTx(ctx context.Context, orgID, reservationID string, req *
 		"is_estimated":        req.IsEstimated,
 		"usage_source":        usageSource,
 		"provider_status":     req.Status,
+		"ttft_ms":             req.TTFTMs,
 	}
 	usageBytes, _ := json.Marshal(usageMap)
 

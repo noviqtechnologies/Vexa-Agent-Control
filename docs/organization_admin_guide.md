@@ -140,4 +140,23 @@ print(response.choices[0].message.content)
 - **Zero-Downtime Rotation**: Admins can rotate active keys with a configurable grace period (default: 3600 seconds). Both old and new secrets authenticate cleanly until the grace period elapses.
 - **Immediate Revocation**: Clicking Revoke invalidates the key hash and evicts all connected edge proxy caches via real-time SSE invalidation events.
 
+---
+
+## 6. Centralized Provider Key Custody (Zero-Leakage Model)
+
+To eliminate the security liability of distributing raw company API keys (OpenAI, Anthropic, Gemini, AWS Bedrock) to developer laptops:
+
+1. **Central KMS Envelope Encryption:** Navigate to **Settings ➔ Provider Keys** in the Web Console. Enter your company's master provider API keys.
+2. **Encrypted at Rest:** Keys are encrypted using AES-256-GCM envelope encryption backed by Docker Secrets (`/run/secrets/master_key` with `0400` permissions) or cloud KMS.
+3. **Transient In-Memory Decryption:** Provider secrets are decrypted strictly in memory at the Control Hub gateway during upstream request dispatch and zeroized immediately after execution.
+4. **Zero Secrets on Workstations:** Developers authenticate with their corporate SSO accounts (`agentcontrol login`). The local proxy forwards requests to the Hub without requiring or storing any raw provider API keys on developer disks.
+
+---
+
+## 7. First-Class Team Governance & Immediate Offboarding
+
+1. **Team Model Allowlists & Budgets:** Assign developers to teams (`team_memberships`) with model allowlists (e.g. `claude-3-5-sonnet`, `gpt-4o`) and monthly spend limits ($50/developer).
+2. **Immediate Offboarding Guarantee:** When an employee leaves the company, disabling their account in Google Workspace or Microsoft Entra ID immediately invalidates OIDC token refreshes. Model access and proxy routing terminate instantly without manual credential rotation.
+3. **Immutable Attribution Ledger:** Every admitted request is recorded in `broker_admissions` with verified `organization_id`, `team_id`, `user_id`, `device_id`, and `policy_version` before upstream dispatch.
+
 

@@ -63,3 +63,27 @@ Force restoration from the latest available backup:
 ```bash
 agentcontrol disconnect --all --force
 ```
+
+---
+
+## 6. Streaming Disconnection / Premature Stream Close
+
+**Symptom:**
+Codex Desktop, Cursor, or Cline displays:
+```text
+stream disconnected before completion: stream closed before response.completed
+```
+
+**Root Causes & Resolution:**
+1. **View Client Diagnostic Logs Locally:**
+   - **Windows:** `Get-Content -Tail 50 "$env:LOCALAPPDATA\AgentControl\logs\agentcontrol.jsonl"`
+   - **macOS:** `tail -n 50 ~/Library/Logs/AgentControl/agentcontrol.jsonl`
+   - **Linux:** `tail -n 50 ~/.local/state/agentcontrol/logs/agentcontrol.jsonl`
+2. **View Centrally in Observability Dashboard:**
+   - Open your **AgentControl Console** at `http://localhost:5173` (or cloud dashboard).
+   - Navigate to **Observability > Client & Gateway Logs**.
+   - Filter by your Device ID or set `Level: Error` to inspect the exact upstream HTTP status or socket timeout reason.
+3. **Verify Provider Credentials:**
+   - Ensure provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) are valid and not expired.
+   - Check if the Virtual Key monthly budget or model permissions were exceeded.
+

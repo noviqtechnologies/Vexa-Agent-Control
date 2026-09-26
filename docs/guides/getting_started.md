@@ -88,7 +88,7 @@ Example Output:
 ● Vexa Agent Control Daemon Health Inspection
   OS Platform:        windows (x86_64)
   Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.89) | Up 23s
+  Daemon Process:     PID 25936 (v1.0.90) | Up 23s
   Listener Binding:   127.0.0.1:18080 (20 ms RTT)
   Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
 ```

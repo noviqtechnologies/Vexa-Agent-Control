@@ -10,10 +10,33 @@ function microcentsToUSD(microcents?: number): string {
   return `$${dollars.toFixed(4)}`
 }
 
-function formatTokens(input = 0, output = 0): string {
+function formatTokenNum(n: number): string {
+  if (!n || n <= 0) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return `${n}`
+}
+
+interface TokenInfo {
+  total: number
+  totalFormatted: string
+  inputFormatted: string
+  outputFormatted: string
+  cachedFormatted?: string
+  rawTooltip: string
+}
+
+function formatTokens(input = 0, output = 0, cached = 0): TokenInfo {
   const total = input + output
-  if (total === 0) return '0 (0+0)'
-  return `${total.toLocaleString()} (${input.toLocaleString()}+${output.toLocaleString()})`
+  const rawTooltip = `Total: ${total.toLocaleString()} tokens (Prompt: ${input.toLocaleString()}, Completion: ${output.toLocaleString()}${cached > 0 ? `, Cached: ${cached.toLocaleString()}` : ''})`
+  return {
+    total,
+    totalFormatted: formatTokenNum(total),
+    inputFormatted: formatTokenNum(input),
+    outputFormatted: formatTokenNum(output),
+    cachedFormatted: cached > 0 ? formatTokenNum(cached) : undefined,
+    rawTooltip,
+  }
 }
 
 function formatDuration(ms?: number): string {
@@ -21,9 +44,25 @@ function formatDuration(ms?: number): string {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-function formatTTFT(ms?: number): string {
-  if (!ms || ms <= 0) return '-'
-  return `${(ms / 1000).toFixed(2)}s`
+interface TTFTInfo {
+  label: string
+  isBatch: boolean
+  tooltip: string
+}
+
+function formatTTFT(ms?: number): TTFTInfo {
+  if (!ms || ms <= 0) {
+    return {
+      label: 'N/A (Batch)',
+      isBatch: true,
+      tooltip: 'Non-streaming batch request (TTFT is only measured for streaming responses)',
+    }
+  }
+  return {
+    label: `${(ms / 1000).toFixed(2)}s`,
+    isBatch: false,
+    tooltip: `Time To First Token: ${ms}ms`,
+  }
 }
 
 function formatTimestamp(isoString: string): string {
@@ -41,11 +80,43 @@ function formatTimestamp(isoString: string): string {
   }
 }
 
+type TypeIconKind = 'llm' | 'tool' | 'response' | 'embedding'
+
 interface TypeBadgeInfo {
   label: string
-  icon: string
+  iconKind: TypeIconKind
   badgeClass: string
   tooltip: string
+}
+
+function RenderTypeIcon({ kind }: { kind: TypeIconKind }) {
+  if (kind === 'tool') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    )
+  }
+  if (kind === 'response') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    )
+  }
+  if (kind === 'embedding') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    )
+  }
+  // Default LLM Sparkle
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+    </svg>
+  )
 }
 
 function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = []): TypeBadgeInfo {
@@ -55,7 +126,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
   if (type === 'TOOL_CALL' || type === 'TOOL' || tags.type === 'tool_call' || tags.tool_calls) {
     return {
       label: 'Tool Call',
-      icon: '🛠️',
+      iconKind: 'tool',
       badgeClass: 'obs-badge-tool',
       tooltip: 'Agent action: LLM selected and invoked a tool/function call',
     }
@@ -64,7 +135,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
   if (type === 'RESPONSE' || type === 'SYNTHESIS' || tags.type === 'synthesis' || tags.role === 'tool_result') {
     return {
       label: 'Response',
-      icon: '💬',
+      iconKind: 'response',
       badgeClass: 'obs-badge-response',
       tooltip: 'Agent answer: LLM synthesized final response from tool execution outputs',
     }
@@ -73,7 +144,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
   if (type === 'EMBEDDING' || type === 'EMBEDDINGS') {
     return {
       label: 'Embedding',
-      icon: '⚡',
+      iconKind: 'embedding',
       badgeClass: 'obs-badge-embedding',
       tooltip: 'Vector text embedding generation',
     }
@@ -100,7 +171,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
     if (isFollowedByCorrelated && !isPrecededByCorrelated) {
       return {
         label: (r.output_tokens || 0) < 60 ? 'Tool Call' : 'Agent Step 1',
-        icon: (r.output_tokens || 0) < 60 ? '🛠️' : '✦',
+        iconKind: (r.output_tokens || 0) < 60 ? 'tool' : 'llm',
         badgeClass: (r.output_tokens || 0) < 60 ? 'obs-badge-tool' : 'obs-badge-type',
         tooltip: `Agent Step 1: Tool invocation / prompt processing (${r.output_tokens || 0} completion tokens)`,
       }
@@ -109,7 +180,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
     if (isPrecededByCorrelated) {
       return {
         label: 'Response',
-        icon: '💬',
+        iconKind: 'response',
         badgeClass: 'obs-badge-response',
         tooltip: `Agent Step 2: Synthesis after tool execution (${r.input_tokens || 0} context tokens)`,
       }
@@ -118,7 +189,7 @@ function getRequestTypeBadge(r: RunSummary, index = 0, allLogs: RunSummary[] = [
 
   return {
     label: r.request_type || 'LLM',
-    icon: '✦',
+    iconKind: 'llm',
     badgeClass: 'obs-badge-type',
     tooltip: 'Standard LLM generation / single completion request',
   }
@@ -288,7 +359,7 @@ export default function RequestLogsTab() {
         'Output Tokens',
         'Cached Tokens',
         'User',
-        'Host / Device Name',
+        'Host',
         'Device ID',
       ]
 
@@ -310,21 +381,24 @@ export default function RequestLogsTab() {
         const costUSD = microcentsToUSD(billedMicrocents)
         const typeBadge = getRequestTypeBadge(r, index, logs)
         const durationSec = r.duration_ms ? (r.duration_ms / 1000).toFixed(2) : '0.00'
-        const ttftSec = r.ttft_ms ? (r.ttft_ms / 1000).toFixed(2) : ''
+        const ttftInfo = formatTTFT(r.ttft_ms)
         const totalTokens = (r.input_tokens || 0) + (r.output_tokens || 0)
+
+        const isHostUUID = r.device_name ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.device_name.trim()) : true
+        const validHostName = r.device_name && !isHostUUID ? r.device_name : null
 
         return [
           r.started_at,
           formatTimestamp(r.started_at),
           typeBadge.label,
           status,
-          r.session_id || '',
+          r.session_id || 'N/A',
           r.request_id || '',
           costUSD,
           durationSec,
-          ttftSec,
+          ttftInfo.isBatch ? 'N/A (Batch)' : ttftInfo.label,
           r.project_id || 'default',
-          r.virtual_key_prefix || '',
+          r.virtual_key_prefix || 'Direct / Gateway',
           r.virtual_key_alias || '',
           r.model || '',
           r.provider || '',
@@ -332,8 +406,8 @@ export default function RequestLogsTab() {
           r.input_tokens || 0,
           r.output_tokens || 0,
           r.cached_tokens || 0,
-          r.internal_user_id || r.end_user_id || '',
-          r.device_name || '',
+          r.internal_user_id || r.end_user_id || (r.virtual_key_alias ? `Key: ${r.virtual_key_alias}` : 'N/A'),
+          validHostName || 'N/A',
           r.device_id || '',
         ]
       })
@@ -578,12 +652,12 @@ export default function RequestLogsTab() {
                 <th>Request ID</th>
                 <th>Cost</th>
                 <th>Duration (s)</th>
-                <th>TTFT (s)</th>
                 <th>Team</th>
-                <th>Key Prefix</th>
+                <th>Key</th>
                 <th>Model</th>
                 <th>Tokens</th>
-                <th>User / Host</th>
+                <th>User</th>
+                <th>Host</th>
               </tr>
             </thead>
             <tbody>
@@ -615,10 +689,13 @@ export default function RequestLogsTab() {
                 }
 
                 // Billed cost: Only SETTLED runs incur actual spend.
-                // RELEASED, FAILED, DENIED, or in-flight AUTHORIZED runs have $0.00 settled spend.
                 const billedMicrocents = r.state === 'SETTLED' ? (r.settled_microcents || 0) : 0
                 const costUSD = microcentsToUSD(billedMicrocents)
                 const typeBadge = getRequestTypeBadge(r, index, logs)
+                const tokenInfo = formatTokens(r.input_tokens, r.output_tokens, r.cached_tokens)
+
+                const isHostUUID = r.device_name ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.device_name.trim()) : true
+                const validHostName = r.device_name && !isHostUUID ? r.device_name : null
 
                 return (
                   <tr
@@ -629,7 +706,8 @@ export default function RequestLogsTab() {
                     <td className="obs-col-time">{formatTimestamp(r.started_at)}</td>
                     <td>
                       <span className={`obs-badge ${typeBadge.badgeClass}`} title={typeBadge.tooltip}>
-                        <span className="obs-type-sparkle">{typeBadge.icon}</span> {typeBadge.label}
+                        <RenderTypeIcon kind={typeBadge.iconKind} />
+                        <span>{typeBadge.label}</span>
                       </span>
                     </td>
                     <td>
@@ -662,7 +740,9 @@ export default function RequestLogsTab() {
                           </button>
                         </div>
                       ) : (
-                        <span className="obs-muted">-</span>
+                        <span className="obs-session-na" title="Session ID was not provided in request headers">
+                          N/A
+                        </span>
                       )}
                     </td>
                     <td className="obs-col-mono">
@@ -678,13 +758,26 @@ export default function RequestLogsTab() {
                     </td>
                     <td className="obs-col-cost">{costUSD}</td>
                     <td>{formatDuration(r.duration_ms)}</td>
-                    <td>{formatTTFT(r.ttft_ms)}</td>
-                    <td>{r.project_id || 'default'}</td>
+                    <td>
+                      {r.project_id && r.project_id.trim() !== '' && r.project_id !== 'default' ? (
+                        <span className="obs-team-pill" title={`Team: ${r.project_id}`}>
+                          {r.project_id}
+                        </span>
+                      ) : (
+                        <span className="obs-team-na-pill" title="No team assigned">
+                          N/A
+                        </span>
+                      )}
+                    </td>
                     <td>
                       {r.virtual_key_prefix ? (
-                        <span className="obs-key-pill">{r.virtual_key_prefix}</span>
+                        <span className="obs-key-pill" title={`Virtual Key: ${r.virtual_key_alias || r.virtual_key_prefix}`}>
+                          🔑 {r.virtual_key_alias || r.virtual_key_prefix}
+                        </span>
                       ) : (
-                        <span className="obs-muted">-</span>
+                        <span className="obs-key-direct-pill" title="Direct Gateway proxy credentials (No virtual key alias attached)">
+                          Direct
+                        </span>
                       )}
                     </td>
                     <td>
@@ -692,38 +785,44 @@ export default function RequestLogsTab() {
                         {r.model}
                       </span>
                     </td>
-                    <td className="obs-col-tokens">
-                      {formatTokens(r.input_tokens, r.output_tokens)}
+                    <td className="obs-col-tokens" title={tokenInfo.rawTooltip}>
+                      <div className="obs-tokens-compact">
+                        <span className="obs-tokens-total">{tokenInfo.totalFormatted}</span>
+                        <span className="obs-tokens-split" title={`Prompt: ${(r.input_tokens || 0).toLocaleString()} · Completion: ${(r.output_tokens || 0).toLocaleString()}`}>
+                          <span className="obs-token-in">↑{tokenInfo.inputFormatted}</span>
+                          <span className="obs-token-out">↓{tokenInfo.outputFormatted}</span>
+                        </span>
+                        {tokenInfo.cachedFormatted && (
+                          <span className="obs-cached-token-pill" title={`Prompt cache hit: ${(r.cached_tokens || 0).toLocaleString()} tokens`}>
+                            ⚡ {tokenInfo.cachedFormatted}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="obs-col-user">
                       {r.internal_user_id || r.end_user_id ? (
-                        <div className="obs-user-cell">
-                          <span className="obs-user-primary">{r.internal_user_id || r.end_user_id}</span>
-                          {r.device_name && (
-                            <span className="obs-user-host-sub" title={`Enrolled Host: ${r.device_name}`}>
-                              💻 {r.device_name}
-                            </span>
-                          )}
-                        </div>
-                      ) : r.device_name || r.device_id ? (
-                        <div className="obs-user-cell" title="Device / Host identifier (Requester user was not explicitly tagged in request)">
-                          <span className="obs-user-host-fallback">
-                            💻 {r.device_name || r.device_id}
-                          </span>
-                          {r.virtual_key_alias && (
-                            <span className="obs-user-key-sub" title={`Virtual Key Alias: ${r.virtual_key_alias}`}>
-                              🔑 {r.virtual_key_alias}
-                            </span>
-                          )}
-                        </div>
+                        <span className="obs-user-primary" title={`User: ${r.internal_user_id || r.end_user_id}`}>
+                          {r.internal_user_id || r.end_user_id}
+                        </span>
                       ) : r.virtual_key_alias ? (
-                        <div className="obs-user-cell" title={`Virtual Key Alias: ${r.virtual_key_alias}`}>
-                          <span className="obs-user-key-fallback">
-                            🔑 {r.virtual_key_alias}
-                          </span>
-                        </div>
+                        <span className="obs-user-key-sub" title={`Virtual Key Alias: ${r.virtual_key_alias}`}>
+                          🔑 {r.virtual_key_alias}
+                        </span>
                       ) : (
-                        <span className="obs-muted">-</span>
+                        <span className="obs-not-available" title="No user identity tagged on this request">
+                          N/A
+                        </span>
+                      )}
+                    </td>
+                    <td className="obs-col-host">
+                      {validHostName ? (
+                        <span className="obs-user-host-badge" title={`Host identifier: ${validHostName}`}>
+                          💻 {validHostName}
+                        </span>
+                      ) : (
+                        <span className="obs-not-available" title="No device hostname tagged on this request">
+                          N/A
+                        </span>
                       )}
                     </td>
                   </tr>

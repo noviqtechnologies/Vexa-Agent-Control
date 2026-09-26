@@ -14,7 +14,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::identity::device::{save_device_token, save_hub_url, DeviceIdentity};
+use crate::identity::device::{save_device_token, save_hub_url, save_user_email, DeviceIdentity};
 use crate::identity::storage::CredentialStore;
 
 /// Core authentication provider abstraction (§FR-1.1).
@@ -44,6 +44,8 @@ pub struct LoginSession {
     pub code_verifier: String,
     pub redirect_uri: String,
     pub callback_port: u16,
+    #[serde(skip)]
+    pub listener: std::sync::Arc<tokio::sync::Mutex<Option<TcpListener>>>,
 }
 
 /// Result of successful device enrollment and authentication.
@@ -223,15 +225,28 @@ impl SmbBrowserAuthProvider {
         }
     }
 
-    /// Try to find an available port in the standard loopback range 18085..=18090.
+    /// Bind ephemeral port on loopback interface (RFC 8252 compliant)
     async fn find_listener() -> Result<(TcpListener, u16), AuthError> {
+        // 1. Primary: bind ephemeral port 0 on 127.0.0.1 (OS allocates free port)
+        if let Ok(listener) = TcpListener::bind("127.0.0.1:0").await {
+            if let Ok(addr) = listener.local_addr() {
+                return Ok((listener, addr.port()));
+            }
+        }
+        // 2. Fallback: try IPv6 loopback [::1]:0
+        if let Ok(listener) = TcpListener::bind("[::1]:0").await {
+            if let Ok(addr) = listener.local_addr() {
+                return Ok((listener, addr.port()));
+            }
+        }
+        // 3. Fallback range 18085..=18090
         for port in 18085..=18090 {
             if let Ok(listener) = TcpListener::bind(format!("127.0.0.1:{}", port)).await {
                 return Ok((listener, port));
             }
         }
         Err(AuthError::PortUnavailable(
-            "Ports 18085-18090 are all in use on 127.0.0.1".to_string(),
+            "Could not allocate loopback listener on 127.0.0.1".to_string(),
         ))
     }
 }
@@ -239,9 +254,7 @@ impl SmbBrowserAuthProvider {
 #[async_trait]
 impl AuthProvider for SmbBrowserAuthProvider {
     async fn initiate_login(&self) -> Result<LoginSession, AuthError> {
-        let (_listener, port) = Self::find_listener().await?;
-        // Drop the temporary listener so await_callback can re-bind or start listening
-        drop(_listener);
+        let (listener, port) = Self::find_listener().await?;
 
         let (code_verifier, code_challenge) = generate_pkce_pair();
         let state = generate_state();
@@ -262,6 +275,7 @@ impl AuthProvider for SmbBrowserAuthProvider {
             code_verifier,
             redirect_uri,
             callback_port: port,
+            listener: std::sync::Arc::new(tokio::sync::Mutex::new(Some(listener))),
         })
     }
 
@@ -269,14 +283,23 @@ impl AuthProvider for SmbBrowserAuthProvider {
         &self,
         session: &LoginSession,
     ) -> Result<DeviceEnrollmentResult, AuthError> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", session.callback_port))
-            .await
-            .map_err(|e| {
-                AuthError::PortUnavailable(format!(
-                    "Could not bind to port {}: {}",
-                    session.callback_port, e
-                ))
-            })?;
+        // Take the already open listener to guarantee zero port-race vulnerability
+        let listener_opt = {
+            let mut guard = session.listener.lock().await;
+            guard.take()
+        };
+
+        let listener = match listener_opt {
+            Some(l) => l,
+            None => TcpListener::bind(format!("127.0.0.1:{}", session.callback_port))
+                .await
+                .map_err(|e| {
+                    AuthError::PortUnavailable(format!(
+                        "Could not bind to port {}: {}",
+                        session.callback_port, e
+                    ))
+                })?,
+        };
 
         // Await callback with 120-second timeout
         let accept_future = async {
@@ -429,7 +452,10 @@ impl AuthProvider for SmbBrowserAuthProvider {
             "client_platform": std::env::consts::OS,
             "agent_version": env!("CARGO_PKG_VERSION"),
             "public_key_bytes": device_identity.public_key_base64(),
-            "ed25519_public_key": device_identity.public_key_base64()
+            "ed25519_public_key": device_identity.public_key_base64(),
+            "owner_subject": &user_id,
+            "user_id": &user_id,
+            "user_email": &user_id
         });
 
         let enroll_resp = client
@@ -458,11 +484,12 @@ impl AuthProvider for SmbBrowserAuthProvider {
             }
         }
 
-        // Save keys and tokens securely to platform CredentialStore
+        // Save keys, user identity, and tokens securely to platform CredentialStore
         let _ = CredentialStore::set("refresh_token", &refresh_token);
         let _ = CredentialStore::set("access_token", &access_token);
         let _ = save_device_token(&device_identity.device_id);
         let _ = save_hub_url(&self.hub_url);
+        let _ = save_user_email(&user_id);
 
         // Generate persistent local proxy bearer token
         let local_token = get_or_create_local_token().map_err(|e| {
@@ -729,7 +756,11 @@ mod tests {
             .contains("https://app.vexasec.io/oauth/authorize"));
         assert!(session.auth_url.contains("code_challenge="));
         assert!(session.auth_url.contains("code_challenge_method=S256"));
-        assert!(session.callback_port >= 18085 && session.callback_port <= 18090);
+        assert!(session.callback_port > 0);
+        assert!(
+            session.listener.lock().await.is_some(),
+            "Listener must remain bound and open"
+        );
     }
 
     #[tokio::test]

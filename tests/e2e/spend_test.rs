@@ -60,6 +60,11 @@ fn test_money_microcents_math_and_serde() {
         input_token_estimate: 500,
         max_output_tokens: 1000,
         request_hash: "hash123".to_string(),
+        session_id: Some("sess-123".to_string()),
+        internal_user_id: Some("dev_user".to_string()),
+        device_name: Some("dev-station".to_string()),
+        virtual_key_prefix: None,
+        virtual_key_alias: None,
     };
 
     let json_str = serde_json::to_string(&req).expect("serialize req");

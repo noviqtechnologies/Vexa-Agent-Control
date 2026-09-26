@@ -172,3 +172,42 @@ type DeviceDetailResponse struct {
 	RecentTamperEvents []DeviceTamperEventLog `json:"recent_tamper_events"`
 	ReportPayload      string                 `json:"report_payload,omitempty"`
 }
+
+// ClientLogEntry represents a structured diagnostic error/warning logged on a client gateway
+type ClientLogEntry struct {
+	ID             string                 `json:"id"`
+	OrganizationID string                 `json:"organization_id"`
+	DeviceID       string                 `json:"device_id"`
+	Hostname       string                 `json:"hostname,omitempty"`
+	UserIdentifier string                 `json:"user_identifier,omitempty"`
+	Timestamp      time.Time              `json:"timestamp"`
+	Level          string                 `json:"level"`
+	Event          string                 `json:"event"`
+	ErrorCode      string                 `json:"error_code,omitempty"`
+	Message        string                 `json:"message,omitempty"`
+	Origin         string                 `json:"origin,omitempty"`
+	RequestID      string                 `json:"request_id,omitempty"`
+	Details        map[string]interface{} `json:"details,omitempty"`
+}
+
+// ClientLogsIngestRequest represents batch client error logs sent by agentwall
+type ClientLogsIngestRequest struct {
+	DeviceID       string                   `json:"device_id"`
+	Hostname       string                   `json:"hostname,omitempty"`
+	UserIdentifier string                   `json:"user_identifier,omitempty"`
+	Logs           []map[string]interface{} `json:"logs"`
+	Timestamp      time.Time                `json:"timestamp"`
+}
+
+// ClientLogQuery defines query parameters for fetching client logs
+type ClientLogQuery struct {
+	Limit     int
+	Offset    int
+	DeviceID  string
+	Level     string
+	Event     string
+	RequestID string
+	Search    string
+	Since     time.Time
+}
+

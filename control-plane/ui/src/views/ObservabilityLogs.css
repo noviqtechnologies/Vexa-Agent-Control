@@ -403,6 +403,52 @@
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.obs-tokens-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.obs-tokens-total {
+  font-weight: 600;
+  color: #f1f5f9;
+  font-size: 12.5px;
+}
+
+.obs-tokens-split {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #64748b;
+  background: rgba(148, 163, 184, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.obs-token-in {
+  color: #94a3b8;
+}
+
+.obs-token-out {
+  color: #38bdf8;
+}
+
+.obs-cached-token-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
 .obs-model-name {
@@ -411,14 +457,89 @@
 }
 
 .obs-key-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: rgba(99, 102, 241, 0.15);
   color: #818cf8;
   border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: monospace;
+}
+
+.obs-key-direct-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(100, 116, 139, 0.12);
+  color: #94a3b8;
+  border: 1px dashed rgba(100, 116, 139, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.obs-session-single,
+.obs-session-na,
+.obs-not-available {
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(100, 116, 139, 0.08);
+  border-radius: 4px;
+  border: 1px dashed rgba(100, 116, 139, 0.25);
+}
+
+.obs-team-pill {
+  display: inline-block;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
-  font-family: monospace;
+  font-weight: 500;
+}
+
+.obs-team-default-pill {
+  display: inline-block;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.obs-team-na-pill {
+  display: inline-block;
+  background: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+  border: 1px dashed rgba(100, 116, 139, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.obs-badge-batch {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(100, 116, 139, 0.12);
+  color: #94a3b8;
+  border: 1px dashed rgba(100, 116, 139, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: help;
 }
 
 .obs-table-name-tag {
@@ -706,9 +827,13 @@
   cursor: not-allowed;
 }
 
-/* User / Host cell styling */
+/* User & Host cell styling */
 .obs-col-user {
-  max-width: 200px;
+  max-width: 180px;
+}
+
+.obs-col-host {
+  max-width: 180px;
 }
 
 .obs-user-cell {
@@ -726,15 +851,7 @@
   white-space: nowrap;
 }
 
-.obs-user-host-sub {
-  font-size: 11px;
-  color: var(--text-muted, #94a3b8);
-  font-family: var(--font-mono, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.obs-user-host-badge,
 .obs-user-host-fallback {
   display: inline-flex;
   align-items: center;
@@ -747,6 +864,15 @@
   border-radius: 4px;
   border: 1px solid rgba(56, 189, 248, 0.2);
   max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.obs-user-host-sub {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  font-family: var(--font-mono, monospace);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

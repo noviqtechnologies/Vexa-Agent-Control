@@ -55,8 +55,8 @@ func (h *FleetHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 func (h *FleetHandler) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())
 	hours := queryInt(r, "hours", 24)
-	if hours > 168 {
-		hours = 168
+	if hours > 720 {
+		hours = 720
 	}
 
 	data, err := h.store.GetDecisionHeatmap(r.Context(), tenantID, hours)

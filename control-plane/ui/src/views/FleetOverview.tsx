@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from 'recharts'
 import {
-  api, subscribeAlerts,
+  api, subscribeAlerts, listDevicesV2,
   type FleetStats, type AgentSummary, type DecisionBreakdown, type RedactedAlert, type LicenseStatus, type CoverageHealthResponse, type ListSentryDevicesResponse,
   type VirtualKey, type Policy, type BudgetWindowV2, type SpendPolicyV2
 } from '../api/client'
@@ -64,12 +64,13 @@ export default function FleetOverview() {
       api.listRecentAlerts(50, hours).catch(() => []),
       (api.getCoverageHealth ? api.getCoverageHealth().catch(() => null) : Promise.resolve(null)),
       (api.getLicenseStatus ? api.getLicenseStatus().catch(() => null) : Promise.resolve(null)),
+      listDevicesV2().catch(() => null),
       (api.listSentryDevices ? api.listSentryDevices().catch(() => null) : Promise.resolve(null)),
       (api.listVirtualKeys ? api.listVirtualKeys().catch(() => ({ virtual_keys: [] })) : Promise.resolve({ virtual_keys: [] })),
       (api.listPolicies ? api.listPolicies().catch(() => []) : Promise.resolve([])),
       (api.getEffectiveSpendV2 ? api.getEffectiveSpendV2().catch(() => null) : Promise.resolve(null)),
       (api.listSpendPoliciesV2 ? api.listSpendPoliciesV2().catch(() => null) : Promise.resolve(null)),
-    ]).then(([s, a, h, al, cov, lic, snt, vk, pol, sp, spPol]) => {
+    ]).then(([s, a, h, al, cov, lic, devV2, snt, vk, pol, sp, spPol]) => {
       const rawAgents = a || []
       const seen = new Set<string>()
       const dedupedAgents: AgentSummary[] = []
@@ -96,7 +97,41 @@ export default function FleetOverview() {
       setAlerts(al || [])
       setCoverage(cov)
       setLicenseStatus(lic)
-      setSentrySummary(snt)
+
+      // Unify workstation device list across V2 and V1 Sentry APIs
+      let workstationDevices: any[] = []
+      let workstationTotal = 0
+      if (devV2 && devV2.devices && devV2.devices.length > 0) {
+        workstationDevices = devV2.devices.map(d => ({
+          device_id: d.device_id,
+          hostname: d.display_name || d.stable_device_id || d.device_id,
+          user_identifier: d.owner_subject || d.stable_device_id || 'workstation',
+          owner_subject: d.owner_subject,
+          auth_provider_type: d.auth_provider_type,
+          os: d.os_family,
+          os_version: d.architecture,
+          overall_compliance: d.status === 'REVOKED' ? 'NON_COMPLIANT' : (d.last_freshness === 'STALE' ? 'OFFLINE' : 'COMPLIANT'),
+          active_ides: ['Cursor', 'VS Code', 'Windsurf'],
+          tamper_count_24h: 0,
+          last_heartbeat_at: d.last_seen_at,
+          enrollment_status: d.status,
+          capability_vector: d.capability_vector || ['CONFIGURED', 'TRAFFIC_VERIFIED'],
+          last_freshness: d.last_freshness || 'ACTIVE_FRESH',
+        }))
+        workstationTotal = devV2.total_count || workstationDevices.length
+      } else if (snt && snt.devices && snt.devices.length > 0) {
+        workstationDevices = snt.devices
+        workstationTotal = snt.total_count ?? (snt as any).total ?? workstationDevices.length
+      }
+
+      setSentrySummary({
+        devices: workstationDevices,
+        total_count: workstationTotal,
+        compliant_count: snt?.compliant_count ?? 0,
+        non_compliant_count: snt?.non_compliant_count ?? 0,
+        offline_count: snt?.offline_count ?? 0,
+      })
+
       if (vk && Array.isArray((vk as any).virtual_keys)) {
         setVirtualKeys((vk as any).virtual_keys)
       }
@@ -152,19 +187,21 @@ export default function FleetOverview() {
   })()
 
   const isHeartbeatActive = (d: any) => {
-    if (d.enrollment_status === 'REVOKED') return false
+    if (d.enrollment_status === 'REVOKED' || d.overall_compliance === 'NON_COMPLIANT') return false
+    if (d.overall_compliance === 'OFFLINE' || d.last_freshness === 'STALE') return false
+    if (d.last_freshness === 'ACTIVE_FRESH' || d.last_freshness === 'ACTIVE_RECENT') return true
     if (!d.last_heartbeat_at) return false
-    return (Date.now() - new Date(d.last_heartbeat_at).getTime()) <= 3 * 60 * 1000
+    return (Date.now() - new Date(d.last_heartbeat_at).getTime()) <= 15 * 60 * 1000
   }
 
-  const computedCompliant = sentryDeduped.filter(d => isHeartbeatActive(d) && d.overall_compliance !== 'NON_COMPLIANT').length
-  const computedOffline = sentryDeduped.filter(d => !isHeartbeatActive(d)).length
+  const computedCompliant = sentryDeduped.filter(d => isHeartbeatActive(d)).length
+  const computedOffline = sentryDeduped.filter(d => !isHeartbeatActive(d) && d.overall_compliance !== 'NON_COMPLIANT' && d.enrollment_status !== 'REVOKED').length
   const computedNonCompliant = sentryDeduped.filter(d => d.overall_compliance === 'NON_COMPLIANT' || d.enrollment_status === 'REVOKED').length
 
-  const totalEnrolledWorkstations = sentrySummary?.total_count ?? (sentrySummary as any)?.total ?? (sentryDeduped.length > 0 ? sentryDeduped.length : undefined) ?? coverage?.summary?.total_workstations ?? 0
-  const activeWorkstations = sentrySummary?.compliant_count ?? (sentryDeduped.length > 0 ? computedCompliant : undefined) ?? coverage?.summary?.protected_workstations ?? (stats && stats.active_agents > 0 ? stats.active_agents : 0)
-  const offlineWorkstations = sentrySummary?.offline_count ?? (sentryDeduped.length > 0 ? computedOffline : undefined) ?? coverage?.summary?.stale_workstations ?? 0
-  const driftedWorkstations = sentrySummary?.non_compliant_count ?? (sentryDeduped.length > 0 ? computedNonCompliant : undefined) ?? coverage?.summary?.exposed_workstations ?? 0
+  const totalEnrolledWorkstations = sentryDeduped.length > 0 ? sentryDeduped.length : (sentrySummary?.total_count ?? (sentrySummary as any)?.total ?? coverage?.summary?.total_workstations ?? 0)
+  const activeWorkstations = sentryDeduped.length > 0 ? computedCompliant : (sentrySummary?.compliant_count ?? coverage?.summary?.protected_workstations ?? (stats && stats.active_agents > 0 ? stats.active_agents : 0))
+  const offlineWorkstations = sentryDeduped.length > 0 ? computedOffline : (sentrySummary?.offline_count ?? coverage?.summary?.stale_workstations ?? 0)
+  const driftedWorkstations = sentryDeduped.length > 0 ? computedNonCompliant : (sentrySummary?.non_compliant_count ?? coverage?.summary?.exposed_workstations ?? 0)
   const activeIdesCount = coverage?.summary?.total_active_ides ?? 0
 
   // Spend calculations (authoritative settled total and policy cap)
@@ -491,8 +528,8 @@ export default function FleetOverview() {
         {/* Card 4: Spend & Budget Governance */}
         <div
           className="card soc-capability-card soc-clickable-tile"
-          onClick={() => navigate('/spend/limits')}
-          title="Configure spend ceilings and token budgets"
+          onClick={() => navigate('/spend/visualization')}
+          title="View Spend Analytics & Observatory"
         >
           <div className="soc-capability-header">
             <div className="soc-capability-title-group">
@@ -523,11 +560,11 @@ export default function FleetOverview() {
             className="soc-capability-footer"
             onClick={(e) => {
               e.stopPropagation()
-              navigate('/spend/limits')
+              navigate('/spend/visualization')
             }}
-            title="View Spend Ledgers"
+            title="View Spend Analytics & Observatory"
           >
-            <span>View Spend Ledgers</span>
+            <span>View Spend Analytics</span>
             <span>→</span>
           </div>
         </div>
@@ -666,56 +703,126 @@ export default function FleetOverview() {
       )}
 
       {/* Decision heatmap */}
-      <div className="card soc-panel" style={{ marginBottom: 24 }}>
-        <div className="soc-card-header">
-          <div>
-            <div className="card-title">Decision Heatmap (24h)</div>
-            <div className="soc-card-subtitle">Stacked telemetry breakdown: Allowed vs Warned (DLP Redacted) vs Denied (Blocked)</div>
-          </div>
-          <span className="soc-live-pill">LIVE STREAM</span>
-        </div>
+      {(() => {
+        const isDayGrain = timeRange === '7d' || timeRange === '30d'
+        const displayHeatmap = isDayGrain
+          ? (() => {
+              const dayMap = new Map<string, { hour: string; allowed: number; denied: number; warned: number }>()
+              for (const item of heatmap) {
+                const dayKey = item.hour.split(' ')[0] || item.hour.slice(0, 10)
+                const existing = dayMap.get(dayKey) || { hour: dayKey, allowed: 0, denied: 0, warned: 0 }
+                existing.allowed += item.allowed || 0
+                existing.denied += item.denied || 0
+                existing.warned += item.warned || 0
+                dayMap.set(dayKey, existing)
+              }
+              return Array.from(dayMap.values())
+            })()
+          : heatmap
 
-        {heatmap.length > 0 ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={heatmap} margin={{ top: 12, right: 12, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis
-                dataKey="hour"
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                tickFormatter={(v: string) => v.split(' ')[1] || v}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                contentStyle={{
-                  background: '#0e131f',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
-                  color: '#f8fafc',
-                }}
-              />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                wrapperStyle={{ paddingBottom: 10, fontSize: 12 }}
-              />
-              <Bar dataKey="allowed" name="Allowed" stackId="a" fill={DECISION_COLORS.allowed} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="warned" name="Warned" stackId="a" fill={DECISION_COLORS.warned} />
-              <Bar dataKey="denied" name="Denied" stackId="a" fill={DECISION_COLORS.denied} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="empty-state">No events in the last 24 hours</div>
-        )}
-      </div>
+        const formatHeatmapTick = (v: string) => {
+          if (isDayGrain) {
+            const parts = v.split('-')
+            if (parts.length >= 3) {
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+              const m = parseInt(parts[1], 10) - 1
+              const d = parseInt(parts[2], 10)
+              if (m >= 0 && m < 12 && !isNaN(d)) {
+                return `${monthNames[m]} ${d}`
+              }
+            }
+            return v
+          }
+          return v.split(' ')[1] || v
+        }
+
+        const heatmapTitle = timeRange === '1h'
+          ? 'Decision Heatmap (1H - Hourly)'
+          : timeRange === '7d'
+          ? 'Decision Heatmap (7D - Daily)'
+          : timeRange === '30d'
+          ? 'Decision Heatmap (30D - Daily)'
+          : 'Decision Heatmap (24H - Hourly)'
+
+        const emptyText = timeRange === '1h'
+          ? 'No events in the last 1 hour'
+          : timeRange === '7d'
+          ? 'No events in the last 7 days'
+          : timeRange === '30d'
+          ? 'No events in the last 30 days'
+          : 'No events in the last 24 hours'
+
+        return (
+          <div className="card soc-panel" style={{ marginBottom: 24 }}>
+            <div className="soc-card-header">
+              <div>
+                <div className="card-title">{heatmapTitle}</div>
+                <div className="soc-card-subtitle">
+                  {isDayGrain
+                    ? 'Daily aggregated telemetry breakdown: Allowed vs Warned (DLP Redacted) vs Denied (Blocked)'
+                    : 'Stacked telemetry breakdown: Allowed vs Warned (DLP Redacted) vs Denied (Blocked)'}
+                </div>
+              </div>
+              <span className="soc-live-pill">LIVE STREAM</span>
+            </div>
+
+            {displayHeatmap.length > 0 ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={displayHeatmap} margin={{ top: 12, right: 12, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tickFormatter={formatHeatmapTick}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                    labelFormatter={(label: any) => {
+                      if (isDayGrain && typeof label === 'string') {
+                        const parts = label.split('-')
+                        if (parts.length >= 3) {
+                          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                          const m = parseInt(parts[1], 10) - 1
+                          const d = parseInt(parts[2], 10)
+                          if (m >= 0 && m < 12 && !isNaN(d)) {
+                            return `${monthNames[m]} ${d}, ${parts[0]}`
+                          }
+                        }
+                      }
+                      return String(label)
+                    }}
+                    contentStyle={{
+                      background: '#0e131f',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                      color: '#f8fafc',
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    wrapperStyle={{ paddingBottom: 10, fontSize: 12 }}
+                  />
+                  <Bar dataKey="allowed" name="Allowed" stackId="a" fill={DECISION_COLORS.allowed} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="warned" name="Warned" stackId="a" fill={DECISION_COLORS.warned} />
+                  <Bar dataKey="denied" name="Denied" stackId="a" fill={DECISION_COLORS.denied} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">{emptyText}</div>
+            )}
+          </div>
+        )
+      })()}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="soc-split-view">
         {/* Agents table */}

@@ -70,14 +70,17 @@ export default function Devices() {
     if (d.enrollment_status === 'REVOKED' || d.overall_compliance === 'NON_COMPLIANT') {
       return 'NON_COMPLIANT'
     }
-    if (d.overall_compliance === 'OFFLINE') {
+    if (d.overall_compliance === 'OFFLINE' || (d as any).last_freshness === 'STALE') {
       return 'OFFLINE'
+    }
+    if ((d as any).last_freshness === 'ACTIVE_FRESH' || (d as any).last_freshness === 'ACTIVE_RECENT') {
+      return 'COMPLIANT'
     }
     if (!d.last_heartbeat_at) {
       return 'OFFLINE'
     }
     const hbTime = new Date(d.last_heartbeat_at).getTime()
-    if (Date.now() - hbTime > 3 * 60 * 1000) {
+    if (Date.now() - hbTime > 15 * 60 * 1000) {
       return 'OFFLINE'
     }
     return (d.overall_compliance as any) || 'COMPLIANT'

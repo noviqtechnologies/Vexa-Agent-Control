@@ -97,4 +97,73 @@ describe('LicenseSettings View', () => {
 
     render(<LicenseSettings />)
   })
+
+  it('allows changing organization name and submitting update', async () => {
+    let orgData = {
+      id: '00000000-0000-0000-0000-000000000001',
+      name: 'Primary Organization',
+      slug: 'primary-org',
+      contact_email: 'admin@primary.local',
+      license_tier: 'team',
+      max_devices: 5,
+      enrolled_devices: 1,
+      days_remaining: 30,
+      has_license_key: false,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    }
+
+    const fetchMock = vi.fn((url: string, opts?: any) => {
+      if (url === '/api/v1/organization' && (!opts || opts.method === 'GET' || !opts.method)) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(orgData),
+        })
+      }
+      if (url === '/api/v1/organization' && opts?.method === 'PUT') {
+        const body = JSON.parse(opts.body)
+        orgData = { ...orgData, name: body.name, contact_email: body.contact_email }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        })
+      }
+      if (url === '/api/v1/auth/me') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ user_id: 'admin', organization_name: orgData.name }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { fireEvent } = await import('@testing-library/react')
+    render(<LicenseSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Primary Organization')).toBeDefined()
+    })
+
+    const changeBtn = screen.getByRole('button', { name: /change name/i })
+    fireEvent.click(changeBtn)
+
+    const input = screen.getByPlaceholderText(/e\.g\. Acme Corp/i) as HTMLInputElement
+    expect(input.value).toBe('Primary Organization')
+
+    fireEvent.change(input, { target: { value: 'Apex Cyber Corp' } })
+    const saveBtn = screen.getByRole('button', { name: /save changes/i })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/organization',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ name: 'Apex Cyber Corp', contact_email: 'admin@primary.local' }),
+        })
+      )
+    })
+  })
 })

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -117,21 +118,21 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 
 	sql := `
 		SELECT sr.reservation_id::text, sr.request_id, sr.gateway_id,
-		       COALESCE(NULLIF(d.display_name, ''), d.stable_device_id, sr.gateway_id) AS device_name,
+		       COALESCE(NULLIF(d.display_name, ''), NULLIF(sr.tags->>'device_name', ''), NULLIF(sr.tags->>'hostname', ''), d.stable_device_id, sr.gateway_id) AS device_name,
 		       sr.project_id, sr.provider, sr.model, sr.state,
 		       sr.reserved_microcents, sr.settled_microcents, sr.created_at, sr.settled_at,
 		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(sr.settled_at, sr.released_at, now()) - sr.created_at)) * 1000, 0)::bigint,
-		       COALESCE(sr.ttft_ms, 0),
+		       COALESCE(sr.ttft_ms, 0)::bigint,
 		       COALESCE(sr.input_tokens, 0),
 		       COALESCE(sr.output_tokens, 0),
 		       COALESCE(sr.cached_tokens, 0),
-		       sr.virtual_key_id::text,
-		       sr.virtual_key_hash,
-		       sr.virtual_key_prefix,
-		       sr.virtual_key_alias,
+		       COALESCE(sr.virtual_key_id::text, vk.id::text),
+		       COALESCE(sr.virtual_key_hash, vk.key_hash),
+		       COALESCE(NULLIF(sr.virtual_key_prefix, ''), NULLIF(sr.tags->>'virtual_key_prefix', ''), vk.key_prefix),
+		       COALESCE(NULLIF(sr.virtual_key_alias, ''), NULLIF(sr.tags->>'virtual_key_alias', ''), vk.name),
 		       sr.session_id,
-		       COALESCE(NULLIF(sr.internal_user_id, ''), d.owner_subject),
-		       COALESCE(NULLIF(sr.end_user_id, ''), d.owner_subject),
+		       COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(sr.tags->>'user_id', ''), NULLIF(d.owner_subject, ''), NULLIF(u.email, ''), NULLIF(vk.created_by, '')),
+		       COALESCE(NULLIF(sr.end_user_id, ''), NULLIF(sr.internal_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(sr.tags->>'user_id', ''), NULLIF(d.owner_subject, ''), NULLIF(u.email, ''), NULLIF(vk.created_by, '')),
 		       COALESCE(sr.tags, '{}'::jsonb),
 		       COALESCE(sr.request_type, 'LLM'),
 		       COALESCE(sr.status_code, 200)
@@ -140,6 +141,26 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 			d.organization_id = sr.organization_id 
 			AND (d.id::text = sr.gateway_id OR d.stable_device_id = sr.gateway_id OR d.display_name = sr.gateway_id)
 		)
+		LEFT JOIN users u ON (
+			u.organization_id = sr.organization_id
+			AND (
+				LOWER(u.email) = LOWER(d.owner_subject)
+				OR (u.provider_subject IS NOT NULL AND u.provider_subject = d.owner_subject)
+			)
+		)
+		LEFT JOIN LATERAL (
+			SELECT v.id, v.key_hash, v.key_prefix, v.name, v.created_by
+			FROM virtual_keys v
+			WHERE v.organization_id = sr.organization_id
+			  AND (
+			  	v.id::text = sr.virtual_key_id::text
+			  	OR v.key_hash = sr.virtual_key_hash
+			  	OR (d.owner_subject IS NOT NULL AND (LOWER(v.created_by) = LOWER(d.owner_subject) OR LOWER(v.name) = LOWER(d.owner_subject)))
+			  	OR (u.email IS NOT NULL AND (LOWER(v.created_by) = LOWER(u.email) OR LOWER(v.name) = LOWER(u.email)))
+			  )
+			ORDER BY v.created_at DESC
+			LIMIT 1
+		) vk ON true
 		WHERE sr.organization_id = $1 AND sr.created_at >= $2
 	`
 	args := []interface{}{orgID, q.Since}
@@ -208,6 +229,7 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 
 	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
+		log.Printf("[runs] ListRuns query failed: %v", err)
 		return s.listRunsLegacyFallback(ctx, orgID, q)
 	}
 	defer rows.Close()
@@ -224,15 +246,17 @@ func (s *Store) ListRuns(ctx context.Context, orgID string, q RunQuery) ([]RunSu
 			&r.DurationMs, &r.TTFTMs, &r.InputTokens, &r.OutputTokens, &r.CachedTokens,
 			&vKeyID, &r.VirtualKeyHash, &r.VirtualKeyPrefix, &r.VirtualKeyAlias,
 			&r.SessionID, &r.InternalUserID, &r.EndUserID, &tagsJSON, &r.RequestType, &r.StatusCode,
-		); err == nil {
-			r.SettledAt = settledAt
-			r.VirtualKeyID = vKeyID
-			r.TotalTokens = r.InputTokens + r.OutputTokens
-			if len(tagsJSON) > 0 {
-				_ = json.Unmarshal(tagsJSON, &r.Tags)
-			}
-			runs = append(runs, r)
+		); err != nil {
+			log.Printf("[runs] ListRuns scan error: %v", err)
+			continue
 		}
+		r.SettledAt = settledAt
+		r.VirtualKeyID = vKeyID
+		r.TotalTokens = r.InputTokens + r.OutputTokens
+		if len(tagsJSON) > 0 {
+			_ = json.Unmarshal(tagsJSON, &r.Tags)
+		}
+		runs = append(runs, r)
 	}
 
 	if len(runs) == 0 {
@@ -293,21 +317,23 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 	var rawStatusCode *int
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT sr.reservation_id::text, sr.request_id, sr.gateway_id, sr.project_id, sr.provider, sr.model, sr.state,
+		SELECT sr.reservation_id::text, sr.request_id, sr.gateway_id,
+		       COALESCE(NULLIF(dev.display_name, ''), NULLIF(sr.tags->>'device_name', ''), NULLIF(sr.tags->>'hostname', ''), dev.stable_device_id, sr.gateway_id) AS device_name,
+		       sr.project_id, sr.provider, sr.model, sr.state,
 		       sr.reserved_microcents, sr.settled_microcents, sr.policy_snapshot::text, sr.price_book_version_id,
 		       sr.created_at, sr.settled_at, sr.released_at, sr.release_reason,
 		       COALESCE(EXTRACT(EPOCH FROM (COALESCE(sr.settled_at, sr.released_at, now()) - sr.created_at)) * 1000, 0)::bigint,
-		       COALESCE(sr.ttft_ms, 0),
+		       COALESCE(sr.ttft_ms, 0)::bigint,
 		       COALESCE(sr.input_tokens, 0),
 		       COALESCE(sr.output_tokens, 0),
 		       COALESCE(sr.cached_tokens, 0),
-		       sr.virtual_key_id::text,
-		       sr.virtual_key_hash,
-		       sr.virtual_key_prefix,
-		       sr.virtual_key_alias,
+		       COALESCE(sr.virtual_key_id::text, vk.id::text),
+		       COALESCE(sr.virtual_key_hash, vk.key_hash),
+		       COALESCE(NULLIF(sr.virtual_key_prefix, ''), NULLIF(sr.tags->>'virtual_key_prefix', ''), vk.key_prefix),
+		       COALESCE(NULLIF(sr.virtual_key_alias, ''), NULLIF(sr.tags->>'virtual_key_alias', ''), vk.name),
 		       sr.session_id,
-		       COALESCE(NULLIF(sr.internal_user_id, ''), dev.owner_subject),
-		       COALESCE(NULLIF(sr.end_user_id, ''), dev.owner_subject),
+		       COALESCE(NULLIF(sr.internal_user_id, ''), NULLIF(sr.end_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(sr.tags->>'user_id', ''), NULLIF(dev.owner_subject, ''), NULLIF(u.email, ''), NULLIF(vk.created_by, '')),
+		       COALESCE(NULLIF(sr.end_user_id, ''), NULLIF(sr.internal_user_id, ''), NULLIF(sr.tags->>'identity_email', ''), NULLIF(sr.tags->>'user_email', ''), NULLIF(sr.tags->>'user_id', ''), NULLIF(dev.owner_subject, ''), NULLIF(u.email, ''), NULLIF(vk.created_by, '')),
 		       COALESCE(sr.tags, '{}'::jsonb),
 		       COALESCE(sr.request_type, 'LLM'),
 		       sr.status_code
@@ -316,9 +342,29 @@ func (s *Store) GetRunDossier(ctx context.Context, orgID, runID string) (*RunDos
 			dev.organization_id = sr.organization_id
 			AND (dev.id::text = sr.gateway_id OR dev.stable_device_id = sr.gateway_id OR dev.display_name = sr.gateway_id)
 		)
+		LEFT JOIN users u ON (
+			u.organization_id = sr.organization_id
+			AND (
+				LOWER(u.email) = LOWER(dev.owner_subject)
+				OR (u.provider_subject IS NOT NULL AND u.provider_subject = dev.owner_subject)
+			)
+		)
+		LEFT JOIN LATERAL (
+			SELECT v.id, v.key_hash, v.key_prefix, v.name, v.created_by
+			FROM virtual_keys v
+			WHERE v.organization_id = sr.organization_id
+			  AND (
+			  	v.id::text = sr.virtual_key_id::text
+			  	OR v.key_hash = sr.virtual_key_hash
+			  	OR (dev.owner_subject IS NOT NULL AND (LOWER(v.created_by) = LOWER(dev.owner_subject) OR LOWER(v.name) = LOWER(dev.owner_subject)))
+			  	OR (u.email IS NOT NULL AND (LOWER(v.created_by) = LOWER(u.email) OR LOWER(v.name) = LOWER(u.email)))
+			  )
+			ORDER BY v.created_at DESC
+			LIMIT 1
+		) vk ON true
 		WHERE (sr.reservation_id::text = $1 OR sr.request_id = $1) AND sr.organization_id = $2
 	`, runID, orgID).Scan(
-		&d.RunID, &d.RequestID, &d.DeviceID, &d.ProjectID, &d.Provider, &d.Model, &d.State,
+		&d.RunID, &d.RequestID, &d.DeviceID, &d.DeviceName, &d.ProjectID, &d.Provider, &d.Model, &d.State,
 		&d.ReservedMicrocents, &d.SettledMicrocents, &policyRaw, &d.PriceBookVersionID,
 		&d.StartedAt, &settledAt, &releasedAt, &releaseReason, &d.DurationMs,
 		&d.TTFTMs, &d.InputTokens, &d.OutputTokens, &d.CachedTokens,

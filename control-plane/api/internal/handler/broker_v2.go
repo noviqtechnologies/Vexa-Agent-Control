@@ -140,6 +140,15 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 	if virtualKeySecret == "" {
 		virtualKeySecret = req.VirtualKey
 	}
+	if virtualKeySecret == "" {
+		authHdr := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHdr, "Bearer ") {
+			cand := strings.TrimSpace(strings.TrimPrefix(authHdr, "Bearer "))
+			if strings.HasPrefix(cand, "sk-vex-") || strings.HasPrefix(cand, "vex_") || strings.HasPrefix(cand, "vexa_") {
+				virtualKeySecret = cand
+			}
+		}
+	}
 	virtualKeySecret = strings.TrimPrefix(virtualKeySecret, "Bearer ")
 	virtualKeySecret = strings.TrimSpace(virtualKeySecret)
 
@@ -207,6 +216,30 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			projID = "default"
 		}
 
+		var vkPrefix, vkAlias, internalUser string
+		if vk != nil {
+			vkPrefix = vk.KeyPrefix
+			vkAlias = vk.Name
+			if vk.CreatedBy != "" {
+				internalUser = vk.CreatedBy
+			}
+		} else if virtualKeySecret != "" {
+			if len(virtualKeySecret) > 14 {
+				vkPrefix = virtualKeySecret[:10] + "..."
+			} else {
+				vkPrefix = virtualKeySecret
+			}
+			vkAlias = vkPrefix
+		}
+
+		if internalUser == "" && principal != nil {
+			if principal.ProviderSubject != nil && *principal.ProviderSubject != "" {
+				internalUser = *principal.ProviderSubject
+			} else if principal.UserID != nil && *principal.UserID != "" {
+				internalUser = *principal.UserID
+			}
+		}
+
 		authReq := &spend.AuthorizeRequest{
 			GatewayID:          principal.DeviceID,
 			RequestID:          reqID,
@@ -217,6 +250,9 @@ func (h *BrokerV2Handler) HandleLLMRequest(w http.ResponseWriter, r *http.Reques
 			InputTokenEstimate: inputEst,
 			MaxOutputTokens:    maxOutput,
 			RequestHash:        reqID,
+			VirtualKeyPrefix:   vkPrefix,
+			VirtualKeyAlias:    vkAlias,
+			InternalUserID:     internalUser,
 		}
 
 		var err error
@@ -487,6 +523,15 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 	if virtualKeySecret == "" {
 		virtualKeySecret = req.VirtualKey
 	}
+	if virtualKeySecret == "" {
+		authHdr := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHdr, "Bearer ") {
+			cand := strings.TrimSpace(strings.TrimPrefix(authHdr, "Bearer "))
+			if strings.HasPrefix(cand, "sk-vex-") || strings.HasPrefix(cand, "vex_") || strings.HasPrefix(cand, "vexa_") {
+				virtualKeySecret = cand
+			}
+		}
+	}
 	virtualKeySecret = strings.TrimPrefix(virtualKeySecret, "Bearer ")
 	virtualKeySecret = strings.TrimSpace(virtualKeySecret)
 
@@ -554,6 +599,30 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 			projID = "default"
 		}
 
+		var vkPrefix, vkAlias, internalUser string
+		if vk != nil {
+			vkPrefix = vk.KeyPrefix
+			vkAlias = vk.Name
+			if vk.CreatedBy != "" {
+				internalUser = vk.CreatedBy
+			}
+		} else if virtualKeySecret != "" {
+			if len(virtualKeySecret) > 14 {
+				vkPrefix = virtualKeySecret[:10] + "..."
+			} else {
+				vkPrefix = virtualKeySecret
+			}
+			vkAlias = vkPrefix
+		}
+
+		if internalUser == "" && principal != nil {
+			if principal.ProviderSubject != nil && *principal.ProviderSubject != "" {
+				internalUser = *principal.ProviderSubject
+			} else if principal.UserID != nil && *principal.UserID != "" {
+				internalUser = *principal.UserID
+			}
+		}
+
 		authReq := &spend.AuthorizeRequest{
 			GatewayID:          principal.DeviceID,
 			RequestID:          reqID,
@@ -564,6 +633,9 @@ func (h *BrokerV2Handler) HandleLLMStream(w http.ResponseWriter, r *http.Request
 			InputTokenEstimate: inputEst,
 			MaxOutputTokens:    maxOutput,
 			RequestHash:        reqID,
+			VirtualKeyPrefix:   vkPrefix,
+			VirtualKeyAlias:    vkAlias,
+			InternalUserID:     internalUser,
 		}
 
 		var err error

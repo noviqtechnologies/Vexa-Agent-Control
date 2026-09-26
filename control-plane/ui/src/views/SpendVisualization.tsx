@@ -63,13 +63,39 @@ export default function SpendVisualization() {
     : 0.0000025
   const approxSavedUSD = totalCachedTokens * effectiveTokenRateUSD
 
-  const timeSeriesData = (analytics?.time_series || []).map((pt) => ({
-    time: new Date(pt.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    settled: microcentsToUSD(pt.settled_microcents),
-    reserved: microcentsToUSD(pt.reserved_microcents),
-    released: microcentsToUSD(pt.released_microcents),
-    requests: pt.request_count,
-  }))
+  const isDayGrain = hours > 24
+
+  const timeSeriesData = (() => {
+    const rawSeries = analytics?.time_series || []
+    if (isDayGrain) {
+      const dayMap = new Map<string, { time: string; settled: number; reserved: number; released: number; requests: number }>()
+      for (const pt of rawSeries) {
+        const d = new Date(pt.hour)
+        const dayKey = isNaN(d.getTime()) ? pt.hour.split(' ')[0] || pt.hour.slice(0, 10) : d.toISOString().slice(0, 10)
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const parts = dayKey.split('-')
+        const formattedDate = parts.length >= 3 && !isNaN(parseInt(parts[1], 10))
+          ? `${monthNames[parseInt(parts[1], 10) - 1]} ${parseInt(parts[2], 10)}`
+          : dayKey
+
+        const existing = dayMap.get(dayKey) || { time: formattedDate, settled: 0, reserved: 0, released: 0, requests: 0 }
+        existing.settled += microcentsToUSD(pt.settled_microcents)
+        existing.reserved += microcentsToUSD(pt.reserved_microcents)
+        existing.released += microcentsToUSD(pt.released_microcents)
+        existing.requests += pt.request_count || 0
+        dayMap.set(dayKey, existing)
+      }
+      return Array.from(dayMap.values())
+    }
+
+    return rawSeries.map((pt) => ({
+      time: new Date(pt.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      settled: microcentsToUSD(pt.settled_microcents),
+      reserved: microcentsToUSD(pt.reserved_microcents),
+      released: microcentsToUSD(pt.released_microcents),
+      requests: pt.request_count,
+    }))
+  })()
 
   const topEntities = analytics?.top_entities || []
   const maxEntitySpend = Math.max(...topEntities.map(e => microcentsToUSD(e.settled_microcents)), 0.01)
@@ -231,12 +257,26 @@ export default function SpendVisualization() {
         </div>
       </div>
 
-      {/* Hourly Spend Velocity Chart */}
+      {/* Spend Velocity Chart */}
       <div className="card soc-panel" style={{ marginBottom: 24 }}>
         <div className="soc-card-header">
           <div>
-            <div className="card-title">Hourly Spend Velocity & Trend</div>
-            <div className="soc-card-subtitle">Real-time throughput of settled spend versus active pre-reservations</div>
+            <div className="card-title">
+              {hours === 1
+                ? 'Hourly Spend Velocity & Trend (1H)'
+                : hours === 24
+                ? 'Hourly Spend Velocity & Trend (24H)'
+                : hours === 168
+                ? 'Daily Spend Velocity & Trend (7D - Daily)'
+                : hours === 720
+                ? 'Daily Spend Velocity & Trend (30D - Daily)'
+                : `Spend Velocity & Trend (${hours}h)`}
+            </div>
+            <div className="soc-card-subtitle">
+              {isDayGrain
+                ? 'Daily aggregated throughput of settled spend versus active pre-reservations'
+                : 'Real-time throughput of settled spend versus active pre-reservations'}
+            </div>
           </div>
           <span className="soc-live-pill">LIVE LEDGER</span>
         </div>

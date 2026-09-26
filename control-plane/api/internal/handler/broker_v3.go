@@ -11,6 +11,8 @@ import (
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/valkey"
@@ -56,7 +58,14 @@ type BrokerV3DispatchPayload struct {
 
 // POST /api/v3/broker/dispatch
 func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
-	// 1. Authenticate via Virtual Key (Bearer token or X-Virtual-Key header)
+	// 1. Authoritative principal verification from middleware context
+	var tenantID string
+	principal, _ := r.Context().Value(middleware.DevicePrincipalKey).(*model.DevicePrincipal)
+	if principal != nil && principal.OrganizationID != "" {
+		tenantID = principal.OrganizationID
+	}
+
+	// 2. Authenticate via Virtual Key (Bearer token or X-Virtual-Key header)
 	authHeader := r.Header.Get("Authorization")
 	virtualKeySecret := strings.TrimPrefix(authHeader, "Bearer ")
 	if virtualKeySecret == authHeader || virtualKeySecret == "" {
@@ -64,8 +73,6 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var vk *store.VirtualKey
-	var tenantID string
-
 	if virtualKeySecret != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(virtualKeySecret))
@@ -81,11 +88,17 @@ func (h *BrokerV3Handler) Dispatch(w http.ResponseWriter, r *http.Request) {
 			writeBrokerJSONError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred while validating virtual key")
 			return
 		}
-		tenantID = vk.TenantID
-	} else {
+		if tenantID == "" {
+			tenantID = vk.TenantID
+		} else if vk.TenantID != "" && vk.TenantID != tenantID {
+			writeBrokerJSONError(w, http.StatusForbidden, "tenant_mismatch", "Virtual key does not belong to the verified organization")
+			return
+		}
+	} else if tenantID == "" {
+		// Fallback for direct dashboard/tenant requests if no virtual key or principal
 		tenantID = getTenantID(r)
 		if tenantID == "" {
-			writeBrokerJSONError(w, http.StatusUnauthorized, "auth_required", "Authorization header or virtual key required")
+			writeBrokerJSONError(w, http.StatusUnauthorized, "auth_required", "Verified device principal or valid virtual key required")
 			return
 		}
 	}

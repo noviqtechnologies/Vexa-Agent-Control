@@ -232,6 +232,17 @@ describe('FleetOverview', () => {
       expect(api.listAgents).toHaveBeenCalledWith(50, 0, 1)
       expect(api.getHeatmap).toHaveBeenCalledWith(1)
       expect(api.listRecentAlerts).toHaveBeenCalledWith(50, 1)
+      expect(screen.getByText('Decision Heatmap (1H - Hourly)')).toBeInTheDocument()
+    })
+
+    // Click 7D toggle
+    const sevenDayBtn = screen.getByText('7D')
+    sevenDayBtn.click()
+
+    await waitFor(() => {
+      expect(api.getFleetOverview).toHaveBeenCalledWith(168)
+      expect(api.getHeatmap).toHaveBeenCalledWith(168)
+      expect(screen.getByText('Decision Heatmap (7D - Daily)')).toBeInTheDocument()
     })
   })
 
@@ -339,4 +350,30 @@ describe('FleetOverview', () => {
       expect(screen.getByText('1 Policy')).toBeInTheDocument()
     })
   })
+
+  it('navigates to Spend Analytics & Observatory (/spend/visualization) when Spend Limits card is clicked', async () => {
+    vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
+    vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
+    vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
+    vi.mocked(api.listRecentAlerts).mockResolvedValue(mockAlerts)
+
+    renderView()
+
+    await waitFor(() => {
+      expect(screen.getByText('Spend Limits')).toBeInTheDocument()
+    })
+
+    const spendCard = screen.getByText('Spend Limits').closest('.soc-capability-card')
+    expect(spendCard).not.toBeNull()
+    fireEvent.click(spendCard!)
+
+    expect(mockNavigate).toHaveBeenCalledWith('/spend/visualization')
+
+    mockNavigate.mockClear()
+    const spendFooter = screen.getByText('View Spend Analytics')
+    fireEvent.click(spendFooter)
+
+    expect(mockNavigate).toHaveBeenCalledWith('/spend/visualization')
+  })
 })
+

@@ -77,7 +77,7 @@ export default function Login() {
 
   return (
     <div className="soc-login-viewport">
-      {/* Refined ambient atmosphere */}
+      {/* Ambient background atmosphere */}
       <div className="soc-login-ambient-glow" aria-hidden="true" />
       <div className="soc-login-ambient-secondary" aria-hidden="true" />
       <div className="soc-login-grid-overlay" aria-hidden="true" />
@@ -182,7 +182,7 @@ export default function Login() {
             </div>
             <div className="trust-pill">
               <span className="trust-shield">🛡️</span>
-              <span>FIPS 140-3 Cryptographic Integrity</span>
+              <span>HMAC-SHA256 Signed Audit Trail</span>
             </div>
           </div>
         </aside>
@@ -292,7 +292,7 @@ export default function Login() {
                   </div>
                 )}
 
-                {/* TAB PANEL: Password Sign-in */}
+                {/* TAB PANEL: Password Sign-in (Local Authentication) */}
                 {authMode === 'password' && (
                   <form onSubmit={handleSubmit} className="local-login-form" id="panel-password" role="tabpanel" aria-labelledby="tab-password">
                     <div className="form-group">
@@ -402,12 +402,12 @@ export default function Login() {
                   </form>
                 )}
 
-                {/* TAB PANEL: Dedicated Enterprise SSO */}
+                {/* TAB PANEL: Dedicated Enterprise SSO (Google Workspace & Microsoft Entra ID) */}
                 {authMode === 'sso' && oauthProviders.length > 0 && (
                   <div className="soc-sso-panel" id="panel-sso" role="tabpanel" aria-labelledby="tab-sso">
                     <div className="sso-panel-intro">
                       <p>
-                        Federated enterprise single sign-on with multi-factor authentication (MFA) governed by your company IdP.
+                        Federated enterprise single sign-on with multi-factor authentication (MFA) governed by your organization identity provider (Google Workspace or Microsoft Entra ID).
                       </p>
                     </div>
 
@@ -548,7 +548,7 @@ export default function Login() {
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
-                <span>FIPS 140-3 &amp; HMAC Audit Chain Verified</span>
+                <span>HMAC-SHA256 Tamper-Evident Audit Chain</span>
               </button>
               <span className="footer-divider">&bull;</span>
               <span className="footer-version">Control Plane v1.0.72</span>
@@ -565,7 +565,7 @@ export default function Login() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="2" y1="12" x2="22" y2="12" />
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" />
                 </svg>
                 <span>vexasec.io</span>
               </a>
@@ -629,7 +629,7 @@ export default function Login() {
                 </div>
                 <div className="guidance-item">
                   <strong>🔑 Enterprise SSO &amp; IdP Issues</strong>
-                  <p>If your organization uses Microsoft Entra ID, Okta, or Google Workspace, confirm your organizational account status with your IT identity provider team.</p>
+                  <p>If your organization uses Microsoft Entra ID (Azure AD) or Google Workspace, confirm your organizational account status with your IT identity provider team.</p>
                 </div>
                 <div className="guidance-item">
                   <strong>✉️ Enterprise Technical Support</strong>
@@ -681,7 +681,7 @@ export default function Login() {
                   <p>All ingress traffic is negotiated using modern cryptographic cipher suites with forward secrecy. Deprecated TLS 1.0/1.1 and insecure ciphers are rejected at gateway edge.</p>
                 </div>
                 <div className="guidance-item">
-                  <strong>🛡️ FIPS 140-3 &amp; HMAC Audit Chain Forensics</strong>
+                  <strong>🛡️ HMAC-SHA256 Cryptographic Audit Chain</strong>
                   <p>Audit entries are cryptographically chained using HMAC-SHA256 digests. Any log alteration is immediately detected and flagged across downstream SIEM collectors.</p>
                 </div>
                 <div className="guidance-item">
@@ -720,13 +720,6 @@ function ProviderIcon({ type }: { type: string }) {
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-    )
-  }
-  if (type === 'okta') {
-    return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" stroke="#007dc1" strokeWidth="3" />
       </svg>
     )
   }

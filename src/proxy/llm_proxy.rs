@@ -110,6 +110,159 @@ pub(crate) fn extract_completion_text_from_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).to_string()
 }
 
+/// Sanitizes tool/function parameter schemas in a request body so they conform
+/// to OpenAI broker requirements:
+/// - Top-level schema MUST have `type: "object"`
+/// - Top-level schema MUST NOT use `anyOf` / `oneOf` / `allOf` / `enum` / `const` / `not`
+/// - Schema must be a valid object (non-objects or empty schemas are normalized)
+/// - Any `required` array entries must exist in `properties`
+///
+/// If a schema violates these rules, it is repaired in-place (lifting properties from valid
+/// object branches of anyOf/oneOf/allOf if possible, or falling back to a permissive object schema),
+/// preventing HTTP 400 errors from the central broker (error_code: invalid_function_parameters).
+pub(crate) fn sanitize_tool_schemas(body: &mut Value) {
+    const FORBIDDEN_KEYS: &[&str] = &["anyOf", "oneOf", "allOf", "enum", "const", "not"];
+
+    fn sanitize_schema_value(schema: &mut Value) {
+        let obj = match schema.as_object_mut() {
+            Some(o) => o,
+            None => {
+                *schema = json!({
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": true
+                });
+                return;
+            }
+        };
+
+        let has_forbidden = FORBIDDEN_KEYS.iter().any(|k| obj.contains_key(*k));
+        let missing_object_type = match obj.get("type") {
+            Some(Value::String(s)) => s != "object",
+            _ => true,
+        };
+
+        if has_forbidden || missing_object_type {
+            // Attempt to extract properties / required from an object sub-schema in anyOf/oneOf/allOf
+            let mut extracted_properties = None;
+            let mut extracted_required = None;
+
+            for &key in &["anyOf", "oneOf", "allOf"] {
+                if let Some(branches) = obj.get(key).and_then(|v| v.as_array()) {
+                    for branch in branches {
+                        if let Some(branch_obj) = branch.as_object() {
+                            let is_obj_branch = branch_obj
+                                .get("type")
+                                .and_then(|t| t.as_str())
+                                .map(|t| t == "object")
+                                .unwrap_or_else(|| branch_obj.contains_key("properties"));
+                            if is_obj_branch && branch_obj.contains_key("properties") {
+                                extracted_properties = branch_obj.get("properties").cloned();
+                                extracted_required = branch_obj.get("required").cloned();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if extracted_properties.is_some() {
+                    break;
+                }
+            }
+
+            for key in FORBIDDEN_KEYS {
+                obj.remove(*key);
+            }
+
+            obj.insert("type".to_string(), Value::String("object".to_string()));
+
+            if !obj.contains_key("properties") {
+                if let Some(props) = extracted_properties {
+                    obj.insert("properties".to_string(), props);
+                    if let Some(req) = extracted_required {
+                        obj.insert("required".to_string(), req);
+                    }
+                } else {
+                    obj.insert("properties".to_string(), Value::Object(serde_json::Map::new()));
+                    obj.insert("additionalProperties".to_string(), Value::Bool(true));
+                }
+            }
+        }
+
+        // Clean up required array so it only references existing keys in properties
+        let valid_keys: Option<std::collections::HashSet<String>> = obj
+            .get("properties")
+            .and_then(|p| p.as_object())
+            .map(|p| p.keys().cloned().collect());
+
+        if let Some(keys) = valid_keys {
+            if let Some(req_arr) = obj.get_mut("required").and_then(|r| r.as_array_mut()) {
+                req_arr.retain(|k| {
+                    k.as_str().map(|s| keys.contains(s)).unwrap_or(false)
+                });
+            }
+        } else if obj.contains_key("required") {
+            obj.remove("required");
+        }
+    }
+
+    fn sanitize_tool_item(tool: &mut Value) {
+        if let Some(obj) = tool.as_object_mut() {
+            // 1. Direct schema fields on tool object (e.g. MCP tools or OpenAI Responses protocol)
+            if let Some(params) = obj.get_mut("parameters") {
+                sanitize_schema_value(params);
+            }
+            if let Some(input_schema) = obj.get_mut("input_schema") {
+                sanitize_schema_value(input_schema);
+            }
+            if let Some(input_schema_camel) = obj.get_mut("inputSchema") {
+                sanitize_schema_value(input_schema_camel);
+            }
+            if let Some(schema) = obj.get_mut("schema") {
+                sanitize_schema_value(schema);
+            }
+
+            // 2. OpenAI function wrapper: { type: "function", function: { parameters: ... } }
+            if let Some(func_val) = obj.get_mut("function") {
+                if let Some(func_obj) = func_val.as_object_mut() {
+                    if let Some(params) = func_obj.get_mut("parameters") {
+                        sanitize_schema_value(params);
+                    }
+                    if let Some(input_schema) = func_obj.get_mut("input_schema") {
+                        sanitize_schema_value(input_schema);
+                    }
+                    if let Some(input_schema_camel) = func_obj.get_mut("inputSchema") {
+                        sanitize_schema_value(input_schema_camel);
+                    }
+                    if let Some(schema) = func_obj.get_mut("schema") {
+                        sanitize_schema_value(schema);
+                    }
+                }
+            }
+
+            // 3. Nested tool arrays (e.g. MCP tool groups: tools[i].tools[j])
+            if let Some(nested_tools) = obj.get_mut("tools").and_then(|t| t.as_array_mut()) {
+                for inner_tool in nested_tools.iter_mut() {
+                    sanitize_tool_item(inner_tool);
+                }
+            }
+        }
+    }
+
+    // Top-level tools array
+    if let Some(tools) = body.get_mut("tools").and_then(|v| v.as_array_mut()) {
+        for tool in tools.iter_mut() {
+            sanitize_tool_item(tool);
+        }
+    }
+
+    // Top-level functions array (legacy OpenAI format)
+    if let Some(functions) = body.get_mut("functions").and_then(|v| v.as_array_mut()) {
+        for func in functions.iter_mut() {
+            sanitize_tool_item(func);
+        }
+    }
+}
+
 pub(crate) fn infer_provider_from_model(model: &str) -> String {
     let lower = model.to_lowercase();
     if lower.starts_with("gpt-")
@@ -472,6 +625,22 @@ pub(crate) fn make_error_response_with_protocol(
     if let Some(d) = details.clone() {
         err_obj["details"] = d;
     }
+
+    crate::logging::log_event(
+        crate::logging::Level::Error,
+        "llm_proxy_error",
+        serde_json::json!({
+            "status_code": status.as_u16(),
+            "origin": origin,
+            "error_code": error_code,
+            "message": message,
+            "request_id": req_id,
+            "details": details,
+            "is_streaming": is_streaming,
+            "is_responses_protocol": is_responses_protocol,
+            "is_anthropic_protocol": is_anthropic_protocol
+        }),
+    );
 
     if is_streaming {
         let sse_content = format!(
@@ -853,7 +1022,7 @@ pub async fn handle_request(
     state: Arc<ProxyState>,
     client_ip: &str,
 ) -> Result<Response<BoxBody>, hyper::Error> {
-    let start_time = std::time::Instant::now();
+    let _start_time = std::time::Instant::now();
 
     // Handle GET /v1/models and GET /models connectivity check for Cline / OpenAI clients
     if req.method() == hyper::Method::GET {
@@ -1080,6 +1249,7 @@ pub async fn handle_request(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let req_uuid = uuid::Uuid::new_v4().to_string();
+    let start_time = std::time::Instant::now();
 
     let model = match body.get("model").and_then(|v| v.as_str()) {
         Some(m) => m.to_string(),
@@ -1106,6 +1276,9 @@ pub async fn handle_request(
             obj.remove("reasoning_effort");
         }
     }
+
+    // Sanitize tool schemas early across all protocols and tool nesting levels
+    sanitize_tool_schemas(&mut body);
 
     // Evaluate LLM policy — resolve from session scope, active global state, or JIT disk policy
     let global_policy = state.policy.read().ok().and_then(|g| g.clone());
@@ -1445,7 +1618,14 @@ pub async fn handle_request(
             input_token_estimate: Some(input_est),
             max_output_tokens: Some(max_output),
             virtual_key: incoming_virtual_key,
-            payload: body.clone(),
+            payload: {
+                // Sanitize tool schemas before forwarding to the broker.
+                // The OpenAI broker rejects top-level `anyOf`/`oneOf`/`allOf`/`enum`/`const`/`not`
+                // and schemas without `type: "object"` (HTTP 400 invalid_function_parameters).
+                let mut sanitized_body = body.clone();
+                sanitize_tool_schemas(&mut sanitized_body);
+                sanitized_body
+            },
         };
 
         if is_streaming {
@@ -1499,6 +1679,12 @@ pub async fn handle_request(
                     let (tx, rx) = tokio::sync::mpsc::channel::<
                         Result<hyper::body::Frame<Bytes>, hyper::Error>,
                     >(64);
+                    let state_clone_for_broker_stream = state.clone();
+                    let session_clone_for_broker_stream = session.clone();
+                    let model_clone_for_broker_stream = model.clone();
+                    let provider_name_clone_for_broker_stream = provider_name.clone();
+                    let start_time_for_broker_stream = start_time;
+                    let input_est_for_broker_stream = input_est;
                     let req_uuid_for_broker_stream = req_uuid.clone();
                     let is_anthropic_for_broker_stream = is_anthropic_protocol;
                     let is_responses_for_broker_stream = is_responses_protocol;
@@ -1597,6 +1783,53 @@ pub async fn handle_request(
                                 .send(Ok(hyper::body::Frame::data(Bytes::from(payload))))
                                 .await;
                         }
+
+                        // Send structured request log to control hub "Request Logs" tab
+                        if let Some(ref dc) = state_clone_for_broker_stream.dashboard_client {
+                            let key_hash = {
+                                use sha2::{Digest, Sha256};
+                                session_clone_for_broker_stream
+                                    .identity_sub
+                                    .as_deref()
+                                    .map(|sub| {
+                                        let mut h = Sha256::new();
+                                        h.update(sub.as_bytes());
+                                        format!("sha256:{:.8}", hex::encode(h.finalize()))
+                                    })
+                            };
+                            dc.send_llm_request_log(crate::control_plane_client::client::LlmRequestLog {
+                                request_id: req_uuid_for_broker_stream.clone(),
+                                session_id: session_clone_for_broker_stream.session_id.clone(),
+                                key_hash,
+                                model: model_clone_for_broker_stream.clone(),
+                                provider: provider_name_clone_for_broker_stream.clone(),
+                                is_streaming: true,
+                                prompt_tokens: input_est_for_broker_stream,
+                                completion_tokens: streamed_tokens_est as i64,
+                                total_tokens: (input_est_for_broker_stream + streamed_tokens_est as i64),
+                                latency_ms: start_time_for_broker_stream.elapsed().as_secs_f64() * 1000.0,
+                                status_code: 200,
+                                verdict: "allow".to_string(),
+                                identity_sub: session_clone_for_broker_stream
+                                    .identity_sub
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                identity_email: session_clone_for_broker_stream
+                                    .identity_email
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                request_ip: session_clone_for_broker_stream.request_ip.clone(),
+                                timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                                is_estimated: true,
+                                protocol: if is_anthropic_for_broker_stream {
+                                    "anthropic_messages".to_string()
+                                } else if is_responses_for_broker_stream {
+                                    "openai_responses".to_string()
+                                } else {
+                                    "openai_chat_completions".to_string()
+                                },
+                            });
+                        }
                     });
 
                     let stream_body =
@@ -1660,6 +1893,64 @@ pub async fn handle_request(
                         &model,
                         control_plane_proto::redact::RawDecision::Allowed,
                     );
+                    if let Some(ref dc) = state.dashboard_client {
+                        let usage = brokered_resp.response.get("usage");
+                        let p_tokens = usage
+                            .and_then(|u| u.get("prompt_tokens"))
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(input_est);
+                        let c_tokens = usage
+                            .and_then(|u| u.get("completion_tokens"))
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let t_tokens = usage
+                            .and_then(|u| u.get("total_tokens"))
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(p_tokens + c_tokens);
+                        let key_hash = {
+                            use sha2::{Digest, Sha256};
+                            session
+                                .identity_sub
+                                .as_deref()
+                                .map(|sub| {
+                                    let mut h = Sha256::new();
+                                    h.update(sub.as_bytes());
+                                    format!("sha256:{:.8}", hex::encode(h.finalize()))
+                                })
+                        };
+                        dc.send_llm_request_log(crate::control_plane_client::client::LlmRequestLog {
+                            request_id: req_uuid.clone(),
+                            session_id: session.session_id.clone(),
+                            key_hash,
+                            model: model.clone(),
+                            provider: provider_name.clone(),
+                            is_streaming: false,
+                            prompt_tokens: p_tokens,
+                            completion_tokens: c_tokens,
+                            total_tokens: t_tokens,
+                            latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                            status_code: 200,
+                            verdict: "allow".to_string(),
+                            identity_sub: session
+                                .identity_sub
+                                .clone()
+                                .or_else(|| crate::identity::device::load_user_email()),
+                            identity_email: session
+                                .identity_email
+                                .clone()
+                                .or_else(|| crate::identity::device::load_user_email()),
+                            request_ip: session.request_ip.clone(),
+                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                            is_estimated: false,
+                            protocol: if is_anthropic_protocol {
+                                "anthropic_messages".to_string()
+                            } else if is_responses_protocol {
+                                "openai_responses".to_string()
+                            } else {
+                                "openai_chat_completions".to_string()
+                            },
+                        });
+                    }
                     let resp_bytes =
                         serde_json::to_vec(&brokered_resp.response).unwrap_or_default();
                     let mut builder = Response::builder().status(StatusCode::OK);
@@ -2033,6 +2324,27 @@ pub async fn handle_request(
                 .or_else(|| std::env::var("GATEWAY_ID").ok())
                 .unwrap_or_else(|| session.session_id.clone());
 
+            let current_user = session
+                .identity_email
+                .clone()
+                .or_else(|| session.identity_sub.clone())
+                .or_else(|| crate::identity::device::load_user_email())
+                .or_else(|| {
+                    let u = crate::identity::device::get_current_user();
+                    if u.is_empty() || u == "unknown" {
+                        None
+                    } else {
+                        Some(u)
+                    }
+                });
+
+            let local_hostname = crate::identity::device::get_hostname();
+            let device_name = if !local_hostname.is_empty() {
+                Some(local_hostname)
+            } else {
+                None
+            };
+
             let auth_req = crate::spend::types::SpendV2AuthorizeReq {
                 gateway_id: Some(device_id),
                 request_id: req_uuid.clone(),
@@ -2046,6 +2358,11 @@ pub async fn handle_request(
                 input_token_estimate: input_est,
                 max_output_tokens: max_output,
                 request_hash: req_hash,
+                session_id: Some(session.session_id.clone()),
+                internal_user_id: current_user,
+                device_name,
+                virtual_key_prefix: None,
+                virtual_key_alias: None,
             };
 
             let auth_url = format!("{}/api/v2/spend/authorize", hub_base.trim_end_matches('/'));
@@ -2509,6 +2826,7 @@ pub async fn handle_request(
                     let mut total_tokens_val = None;
                     let mut found_provider_usage = false;
                     let mut has_emitted_content_or_tool = false;
+                    let mut first_token_instant: Option<std::time::Instant> = None;
                     let mut byte_buffer = Vec::<u8>::new();
 
                     let is_cross_to_openai =
@@ -2753,10 +3071,18 @@ pub async fn handle_request(
                                         }
                                     }
                                 }
+                                if first_token_instant.is_none()
+                                    && (has_emitted_content_or_tool || accumulated_chars > 0)
+                                {
+                                    first_token_instant = Some(std::time::Instant::now());
+                                }
                             }
                             Err(_) => break,
                         }
                     }
+
+                    let ttft_ms_val = first_token_instant
+                        .map(|t| t.duration_since(start_time_clone).as_millis() as i64);
 
                     if !byte_buffer.is_empty() {
                         let text = String::from_utf8_lossy(&byte_buffer);
@@ -2837,6 +3163,7 @@ pub async fn handle_request(
                                 }),
                                 status: 200,
                                 request_hash: req_uuid_clone.clone(),
+                                ttft_ms: ttft_ms_val,
                             };
                             let settle_url = format!(
                                 "{}/api/v2/spend/reservations/{}/settle",
@@ -2943,6 +3270,60 @@ pub async fn handle_request(
                         &model_clone,
                         control_plane_proto::redact::RawDecision::Allowed,
                     );
+
+                    // Send structured request log to control hub "Request Logs" tab
+                    if let Some(ref dc) = state_clone.dashboard_client {
+                        let protocol_str = if is_anthropic_protocol_clone {
+                            "anthropic_messages"
+                        } else if is_responses_protocol_clone {
+                            "openai_responses"
+                        } else {
+                            "openai_chat_completions"
+                        };
+                        let auth_hdr = session_clone.request_ip.clone(); // reuse field for IP
+                        let key_hash = {
+                            use sha2::{Digest, Sha256};
+                            session_clone
+                                .identity_sub
+                                .as_deref()
+                                .map(|sub| {
+                                    let mut h = Sha256::new();
+                                    h.update(sub.as_bytes());
+                                    format!("sha256:{:.8}", hex::encode(h.finalize()))
+                                })
+                        };
+                        dc.send_llm_request_log(
+                            crate::control_plane_client::client::LlmRequestLog {
+                                request_id: req_uuid_clone.clone(),
+                                session_id: session_clone.session_id.clone(),
+                                key_hash,
+                                model: model_clone.clone(),
+                                provider: provider_name_clone.clone(),
+                                is_streaming: true,
+                                prompt_tokens: prompt_tokens_val,
+                                completion_tokens: completion_tokens_val,
+                                total_tokens: total_tokens_val
+                                    .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)
+                                    as i64,
+                                latency_ms: start_time_clone.elapsed().as_secs_f64() * 1000.0,
+                                status_code: 200,
+                                verdict: "allow".to_string(),
+                                identity_sub: session_clone
+                                    .identity_sub
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                identity_email: session_clone
+                                    .identity_email
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                request_ip: auth_hdr,
+                                timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                                is_estimated: !found_provider_usage,
+                                protocol: protocol_str.to_string(),
+                            },
+                        );
+                    }
+
                     let _ = state_clone.audit_logger.write_entry(
                         &session_clone.session_id,
                         "llm_allow",
@@ -3148,6 +3529,7 @@ pub async fn handle_request(
 
                 if let Some(ref hub_base) = hub_url {
                     if let Some(ref res_id) = active_reservation_id {
+                        let non_streaming_ttft = start_time.elapsed().as_millis() as i64;
                         let settle_req = crate::spend::types::SpendV2SettleReq {
                             request_id: req_uuid.clone(),
                             idempotency_key: format!("settle-{}", req_uuid),
@@ -3159,6 +3541,7 @@ pub async fn handle_request(
                             usage_source: Some(usage_source),
                             status: status.as_u16() as i32,
                             request_hash: req_uuid.clone(),
+                            ttft_ms: Some(non_streaming_ttft),
                         };
                         let settle_url = format!(
                             "{}/api/v2/spend/reservations/{}/settle",
@@ -3226,6 +3609,59 @@ pub async fn handle_request(
                     &model,
                     control_plane_proto::redact::RawDecision::Allowed,
                 );
+
+                // Send structured request log to control hub "Request Logs" tab
+                if let Some(ref dc) = state.dashboard_client {
+                    let protocol_str = if is_anthropic_protocol {
+                        "anthropic_messages"
+                    } else if is_responses_protocol {
+                        "openai_responses"
+                    } else {
+                        "openai_chat_completions"
+                    };
+                    let key_hash = {
+                        use sha2::{Digest, Sha256};
+                        session
+                            .identity_sub
+                            .as_deref()
+                            .map(|sub| {
+                                let mut h = Sha256::new();
+                                h.update(sub.as_bytes());
+                                format!("sha256:{:.8}", hex::encode(h.finalize()))
+                            })
+                    };
+                    dc.send_llm_request_log(
+                        crate::control_plane_client::client::LlmRequestLog {
+                            request_id: req_uuid.clone(),
+                            session_id: session.session_id.clone(),
+                            key_hash,
+                            model: model.clone(),
+                            provider: provider_name.clone(),
+                            is_streaming: false,
+                            prompt_tokens: prompt_tokens_val,
+                            completion_tokens: completion_tokens_val,
+                            total_tokens: total_tokens
+                                .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)
+                                as i64,
+                            latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                            status_code: status.as_u16(),
+                            verdict: "allow".to_string(),
+                            identity_sub: session
+                                .identity_sub
+                                .clone()
+                                .or_else(|| crate::identity::device::load_user_email()),
+                            identity_email: session
+                                .identity_email
+                                .clone()
+                                .or_else(|| crate::identity::device::load_user_email()),
+                            request_ip: session.request_ip.clone(),
+                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                            is_estimated: false,
+                            protocol: protocol_str.to_string(),
+                        },
+                    );
+                }
+
                 let _ = state
                     .audit_logger
                     .write_entry(
@@ -3696,5 +4132,225 @@ mod tests {
         assert!(!is_internal_agentcontrol_key(
             "AIzaSyD1234567890abcdefghijklmnopqrstuv"
         ));
+    }
+
+    // ── sanitize_tool_schemas ────────────────────────────────────────────────
+
+    #[test]
+    fn test_sanitize_tool_schemas_valid_passthrough() {
+        // A well-formed schema must NOT be modified.
+        let mut body = json!({
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "my_tool",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "foo": { "type": "string" }
+                        }
+                    }
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = body["tools"][0]["function"]["parameters"].clone();
+        assert_eq!(params["type"], "object");
+        assert!(params.get("properties").is_some());
+        // Must not add unnecessary additionalProperties to a valid schema
+        assert_eq!(params.get("additionalProperties"), None);
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_anyof_top_level() {
+        // Simulates the `automation_update` failure: top-level anyOf without type:object
+        let mut body = json!({
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "automation_update",
+                    "parameters": {
+                        "anyOf": [
+                            { "type": "string" },
+                            { "type": "null" }
+                        ]
+                    }
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = &body["tools"][0]["function"]["parameters"];
+        assert_eq!(params["type"], "object", "anyOf must be replaced with object type");
+        assert!(params.get("anyOf").is_none(), "anyOf must be stripped from sanitized schema");
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_nested_tools_group() {
+        // OpenAI responses protocol nests MCP tool groups as tools[].tools[]
+        let mut body = json!({
+            "tools": [{
+                "type": "mcp",
+                "tools": [{
+                    "type": "function",
+                    "function": {
+                        "name": "automation_update",
+                        "parameters": {
+                            "oneOf": [
+                                { "type": "object", "properties": {} },
+                                { "type": "null" }
+                            ]
+                        }
+                    }
+                }]
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = &body["tools"][0]["tools"][0]["function"]["parameters"];
+        assert_eq!(params["type"], "object");
+        assert!(params.get("oneOf").is_none());
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_anthropic_input_schema() {
+        // Anthropic uses input_schema instead of function.parameters
+        let mut body = json!({
+            "tools": [{
+                "name": "some_tool",
+                "input_schema": {
+                    "enum": ["a", "b", "c"]
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let schema = &body["tools"][0]["input_schema"];
+        assert_eq!(schema["type"], "object");
+        assert!(schema.get("enum").is_none());
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_exact_error_tools_9_tools_1_parameters() {
+        // Simulates the exact reported error: tools[9].tools[1].parameters with top-level anyOf
+        let mut tools_array = Vec::new();
+        for i in 0..9 {
+            tools_array.push(json!({
+                "type": "function",
+                "function": {
+                    "name": format!("dummy_tool_{}", i),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            }));
+        }
+
+        // tools[9] is an MCP tool group containing tools[0] and tools[1] (automation_update)
+        tools_array.push(json!({
+            "type": "mcp",
+            "server_name": "automation-server",
+            "tools": [
+                {
+                    "name": "automation_list",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "limit": { "type": "integer" }
+                        }
+                    }
+                },
+                {
+                    "name": "automation_update",
+                    "parameters": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "rule_id": { "type": "string" },
+                                    "status": { "type": "string" }
+                                },
+                                "required": ["rule_id"]
+                            },
+                            { "type": "null" }
+                        ]
+                    }
+                }
+            ]
+        }));
+
+        let mut body = json!({ "tools": tools_array });
+        sanitize_tool_schemas(&mut body);
+
+        let target_param = &body["tools"][9]["tools"][1]["parameters"];
+        assert_eq!(target_param["type"], "object");
+        assert!(target_param.get("anyOf").is_none());
+        assert_eq!(target_param["properties"]["rule_id"]["type"], "string");
+        assert_eq!(target_param["properties"]["status"]["type"], "string");
+        assert_eq!(target_param["required"], json!(["rule_id"]));
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_direct_top_level_parameters() {
+        // Direct parameters on top-level tool without "function" wrapper
+        let mut body = json!({
+            "tools": [{
+                "name": "direct_tool",
+                "parameters": {
+                    "oneOf": [
+                        { "type": "string" },
+                        { "type": "number" }
+                    ]
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = &body["tools"][0]["parameters"];
+        assert_eq!(params["type"], "object");
+        assert!(params.get("oneOf").is_none());
+        assert_eq!(params["additionalProperties"], true);
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_cleans_dangling_required() {
+        // Schema with required entries that do not exist in properties
+        let mut body = json!({
+            "tools": [{
+                "name": "tool_with_bad_req",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "valid_prop": { "type": "string" }
+                    },
+                    "required": ["valid_prop", "non_existent_prop"]
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = &body["tools"][0]["parameters"];
+        assert_eq!(params["required"], json!(["valid_prop"]));
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_legacy_functions() {
+        let mut body = json!({
+            "functions": [{
+                "name": "legacy_func",
+                "parameters": {
+                    "anyOf": [{ "type": "string" }]
+                }
+            }]
+        });
+        sanitize_tool_schemas(&mut body);
+        let params = &body["functions"][0]["parameters"];
+        assert_eq!(params["type"], "object");
+        assert!(params.get("anyOf").is_none());
+    }
+
+    #[test]
+    fn test_sanitize_tool_schemas_no_tools_field() {
+        // Body without a tools field must not panic or be modified
+        let mut body = json!({ "messages": [{ "role": "user", "content": "hi" }] });
+        let before = body.clone();
+        sanitize_tool_schemas(&mut body);
+        assert_eq!(body, before);
     }
 }

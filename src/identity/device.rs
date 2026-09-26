@@ -212,6 +212,15 @@ pub fn get_hostname() -> String {
             return t.to_string();
         }
     }
+    #[cfg(unix)]
+    {
+        if let Ok(content) = std::fs::read_to_string("/etc/hostname") {
+            let t = content.trim();
+            if !t.is_empty() && t.to_lowercase() != "localhost" {
+                return t.to_string();
+            }
+        }
+    }
     if let Ok(output) = std::process::Command::new("hostname").output() {
         if let Ok(s) = String::from_utf8(output.stdout) {
             let t = s.trim();
@@ -224,6 +233,12 @@ pub fn get_hostname() -> String {
 }
 
 pub fn get_current_user() -> String {
+    if let Some(user_email) = load_user_email() {
+        let trimmed = user_email.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
     #[cfg(windows)]
     {
         if let Ok(u) = std::env::var("USERNAME") {
@@ -251,6 +266,17 @@ pub fn get_current_user() -> String {
         let t = u.trim();
         if !t.is_empty() {
             return t.to_string();
+        }
+    }
+    #[cfg(unix)]
+    {
+        if let Ok(output) = std::process::Command::new("whoami").output() {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                let t = s.trim();
+                if !t.is_empty() {
+                    return t.to_string();
+                }
+            }
         }
     }
     if let Some(home) = dirs::home_dir() {
@@ -310,6 +336,63 @@ pub fn save_device_token(token: &str) -> Result<(), String> {
 /// Load saved Device JWT token from CredentialStore
 pub fn load_device_token() -> Option<String> {
     crate::identity::storage::CredentialStore::get("device_token").unwrap_or(None)
+}
+
+/// Persist authenticated/enrolled user email or ID to CredentialStore and local state
+pub fn save_user_email(email: &str) -> Result<(), String> {
+    let clean = email.trim();
+    if clean.is_empty() {
+        return Ok(());
+    }
+    std::env::set_var("AGENTCONTROL_USER_EMAIL", clean);
+    std::env::set_var("AGENTCONTROL_USER_ID", clean);
+    let _ = crate::identity::storage::CredentialStore::set("user_email", clean);
+    let _ = crate::identity::storage::CredentialStore::set("user_id", clean);
+
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".agentcontrol");
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(dir.join("user_email"), clean);
+    }
+    Ok(())
+}
+
+/// Load authenticated/enrolled user email or ID from CredentialStore, environment, or file
+pub fn load_user_email() -> Option<String> {
+    if let Ok(v) = std::env::var("AGENTCONTROL_USER_EMAIL") {
+        let trimmed = v.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(v) = std::env::var("AGENTCONTROL_USER_ID") {
+        let trimmed = v.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(Some(email)) = crate::identity::storage::CredentialStore::get("user_email").ok() {
+        let trimmed = email.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(Some(user_id)) = crate::identity::storage::CredentialStore::get("user_id").ok() {
+        let trimmed = user_id.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let path = home.join(".agentcontrol").join("user_email");
+        if let Ok(content) = fs::read_to_string(path) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Persist enrolled Control Hub API URL to ~/.agentcontrol/hub_url and ProgramData (Windows) or /etc (Unix)

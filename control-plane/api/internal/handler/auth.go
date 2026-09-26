@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
@@ -685,32 +684,52 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse and extract claims from ID Token
+	// Cryptographically verify ID Token against provider JWKS
 	var subject, email, issuer string
 	idTokenRaw, ok := tok.Extra("id_token").(string)
 	if ok && idTokenRaw != "" {
-		token, _, _ := new(jwt.Parser).ParseUnverified(idTokenRaw, jwt.MapClaims{})
-		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			if sub, ok := claims["sub"].(string); ok && sub != "" {
-				subject = sub
-			} else if oid, ok := claims["oid"].(string); ok && oid != "" {
-				subject = oid
-			}
-
-			if em, ok := claims["email"].(string); ok && em != "" {
-				email = em
-			} else if pref, ok := claims["preferred_username"].(string); ok && pref != "" {
-				email = pref
-			} else if upn, ok := claims["upn"].(string); ok && upn != "" {
-				email = upn
-			} else if un, ok := claims["unique_name"].(string); ok && un != "" {
-				email = un
-			}
-
-			if iss, ok := claims["iss"].(string); ok {
-				issuer = iss
-			}
+		expectedNonce := ""
+		if nonceCookie, err := r.Cookie("oauth_nonce"); err == nil && nonceCookie != nil {
+			expectedNonce = nonceCookie.Value
 		}
+
+		claims, err := defaultOIDCVerifier.VerifyIDToken(
+			r.Context(),
+			idTokenRaw,
+			disco.JWKSURI,
+			disco.Issuer,
+			provider.ClientID,
+			expectedNonce,
+		)
+		if err != nil {
+			log.Printf("[OAuth Error] ID token cryptographic verification failed for provider %s: %v", provider.ID, err)
+			http.Error(w, fmt.Sprintf("invalid_id_token: %v", err), http.StatusUnauthorized)
+			return
+		}
+
+		if sub, ok := claims["sub"].(string); ok && sub != "" {
+			subject = sub
+		} else if oid, ok := claims["oid"].(string); ok && oid != "" {
+			subject = oid
+		}
+
+		if em, ok := claims["email"].(string); ok && em != "" {
+			email = em
+		} else if pref, ok := claims["preferred_username"].(string); ok && pref != "" {
+			email = pref
+		} else if upn, ok := claims["upn"].(string); ok && upn != "" {
+			email = upn
+		} else if un, ok := claims["unique_name"].(string); ok && un != "" {
+			email = un
+		}
+
+		if iss, ok := claims["iss"].(string); ok {
+			issuer = iss
+		}
+	} else {
+		log.Printf("[OAuth Error] missing id_token in token exchange for provider %s", provider.ID)
+		http.Error(w, "missing_id_token: provider did not return an id_token", http.StatusBadRequest)
+		return
 	}
 
 	// Fallback to UserInfo endpoint / Graph API if email or subject was missing

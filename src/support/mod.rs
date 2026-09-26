@@ -208,7 +208,8 @@ pub async fn run_repair() -> i32 {
     );
     println!("Checking configuration manifests and background agent service...");
 
-    let mut repaired = 0;
+    let mut repaired = 0;  // items that were broken and got fixed
+    let mut verified = 0;  // items that were already healthy
 
     // 1. Repair local token
     let local_token_path = crate::identity::oauth::get_local_token_path();
@@ -219,6 +220,7 @@ pub async fn run_repair() -> i32 {
         }
     } else {
         println!("  {} Local proxy token is present.", "✔".green());
+        verified += 1;
     }
 
     // 2. Re-install user service / scheduled task if missing.
@@ -241,18 +243,53 @@ pub async fn run_repair() -> i32 {
             "  {} Per-user background service verified and active.",
             "✔".green()
         );
-        repaired += 1;
+        verified += 1;
     }
 
-    // 3. Re-validate active client manifests
+    // 3. Re-validate active client manifests — detect and re-stamp drifted hashes
     if let Ok(manifests) = OwnershipManifest::list_all() {
-        for m in manifests {
+        for mut m in manifests {
             if m.config_path.exists() {
-                println!(
-                    "  {} Target '{}' configuration validated.",
-                    "✔".green(),
-                    m.target
-                );
+                match OwnershipManifest::compute_sha256(&m.config_path) {
+                    Ok(cur_hash) if cur_hash != m.post_mutation_hash_sha256 => {
+                        // Config was modified externally (e.g. by the IDE itself).
+                        // Re-stamp the manifest so doctor no longer flags drift.
+                        m.post_mutation_hash_sha256 = cur_hash;
+                        match m.save() {
+                            Ok(_) => {
+                                println!(
+                                    "  {} Target '{}' configuration drift resolved (manifest re-stamped).",
+                                    "✔".green(),
+                                    m.target
+                                );
+                                repaired += 1;
+                            }
+                            Err(e) => {
+                                println!(
+                                    "  {} Target '{}' manifest re-stamp failed: {}",
+                                    "⚠".yellow(),
+                                    m.target,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        println!(
+                            "  {} Target '{}' configuration validated (no drift).",
+                            "✔".green(),
+                            m.target
+                        );
+                    }
+                    Err(e) => {
+                        println!(
+                            "  {} Target '{}' hash check failed: {}",
+                            "⚠".yellow(),
+                            m.target,
+                            e
+                        );
+                    }
+                }
             }
         }
     }
@@ -284,13 +321,23 @@ pub async fn run_repair() -> i32 {
             "  {} Zero-CA security invariant verified (no Root CA in OS trust store).",
             "✔".green()
         );
+        verified += 1;
     }
 
-    println!(
-        "\n{} Repair completed successfully! ({} items verified/repaired)",
-        "✔".green().bold(),
-        repaired
-    );
+    if repaired > 0 {
+        println!(
+            "\n{} Repair completed. ({} issue(s) fixed, {} verified healthy)",
+            "✔".green().bold(),
+            repaired,
+            verified
+        );
+    } else {
+        println!(
+            "\n{} All checks passed. No issues found. ({} verified healthy)",
+            "✔".green().bold(),
+            verified
+        );
+    }
     0
 }
 

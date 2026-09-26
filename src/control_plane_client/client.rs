@@ -3,6 +3,30 @@
 use control_plane_proto::alert::RedactedAlert;
 use control_plane_proto::event::RedactedEvent;
 use control_plane_proto::mcp_server::McpServerSnapshot;
+use serde::Serialize;
+
+/// A structured LLM request log entry sent to the control hub Request Logs tab.
+#[derive(Debug, Clone, Serialize)]
+pub struct LlmRequestLog {
+    pub request_id: String,
+    pub session_id: String,
+    pub key_hash: Option<String>,
+    pub model: String,
+    pub provider: String,
+    pub is_streaming: bool,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+    pub latency_ms: f64,
+    pub status_code: u16,
+    pub verdict: String,
+    pub identity_sub: Option<String>,
+    pub identity_email: Option<String>,
+    pub request_ip: Option<String>,
+    pub timestamp_ms: i64,
+    pub is_estimated: bool,
+    pub protocol: String,
+}
 
 /// HTTP client for exporting audit events, alerts, spend data, and server snapshots.
 pub struct DashboardClient {
@@ -26,10 +50,17 @@ impl DashboardClient {
             token
         } else if let Ok(secret) = std::env::var("GATEWAY_SECRET") {
             let s = secret.trim().to_string();
-            if !s.is_empty()
-                && s != "local-dev-shared-secret-change-me"
-                && s != "vexa_team_gateway_secret_key_12345"
-            {
+            if !s.is_empty() {
+                s
+            } else {
+                crate::identity::device::DeviceIdentity::load_or_create()
+                    .ok()
+                    .map(|id| id.device_id)
+                    .unwrap_or_else(|| "gw-default".to_string())
+            }
+        } else if let Ok(admin_token) = std::env::var("AGENTCONTROL_ADMIN_TOKEN") {
+            let s = admin_token.trim().to_string();
+            if !s.is_empty() {
                 s
             } else {
                 crate::identity::device::DeviceIdentity::load_or_create()
@@ -73,6 +104,45 @@ impl DashboardClient {
                     "dashboard_send_event_failed",
                     serde_json::json!({"error": e.to_string()}),
                 );
+            }
+        });
+    }
+
+    /// Asynchronously transmits a structured LLM request log to the control hub Request Logs ingest endpoint.
+    /// This populates the "Request Logs" tab in the AgentControl Console / Vexa Console.
+    pub fn send_llm_request_log(&self, log: LlmRequestLog) {
+        let url = format!("{}/api/v1/ingest/request-logs", self.base_url);
+        let req = self
+            .http
+            .post(&url)
+            .header("Authorization", &self.secret)
+            .json(&log);
+
+        tokio::spawn(async move {
+            match req.send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    crate::logging::log_event(
+                        crate::logging::Level::Debug,
+                        "request_log_sent",
+                        serde_json::json!({"request_id": log.request_id, "status": resp.status().as_u16()}),
+                    );
+                }
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    let body = resp.text().await.unwrap_or_default();
+                    crate::logging::log_event(
+                        crate::logging::Level::Warn,
+                        "request_log_send_rejected",
+                        serde_json::json!({"status": status, "request_id": log.request_id, "body": body}),
+                    );
+                }
+                Err(e) => {
+                    crate::logging::log_event(
+                        crate::logging::Level::Warn,
+                        "request_log_send_failed",
+                        serde_json::json!({"error": e.to_string(), "request_id": log.request_id}),
+                    );
+                }
             }
         });
     }

@@ -17,11 +17,12 @@ Vexa Agent Control protects developer workstations through two complementary pil
 │   • Injects `agentcontrol stdio-proxy --` before MCP servers                │
 │   • Enforces DLP, prompt injection defense, and tool call authorization     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ PILLAR 2: LLM Proxy & Virtual Key Governance (HTTP / SSE Redirection)       │
-│   • Route completion traffic to `http://127.0.0.1:8080/v1`                  │
-│   • Developers configure scoped Virtual Keys (`sk-vex-...`)                 │
-│   • Authoritative token spend caps, rate limits (RPM/TPM), model governance │
-│   • Real provider credentials remain securely in the central Key Vault      │
+│ PILLAR 2: LLM Proxy & Server-Side Provider Key Custody (Zero Secrets on Disk)│
+│   • Route completion traffic to `http://127.0.0.1:18080/v1`                  │
+│   • Zero raw provider keys or static secrets stored in developer IDE configs │
+│   • Sessions bound to Google Workspace / Entra ID via `agentcontrol login`   │
+│   • Authoritative spend caps, team allowlists, and audit attribution         │
+│   • Real provider credentials (OpenAI/Anthropic) remain strictly in KMS Vault│
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

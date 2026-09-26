@@ -1598,8 +1598,14 @@ async fn run_start(args: cli::StartArgs) -> i32 {
             (None, "sha256:none".to_string(), vec![], false)
         };
 
-    // Initialize dashboard client early for SpendLedger sync (active only in Team mode with enrollment)
-    let dashboard_client = if profile.is_team() && is_enrolled {
+    // Initialize dashboard client early for SpendLedger sync and LLM request logs telemetry
+    let dashboard_client = if profile.is_team()
+        || is_enrolled
+        || agentcontrol::identity::device::load_hub_url().is_some()
+        || std::env::var("GATEWAY_SECRET").is_ok()
+        || std::env::var("AGENTCONTROL_HUB_URL").is_ok()
+        || std::env::var("DASHBOARD_API_URL").is_ok()
+    {
         agentcontrol::control_plane_client::client::DashboardClient::from_env()
             .map(std::sync::Arc::new)
     } else {
@@ -1769,13 +1775,23 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         }
     };
 
+    let is_bridge_mode = std::env::var("AGENTCONTROL_CONTAINER_BRIDGE_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    let allow_wildcard = std::env::var("ALLOW_WILDCARD_IDENTITY")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     let has_identity_auth = compiled_policy
         .as_ref()
         .map(|p| p.identity_validator.is_some())
         .unwrap_or(false)
         || centralized
         || args.admin_token.is_some()
-        || std::env::var("AGENTCONTROL_ADMIN_TOKEN").is_ok();
+        || std::env::var("AGENTCONTROL_ADMIN_TOKEN").is_ok()
+        || is_bridge_mode
+        || allow_wildcard;
 
     if !listen_addr.ip().is_loopback() && !has_identity_auth {
         eprintln!(

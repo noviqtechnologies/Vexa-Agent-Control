@@ -7,8 +7,10 @@ Welcome to the technical documentation for **Vexa Agent Control**. This director
 ## 🚀 Start Here
 
 - **First time with Vexa?** Read the [10-Minute Developer Quickstart](quickstart.md).
-- **Evaluating with Docker?** Read the [Docker Deployment Guide](guides/docker-deployment.md).
-- **Evaluating in a team?** Read the [Small Team Hub Guide](guides/small-team-hub.md).
+- **Evaluating in a team?** Read the [Team Hub Guide](team_hub_guide.md) and [Organization Admin Guide](organization_admin_guide.md).
+- **Binding to Google Workspace / Entra ID?** Read the [OIDC Identity Binding Guide](oidc_identity_binding.md).
+- **Workstation & IDE Setup?** Read the [Workstation Guide](workstation_guide.md) and [IDE Integrations Matrix](integrations/README.md).
+- **Evaluating with Docker?** Read the [Docker Deployment Guide](deployment.md).
 
 ---
 

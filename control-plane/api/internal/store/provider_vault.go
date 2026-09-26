@@ -16,27 +16,44 @@ var (
 )
 
 type ProviderKeyMeta struct {
-	ID        string    `json:"id"`
-	TenantID  string    `json:"tenant_id"`
-	Provider  string    `json:"provider"`
-	KeyAlias  string    `json:"key_alias"`
-	Version   int       `json:"version"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	OrganizationID string    `json:"organization_id"`
+	TenantID       string    `json:"tenant_id"` // Alias for backward compatibility
+	Provider       string    `json:"provider"`
+	KeyAlias       string    `json:"key_alias"`
+	Version        int       `json:"version"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// InsertEncryptedProviderKey encrypts a provider API key using AES-256-GCM with tenant-bound AAD and persists it.
+func maskSecret(s string) string {
+	if len(s) > 8 {
+		return s[:3] + "..." + s[len(s)-4:]
+	}
+	return "***"
+}
+
+// InsertEncryptedProviderKey encrypts a provider API key using AES-256-GCM envelope encryption and persists it to provider_keys.
 func (s *Store) InsertEncryptedProviderKey(
 	ctx context.Context,
-	tenantID, provider, keyAlias, plainSecret string,
+	orgID, provider, keyAlias, plainSecret string,
 	kmsProvider kms.KMSProvider,
 ) error {
-	if tenantID == "" || provider == "" || plainSecret == "" {
-		return errors.New("tenant_id, provider, and secret are required")
+	if s.pool == nil {
+		return errors.New("database pool not initialized")
+	}
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
+	if keyAlias == "" {
+		keyAlias = "default"
+	}
+	if provider == "" || plainSecret == "" {
+		return errors.New("provider and plainSecret are required")
 	}
 
 	version := 1
-	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", tenantID, provider, keyAlias, version))
+	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", orgID, provider, keyAlias, version))
 
 	cipherBytes, err := kmsProvider.Encrypt(ctx, []byte(plainSecret), aad)
 	if err != nil {
@@ -44,39 +61,51 @@ func (s *Store) InsertEncryptedProviderKey(
 	}
 
 	cipherHex := hex.EncodeToString(cipherBytes)
+	masked := maskSecret(plainSecret)
 	now := time.Now().UTC()
 
 	query := `
 	INSERT INTO provider_keys (
-		id, tenant_id, provider, key_alias, key_ciphertext, version, created_at, updated_at
+		id, organization_id, provider, key_alias, version, status, api_key_encrypted, api_key_masked, created_at, updated_at
 	) VALUES (
-		gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
+		gen_random_uuid(), $1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8
 	)
-	ON CONFLICT (tenant_id, provider) DO UPDATE
-	SET key_alias = EXCLUDED.key_alias,
-	    key_ciphertext = EXCLUDED.key_ciphertext,
+	ON CONFLICT (organization_id, provider, key_alias) DO UPDATE
+	SET api_key_encrypted = EXCLUDED.api_key_encrypted,
+	    api_key_masked = EXCLUDED.api_key_masked,
 	    version = provider_keys.version + 1,
+	    status = 'ACTIVE',
 	    updated_at = EXCLUDED.updated_at`
 
-	_, err = s.pool.Exec(ctx, query, tenantID, provider, keyAlias, cipherHex, version, now, now)
+	_, err = s.pool.Exec(ctx, query, orgID, provider, keyAlias, version, cipherHex, masked, now, now)
 	return err
 }
 
-// GetDecryptedProviderKey retrieves and decrypts the provider key using tenant-bound AAD.
+// GetDecryptedProviderKey retrieves and decrypts the provider key using organization-bound AAD.
 func (s *Store) GetDecryptedProviderKey(
 	ctx context.Context,
-	tenantID, provider string,
+	orgID, provider string,
 	kmsProvider kms.KMSProvider,
 ) (string, error) {
+	if s.pool == nil {
+		return "", errors.New("database pool not initialized")
+	}
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
+
 	query := `
-	SELECT key_alias, key_ciphertext, version
+	SELECT key_alias, api_key_encrypted, version
 	FROM provider_keys
-	WHERE tenant_id = $1 AND provider = $2`
+	WHERE provider = $2 
+	  AND (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+	ORDER BY created_at DESC
+	LIMIT 1`
 
 	var keyAlias, cipherHex string
 	var version int
 
-	err := s.pool.QueryRow(ctx, query, tenantID, provider).Scan(&keyAlias, &cipherHex, &version)
+	err := s.pool.QueryRow(ctx, query, orgID, provider).Scan(&keyAlias, &cipherHex, &version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrProviderKeyNotFound
@@ -84,14 +113,24 @@ func (s *Store) GetDecryptedProviderKey(
 		return "", err
 	}
 
-	cipherBytes, err := hex.DecodeString(cipherHex)
-	if err != nil {
-		return "", fmt.Errorf("decode ciphertext hex: %w", err)
+	if cipherHex == "" {
+		return "", ErrProviderKeyNotFound
 	}
 
-	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", tenantID, provider, keyAlias, version))
+	cipherBytes, err := hex.DecodeString(cipherHex)
+	if err != nil {
+		// If stored as plaintext in legacy rows, return directly
+		return cipherHex, nil
+	}
+
+	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", orgID, provider, keyAlias, version))
 	plainBytes, err := kmsProvider.Decrypt(ctx, cipherBytes, aad)
 	if err != nil {
+		// Fallback try with version 1 or raw unversioned aad
+		fallbackAAD := []byte(fmt.Sprintf("%s|%s|%s|1", orgID, provider, keyAlias))
+		if p2, err2 := kmsProvider.Decrypt(ctx, cipherBytes, fallbackAAD); err2 == nil {
+			return string(p2), nil
+		}
 		return "", fmt.Errorf("decrypt provider key: %w", err)
 	}
 
@@ -99,14 +138,21 @@ func (s *Store) GetDecryptedProviderKey(
 }
 
 // ListEncryptedProviderKeys lists metadata for all configured provider keys without decrypting secrets.
-func (s *Store) ListEncryptedProviderKeys(ctx context.Context, tenantID string) ([]ProviderKeyMeta, error) {
+func (s *Store) ListEncryptedProviderKeys(ctx context.Context, orgID string) ([]ProviderKeyMeta, error) {
+	if s.pool == nil {
+		return []ProviderKeyMeta{}, nil
+	}
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
+
 	query := `
-	SELECT id, tenant_id, provider, key_alias, version, created_at, updated_at
+	SELECT id, organization_id, provider, key_alias, version, created_at, updated_at
 	FROM provider_keys
-	WHERE tenant_id = $1
+	WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
 	ORDER BY provider ASC`
 
-	rows, err := s.pool.Query(ctx, query, tenantID)
+	rows, err := s.pool.Query(ctx, query, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,18 +161,26 @@ func (s *Store) ListEncryptedProviderKeys(ctx context.Context, tenantID string) 
 	var list []ProviderKeyMeta
 	for rows.Next() {
 		var m ProviderKeyMeta
-		if err := rows.Scan(&m.ID, &m.TenantID, &m.Provider, &m.KeyAlias, &m.Version, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.Provider, &m.KeyAlias, &m.Version, &m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
+		m.TenantID = m.OrganizationID
 		list = append(list, m)
 	}
 
 	return list, nil
 }
 
-func (s *Store) DeleteEncryptedProviderKey(ctx context.Context, tenantID, provider string) error {
-	query := `DELETE FROM provider_keys WHERE tenant_id = $1 AND provider = $2`
-	tag, err := s.pool.Exec(ctx, query, tenantID, provider)
+// DeleteEncryptedProviderKey removes a provider key entry.
+func (s *Store) DeleteEncryptedProviderKey(ctx context.Context, orgID, provider string) error {
+	if s.pool == nil {
+		return nil
+	}
+	if orgID == "" {
+		orgID = DefaultOrgID
+	}
+	query := `DELETE FROM provider_keys WHERE (organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid) AND provider = $2`
+	tag, err := s.pool.Exec(ctx, query, orgID, provider)
 	if err != nil {
 		return err
 	}

@@ -239,27 +239,33 @@ pub async fn run_diagnostics() -> DoctorReport {
     // 6. Connected Targets & Configuration Drift Check
     match OwnershipManifest::list_all() {
         Ok(manifests) if !manifests.is_empty() => {
-            let mut drift_count = 0;
+            let mut drifted_targets: Vec<String> = Vec::new();
             for m in &manifests {
                 if m.config_path.exists() {
                     let cur_hash =
                         OwnershipManifest::compute_sha256(&m.config_path).unwrap_or_default();
                     if cur_hash != m.post_mutation_hash_sha256 {
-                        drift_count += 1;
+                        drifted_targets.push(m.target.clone());
                     }
                 }
             }
 
-            if drift_count > 0 {
+            if !drifted_targets.is_empty() {
+                let drift_count = drifted_targets.len();
+                let target_list = drifted_targets.join(", ");
                 report.add_check(DiagnosticCheck {
                     category: "Targets".to_string(),
                     name: "Target Configuration Drift".to_string(),
                     status: DiagnosticStatus::Warn,
                     message: format!(
-                        "{} connected target(s) have detected external modifications (customizations preserved).",
-                        drift_count
+                        "{} connected target(s) have detected external modifications: {} (customizations preserved).",
+                        drift_count, target_list
                     ),
-                    details: Some(serde_json::json!({ "total_targets": manifests.len(), "drift_count": drift_count })),
+                    details: Some(serde_json::json!({
+                        "total_targets": manifests.len(),
+                        "drift_count": drift_count,
+                        "drifted_targets": drifted_targets
+                    })),
                     remediation: Some("Run 'agentcontrol repair' to re-verify manifests and endpoints.".to_string()),
                 });
             } else {

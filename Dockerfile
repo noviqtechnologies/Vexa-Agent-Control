@@ -66,7 +66,7 @@ COPY --from=builder /usr/local/bin/agentcontrol /usr/local/bin/agentcontrol
 COPY policy.example.yaml /app/policy.example.yaml
 
 # Create directory for audit logs with correct permissions
-RUN mkdir -p /var/log/agentcontrol && chmod 755 /var/log/agentcontrol
+RUN mkdir -p /var/log/agentcontrol && chmod 777 /var/log/agentcontrol
 
 # Non-root user for security
 RUN useradd -r -u 10001 -s /bin/false -d /app agentcontrol && \

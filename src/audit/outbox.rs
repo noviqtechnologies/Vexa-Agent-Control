@@ -190,7 +190,7 @@ impl DurableOutbox {
                 };
 
                 let exporter = siem_exporter.clone();
-                let _dash = dashboard_client.clone();
+                let dash = dashboard_client.clone();
                 let exp_counter = exported_c.clone();
                 let fail_counter = failed_c.clone();
                 let db_tx_task = db_tx_worker.clone();
@@ -204,6 +204,29 @@ impl DurableOutbox {
 
                         if let Some(ref exp) = exporter {
                             try_export(exp, &item.entry).await;
+                        }
+
+                        // Forward audit entry to control hub dashboard
+                        if let Some(ref dc) = dash {
+                            let raw = control_plane_proto::redact::RawEventForRedaction {
+                                session_id: &item.entry.session_id,
+                                agent_id: item.entry.identity_sub.as_deref().unwrap_or("agent-local"),
+                                tool_name: item.entry.tool_name.as_deref().unwrap_or("unknown"),
+                                tool_name_is_allowlisted: true,
+                                decision: if item.entry.event.contains("deny") || item.entry.event.contains("block") {
+                                    control_plane_proto::redact::RawDecision::Denied
+                                } else {
+                                    control_plane_proto::redact::RawDecision::Allowed
+                                },
+                                timestamp_ms: chrono::DateTime::parse_from_rfc3339(&item.entry.ts)
+                                    .map(|dt| dt.timestamp_millis())
+                                    .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis()),
+                                dlp_findings: &[],
+                                injection_findings: &[],
+                                semantic_findings: &[],
+                            };
+                            let redacted = control_plane_proto::redact::redact_event(&raw);
+                            dc.send_event(redacted);
                         }
 
                         let _ = db_tx_task.send(OutboxDbCmd::MarkExported(item.event_id.clone()));
