@@ -86,6 +86,29 @@ impl DurableOutbox {
             dir.join("events.db")
         });
 
+        // Ensure database directory and schema exist synchronously before background processing
+        if let Some(parent) = db_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(conn) = Connection::open(&db_path) {
+            let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            let _ = conn.execute(
+                "CREATE TABLE IF NOT EXISTS outbox_spool (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT UNIQUE,
+                    payload TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at INTEGER NOT NULL
+                )",
+                [],
+            );
+            let _ = conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_outbox_spool_status ON outbox_spool(status)",
+                [],
+            );
+        }
+
         let (tx, mut rx) = mpsc::channel::<OutboxEntry>(queue_capacity.max(1024));
         let (db_tx, db_rx) = std::sync::mpsc::channel::<OutboxDbCmd>();
 

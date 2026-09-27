@@ -75,14 +75,14 @@ type EnrollDeviceResponse struct {
 
 // IdeTargetStatus represents configuration state of a single IDE on workstation
 type IdeTargetStatus struct {
-	Name               string     `json:"name"`
-	Installed          bool       `json:"installed"`
-	ConfigPath         string     `json:"config_path,omitempty"`
-	ProxyConfigured    bool       `json:"proxy_configured"`
-	ConfiguredBaseURL  string     `json:"configured_base_url,omitempty"`
-	McpWrapped         bool       `json:"mcp_wrapped"`
-	ComplianceState    string     `json:"compliance_state"`
-	LastHealedAt       *time.Time `json:"last_healed_at,omitempty"`
+	Name              string     `json:"name"`
+	Installed         bool       `json:"installed"`
+	ConfigPath        string     `json:"config_path,omitempty"`
+	ProxyConfigured   bool       `json:"proxy_configured"`
+	ConfiguredBaseURL string     `json:"configured_base_url,omitempty"`
+	McpWrapped        bool       `json:"mcp_wrapped"`
+	ComplianceState   string     `json:"compliance_state"`
+	LastHealedAt      *time.Time `json:"last_healed_at,omitempty"`
 }
 
 // TamperEventPayload represents a tampering or auto-healing incident
@@ -210,4 +210,3 @@ type ClientLogQuery struct {
 	Search    string
 	Since     time.Time
 }
-

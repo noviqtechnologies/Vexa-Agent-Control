@@ -108,7 +108,6 @@ func (s *Store) EnsureOrganizationsSchema(ctx context.Context) error {
 	return s.EnsureUsersSchema(ctx)
 }
 
-
 // GetOrganization returns the organization by ID or slug.
 func (s *Store) GetOrganization(ctx context.Context, idOrSlug string) (*model.Organization, error) {
 	if s.pool == nil {

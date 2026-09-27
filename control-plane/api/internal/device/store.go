@@ -676,4 +676,3 @@ func (s *Store) ListClientLogs(ctx context.Context, orgID string, query ClientLo
 	}
 	return entries, nil
 }
-

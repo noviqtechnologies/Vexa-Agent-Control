@@ -12,18 +12,18 @@ const (
 )
 
 type Organization struct {
-	ID                  string             `json:"id" db:"id"`
-	Name                string             `json:"name" db:"name"`
-	Slug                string             `json:"slug" db:"slug"`
-	ContactEmail        string             `json:"contact_email" db:"contact_email"`
-	LicenseTier         string             `json:"license_tier" db:"license_tier"` // "developer", "team", "enterprise"
-	MaxDevices          int                `json:"max_devices" db:"max_devices"`
-	EnrolledDevices     int                `json:"enrolled_devices" db:"-"`
-	LicenseKeyJWT       string             `json:"license_key_jwt,omitempty" db:"license_key_jwt"`
-	LicenseExpiresAt    *time.Time         `json:"license_expires_at,omitempty" db:"license_expires_at"`
-	Status              OrganizationStatus `json:"status" db:"status"`
-	CreatedAt           time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt           time.Time          `json:"updated_at" db:"updated_at"`
+	ID               string             `json:"id" db:"id"`
+	Name             string             `json:"name" db:"name"`
+	Slug             string             `json:"slug" db:"slug"`
+	ContactEmail     string             `json:"contact_email" db:"contact_email"`
+	LicenseTier      string             `json:"license_tier" db:"license_tier"` // "developer", "team", "enterprise"
+	MaxDevices       int                `json:"max_devices" db:"max_devices"`
+	EnrolledDevices  int                `json:"enrolled_devices" db:"-"`
+	LicenseKeyJWT    string             `json:"license_key_jwt,omitempty" db:"license_key_jwt"`
+	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty" db:"license_expires_at"`
+	Status           OrganizationStatus `json:"status" db:"status"`
+	CreatedAt        time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at" db:"updated_at"`
 }
 
 type UpdateOrgReq struct {

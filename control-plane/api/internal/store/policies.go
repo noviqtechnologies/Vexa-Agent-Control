@@ -85,7 +85,7 @@ func (s *Store) GetActivePolicy(ctx context.Context, organizationID string) (*mo
 		groupsYaml.WriteString("\n\ngroups:\n")
 		for _, gp := range groupPolicies {
 			groupsYaml.WriteString(fmt.Sprintf("  - id: %q\n", gp.GroupID))
-			
+
 			// Parse claims
 			var claimsList []string
 			var claimsObj map[string]interface{}
@@ -180,7 +180,7 @@ func (s *Store) SavePolicy(ctx context.Context, organizationID string, p *model.
 				updated_at = now()
 			RETURNING id
 		`, organizationID, p.Version, p.Content, p.IsActive).Scan(&id)
-		
+
 		if err == nil {
 			p.ID = id
 		}

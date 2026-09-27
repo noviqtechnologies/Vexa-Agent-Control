@@ -111,20 +111,24 @@ fn test_stdio_proxy_process_integration() {
         }
     };
 
-    // Skip if python3 is unavailable (the echo upstream needs it).
-    if Command::new("python3").arg("--version").output().is_err() {
-        eprintln!("[SKIP] test_stdio_proxy_process_integration: python3 not found in PATH.");
+    // Skip if python3 or python is unavailable (the echo upstream needs it).
+    let python_bin = if Command::new("python3").arg("--version").output().is_ok() {
+        "python3"
+    } else if Command::new("python").arg("--version").output().is_ok() {
+        "python"
+    } else {
+        eprintln!("[SKIP] test_stdio_proxy_process_integration: python3/python not found in PATH.");
         return;
-    }
+    };
 
     let dir = tempfile::tempdir().expect("create temp dir");
     let upstream_script = write_echo_upstream(dir.path());
     let hit_log = dir.path().join("upstream_hits.log");
 
-    // Spawn: agentcontrol stdio-proxy -- python3 -u <echo_upstream.py>
+    // Spawn: agentcontrol stdio-proxy -- <python_bin> -u <echo_upstream.py>
     let mut proxy = Command::new(&binary)
         .current_dir(dir.path())
-        .args(["stdio-proxy", "--", "python3", "-u"])
+        .args(["stdio-proxy", "--", python_bin, "-u"])
         .arg(&upstream_script)
         .env("UPSTREAM_HIT_LOG", &hit_log)
         .env("PYTHONUNBUFFERED", "1")

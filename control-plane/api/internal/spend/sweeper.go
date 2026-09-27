@@ -81,4 +81,3 @@ func (j *SweepJob) Run(ctx context.Context) error {
 	}
 	return nil
 }
-

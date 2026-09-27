@@ -374,5 +374,3 @@ func (h *IngestHandler) PostRequestLogs(w http.ResponseWriter, r *http.Request) 
 		"total":    len(logs),
 	})
 }
-
-

@@ -22,22 +22,22 @@ import (
 var errStore = errors.New("store failure")
 
 type mockStore struct {
-	getFleetStatsFunc     func(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error)
-	listAgentsFunc        func(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error)
-	getDecisionHeatmapFn  func(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
-	listRecentEventsFunc  func(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
-	listCredentialsFunc   func(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error)
-	upsertAgentFunc       func(ctx context.Context, tenantID, agentID string) error
-	insertEventFunc       func(ctx context.Context, tenantID string, e *model.RedactedEvent) error
-	insertAlertFunc       func(ctx context.Context, tenantID string, a *model.RedactedAlert) error
-	insertRequestLogFunc  func(ctx context.Context, tenantID string, log *model.LlmRequestLog) error
-	upsertCredentialFunc  func(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
-	listRecentAlertsFunc  func(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)
-	getThreatSummaryFunc    func(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
-	getThreatTimelineFunc   func(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error)
-	getTopThreatPatternsFunc func(ctx context.Context, tenantID string, hours int, limit int) ([]store.ThreatPattern, error)
-	countDistinctAgentsFunc  func(ctx context.Context, tenantID string) (int, error)
-	agentExistsFunc          func(ctx context.Context, tenantID, agentID string) (bool, error)
+	getFleetStatsFunc            func(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error)
+	listAgentsFunc               func(ctx context.Context, tenantID string, limit, offset int, hours int) ([]store.AgentSummary, error)
+	getDecisionHeatmapFn         func(ctx context.Context, tenantID string, hours int) ([]store.DecisionBreakdown, error)
+	listRecentEventsFunc         func(ctx context.Context, tenantID, agentID string, limit int) ([]store.RecentEvent, error)
+	listCredentialsFunc          func(ctx context.Context, tenantID, agentID string) ([]model.SanitizedCredentialMeta, error)
+	upsertAgentFunc              func(ctx context.Context, tenantID, agentID string) error
+	insertEventFunc              func(ctx context.Context, tenantID string, e *model.RedactedEvent) error
+	insertAlertFunc              func(ctx context.Context, tenantID string, a *model.RedactedAlert) error
+	insertRequestLogFunc         func(ctx context.Context, tenantID string, log *model.LlmRequestLog) error
+	upsertCredentialFunc         func(ctx context.Context, tenantID string, c *model.SanitizedCredentialMeta) error
+	listRecentAlertsFunc         func(ctx context.Context, tenantID string, limit int, hours int) ([]model.RedactedAlert, error)
+	getThreatSummaryFunc         func(ctx context.Context, tenantID string, hours int) (*store.ThreatSummary, error)
+	getThreatTimelineFunc        func(ctx context.Context, tenantID string, hours int) ([]store.ThreatTimelinePoint, error)
+	getTopThreatPatternsFunc     func(ctx context.Context, tenantID string, hours int, limit int) ([]store.ThreatPattern, error)
+	countDistinctAgentsFunc      func(ctx context.Context, tenantID string) (int, error)
+	agentExistsFunc              func(ctx context.Context, tenantID, agentID string) (bool, error)
 	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
 	updateVirtualKeyFunc         func(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error)
 	getVirtualKeyByHashFunc      func(ctx context.Context, keyHash string) (*store.VirtualKey, error)

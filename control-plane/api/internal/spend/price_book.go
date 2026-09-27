@@ -10,15 +10,15 @@ import (
 
 // PriceBookItem represents an audited rate item in USD microcents per 1M tokens.
 type PriceBookItem struct {
-	ItemID                         string          `json:"item_id"`
-	PriceBookVersionID             string          `json:"price_book_version_id"`
-	Provider                       string          `json:"provider"`
-	ModelSelector                  string          `json:"model_selector"`
-	InputRateMicrocentsPerMillion  MoneyMicrocents `json:"input_rate_microcents_per_million"`
-	OutputRateMicrocentsPerMillion MoneyMicrocents `json:"output_rate_microcents_per_million"`
+	ItemID                              string          `json:"item_id"`
+	PriceBookVersionID                  string          `json:"price_book_version_id"`
+	Provider                            string          `json:"provider"`
+	ModelSelector                       string          `json:"model_selector"`
+	InputRateMicrocentsPerMillion       MoneyMicrocents `json:"input_rate_microcents_per_million"`
+	OutputRateMicrocentsPerMillion      MoneyMicrocents `json:"output_rate_microcents_per_million"`
 	CachedInputRateMicrocentsPerMillion MoneyMicrocents `json:"cached_input_rate_microcents_per_million"`
-	EffectiveFrom                  time.Time       `json:"effective_from"`
-	EffectiveTo                    *time.Time      `json:"effective_to,omitempty"`
+	EffectiveFrom                       time.Time       `json:"effective_from"`
+	EffectiveTo                         *time.Time      `json:"effective_to,omitempty"`
 }
 
 // CalculateReserve computes the maximum bounded cost in integer microcents.
@@ -126,4 +126,3 @@ func (s *Store) GetPriceBookItem(ctx context.Context, versionID, provider, model
 	}
 	return &item, nil
 }
-

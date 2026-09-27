@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	ErrNil                = errors.New("valkey: nil returned")
-	ErrClosed             = errors.New("valkey: client closed")
-	ErrBudgetCapExceeded  = errors.New("valkey: monthly budget microcents exceeded")
+	ErrNil               = errors.New("valkey: nil returned")
+	ErrClosed            = errors.New("valkey: client closed")
+	ErrBudgetCapExceeded = errors.New("valkey: monthly budget microcents exceeded")
 )
 
 // Client interface for Valkey caching and distributed rate-limiting/spend operations.

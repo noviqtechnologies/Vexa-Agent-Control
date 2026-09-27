@@ -298,4 +298,3 @@ func (h *EffectivePolicyHandler) GetEffectiveSigned(w http.ResponseWriter, r *ht
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(manifest)
 }
-

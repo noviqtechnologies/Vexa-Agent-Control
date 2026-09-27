@@ -83,7 +83,6 @@ func (h *ObservabilityHandler) ListClientLogs(w http.ResponseWriter, r *http.Req
 	})
 }
 
-
 // ListRequestLogs handles GET /api/v1/observability/request-logs
 func (h *ObservabilityHandler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.ResolveTenantScope(r)
@@ -276,7 +275,6 @@ func (h *ObservabilityHandler) ListDeletedKeys(w http.ResponseWriter, r *http.Re
 		keys = []store.VirtualKey{}
 	}
 
-
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"organization_id":      tenantID,
@@ -302,4 +300,3 @@ func (h *ObservabilityHandler) ListDeletedTeams(w http.ResponseWriter, r *http.R
 		"total":           0,
 	})
 }
-

@@ -15,7 +15,7 @@ type mockJob struct {
 	failNext bool
 }
 
-func (m *mockJob) Name() string          { return m.name }
+func (m *mockJob) Name() string            { return m.name }
 func (m *mockJob) Interval() time.Duration { return m.interval }
 func (m *mockJob) Run(ctx context.Context) error {
 	m.runCount.Add(1)

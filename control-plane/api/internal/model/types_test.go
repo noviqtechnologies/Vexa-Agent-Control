@@ -49,9 +49,9 @@ func TestRedactedAlert_Valid(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		alert  RedactedAlert
-		want   bool
+		name  string
+		alert RedactedAlert
+		want  bool
 	}{
 		{
 			"valid_critical",

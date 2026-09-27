@@ -71,4 +71,3 @@ func TestObservabilityHandler_ListClientLogs(t *testing.T) {
 		t.Fatalf("expected client_logs in response")
 	}
 }
-

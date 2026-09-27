@@ -16,14 +16,14 @@ var (
 )
 
 type IdempotencyRecord struct {
-	TenantID           string
-	PrincipalRef       string
-	Route              string
-	IdempotencyKey     string
-	CanonicalBodySHA   string
-	ResponseStatus     int
-	ResponseReference  string
-	ExpiresAt          time.Time
+	TenantID          string
+	PrincipalRef      string
+	Route             string
+	IdempotencyKey    string
+	CanonicalBodySHA  string
+	ResponseStatus    int
+	ResponseReference string
+	ExpiresAt         time.Time
 }
 
 // EnsureIdempotencySchema guarantees schema consistency for the idempotency_records table.

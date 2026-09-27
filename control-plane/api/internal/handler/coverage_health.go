@@ -22,17 +22,17 @@ type SupportedIdeCoverage struct {
 
 // WorkstationCoverageItem represents the comprehensive boundary security for a workstation.
 type WorkstationCoverageItem struct {
-	DeviceID         string                 `json:"device_id"`
-	Hostname         string                 `json:"hostname"`
-	UserIdentifier   string                 `json:"user_identifier"`
-	OS               string                 `json:"os"`
-	OSVersion        string                 `json:"os_version"`
-	HealthState      string                 `json:"health_state"` // "PROTECTED" | "STALE" | "EXPOSED" | "REVOKED"
-	OverallCompliance string                `json:"overall_compliance"`
-	LastHeartbeatAt  *time.Time             `json:"last_heartbeat_at"`
-	TamperCount24h   int                    `json:"tamper_count_24h"`
-	ActiveIDEs       []string               `json:"active_ides"`
-	IdeCoverage      []SupportedIdeCoverage `json:"ide_coverage"`
+	DeviceID          string                 `json:"device_id"`
+	Hostname          string                 `json:"hostname"`
+	UserIdentifier    string                 `json:"user_identifier"`
+	OS                string                 `json:"os"`
+	OSVersion         string                 `json:"os_version"`
+	HealthState       string                 `json:"health_state"` // "PROTECTED" | "STALE" | "EXPOSED" | "REVOKED"
+	OverallCompliance string                 `json:"overall_compliance"`
+	LastHeartbeatAt   *time.Time             `json:"last_heartbeat_at"`
+	TamperCount24h    int                    `json:"tamper_count_24h"`
+	ActiveIDEs        []string               `json:"active_ides"`
+	IdeCoverage       []SupportedIdeCoverage `json:"ide_coverage"`
 }
 
 // CoverageHealthResponse is the authoritative fleet protection & control health envelope.
@@ -48,7 +48,7 @@ type CoverageHealthResponse struct {
 		FleetProtectionScore  float64 `json:"fleet_protection_score"`
 	} `json:"summary"`
 	Workstations []WorkstationCoverageItem `json:"workstations"`
-	GeneratedAt  string                   `json:"generated_at"`
+	GeneratedAt  string                    `json:"generated_at"`
 }
 
 // CoverageHealthHandler exposes GET /api/v1/fleet/coverage-health

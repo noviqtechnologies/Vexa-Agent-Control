@@ -125,4 +125,3 @@ func TestCanonicalTranscript_RetryWithNewCSR(t *testing.T) {
 		t.Fatal("signature on refreshed transcript must verify successfully")
 	}
 }
-

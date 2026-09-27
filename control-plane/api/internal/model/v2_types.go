@@ -9,12 +9,12 @@ import (
 type DeviceState string
 
 const (
-	DeviceStatePending       DeviceState = "PENDING"
-	DeviceStateCompliant     DeviceState = "COMPLIANT"
-	DeviceStateNonCompliant  DeviceState = "NON_COMPLIANT"
-	DeviceStateUnreachable   DeviceState = "UNREACHABLE"
-	DeviceStateRevoked       DeviceState = "REVOKED"
-	DeviceStateLegacyAuth    DeviceState = "LEGACY_AUTH"
+	DeviceStatePending      DeviceState = "PENDING"
+	DeviceStateCompliant    DeviceState = "COMPLIANT"
+	DeviceStateNonCompliant DeviceState = "NON_COMPLIANT"
+	DeviceStateUnreachable  DeviceState = "UNREACHABLE"
+	DeviceStateRevoked      DeviceState = "REVOKED"
+	DeviceStateLegacyAuth   DeviceState = "LEGACY_AUTH"
 )
 
 // CredentialStatus represents the status of an mTLS certificate or enrollment key.
@@ -93,47 +93,47 @@ type EnrollmentTokenRecord struct {
 
 // EnrollmentTransactionRecord represents a 2-key enrollment handshake transaction.
 type EnrollmentTransactionRecord struct {
-	ID                        string     `json:"id"`
-	OrganizationID            string     `json:"organization_id"`
-	EnrollmentTokenID         string     `json:"enrollment_token_id"`
-	StableDeviceID            string     `json:"stable_device_id"`
-	DisplayName               string     `json:"display_name,omitempty"`
-	OwnerSubject              string     `json:"owner_subject,omitempty"`
-	EnrollmentEd25519PubKey   []byte     `json:"-"`
-	EnrollmentKeyFingerprint  string     `json:"enrollment_key_fingerprint"`
-	MTLSCSRSHA256             string     `json:"mtls_csr_sha256"`
-	MTLSCSRPEM                string     `json:"mtls_csr_pem"`
-	OSFamily                  string     `json:"os_family"`
-	OSVersionSummary          string     `json:"os_version_summary,omitempty"`
-	Architecture              string     `json:"architecture"`
-	Status                    string     `json:"status"`
-	FailureCode               string     `json:"failure_code,omitempty"`
-	ExpiresAt                 time.Time  `json:"expires_at"`
-	CompletedAt               *time.Time `json:"completed_at,omitempty"`
-	CreatedAt                 time.Time  `json:"created_at"`
+	ID                       string     `json:"id"`
+	OrganizationID           string     `json:"organization_id"`
+	EnrollmentTokenID        string     `json:"enrollment_token_id"`
+	StableDeviceID           string     `json:"stable_device_id"`
+	DisplayName              string     `json:"display_name,omitempty"`
+	OwnerSubject             string     `json:"owner_subject,omitempty"`
+	EnrollmentEd25519PubKey  []byte     `json:"-"`
+	EnrollmentKeyFingerprint string     `json:"enrollment_key_fingerprint"`
+	MTLSCSRSHA256            string     `json:"mtls_csr_sha256"`
+	MTLSCSRPEM               string     `json:"mtls_csr_pem"`
+	OSFamily                 string     `json:"os_family"`
+	OSVersionSummary         string     `json:"os_version_summary,omitempty"`
+	Architecture             string     `json:"architecture"`
+	Status                   string     `json:"status"`
+	FailureCode              string     `json:"failure_code,omitempty"`
+	ExpiresAt                time.Time  `json:"expires_at"`
+	CompletedAt              *time.Time `json:"completed_at,omitempty"`
+	CreatedAt                time.Time  `json:"created_at"`
 }
 
 // DeviceRecord represents the operational projection of an enrolled device.
 type DeviceRecord struct {
-	ID                string      `json:"id"`
-	OrganizationID    string      `json:"organization_id"`
-	TeamID            string      `json:"team_id"`
-	StableDeviceID    string      `json:"stable_device_id"`
-	DisplayName       string      `json:"display_name,omitempty"`
-	OwnerSubject      string      `json:"owner_subject,omitempty"`
-	OSFamily          string      `json:"os_family"`
-	OSVersionSummary  string      `json:"os_version_summary,omitempty"`
-	Architecture      string      `json:"architecture"`
-	State             DeviceState `json:"state"`
-	StateReasonCode   string      `json:"state_reason_code,omitempty"`
-	StateChangedAt    time.Time   `json:"state_changed_at"`
-	FirstEnrolledAt   time.Time   `json:"first_enrolled_at"`
-	LastAuthAt        *time.Time  `json:"last_authenticated_at,omitempty"`
-	LastHeartbeatAt   *time.Time  `json:"last_heartbeat_at,omitempty"`
-	RevokedAt         *time.Time  `json:"revoked_at,omitempty"`
-	RevocationReason  string      `json:"revocation_reason,omitempty"`
-	CreatedAt         time.Time   `json:"created_at"`
-	UpdatedAt         time.Time   `json:"updated_at"`
+	ID               string      `json:"id"`
+	OrganizationID   string      `json:"organization_id"`
+	TeamID           string      `json:"team_id"`
+	StableDeviceID   string      `json:"stable_device_id"`
+	DisplayName      string      `json:"display_name,omitempty"`
+	OwnerSubject     string      `json:"owner_subject,omitempty"`
+	OSFamily         string      `json:"os_family"`
+	OSVersionSummary string      `json:"os_version_summary,omitempty"`
+	Architecture     string      `json:"architecture"`
+	State            DeviceState `json:"state"`
+	StateReasonCode  string      `json:"state_reason_code,omitempty"`
+	StateChangedAt   time.Time   `json:"state_changed_at"`
+	FirstEnrolledAt  time.Time   `json:"first_enrolled_at"`
+	LastAuthAt       *time.Time  `json:"last_authenticated_at,omitempty"`
+	LastHeartbeatAt  *time.Time  `json:"last_heartbeat_at,omitempty"`
+	RevokedAt        *time.Time  `json:"revoked_at,omitempty"`
+	RevocationReason string      `json:"revocation_reason,omitempty"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 // PolicyEnvelope represents an immutable signed Team policy payload.

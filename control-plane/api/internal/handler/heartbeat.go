@@ -19,15 +19,15 @@ func NewHeartbeatHandler(s *store.Store) *HeartbeatHandler {
 }
 
 type HeartbeatRequest struct {
-	DeviceID          string                 `json:"device_id"`
-	Hostname          string                 `json:"hostname"`
-	OSArch            string                 `json:"os_arch"`
-	AgentControlVersion  string                 `json:"agentcontrol_version"`
-	DaemonStatus      string                 `json:"daemon_status"`
-	IDEChecksums       map[string]interface{} `json:"ide_checksums"`
-	MCPServersTotal   int                    `json:"mcp_servers_total"`
-	MCPServersWrapped int                    `json:"mcp_servers_wrapped"`
-	UptimeSeconds     int64                  `json:"uptime_seconds"`
+	DeviceID            string                 `json:"device_id"`
+	Hostname            string                 `json:"hostname"`
+	OSArch              string                 `json:"os_arch"`
+	AgentControlVersion string                 `json:"agentcontrol_version"`
+	DaemonStatus        string                 `json:"daemon_status"`
+	IDEChecksums        map[string]interface{} `json:"ide_checksums"`
+	MCPServersTotal     int                    `json:"mcp_servers_total"`
+	MCPServersWrapped   int                    `json:"mcp_servers_wrapped"`
+	UptimeSeconds       int64                  `json:"uptime_seconds"`
 }
 
 type HeartbeatResponse struct {

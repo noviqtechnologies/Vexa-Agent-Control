@@ -8,7 +8,7 @@ func TestPriceBook_CalculateReserve(t *testing.T) {
 	item := PriceBookItem{
 		Provider:                       "openai",
 		ModelSelector:                  "gpt-4o",
-		InputRateMicrocentsPerMillion:  250_000_000, // $2.50 / 1M
+		InputRateMicrocentsPerMillion:  250_000_000,   // $2.50 / 1M
 		OutputRateMicrocentsPerMillion: 1_000_000_000, // $10.00 / 1M
 	}
 
@@ -54,9 +54,9 @@ func TestPriceBook_CalculateSettlement(t *testing.T) {
 	item := PriceBookItem{
 		Provider:                            "openai",
 		ModelSelector:                       "gpt-4o",
-		InputRateMicrocentsPerMillion:       250_000_000,  // $2.50 / 1M
+		InputRateMicrocentsPerMillion:       250_000_000,   // $2.50 / 1M
 		OutputRateMicrocentsPerMillion:      1_000_000_000, // $10.00 / 1M
-		CachedInputRateMicrocentsPerMillion: 125_000_000,  // $1.25 / 1M
+		CachedInputRateMicrocentsPerMillion: 125_000_000,   // $1.25 / 1M
 	}
 
 	// 1,000 total input (with 400 cached), 500 output

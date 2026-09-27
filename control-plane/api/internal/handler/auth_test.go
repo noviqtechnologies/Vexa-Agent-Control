@@ -548,6 +548,3 @@ func TestLogout_ClearsAllSessionAndOAuthCookies(t *testing.T) {
 		}
 	}
 }
-
-
-

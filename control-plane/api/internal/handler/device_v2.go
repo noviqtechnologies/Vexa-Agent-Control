@@ -65,7 +65,7 @@ func (h *DeviceV2Handler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 	resp.Policy.Version = 1
 	resp.Policy.Mode = "TEAM_ENFORCE"
 	resp.Policy.Content = "version: 2\ndefault_action: deny\nenforce_safe_mode: true\n"
-	
+
 	contentBytes := []byte(resp.Policy.Content)
 	hasher := sha256.New()
 	hasher.Write(contentBytes)
@@ -629,5 +629,3 @@ func (h *DeviceV2Handler) ListDevicesV2(w http.ResponseWriter, r *http.Request) 
 		"total_count": len(items),
 	})
 }
-
-

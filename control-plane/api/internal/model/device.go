@@ -3,23 +3,23 @@ package model
 import "time"
 
 type Device struct {
-	DeviceID          string                 `json:"device_id"`
-	Hostname          string                 `json:"hostname"`
-	OSArch            string                 `json:"os_arch"`
-	OSFamily          string                 `json:"os_family"`
-	PublicKey         string                 `json:"public_key"`
-	AgentControlVersion  string                 `json:"agentcontrol_version"`
-	ComplianceStatus  string                 `json:"compliance_status"`
-	MCPServersTotal   int                    `json:"mcp_servers_total"`
-	MCPServersWrapped int                    `json:"mcp_servers_wrapped"`
-	IDEChecksums       map[string]interface{} `json:"ide_checksums"`
-	FirstEnrolledAt   time.Time              `json:"first_enrolled_at"`
-	LastHeartbeatAt   time.Time              `json:"last_heartbeat_at"`
-	OwnerSubject      string                 `json:"owner_subject,omitempty"`
-	AuthProviderType  string                 `json:"auth_provider_type,omitempty"`
-	IsRevoked         bool                   `json:"is_revoked"`
-	RevokedAt         *time.Time             `json:"revoked_at,omitempty"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	DeviceID            string                 `json:"device_id"`
+	Hostname            string                 `json:"hostname"`
+	OSArch              string                 `json:"os_arch"`
+	OSFamily            string                 `json:"os_family"`
+	PublicKey           string                 `json:"public_key"`
+	AgentControlVersion string                 `json:"agentcontrol_version"`
+	ComplianceStatus    string                 `json:"compliance_status"`
+	MCPServersTotal     int                    `json:"mcp_servers_total"`
+	MCPServersWrapped   int                    `json:"mcp_servers_wrapped"`
+	IDEChecksums        map[string]interface{} `json:"ide_checksums"`
+	FirstEnrolledAt     time.Time              `json:"first_enrolled_at"`
+	LastHeartbeatAt     time.Time              `json:"last_heartbeat_at"`
+	OwnerSubject        string                 `json:"owner_subject,omitempty"`
+	AuthProviderType    string                 `json:"auth_provider_type,omitempty"`
+	IsRevoked           bool                   `json:"is_revoked"`
+	RevokedAt           *time.Time             `json:"revoked_at,omitempty"`
+	UpdatedAt           time.Time              `json:"updated_at"`
 }
 
 type EnrollmentToken struct {

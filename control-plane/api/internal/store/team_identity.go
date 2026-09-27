@@ -17,16 +17,16 @@ var (
 )
 
 type UserIdentity struct {
-	ID             string    `json:"id"`
-	UserID         string    `json:"user_id"`
-	OrganizationID string    `json:"organization_id"`
-	ProviderID     string    `json:"provider_id"`
-	IdentityIssuer string    `json:"identity_issuer"`
-	IdentitySubject string   `json:"identity_subject"`
-	IdentityEmail  string    `json:"identity_email"`
-	EmailVerified  bool      `json:"email_verified"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	OrganizationID  string    `json:"organization_id"`
+	ProviderID      string    `json:"provider_id"`
+	IdentityIssuer  string    `json:"identity_issuer"`
+	IdentitySubject string    `json:"identity_subject"`
+	IdentityEmail   string    `json:"identity_email"`
+	EmailVerified   bool      `json:"email_verified"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type OAuthRefreshToken struct {

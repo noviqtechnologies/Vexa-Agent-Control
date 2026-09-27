@@ -78,12 +78,12 @@ func TestBrokerV2Handler_FailClosedOnMissingCredential(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqPayload)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/broker/llm-requests", bytes.NewReader(bodyBytes))
-	
+
 	// Inject compliant device principal
 	principal := &model.DevicePrincipal{
-		DeviceID:    "dev-1",
+		DeviceID:       "dev-1",
 		OrganizationID: "00000000-0000-0000-0000-000000000001",
-		DeviceState: model.DeviceStateCompliant,
+		DeviceState:    model.DeviceStateCompliant,
 	}
 	ctx := context.WithValue(req.Context(), middleware.DevicePrincipalKey, principal)
 	req = req.WithContext(ctx)
@@ -121,7 +121,7 @@ func TestBrokerV2Handler_NonCompliantDeviceDenied(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqPayload)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/broker/llm-requests", bytes.NewReader(bodyBytes))
-	
+
 	// Inject NON_COMPLIANT device principal
 	principal := &model.DevicePrincipal{
 		DeviceID:       "dev-2",

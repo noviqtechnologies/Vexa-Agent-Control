@@ -26,7 +26,7 @@ func (h *AuthProviderHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Redact secrets
 	for i := range providers {
 		providers[i].ClientSecret = ""
@@ -48,7 +48,7 @@ func (h *AuthProviderHandler) Get(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	provider.ClientSecret = "" // Redact
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(provider)
@@ -61,22 +61,22 @@ func (h *AuthProviderHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	
+
 	if p.Type == "" || p.Name == "" {
 		http.Error(w, "type and name are required", http.StatusBadRequest)
 		return
 	}
-	
+
 	if p.ID == "" {
 		p.CreatedAt = time.Now()
 	}
 	p.UpdatedAt = time.Now()
-	
+
 	if err := h.store.UpsertAuthProvider(r.Context(), tenantID, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	p.ClientSecret = ""
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)

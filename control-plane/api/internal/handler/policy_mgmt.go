@@ -59,7 +59,7 @@ func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 	}
 	var policy *model.Policy
 	var err error
-	
+
 	if r.URL.Query().Get("raw") == "true" {
 		policy, err = h.store.GetRawActivePolicy(r.Context(), tenantID)
 	} else {

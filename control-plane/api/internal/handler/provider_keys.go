@@ -83,7 +83,7 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 
 	// Hide the encrypted key from the response
 	k.APIKeyEncrypted = ""
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(k)

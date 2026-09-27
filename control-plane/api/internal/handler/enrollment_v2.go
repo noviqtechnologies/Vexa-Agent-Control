@@ -33,11 +33,11 @@ func NewEnrollmentV2Handler(st *store.Store, cas crypto.CASIssuer) *EnrollmentV2
 }
 
 type StartEnrollmentRequest struct {
-	SchemaVersion   string `json:"schema_version"`
-	EnrollmentToken string `json:"enrollment_token"`
-	StableDeviceID  string `json:"stable_device_id"`
-	DisplayName     string `json:"display_name"`
-	OwnerSubject    string `json:"owner_subject"`
+	SchemaVersion     string `json:"schema_version"`
+	EnrollmentToken   string `json:"enrollment_token"`
+	StableDeviceID    string `json:"stable_device_id"`
+	DisplayName       string `json:"display_name"`
+	OwnerSubject      string `json:"owner_subject"`
 	IdentityPublicKey struct {
 		Algorithm string `json:"algorithm"`
 		Value     string `json:"value"` // base64url 32-byte Ed25519 public key
@@ -47,9 +47,9 @@ type StartEnrollmentRequest struct {
 		PEM       string `json:"pem"`
 	} `json:"mtls_csr"`
 	Platform struct {
-		OSFamily          string `json:"os_family"`
+		OSFamily         string `json:"os_family"`
 		OSVersionSummary string `json:"os_version_summary"`
-		Architecture      string `json:"architecture"`
+		Architecture     string `json:"architecture"`
 	} `json:"platform"`
 	Release struct {
 		Version    string `json:"version"`
@@ -177,9 +177,9 @@ func (h *EnrollmentV2Handler) StartEnrollment(w http.ResponseWriter, r *http.Req
 }
 
 type CompleteEnrollmentRequest struct {
-	SchemaVersion        string `json:"schema_version"`
-	TransactionID        string `json:"transaction_id"`
-	ChallengeID          string `json:"challenge_id"`
+	SchemaVersion       string `json:"schema_version"`
+	TransactionID       string `json:"transaction_id"`
+	ChallengeID         string `json:"challenge_id"`
 	EnrollmentSignature struct {
 		Algorithm string `json:"algorithm"`
 		Value     string `json:"value"` // base64url 64-byte Ed25519 signature

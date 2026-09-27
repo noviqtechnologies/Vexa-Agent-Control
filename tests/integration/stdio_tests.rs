@@ -8,15 +8,30 @@ use tokio::time::sleep;
 async fn test_stdio_bridge() {
     let bin = env!("CARGO_BIN_EXE_agentcontrol");
 
-    // Spawn agentcontrol in stdio mode
+    // Detect python interpreter (python3 or python)
+    let python_bin = if std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        "python3"
+    } else if std::process::Command::new("python")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        "python"
+    } else {
+        eprintln!("[SKIP] test_stdio_bridge: python interpreter not found.");
+        return;
+    };
+
+    // Spawn agentcontrol in stdio-proxy mode wrapping the python echo command
     let mut child = Command::new(bin)
         .args([
-            "dev",
-            "--stdio",
-            "--mcp-url",
-            "http://127.0.0.1:3000",
+            "stdio-proxy",
             "--",
-            "python",
+            python_bin,
             "-c",
             "import sys; line = sys.stdin.readline(); print('{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'); sys.stdout.flush()",
         ])
@@ -46,16 +61,14 @@ async fn test_stdio_bridge() {
         .expect("Failed to write to stdin");
     stdin.flush().await.expect("Failed to flush stdin");
 
-    // Read the response from stdout
-
-    // We use a small timeout to read the response to avoid hanging if the bridge is broken
+    // Read the response from stdout with a timeout
     let mut res_str = String::new();
     let _ = tokio::time::timeout(Duration::from_secs(5), async {
         let mut reader = tokio::io::BufReader::new(stdout);
         loop {
             let mut line = String::new();
             use tokio::io::AsyncBufReadExt;
-            if reader.read_line(&mut line).await.unwrap() == 0 {
+            if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
                 break;
             }
             res_str.push_str(&line);
@@ -66,6 +79,9 @@ async fn test_stdio_bridge() {
     })
     .await;
 
+    // Clean up child process
+    let _ = child.kill().await;
+
     // The proxy should respond to ping automatically or forward it.
     // Either way, we expect a valid JSON-RPC message containing jsonrpc: 2.0
     assert!(
@@ -73,7 +89,4 @@ async fn test_stdio_bridge() {
         "Expected JSON-RPC format in stdout, got: {}",
         res_str
     );
-
-    // Clean up
-    child.kill().await.ok();
 }

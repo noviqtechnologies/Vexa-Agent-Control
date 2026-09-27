@@ -61,8 +61,8 @@ type UpdateVirtualKeyRequest struct {
 }
 
 type CreateVirtualKeyResponse struct {
-	Key      store.VirtualKey `json:"virtual_key"`
-	RawSecret string          `json:"raw_secret"` // Returned ONLY upon creation
+	Key       store.VirtualKey `json:"virtual_key"`
+	RawSecret string           `json:"raw_secret"` // Returned ONLY upon creation
 }
 
 func generateVirtualKeySecret(prefix string) (rawSecret, keyHash, keyPrefix string, err error) {
@@ -251,7 +251,6 @@ func (h *VirtualKeyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		"id":     id,
 	})
 }
-
 
 type RotateRequest struct {
 	GracePeriodSeconds int `json:"grace_period_seconds"`

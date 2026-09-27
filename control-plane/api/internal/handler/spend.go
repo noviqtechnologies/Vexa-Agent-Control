@@ -29,7 +29,7 @@ func (h *SpendHandler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 	if budgets == nil {
 		budgets = []store.SpendBudget{}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(budgets)
 }
@@ -41,14 +41,14 @@ func (h *SpendHandler) CreateBudget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	
+
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
 	if err := h.store.UpsertSpendBudget(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -66,7 +66,7 @@ func (h *SpendHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 	if snapshots == nil {
 		snapshots = []store.SpendSnapshot{}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(snapshots)
 }
@@ -78,14 +78,14 @@ func (h *SpendHandler) SyncSnapshot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	
+
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
 	if err := h.store.UpsertSpendSnapshot(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -101,7 +101,7 @@ func (h *SpendHandler) ListIncreaseRequests(w http.ResponseWriter, r *http.Reque
 	if reqs == nil {
 		reqs = []store.IncreaseRequest{}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reqs)
 }
@@ -114,14 +114,14 @@ func (h *SpendHandler) SubmitIncreaseRequest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Status = "pending"
-	
+
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
 	if err := h.store.InsertIncreaseRequest(ctx, tenantID, &req); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -135,23 +135,23 @@ func (h *SpendHandler) ResolveIncreaseRequest(w http.ResponseWriter, r *http.Req
 		http.Error(w, `{"error":"missing request id"}`, http.StatusBadRequest)
 		return
 	}
-	
+
 	var req struct {
-		Status     string  `json:"status"`
-		ResolvedBy string  `json:"resolved_by"`
-		NewCap     *int64  `json:"new_cap"`
+		Status     string `json:"status"`
+		ResolvedBy string `json:"resolved_by"`
+		NewCap     *int64 `json:"new_cap"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	
+
 	ctx := r.Context()
 	tenantID := middleware.TenantIDFromContext(ctx)
 	if err := h.store.ResolveIncreaseRequest(ctx, tenantID, id, req.Status, req.ResolvedBy, req.NewCap); err != nil {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusOK)
 }

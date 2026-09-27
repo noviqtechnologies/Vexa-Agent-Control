@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/broker"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/config"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
@@ -27,7 +28,6 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -514,12 +514,12 @@ func main() {
 		r.Post("/policy/suggestions", policyH.GetSuggestions)
 
 		r.Post("/identity/rotate", rotationH.TriggerRotation)
-		
+
 		// Auth Providers
 		r.With(middleware.RequireAdmin()).Get("/auth_providers", authProviderH.List)
 		r.With(middleware.RequireAdmin()).Get("/auth_providers/{id}", authProviderH.Get)
 		r.With(middleware.RequireAdmin()).Put("/auth_providers", authProviderH.Upsert)
-		
+
 		// Users
 		r.With(middleware.RequireAdmin()).Get("/users", userH.List)
 		r.With(middleware.RequireAdmin()).Post("/users", userH.Create)
@@ -529,7 +529,7 @@ func main() {
 		r.Post("/users/{id}/password", userH.UpdatePassword)
 		r.Put("/users/{id}/password", userH.UpdatePassword)
 		r.With(middleware.RequireAdmin()).Delete("/users/{id}", userH.Delete)
-		
+
 		// Policy Management
 		r.Get("/policies", policyMgmtH.List)
 		r.Get("/policies/active", policyMgmtH.GetActive)

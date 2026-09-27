@@ -217,4 +217,3 @@ func StrictDeviceOrAssertionAuth(st *store.Store, trustedVPCHeaderSecret string)
 		})
 	}
 }
-

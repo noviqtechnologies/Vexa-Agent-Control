@@ -31,9 +31,9 @@ func productionEnv() map[string]string {
 		"DATABASE_URL":                   "postgres://localhost:5432/test",
 		"GATEWAY_SECRET":                 "prod_gateway_secret_very_secure_67890",
 		"OIDC_ISSUER":                    "https://accounts.example.com",
-		"OIDC_CLIENT_ID":                "dashboard-client",
+		"OIDC_CLIENT_ID":                 "dashboard-client",
 		"PROVIDER_KEY_ENCRYPTION_SECRET": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
-		"INGRESS_AUTH_SECRET":           "prod_ingress_secret_auth_token_12345",
+		"INGRESS_AUTH_SECRET":            "prod_ingress_secret_auth_token_12345",
 	}
 }
 
@@ -102,7 +102,7 @@ func TestLoad_MissingOIDC_NonDevMode(t *testing.T) {
 		"DATABASE_URL":                   "postgres://localhost:5432/test",
 		"GATEWAY_SECRET":                 "prod_gateway_secret_very_secure_67890",
 		"PROVIDER_KEY_ENCRYPTION_SECRET": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
-		"INGRESS_AUTH_SECRET":           "prod_ingress_secret_auth_token_12345",
+		"INGRESS_AUTH_SECRET":            "prod_ingress_secret_auth_token_12345",
 	})
 
 	cfg, err := Load()
@@ -274,4 +274,3 @@ func TestLoad_TenantAndControlHubAdminConfig_Fallback(t *testing.T) {
 		t.Errorf("expected fallback org name Acme Legacy, got %s", cfg.OrganizationName)
 	}
 }
-

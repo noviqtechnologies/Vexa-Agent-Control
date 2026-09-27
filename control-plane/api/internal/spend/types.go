@@ -90,7 +90,7 @@ const (
 	ErrCodeSpendBudgetExhausted = "spend_budget_exhausted"
 	ErrCodeReservationExpired   = "reservation_expired"
 	ErrCodePolicyVersionStale   = "policy_version_stale"
-	ErrCodeAuthorizationRetry  = "authorization_retryable"
+	ErrCodeAuthorizationRetry   = "authorization_retryable"
 	ErrCodeOutputBoundMissing   = "output_bound_missing"
 	ErrCodeIdempotencyConflict  = "idempotency_conflict"
 	ErrCodeReservationNotFound  = "reservation_not_found"
@@ -108,9 +108,9 @@ const (
 type SpendPolicy struct {
 	PolicyID        string          `json:"policy_id"`
 	OrganizationID  string          `json:"organization_id"`
-	ScopeType       string          `json:"scope_type"` // organization | project
-	ScopeID         string          `json:"scope_id"`   // tenant_id or project_id
-	Currency        string          `json:"currency"`   // USD
+	ScopeType       string          `json:"scope_type"`  // organization | project
+	ScopeID         string          `json:"scope_id"`    // tenant_id or project_id
+	Currency        string          `json:"currency"`    // USD
 	PeriodType      string          `json:"period_type"` // daily | monthly
 	LimitMicrocents MoneyMicrocents `json:"limit_microcents"`
 	Action          string          `json:"action"` // hard_deny | warn | notify
@@ -133,18 +133,18 @@ type SpendPolicyVersion struct {
 
 // BudgetWindow tracks current reserved & settled microcents within a UTC time window.
 type BudgetWindow struct {
-	WindowID           string          `json:"window_id"`
-	OrganizationID     string          `json:"organization_id"`
-	PolicyVersionID    string          `json:"policy_version_id"`
-	ScopeType          string          `json:"scope_type"`
-	ScopeID            string          `json:"scope_id"`
-	WindowStart        time.Time       `json:"window_start"`
-	WindowEnd          time.Time       `json:"window_end"`
-	LimitMicrocents    MoneyMicrocents `json:"limit_microcents"`
-	ReservedMicrocents MoneyMicrocents `json:"reserved_microcents"`
-	SettledMicrocents  MoneyMicrocents `json:"settled_microcents"`
+	WindowID            string          `json:"window_id"`
+	OrganizationID      string          `json:"organization_id"`
+	PolicyVersionID     string          `json:"policy_version_id"`
+	ScopeType           string          `json:"scope_type"`
+	ScopeID             string          `json:"scope_id"`
+	WindowStart         time.Time       `json:"window_start"`
+	WindowEnd           time.Time       `json:"window_end"`
+	LimitMicrocents     MoneyMicrocents `json:"limit_microcents"`
+	ReservedMicrocents  MoneyMicrocents `json:"reserved_microcents"`
+	SettledMicrocents   MoneyMicrocents `json:"settled_microcents"`
 	AvailableMicrocents MoneyMicrocents `json:"available_microcents"`
-	Version            int64           `json:"version"`
+	Version             int64           `json:"version"`
 }
 
 // SpendReservation represents an active preflight reservation.
@@ -374,4 +374,3 @@ type RunDossier struct {
 	PriceBookVersionID string          `json:"price_book_version_id"`
 	Events             []SpendEvent    `json:"events"`
 }
-

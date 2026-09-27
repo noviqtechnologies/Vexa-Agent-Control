@@ -61,7 +61,6 @@ func (h *DeviceHandler) RecordClientLogs(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-
 // EnrollDevice handles POST /api/v1/devices/enroll
 func (h *DeviceHandler) EnrollDevice(w http.ResponseWriter, r *http.Request) {
 	var req device.EnrollDeviceRequest

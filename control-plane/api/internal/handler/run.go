@@ -185,7 +185,7 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 			"end_user_id":        dossier.EndUserID,
 		},
 		"policy": map[string]interface{}{
-			"snapshot":               parsedPolicy,
+			"snapshot":              parsedPolicy,
 			"price_book_version_id": dossier.PriceBookVersionID,
 		},
 		"dispatch": map[string]interface{}{

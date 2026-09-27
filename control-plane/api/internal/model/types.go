@@ -5,13 +5,13 @@ package model
 // AC-23.10: no field here accepts raw secret material.
 
 type RedactedEvent struct {
-	EventID           string                    `json:"event_id"`
-	TimestampMs       int64                     `json:"timestamp_ms"`
-	SessionID         string                    `json:"session_id"`
-	AgentID           string                    `json:"agent_id"`
-	ToolName          string                    `json:"tool_name"`
-	Decision          string                    `json:"decision"`
-	DlpFindings       []RedactedDlpFinding      `json:"dlp_findings"`
+	EventID           string                     `json:"event_id"`
+	TimestampMs       int64                      `json:"timestamp_ms"`
+	SessionID         string                     `json:"session_id"`
+	AgentID           string                     `json:"agent_id"`
+	ToolName          string                     `json:"tool_name"`
+	Decision          string                     `json:"decision"`
+	DlpFindings       []RedactedDlpFinding       `json:"dlp_findings"`
 	InjectionFindings []RedactedInjectionFinding `json:"injection_findings"`
 	SemanticFindings  []RedactedSemanticFinding  `json:"semantic_findings"`
 }
@@ -120,4 +120,3 @@ type LlmRequestLog struct {
 func (l *LlmRequestLog) Valid() bool {
 	return l != nil && l.RequestID != ""
 }
-

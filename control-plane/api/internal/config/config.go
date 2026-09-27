@@ -295,5 +295,3 @@ func Load() (*Config, error) {
 		DevMode:                     devMode,
 	}, nil
 }
-
-

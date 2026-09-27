@@ -166,5 +166,3 @@ func TestMultiTenant_AdminEndpointsGatedForMembers(t *testing.T) {
 		}
 	}
 }
-
-
