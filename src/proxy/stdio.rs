@@ -347,7 +347,7 @@ fn send_dashboard_event(
 }
 
 /// Enforces process memory quota (< 64MB RSS) across Windows, Linux, and macOS (PRD §FR-7, Task 3.4).
-pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), String> {
+pub fn enforce_child_memory_quota(_pid: u32, _max_bytes: usize) -> Result<(), String> {
     #[cfg(windows)]
     #[allow(non_camel_case_types, non_upper_case_globals)]
     {
@@ -431,8 +431,8 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
             info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
                 | JOB_OBJECT_LIMIT_JOB_MEMORY
                 | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            info.process_memory_limit = max_bytes;
-            info.job_memory_limit = max_bytes;
+            info.process_memory_limit = _max_bytes;
+            info.job_memory_limit = _max_bytes;
 
             let ret = SetInformationJobObject(
                 job,
@@ -461,8 +461,8 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
         #[cfg(target_os = "linux")]
         unsafe {
             let rlim = libc::rlimit {
-                rlim_cur: max_bytes as libc::rlim_t,
-                rlim_max: max_bytes as libc::rlim_t,
+                rlim_cur: _max_bytes as libc::rlim_t,
+                rlim_max: _max_bytes as libc::rlim_t,
             };
             // Use prlimit to target the child PID rather than the calling agentcontrol proxy.
             let res = libc::prlimit(
@@ -481,6 +481,7 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
         {
             // macOS and BSD do not support post-spawn cross-process setrlimit.
             // Resource usage is observed via egress telemetry.
+            let _ = (_pid, _max_bytes);
             Ok(())
         }
     }
