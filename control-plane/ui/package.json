@@ -22,15 +22,15 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^22.10.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "jsdom": "^29.1.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.5.3",
-    "vite": "^5.4.0",
-    "vitest": "^4.1.10"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
   }
 }
