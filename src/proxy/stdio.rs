@@ -649,8 +649,7 @@ pub async fn run_stdio_bridge(
                                 if let Ok(json_str) = serde_json::to_string(&event) {
                                     let _ = state.event_tx.send(json_str);
                                 }
-                                let db = state.db_manager.clone();
-                                tokio::spawn(async move { let _ = db.insert(event).await; });
+                                let _ = state.db_manager.insert(event).await;
 
                                 send_dashboard_event(
                                     &state,
@@ -695,8 +694,7 @@ pub async fn run_stdio_bridge(
                                 if let Ok(json_str) = serde_json::to_string(&event) {
                                     let _ = state.event_tx.send(json_str);
                                 }
-                                let db = state.db_manager.clone();
-                                tokio::spawn(async move { let _ = db.insert(event).await; });
+                                let _ = state.db_manager.insert(event).await;
 
                                 send_dashboard_event(
                                     &state,
@@ -742,8 +740,7 @@ pub async fn run_stdio_bridge(
                                 if let Ok(json_str) = serde_json::to_string(&event) {
                                     let _ = state.event_tx.send(json_str);
                                 }
-                                let db = state.db_manager.clone();
-                                tokio::spawn(async move { let _ = db.insert(event).await; });
+                                let _ = state.db_manager.insert(event).await;
 
                                 send_dashboard_event(
                                     &state,

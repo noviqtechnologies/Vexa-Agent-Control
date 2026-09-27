@@ -220,6 +220,9 @@ fn test_stdio_proxy_process_integration() {
         inj_resp
     );
 
+    // Brief pause for all async tasks to settle before closing child stdin.
+    std::thread::sleep(Duration::from_millis(100));
+
     // Close stdin so the proxy receives EOF and exits cleanly.
     drop(proxy_stdin);
     let _ = proxy.wait();
