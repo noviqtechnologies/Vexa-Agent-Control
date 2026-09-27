@@ -371,13 +371,13 @@ pub fn load_user_email() -> Option<String> {
             return Some(trimmed.to_string());
         }
     }
-    if let Some(Some(email)) = crate::identity::storage::CredentialStore::get("user_email").ok() {
+    if let Ok(Some(email)) = crate::identity::storage::CredentialStore::get("user_email") {
         let trimmed = email.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
         }
     }
-    if let Some(Some(user_id)) = crate::identity::storage::CredentialStore::get("user_id").ok() {
+    if let Ok(Some(user_id)) = crate::identity::storage::CredentialStore::get("user_id") {
         let trimmed = user_id.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());

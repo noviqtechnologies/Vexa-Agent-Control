@@ -21,8 +21,16 @@ DARK_GRAY='\033[0;90m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# Dynamically generate ephemeral demo secrets if not already set in environment
+export DEV_MODE=true
+export ALLOW_DEV_MODE=true
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)}"
+export GATEWAY_SECRET="${GATEWAY_SECRET:-$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)}"
+export POLICY_READ_SECRET="${POLICY_READ_SECRET:-$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)}"
+export PROVIDER_KEY_ENCRYPTION_SECRET="${PROVIDER_KEY_ENCRYPTION_SECRET:-$(openssl rand -hex 32 2>/dev/null || date +%s%N | sha256sum | head -c 64)}"
+
 echo ""
-echo -e "  ${CYAN}Building and starting Vexa Agent Control Dashboard...${NC}"
+echo -e "  ${CYAN}Building and starting Vexa Agent Control Dashboard (with dynamic ephemeral secrets)...${NC}"
 echo ""
 
 docker compose -f "$COMPOSE_FILE" up -d --build

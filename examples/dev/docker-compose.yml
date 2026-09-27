@@ -1,28 +1,23 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# ⚠️  LOCAL DEVELOPMENT & TEST MOCK STACK ONLY (NOT FOR PRODUCTION / TEAM HUB) ⚠️
-# ══════════════════════════════════════════════════════════════════════════════
-# This Compose file runs local testing mocks (Mock OIDC, Mock Splunk HEC, Dev Vault, Mock MCP).
-# For Team Hub deployment with PostgreSQL, Control Plane API & UI, use:
-#   docker compose -f docker-compose.team.yml up -d
+# VEXA AGENT CONTROL — LOCAL DEVELOPMENT & TEST MOCK STACK
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: vexa-agentcontrol-dev
 
 services:
-
   # ── Mock OIDC Provider ──────────────────────────────────────────────────────
   mock-oidc:
     container_name: vexa-agentcontrol-mock-oidc
     image: python:3.12-slim
     working_dir: /app
     volumes:
-      - ./test-tools:/app
+      - ../../test-tools:/app
     command: >
       sh -c "pip install cryptography pyjwt --quiet && python3 mock_oidc.py --port 8082 --audience agentcontrol"
     ports:
       - "8082:8082"
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -36,7 +31,7 @@ services:
     image: python:3.12-slim
     working_dir: /app
     volumes:
-      - ./test-tools:/app
+      - ../../test-tools:/app
     command: python3 mock_splunk.py --port 8088
     ports:
       - "8088:8088"
@@ -49,28 +44,11 @@ services:
     networks:
       - agentcontrol-net
 
-  # ── HashiCorp Vault (FR-22) ─────────────────────────────────────────────────
-  vault:
-    container_name: vexa-agentcontrol-vault
-    image: hashicorp/vault:1.16
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: "root"
-    ports:
-      - "8200:8200"
-    healthcheck:
-      test: ["CMD", "vault", "status"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    networks:
-      - agentcontrol-net
-
   # ── Mock MCP Tool Server ────────────────────────────────────────────────────
   mock-mcp:
     container_name: vexa-agentcontrol-mock-mcp
     build:
-      context: ./test-tools/mock-mcp-server
+      context: ../../test-tools/mock-mcp-server
       dockerfile: Dockerfile
     ports:
       - "3001:3000"
@@ -83,36 +61,29 @@ services:
     networks:
       - agentcontrol-net
 
-  # ── AgentControl Gateway ────────────────────────────────────────────────────
+  # ── AgentControl Gateway (Dev Mode) ─────────────────────────────────────────
   agentcontrol:
     container_name: vexa-agentcontrol-gateway-dev
-    image: vexa-agentcontrol-gateway:dev
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:
-      - ./policy.example.yaml:/app/policy.yaml:ro
+      - ../../policy.example.yaml:/app/policy.yaml:ro
       - agentcontrol-logs:/var/log/agentcontrol
     environment:
-      # Core gateway config
+      DEV_MODE: "true"
       AGENTCONTROL_LISTEN: "0.0.0.0:8080"
       AGENTCONTROL_MCP_URL: "http://mock-mcp:3000"
       AGENTCONTROL_LOG_PATH: "/var/log/agentcontrol/audit.log"
       AGENTCONTROL_DRY_RUN: "false"
-      POLICY_READ_SECRET: "local-dev-policy-read-secret"
-
-      # OIDC — points to the local mock provider (AC-203-2: same code path as production)
+      POLICY_READ_SECRET: "${POLICY_READ_SECRET:-local-dev-policy-read-secret}"
       AGENTCONTROL_OIDC_ISSUER: "http://mock-oidc:8082"
-
-      # SIEM export — points to local Splunk mock
       AGENTCONTROL_SIEM_BACKEND: "splunk"
       AGENTCONTROL_SIEM_ENDPOINT: "http://mock-splunk:8088/services/collector/event"
-      AGENTCONTROL_SIEM_TOKEN: "mock-splunk-token-for-local-dev"
+      AGENTCONTROL_SIEM_TOKEN: "${SIEM_TOKEN:-mock-splunk-token-for-local-dev}"
       AGENTCONTROL_SIEM_TIMEOUT: "2"
-
-      # Developer convenience: wildcard identity allowed in local dev
       ALLOW_WILDCARD_IDENTITY: "true"
     command:
       - "start"

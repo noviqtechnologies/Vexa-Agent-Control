@@ -7,23 +7,67 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test:
+  # ── 1. Clean Reproducibility Job (No Cache) ──────────────────────────────────
+  clean-reproducibility:
+    name: Clean Container Validation (No Cache)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain (Pinned via rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: clippy, rustfmt
+
+      - name: Print Exact Toolchain Versions
+        run: |
+          echo "=== Pinned Toolchain Diagnostics ==="
+          rustc --version
+          cargo --version
+
+      - name: Format Check
+        run: cargo fmt --check
+
+      - name: Clippy Linter (Deny Warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build Binary from Scratch
+        run: cargo build --release --locked
+
+      - name: Full Test Suite
+        run: cargo test --release --all-targets --locked
+
+  # ── 2. Multi-OS Matrix with Caching Optimization ─────────────────────────────
+  test-matrix:
+    name: Test Matrix (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.88.0
           components: clippy, rustfmt
 
-      - name: Cache dependencies
+      - name: Print Toolchain Versions
+        shell: bash
+        run: |
+          echo "=== Toolchain Versions ==="
+          rustc --version
+          cargo --version
+
+      - name: Cache dependencies (Optimization only)
         uses: Swatinem/rust-cache@v2
+        continue-on-error: true
 
       - name: Check code formatting
         run: cargo fmt --check
@@ -33,3 +77,52 @@ jobs:
 
       - name: Run all tests
         run: cargo test --all-targets
+
+  # ── 3. Multi-Component Checks (Go API & Node/React UI) ──────────────────────
+  components-validation:
+    name: Go API & Web UI Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.7'
+          check-latest: false
+
+      - name: Print Go Version
+        run: go version
+
+      - name: Validate Control Plane Go API
+        working-directory: control-plane/api
+        run: |
+          echo "Checking Go formatting..."
+          test -z "$(gofmt -l .)"
+          echo "Running Go vet..."
+          go vet ./...
+
+      - name: Validate Operator Go API
+        working-directory: operator
+        run: |
+          echo "Running Operator Go vet..."
+          go vet ./...
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.0'
+          cache: 'npm'
+          cache-dependency-path: 'control-plane/ui/package-lock.json'
+
+      - name: Print Node/npm Versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Build Web UI Dashboard
+        working-directory: control-plane/ui
+        run: |
+          npm ci
+          npm run build

@@ -16,8 +16,8 @@ This is the primary and recommended installation path for Windows 10 and Windows
 
 | Windows Architecture | Release Asset | Status | Notes |
 |---|---|---|---|
-| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.83-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
-| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.83-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
+| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.91-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
+| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.91-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
 
 ---
 
@@ -53,13 +53,14 @@ If you have **Docker Desktop for Windows** installed and want to run Vexa Agent 
 
 ### Standalone Gateway Container
 ```powershell
+$token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
   -p 8080:8080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  -e AGENTCONTROL_ADMIN_TOKEN="$token" `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 `
   start --listen 0.0.0.0:8080
 ```
 

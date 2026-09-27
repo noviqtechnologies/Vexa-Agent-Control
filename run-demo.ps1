@@ -8,8 +8,23 @@ $LOGIN_EMAIL = "admin"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $composeFile = Join-Path $scriptDir "control-plane\docker-compose.yml"
 
+# Dynamically generate ephemeral demo secrets if not already set in environment
+$env:DEV_MODE = "true"
+$env:ALLOW_DEV_MODE = "true"
+
+function New-SecureRandomHex([int]$bytes) {
+    $buffer = New-Object byte[] $bytes
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($buffer)
+    return -join ($buffer | ForEach-Object { "{0:x2}" -f $_ })
+}
+
+if (-not $env:POSTGRES_PASSWORD) { $env:POSTGRES_PASSWORD = New-SecureRandomHex 16 }
+if (-not $env:GATEWAY_SECRET) { $env:GATEWAY_SECRET = New-SecureRandomHex 16 }
+if (-not $env:POLICY_READ_SECRET) { $env:POLICY_READ_SECRET = New-SecureRandomHex 16 }
+if (-not $env:PROVIDER_KEY_ENCRYPTION_SECRET) { $env:PROVIDER_KEY_ENCRYPTION_SECRET = New-SecureRandomHex 32 }
+
 Write-Host ""
-Write-Host "  Building and starting Vexa Agent Control Dashboard..." -ForegroundColor Cyan
+Write-Host "  Building and starting Vexa Agent Control Dashboard (with dynamic ephemeral secrets)..." -ForegroundColor Cyan
 Write-Host ""
 
 docker compose -f "$composeFile" up --detach --build

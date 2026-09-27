@@ -139,13 +139,14 @@ Best for lightweight background proxying (~7MB RAM) of IDE MCP tools and LLM tra
 
 #### Windows (PowerShell):
 ```powershell
+$token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
   -p 8080:8080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  -e AGENTCONTROL_ADMIN_TOKEN="$token" `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 `
   start --listen 0.0.0.0:8080
 ```
 
@@ -156,20 +157,21 @@ docker run -d ^
   -p 8080:8080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
-  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 ^
   start --listen 0.0.0.0:8080
 ```
 
 #### macOS / Linux / WSL (Bash / Zsh):
 ```bash
+ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run -d \
   --name agentcontrol \
   -p 8080:8080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 \
   start --listen 0.0.0.0:8080
 ```
 
@@ -182,9 +184,9 @@ docker run -d \
    *(Expected status: `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
 
 2. **Test Admin API:**
-   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
-   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
-   - **Windows (CMD):** `curl -s -H "Authorization: Bearer admin123456" http://localhost:8080/`
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $token" http://localhost:8080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer %AGENTCONTROL_ADMIN_TOKEN%" http://localhost:8080/`
 
 3. **Stream Live Logs:**
    ```bash
@@ -211,25 +213,27 @@ Mount your own `agentcontrol-policy.yaml` into the container:
 
 #### macOS / Linux / WSL (Bash / Zsh):
 ```bash
+ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run -d \
   --name agentcontrol \
   -p 8080:8080 \
   -v "$(pwd)/agentcontrol-policy.yaml:/app/policy.yaml:ro" \
   -v agentcontrol-logs:/var/log/agentcontrol \
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" \
-  ghcr.io/noviqtechnologies/agentcontrol:latest \
+  -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 \
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 
 #### Windows (PowerShell):
 ```powershell
+$token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
   -p 8080:8080 `
   -v "${PWD}/agentcontrol-policy.yaml:/app/policy.yaml:ro" `
   -v agentcontrol-logs:/var/log/agentcontrol `
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" `
-  ghcr.io/noviqtechnologies/agentcontrol:latest `
+  -e AGENTCONTROL_ADMIN_TOKEN="$token" `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 `
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 
@@ -240,8 +244,8 @@ docker run -d ^
   -p 8080:8080 ^
   -v "%cd%/agentcontrol-policy.yaml:/app/policy.yaml:ro" ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
-  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 ^
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 

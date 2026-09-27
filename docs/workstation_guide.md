@@ -63,7 +63,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 > **Prefer Running with Docker?**
 > If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker compose -f docker-compose.standalone.yml up -d` or `docker run`:
 > ```bash
-> docker run -d --name agentcontrol -p 127.0.0.1:18080:18080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ghcr.io/noviqtechnologies/agentcontrol:latest start --listen 0.0.0.0:18080 --container-bridge-mode
+> docker run -d --name agentcontrol -p 127.0.0.1:18080:18080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 start --listen 0.0.0.0:18080 --container-bridge-mode
 > ```
 > See the full [Docker Deployment Guide](guides/docker-deployment.md).
 
@@ -102,7 +102,7 @@ Example Output:
 ● Vexa Agent Control Daemon Health Inspection
   OS Platform:        windows (x86_64)
   Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.90) | Up 23s
+  Daemon Process:     PID 25936 (v1.0.91) | Up 23s
   Listener Binding:   127.0.0.1:18080 (20 ms RTT)
   Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
 ```

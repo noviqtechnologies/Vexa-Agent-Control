@@ -3,8 +3,8 @@ PRD/
 design/
 agentinfo/
 scratch/
-graphify-out/
-scripts/
+!scripts/
+!scripts/**
 infra/gcp-teams-saas-hub
 sdk/
 
@@ -129,6 +129,7 @@ baselines.json
 .env
 .env.*
 !*.env.example
+!**/.env*.example
 test-cert.pem
 *cookies*.txt
 

@@ -208,8 +208,8 @@ pub async fn run_repair() -> i32 {
     );
     println!("Checking configuration manifests and background agent service...");
 
-    let mut repaired = 0;  // items that were broken and got fixed
-    let mut verified = 0;  // items that were already healthy
+    let mut repaired = 0; // items that were broken and got fixed
+    let mut verified = 0; // items that were already healthy
 
     // 1. Repair local token
     let local_token_path = crate::identity::oauth::get_local_token_path();

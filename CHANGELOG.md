@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.91] - 2026-09-27
+
+### Added & Enhanced
+- **Pinned Toolchains & Build Reproducibility:** Added `rust-toolchain.toml` pinning Rust 1.88.0 with `clippy`, `rustfmt`, and `llvm-tools-preview`. Added `.nvmrc` and `.node-version` (Node 20.18.0), `.go-version` (Go 1.22.7), and engine constraints.
+- **One-Command Bootstrap Runners:** Added `scripts/bootstrap.sh` and `scripts/bootstrap.ps1` for unified zero-config multi-platform bootstrapping, linting, test suites, and build validation.
+- **Clean Container CI Hardening:** Enhanced CI matrix across Linux, macOS, and Windows with a clean-container reproducibility job running from an empty cache, diagnostic toolchain version printing, and Go/UI multi-component verification.
+- **Secure Deployment Architecture:** Separated example stacks into explicit `examples/dev/` and hardened `examples/production/` directories.
+- **Dynamic Secret Generation:** Replaced static demo credentials with cryptographically secure ephemeral random generation in `run-demo.sh` and `run-demo.ps1`.
+- **Fail-Closed Runtime Validation:** Enforced strict fail-closed checks against insecure default passwords and placeholders in `control-plane/api` and `agentcontrol` gateway.
+- **Secret Scanning Pipeline:** Added automated CI secret scanning workflow (`.github/workflows/secret-scan.yml`).
+- **Support Matrix & Canonical Specs:** Added comprehensive support matrix covering OS, IDEs, and transports to documentation hub. Standardized canonical ports and eliminated port collision between Mock OIDC and Control Plane API.
+
+---
+
 ## [1.0.90] - 2026-09-26
 
 ### Added & Enhanced
@@ -178,7 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...HEAD
+[1.0.91]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...v1.0.91
 [1.0.90]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...v1.0.90
 [1.0.89]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.88...v1.0.89
 [1.0.88]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.87...v1.0.88

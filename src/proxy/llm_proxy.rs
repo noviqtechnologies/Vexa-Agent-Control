@@ -182,7 +182,10 @@ pub(crate) fn sanitize_tool_schemas(body: &mut Value) {
                         obj.insert("required".to_string(), req);
                     }
                 } else {
-                    obj.insert("properties".to_string(), Value::Object(serde_json::Map::new()));
+                    obj.insert(
+                        "properties".to_string(),
+                        Value::Object(serde_json::Map::new()),
+                    );
                     obj.insert("additionalProperties".to_string(), Value::Bool(true));
                 }
             }
@@ -196,9 +199,7 @@ pub(crate) fn sanitize_tool_schemas(body: &mut Value) {
 
         if let Some(keys) = valid_keys {
             if let Some(req_arr) = obj.get_mut("required").and_then(|r| r.as_array_mut()) {
-                req_arr.retain(|k| {
-                    k.as_str().map(|s| keys.contains(s)).unwrap_or(false)
-                });
+                req_arr.retain(|k| k.as_str().map(|s| keys.contains(s)).unwrap_or(false));
             }
         } else if obj.contains_key("required") {
             obj.remove("required");
@@ -1797,38 +1798,44 @@ pub async fn handle_request(
                                         format!("sha256:{:.8}", hex::encode(h.finalize()))
                                     })
                             };
-                            dc.send_llm_request_log(crate::control_plane_client::client::LlmRequestLog {
-                                request_id: req_uuid_for_broker_stream.clone(),
-                                session_id: session_clone_for_broker_stream.session_id.clone(),
-                                key_hash,
-                                model: model_clone_for_broker_stream.clone(),
-                                provider: provider_name_clone_for_broker_stream.clone(),
-                                is_streaming: true,
-                                prompt_tokens: input_est_for_broker_stream,
-                                completion_tokens: streamed_tokens_est as i64,
-                                total_tokens: (input_est_for_broker_stream + streamed_tokens_est as i64),
-                                latency_ms: start_time_for_broker_stream.elapsed().as_secs_f64() * 1000.0,
-                                status_code: 200,
-                                verdict: "allow".to_string(),
-                                identity_sub: session_clone_for_broker_stream
-                                    .identity_sub
-                                    .clone()
-                                    .or_else(|| crate::identity::device::load_user_email()),
-                                identity_email: session_clone_for_broker_stream
-                                    .identity_email
-                                    .clone()
-                                    .or_else(|| crate::identity::device::load_user_email()),
-                                request_ip: session_clone_for_broker_stream.request_ip.clone(),
-                                timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                                is_estimated: true,
-                                protocol: if is_anthropic_for_broker_stream {
-                                    "anthropic_messages".to_string()
-                                } else if is_responses_for_broker_stream {
-                                    "openai_responses".to_string()
-                                } else {
-                                    "openai_chat_completions".to_string()
+                            dc.send_llm_request_log(
+                                crate::control_plane_client::client::LlmRequestLog {
+                                    request_id: req_uuid_for_broker_stream.clone(),
+                                    session_id: session_clone_for_broker_stream.session_id.clone(),
+                                    key_hash,
+                                    model: model_clone_for_broker_stream.clone(),
+                                    provider: provider_name_clone_for_broker_stream.clone(),
+                                    is_streaming: true,
+                                    prompt_tokens: input_est_for_broker_stream,
+                                    completion_tokens: streamed_tokens_est as i64,
+                                    total_tokens: (input_est_for_broker_stream
+                                        + streamed_tokens_est as i64),
+                                    latency_ms: start_time_for_broker_stream
+                                        .elapsed()
+                                        .as_secs_f64()
+                                        * 1000.0,
+                                    status_code: 200,
+                                    verdict: "allow".to_string(),
+                                    identity_sub: session_clone_for_broker_stream
+                                        .identity_sub
+                                        .clone()
+                                        .or_else(|| crate::identity::device::load_user_email()),
+                                    identity_email: session_clone_for_broker_stream
+                                        .identity_email
+                                        .clone()
+                                        .or_else(|| crate::identity::device::load_user_email()),
+                                    request_ip: session_clone_for_broker_stream.request_ip.clone(),
+                                    timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                                    is_estimated: true,
+                                    protocol: if is_anthropic_for_broker_stream {
+                                        "anthropic_messages".to_string()
+                                    } else if is_responses_for_broker_stream {
+                                        "openai_responses".to_string()
+                                    } else {
+                                        "openai_chat_completions".to_string()
+                                    },
                                 },
-                            });
+                            );
                         }
                     });
 
@@ -1909,47 +1916,46 @@ pub async fn handle_request(
                             .unwrap_or(p_tokens + c_tokens);
                         let key_hash = {
                             use sha2::{Digest, Sha256};
-                            session
-                                .identity_sub
-                                .as_deref()
-                                .map(|sub| {
-                                    let mut h = Sha256::new();
-                                    h.update(sub.as_bytes());
-                                    format!("sha256:{:.8}", hex::encode(h.finalize()))
-                                })
+                            session.identity_sub.as_deref().map(|sub| {
+                                let mut h = Sha256::new();
+                                h.update(sub.as_bytes());
+                                format!("sha256:{:.8}", hex::encode(h.finalize()))
+                            })
                         };
-                        dc.send_llm_request_log(crate::control_plane_client::client::LlmRequestLog {
-                            request_id: req_uuid.clone(),
-                            session_id: session.session_id.clone(),
-                            key_hash,
-                            model: model.clone(),
-                            provider: provider_name.clone(),
-                            is_streaming: false,
-                            prompt_tokens: p_tokens,
-                            completion_tokens: c_tokens,
-                            total_tokens: t_tokens,
-                            latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
-                            status_code: 200,
-                            verdict: "allow".to_string(),
-                            identity_sub: session
-                                .identity_sub
-                                .clone()
-                                .or_else(|| crate::identity::device::load_user_email()),
-                            identity_email: session
-                                .identity_email
-                                .clone()
-                                .or_else(|| crate::identity::device::load_user_email()),
-                            request_ip: session.request_ip.clone(),
-                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                            is_estimated: false,
-                            protocol: if is_anthropic_protocol {
-                                "anthropic_messages".to_string()
-                            } else if is_responses_protocol {
-                                "openai_responses".to_string()
-                            } else {
-                                "openai_chat_completions".to_string()
+                        dc.send_llm_request_log(
+                            crate::control_plane_client::client::LlmRequestLog {
+                                request_id: req_uuid.clone(),
+                                session_id: session.session_id.clone(),
+                                key_hash,
+                                model: model.clone(),
+                                provider: provider_name.clone(),
+                                is_streaming: false,
+                                prompt_tokens: p_tokens,
+                                completion_tokens: c_tokens,
+                                total_tokens: t_tokens,
+                                latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                                status_code: 200,
+                                verdict: "allow".to_string(),
+                                identity_sub: session
+                                    .identity_sub
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                identity_email: session
+                                    .identity_email
+                                    .clone()
+                                    .or_else(|| crate::identity::device::load_user_email()),
+                                request_ip: session.request_ip.clone(),
+                                timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                                is_estimated: false,
+                                protocol: if is_anthropic_protocol {
+                                    "anthropic_messages".to_string()
+                                } else if is_responses_protocol {
+                                    "openai_responses".to_string()
+                                } else {
+                                    "openai_chat_completions".to_string()
+                                },
                             },
-                        });
+                        );
                     }
                     let resp_bytes =
                         serde_json::to_vec(&brokered_resp.response).unwrap_or_default();
@@ -3283,14 +3289,11 @@ pub async fn handle_request(
                         let auth_hdr = session_clone.request_ip.clone(); // reuse field for IP
                         let key_hash = {
                             use sha2::{Digest, Sha256};
-                            session_clone
-                                .identity_sub
-                                .as_deref()
-                                .map(|sub| {
-                                    let mut h = Sha256::new();
-                                    h.update(sub.as_bytes());
-                                    format!("sha256:{:.8}", hex::encode(h.finalize()))
-                                })
+                            session_clone.identity_sub.as_deref().map(|sub| {
+                                let mut h = Sha256::new();
+                                h.update(sub.as_bytes());
+                                format!("sha256:{:.8}", hex::encode(h.finalize()))
+                            })
                         };
                         dc.send_llm_request_log(
                             crate::control_plane_client::client::LlmRequestLog {
@@ -3621,45 +3624,40 @@ pub async fn handle_request(
                     };
                     let key_hash = {
                         use sha2::{Digest, Sha256};
-                        session
-                            .identity_sub
-                            .as_deref()
-                            .map(|sub| {
-                                let mut h = Sha256::new();
-                                h.update(sub.as_bytes());
-                                format!("sha256:{:.8}", hex::encode(h.finalize()))
-                            })
+                        session.identity_sub.as_deref().map(|sub| {
+                            let mut h = Sha256::new();
+                            h.update(sub.as_bytes());
+                            format!("sha256:{:.8}", hex::encode(h.finalize()))
+                        })
                     };
-                    dc.send_llm_request_log(
-                        crate::control_plane_client::client::LlmRequestLog {
-                            request_id: req_uuid.clone(),
-                            session_id: session.session_id.clone(),
-                            key_hash,
-                            model: model.clone(),
-                            provider: provider_name.clone(),
-                            is_streaming: false,
-                            prompt_tokens: prompt_tokens_val,
-                            completion_tokens: completion_tokens_val,
-                            total_tokens: total_tokens
-                                .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)
-                                as i64,
-                            latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
-                            status_code: status.as_u16(),
-                            verdict: "allow".to_string(),
-                            identity_sub: session
-                                .identity_sub
-                                .clone()
-                                .or_else(|| crate::identity::device::load_user_email()),
-                            identity_email: session
-                                .identity_email
-                                .clone()
-                                .or_else(|| crate::identity::device::load_user_email()),
-                            request_ip: session.request_ip.clone(),
-                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
-                            is_estimated: false,
-                            protocol: protocol_str.to_string(),
-                        },
-                    );
+                    dc.send_llm_request_log(crate::control_plane_client::client::LlmRequestLog {
+                        request_id: req_uuid.clone(),
+                        session_id: session.session_id.clone(),
+                        key_hash,
+                        model: model.clone(),
+                        provider: provider_name.clone(),
+                        is_streaming: false,
+                        prompt_tokens: prompt_tokens_val,
+                        completion_tokens: completion_tokens_val,
+                        total_tokens: total_tokens
+                            .unwrap_or((prompt_tokens_val + completion_tokens_val) as u64)
+                            as i64,
+                        latency_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                        status_code: status.as_u16(),
+                        verdict: "allow".to_string(),
+                        identity_sub: session
+                            .identity_sub
+                            .clone()
+                            .or_else(|| crate::identity::device::load_user_email()),
+                        identity_email: session
+                            .identity_email
+                            .clone()
+                            .or_else(|| crate::identity::device::load_user_email()),
+                        request_ip: session.request_ip.clone(),
+                        timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                        is_estimated: false,
+                        protocol: protocol_str.to_string(),
+                    });
                 }
 
                 let _ = state
@@ -4180,8 +4178,14 @@ mod tests {
         });
         sanitize_tool_schemas(&mut body);
         let params = &body["tools"][0]["function"]["parameters"];
-        assert_eq!(params["type"], "object", "anyOf must be replaced with object type");
-        assert!(params.get("anyOf").is_none(), "anyOf must be stripped from sanitized schema");
+        assert_eq!(
+            params["type"], "object",
+            "anyOf must be replaced with object type"
+        );
+        assert!(
+            params.get("anyOf").is_none(),
+            "anyOf must be stripped from sanitized schema"
+        );
     }
 
     #[test]

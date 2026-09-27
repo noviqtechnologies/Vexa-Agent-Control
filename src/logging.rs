@@ -19,7 +19,6 @@ const MAX_BUFFERED_ERRORS: usize = 500;
 static LOG_FILE_MUTEX: Mutex<()> = Mutex::new(());
 static CLIENT_ERROR_BUFFER: Mutex<Option<VecDeque<serde_json::Value>>> = Mutex::new(None);
 
-
 /// Enable or disable spend-only logging mode
 pub fn set_spend_only(enabled: bool) {
     SPEND_ONLY.store(enabled, Ordering::Relaxed);
@@ -73,7 +72,11 @@ pub fn get_log_dir() -> PathBuf {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         if let Some(home) = dirs::home_dir() {
-            return home.join(".local").join("state").join("agentcontrol").join("logs");
+            return home
+                .join(".local")
+                .join("state")
+                .join("agentcontrol")
+                .join("logs");
         }
         PathBuf::from("/var/log/agentcontrol")
     }
@@ -108,9 +111,7 @@ impl Level {
 /// Recursively scrubs sensitive API keys, Authorization headers, and Bearer tokens.
 pub fn sanitize_log_value(val: &serde_json::Value) -> serde_json::Value {
     match val {
-        serde_json::Value::String(s) => {
-            serde_json::Value::String(sanitize_secret_string(s))
-        }
+        serde_json::Value::String(s) => serde_json::Value::String(sanitize_secret_string(s)),
         serde_json::Value::Array(arr) => {
             serde_json::Value::Array(arr.iter().map(sanitize_log_value).collect())
         }
@@ -154,7 +155,9 @@ fn sanitize_secret_string(s: &str) -> String {
         let parts: Vec<&str> = s.split("Bearer ").collect();
         let mut out = parts[0].to_string();
         for p in &parts[1..] {
-            let token_end = p.find(|c: char| c.is_whitespace() || c == '"' || c == ',' || c == '\'').unwrap_or(p.len());
+            let token_end = p
+                .find(|c: char| c.is_whitespace() || c == '"' || c == ',' || c == '\'')
+                .unwrap_or(p.len());
             let token = &p[..token_end];
             let rest = &p[token_end..];
             out.push_str("Bearer ");
@@ -164,7 +167,11 @@ fn sanitize_secret_string(s: &str) -> String {
         return out;
     }
     // Mask sk- keys
-    if s.starts_with("sk-") || s.starts_with("sk_") || s.starts_with("vex_") || s.starts_with("ghp_") {
+    if s.starts_with("sk-")
+        || s.starts_with("sk_")
+        || s.starts_with("vex_")
+        || s.starts_with("ghp_")
+    {
         return mask_secret(s);
     }
     s.to_string()
@@ -187,7 +194,11 @@ fn rotate_log_file_if_needed(file_path: &Path) {
                     .filter(|p| {
                         p.file_name()
                             .and_then(|n| n.to_str())
-                            .map(|s| s.starts_with("agentcontrol.") && s.ends_with(".jsonl") && s != "agentcontrol.jsonl")
+                            .map(|s| {
+                                s.starts_with("agentcontrol.")
+                                    && s.ends_with(".jsonl")
+                                    && s != "agentcontrol.jsonl"
+                            })
                             .unwrap_or(false)
                     })
                     .collect();
@@ -202,7 +213,6 @@ fn rotate_log_file_if_needed(file_path: &Path) {
         }
     }
 }
-
 
 /// Append a sanitized line to the local disk log file
 fn write_to_log_file(line: &str) {
@@ -219,7 +229,11 @@ fn write_to_log_file(line: &str) {
 
     rotate_log_file_if_needed(&file_path);
 
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&file_path) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file_path)
+    {
         let _ = writeln!(file, "{}", line);
     }
 }
@@ -416,4 +430,3 @@ mod tests {
         assert!(found);
     }
 }
-

@@ -23,7 +23,7 @@ fi
 echo "[*] Target OS: $OS | Arch: $ARCH"
 
 REPO="noviqtechnologies/Vexa-Agent-Control"
-FALLBACK_VERSION="v1.0.89"
+FALLBACK_VERSION="v1.0.91"
 
 echo "[*] Fetching latest release version..."
 # 1. Primary: GitHub Releases API
@@ -98,7 +98,7 @@ else
 
   echo "[*] Verifying cryptographic SHA-256 checksum..."
   if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
-    EXPECTED_HASH=$(grep "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk '{print $1}' || true)
+    EXPECTED_HASH=$(grep -F "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk 'length($1) == 64 {print $1}' | head -1 || true)
     if [[ -n "$EXPECTED_HASH" ]]; then
       ACTUAL_HASH=""
       if command -v sha256sum &>/dev/null; then

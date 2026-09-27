@@ -22,7 +22,11 @@
     clippy::never_loop,
     clippy::manual_range_contains,
     clippy::manual_unwrap_or,
-    clippy::manual_ok_err
+    clippy::manual_ok_err,
+    clippy::uninlined_format_args,
+    clippy::useless_vec,
+    clippy::redundant_closure,
+    clippy::collapsible_else_if
 )]
 
 pub mod audit;

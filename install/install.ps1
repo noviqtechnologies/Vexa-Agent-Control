@@ -26,7 +26,7 @@ param(
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
-    $FallbackVersion = "v1.0.89"
+    $FallbackVersion = "v1.0.91"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
@@ -143,13 +143,16 @@ param(
         throw "Checksum manifest missing."
     }
 
-    $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($AssetName) })
+    $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($AssetName) -and ($_ -split '\s+')[0].Length -eq 64 } | Select-Object -First 1)
+    if (-not $ExpectedHashStr) {
+        $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($AssetName) } | Select-Object -First 1)
+    }
     if (-not $ExpectedHashStr) {
         Write-Host "[!] FATAL: Asset $AssetName is not listed in checksums.txt." -ForegroundColor $ColorRed
         throw "Release asset digest missing from manifest."
     }
 
-    $ExpectedHash = ($ExpectedHashStr -split '\s+')[0].Trim().ToUpper()
+    $ExpectedHash = ($ExpectedHashStr.Trim() -split '\s+')[0].Trim().ToUpper()
     $ActualHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToUpper()
 
     if ($ExpectedHash -ne $ActualHash) {

@@ -345,7 +345,6 @@ pub async fn start_heartbeat_loop(interval_secs: u64) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

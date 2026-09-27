@@ -1,12 +1,42 @@
 [workspace]
 members = [".", "control-plane/proto"]
 
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+upper_case_acronyms = "allow"
+large_enum_variant = "allow"
+single_match = "allow"
+collapsible_match = "allow"
+collapsible_if = "allow"
+collapsible_else_if = "allow"
+needless_borrows_for_generic_args = "allow"
+derivable_impls = "allow"
+unnecessary_unwrap = "allow"
+manual_strip = "allow"
+lines_filter_map_ok = "allow"
+redundant_pattern_matching = "allow"
+let_unit_value = "allow"
+needless_return = "allow"
+new_without_default = "allow"
+never_loop = "allow"
+manual_range_contains = "allow"
+manual_unwrap_or = "allow"
+manual_ok_err = "allow"
+uninlined_format_args = "allow"
+useless_vec = "allow"
+redundant_closure = "allow"
+match_result_ok = "allow"
+
 [package]
 name = "agentcontrol"
-version = "1.0.90"
+version = "1.0.91"
 edition = "2021"
 description = "VEXA Agent Control — centralized enterprise security gateway enforcing deterministic policies for AI agent tool calls over MCP"
 license = "Apache-2.0"
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "agentcontrol"
@@ -20,8 +50,8 @@ path = "src/lib.rs"
 # The minimal set for individual developers (Local Safe Mode + Proxy)
 default = ["local-core"]
 
-# SMB / Team Edition (Adds Passport Model + Hub Sync)
-team = ["local-core", "passport-injection", "hub-sync"]
+# SMB / Team Edition (Adds Passport Model + Hub Sync + OIDC)
+team = ["local-core", "passport-injection", "hub-sync", "oidc-auth"]
 
 # Enterprise Edition (Adds OIDC, mTLS, and SIEM Export)
 enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]

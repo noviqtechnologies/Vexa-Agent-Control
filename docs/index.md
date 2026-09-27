@@ -43,6 +43,25 @@ Agent Control is deployed in distinct modes depending on your operational needs:
 5. **ADR Security Benchmark (`agentcontrol bench`)**
    An offline benchmark runner that stress-tests the local gateway against 303 curated tasks across 17 attack categories, producing an HTML report with grades and per-category breakdowns.
 
+## Support Matrix
+
+| Category | Platform / Tool | Support Level | Transport / Interface | Notes |
+|---|---|---|---|---|
+| **OS** | Windows 10 / 11 (x86_64) | **Tier 1 (GA)** | Stdio, HTTP Loopback, WinService | Native PowerShell & CMD support |
+| **OS** | macOS (Apple Silicon / ARM64) | **Tier 1 (GA)** | Stdio, HTTP Loopback, Launchd | Universal binary, Homebrew-compatible |
+| **OS** | macOS (Intel / x86_64) | **Tier 1 (GA)** | Stdio, HTTP Loopback, Launchd | Full parity |
+| **OS** | Linux (Ubuntu / Debian / RHEL / Arch) | **Tier 1 (GA)** | Stdio, HTTP Loopback, Systemd | AMD64 & AArch64 |
+| **OS** | Windows Subsystem for Linux (WSL2) | **Tier 1 (GA)** | Stdio, HTTP Bridge | Automatic host browser launching |
+| **IDE / Client** | Cursor | **Tier 1 (GA)** | MCP over Stdio / SSE | Zero-touch `agentcontrol connect cursor` |
+| **IDE / Client** | Claude Desktop | **Tier 1 (GA)** | MCP over Stdio | Zero-touch `agentcontrol connect claude` |
+| **IDE / Client** | Antigravity | **Tier 1 (GA)** | MCP over Stdio / SSE | Zero-touch `agentcontrol connect antigravity` |
+| **IDE / Client** | Codex CLI | **Tier 1 (GA)** | MCP over Stdio | Zero-touch `agentcontrol connect codex` |
+| **IDE / Client** | VS Code Continue | **Tier 1 (GA)** | MCP over Stdio | Automatic config injection |
+| **Transport** | MCP JSON-RPC 2.0 (Stdio) | **Tier 1 (GA)** | Subprocess IPC | Full duplex filtering & Safe Mode |
+| **Transport** | HTTP / HTTPS Reverse Proxy | **Tier 1 (GA)** | HTTP/1.1 & HTTP/2 | DLP inspection, TLS interception |
+| **Transport** | Server-Sent Events (SSE) | **Tier 1 (GA)** | Streaming HTTP | Live event streaming & policy check |
+| **Transport** | WebSocket Bridge | **Tier 2 (Beta)** | RFC 6455 | Stateful session proxy |
+
 ## Documentation Index
 
 - **Documentation Hub:** [README.md](README.md)
@@ -53,3 +72,4 @@ Agent Control is deployed in distinct modes depending on your operational needs:
 - **Reference:** [CLI Commands](reference/cli.md) · [Configuration & Env Vars](reference/configuration.md) · [Paths & State](reference/paths-and-state.md) · [Troubleshooting](reference/troubleshooting.md) · [Removal & Recovery](reference/removal-and-recovery.md) · [Legacy Migration](reference/legacy-migration.md) · [Release Notes Template](reference/release-notes-template.md)
 - **Advanced & Enterprise:** [Team Operations](advanced/team-operations.md) · [OIDC](advanced/oidc.md) · [Kubernetes](advanced/kubernetes.md) · [SIEM](advanced/siem.md) · [Enterprise](advanced/enterprise.md)
 - **Security Standards:** [OWASP Agentic Top 10 Specification](owasp_agentic_top10.md) · [ADR Security Benchmark](adr_benchmark.md)
+

@@ -210,10 +210,16 @@ impl DurableOutbox {
                         if let Some(ref dc) = dash {
                             let raw = control_plane_proto::redact::RawEventForRedaction {
                                 session_id: &item.entry.session_id,
-                                agent_id: item.entry.identity_sub.as_deref().unwrap_or("agent-local"),
+                                agent_id: item
+                                    .entry
+                                    .identity_sub
+                                    .as_deref()
+                                    .unwrap_or("agent-local"),
                                 tool_name: item.entry.tool_name.as_deref().unwrap_or("unknown"),
                                 tool_name_is_allowlisted: true,
-                                decision: if item.entry.event.contains("deny") || item.entry.event.contains("block") {
+                                decision: if item.entry.event.contains("deny")
+                                    || item.entry.event.contains("block")
+                                {
                                     control_plane_proto::redact::RawDecision::Denied
                                 } else {
                                     control_plane_proto::redact::RawDecision::Allowed

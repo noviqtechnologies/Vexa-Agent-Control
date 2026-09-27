@@ -35,8 +35,8 @@ docker run -d ^
   -p 8080:8080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
-  -e AGENTCONTROL_ADMIN_TOKEN="admin123456" ^
-  ghcr.io/noviqtechnologies/agentcontrol:latest ^
+  -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 ^
   start --listen 0.0.0.0:8080
 
 :: Full-Stack Control Hub (Compose):
