@@ -1,8 +1,8 @@
 use agentcontrol::verify::run_verification_probe;
+use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Method, Request, Response, StatusCode};
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use hyper_util::server::conn::auto;
+use hyper_util::rt::TokioIo;
 use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -105,7 +105,7 @@ async fn test_verification_probe_suite_all_pass() {
             if let Ok((stream, _)) = listener.accept().await {
                 let io = TokioIo::new(stream);
                 tokio::spawn(async move {
-                    let _ = auto::Builder::new(TokioExecutor::new())
+                    let _ = http1::Builder::new()
                         .serve_connection(io, service_fn(mock_gateway_handler))
                         .await;
                 });
@@ -132,7 +132,7 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
             if let Ok((stream, _)) = listener.accept().await {
                 let io = TokioIo::new(stream);
                 tokio::spawn(async move {
-                    let _ = auto::Builder::new(TokioExecutor::new())
+                    let _ = http1::Builder::new()
                         .serve_connection(io, service_fn(|req: Request<Incoming>| async move {
                             if req.uri().path() == "/healthz" {
                                 return Ok::<_, Infallible>(Response::builder()
