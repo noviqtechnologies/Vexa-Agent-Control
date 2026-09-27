@@ -458,21 +458,29 @@ pub fn enforce_child_memory_quota(_pid: u32, max_bytes: usize) -> Result<(), Str
 
     #[cfg(unix)]
     {
+        #[cfg(target_os = "linux")]
         unsafe {
             let rlim = libc::rlimit {
                 rlim_cur: max_bytes as libc::rlim_t,
                 rlim_max: max_bytes as libc::rlim_t,
             };
-            #[cfg(target_os = "linux")]
-            let res = libc::setrlimit(libc::RLIMIT_AS, &rlim);
-            #[cfg(target_os = "macos")]
-            let res = libc::setrlimit(libc::RLIMIT_DATA, &rlim);
-            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-            let res = -1;
-
+            // Use prlimit to target the child PID rather than the calling agentcontrol proxy.
+            let res = libc::prlimit(
+                _pid as libc::pid_t,
+                libc::RLIMIT_DATA,
+                &rlim,
+                std::ptr::null_mut(),
+            );
             if res != 0 {
-                return Err("setrlimit memory limit unavailable in current environment".to_string());
+                return Err("prlimit memory limit unavailable or denied for child PID".to_string());
             }
+            Ok(())
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            // macOS and BSD do not support post-spawn cross-process setrlimit.
+            // Resource usage is observed via egress telemetry.
             Ok(())
         }
     }

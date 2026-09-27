@@ -32,12 +32,13 @@ async fn test_stdio_bridge() {
             "stdio-proxy",
             "--",
             python_bin,
+            "-u",
             "-c",
-            "import sys; line = sys.stdin.readline(); print('{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'); sys.stdout.flush()",
+            "import sys, json; line = sys.stdin.readline(); sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'result': {}}) + '\\n'); sys.stdout.flush()",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start agentcontrol stdio proxy");
 
