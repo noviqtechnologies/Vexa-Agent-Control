@@ -57,7 +57,7 @@ jobs:
           ./target/release/${{ matrix.bin_name }} protect --no-browser &
           GATEWAY_PID=$!
           sleep 4
-          ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:8080"
+          ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:18080"
           kill -9 $GATEWAY_PID || true
 
       - name: Test Dry-Run Unprotect
