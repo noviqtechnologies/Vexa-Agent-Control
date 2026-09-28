@@ -40,17 +40,21 @@ pub async fn run_verification_probe(
         .map(|s| s.to_string());
 
     // Resolve all identity / credential state AND build the reqwest client on a
-    // single blocking thread with a hard 5-second timeout.
+    // detached OS thread with a hard 5-second async timeout.
     //
-    // Why spawn_blocking?
-    //   • reqwest::Client::builder().build() calls into the macOS Security framework
-    //     (native-tls / certificate store) synchronously.
-    //   • DeviceIdentity::load_or_create() and load_device_token() call
-    //     keyring::Entry::get_password() which talks to the macOS Keychain via XPC.
-    //   Both operations can block indefinitely on a headless CI runner where no
-    //   Keychain unlock is possible.  Running them on a blocking thread keeps the
-    //   async event loop (and tokio timers) alive so that any outer
-    //   tokio::time::timeout can actually fire.
+    // Why std::thread::spawn + oneshot instead of spawn_blocking?
+    //   tokio::task::spawn_blocking registers blocking threads with the tokio
+    //   runtime.  When the runtime shuts down (e.g. after a #[tokio::test]),
+    //   it waits for ALL blocking threads to finish.  On macOS headless CI
+    //   runners, keyring::Entry::get_password() and reqwest::Client::build()
+    //   both make synchronous XPC/Security-framework calls that can block
+    //   indefinitely — causing the entire test process to hang even after the
+    //   async timeout has fired and the JoinHandle future was dropped.
+    //
+    //   A plain std::thread is NOT tracked by the tokio runtime.  When the
+    //   oneshot Receiver is dropped (timeout or normal completion), the thread's
+    //   tx.send() returns Err and the thread exits cleanly.  The runtime can
+    //   then shut down without waiting.
     let effective_user_id_owned = user_id_opt.map(|s| s.to_string());
     let gateway_token_owned = gateway_token_opt.map(|s| s.to_string());
 
@@ -60,51 +64,52 @@ pub async fn run_verification_probe(
         gateway_token: Option<String>,
     }
 
-    let bundle = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        tokio::task::spawn_blocking(move || {
-            // Build HTTP client (may init TLS cert store on macOS).
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(5))
-                .pool_max_idle_per_host(0)
-                .pool_idle_timeout(std::time::Duration::from_millis(500))
-                .build()
-                .unwrap_or_else(|_| reqwest::Client::new());
+    let (tx, rx) = tokio::sync::oneshot::channel::<SetupBundle>();
+    std::thread::spawn(move || {
+        // Build HTTP client (may init TLS / cert-store on macOS).
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .pool_max_idle_per_host(0)
+            .pool_idle_timeout(std::time::Duration::from_millis(500))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
 
-            // Resolve device identity (macOS Keychain call).
-            let device_id = crate::identity::device::DeviceIdentity::load_or_create()
-                .map(|d| d.device_id)
-                .unwrap_or_else(|_| "local-device".to_string());
+        // Resolve device identity (macOS Keychain XPC call).
+        let device_id = crate::identity::device::DeviceIdentity::load_or_create()
+            .map(|d| d.device_id)
+            .unwrap_or_else(|_| "local-device".to_string());
 
-            // Resolve gateway auth token (second macOS Keychain call).
-            let gateway_token: Option<String> = gateway_token_owned
-                .or_else(|| {
-                    std::env::var("GATEWAY_SECRET")
-                        .ok()
-                        .filter(|s| !s.is_empty())
-                })
-                .or_else(|| {
-                    std::env::var("AGENTCONTROL_ADMIN_TOKEN")
-                        .ok()
-                        .filter(|s| !s.is_empty())
-                })
-                .or_else(crate::identity::device::load_device_token);
+        // Resolve gateway auth token (second macOS Keychain XPC call).
+        let gateway_token: Option<String> = gateway_token_owned
+            .or_else(|| {
+                std::env::var("GATEWAY_SECRET")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+            })
+            .or_else(|| {
+                std::env::var("AGENTCONTROL_ADMIN_TOKEN")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+            })
+            .or_else(crate::identity::device::load_device_token);
 
-            SetupBundle {
-                client,
-                device_id,
-                gateway_token,
-            }
-        }),
-    )
-    .await
-    .ok()
-    .and_then(|r| r.ok())
-    .unwrap_or_else(|| SetupBundle {
-        client: reqwest::Client::new(),
-        device_id: "local-device".to_string(),
-        gateway_token: None,
+        // If the receiver timed out and was dropped, send returns Err — that's fine.
+        let _ = tx.send(SetupBundle {
+            client,
+            device_id,
+            gateway_token,
+        });
     });
+
+    let bundle = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+        .await
+        .ok()
+        .and_then(|r| r.ok())
+        .unwrap_or_else(|| SetupBundle {
+            client: reqwest::Client::new(),
+            device_id: "local-device".to_string(),
+            gateway_token: None,
+        });
 
     let client = bundle.client;
     let effective_device_id = bundle.device_id;
