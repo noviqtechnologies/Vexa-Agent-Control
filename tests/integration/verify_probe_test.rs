@@ -6,6 +6,7 @@ use hyper_util::rt::TokioIo;
 use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 async fn mock_gateway_handler(
@@ -125,7 +126,19 @@ async fn test_verification_probe_suite_all_pass() {
         }
     });
 
-    let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
+    // Hard ceiling: if run_verification_probe takes longer than 30 s (e.g. due to a
+    // macOS Keychain prompt blocking spawn_blocking) the test fails immediately with a
+    // clear message instead of hanging the entire CI job.
+    let exit_code = tokio::time::timeout(
+        Duration::from_secs(30),
+        run_verification_probe(&gateway_url, true, None, None, None, None),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        eprintln!("[TIMEOUT] test_verification_probe_suite_all_pass exceeded 30 s – treating as failure");
+        1
+    });
+
     let _ = shutdown_tx.send(());
     server_task.abort();
 
@@ -203,7 +216,17 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
         }
     });
 
-    let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
+    // Hard ceiling: prevents indefinite hang in headless CI (e.g. macOS Keychain block).
+    let exit_code = tokio::time::timeout(
+        Duration::from_secs(30),
+        run_verification_probe(&gateway_url, true, None, None, None, None),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        eprintln!("[TIMEOUT] test_verification_probe_suite_injection_failure_honest_fail exceeded 30 s");
+        1
+    });
+
     let _ = shutdown_tx.send(());
     server_task.abort();
 

@@ -45,9 +45,20 @@ pub async fn run_verification_probe(
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_string());
 
-    let effective_device_id = crate::identity::device::DeviceIdentity::load_or_create()
-        .map(|d| d.device_id)
-        .unwrap_or_else(|_| "local-device".to_string());
+    // Resolve device identity on a blocking thread with a timeout so that
+    // macOS Keychain prompts in headless CI runners never stall the async runtime.
+    let effective_device_id = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        tokio::task::spawn_blocking(|| {
+            crate::identity::device::DeviceIdentity::load_or_create()
+                .map(|d| d.device_id)
+                .unwrap_or_else(|_| "local-device".to_string())
+        }),
+    )
+    .await
+    .ok()
+    .and_then(|r| r.ok())
+    .unwrap_or_else(|| "local-device".to_string());
 
     let effective_user_id = user_id_opt.map(|s| s.to_string()).unwrap_or_else(|| {
         std::env::var("USER")
