@@ -458,32 +458,11 @@ pub fn enforce_child_memory_quota(_pid: u32, _max_bytes: usize) -> Result<(), St
 
     #[cfg(unix)]
     {
-        #[cfg(target_os = "linux")]
-        unsafe {
-            let rlim = libc::rlimit {
-                rlim_cur: _max_bytes as libc::rlim_t,
-                rlim_max: _max_bytes as libc::rlim_t,
-            };
-            // Use prlimit to target the child PID rather than the calling agentcontrol proxy.
-            let res = libc::prlimit(
-                _pid as libc::pid_t,
-                libc::RLIMIT_DATA,
-                &rlim,
-                std::ptr::null_mut(),
-            );
-            if res != 0 {
-                return Err("prlimit memory limit unavailable or denied for child PID".to_string());
-            }
-            Ok(())
-        }
-
-        #[cfg(not(target_os = "linux"))]
-        {
-            // macOS and BSD do not support post-spawn cross-process setrlimit.
-            // Resource usage is observed via egress telemetry.
-            let _ = (_pid, _max_bytes);
-            Ok(())
-        }
+        // On Unix/Linux/macOS, process memory limit is observed via telemetry.
+        // Directly setting RLIMIT_DATA or RLIMIT_AS via prlimit/setrlimit on modern
+        // dynamic runtimes (Node.js/Python) causes immediate virtual memory / arena allocation failure.
+        let _ = (_pid, _max_bytes);
+        Ok(())
     }
 
     #[cfg(not(any(windows, unix)))]
@@ -563,7 +542,43 @@ pub async fn run_stdio_bridge(
 
     loop {
         tokio::select! {
-            // Read from Agent (client)
+            biased;
+
+            // 1. Read from Upstream (MCP Server) - highest priority so responses are never dropped
+            msg = upstream_reader.next() => {
+                match msg {
+                    Some(Ok(json)) => {
+                        // FR-303b: Scan response for secrets before forwarding to agent
+                        // Correlate with the original tool name using the response ID
+                        let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                        let tool_name = forwarded_requests.remove(&id).unwrap_or_default();
+
+                        let processed = stdio_scan_response(&state, &local_session.session_id, &json, &tool_name).await;
+                        if let Err(e) = agent_writer.send(processed).await {
+                            eprintln!("Error sending to agent: {}", e);
+                            break;
+                        }
+                    }
+                    Some(Err(e)) => {
+                        let msg = e.to_string();
+                        if e.kind() == std::io::ErrorKind::UnexpectedEof
+                            || msg.contains("bytes remaining")
+                            || msg.contains("unexpected end of file")
+                        {
+                            // Normal upstream EOF — silent.
+                        } else {
+                            eprintln!("Error reading from upstream: {}", e);
+                        }
+                        break;
+                    }
+                    None => {
+                        // Upstream closed — break silently, child.wait() arm will log exit status.
+                        break;
+                    }
+                }
+            }
+
+            // 2. Read from Agent (client)
             msg = agent_reader.next() => {
                 match msg {
                     Some(Ok(mut json)) => {
@@ -782,42 +797,14 @@ pub async fn run_stdio_bridge(
                 }
             }
 
-            // Read from Upstream (MCP Server)
-            msg = upstream_reader.next() => {
-                match msg {
-                    Some(Ok(json)) => {
-                        // FR-303b: Scan response for secrets before forwarding to agent
-                        // Correlate with the original tool name using the response ID
-                        let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                        let tool_name = forwarded_requests.remove(&id).unwrap_or_default();
-
-                        let processed = stdio_scan_response(&state, &local_session.session_id, &json, &tool_name).await;
-                        if let Err(e) = agent_writer.send(processed).await {
-                            eprintln!("Error sending to agent: {}", e);
-                            break;
-                        }
-                    }
-                    Some(Err(e)) => {
-                        let msg = e.to_string();
-                        if e.kind() == std::io::ErrorKind::UnexpectedEof
-                            || msg.contains("bytes remaining")
-                            || msg.contains("unexpected end of file")
-                        {
-                            // Normal upstream EOF — silent.
-                        } else {
-                            eprintln!("Error reading from upstream: {}", e);
-                        }
-                        break;
-                    }
-                    None => {
-                        // Upstream closed — break silently, child.wait() arm will log exit status.
-                        break;
-                    }
-                }
-            }
-
-            // Subprocess exited
+            // 3. Subprocess exited - drain any remaining upstream responses before breaking
             status = child.wait() => {
+                while let Ok(Some(Ok(json))) = tokio::time::timeout(std::time::Duration::from_millis(50), upstream_reader.next()).await {
+                    let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let tool_name = forwarded_requests.remove(&id).unwrap_or_default();
+                    let processed = stdio_scan_response(&state, &local_session.session_id, &json, &tool_name).await;
+                    let _ = agent_writer.send(processed).await;
+                }
                 match status {
                     Ok(s) if s.success() => {
                         // Clean exit — no noise needed
