@@ -135,7 +135,9 @@ async fn test_verification_probe_suite_all_pass() {
     )
     .await
     .unwrap_or_else(|_| {
-        eprintln!("[TIMEOUT] test_verification_probe_suite_all_pass exceeded 30 s – treating as failure");
+        eprintln!(
+            "[TIMEOUT] test_verification_probe_suite_all_pass exceeded 30 s – treating as failure"
+        );
         1
     });
 
@@ -223,7 +225,9 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
     )
     .await
     .unwrap_or_else(|_| {
-        eprintln!("[TIMEOUT] test_verification_probe_suite_injection_failure_honest_fail exceeded 30 s");
+        eprintln!(
+            "[TIMEOUT] test_verification_probe_suite_injection_failure_honest_fail exceeded 30 s"
+        );
         1
     });
 
