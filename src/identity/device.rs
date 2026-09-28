@@ -25,22 +25,24 @@ impl DeviceIdentity {
         let hostname = get_hostname();
 
         // 1. Try loading private key bytes from OS Keyring
-        if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
-            if let Ok(secret_hex) = entry.get_password() {
-                if let Ok(bytes) = hex::decode(&secret_hex) {
-                    if bytes.len() == 32 {
-                        let mut arr = [0u8; 32];
-                        arr.copy_from_slice(&bytes);
-                        let signing_key = SigningKey::from_bytes(&arr);
-                        let verifying_key: VerifyingKey = signing_key.verifying_key();
-                        let pub_hex = hex::encode(verifying_key.as_bytes());
-                        let device_id = derive_device_id(&hostname, &pub_hex);
+        if crate::identity::storage::is_keyring_enabled() {
+            if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
+                if let Ok(secret_hex) = entry.get_password() {
+                    if let Ok(bytes) = hex::decode(&secret_hex) {
+                        if bytes.len() == 32 {
+                            let mut arr = [0u8; 32];
+                            arr.copy_from_slice(&bytes);
+                            let signing_key = SigningKey::from_bytes(&arr);
+                            let verifying_key: VerifyingKey = signing_key.verifying_key();
+                            let pub_hex = hex::encode(verifying_key.as_bytes());
+                            let device_id = derive_device_id(&hostname, &pub_hex);
 
-                        return Ok(Self {
-                            device_id,
-                            public_key_hex: pub_hex,
-                            signing_key,
-                        });
+                            return Ok(Self {
+                                device_id,
+                                public_key_hex: pub_hex,
+                                signing_key,
+                            });
+                        }
                     }
                 }
             }
@@ -75,8 +77,10 @@ impl DeviceIdentity {
                             let device_id = derive_device_id(&hostname, &pub_hex);
 
                             // Try writing to OS keyring for future runs
-                            if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
-                                let _ = entry.set_password(trimmed);
+                            if crate::identity::storage::is_keyring_enabled() {
+                                if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
+                                    let _ = entry.set_password(trimmed);
+                                }
                             }
 
                             return Ok(Self {
@@ -98,8 +102,10 @@ impl DeviceIdentity {
         let device_id = derive_device_id(&hostname, &pub_hex);
 
         // Store in OS Keyring
-        if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
-            let _ = entry.set_password(&secret_hex);
+        if crate::identity::storage::is_keyring_enabled() {
+            if let Ok(entry) = Entry::new(SERVICE_NAME, KEY_NAME) {
+                let _ = entry.set_password(&secret_hex);
+            }
         }
 
         // Store in fallback file with restricted permissions

@@ -48,6 +48,15 @@ async fn test_stdio_bridge() {
     let mut stdin = child.stdin.take().expect("Failed to open stdin");
     let stdout = child.stdout.take().expect("Failed to open stdout");
 
+    let stderr = child.stderr.take().expect("Failed to open stderr");
+    let stderr_handle = tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        let mut buf = Vec::new();
+        let mut reader = tokio::io::BufReader::new(stderr);
+        let _ = reader.read_to_end(&mut buf).await;
+        String::from_utf8_lossy(&buf).to_string()
+    });
+
     // Send a JSON-RPC 'ping' request
     let req = serde_json::json!({
         "jsonrpc": "2.0",
@@ -82,12 +91,14 @@ async fn test_stdio_bridge() {
 
     // Clean up child process
     let _ = child.kill().await;
+    let stderr_output = stderr_handle.await.unwrap_or_default();
 
     // The proxy should respond to ping automatically or forward it.
     // Either way, we expect a valid JSON-RPC message containing jsonrpc: 2.0
     assert!(
         res_str.contains(r#""jsonrpc":"2.0""#) || res_str.contains(r#""jsonrpc": "2.0""#),
-        "Expected JSON-RPC format in stdout, got: {}",
-        res_str
+        "Expected JSON-RPC format in stdout, got: '{}'. Child stderr: '{}'",
+        res_str,
+        stderr_output
     );
 }

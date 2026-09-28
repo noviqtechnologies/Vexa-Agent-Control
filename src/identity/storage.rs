@@ -30,15 +30,32 @@ impl StorageType {
     }
 }
 
+pub(crate) fn is_keyring_enabled() -> bool {
+    // In automated testing / CI environments, headless daemons, or when explicitly disabled,
+    // bypass OS keyring to prevent macOS Keychain / Linux Secret Service prompt hangs.
+    if std::env::var("AGENTCONTROL_NO_KEYRING").is_ok()
+        || std::env::var("CI").is_ok()
+        || std::env::var("GITHUB_ACTIONS").is_ok()
+        || std::env::var("DEBIAN_FRONTEND")
+            .map(|v| v == "noninteractive")
+            .unwrap_or(false)
+    {
+        return false;
+    }
+    true
+}
+
 pub struct CredentialStore;
 
 impl CredentialStore {
     /// Save a secret credential for a given key identifier.
     pub fn set(key: &str, secret: &str) -> Result<(), String> {
-        // First try OS Keyring
-        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-            if entry.set_password(secret).is_ok() {
-                return Ok(());
+        if is_keyring_enabled() {
+            // First try OS Keyring
+            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                if entry.set_password(secret).is_ok() {
+                    return Ok(());
+                }
             }
         }
 
@@ -48,10 +65,12 @@ impl CredentialStore {
 
     /// Retrieve a secret credential for a given key identifier.
     pub fn get(key: &str) -> Result<Option<String>, String> {
-        // First try OS Keyring
-        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-            if let Ok(secret) = entry.get_password() {
-                return Ok(Some(secret));
+        if is_keyring_enabled() {
+            // First try OS Keyring
+            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                if let Ok(secret) = entry.get_password() {
+                    return Ok(Some(secret));
+                }
             }
         }
 
@@ -61,17 +80,21 @@ impl CredentialStore {
 
     /// Delete a secret credential.
     pub fn delete(key: &str) -> Result<(), String> {
-        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-            let _ = entry.delete_password();
+        if is_keyring_enabled() {
+            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                let _ = entry.delete_password();
+            }
         }
         Self::delete_fallback_file(key)
     }
 
     /// Detect current active storage type.
     pub fn active_storage_type(key: &str) -> StorageType {
-        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-            if entry.get_password().is_ok() {
-                return StorageType::OsKeyring;
+        if is_keyring_enabled() {
+            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                if entry.get_password().is_ok() {
+                    return StorageType::OsKeyring;
+                }
             }
         }
         #[cfg(windows)]
