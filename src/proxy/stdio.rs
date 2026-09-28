@@ -817,6 +817,11 @@ pub async fn run_stdio_bridge(
         }
     }
 
+    // Ensure all pending bytes are flushed to stdout before process exit
+    use tokio::io::AsyncWriteExt;
+    let _ = agent_writer.flush().await;
+    let _ = tokio::io::stdout().flush().await;
+
     // Ensure child is dead
     let _ = child.kill().await;
 

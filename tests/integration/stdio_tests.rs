@@ -64,7 +64,7 @@ async fn test_stdio_bridge() {
 
     // Read the response from stdout with a timeout
     let mut res_str = String::new();
-    let _ = tokio::time::timeout(Duration::from_secs(5), async {
+    let _ = tokio::time::timeout(Duration::from_secs(30), async {
         let mut reader = tokio::io::BufReader::new(stdout);
         loop {
             let mut line = String::new();

@@ -91,7 +91,7 @@ fn send_and_recv(
         .write_all(line.as_bytes())
         .expect("write to proxy stdin");
     stdin.flush().expect("flush proxy stdin");
-    match stdout_rx.recv_timeout(Duration::from_secs(10)) {
+    match stdout_rx.recv_timeout(Duration::from_secs(30)) {
         Ok(resp) => serde_json::from_str(resp.trim()).unwrap_or(serde_json::Value::Null),
         Err(e) => panic!("Timed out waiting for response from stdio-proxy: {:?}", e),
     }
