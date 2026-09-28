@@ -32,40 +32,51 @@ pub async fn run_verification_probe(
     gateway_token_opt: Option<&str>,
 ) -> i32 {
     let start = Instant::now();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .pool_max_idle_per_host(0)
-        .pool_idle_timeout(std::time::Duration::from_millis(500))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
 
-    let normalized_gw = gateway_url.trim_end_matches('/');
+    let normalized_gw = gateway_url.trim_end_matches('/').to_string();
 
     let effective_hub = hub_opt
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_string());
 
-    // Resolve all identity / credential state on a single blocking thread with a hard
-    // 3-second timeout.  Both DeviceIdentity::load_or_create() and load_device_token()
-    // call keyring::Entry::get_password() which, on macOS headless CI runners, can
-    // block indefinitely waiting for a Keychain unlock that never arrives.
-    // Running them inside spawn_blocking keeps the async event loop (and tokio timers)
-    // responsive so that any outer tokio::time::timeout can actually fire.
+    // Resolve all identity / credential state AND build the reqwest client on a
+    // single blocking thread with a hard 5-second timeout.
+    //
+    // Why spawn_blocking?
+    //   • reqwest::Client::builder().build() calls into the macOS Security framework
+    //     (native-tls / certificate store) synchronously.
+    //   • DeviceIdentity::load_or_create() and load_device_token() call
+    //     keyring::Entry::get_password() which talks to the macOS Keychain via XPC.
+    //   Both operations can block indefinitely on a headless CI runner where no
+    //   Keychain unlock is possible.  Running them on a blocking thread keeps the
+    //   async event loop (and tokio timers) alive so that any outer
+    //   tokio::time::timeout can actually fire.
     let effective_user_id_owned = user_id_opt.map(|s| s.to_string());
     let gateway_token_owned = gateway_token_opt.map(|s| s.to_string());
 
-    struct IdentityBundle {
+    struct SetupBundle {
+        client: reqwest::Client,
         device_id: String,
         gateway_token: Option<String>,
     }
 
     let bundle = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
+        std::time::Duration::from_secs(5),
         tokio::task::spawn_blocking(move || {
+            // Build HTTP client (may init TLS cert store on macOS).
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .pool_max_idle_per_host(0)
+                .pool_idle_timeout(std::time::Duration::from_millis(500))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+
+            // Resolve device identity (macOS Keychain call).
             let device_id = crate::identity::device::DeviceIdentity::load_or_create()
                 .map(|d| d.device_id)
                 .unwrap_or_else(|_| "local-device".to_string());
 
+            // Resolve gateway auth token (second macOS Keychain call).
             let gateway_token: Option<String> = gateway_token_owned
                 .or_else(|| {
                     std::env::var("GATEWAY_SECRET")
@@ -79,7 +90,8 @@ pub async fn run_verification_probe(
                 })
                 .or_else(crate::identity::device::load_device_token);
 
-            IdentityBundle {
+            SetupBundle {
+                client,
                 device_id,
                 gateway_token,
             }
@@ -88,11 +100,13 @@ pub async fn run_verification_probe(
     .await
     .ok()
     .and_then(|r| r.ok())
-    .unwrap_or_else(|| IdentityBundle {
+    .unwrap_or_else(|| SetupBundle {
+        client: reqwest::Client::new(),
         device_id: "local-device".to_string(),
         gateway_token: None,
     });
 
+    let client = bundle.client;
     let effective_device_id = bundle.device_id;
     let gateway_token = bundle.gateway_token;
 
@@ -183,7 +197,7 @@ pub async fn run_verification_probe(
         }
     });
     let mut req1 = client
-        .post(normalized_gw)
+        .post(&normalized_gw)
         .header("X-AgentControl-Source", "verification")
         .header("X-AgentControl-Device-Id", &effective_device_id)
         .header("X-AgentControl-User-Id", &effective_user_id);
@@ -333,7 +347,7 @@ pub async fn run_verification_probe(
         }
     });
     let mut req2 = client
-        .post(normalized_gw)
+        .post(&normalized_gw)
         .header("X-AgentControl-Source", "verification")
         .header("X-AgentControl-Device-Id", &effective_device_id)
         .header("X-AgentControl-User-Id", &effective_user_id);
@@ -454,7 +468,7 @@ pub async fn run_verification_probe(
         }
     });
     let mut req3 = client
-        .post(normalized_gw)
+        .post(&normalized_gw)
         .header("X-AgentControl-Source", "verification")
         .header("X-AgentControl-Device-Id", &effective_device_id)
         .header("X-AgentControl-User-Id", &effective_user_id);
@@ -565,7 +579,7 @@ pub async fn run_verification_probe(
     // Probe 4: Workstation Client Interception & Sentry Check
     // -------------------------------------------------------------
     let t4 = Instant::now();
-    let installed_ides = crate::wrap::ide_config::scan_all_ides(normalized_gw);
+    let installed_ides = crate::wrap::ide_config::scan_all_ides(&normalized_gw);
     let lat4 = t4.elapsed().as_millis();
 
     let any_installed = installed_ides.iter().any(|s| s.installed);
