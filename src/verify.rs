@@ -45,22 +45,58 @@ pub async fn run_verification_probe(
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_string());
 
-    // Resolve device identity on a blocking thread with a timeout so that
-    // macOS Keychain prompts in headless CI runners never stall the async runtime.
-    let effective_device_id = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        tokio::task::spawn_blocking(|| {
-            crate::identity::device::DeviceIdentity::load_or_create()
+    // Resolve all identity / credential state on a single blocking thread with a hard
+    // 3-second timeout.  Both DeviceIdentity::load_or_create() and load_device_token()
+    // call keyring::Entry::get_password() which, on macOS headless CI runners, can
+    // block indefinitely waiting for a Keychain unlock that never arrives.
+    // Running them inside spawn_blocking keeps the async event loop (and tokio timers)
+    // responsive so that any outer tokio::time::timeout can actually fire.
+    let effective_user_id_owned = user_id_opt.map(|s| s.to_string());
+    let gateway_token_owned = gateway_token_opt.map(|s| s.to_string());
+
+    struct IdentityBundle {
+        device_id: String,
+        gateway_token: Option<String>,
+    }
+
+    let bundle = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::task::spawn_blocking(move || {
+            let device_id = crate::identity::device::DeviceIdentity::load_or_create()
                 .map(|d| d.device_id)
-                .unwrap_or_else(|_| "local-device".to_string())
+                .unwrap_or_else(|_| "local-device".to_string());
+
+            let gateway_token: Option<String> = gateway_token_owned
+                .or_else(|| {
+                    std::env::var("GATEWAY_SECRET")
+                        .ok()
+                        .filter(|s| !s.is_empty())
+                })
+                .or_else(|| {
+                    std::env::var("AGENTCONTROL_ADMIN_TOKEN")
+                        .ok()
+                        .filter(|s| !s.is_empty())
+                })
+                .or_else(crate::identity::device::load_device_token);
+
+            IdentityBundle {
+                device_id,
+                gateway_token,
+            }
         }),
     )
     .await
     .ok()
     .and_then(|r| r.ok())
-    .unwrap_or_else(|| "local-device".to_string());
+    .unwrap_or_else(|| IdentityBundle {
+        device_id: "local-device".to_string(),
+        gateway_token: None,
+    });
 
-    let effective_user_id = user_id_opt.map(|s| s.to_string()).unwrap_or_else(|| {
+    let effective_device_id = bundle.device_id;
+    let gateway_token = bundle.gateway_token;
+
+    let effective_user_id = effective_user_id_owned.unwrap_or_else(|| {
         std::env::var("USER")
             .or_else(|_| std::env::var("USERNAME"))
             .or_else(|_| std::env::var("LOGNAME"))
@@ -68,22 +104,6 @@ pub async fn run_verification_probe(
     });
 
     let effective_assignment_id = assignment_id_opt.map(|s| s.to_string());
-
-    // Resolve the local gateway auth token (used if the gateway has GATEWAY_SECRET / enrollment active)
-    // Priority: explicit CLI token → GATEWAY_SECRET env var → AGENTCONTROL_ADMIN_TOKEN env var → enrolled device_token → empty
-    let gateway_token: Option<String> = gateway_token_opt
-        .map(|s| s.to_string())
-        .or_else(|| {
-            std::env::var("GATEWAY_SECRET")
-                .ok()
-                .filter(|s| !s.is_empty())
-        })
-        .or_else(|| {
-            std::env::var("AGENTCONTROL_ADMIN_TOKEN")
-                .ok()
-                .filter(|s| !s.is_empty())
-        })
-        .or_else(crate::identity::device::load_device_token);
 
     // 1. Health check pre-flight
     let health_url = format!("{}/healthz", normalized_gw);
