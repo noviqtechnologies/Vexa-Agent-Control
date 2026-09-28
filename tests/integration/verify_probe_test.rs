@@ -17,6 +17,7 @@ async fn mock_gateway_handler(
     if path == "/healthz" {
         return Ok(Response::builder()
             .status(StatusCode::OK)
+            .header("Connection", "close")
             .body(http_body_util::Full::new(bytes::Bytes::from("OK")))
             .unwrap());
     }
@@ -46,6 +47,7 @@ async fn mock_gateway_handler(
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .header("Content-Type", "application/json")
+                .header("Connection", "close")
                 .body(http_body_util::Full::new(bytes::Bytes::from(
                     resp_body.to_string(),
                 )))
@@ -65,6 +67,7 @@ async fn mock_gateway_handler(
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .header("Content-Type", "application/json")
+                .header("Connection", "close")
                 .body(http_body_util::Full::new(bytes::Bytes::from(
                     resp_body.to_string(),
                 )))
@@ -82,6 +85,7 @@ async fn mock_gateway_handler(
         return Ok(Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json")
+            .header("Connection", "close")
             .body(http_body_util::Full::new(bytes::Bytes::from(
                 resp_body.to_string(),
             )))
@@ -90,6 +94,7 @@ async fn mock_gateway_handler(
 
     Ok(Response::builder()
         .status(StatusCode::NOT_FOUND)
+        .header("Connection", "close")
         .body(http_body_util::Full::new(bytes::Bytes::new()))
         .unwrap())
 }
@@ -100,20 +105,30 @@ async fn test_verification_probe_suite_all_pass() {
     let addr: SocketAddr = listener.local_addr().unwrap();
     let gateway_url = format!("http://127.0.0.1:{}", addr.port());
 
-    tokio::spawn(async move {
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let server_task = tokio::spawn(async move {
         loop {
-            if let Ok((stream, _)) = listener.accept().await {
-                let io = TokioIo::new(stream);
-                tokio::spawn(async move {
-                    let _ = http1::Builder::new()
-                        .serve_connection(io, service_fn(mock_gateway_handler))
-                        .await;
-                });
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                res = listener.accept() => {
+                    if let Ok((stream, _)) = res {
+                        let io = TokioIo::new(stream);
+                        tokio::spawn(async move {
+                            let _ = http1::Builder::new()
+                                .serve_connection(io, service_fn(mock_gateway_handler))
+                                .await;
+                        });
+                    }
+                }
             }
         }
     });
 
     let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
+    let _ = shutdown_tx.send(());
+    server_task.abort();
+
     assert_eq!(
         exit_code, 0,
         "Expected verify suite to pass 3/3 on compliant gateway"
@@ -126,56 +141,71 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
     let addr: SocketAddr = listener.local_addr().unwrap();
     let gateway_url = format!("http://127.0.0.1:{}", addr.port());
 
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
     // Mock buggy/unprotected gateway that allows injection and returns upstream connection error (HTTP 200)
-    tokio::spawn(async move {
+    let server_task = tokio::spawn(async move {
         loop {
-            if let Ok((stream, _)) = listener.accept().await {
-                let io = TokioIo::new(stream);
-                tokio::spawn(async move {
-                    let _ = http1::Builder::new()
-                        .serve_connection(io, service_fn(|req: Request<Incoming>| async move {
-                            if req.uri().path() == "/healthz" {
-                                return Ok::<_, Infallible>(Response::builder()
-                                    .status(StatusCode::OK)
-                                    .body(http_body_util::Full::new(bytes::Bytes::from("OK")))
-                                    .unwrap());
-                            }
-                            use http_body_util::BodyExt;
-                            let bytes = req.into_body().collect().await.unwrap().to_bytes();
-                            let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(json!({}));
-                            let id = body.get("id").cloned().unwrap_or(json!("1"));
-                            let params = body.get("params").cloned().unwrap_or(json!({}));
-                            let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                res = listener.accept() => {
+                    if let Ok((stream, _)) = res {
+                        let io = TokioIo::new(stream);
+                        tokio::spawn(async move {
+                            let _ = http1::Builder::new()
+                                .serve_connection(io, service_fn(|req: Request<Incoming>| async move {
+                                    if req.uri().path() == "/healthz" {
+                                        return Ok::<_, Infallible>(Response::builder()
+                                            .status(StatusCode::OK)
+                                            .header("Connection", "close")
+                                            .body(http_body_util::Full::new(bytes::Bytes::from("OK")))
+                                            .unwrap());
+                                    }
+                                    use http_body_util::BodyExt;
+                                    let bytes = req.into_body().collect().await.unwrap().to_bytes();
+                                    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(json!({}));
+                                    let id = body.get("id").cloned().unwrap_or(json!("1"));
+                                    let params = body.get("params").cloned().unwrap_or(json!({}));
+                                    let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
-                            if tool_name == "send_external_http" {
-                                let resp_body = json!({
-                                    "jsonrpc": "2.0",
-                                    "id": id,
-                                    "error": { "code": -32001, "message": "Policy violation: dlp: AWS Key" }
-                                });
-                                return Ok(Response::builder()
-                                    .status(StatusCode::BAD_REQUEST)
-                                    .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
-                                    .unwrap());
-                            }
+                                    if tool_name == "send_external_http" {
+                                        let resp_body = json!({
+                                            "jsonrpc": "2.0",
+                                            "id": id,
+                                            "error": { "code": -32001, "message": "Policy violation: dlp: AWS Key" }
+                                        });
+                                        return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .header("Content-Type", "application/json")
+                                            .header("Connection", "close")
+                                            .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                                            .unwrap());
+                                    }
 
-                            // Buggy gateway returns HTTP 200 with upstream error for injection!
-                            let resp_body = json!({
-                                "jsonrpc": "2.0",
-                                "id": id,
-                                "error": { "code": -32603, "message": "Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)" }
-                            });
-                            Ok(Response::builder()
-                                .status(StatusCode::OK)
-                                .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
-                                .unwrap())
-                        }))
-                        .await;
-                });
+                                    // Buggy gateway returns HTTP 200 with upstream error for injection!
+                                    let resp_body = json!({
+                                        "jsonrpc": "2.0",
+                                        "id": id,
+                                        "error": { "code": -32603, "message": "Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)" }
+                                    });
+                                    Ok(Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("Content-Type", "application/json")
+                                        .header("Connection", "close")
+                                        .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                                        .unwrap())
+                                }))
+                                .await;
+                        });
+                    }
+                }
             }
         }
     });
 
     let exit_code = run_verification_probe(&gateway_url, true, None, None, None, None).await;
+    let _ = shutdown_tx.send(());
+    server_task.abort();
+
     assert_eq!(exit_code, 1, "Expected verify suite to fail (exit 1) when injection is forwarded upstream instead of blocked");
 }
