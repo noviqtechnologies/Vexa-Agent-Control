@@ -101,7 +101,7 @@ Agent Control adapts to your infrastructure across three operational deployment 
 | Capability | Workstation Sidecar | Team Control Hub | Enterprise Fleet | Primary Command / Interface |
 |---|:---:|:---:|:---:|---|
 | **Default-Deny Policy Engine** | ✓ | ✓ | ✓ | `agentcontrol start` / `agentcontrol protect` |
-| **Policy Marketplace (One-Click Templates)** | ✓ | ✓ | ✓ | Web Console `/policy/marketplace` |
+| **Guardrail Presets (One-Click Templates)** | ✓ | ✓ | ✓ | Web Console `/policy/marketplace` |
 | **15 Out-of-the-Box Safe Rules** | ✓ | ✓ | ✓ | Active by default (no YAML needed) |
 | **9 Prompt Injection Scanners** | ✓ | ✓ | ✓ | Built-in 6-pass normalizer |
 | **Dual-Pass DLP Secret Redaction** | ✓ | ✓ | ✓ | 21 built-in regex detectors |
@@ -114,7 +114,7 @@ Agent Control adapts to your infrastructure across three operational deployment 
 | **ADR Security Benchmark (303 Tasks)** | ✓ | ✓ | ✓ | `agentcontrol bench --full` |
 | **Automated Compliance Reports** | ✓ | ✓ | ✓ | `agentcontrol compliance report` |
 | **Zero Master Key Custody** | — | ✓ | ✓ | Centralized Vault / Hub Injection |
-| **Authoritative Spend Ledger** | — | ✓ | ✓ | Web Console `/spend/status` |
+| **Authoritative Spend Ledger & Cost Controls** | — | ✓ | ✓ | Web Console `/spend/visualization` |
 | **Centralized SSE Policy Push** | — | ✓ | ✓ | SSE stream `/api/v1/policy/subscribe` |
 | **OIDC Identity & Group Claims** | — | ✓ | ✓ | `identity_binding` YAML block |
 | **Multi-Tenant Policy Sharding** | — | ✓ | ✓ | `agent_project_id` header routing |
@@ -237,7 +237,7 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.91)
+✔ Binary Integrity:          Pass (v1.0.92)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
@@ -396,7 +396,7 @@ Example Output:
 ● Vexa Agent Control Daemon Health Inspection
   OS Platform:        windows (x86_64)
   Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.91) | Up 23s
+  Daemon Process:     PID 25936 (v1.0.92) | Up 23s
   Listener Binding:   127.0.0.1:18080 (20 ms RTT)
   Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
 ```
@@ -598,7 +598,7 @@ Agent Request (Loopback) ──► [ Local Edge Gateway ] ──► [ Central Br
 
 ### Virtual Keys & Client Configuration (Cross-Platform)
 
-Agent Control provides **Virtual Keys** (`sk-vex-...`) managed through the Web Console (`/virtual-keys`). Rather than distributing sensitive, unrestricted provider API keys (OpenAI, Anthropic, Google) to developer workstations, operators generate scoped Virtual Keys with strict boundaries:
+Agent Control provides **Virtual Keys** (`sk-vex-...`) managed through the Web Console (**Integrations & Keys ➔ Virtual Keys** at `/integrations/virtual-keys`). Rather than distributing sensitive, unrestricted provider API keys (OpenAI, Anthropic, Google) to developer workstations, operators generate scoped Virtual Keys with strict boundaries:
 
 - **Monthly Budget Cap ($ USD):** Hard or soft ceiling converted to integer microcents.
 - **Throughput Rate Limits:** Maximum Requests Per Minute (RPM) and Tokens Per Minute (TPM).
@@ -647,7 +647,7 @@ Agent Control provides a clean architecture for governing LLM spend and security
 ```
 
 ### Requesting a Budget Increase
-1. Navigate to the **Spend Status** view in the Web Console (`/spend/status`).
+1. Navigate to **Activity & Cost ➔ Cost & Budgets** in the Web Console (`/spend/visualization`).
 2. Review project budget limits, current window consumption, and active reservations.
 3. Submit a budget increase request with requested amount and business justification.
 4. Once approved by an operator in `/spend/requests`, the new limit takes effect immediately with zero downtime.

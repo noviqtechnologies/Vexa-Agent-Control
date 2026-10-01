@@ -8,8 +8,8 @@ The **Run Explorer** gives security and platform teams deep, deterministic visib
 
 ## Accessing the Run Explorer
 
-1. Navigate to the Vexa SOC Console (`http://localhost:5173` or your production domain).
-2. In the sidebar, expand **Observability & Runs** $\rightarrow$ **Run Explorer** (or visit `/runs`).
+1. Navigate to the Vexa Agent Control Console (`http://localhost:5173` or your production domain).
+2. In the sidebar, navigate to **Activity & Cost ➔ Request & Audit Logs** (or access the dedicated Run Explorer view directly at `/runs`).
 3. Cross-platform compatibility: accessible in any modern web browser on Windows, macOS, Linux, and mobile browsers.
 
 ---

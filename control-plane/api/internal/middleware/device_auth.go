@@ -78,13 +78,7 @@ func DeviceAssertionAuth(db *store.Store) func(http.Handler) http.Handler {
 			var unverifiedClaims DeviceAssertionClaims
 			_, _, err := parser.ParseUnverified(rawToken, &unverifiedClaims)
 			if err != nil {
-				// Fallback: allow direct device token / ID authentication for enrolled devices
-				if principal, ok := db.ResolveDevicePrincipal(r.Context(), rawToken); ok && principal != nil {
-					ctx := context.WithValue(r.Context(), DevicePrincipalKey, principal)
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
-				}
-				http.Error(w, `{"error":{"code":"invalid_assertion_token","message":"Malformed assertion JWT payload"}}`, http.StatusUnauthorized)
+				http.Error(w, `{"error":{"code":"invalid_assertion_token","message":"Malformed assertion JWT payload; raw device ID authentication is disabled"}}`, http.StatusUnauthorized)
 				return
 			}
 

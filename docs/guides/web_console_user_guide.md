@@ -6,13 +6,25 @@ The VEXA Agent Control Web Console is an enterprise Security Operations Center (
 
 ## 1. Navigating the Console
 
-The sidebar organizes functionality into six core operational domains:
-- **Device & Fleet Governance**: Workstation fleet inventory, multi-state capability tracking, coverage matrix, and IDE drift logs.
-- **Policies & Security**: Dynamic policy authoring, DLP rules, 6-pass prompt injection defense, group policy assignment, and safe mode controls.
-- **Integrations & Keys**: Universal AI Gateway virtual key custody, model provider credentials, and MCP server registry.
-- **Observability & Runs**: Forensics run explorer, multi-turn session tracing, and streaming audit logs.
-- **Spend & Budgets**: Authoritative spend limits, preflight reservations, and self-service increase requests.
-- **Team & Organization**: Single Sign-On (SSO) providers, user roles, license management, and administrative tokens.
+The sidebar organizes functionality into four streamlined, task-oriented hubs with high-level visibility:
+
+- **Fleet Overview**: Top-level executive dashboard showing active workstation health, composite posture score, and instant status.
+- **Policies & Security**:
+  - **Guardrail Presets** (`/policy/marketplace`): 1-click curated security profiles (*Strict, Balanced, Dev-Friendly*).
+  - **Security & DLP Events** (`/threats`): Real-time prompt injection attempts, sensitive secret leaks, and security alerts.
+  - **Policy Rules** (`/policy/edit`): Fine-grained YAML rule authoring, group policies, and safe mode controls.
+- **Integrations & Keys**:
+  - **Virtual Keys** (`/integrations/virtual-keys`): Scoped gateway keys with automated routing and spend attribution.
+  - **LLM Providers** (`/integrations/llm-providers`): Centralized custody of upstream OpenAI, Anthropic, Google, and Ollama credentials.
+  - **MCP Servers** (`/integrations/mcp-servers`): Allowlisted Model Context Protocol tool endpoints and sandboxes.
+  - **Connected Devices** (`/devices`): Active developer workstations, IDE installations, and enrollment status.
+- **Activity & Cost**:
+  - **Cost & Budgets** (`/spend/visualization`): Live spend ledger analytics, hourly token burn rates, and budget limit governance.
+  - **Request & Audit Logs** (`/observability/logs`): Unified request traces, client gateway telemetry, and administrative audit trails.
+- **Team & Settings**:
+  - **Users & Roles** (`/admin/users`): Team member management, RBAC, and invitations.
+  - **Organization & License** (`/settings/license`): Workspace details, license tier, and capacity limits.
+  - **Auth Providers & SSO** (`/admin/auth-providers`): OIDC/OAuth authentication and enterprise SSO.
 
 ---
 
@@ -63,7 +75,7 @@ agentcontrol login
 This opens the browser, executes an OAuth 2.0 PKCE challenge against the Control Hub, generates local Ed25519 identity keys inside the OS secure storage (DPAPI / Keychain), and automatically registers the public key at `/api/v2/devices/enroll`.
 
 ### Method B: Headless Enrollment Token (CI/CD or MDM)
-1. Navigate to **Device Governance** in the Web Console.
+1. Navigate to **Integrations & Keys ➔ Connected Devices** in the Web Console.
 2. Click **"+ Generate Enrollment Token"**.
 3. Select expiration (e.g. 24 hours) and provide a reason or device label.
 4. Execute the generated command on the target system:
@@ -76,7 +88,7 @@ agentcontrol enroll --hub-url https://console.vexasec.io --token <token_value>
 ## 5. Workstation Inspection & Revocation
 
 ### Inspecting Endpoint Health
-Click the **magnifying glass (🔍)** or **"Inspect"** button on any workstation row to view:
+Click the **magnifying glass (🔍)** or **"Inspect"** button on any workstation row under **Connected Devices** to view:
 - Hardware architecture, OS version, and agent release.
 - Ed25519 identity key fingerprint and active status.
 - Detected IDE installations (Cursor, VS Code, Windsurf, Zed, Cline) and proxy configuration state.
@@ -90,9 +102,9 @@ If an endpoint is compromised, lost, or decommissioned:
 
 ---
 
-## 6. Spend Limits & Increase Requests
+## 6. Cost & Budgets Governance
 
-Administrators configure financial boundaries under **Spend & Budgets**:
+Administrators configure financial boundaries under **Activity & Cost ➔ Cost & Budgets** (`/spend/visualization` or `/spend/limits`):
 - **Hard Budget Caps**: Set maximum allowable spend per day or billing period.
 - **Preflight Reservations**: Gateway estimates token costs before dispatching requests to LLM providers; calls exceeding limits receive HTTP 429 (`BudgetExceeded`).
 - **Increase Requests**: When a developer requires additional budget for complex tasks, they can submit an increase request from their CLI. Administrators can review, approve, or decline requests directly in the console at `/spend/requests`.

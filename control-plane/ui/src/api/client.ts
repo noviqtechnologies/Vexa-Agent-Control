@@ -1071,15 +1071,16 @@ export function resolveHubUrl(tokenHubUrl?: string): string {
       return origin.replace('console.', 'enroll.')
     }
 
-    // 3. Local Docker Compose port alignment (UI on 3000 -> API on 8081)
-    if (origin.includes(':3000')) {
-      return origin.replace(':3000', ':8081')
+    // 3. Local dev server port alignment
+    // In local development or Docker Compose, browser PKCE login occurs via the Web Console origin (http://localhost:3000)
+    if (origin.includes(':8081') || origin.includes(':5173')) {
+      return 'http://localhost:3000'
     }
 
-    // 4. Fallback to current browser origin
+    // 4. Fallback to current browser origin (e.g. http://localhost:3000)
     return origin
   }
-  return 'http://localhost:8081'
+  return 'http://localhost:3000'
 }
 
 export async function createEnrollmentTokenV2(reason: string, deviceLabel = '', targetOwner = '', ttlHours = 24): Promise<EnrollmentTokenV2> {

@@ -49,22 +49,6 @@ interface NavSection {
 
 const CUSTOMER_NAV_SECTIONS: NavSection[] = [
   {
-    id: 'devices',
-    label: 'Device & Fleet Governance',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="17" x2="12" y2="21"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Device Governance', to: '/devices' },
-      { label: 'Coverage & Control Health', to: '/coverage-health' },
-      { label: 'IDE Tamper Log', to: '/devices/tamper-log' },
-    ],
-  },
-  {
     id: 'policies',
     label: 'Policies & Security',
     icon: (
@@ -73,13 +57,9 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Policy Editor', to: '/policy/edit' },
-      { label: 'Policy Marketplace', to: '/policy/marketplace' },
-      { label: 'Group Policies', to: '/policy/group' },
-      { label: 'Effective Policy Explorer', to: '/policy/effective-explorer' },
-      { label: 'Threat Intelligence', to: '/threats' },
-      { label: 'Safe Mode', to: '/policy/safe-mode' },
-      { label: 'Agent Identity', to: '/identity', badge: 'Coming Soon' },
+      { label: 'Guardrail Presets', to: '/policy/marketplace' },
+      { label: 'Security & DLP Events', to: '/threats' },
+      { label: 'Policy Rules', to: '/policy/edit' },
     ],
   },
   {
@@ -95,11 +75,12 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       { label: 'Virtual Keys', to: '/integrations/virtual-keys' },
       { label: 'LLM Providers', to: '/integrations/llm-providers' },
       { label: 'MCP Servers', to: '/integrations/mcp-servers' },
+      { label: 'Connected Devices', to: '/devices' },
     ],
   },
   {
     id: 'observability',
-    label: 'Observability & Runs',
+    label: 'Activity & Cost',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="11" cy="11" r="8"/>
@@ -107,27 +88,13 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
+      { label: 'Cost & Budgets', to: '/spend/visualization' },
       { label: 'Request & Audit Logs', to: '/observability/logs' },
-      { label: 'Run Explorer', to: '/runs' },
-      { label: 'Spend Analytics', to: '/spend/visualization' },
-    ],
-  },
-  {
-    id: 'spend',
-    label: 'Spend & Budgets',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
-      </svg>
-    ),
-    children: [
-      { label: 'Spend Limits', to: '/spend/limits' },
-      { label: 'Increase Requests', to: '/spend/requests' },
     ],
   },
   {
     id: 'team',
-    label: 'Team & Organization',
+    label: 'Team & Settings',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -137,8 +104,8 @@ const CUSTOMER_NAV_SECTIONS: NavSection[] = [
       </svg>
     ),
     children: [
-      { label: 'Organization & License', to: '/settings/license' },
       { label: 'Users & Roles', to: '/admin/users' },
+      { label: 'Organization & License', to: '/settings/license' },
       { label: 'Auth Providers & SSO', to: '/admin/auth-providers' },
     ],
   },

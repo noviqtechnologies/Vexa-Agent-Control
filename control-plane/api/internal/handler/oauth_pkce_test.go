@@ -207,3 +207,98 @@ func TestToken_InvalidVerifierRejected(t *testing.T) {
 		t.Fatalf("expected status 400 Bad Request on PKCE mismatch, got %d", resp.StatusCode)
 	}
 }
+
+func TestAuthorize_NonLoopbackRejectedForCLI(t *testing.T) {
+	h := NewPKCEOAuthHandler(nil)
+	reqURL := "/oauth/authorize?response_type=code&client_id=agentcontrol-cli&redirect_uri=" +
+		url.QueryEscape("https://evil.com/callback") +
+		"&code_challenge=test_challenge_123&code_challenge_method=S256&state=state_xyz"
+
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+	w := httptest.NewRecorder()
+	h.Authorize(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 Bad Request on non-loopback CLI redirect_uri, got %d", resp.StatusCode)
+	}
+}
+
+func TestToken_ClientIDMismatchRejected(t *testing.T) {
+	h := NewPKCEOAuthHandler(nil)
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	hasher := sha256.New()
+	hasher.Write([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
+
+	code := "auth_code_client_mismatch"
+	h.mu.Lock()
+	h.codes[code] = PKCEAuthCode{
+		Code:          code,
+		ClientID:      "agentcontrol-cli",
+		RedirectURI:   "http://127.0.0.1:18085/callback",
+		CodeChallenge: challenge,
+		UserID:        "user@example.com",
+		TenantID:      middleware.DefaultOrganizationID,
+		ExpiresAt:     time.Now().Add(5 * time.Minute),
+	}
+	h.mu.Unlock()
+
+	body := strings.NewReader(`{
+		"grant_type": "authorization_code",
+		"client_id": "malicious-client-app",
+		"code": "auth_code_client_mismatch",
+		"code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+		"redirect_uri": "http://127.0.0.1:18085/callback"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.Token(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 Bad Request on client_id mismatch, got %d", resp.StatusCode)
+	}
+}
+
+func TestToken_RedirectURIMismatchRejected(t *testing.T) {
+	h := NewPKCEOAuthHandler(nil)
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	hasher := sha256.New()
+	hasher.Write([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
+
+	code := "auth_code_redirect_mismatch"
+	h.mu.Lock()
+	h.codes[code] = PKCEAuthCode{
+		Code:          code,
+		ClientID:      "agentcontrol-cli",
+		RedirectURI:   "http://127.0.0.1:18085/callback",
+		CodeChallenge: challenge,
+		UserID:        "user@example.com",
+		TenantID:      middleware.DefaultOrganizationID,
+		ExpiresAt:     time.Now().Add(5 * time.Minute),
+	}
+	h.mu.Unlock()
+
+	body := strings.NewReader(`{
+		"grant_type": "authorization_code",
+		"client_id": "agentcontrol-cli",
+		"code": "auth_code_redirect_mismatch",
+		"code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+		"redirect_uri": "http://127.0.0.1:9999/callback"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.Token(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 Bad Request on redirect_uri mismatch, got %d", resp.StatusCode)
+	}
+}
+

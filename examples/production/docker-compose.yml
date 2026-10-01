@@ -55,7 +55,7 @@ services:
 
   # ── Control Plane API ─────────────────────────────────────────────────────
   control-plane-api:
-    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:v1.0.91
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:v1.0.92
     container_name: vexa-prod-api
     restart: unless-stopped
     depends_on:
@@ -83,7 +83,7 @@ services:
 
   # ── Control Plane UI Console ──────────────────────────────────────────────
   control-plane-ui:
-    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:v1.0.91
+    image: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:v1.0.92
     container_name: vexa-prod-ui
     restart: unless-stopped
     depends_on:

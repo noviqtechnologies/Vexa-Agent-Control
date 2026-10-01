@@ -651,8 +651,8 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
 
     match provider.await_callback(&session).await {
         Ok(result) => {
-            println!("\n{} Authenticated successfully!", "✔".green().bold());
-            println!("  Signed in as:       {}", result.user_id.bold());
+            println!("\n{} Authentication complete.", "✔".green().bold());
+            println!("  Account:            {}", result.user_id.bold());
             println!("  Hub:                {}", clean_hub.cyan());
             println!("  Device ID:          {}", result.device_id.dimmed());
             println!("  Runtime Profile:    {}", "team-gateway".green());
@@ -661,8 +661,7 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
             let _ = crate::cli::save_persisted_profile(crate::cli::DeploymentProfile::TeamGateway);
 
             // Silently register the background daemon. The login command owns
-            // all UX output; the service install runs quiet. On failure a
-            // single non-alarming hint is printed by run_service.
+            // all UX output; the service install runs quiet.
             let service_action = crate::service::ServiceAction::Install {
                 hub_url: clean_hub.to_string(),
                 gateway_secret: None,
@@ -677,7 +676,7 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
             if svc_ok {
                 println!(
                     "  Background daemon:  {} (starts with your session)",
-                    "✔ Registered".green()
+                    "✔ Registered & Running".green()
                 );
             } else {
                 println!(
@@ -686,14 +685,18 @@ pub async fn run_login(hub_url: &str, no_browser: bool) -> i32 {
                 );
             }
 
-            println!("\n{} Setup complete! You can now run:", "✔".green().bold());
+            println!("\nNext, run:\n");
             println!(
-                "  {}     - Check workstation health and capabilities",
-                "agentcontrol status".cyan()
+                "  {}        - Verify workstation environment & diagnostic health",
+                "agentcontrol doctor".cyan().bold()
             );
             println!(
-                "  {} - Connect a client (e.g. codex, claude)",
-                "agentcontrol connect codex".cyan()
+                "  {} - Automatically configure Codex with zero manual keys",
+                "agentcontrol connect codex".cyan().bold()
+            );
+            println!(
+                "  {}        - Run live synthetic policy verification probe",
+                "agentcontrol verify".cyan().bold()
             );
             0
         }

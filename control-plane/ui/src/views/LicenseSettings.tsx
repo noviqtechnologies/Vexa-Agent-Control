@@ -197,8 +197,8 @@ export const LicenseSettings: React.FC = () => {
               Join Community Discord ➔
             </a>
             <span style={{ color: 'var(--text-muted)' }}>•</span>
-            <a href="mailto:early-access@vexasec.io" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-              Request Quota Expansion (early-access@vexasec.io) ➔
+            <a href="mailto:contact@vexasec.io" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+              Request Quota Expansion (contact@vexasec.io) ➔
             </a>
           </div>
         </div>

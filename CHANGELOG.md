@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.92] - 2026-10-01
+
+### Added & Enhanced
+- **PKCE OAuth & Device Authorization:** Hardened PKCE OAuth authentication, token validation, and refresh mechanics with full test coverage (`oauth_pkce_test.go`).
+- **Spend Governance & Reconciliation:** Added spend v2 reconciliation engine and automated reconciliation tests to prevent drift across provider usage and team budgets.
+- **Interactive Policy Editor & Visual Matrix:** Overhauled Control Hub Policy Editor with live policy simulation, rule status toggles, and comprehensive visual styling.
+- **Security Efficacy Benchmark Suite:** Added end-to-end security benchmark test suite (`tests/security_efficacy_benchmark_test.rs`) and test corpus (`tests/corpus/injection_test_corpus.json`) covering prompt injection and secret exfiltration vectors.
+- **Multi-Cloud Infrastructure Automation:** Synchronized and verified Terraform modules across AWS ECS, GCP Cloud Run, and Azure Container Apps with configurable ingress authentication.
+- **Team Provisioning Runners:** Added `scripts/bootstrap-team.sh` and `scripts/bootstrap-team.ps1` for rapid zero-config team hub staging and local sandbox deployments.
+
+### Fixed
+- **CI Keyring & Verification Deadlocks:** Bypassed OS keyring in CI/headless environments, offloaded TLS client building and certificate discovery to non-blocking threads to eliminate runtime shutdown hangs.
+- **Multi-Platform Release Workflow:** Hardened release workflows with multi-arch Docker image generation and verified asset signing.
+
+---
+
 ## [1.0.91] - 2026-09-27
 
 ### Added & Enhanced
@@ -192,7 +208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.92...HEAD
+[1.0.92]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...v1.0.92
 [1.0.91]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...v1.0.91
 [1.0.90]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...v1.0.90
 [1.0.89]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.88...v1.0.89

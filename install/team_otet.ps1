@@ -92,7 +92,7 @@ $ArchStr = $ArchMap[$ArchEnv]
 if (-not $ArchStr) { $ArchStr = "x86_64" }
 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
-$FallbackVersion = "v1.0.91"
+$FallbackVersion = "v1.0.92"
 
 if (!$Version) {
     Write-Host "[*] Fetching latest release version from GitHub..." -ForegroundColor $ColorCyan

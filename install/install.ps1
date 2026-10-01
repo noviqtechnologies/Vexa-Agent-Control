@@ -26,7 +26,7 @@ param(
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
-    $FallbackVersion = "v1.0.91"
+    $FallbackVersion = "v1.0.92"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }
@@ -232,8 +232,10 @@ param(
     Write-Host "  Get started by authenticating and connecting your assistant:" -ForegroundColor $ColorCyan
     Write-Host ""
     Write-Host "    agentcontrol login" -ForegroundColor $ColorGreen
-    Write-Host "    agentcontrol connect codex" -ForegroundColor $ColorGreen
+    Write-Host "    agentcontrol status" -ForegroundColor $ColorGreen
     Write-Host "    agentcontrol doctor" -ForegroundColor $ColorGreen
+    Write-Host "    agentcontrol connect codex" -ForegroundColor $ColorGreen
+    Write-Host "    agentcontrol verify" -ForegroundColor $ColorGreen
     Write-Host ""
     Write-Host "  Community Support & Issues:" -ForegroundColor $ColorCyan
     Write-Host "     Discord : https://discord.gg/vexasec" -ForegroundColor $ColorCyan

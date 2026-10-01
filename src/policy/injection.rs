@@ -126,7 +126,7 @@ const PATTERN_DEFS: &[(&str, &str)] = &[
     ),
     (
         "CJK Instruction Override: Ignore",
-        r"(?i)忽略(?:所有)?(?:之前)?(?:的)?(?:指令|指示)",
+        r"(?i)忽略(?:之前|过去|所有)?(?:的)?(?:之前|过去|所有)?(?:的)?(?:指令|指示|规则|提示)",
     ),
     (
         "CJK Instruction Override: New",
@@ -233,14 +233,20 @@ impl InjectionScanner {
         // Pass 1: NFKC
         let mut text = input.nfkc().collect::<String>();
 
-        // Pass 2: Zero-width character stripping & Cyrillic homoglyphs
+        // Pass 2: Zero-width character stripping & homoglyphs
         text = text
             .replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'], "")
             .replace('а', "a") // Cyrillic 'a'
             .replace('о', "o")
             .replace('е', "e")
             .replace('с', "c")
-            .replace('р', "p");
+            .replace('р', "p")
+            .replace('\u{0456}', "i") // Cyrillic small 'i'
+            .replace('\u{0261}', "g") // Latin small script 'g'
+            .replace('\u{0443}', "y") // Cyrillic 'u'
+            .replace('\u{0445}', "x") // Cyrillic 'kh'
+            .replace('\u{0455}', "s") // Cyrillic 'dze'
+            .replace('\u{0458}', "j"); // Cyrillic 'je'
 
         // Pass 3: URL decode
         text = Self::decode_url(&text, 3);

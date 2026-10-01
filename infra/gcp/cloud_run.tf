@@ -71,11 +71,25 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "DEV_MODE"
-        value = var.environment == "dev" ? "true" : "false"
+        value = var.dev_mode != null ? (var.dev_mode ? "true" : "false") : (var.environment == "dev" || var.environment == "stage" ? "true" : "false")
       }
       env {
         name  = "ALLOW_DEV_MODE"
-        value = var.environment == "dev" ? "true" : "false"
+        value = var.dev_mode != null ? (var.dev_mode ? "true" : "false") : (var.environment == "dev" || var.environment == "stage" ? "true" : "false")
+      }
+      dynamic "env" {
+        for_each = var.admin_email != "" ? [1] : []
+        content {
+          name  = "ADMIN_EMAIL"
+          value = var.admin_email
+        }
+      }
+      dynamic "env" {
+        for_each = var.admin_password != "" ? [1] : []
+        content {
+          name  = "ADMIN_PASSWORD"
+          value = var.admin_password
+        }
       }
       env {
         name = "GATEWAY_SECRET"

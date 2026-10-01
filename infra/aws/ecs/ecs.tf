@@ -65,13 +65,13 @@ locals {
           hostPort      = 8400
         }
       ]
-      environment = [
+      environment = concat([
         { name = "DATABASE_URL", value = local.effective_database_url },
         { name = "VALKEY_URL", value = "127.0.0.1:6379" },
         { name = "DASHBOARD_PORT", value = "8400" },
         { name = "ENVIRONMENT", value = var.environment },
-        { name = "DEV_MODE", value = var.environment == "dev" ? "true" : "false" },
-        { name = "ALLOW_DEV_MODE", value = var.environment == "dev" ? "true" : "false" },
+        { name = "DEV_MODE", value = var.dev_mode != null ? (var.dev_mode ? "true" : "false") : (var.environment == "dev" || var.environment == "stage" ? "true" : "false") },
+        { name = "ALLOW_DEV_MODE", value = var.dev_mode != null ? (var.dev_mode ? "true" : "false") : (var.environment == "dev" || var.environment == "stage" ? "true" : "false") },
         { name = "GATEWAY_SECRET", value = local.gateway_secret },
         { name = "POLICY_READ_SECRET", value = local.policy_read_secret },
         { name = "GATEWAY_URL", value = "http://127.0.0.1:8080" },
@@ -80,7 +80,10 @@ locals {
         { name = "AGENTCONTROL_SESSION_SECRET", value = local.session_secret },
         { name = "DIRECT_TLS_ENABLED", value = "true" },
         { name = "INGRESS_AUTH_SECRET", value = local.gateway_secret }
-      ]
+      ],
+      var.admin_email != "" ? [{ name = "ADMIN_EMAIL", value = var.admin_email }] : [],
+      var.admin_password != "" ? [{ name = "ADMIN_PASSWORD", value = var.admin_password }] : []
+      )
       dependsOn = concat(
         (var.database_url == "" && !var.enable_rds) ? [
           {

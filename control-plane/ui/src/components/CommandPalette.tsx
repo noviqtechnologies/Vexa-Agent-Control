@@ -77,14 +77,6 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       shortcut: 'G F',
     },
     {
-      id: 'nav-identity',
-      title: 'Agent Identity & PKI Governance',
-      category: 'Governance',
-      description: 'Ed25519 secure enclave credentials and rotation status',
-      action: () => navigate('/identity'),
-      shortcut: 'G I',
-    },
-    {
       id: 'nav-policy-active',
       title: 'Active Policies & Rules',
       category: 'Policy',
@@ -98,13 +90,6 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       category: 'Policy',
       description: 'Interactive YAML policy authoring and validation',
       action: () => navigate('/policy/edit'),
-    },
-    {
-      id: 'nav-policy-group',
-      title: 'Group Policies',
-      category: 'Policy',
-      description: 'Multi-tenant role-based policy templates',
-      action: () => navigate('/policy/group'),
     },
     {
       id: 'nav-safe-mode',
@@ -164,13 +149,6 @@ export default function CommandPalette({ isOpen: controlledIsOpen, onClose }: Co
       category: 'Governance',
       description: 'Token spend thresholds and monthly cost caps',
       action: () => navigate('/spend/limits'),
-    },
-    {
-      id: 'nav-spend-requests',
-      title: 'Spend Increase Requests',
-      category: 'Governance',
-      description: 'Approve or deny developer budget escalation requests',
-      action: () => navigate('/spend/requests'),
     },
     {
       id: 'nav-spend-status',

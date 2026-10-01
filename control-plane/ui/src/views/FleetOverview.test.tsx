@@ -246,7 +246,7 @@ describe('FleetOverview', () => {
     })
   })
 
-  it('renders hero banner with View Coverage Matrix action button', async () => {
+  it('renders hero banner with connected devices action button', async () => {
     vi.mocked(api.getFleetOverview).mockResolvedValue(mockStats)
     vi.mocked(api.listAgents).mockResolvedValue(mockAgents)
     vi.mocked(api.getHeatmap).mockResolvedValue(mockHeatmap)
@@ -258,9 +258,9 @@ describe('FleetOverview', () => {
       expect(screen.getByText('5')).toBeInTheDocument()
     })
 
-    const matrixBtn = screen.getByRole('button', { name: /View Coverage Matrix/i })
-    expect(matrixBtn).toBeInTheDocument()
-    fireEvent.click(matrixBtn)
+    const devicesBtn = screen.getByRole('button', { name: /View Connected Devices|\+ Connect First Device/i })
+    expect(devicesBtn).toBeInTheDocument()
+    fireEvent.click(devicesBtn)
   })
 
   it('renders dynamic living capability snapshot cards', async () => {

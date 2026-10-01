@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -178,6 +179,45 @@ func (h *SpendV2Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		"organization_id": orgID,
 		"events":          events,
 	})
+}
+
+// GET /api/v2/spend/reconcile
+func (h *SpendV2Handler) ReconcileExport(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := resolveContextOrgAndActor(r)
+	days := queryInt(r, "days", 30)
+	format := r.URL.Query().Get("format")
+
+	since := time.Now().UTC().AddDate(0, 0, -days)
+	until := time.Now().UTC()
+
+	if format == "json" {
+		report, err := h.store.GetReconciliationReport(r.Context(), orgID, since, until)
+		if err != nil {
+			http.Error(w, `{"error":"failed to generate reconciliation report"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"organization_id": orgID,
+			"since":           since,
+			"until":           until,
+			"report":          report,
+		})
+		return
+	}
+
+	// Default: CSV export
+	csvBytes, err := h.store.ExportReconciliationCSV(r.Context(), orgID, since, until)
+	if err != nil {
+		http.Error(w, `{"error":"failed to export reconciliation CSV"}`, http.StatusInternalServerError)
+		return
+	}
+
+	filename := fmt.Sprintf("spend_reconciliation_%s_%s.csv", orgID, time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(csvBytes)
 }
 
 // GET /api/v2/spend/policies

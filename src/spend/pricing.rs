@@ -44,8 +44,36 @@ impl PricingTable {
         Ok(table)
     }
 
+    /// Resolve model snapshots, aliases, and provider prefixes (e.g. "openai/gpt-4o-2024-08-06" -> "gpt-4o") (FIN-004)
+    pub fn resolve_model_alias<'a>(&'a self, model: &'a str) -> &'a str {
+        if self.models.contains_key(model) {
+            return model;
+        }
+
+        // 1. Strip provider prefix (e.g. "openai/gpt-4o" -> "gpt-4o")
+        let unprefix = if let Some((_, base)) = model.split_once('/') {
+            base
+        } else {
+            model
+        };
+
+        if self.models.contains_key(unprefix) {
+            return unprefix;
+        }
+
+        // 2. Check if any known model is a prefix (e.g. "gpt-6-astra-2026-08-01" -> "gpt-6-astra")
+        for known_model in self.models.keys() {
+            if unprefix.starts_with(known_model) && unprefix[known_model.len()..].starts_with('-') {
+                return known_model.as_str();
+            }
+        }
+
+        unprefix
+    }
+
     pub fn estimate_cents(&self, model: &str, input_tokens: u64, output_tokens: u64) -> u64 {
-        let price = self.models.get(model).unwrap_or(&self.fallback);
+        let resolved = self.resolve_model_alias(model);
+        let price = self.models.get(resolved).unwrap_or(&self.fallback);
 
         let input_cost = (input_tokens as f64 / 1_000_000.0) * (price.input_per_1m_cents as f64);
         let output_cost = (output_tokens as f64 / 1_000_000.0) * (price.output_per_1m_cents as f64);
@@ -94,5 +122,21 @@ mod tests {
         // Test deepseek-v4-flash: 14 cents in / 28 cents out per 1M
         let ds_cost = table.estimate_cents("deepseek-v4-flash", 1_000_000, 1_000_000);
         assert_eq!(ds_cost, 42);
+    }
+
+    #[test]
+    fn test_model_alias_resolution() {
+        let table = PricingTable::load(None).expect("Bundled pricing table must load cleanly");
+
+        // Exact match
+        assert_eq!(table.resolve_model_alias("gpt-6-astra"), "gpt-6-astra");
+
+        // Provider prefix stripping
+        assert_eq!(table.resolve_model_alias("openai/gpt-6-astra"), "gpt-6-astra");
+        assert_eq!(table.resolve_model_alias("anthropic/claude-sonnet-5"), "claude-sonnet-5");
+
+        // Snapshot suffix stripping
+        assert_eq!(table.resolve_model_alias("gpt-6-astra-2026-08-01"), "gpt-6-astra");
+        assert_eq!(table.resolve_model_alias("openai/gpt-6-astra-20260801"), "gpt-6-astra");
     }
 }

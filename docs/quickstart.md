@@ -50,7 +50,7 @@ Every step in this guide defines: **Goal**, **Run**, **Expected Result**, **If i
     set PATH=%USERPROFILE%\.local\bin;%PATH%
     agentcontrol.exe --version
     ```
-- **Expected Result:** Prints `agentcontrol 1.0.91` (or current release).
+- **Expected Result:** Prints `agentcontrol 1.0.92` (or current release).
 - **If it fails:** Verify internet access to `raw.githubusercontent.com`. Refer to [Platform Installation Guides](install/).
 - **What changes:** Binary placed in `~/.local/bin/agentcontrol` (or `%USERPROFILE%\.local\bin\agentcontrol.exe`).
 - **Undo:** Delete the binary file or run the uninstaller script.
@@ -65,9 +65,18 @@ If your company runs a **Vexa Team Hub**, you do not need individual provider ke
 # 1. Authenticate with your corporate Google Workspace or Microsoft Entra ID
 agentcontrol login --hub https://hub.yourcompany.com
 
-# 2. Connect your AI coding assistant with zero secrets on disk
+# 2. Inspect active device posture and background service registration
+agentcontrol status
+
+# 3. Read-only environment and diagnostic health check
+agentcontrol doctor
+
+# 4. Connect your AI coding assistant with zero secrets on disk
+agentcontrol connect codex
 agentcontrol connect cursor
-agentcontrol connect claude-code
+
+# 5. Verify live policy enforcement
+agentcontrol verify
 ```
 
 - **How it works:**

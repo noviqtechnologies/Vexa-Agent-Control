@@ -26,7 +26,7 @@ Vexa operates on an **Open-Core** distribution model:
 
 ### Web Console Management
 1. Log in to the Control Plane Web Console (`http://localhost:8081` or your private domain).
-2. Navigate to **Team & Organization ➔ Organization & License** (`/settings/license`).
+2. Navigate to **Team & Settings ➔ Organization & License** (`/settings/license`).
 3. View your active organization details:
    - **Organization Name & Slug**
    - **Active License Tier** (`DEVELOPER`, `TEAM`, `ENTERPRISE`)
@@ -50,7 +50,7 @@ export VEXA_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
 
 When an agent workstation initiates enrollment via `agentcontrol login --hub <URL>` (interactive PKCE) or `agentcontrol enroll --token <TOKEN> --hub-url <URL>` (headless/MDM, requires admin-issued OTET):
 1. The Control Plane verifies that the 30-day Early Access evaluation window has not expired and that the active enrolled device count has not exceeded the license tier limit (`1` for Developer, `5` for Team during Early Access, `50` for Team at GA, unlimited for Enterprise).
-2. If the quota is full or the 30-day window has expired, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`) or `403 Forbidden` (`license_expired`). To request additional Early Access device capacity, reach out on the community Discord or email `early-access@vexasec.io`.
+2. If the quota is full or the 30-day window has expired, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`) or `403 Forbidden` (`license_expired`). To request additional Early Access device capacity, reach out on the community Discord or email `contact@vexasec.io`.
 3. Revoking decommissioned devices in **Device Governance** immediately excludes them from the total enrolled count, freeing up capacity for new enrollments.
 
 > [!NOTE]
@@ -68,7 +68,7 @@ When an agent workstation initiates enrollment via `agentcontrol login --hub <UR
 
 ## 6. OIDC Federation & Enterprise Identity Management
 
-Organization Admins can configure OIDC Identity Providers (Google Workspace, Microsoft Entra ID, Okta, Auth0, Keycloak, Clerk) under **Auth Providers & SSO** (`/settings/auth-providers`).
+Organization Admins can configure OIDC Identity Providers (Google Workspace, Microsoft Entra ID, Okta, Auth0, Keycloak, Clerk) under **Team & Settings ➔ Auth Providers & SSO** (`/admin/auth-providers`).
 
 ### Core Guarantees:
 1. **Durable Subject Binding:** Users are bound to their immutable `provider_subject` (`sub` claim) rather than mutable email strings.
@@ -94,7 +94,7 @@ Vexa Agent Control allows organization administrators to issue and govern **Scop
 ### Admin-Only Provisioning Workflow
 Under the Zero Trust security model, virtual keys are **not automatically issued** during onboarding. An Organization Administrator explicitly provisions keys tailored to specific developer workloads:
 
-1. In the Web Console, navigate to **Scoped Virtual Keys** (`/virtual-keys`).
+1. In the Web Console, navigate to **Integrations & Keys ➔ Virtual Keys** (`/integrations/virtual-keys`).
 2. Click **Issue Virtual Key** (`#btn-issue-virtual-key`).
 3. Configure the governance policy:
    - **Key Ownership Persona**: Restricted to `🧑 User / Developer` (Service Accounts and Autonomous Agents are reserved for future releases).
@@ -142,21 +142,51 @@ print(response.choices[0].message.content)
 
 ---
 
-## 6. Centralized Provider Key Custody (Zero-Leakage Model)
+## 8. Centralized Provider Key Custody (Zero-Leakage Model)
 
 To eliminate the security liability of distributing raw company API keys (OpenAI, Anthropic, Gemini, AWS Bedrock) to developer laptops:
 
-1. **Central KMS Envelope Encryption:** Navigate to **Settings ➔ Provider Keys** in the Web Console. Enter your company's master provider API keys.
+1. **Central KMS Envelope Encryption:** Navigate to **Integrations & Keys ➔ LLM Providers** (`/integrations/llm-providers`) in the Web Console. Enter your company's master provider API keys.
 2. **Encrypted at Rest:** Keys are encrypted using AES-256-GCM envelope encryption backed by Docker Secrets (`/run/secrets/master_key` with `0400` permissions) or cloud KMS.
 3. **Transient In-Memory Decryption:** Provider secrets are decrypted strictly in memory at the Control Hub gateway during upstream request dispatch and zeroized immediately after execution.
 4. **Zero Secrets on Workstations:** Developers authenticate with their corporate SSO accounts (`agentcontrol login`). The local proxy forwards requests to the Hub without requiring or storing any raw provider API keys on developer disks.
 
 ---
 
-## 7. First-Class Team Governance & Immediate Offboarding
+## 9. First-Class Team Governance & Immediate Offboarding
 
 1. **Team Model Allowlists & Budgets:** Assign developers to teams (`team_memberships`) with model allowlists (e.g. `claude-3-5-sonnet`, `gpt-4o`) and monthly spend limits ($50/developer).
 2. **Immediate Offboarding Guarantee:** When an employee leaves the company, disabling their account in Google Workspace or Microsoft Entra ID immediately invalidates OIDC token refreshes. Model access and proxy routing terminate instantly without manual credential rotation.
 3. **Immutable Attribution Ledger:** Every admitted request is recorded in `broker_admissions` with verified `organization_id`, `team_id`, `user_id`, `device_id`, and `policy_version` before upstream dispatch.
+
+---
+
+## 10. Role-Based Group Policies (RBAC) & IdP Claim Governance
+
+Administrators can bind tool access and model permissions to Identity Provider groups (Microsoft Entra ID, Google Workspace) under **Policies & Security ➔ Policy Rules** (`/policy/edit` or `/policy/group`).
+
+### Policy Editor vs. Group Policy Editor
+- **Policy Editor (`/policy/edit`):** Establishes the organization-wide baseline (Prompt Injection Firewall, global DLP regexes, rate limits, and fail-closed default actions).
+- **Group Policies (`/policy/group`):** Granular, role-based overrides scoped by verified JWT claims (`groups`, `roles`, `hd`).
+
+### Creating a Group Policy in Web Console
+1. In the Web Console, navigate to **Policies & Security ➔ Policy Rules** (or `/policy/group`).
+2. Click **+ New Policy**.
+3. Set **TARGET GROUP ID** (e.g. `engineering` or `contractors`). *Note: Must not be blank to enable the Publish button.*
+4. Configure **REQUIRED CLAIMS (JSON)**:
+   - For **Microsoft Entra ID**: `{"groups": ["<ENTRA_GROUP_OBJECT_ID_GUID>"]}`
+   - For **Google Workspace**: `{"groups": ["team@yourcompany.com"]}` or `{"hd": "yourcompany.com"}`
+5. Configure **TOOL OVERRIDES (JSON)**:
+   ```json
+   [
+     { "name": "read_file", "action": "allow" },
+     { "name": "write_file", "action": "deny" },
+     { "name": "bash", "action": "deny" }
+   ]
+   ```
+6. Click **Publish Version** to dynamically assemble and broadcast the active policy to all connected agent gateways.
+
+For complete details, step-by-step IdP token claim setup, and testing instructions, see the dedicated [Group Policies Guide](file:///c:/AgentWall/agentwall/docs/guides/group_policies_guide.md).
+
 
 

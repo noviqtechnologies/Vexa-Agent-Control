@@ -333,6 +333,15 @@ pub async fn resolve_token_and_mode(
     // 1. Direct key override passed via --key or AGENTCONTROL_VIRTUAL_KEY
     if let Some(k) = key.filter(|s| !s.trim().is_empty()) {
         let trimmed = k.trim().to_string();
+        if trimmed.starts_with("sk-vex-") {
+            eprintln!(
+                "{} Note: Command-line virtual keys are intended for headless CI/CD pipelines.",
+                "ℹ".blue().bold()
+            );
+            eprintln!(
+                "  For interactive workstations, zero-key browser login (`agentcontrol login`) authenticates automatically."
+            );
+        }
         let effective_mode = mode.unwrap_or_else(|| {
             if trimmed.starts_with("sk-vex-") {
                 ConnectMode::CloudDirect

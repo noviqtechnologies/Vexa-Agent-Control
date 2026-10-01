@@ -612,11 +612,7 @@ VALUES (
 )
 ON CONFLICT (organization_id, version) DO NOTHING;
 
--- 6. Seed Default Active Price Book
-INSERT INTO price_books (price_book_id, version, is_active, effective_from)
-VALUES ('00000000-0000-0000-0000-000000000005', 'pb_default_2026_01', true, now())
-ON CONFLICT (version) DO NOTHING;
-
+-- 6. Seed Default Active Price Book Version & Items
 INSERT INTO price_book_versions (price_book_version_id, source, published_by, hash)
 VALUES ('pb_default_2026_01', 'system', 'system', 'default_hash')
 ON CONFLICT (price_book_version_id) DO NOTHING;

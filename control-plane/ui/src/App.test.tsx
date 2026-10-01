@@ -47,11 +47,10 @@ describe('App routing', () => {
   it('renders accordion navigation items', async () => {
     renderAt('/')
     expect(await screen.findByText('Fleet Overview')).toBeInTheDocument()
-    expect(screen.getByText('Device & Fleet Governance')).toBeInTheDocument()
-    expect(screen.getByText('Team & Organization')).toBeInTheDocument()
     expect(screen.getByText('Policies & Security')).toBeInTheDocument()
-    expect(screen.getByText('Spend & Budgets')).toBeInTheDocument()
     expect(screen.getByText('Integrations & Keys')).toBeInTheDocument()
+    expect(screen.getByText('Activity & Cost')).toBeInTheDocument()
+    expect(screen.getByText('Team & Settings')).toBeInTheDocument()
   })
 
   it('redirects / to /fleet', async () => {

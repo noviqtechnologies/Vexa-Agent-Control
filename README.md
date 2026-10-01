@@ -10,7 +10,7 @@
 <br/>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Release Version](https://img.shields.io/badge/Version-1.0.91-10B981.svg?style=flat-square)](Cargo.toml)
+[![Release Version](https://img.shields.io/badge/Version-1.0.92-10B981.svg?style=flat-square)](Cargo.toml)
 [![Rust Core](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fnoviqtechnologies%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
 [![OWASP ASI](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
@@ -33,7 +33,7 @@
 - [Quickstart](#-quickstart)
   - [Option A: Standalone Developer Workstation (CLI)](#option-a-standalone-developer-workstation-cli)
   - [Option B: Universal LLM Gateway (OpenAI / Python / cURL)](#option-b-universal-llm-gateway-openai--python--curl)
-  - [Option C: Team Hub & SOC Console (Docker Compose)](#option-c-team-hub--soc-console-docker-compose)
+  - [Option C: Team Hub & Web Console (Docker Compose)](#option-c-team-hub--web-console-docker-compose)
   - [Option D: Standalone Docker Proxy](#option-d-standalone-docker-proxy)
 - [Architecture & Data Flow](#-architecture--data-flow)
 - [Declarative Policy Specification](#-declarative-policy-specification)
@@ -154,14 +154,23 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-#### 2. Connect Your Assistant & Start Gateway
+#### 2. Canonical Onboarding & Connection Flow
 ```bash
-# Connect Cursor, Claude, Antigravity, Codex, or VS Code:
-agentcontrol connect cursor
-agentcontrol connect claude
+# 1. Authenticate once via browser PKCE and enroll device machine identity:
+agentcontrol login --hub https://app.vexasec.io
 
-# Launch local gateway daemon:
-agentcontrol start
+# 2. Inspect active device posture, signed policy, and supervisor status:
+agentcontrol status
+
+# 3. Run read-only diagnostic checks:
+agentcontrol doctor
+
+# 4. Automatically connect your coding assistant (no manual keys needed):
+agentcontrol connect codex
+agentcontrol connect cursor
+
+# 5. Execute synthetic verification probe:
+agentcontrol verify
 ```
 
 #### 3. Open the Local Dashboard
@@ -170,8 +179,8 @@ Navigate to `http://127.0.0.1:18080` in your browser to view real-time traffic, 
 #### 4. Clean Reversal Anytime
 ```bash
 # Non-destructively disconnect assistants and restore pristine settings:
+agentcontrol disconnect codex
 agentcontrol disconnect cursor
-agentcontrol disconnect claude
 ```
 
 ---
@@ -220,7 +229,7 @@ curl -X POST http://localhost:18080/v1/chat/completions \
 
 ---
 
-### Option C: Team Hub & SOC Console (Docker Compose)
+### Option C: Team Hub & Web Console (Docker Compose)
 
 Deploy the complete centralized control plane (PostgreSQL, Go Control Plane API, React Management Console, and Security Gateway):
 
@@ -237,7 +246,7 @@ docker compose -f docker-compose.team.yml up -d
 
 | Service | Endpoint | Description |
 |---|---|---|
-| **Web Console UI** | `http://localhost:3000` | Real-time policy editor, device governance, spend ledger |
+| **Web Console UI** | `http://localhost:3000` | Guardrail presets, model gateways, cost & budgets, audit logs |
 | **Control Plane API** | `http://localhost:8085` | Policy distribution, enrollment, audit checkpoint API |
 | **Security Gateway** | `http://localhost:8080` | High-throughput Rust LLM and MCP proxy |
 

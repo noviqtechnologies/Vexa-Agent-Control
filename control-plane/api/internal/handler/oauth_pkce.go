@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,9 +40,21 @@ type PKCEOAuthHandler struct {
 }
 
 func NewPKCEOAuthHandler(st *store.Store) *PKCEOAuthHandler {
+	secret := os.Getenv("JWT_SIGNING_KEY")
+	if secret == "" {
+		secret = os.Getenv("OAUTH_JWT_SECRET")
+	}
+	var secretBytes []byte
+	if secret != "" {
+		secretBytes = []byte(secret)
+	} else {
+		secretBytes = make([]byte, 32)
+		_, _ = rand.Read(secretBytes)
+	}
+
 	return &PKCEOAuthHandler{
 		Store:     st,
-		jwtSecret: []byte("agentcontrol-access-token-secret-change-me"),
+		jwtSecret: secretBytes,
 		codes:     make(map[string]PKCEAuthCode),
 	}
 }
@@ -62,9 +75,38 @@ func (h *PKCEOAuthHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if state == "" {
+		http.Error(w, "invalid_request: state parameter is required", http.StatusBadRequest)
+		return
+	}
+
 	if codeChallengeMethod != "S256" {
 		http.Error(w, "invalid_request: code_challenge_method must be S256", http.StatusBadRequest)
 		return
+	}
+
+	// Validate redirect URI
+	parsedURI, err := url.Parse(redirectURI)
+	if err != nil || (parsedURI.Scheme != "http" && parsedURI.Scheme != "https") {
+		http.Error(w, "invalid_request: invalid redirect_uri scheme", http.StatusBadRequest)
+		return
+	}
+
+	// For CLI clients, enforce strict loopback address and callback path
+	if clientID == "agentcontrol-cli" || strings.HasPrefix(clientID, "cli-") {
+		host := parsedURI.Hostname()
+		if host != "127.0.0.1" && host != "localhost" && host != "::1" && host != "[::1]" {
+			http.Error(w, "invalid_request: CLI redirect_uri must be a loopback address (127.0.0.1 or localhost)", http.StatusBadRequest)
+			return
+		}
+		if parsedURI.Scheme != "http" {
+			http.Error(w, "invalid_request: CLI loopback redirect_uri must use http scheme", http.StatusBadRequest)
+			return
+		}
+		if parsedURI.Path != "/callback" && parsedURI.Path != "/oauth/callback" {
+			http.Error(w, "invalid_request: CLI redirect_uri path must be /callback or /oauth/callback", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Generate authorization code
@@ -247,6 +289,16 @@ func (h *PKCEOAuthHandler) Token(w http.ResponseWriter, r *http.Request) {
 
 	if !exists || authCode.ExpiresAt.Before(time.Now()) {
 		http.Error(w, `{"error":"invalid_grant","error_description":"Authorization code is invalid or has expired"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Enforce exact client_id and redirect_uri binding
+	if req.ClientID != "" && authCode.ClientID != "" && req.ClientID != authCode.ClientID {
+		http.Error(w, `{"error":"invalid_grant","error_description":"client_id mismatch between authorization request and token exchange"}`, http.StatusBadRequest)
+		return
+	}
+	if req.RedirectURI != "" && authCode.RedirectURI != "" && req.RedirectURI != authCode.RedirectURI {
+		http.Error(w, `{"error":"invalid_grant","error_description":"redirect_uri mismatch between authorization request and token exchange"}`, http.StatusBadRequest)
 		return
 	}
 

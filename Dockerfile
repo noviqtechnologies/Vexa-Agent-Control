@@ -21,6 +21,8 @@ RUN mkdir -p src control-plane/proto/src benches && \
     echo "fn main() {}" > benches/policy_eval.rs && \
     echo "fn main() {}" > benches/proxy_overhead.rs && \
     echo "fn main() {}" > benches/safe_mode.rs && \
+    echo "fn main() {}" > benches/gateway_capacity.rs && \
+    echo "fn main() {}" > benches/workstation_throughput.rs && \
     cargo build --release --bin agentcontrol || true && \
     rm -rf src control-plane/proto/src benches
 

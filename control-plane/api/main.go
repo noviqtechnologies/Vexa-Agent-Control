@@ -379,6 +379,7 @@ func main() {
 			r.Use(middleware.RequireOrganizationFeature(db, "spend_caps"))
 			r.Get("/effective", spendV2H.GetEffective)
 			r.Get("/analytics", spendV2H.GetAnalytics)
+			r.Get("/reconcile", spendV2H.ReconcileExport)
 			r.Get("/events", spendV2H.ListEvents)
 			r.Get("/policies", spendV2H.ListPolicies)
 			r.Post("/policies", spendV2H.CreatePolicy)

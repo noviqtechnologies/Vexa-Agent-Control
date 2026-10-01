@@ -2,8 +2,6 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -125,6 +123,16 @@ jobs:
           path: artifacts
           pattern: agentcontrol-*
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Generate Syft SBOM for Artifacts
+        uses: anchore/sbom-action@v0.18.0
+        with:
+          path: ./artifacts
+          format: spdx-json
+          output-file: artifacts/agentcontrol-sbom.spdx.json
+
       - name: Generate Checksums Manifest (SHA-256 & SHA-512)
         shell: bash
         run: |
@@ -136,6 +144,13 @@ jobs:
           find . -type f -name "*.zip" -exec sha512sum {} + | sed 's|./[^/]*/||' >> checksums.txt
           echo "Generated checksums.txt:"
           cat checksums.txt
+
+      - name: Sign Checksums with Cosign (Keyless)
+        shell: bash
+        run: |
+          cosign sign-blob --yes \
+            --bundle artifacts/checksums.txt.bundle \
+            artifacts/checksums.txt
 
       - name: Generate SLSA Build Provenance Attestation
         uses: actions/attest-build-provenance@v1
@@ -150,6 +165,8 @@ jobs:
           files: |
             artifacts/**/*.zip
             artifacts/checksums.txt
+            artifacts/checksums.txt.bundle
+            artifacts/agentcontrol-sbom.spdx.json
           generate_release_notes: true
           overwrite: true
         env:
@@ -161,6 +178,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -171,6 +190,9 @@ jobs:
         run: |
           VERSION=$(grep -m 1 "^version = " Cargo.toml | cut -d '"' -f 2)
           echo "VERSION=v$VERSION" >> $GITHUB_ENV
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.8.1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -183,6 +205,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Gateway image
+        id: build_gateway
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -192,7 +215,12 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol:latest
             ghcr.io/noviqtechnologies/agentcontrol:${{ env.VERSION }}
 
+      - name: Sign Gateway Docker Image (Keyless)
+        run: |
+          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol@${{ steps.build_gateway.outputs.digest }}"
+
       - name: Build and push Dashboard API image
+        id: build_api
         uses: docker/build-push-action@v6
         with:
           context: ./control-plane/api
@@ -202,7 +230,12 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:${{ env.VERSION }}
 
+      - name: Sign Dashboard API Docker Image (Keyless)
+        run: |
+          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api@${{ steps.build_api.outputs.digest }}"
+
       - name: Build and push Dashboard Frontend image
+        id: build_frontend
         uses: docker/build-push-action@v6
         with:
           context: ./control-plane/ui
@@ -212,7 +245,12 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:${{ env.VERSION }}
 
+      - name: Sign Dashboard Frontend Docker Image (Keyless)
+        run: |
+          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend@${{ steps.build_frontend.outputs.digest }}"
+
       - name: Build and push Database image
+        id: build_db
         uses: docker/build-push-action@v6
         with:
           context: ./control-plane/db
@@ -221,4 +259,8 @@ jobs:
           tags: |
             ghcr.io/noviqtechnologies/agentcontrol-db:latest
             ghcr.io/noviqtechnologies/agentcontrol-db:${{ env.VERSION }}
+
+      - name: Sign Database Docker Image (Keyless)
+        run: |
+          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-db@${{ steps.build_db.outputs.digest }}"
 

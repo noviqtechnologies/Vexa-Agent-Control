@@ -146,7 +146,7 @@ docker run -d `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
   start --listen 0.0.0.0:8080
 ```
 
@@ -158,7 +158,7 @@ docker run -d ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 ^
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
   start --listen 0.0.0.0:8080
 ```
 
@@ -171,7 +171,7 @@ docker run -d \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
   start --listen 0.0.0.0:8080
 ```
 
@@ -220,7 +220,7 @@ docker run -d \
   -v "$(pwd)/agentcontrol-policy.yaml:/app/policy.yaml:ro" \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 
@@ -233,7 +233,7 @@ docker run -d `
   -v "${PWD}/agentcontrol-policy.yaml:/app/policy.yaml:ro" `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 
@@ -245,7 +245,7 @@ docker run -d ^
   -v "%cd%/agentcontrol-policy.yaml:/app/policy.yaml:ro" ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.91 ^
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
   start --policy /app/policy.yaml --listen 0.0.0.0:8080
 ```
 

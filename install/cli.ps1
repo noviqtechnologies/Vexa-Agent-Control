@@ -21,7 +21,7 @@ if (-not $ArchStr) { $ArchStr = "x86_64" }
 
 $Repo = "noviqtechnologies/Vexa-Agent-Control"
 $ReleasesUrl = "https://api.github.com/repos/$Repo/releases/latest"
-$FallbackVersion = "v1.0.91"
+$FallbackVersion = "v1.0.92"
 
 Write-Host "[*] Fetching latest release version..." -ForegroundColor $ColorCyan
 $Version = $null

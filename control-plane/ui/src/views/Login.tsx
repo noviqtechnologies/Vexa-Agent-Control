@@ -15,7 +15,6 @@ export default function Login() {
   const queryParams = new URLSearchParams(location.search)
   const isIdleTimeout = queryParams.get('reason') === 'idle_timeout'
 
-  const [authMode, setAuthMode] = useState<'password' | 'sso'>('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -253,182 +252,115 @@ export default function Login() {
               </div>
             ) : (
               <div className="login-methods">
-                {/* Method Navigation Tabs: Render only when SSO providers are actually configured */}
-                {oauthProviders.length > 0 && (
-                  <div className="soc-auth-nav" role="tablist" aria-label="Authentication Options">
-                    <button
-                      type="button"
-                      role="tab"
-                      id="tab-password"
-                      aria-selected={authMode === 'password'}
-                      aria-controls="panel-password"
-                      className={`soc-tab-btn ${authMode === 'password' ? 'active' : ''}`}
-                      onClick={() => setAuthMode('password')}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <form onSubmit={handleSubmit} className="local-login-form">
+                  <div className="form-group">
+                    <label htmlFor="login-email">
+                      Work email or username
+                    </label>
+                    <div className="soc-input-wrapper">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      <input
+                        id="login-email"
+                        type="text"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="name@company.com or username"
+                        required
+                        autoFocus
+                        autoComplete="username"
+                        autoCapitalize="none"
+                        spellCheck="false"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <div className="label-row">
+                      <label htmlFor="login-password">
+                        Password
+                      </label>
+                      <button
+                        type="button"
+                        className="help-link-btn"
+                        onClick={() => setShowHelpModal(true)}
+                        aria-label="Need help? Forgot password?"
+                      >
+                        Forgot password? <span className="help-subtext">(Need help?)</span>
+                      </button>
+                    </div>
+                    <div className="soc-input-wrapper">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
-                      <span>Sign in with password</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      role="tab"
-                      id="tab-sso"
-                      aria-selected={authMode === 'sso'}
-                      aria-controls="panel-sso"
-                      className={`soc-tab-btn ${authMode === 'sso' ? 'active' : ''}`}
-                      onClick={() => setAuthMode('sso')}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="8.5" cy="7" r="4" />
-                        <line x1="20" y1="8" x2="20" y2="14" />
-                        <line x1="23" y1="11" x2="17" y2="11" />
-                      </svg>
-                      <span>Continue with SSO</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* TAB PANEL: Password Sign-in (Local Authentication) */}
-                {authMode === 'password' && (
-                  <form onSubmit={handleSubmit} className="local-login-form" id="panel-password" role="tabpanel" aria-labelledby="tab-password">
-                    <div className="form-group">
-                      <label htmlFor="login-email">
-                        Work email or username
-                      </label>
-                      <div className="soc-input-wrapper">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <input
-                          id="login-email"
-                          type="text"
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
-                          placeholder="name@company.com or username"
-                          required
-                          autoFocus
-                          autoComplete="username"
-                          autoCapitalize="none"
-                          spellCheck="false"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <div className="label-row">
-                        <label htmlFor="login-password">
-                          Password
-                        </label>
-                        <button
-                          type="button"
-                          className="help-link-btn"
-                          onClick={() => setShowHelpModal(true)}
-                          aria-label="Need help? Forgot password?"
-                        >
-                          Forgot password? <span className="help-subtext">(Need help?)</span>
-                        </button>
-                      </div>
-                      <div className="soc-input-wrapper">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="input-icon" aria-hidden="true">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                        <input
-                          id="login-password"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={e => setPassword(e.target.value)}
-                          placeholder="••••••••••••"
-                          required
-                          autoComplete="current-password"
-                        />
-                        <button
-                          type="button"
-                          className="soc-pwd-toggle"
-                          onClick={() => setShowPassword(prev => !prev)}
-                          title={showPassword ? 'Hide password' : 'Show password'}
-                          aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showPassword ? (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                              <line x1="1" y1="1" x2="23" y2="23" />
-                            </svg>
-                          ) : (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Trust Device Option - Unchecked by Default with Helper Guidance */}
-                    <div className="soc-form-options">
-                      <label className="soc-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={rememberDevice}
-                          onChange={e => setRememberDevice(e.target.checked)}
-                          className="soc-checkbox-input"
-                        />
-                        <div className="soc-checkbox-content">
-                          <span className="soc-checkbox-text">Trust this device for 30 days</span>
-                          <span className="soc-checkbox-hint">Do not select on shared or public computers.</span>
-                        </div>
-                      </label>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="soc-login-submit-btn"
-                      disabled={submitting}
-                    >
-                      {submitting ? (
-                        <span className="btn-loading-content">
-                          <span className="btn-spinner" />
-                          <span>Authenticating...</span>
-                        </span>
-                      ) : (
-                        <span>Sign In to Control Hub →</span>
-                      )}
-                    </button>
-                  </form>
-                )}
-
-                {/* TAB PANEL: Dedicated Enterprise SSO (Google Workspace & Microsoft Entra ID) */}
-                {authMode === 'sso' && oauthProviders.length > 0 && (
-                  <div className="soc-sso-panel" id="panel-sso" role="tabpanel" aria-labelledby="tab-sso">
-                    <div className="sso-panel-intro">
-                      <p>
-                        Federated enterprise single sign-on with multi-factor authentication (MFA) governed by your organization identity provider (Google Workspace or Microsoft Entra ID).
-                      </p>
-                    </div>
-
-                    <div className="oauth-buttons">
-                      {oauthProviders.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className={`oauth-btn oauth-btn-${p.type}`}
-                          onClick={() => { window.location.href = getOAuthLoginUrl(p.id) }}
-                        >
-                          <ProviderIcon type={p.type} />
-                          <span>Continue with {p.name}</span>
-                        </button>
-                      ))}
+                      <input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        required
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        className="soc-pwd-toggle"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
                     </div>
                   </div>
-                )}
+
+                  {/* Trust Device Option - Unchecked by Default with Helper Guidance */}
+                  <div className="soc-form-options">
+                    <label className="soc-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={rememberDevice}
+                        onChange={e => setRememberDevice(e.target.checked)}
+                        className="soc-checkbox-input"
+                      />
+                      <div className="soc-checkbox-content">
+                        <span className="soc-checkbox-text">Trust this device for 30 days</span>
+                        <span className="soc-checkbox-hint">Do not select on shared or public computers.</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="soc-login-submit-btn"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <span className="btn-loading-content">
+                        <span className="btn-spinner" />
+                        <span>Authenticating...</span>
+                      </span>
+                    ) : (
+                      <span>Sign In to Control Hub →</span>
+                    )}
+                  </button>
+                </form>
 
                 {/* Quick Enterprise SSO buttons visible below Password form for instant access */}
-                {authMode === 'password' && oauthProviders.length > 0 && (
+                {oauthProviders.length > 0 && (
                   <div className="soc-quick-sso-section">
                     <div className="soc-login-divider">
                       <span>OR CONTINUE WITH ENTERPRISE SSO</span>

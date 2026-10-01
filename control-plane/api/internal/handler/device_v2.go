@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -70,14 +72,24 @@ func (h *DeviceV2Handler) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 	hasher := sha256.New()
 	hasher.Write(contentBytes)
 	contentHash := hex.EncodeToString(hasher.Sum(nil))
-	resp.Policy.SHA256 = contentHash
+	policySeedStr := os.Getenv("HUB_POLICY_SIGNING_KEY")
+	if policySeedStr == "" {
+		policySeedStr = os.Getenv("POLICY_SIGNING_KEY")
+	}
 
-	seed := sha256.Sum256([]byte("vexa-hub-policy-signing-seed-2026"))
-	privKey := ed25519.NewKeyFromSeed(seed[:])
+	var privKey ed25519.PrivateKey
+	if policySeedStr != "" {
+		seed := sha256.Sum256([]byte(policySeedStr))
+		privKey = ed25519.NewKeyFromSeed(seed[:])
+	} else {
+		// Secure default: generate fresh in-memory key when unconfigured in dev
+		_, privKey, _ = ed25519.GenerateKey(rand.Reader)
+	}
+
 	sig := ed25519.Sign(privKey, []byte(contentHash))
 
 	resp.Policy.Signature.Algorithm = "Ed25519"
-	resp.Policy.Signature.KeyID = "vexa-policy-signer-2026-01"
+	resp.Policy.Signature.KeyID = "vexa-policy-signer-v2"
 	resp.Policy.Signature.Value = base64.StdEncoding.EncodeToString(sig)
 	resp.Policy.IssuedAt = time.Now().UTC()
 	resp.Policy.ExpiresAt = time.Now().UTC().Add(24 * time.Hour)

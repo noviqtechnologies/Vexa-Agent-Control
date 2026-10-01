@@ -12,6 +12,25 @@ variable "environment" {
   default     = "stage"
 }
 
+variable "dev_mode" {
+  description = "Explicitly enable or disable DEV_MODE authentication bypass (defaults to true for dev and stage environments, false for prod)."
+  type        = bool
+  default     = null
+}
+
+variable "admin_email" {
+  description = "Optional administrator email for the Control Hub."
+  type        = string
+  default     = ""
+}
+
+variable "admin_password" {
+  description = "Optional administrator password for the Control Hub."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # ─── Container Images ─────────────────────────────────────────────────────────
 
 variable "container_image" {

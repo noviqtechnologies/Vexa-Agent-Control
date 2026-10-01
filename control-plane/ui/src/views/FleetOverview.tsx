@@ -359,10 +359,10 @@ export default function FleetOverview() {
             <button
               type="button"
               className="soc-btn-primary"
-              onClick={() => navigate('/coverage-health')}
+              onClick={() => navigate(activeWorkstations > 0 ? '/devices' : '/devices?onboard=true')}
               style={{ fontSize: '12px', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
             >
-              <span>View Coverage Matrix</span>
+              <span>{activeWorkstations > 0 ? 'View Connected Devices' : '+ Connect First Device'}</span>
               <span>→</span>
             </button>
           </div>
@@ -438,11 +438,11 @@ export default function FleetOverview() {
             className="soc-capability-footer"
             onClick={(e) => {
               e.stopPropagation()
-              navigate('/coverage-health')
+              navigate('/devices')
             }}
-            title="View Coverage Matrix"
+            title="Manage Connected Devices"
           >
-            <span>View Coverage Matrix</span>
+            <span>Manage Devices</span>
             <span>→</span>
           </div>
         </div>
@@ -485,9 +485,9 @@ export default function FleetOverview() {
               e.stopPropagation()
               navigate('/policy/marketplace')
             }}
-            title="Browse Policy Marketplace"
+            title="Browse Guardrail Presets"
           >
-            <span>Browse Policy Marketplace</span>
+            <span>Browse Guardrail Presets</span>
             <span>→</span>
           </div>
         </div>

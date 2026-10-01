@@ -54,9 +54,9 @@
 
 Agent Control policies use strict, explicit YAML configuration files conforming to the **v2 schema**. Agent Control operates on a **default-deny** model: any tool call, parameter value, or LLM prompt not explicitly allowed is blocked.
 
-### Policy Marketplace ("No More Blank YAML")
+### Guardrail Presets ("No More Blank YAML")
 
-Writing security policies from scratch can be challenging. Agent Control includes a **Policy Marketplace** in the Web Console (`/policy/marketplace`) with **One-Click Templates**:
+Writing security policies from scratch can be challenging. Agent Control includes **Guardrail Presets** in the Web Console (**Policies & Security ➔ Guardrail Presets** at `/policy/marketplace`) with **One-Click Templates**:
 
 - **Safe Cursor Workstation**: Shields `.env`, `id_rsa`, and cloud credentials; blocks destructive shell operations (`rm -rf`, `mkfs`, `dd`); stops post-read exfiltration sequences.
 - **Production Data Egress Control**: Locks outbound network requests to internal company domain wildcards, enables loop prevention firewalls, and enforces MCP schema-drift blocking.
@@ -952,7 +952,7 @@ Persist the installation directory in your shell configuration:
 }
 ```
 - **Cause:** Pre-dispatch authorization checked active budget windows in PostgreSQL (`reserved + settled + reserve > limit`) and rejected the request to prevent financial overruns. Zero provider tokens were consumed.
-- **Solution:** Submit an increase request via the Web Console (`/spend/status`) or ask an administrator to publish an updated budget limit (`/spend/limits`).
+- **Solution:** Submit an increase request via the Web Console (**Activity & Cost ➔ Cost & Budgets** at `/spend/visualization`) or ask an administrator to publish an updated budget limit (`/spend/limits`).
 
 #### Error 429 `LOOP_DETECTED`
 ```json

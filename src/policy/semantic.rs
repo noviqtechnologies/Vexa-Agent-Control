@@ -95,7 +95,7 @@ impl SemanticScanner {
         cache.insert(hash, (finding, Instant::now()));
     }
 
-    /// Heuristic stub simulating Phi-4-Mini model scoring
+    /// Heuristic screening simulating prompt injection scoring (PRD-003 compliant)
     pub fn calculate_score_sync(&self, tool_name: &str, payload: &str) -> SemanticFinding {
         let hash = Self::hash_payload(tool_name, payload);
         if let Some(cached) = self.check_cache(hash) {

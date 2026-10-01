@@ -140,9 +140,36 @@ if (-not $HasPersistentDb) {
     $BuildTargets += @{ Name = "Database (Sidecar)"; Dir = "$RepoRoot\control-plane\db"; Image = $DbImage }
 }
 
+# Warm up DNS cache for Google Cloud services to prevent transient resolution drops
+$GcpHosts = @(
+    "oauth2.googleapis.com",
+    "cloudbilling.googleapis.com",
+    "serviceusage.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
+    "run.googleapis.com",
+    "secretmanager.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "sqladmin.googleapis.com",
+    "storage.googleapis.com"
+)
+foreach ($h in $GcpHosts) {
+    $null = Resolve-DnsName -Name $h -Type A -ErrorAction SilentlyContinue
+}
+
 # 2. Build Container Images (if not skipped)
 if (-not $SkipBuild -and -not $UseGhcr) {
     Write-Host "`n[2/4] Checking image registry & submitting builds (Workers: $MachineType)..." -ForegroundColor Yellow
+
+    # Ensure Artifact Registry repository exists before pushing images
+    $RepoDescribe = cmd /c "gcloud artifacts repositories describe $RepoId --project=$ProjectId --location=$Region >nul 2>nul"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  * Creating Artifact Registry repository '$RepoId' in $Region..." -ForegroundColor Yellow
+        $null = cmd /c "gcloud artifacts repositories create $RepoId --repository-format=docker --location=$Region --project=$ProjectId --description=`"AgentControl $RepoId Container Repository`" --quiet"
+    }
 
     if ($HasPersistentDb) {
         Write-Host "  * Database: Skipped (PostgreSQL / Cloud SQL persistence active)" -ForegroundColor Green
@@ -239,6 +266,17 @@ if (-not $HasPersistentDb) {
 
 Push-Location $InfraDir
 try {
+    # Check if Artifact Registry repository is in state; import if exists in GCP but missing from state
+    $GarRepoId = "projects/$ProjectId/locations/$Region/repositories/$RepoId"
+    $StateList = (& terraform state list 2>$null)
+    if ($StateList -notcontains "google_artifact_registry_repository.agentcontrol_repo[0]") {
+        $null = cmd /c "gcloud artifacts repositories describe $RepoId --project=$ProjectId --location=$Region >nul 2>nul"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  * Synchronizing Artifact Registry repository with Terraform state..." -ForegroundColor DarkGray
+            $null = cmd /c "terraform import -var-file=terraform.stage.tfvars google_artifact_registry_repository.agentcontrol_repo[0] $GarRepoId >nul 2>nul"
+        }
+    }
+
     $TfArgs = @(
         "apply",
         "-var-file=terraform.stage.tfvars",

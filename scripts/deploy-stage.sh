@@ -38,6 +38,12 @@ echo "========================================================"
 if [ "$SKIP_BUILD" = false ]; then
   echo -e "\n[1/3] 🚀 Submitting parallel Cloud Builds ($MACHINE_TYPE)..."
   
+  # Ensure Artifact Registry repository exists before pushing images
+  if ! gcloud artifacts repositories describe "$REPO_ID" --project="$PROJECT_ID" --location="$REGION" >/dev/null 2>&1; then
+    echo "  • Creating Artifact Registry repository '$REPO_ID' in $REGION..."
+    gcloud artifacts repositories create "$REPO_ID" --repository-format=docker --location="$REGION" --project="$PROJECT_ID" --description="AgentControl $REPO_ID Container Repository" --quiet
+  fi
+
   HAS_PERSISTENT_DB=false
   if grep -qE '^\s*database_url\s*=\s*"[^"]+"' "$INFRA_DIR/terraform.stage.tfvars" 2>/dev/null || grep -qE '^\s*enable_cloud_sql\s*=\s*true' "$INFRA_DIR/terraform.stage.tfvars" 2>/dev/null; then
     HAS_PERSISTENT_DB=true
