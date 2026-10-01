@@ -18,9 +18,10 @@ type IdentityConfig struct {
 // permitted so agents can still resolve the gateway's service name.
 //
 // All fields except Enforced are optional and fall back to conventions:
-//   AgentPodSelector    -> {agentcontrol.io/agent: "true"}
-//   GatewayPodSelector  -> {agentcontrol.io/gateway: "true"}
-//   MCPPort             -> 8080
+//
+//	AgentPodSelector    -> {agentcontrol.io/agent: "true"}
+//	GatewayPodSelector  -> {agentcontrol.io/gateway: "true"}
+//	MCPPort             -> 8080
 //
 // Existing CRs written before these fields were introduced remain valid; the
 // defaults produce the behavior described in the PRD.

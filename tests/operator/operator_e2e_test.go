@@ -3,11 +3,11 @@ package operator
 import (
 	"context"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -15,17 +15,17 @@ import (
 	"github.com/noviqtechnologies/agentcontrol/operator/controllers"
 )
 
-func TestAgent ControlPolicyReconciler(t *testing.T) {
+func TestAgentControlPolicyReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = agentcontrolv1alpha1.AddToScheme(scheme)
 
-	policy := &agentcontrolv1alpha1.Agent ControlPolicy{
+	policy := &agentcontrolv1alpha1.AgentControlPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy",
 			Namespace: "default",
 		},
-		Spec: agentcontrolv1alpha1.Agent ControlPolicySpec{
+		Spec: agentcontrolv1alpha1.AgentControlPolicySpec{
 			GatewayImage: "agentcontrol:test",
 			Policy:       "default_action: deny\n",
 		},
@@ -33,7 +33,7 @@ func TestAgent ControlPolicyReconciler(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
 
-	r := &controllers.Agent ControlPolicyReconciler{
+	r := &controllers.AgentControlPolicyReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}

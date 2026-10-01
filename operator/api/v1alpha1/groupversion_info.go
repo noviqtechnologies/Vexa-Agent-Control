@@ -1,6 +1,6 @@
 // Package v1alpha1 contains API Schema definitions for the agentcontrol v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=agentcontrol.io
+// +kubebuilder:object:generate=true
+// +groupName=agentcontrol.io
 package v1alpha1
 
 import (
