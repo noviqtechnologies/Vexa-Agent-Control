@@ -59,7 +59,7 @@ spec:
                       to reach. Defaults to {agentcontrol.io/gateway: "true"} if empty.
                     type: object
                   mcpPort:
-                    description: TCP port the gateway listens on. Defaults to 8080.
+                    description: TCP port the gateway listens on. Defaults to 18080.
                     format: int32
                     maximum: 65535
                     minimum: 1

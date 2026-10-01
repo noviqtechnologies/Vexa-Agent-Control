@@ -35,14 +35,14 @@ If you use **Docker Desktop for Windows** with the WSL2 backend enabled:
 # Inside WSL2 terminal:
 docker run -d \
   --name agentcontrol \
-  -p 8080:8080 \
+  -p 127.0.0.1:18080:18080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" \
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
-Because WSL2 seamlessly mirrors localhost ports, the gateway on port `8080` and the web console on port `3000` are accessible from both inside WSL2 and from Windows desktop browsers at `http://localhost:8080` / `http://localhost:3000`.
+Because WSL2 seamlessly mirrors localhost ports, the gateway on port `18080` (or `127.0.0.1:18080`) and the web console on port `18300` are accessible from both inside WSL2 and from Windows desktop browsers at `http://localhost:18080` / `http://localhost:18300`.
 
 Read the full [Docker Deployment Guide](../guides/docker-deployment.md).
 

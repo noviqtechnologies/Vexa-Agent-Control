@@ -56,12 +56,12 @@ If you have **Docker Desktop for Windows** installed and want to run Vexa Agent 
 $token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
-  -p 8080:8080 `
+  -p 127.0.0.1:18080:18080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 ### Full-Stack Control Hub (Compose)

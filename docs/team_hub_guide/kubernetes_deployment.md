@@ -178,7 +178,7 @@ spec:
         action: pivot_error
   networkPolicy:
     enforced: true
-    mcpPort: 8080
+    mcpPort: 18080
     agentPodSelector:
       agentcontrol.io/agent: "true"
     gatewayPodSelector:
@@ -198,7 +198,7 @@ kubectl apply -f policy.yaml
 ```
 
 > [!NOTE]
-> **Operator Egress NetworkPolicy Enforcement:** When `spec.networkPolicy.enforced: true` is configured, label your AI agent application pods with `agentcontrol.io/agent=true`. The `agentcontrol-operator` will automatically generate a Kubernetes `NetworkPolicy` restricting agent pod egress strictly to the gateway on port `8080` (+DNS).
+> **Operator Egress NetworkPolicy Enforcement:** When `spec.networkPolicy.enforced: true` is configured, label your AI agent application pods with `agentcontrol.io/agent=true`. The `agentcontrol-operator` will automatically generate a Kubernetes `NetworkPolicy` restricting agent pod egress strictly to the gateway on port `18080` (+DNS).
 
 ---
 
@@ -236,28 +236,28 @@ Forward the gateway service port locally to test the `/healthz` endpoint:
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # In Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 # In Terminal 2:
-curl -i http://127.0.0.1:8080/healthz
+curl -i http://127.0.0.1:18080/healthz
 ```
 
 #### Windows (PowerShell):
 ```powershell
 # In Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 # In Terminal 2:
-curl.exe -i http://127.0.0.1:8080/healthz
+curl.exe -i http://127.0.0.1:18080/healthz
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
 :: In Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 :: In Terminal 2:
-curl.exe -i http://127.0.0.1:8080/healthz
+curl.exe -i http://127.0.0.1:18080/healthz
 ```
 
 **Expected Output:** `HTTP/1.1 200 OK` with response `{"status":"ok"}`.
@@ -308,18 +308,18 @@ If you update custom policies directly on disk or in ConfigMaps outside the SSE 
 #### Linux / macOS (Bash / Zsh):
 ```bash
 kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- \
-  wget -qO- --post-data '' http://localhost:8080/reload
+  wget -qO- --post-data '' http://localhost:18080/reload
 ```
 
 #### Windows (PowerShell):
 ```powershell
 kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- `
-  wget -qO- --post-data '' http://localhost:8080/reload
+  wget -qO- --post-data '' http://localhost:18080/reload
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- wget -qO- --post-data '' http://localhost:8080/reload
+kubectl exec -n agentcontrol-system deploy/agentcontrol-gateway -- wget -qO- --post-data '' http://localhost:18080/reload
 ```
 
 #### Method B: Process SIGHUP Signal

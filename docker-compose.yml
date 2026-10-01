@@ -91,13 +91,13 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${AGENTCONTROL_GATEWAY_PORT:-18080}:18080"
     volumes:
       - ./policy.example.yaml:/app/policy.yaml:ro
       - agentcontrol-logs:/var/log/agentcontrol
     environment:
       # Core gateway config
-      AGENTCONTROL_LISTEN: "0.0.0.0:8080"
+      AGENTCONTROL_LISTEN: "0.0.0.0:18080"
       AGENTCONTROL_MCP_URL: "http://mock-mcp:3000"
       AGENTCONTROL_LOG_PATH: "/var/log/agentcontrol/audit.log"
       AGENTCONTROL_DRY_RUN: "false"

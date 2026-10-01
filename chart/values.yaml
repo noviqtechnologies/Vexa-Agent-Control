@@ -125,7 +125,7 @@ gateway:
     # need external access — but that's rarely what you want for a security
     # proxy that's supposed to sit between agents and MCP servers.
     type: ClusterIP
-    port: 8080
+    port: 18080
     # If tls.enabled=true this is the HTTPS port; otherwise plain HTTP.
 
   # COMMON. Upstream MCP server URL the gateway forwards allowed calls to.

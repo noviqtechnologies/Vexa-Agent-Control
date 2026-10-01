@@ -1410,7 +1410,13 @@ async fn run_start(args: cli::StartArgs) -> i32 {
     let effective_profile_name = profile.name().to_string();
 
     let policy_path = args.policy;
-    let listen = if args.listen != "127.0.0.1:18080" {
+    let listen = if let Ok(port_str) = std::env::var("AGENTCONTROL_GATEWAY_PORT") {
+        if let Ok(p) = port_str.trim().parse::<u16>() {
+            format!("127.0.0.1:{}", p)
+        } else {
+            args.listen
+        }
+    } else if args.listen != "127.0.0.1:18080" {
         args.listen
     } else if let Some(ref cfg) = daemon_cfg {
         cfg.listen.clone()

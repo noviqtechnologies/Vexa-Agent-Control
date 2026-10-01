@@ -41,10 +41,10 @@ services:
       dashboard-api:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "${AGENTCONTROL_GATEWAY_PORT:-18080}:18080"
     environment:
       # Gateway listen address (all interfaces inside the container)
-      AGENTCONTROL_LISTEN: "0.0.0.0:8080"
+      AGENTCONTROL_LISTEN: "0.0.0.0:18080"
 
       # Dashboard API URL — tells the gateway WHERE to fetch the active policy.
       # Uses Docker DNS service name; resolves to the dashboard-api container.

@@ -21,7 +21,7 @@ type IdentityConfig struct {
 //
 //	AgentPodSelector    -> {agentcontrol.io/agent: "true"}
 //	GatewayPodSelector  -> {agentcontrol.io/gateway: "true"}
-//	MCPPort             -> 8080
+//	MCPPort             -> 18080
 //
 // Existing CRs written before these fields were introduced remain valid; the
 // defaults produce the behavior described in the PRD.
@@ -40,7 +40,7 @@ type NetworkPolicyConfig struct {
 	// +optional
 	GatewayPodSelector map[string]string `json:"gatewayPodSelector,omitempty"`
 
-	// MCPPort is the TCP port the gateway listens on. Defaults to 8080.
+	// MCPPort is the TCP port the gateway listens on. Defaults to 18080.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535

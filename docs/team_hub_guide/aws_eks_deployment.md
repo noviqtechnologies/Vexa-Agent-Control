@@ -306,7 +306,7 @@ spec:
         action: pivot_error
   networkPolicy:
     enforced: true
-    mcpPort: 8080
+    mcpPort: 18080
     agentPodSelector:
       agentcontrol.io/agent: "true"
     gatewayPodSelector:
@@ -352,33 +352,33 @@ persistentvolumeclaim/data-agentcontrol-db-0      Bound    pvc-a1b2c3d4-5678-90a
 
 ### Step 2: Validate Gateway Health Endpoint
 
-Forward service port `8080` locally to execute end-to-end health checks:
+Forward service port `18080` locally to execute end-to-end health checks:
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
 # Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 # Terminal 2:
-curl -i http://127.0.0.1:8080/healthz
+curl -i http://127.0.0.1:18080/healthz
 ```
 
 #### Windows (PowerShell):
 ```powershell
 # Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 # Terminal 2:
-curl.exe -i http://127.0.0.1:8080/healthz
+curl.exe -i http://127.0.0.1:18080/healthz
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
 :: Terminal 1:
-kubectl port-forward svc/agentcontrol-gateway 8080:8080 -n agentcontrol-system
+kubectl port-forward svc/agentcontrol-gateway 18080:18080 -n agentcontrol-system
 
 :: Terminal 2:
-curl.exe -i http://127.0.0.1:8080/healthz
+curl.exe -i http://127.0.0.1:18080/healthz
 ```
 
 **Expected Output:** `HTTP/1.1 200 OK` with payload `{"status":"ok"}`.
@@ -464,6 +464,6 @@ aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/cluster/agentcontrol-
 | **Cluster Launch** | `eksctl create cluster -f eks-cluster.yaml` | ✅ |
 | **Helm Install** | `helm install agentcontrol ./chart -n agentcontrol-system` | ✅ |
 | **CRD Policy Apply** | `kubectl apply -f policy.yaml` | ✅ |
-| **Health Validation** | `curl.exe http://127.0.0.1:8080/healthz` | ✅ |
+| **Health Validation** | `curl.exe http://127.0.0.1:18080/healthz` | ✅ |
 | **Helm Teardown** | `helm uninstall agentcontrol -n agentcontrol-system` | ✅ |
 | **Cluster Teardown** | `eksctl delete cluster --name agentcontrol-eks-cluster` | ✅ |

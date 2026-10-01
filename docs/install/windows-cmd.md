@@ -32,12 +32,12 @@ If Docker Desktop is installed, run Vexa Agent Control containers directly from 
 :: Standalone Gateway Container:
 docker run -d ^
   --name agentcontrol ^
-  -p 8080:8080 ^
+  -p 127.0.0.1:18080:18080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 
 :: Full-Stack Control Hub (Compose):
 git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git

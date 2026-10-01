@@ -40,11 +40,11 @@ Before starting, ensure your local development environment meets the following r
 - In PowerShell, run `curl.exe` explicitly to avoid built-in PowerShell aliases (`curl` -> `Invoke-WebRequest`).
 
 ### Required Network Ports
-Ensure the following ports are free on your host machine:
-- `8081`: Control Hub UI (React Management Console)
-- `8400`: Control Hub API (Go REST API)
+Ensure the following ports are available on your host machine:
+- `18300`: Control Hub UI (React Management Console, or `3000` / `8081`)
+- `18081`: Control Hub API (Go REST API, or `8400`)
 - `5433`: PostgreSQL 16 Database
-- `8080`: Agent Control Enforcement Gateway
+- `18080`: Agent Control Enforcement Gateway (Project-standard default)
 
 ---
 
@@ -111,10 +111,10 @@ docker compose up -d --build
 ```
 
 #### Stack Endpoints Provisioned:
-- **Control Hub UI:** `http://localhost:8081`
-- **Control Hub API:** `http://localhost:8400` (REST API at `/api/v1`)
+- **Control Hub UI:** `http://localhost:18300` (or `http://localhost:8081`)
+- **Control Hub API:** `http://localhost:18081` (REST API at `/api/v1` or `http://localhost:8400`)
 - **PostgreSQL 16 Database:** `localhost:5433`
-- **Enforcement Gateway (Containerized):** `http://localhost:8080`
+- **Enforcement Gateway (Containerized):** `http://127.0.0.1:18080`
 
 ---
 
@@ -147,7 +147,7 @@ cargo build --bin agentcontrol
 > - **Terminal 1**: `agentcontrol start` runs a persistent foreground gateway process. Keep Terminal 1 active to maintain active SSE connections.
 > - **Terminal 2**: Use a second terminal to trigger requests, view logs, or run verification commands.
 >
-> **Port Notice**: Docker Compose maps a `gateway` container to port `8080`. If starting a native gateway binary on port `8080`, stop the container first (`docker compose stop gateway`) or use another port (e.g. `--listen 127.0.0.1:8082`).
+> **Port Notice**: Docker Compose maps a `gateway` container to the project-standard default port `18080`. If starting a native gateway binary on port `18080`, stop the container first (`docker compose stop gateway`) or use another port (e.g. `--listen 127.0.0.1:18082` or `AGENTCONTROL_GATEWAY_PORT=18082`).
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
@@ -157,13 +157,13 @@ export GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
 # Option A: Running globally installed binary
 agentcontrol start \
-  --listen 127.0.0.1:8080 \
+  --listen 127.0.0.1:18080 \
   --centralized \
   --log-path ./team-audit.log
 
 # Option B: Running compiled binary from repo root
 ./target/debug/agentcontrol start \
-  --listen 127.0.0.1:8080 \
+  --listen 127.0.0.1:18080 \
   --centralized \
   --log-path ./team-audit.log
 ```
@@ -176,13 +176,13 @@ $env:GATEWAY_SECRET="local-dev-shared-secret-change-me"
 
 # Option A: Running globally installed binary
 agentcontrol.exe start `
-  --listen 127.0.0.1:8080 `
+  --listen 127.0.0.1:18080 `
   --centralized `
   --log-path .\team-audit.log
 
 # Option B: Running compiled binary from repo root
 .\target\debug\agentcontrol.exe start `
-  --listen 127.0.0.1:8080 `
+  --listen 127.0.0.1:18080 `
   --centralized `
   --log-path .\team-audit.log
 ```
@@ -194,10 +194,10 @@ set POLICY_READ_SECRET=local-dev-policy-read-secret
 set GATEWAY_SECRET=local-dev-shared-secret-change-me
 
 :: Option A: Running globally installed binary
-agentcontrol.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
+agentcontrol.exe start --listen 127.0.0.1:18080 --centralized --log-path .\team-audit.log
 
 :: Option B: Running compiled binary from repo root
-.\target\debug\agentcontrol.exe start --listen 127.0.0.1:8080 --centralized --log-path .\team-audit.log
+.\target\debug\agentcontrol.exe start --listen 127.0.0.1:18080 --centralized --log-path .\team-audit.log
 ```
 
 ---
@@ -244,7 +244,7 @@ In **Terminal 2**, send an MCP `tools/call` JSON-RPC request to trigger gateway 
 
 #### Linux / macOS (Bash / Zsh):
 ```bash
-curl -X POST http://127.0.0.1:8080 \
+curl -X POST http://127.0.0.1:18080 \
      -H "Authorization: Bearer test-agent-session-1" \
      -H "Content-Type: application/json" \
      -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_file","arguments":{"path":"/tmp/test.txt"}}}'
@@ -252,7 +252,7 @@ curl -X POST http://127.0.0.1:8080 \
 
 #### Windows (PowerShell):
 ```powershell
-curl.exe -X POST http://127.0.0.1:8080 `
+curl.exe -X POST http://127.0.0.1:18080 `
          -H "Authorization: Bearer test-agent-session-1" `
          -H "Content-Type: application/json" `
          -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}'
@@ -260,13 +260,13 @@ curl.exe -X POST http://127.0.0.1:8080 `
 
 #### Windows (Command Prompt - CMD):
 ```cmd
-curl.exe -X POST http://127.0.0.1:8080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
+curl.exe -X POST http://127.0.0.1:18080 -H "Authorization: Bearer test-agent-session-1" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/test.txt\"}}}"
 ```
 
 > [!NOTE]
 > **Expected Behavior:** If no upstream MCP server is running, the gateway will evaluate policy, write the audit log entry, and return an upstream network error. The exact URL in the error differs by deployment mode:
 > - **Native gateway** (running on the host): `Upstream error: Network error: error sending request for url (http://127.0.0.1:3000/)`
-> - **Containerised gateway** (Docker Compose `gateway` service): the upstream URL uses the Docker DNS name configured by `AGENTWALL_LISTEN`, e.g. `http://0.0.0.0:8080/`
+> - **Containerised gateway** (Docker Compose `gateway` service): the upstream URL uses the Docker DNS name configured by `AGENTCONTROL_LISTEN`, e.g. `http://0.0.0.0:18080/`
 >
 > Either way, the upstream error is **expected** for synthetic testing and confirms the gateway intercepted, evaluated, and logged the request.
 >

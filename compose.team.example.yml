@@ -50,7 +50,7 @@ services:
       SAAS_OPERATOR_PASSWORD: ${SAAS_OPERATOR_PASSWORD:?SAAS_OPERATOR_PASSWORD is required in .env}
       INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"
     ports:
-      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:${CONTROL_PLANE_API_PORT:-18081}:8081"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz || exit 1"]
       interval: 10s
@@ -73,7 +73,7 @@ services:
       AGENTCONTROL_API_URL: http://control-plane-api:8081
       AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
     ports:
-      - "3000:80"
+      - "${WEB_CONSOLE_PORT:-18300}:80"
     networks:
       - vexa-team-net
 
@@ -88,7 +88,7 @@ services:
     depends_on:
       - control-plane-api
     environment:
-      AGENTCONTROL_LISTEN: 0.0.0.0:8080
+      AGENTCONTROL_LISTEN: 0.0.0.0:18080
       AGENTCONTROL_CENTRALIZED: "true"
       AGENTCONTROL_ADMIN_TOKEN: ${GATEWAY_SECRET}
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
@@ -98,7 +98,7 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET}
       POLICY_READ_SECRET: ${POLICY_READ_SECRET}
     ports:
-      - "8080:8080"
+      - "${AGENTCONTROL_GATEWAY_PORT:-18080}:18080"
     networks:
       - vexa-team-net
 

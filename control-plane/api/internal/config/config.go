@@ -109,8 +109,14 @@ func isPlaceholder(val string) bool {
 }
 
 func Load() (*Config, error) {
-	port := 8400
-	if v := os.Getenv("PORT"); v != "" {
+	port := 18081
+	if v := os.Getenv("CONTROL_PLANE_API_PORT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CONTROL_PLANE_API_PORT: %w", err)
+		}
+		port = p
+	} else if v := os.Getenv("PORT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid PORT: %w", err)
@@ -134,6 +140,15 @@ func Load() (*Config, error) {
 	gatewaySecret := os.Getenv("GATEWAY_SECRET")
 	policyReadSecret := os.Getenv("POLICY_READ_SECRET")
 	gatewayURL := os.Getenv("GATEWAY_URL")
+	if gatewayURL == "" {
+		gatewayURL = os.Getenv("AGENTCONTROL_GATEWAY_URL")
+	}
+	if gatewayURL == "" {
+		gatewayURL = os.Getenv("AGENTWALL_GATEWAY_URL")
+	}
+	if gatewayURL == "" {
+		gatewayURL = "http://127.0.0.1:18080"
+	}
 	licenseKey := os.Getenv("AGENTCONTROL_HUB_LICENSE_KEY")
 	ingressAuthSecret := os.Getenv("INGRESS_AUTH_SECRET")
 	if ingressAuthSecret == "" {

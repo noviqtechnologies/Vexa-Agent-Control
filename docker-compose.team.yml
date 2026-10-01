@@ -68,7 +68,7 @@ services:
       INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"
       LEGACY_SINGLE_TENANT_MODE: "${LEGACY_SINGLE_TENANT_MODE:-true}"
     ports:
-      - "127.0.0.1:8085:8081"
+      - "127.0.0.1:${CONTROL_PLANE_API_PORT:-18081}:8081"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz || exit 1"]
       interval: 10s
@@ -92,7 +92,7 @@ services:
       AGENTCONTROL_API_URL: http://control-plane-api:8081
       AGENTCONTROL_API_UPSTREAM: control-plane-api:8081
     ports:
-      - "127.0.0.1:3000:80"
+      - "127.0.0.1:${WEB_CONSOLE_PORT:-18300}:80"
     networks:
       - vexa-team-net
 
@@ -108,7 +108,7 @@ services:
     depends_on:
       - control-plane-api
     environment:
-      AGENTCONTROL_LISTEN: 0.0.0.0:8080
+      AGENTCONTROL_LISTEN: 0.0.0.0:18080
       AGENTCONTROL_CENTRALIZED: "true"
       AGENTCONTROL_ADMIN_TOKEN: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
       AGENTCONTROL_LOG_PATH: /var/log/agentcontrol/audit.log
@@ -118,7 +118,7 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET:-local-dev-gateway-secret-1234}
       POLICY_READ_SECRET: ${POLICY_READ_SECRET:-local-dev-policy-read-secret}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${AGENTCONTROL_GATEWAY_PORT:-18080}:18080"
     networks:
       - vexa-team-net
 

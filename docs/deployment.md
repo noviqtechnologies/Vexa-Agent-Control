@@ -163,24 +163,24 @@ Runs the standalone security gateway proxy for MCP tools and LLM traffic on `htt
 $token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
-  -p 8080:8080 `
+  -p 127.0.0.1:18080:18080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 **Windows (Command Prompt - CMD):**
 ```cmd
 docker run -d ^
   --name agentcontrol ^
-  -p 8080:8080 ^
+  -p 127.0.0.1:18080:18080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 **macOS / Linux / WSL (Bash / Zsh):**
@@ -188,12 +188,12 @@ docker run -d ^
 ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run -d \
   --name agentcontrol \
-  -p 8080:8080 \
+  -p 127.0.0.1:18080:18080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 #### Verifying the Headless Gateway
@@ -202,12 +202,12 @@ docker run -d \
    ```bash
    docker ps --filter "name=agentcontrol"
    ```
-   *(Status should show `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
+   *(Status should show `Up ... (healthy)` on `127.0.0.1:18080->18080/tcp`)*
 
 2. **Test Admin API:**
-   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $token" http://localhost:8080/`
-   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/`
-   - **Windows (CMD):** `curl -s -H "Authorization: Bearer %AGENTCONTROL_ADMIN_TOKEN%" http://localhost:8080/`
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $token" http://127.0.0.1:18080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:18080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer %AGENTCONTROL_ADMIN_TOKEN%" http://127.0.0.1:18080/`
 
 3. **Stream Live Logs:**
    ```bash

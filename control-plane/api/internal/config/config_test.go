@@ -15,7 +15,7 @@ func setEnv(t *testing.T, env map[string]string) {
 func clearDashboardEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		"DATABASE_URL", "PORT", "DASHBOARD_PORT", "GATEWAY_SECRET",
+		"DATABASE_URL", "PORT", "DASHBOARD_PORT", "CONTROL_PLANE_API_PORT", "GATEWAY_SECRET",
 		"OIDC_ISSUER", "OIDC_CLIENT_ID", "DEV_MODE", "ALLOW_DEV_MODE",
 		"POLICY_READ_SECRET", "GATEWAY_URL", "PROVIDER_KEY_ENCRYPTION_SECRET", "AGENTCONTROL_HUB_LICENSE_KEY",
 		"INGRESS_AUTH_SECRET", "VPC_INGRESS_AUTH_SECRET", "DIRECT_TLS_ENABLED",
@@ -45,8 +45,8 @@ func TestLoad_Production_AllRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Port != 8400 {
-		t.Errorf("Port = %d, want 8400", cfg.Port)
+	if cfg.Port != 18081 {
+		t.Errorf("Port = %d, want 18081", cfg.Port)
 	}
 	if cfg.DevMode {
 		t.Error("DevMode should be false in production")
@@ -171,6 +171,21 @@ func TestLoad_CustomPort(t *testing.T) {
 	}
 	if cfg.Port != 9000 {
 		t.Errorf("Port = %d, want 9000", cfg.Port)
+	}
+}
+
+func TestLoad_ControlPlaneAPIPort(t *testing.T) {
+	clearDashboardEnv(t)
+	env := productionEnv()
+	env["CONTROL_PLANE_API_PORT"] = "18081"
+	setEnv(t, env)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Port != 18081 {
+		t.Errorf("Port = %d, want 18081", cfg.Port)
 	}
 }
 

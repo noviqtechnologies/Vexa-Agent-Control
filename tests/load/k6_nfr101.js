@@ -6,14 +6,14 @@
  *   ALLOW_WILDCARD_IDENTITY=false for realistic auth (optional: set OIDC_TOKEN)
  *
  * Run:
- *   export OIDC_TOKEN=$(curl -s "http://localhost:8081/token?sub=load&aud=agentwall" | jq -r .access_token)
+ *   export OIDC_TOKEN=$(curl -s "http://localhost:18081/token?sub=load&aud=agentwall" | jq -r .access_token)
  *   k6 run tests/load/k6_nfr101.js
  */
 import http from 'k6/http';
 import { check } from 'k6';
 
 const TOKEN = __ENV.OIDC_TOKEN || '';
-const URL = __ENV.GATEWAY_URL || 'http://localhost:8080/';
+const URL = __ENV.GATEWAY_URL || 'http://localhost:18080/';
 const TOOL = __ENV.TOOL_NAME || 'safe_tool';
 
 export const options = {

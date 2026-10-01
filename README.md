@@ -246,9 +246,9 @@ docker compose -f docker-compose.team.yml up -d
 
 | Service | Endpoint | Description |
 |---|---|---|
-| **Web Console UI** | `http://localhost:3000` | Guardrail presets, model gateways, cost & budgets, audit logs |
-| **Control Plane API** | `http://localhost:8085` | Policy distribution, enrollment, audit checkpoint API |
-| **Security Gateway** | `http://localhost:8080` | High-throughput Rust LLM and MCP proxy |
+| **Web Console UI** | `http://localhost:18300` | Guardrail presets, model gateways, cost & budgets, audit logs |
+| **Control Plane API** | `http://localhost:18081` | Policy distribution, enrollment, audit checkpoint API |
+| **Security Gateway** | `http://localhost:18080` | High-throughput Rust LLM and MCP proxy |
 
 ---
 

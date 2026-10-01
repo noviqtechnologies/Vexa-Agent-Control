@@ -628,7 +628,7 @@ Matching Account Found?
 Validate IdP connectivity, endpoint discovery, and JWKS reachability:
 
 ```bash
-curl -X POST http://localhost:8085/api/v1/auth/providers/{provider_id}/test \
+curl -X POST http://localhost:18081/api/v1/auth/providers/{provider_id}/test \
   -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>"
 ```
 
@@ -662,11 +662,11 @@ agentcontrol-admin break-glass --org-id 00000000-0000-0000-0000-000000000001 --e
   Organization ID: 00000000-0000-0000-0000-000000000001
   Target Admin:    admin@agentcontrol.local
   Recovery Token:  bg_dGVzdF9icmVha19nbGFzc190b2tlbg
-  Redemption URL:  http://127.0.0.1:8081/break-glass
+  Redemption URL:  http://127.0.0.1:18081/break-glass
   Validity:        15 minutes (Single-Use Only)
 ────────────────────────────────────────────────────────────────────────
 ⚠ WARNING: Redeeming this token will grant emergency owner access.
 ```
 
-Redeem the token at `http://localhost:8081/break-glass` or via `POST /api/v1/auth/break-glass`. Upon redemption, all prior tenant sessions are invalidated and an emergency owner session is established.
+Redeem the token at `http://localhost:18081/break-glass` or via `POST /api/v1/auth/break-glass`. Upon redemption, all prior tenant sessions are invalidated and an emergency owner session is established.
 

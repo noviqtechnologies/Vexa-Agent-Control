@@ -75,7 +75,7 @@ def send_tool_call(gateway_url, jwt_token, tool_name, params, request_id=1):
         return 0, {"error": str(e)}
 
 def main():
-    gateway_url = os.environ.get("AGENTWALL_GATEWAY_URL", "http://127.0.0.1:8080")
+    gateway_url = os.environ.get("AGENTCONTROL_GATEWAY_URL", os.environ.get("AGENTWALL_GATEWAY_URL", "http://127.0.0.1:18080"))
     group_name = os.environ.get("AGENT_GROUP", "engineering")
     agent_id = os.environ.get("AGENT_ID", "agent-engineering-01")
     

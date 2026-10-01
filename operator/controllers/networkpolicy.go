@@ -19,7 +19,7 @@ import (
 // scale gateway replicas without re-writing the policy.
 const (
 	// DefaultMCPPort is the TCP port the gateway listens on.
-	DefaultMCPPort int32 = 8080
+	DefaultMCPPort int32 = 18080
 
 	// DNSPort is required for cluster DNS resolution. Without this, agents
 	// cannot even resolve the gateway's Service DNS name.

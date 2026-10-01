@@ -60,9 +60,17 @@ pub async fn run_server(
                         crate::logging::Level::Info,
                         "proxy_port_fallback",
                         serde_json::json!({
-                            "message": format!("Default port 18080 busy; bound dynamic fallback port {}", fallback_port),
-                            "port": fallback_port
+                            "message": format!("Preferred gateway port {} busy; selected bounded fallback port {}", listen_addr.port(), fallback_port),
+                            "selected_port": fallback_port,
+                            "preferred_port": listen_addr.port(),
+                            "override_guidance": "Override with --listen <ADDR> or AGENTCONTROL_GATEWAY_PORT=<PORT>"
                         }),
+                    );
+                    eprintln!(
+                        "ℹ Preferred gateway port {} busy; bound dynamic fallback port {}. Override with --listen <ADDR> or AGENTCONTROL_GATEWAY_PORT={}",
+                        listen_addr.port(),
+                        fallback_port,
+                        fallback_port
                     );
                     break;
                 }

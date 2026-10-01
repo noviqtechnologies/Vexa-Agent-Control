@@ -89,7 +89,7 @@ Gateway                                               Control Hub API
   export POLICY_READ_SECRET="your-policy-read-secret"
   export GATEWAY_SECRET="your-gateway-secret"
 
-  agentcontrol start --listen 0.0.0.0:8080 --centralized
+  agentcontrol start --listen 0.0.0.0:18080 --centralized
   ```
 
 * **Windows (PowerShell):**
@@ -98,7 +98,7 @@ Gateway                                               Control Hub API
   $env:POLICY_READ_SECRET="your-policy-read-secret"
   $env:GATEWAY_SECRET="your-gateway-secret"
 
-  agentcontrol.exe start --listen 0.0.0.0:8080 --centralized
+  agentcontrol.exe start --listen 0.0.0.0:18080 --centralized
   ```
 
 ---
@@ -123,7 +123,7 @@ If IdP configuration errors lock administrators out of the Control Hub, generate
 ```bash
 agentcontrol-admin break-glass --email admin@agentcontrol.local
 ```
-Redeem the token at `http://localhost:8081/break-glass` or via `POST /api/v1/auth/break-glass` to instantly regain Owner access and invalidate compromised sessions.
+Redeem the token at `http://localhost:18081/break-glass` or via `POST /api/v1/auth/break-glass` to instantly regain Owner access and invalidate compromised sessions.
 
 For complete identity architecture and claim mappings, see → [OIDC Identity Binding Guide](oidc_identity_binding.md).
 

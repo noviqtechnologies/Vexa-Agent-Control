@@ -142,24 +142,24 @@ Best for lightweight background proxying (~7MB RAM) of IDE MCP tools and LLM tra
 $token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
-  -p 8080:8080 `
+  -p 127.0.0.1:18080:18080 `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
 docker run -d ^
   --name agentcontrol ^
-  -p 8080:8080 ^
+  -p 127.0.0.1:18080:18080 ^
   -v agentcontrol-data:/app/data ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 #### macOS / Linux / WSL (Bash / Zsh):
@@ -167,12 +167,12 @@ docker run -d ^
 ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run -d \
   --name agentcontrol \
-  -p 8080:8080 \
+  -p 127.0.0.1:18080:18080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 #### Verifying & Interacting with the Headless Gateway
@@ -181,12 +181,12 @@ docker run -d \
    ```bash
    docker ps --filter "name=agentcontrol"
    ```
-   *(Expected status: `Up ... (healthy)` on `0.0.0.0:8080->8080/tcp`)*
+   *(Expected status: `Up ... (healthy)` on `127.0.0.1:18080->18080/tcp`)*
 
 2. **Test Admin API:**
-   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $token" http://localhost:8080/`
-   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/`
-   - **Windows (CMD):** `curl -s -H "Authorization: Bearer %AGENTCONTROL_ADMIN_TOKEN%" http://localhost:8080/`
+   - **Windows (PowerShell):** `curl.exe -s -H "Authorization: Bearer $token" http://127.0.0.1:18080/`
+   - **macOS / Linux / WSL:** `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:18080/`
+   - **Windows (CMD):** `curl -s -H "Authorization: Bearer %AGENTCONTROL_ADMIN_TOKEN%" http://127.0.0.1:18080/`
 
 3. **Stream Live Logs:**
    ```bash
@@ -216,12 +216,12 @@ Mount your own `agentcontrol-policy.yaml` into the container:
 ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run -d \
   --name agentcontrol \
-  -p 8080:8080 \
+  -p 127.0.0.1:18080:18080 \
   -v "$(pwd)/agentcontrol-policy.yaml:/app/policy.yaml:ro" \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
-  start --policy /app/policy.yaml --listen 0.0.0.0:8080
+  start --policy /app/policy.yaml --listen 0.0.0.0:18080
 ```
 
 #### Windows (PowerShell):
@@ -229,24 +229,24 @@ docker run -d \
 $token = if ($env:AGENTCONTROL_ADMIN_TOKEN) { $env:AGENTCONTROL_ADMIN_TOKEN } else { [System.Guid]::NewGuid().ToString("N") + [System.Guid]::NewGuid().ToString("N") }
 docker run -d `
   --name agentcontrol `
-  -p 8080:8080 `
+  -p 127.0.0.1:18080:18080 `
   -v "${PWD}/agentcontrol-policy.yaml:/app/policy.yaml:ro" `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
-  start --policy /app/policy.yaml --listen 0.0.0.0:8080
+  start --policy /app/policy.yaml --listen 0.0.0.0:18080
 ```
 
 #### Windows (Command Prompt - CMD):
 ```cmd
 docker run -d ^
   --name agentcontrol ^
-  -p 8080:8080 ^
+  -p 127.0.0.1:18080:18080 ^
   -v "%cd%/agentcontrol-policy.yaml:/app/policy.yaml:ro" ^
   -v agentcontrol-logs:/var/log/agentcontrol ^
   -e AGENTCONTROL_ADMIN_TOKEN="%AGENTCONTROL_ADMIN_TOKEN%" ^
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 ^
-  start --policy /app/policy.yaml --listen 0.0.0.0:8080
+  start --policy /app/policy.yaml --listen 0.0.0.0:18080
 ```
 
 ---
@@ -305,31 +305,37 @@ Key environment variables in `.env`:
 
 ---
 
-### Option D: Using Custom Ports
+### Option D: Using Custom Ports & Configurable Defaults
 
-If default ports (`8080`, `3000`, or `8081`) conflict with existing services on your host:
+`18080` is the project-standard default for the local Agent Control gateway. If you need to override any defaults (`18080`, `18300`, or `18081`) to avoid conflicts with existing services on your host, configure environment variables:
+
+```bash
+AGENTCONTROL_GATEWAY_PORT=18080
+CONTROL_PLANE_API_PORT=18081
+WEB_CONSOLE_PORT=18300
+```
 
 #### macOS / Linux / WSL (Bash / Zsh):
 ```bash
-# Expose Gateway on host port 9090
+# Expose Gateway on host port 19090
 docker run -d \
   --name agentcontrol \
-  -p 9090:8080 \
-  -e AGENTCONTROL_LISTEN=0.0.0.0:8080 \
+  -p 127.0.0.1:19090:18080 \
+  -e AGENTCONTROL_LISTEN=0.0.0.0:18080 \
   -v agentcontrol-logs:/var/log/agentcontrol \
   ghcr.io/noviqtechnologies/agentcontrol:latest \
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 #### Windows (PowerShell):
 ```powershell
 docker run -d `
   --name agentcontrol `
-  -p 9090:8080 `
-  -e AGENTCONTROL_LISTEN="0.0.0.0:8080" `
+  -p 127.0.0.1:19090:18080 `
+  -e AGENTCONTROL_LISTEN="0.0.0.0:18080" `
   -v agentcontrol-logs:/var/log/agentcontrol `
   ghcr.io/noviqtechnologies/agentcontrol:latest `
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 ---
@@ -338,11 +344,12 @@ docker run -d `
 
 Once the containers are running:
 
-| Component | URL | Default Credentials | Description |
-|---|---|---|---|
-| **Web Console UI** | [http://localhost:3000](http://localhost:3000) | Configured in `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
-| **Control Plane API** | [http://localhost:8081/healthz](http://localhost:8081/healthz) | Bearer Token (`GATEWAY_SECRET`) | REST API for policies, telemetry, and device enrollment |
-| **Security Gateway** | [http://localhost:8080](http://localhost:8080) | N/A (Transparent Proxy) | Intercepts MCP tool calls, OpenAI/Anthropic/Gemini LLM traffic (registered as `vexa-demo-gateway`) |
+| Component | Default Port / URL | Config Variable | Default Credentials | Description |
+|---|---|---|---|---|
+| **Web Console UI** | [http://localhost:18300](http://localhost:18300) | `WEB_CONSOLE_PORT` (default: `18300`) | Configured in `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | Dashboard, Policy Editor, Run Explorer, Spend Ledgers, Device Governance |
+| **Control Plane API** | [http://localhost:18081/healthz](http://localhost:18081/healthz) | `CONTROL_PLANE_API_PORT` (default: `18081`) | Bearer Token (`GATEWAY_SECRET`) | REST API for policies, telemetry, and device enrollment |
+| **Security Gateway** | [http://127.0.0.1:18080](http://127.0.0.1:18080) | `AGENTCONTROL_GATEWAY_PORT` (default: `18080`) | N/A (Transparent Proxy) | Intercepts MCP tool calls, OpenAI/Anthropic/Gemini LLM traffic (registered as `vexa-demo-gateway`) |
+| **TLS Gateway (Reserved)** | `https://127.0.0.1:18443` | `AGENTCONTROL_TLS_PORT` (default: `18443`) | TLS Certificate | Reserved for direct HTTPS mTLS ingress |
 
 > **Note on Device Governance:** The bundled evaluation gateway container automatically registers itself with the Control Plane as `vexa-demo-gateway` to provide immediate telemetry and test proxying out of the box. To enroll your local IDEs (VS Code, Cursor, Windsurf) on your physical computer, click **`+ Generate Enrollment Token`** in the Device Governance console.
 

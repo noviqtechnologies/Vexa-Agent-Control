@@ -54,12 +54,12 @@ If you have **Docker Desktop for Mac** installed and prefer not to install binar
 ```bash
 docker run -d \
   --name agentcontrol \
-  -p 8080:8080 \
+  -p 127.0.0.1:18080:18080 \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" \
   ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
-  start --listen 0.0.0.0:8080
+  start --listen 0.0.0.0:18080
 ```
 
 ### Full-Stack Control Hub (Compose)
