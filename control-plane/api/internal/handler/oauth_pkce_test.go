@@ -301,4 +301,3 @@ func TestToken_RedirectURIMismatchRejected(t *testing.T) {
 		t.Fatalf("expected status 400 Bad Request on redirect_uri mismatch, got %d", resp.StatusCode)
 	}
 }
-

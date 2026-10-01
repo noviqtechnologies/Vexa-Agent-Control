@@ -10,15 +10,15 @@ import (
 
 // SpendReconciliationRow represents a single line in a provider reconciliation export
 type SpendReconciliationRow struct {
-	Date                 string  `json:"date"`
-	Provider             string  `json:"provider"`
-	Model                string  `json:"model"`
-	TotalRequests        int64   `json:"total_requests"`
-	PromptTokens         int64   `json:"prompt_tokens"`
-	CompletionTokens     int64   `json:"completion_tokens"`
-	TotalTokens          int64   `json:"total_tokens"`
+	Date                  string  `json:"date"`
+	Provider              string  `json:"provider"`
+	Model                 string  `json:"model"`
+	TotalRequests         int64   `json:"total_requests"`
+	PromptTokens          int64   `json:"prompt_tokens"`
+	CompletionTokens      int64   `json:"completion_tokens"`
+	TotalTokens           int64   `json:"total_tokens"`
 	SettledCostMicrocents int64   `json:"settled_cost_microcents"`
-	SettledCostUSD       float64 `json:"settled_cost_usd"`
+	SettledCostUSD        float64 `json:"settled_cost_usd"`
 }
 
 // GetReconciliationReport queries the database or memory for aggregated provider usage
