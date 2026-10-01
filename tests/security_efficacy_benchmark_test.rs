@@ -29,7 +29,10 @@ struct Corpus {
 #[test]
 fn test_security_efficacy_and_latency_benchmark() {
     let corpus_path = Path::new("tests/corpus/injection_test_corpus.json");
-    assert!(corpus_path.exists(), "Corpus file must exist at tests/corpus/injection_test_corpus.json");
+    assert!(
+        corpus_path.exists(),
+        "Corpus file must exist at tests/corpus/injection_test_corpus.json"
+    );
 
     let data = fs::read_to_string(corpus_path).expect("Failed to read corpus file");
     let corpus: Corpus = serde_json::from_str(&data).expect("Invalid corpus JSON format");
@@ -49,9 +52,11 @@ fn test_security_efficacy_and_latency_benchmark() {
 
         // 1. Scan for injection patterns
         let response_val = if tc.payload.starts_with('{') {
-            serde_json::from_str(&tc.payload).unwrap_or_else(|_| json!({
-                "content": [{"type": "text", "text": tc.payload}]
-            }))
+            serde_json::from_str(&tc.payload).unwrap_or_else(|_| {
+                json!({
+                    "content": [{"type": "text", "text": tc.payload}]
+                })
+            })
         } else {
             json!({
                 "content": [{"type": "text", "text": tc.payload}]
@@ -64,8 +69,12 @@ fn test_security_efficacy_and_latency_benchmark() {
             "test_tool"
         };
 
-        let injection_result = injection_scanner.scan_response(&response_val, tool_name, "bench-session", true);
-        let injection_blocked = matches!(injection_result, ScanResult::Block { .. } | ScanResult::Warn { .. });
+        let injection_result =
+            injection_scanner.scan_response(&response_val, tool_name, "bench-session", true);
+        let injection_blocked = matches!(
+            injection_result,
+            ScanResult::Block { .. } | ScanResult::Warn { .. }
+        );
 
         // 2. Scan for DLP secrets
         let dlp_findings = dlp_scanner.scan_content(&tc.payload);
@@ -81,12 +90,18 @@ fn test_security_efficacy_and_latency_benchmark() {
             true_positives += 1;
         } else if is_attack && !is_detected {
             false_negatives += 1;
-            println!("[MISSED ATTACK] ID: {} Category: {} Payload: {}", tc.id, tc.category, tc.payload);
+            println!(
+                "[MISSED ATTACK] ID: {} Category: {} Payload: {}",
+                tc.id, tc.category, tc.payload
+            );
         } else if !is_attack && !is_detected {
             true_negatives += 1;
         } else if !is_attack && is_detected {
             false_positives += 1;
-            println!("[FALSE POSITIVE] ID: {} Category: {} Payload: {}", tc.id, tc.category, tc.payload);
+            println!(
+                "[FALSE POSITIVE] ID: {} Category: {} Payload: {}",
+                tc.id, tc.category, tc.payload
+            );
         }
     }
 
@@ -119,7 +134,10 @@ fn test_security_efficacy_and_latency_benchmark() {
     };
 
     println!("\n========================================================");
-    println!("  VEXA AGENT CONTROL — SECURITY BENCHMARK RESULTS (v{})", corpus.version);
+    println!(
+        "  VEXA AGENT CONTROL — SECURITY BENCHMARK RESULTS (v{})",
+        corpus.version
+    );
     println!("========================================================");
     println!("  Total Cases Evaluated : {}", n);
     println!("  True Positives (TP)   : {}", true_positives);
@@ -131,14 +149,38 @@ fn test_security_efficacy_and_latency_benchmark() {
     println!("  Precision Rate        : {:.2}%", precision * 100.0);
     println!("  False Positive Rate   : {:.2}%", fpr * 100.0);
     println!("--------------------------------------------------------");
-    println!("  Latency p50           : {} µs ({:.3} ms)", p50, (p50 as f64) / 1000.0);
-    println!("  Latency p95           : {} µs ({:.3} ms)", p95, (p95 as f64) / 1000.0);
-    println!("  Latency p99           : {} µs ({:.3} ms)", p99, (p99 as f64) / 1000.0);
+    println!(
+        "  Latency p50           : {} µs ({:.3} ms)",
+        p50,
+        (p50 as f64) / 1000.0
+    );
+    println!(
+        "  Latency p95           : {} µs ({:.3} ms)",
+        p95,
+        (p95 as f64) / 1000.0
+    );
+    println!(
+        "  Latency p99           : {} µs ({:.3} ms)",
+        p99,
+        (p99 as f64) / 1000.0
+    );
     println!("========================================================\n");
 
     // Efficacy Assertions (Baseline Gate A Quality Bars)
-    assert!(recall >= 0.90, "Recall rate ({:.2}%) must meet or exceed 90%", recall * 100.0);
-    assert!(precision >= 0.90, "Precision rate ({:.2}%) must meet or exceed 90%", precision * 100.0);
-    assert!(fpr <= 0.05, "False positive rate ({:.2}%) must be 5% or lower", fpr * 100.0);
+    assert!(
+        recall >= 0.90,
+        "Recall rate ({:.2}%) must meet or exceed 90%",
+        recall * 100.0
+    );
+    assert!(
+        precision >= 0.90,
+        "Precision rate ({:.2}%) must meet or exceed 90%",
+        precision * 100.0
+    );
+    assert!(
+        fpr <= 0.05,
+        "False positive rate ({:.2}%) must be 5% or lower",
+        fpr * 100.0
+    );
     assert!(p99 <= 15000, "p99 latency ({} µs) must be under 15ms", p99);
 }

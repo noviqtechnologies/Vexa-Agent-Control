@@ -132,11 +132,23 @@ mod tests {
         assert_eq!(table.resolve_model_alias("gpt-6-astra"), "gpt-6-astra");
 
         // Provider prefix stripping
-        assert_eq!(table.resolve_model_alias("openai/gpt-6-astra"), "gpt-6-astra");
-        assert_eq!(table.resolve_model_alias("anthropic/claude-sonnet-5"), "claude-sonnet-5");
+        assert_eq!(
+            table.resolve_model_alias("openai/gpt-6-astra"),
+            "gpt-6-astra"
+        );
+        assert_eq!(
+            table.resolve_model_alias("anthropic/claude-sonnet-5"),
+            "claude-sonnet-5"
+        );
 
         // Snapshot suffix stripping
-        assert_eq!(table.resolve_model_alias("gpt-6-astra-2026-08-01"), "gpt-6-astra");
-        assert_eq!(table.resolve_model_alias("openai/gpt-6-astra-20260801"), "gpt-6-astra");
+        assert_eq!(
+            table.resolve_model_alias("gpt-6-astra-2026-08-01"),
+            "gpt-6-astra"
+        );
+        assert_eq!(
+            table.resolve_model_alias("openai/gpt-6-astra-20260801"),
+            "gpt-6-astra"
+        );
     }
 }
