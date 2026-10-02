@@ -479,7 +479,10 @@ pub fn run_clients(json: bool) -> i32 {
     let list = get_all_integrations_summary();
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&list).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&list).unwrap_or_default()
+        );
         return 0;
     }
 
@@ -527,7 +530,9 @@ pub fn run_clients(json: bool) -> i32 {
     }
     println!("{}", "─".repeat(95).dimmed());
     println!("  Run 'agentcontrol connect <target>' to protect a detected client.");
-    println!("  Run 'agentcontrol disconnect <target>' to cleanly restore original configuration.\n");
+    println!(
+        "  Run 'agentcontrol disconnect <target>' to cleanly restore original configuration.\n"
+    );
     0
 }
 

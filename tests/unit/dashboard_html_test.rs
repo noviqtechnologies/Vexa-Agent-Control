@@ -9,43 +9,55 @@ fn test_dashboard_html_is_embedded() {
         "Dashboard HTML should contain doctype"
     );
     assert!(
-        html.contains("panel-inventory"),
-        "Dashboard HTML should contain inventory view"
+        html.contains("panel-overview"),
+        "Dashboard HTML should contain overview view"
     );
     assert!(
-        html.contains("panel-timeline"),
-        "Dashboard HTML should contain timeline view"
+        html.contains("panel-presets"),
+        "Dashboard HTML should contain guardrail presets view"
     );
     assert!(
-        html.contains("panel-params"),
-        "Dashboard HTML should contain params view"
+        html.contains("panel-detections"),
+        "Dashboard HTML should contain detections view"
     );
     assert!(
-        html.contains("panel-risks"),
-        "Dashboard HTML should contain risks view"
+        html.contains("panel-policy-rules"),
+        "Dashboard HTML should contain policy rules view"
     );
     assert!(
-        html.contains("panel-semantic"),
-        "Dashboard HTML should contain semantic view"
+        html.contains("panel-virtual-keys"),
+        "Dashboard HTML should contain virtual keys view"
     );
     assert!(
-        html.contains("panel-policy"),
-        "Dashboard HTML should contain policy view"
+        html.contains("panel-llm-providers"),
+        "Dashboard HTML should contain LLM providers view"
     );
     assert!(
-        html.contains("panel-gateway"),
-        "Dashboard HTML should contain gateway controls view"
+        html.contains("panel-mcp-servers"),
+        "Dashboard HTML should contain MCP servers view"
     );
     assert!(
-        html.contains("panel-self-healing"),
-        "Dashboard HTML should contain self-healing view"
+        html.contains("panel-devices"),
+        "Dashboard HTML should contain connected devices view"
     );
     assert!(
-        html.contains("panel-egress"),
-        "Dashboard HTML should contain egress view"
+        html.contains("panel-cost-budgets"),
+        "Dashboard HTML should contain cost & budgets view"
     );
     assert!(
-        html.contains("panel-prometheus"),
-        "Dashboard HTML should contain prometheus view"
+        html.contains("panel-audit-logs"),
+        "Dashboard HTML should contain audit logs view"
+    );
+    assert!(
+        html.contains("panel-users-hub"),
+        "Dashboard HTML should contain users & roles view"
+    );
+    assert!(
+        html.contains("panel-org-hub"),
+        "Dashboard HTML should contain org & license view"
+    );
+    assert!(
+        html.contains("panel-sso-hub"),
+        "Dashboard HTML should contain SSO view"
     );
 }

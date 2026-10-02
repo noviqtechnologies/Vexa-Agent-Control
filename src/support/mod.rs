@@ -630,11 +630,7 @@ pub async fn run_stop(gateway_addr: &str) -> i32 {
         );
         0
     } else {
-        println!(
-            "{} Local gateway on {} is not running.",
-            "ℹ".cyan(),
-            target
-        );
+        println!("{} Local gateway on {} is not running.", "ℹ".cyan(), target);
         0
     }
 }
@@ -666,7 +662,9 @@ pub async fn run_logs(
                             if let Some(data) = line.strip_prefix("data: ") {
                                 if format == "json" {
                                     println!("{}", data);
-                                } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                                } else if let Ok(val) =
+                                    serde_json::from_str::<serde_json::Value>(data)
+                                {
                                     let ts = val
                                         .get("timestamp_ns")
                                         .and_then(|t| t.as_i64())
@@ -676,7 +674,10 @@ pub async fn run_logs(
                                                 .to_string()
                                         })
                                         .unwrap_or_else(|| "live".to_string());
-                                    let v_str = val.get("verdict").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                    let v_str = val
+                                        .get("verdict")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("unknown");
                                     let v_col = match v_str.to_lowercase().as_str() {
                                         "allow" => "ALLOW".green().bold(),
                                         "deny" => "DENY".red().bold(),
@@ -685,10 +686,24 @@ pub async fn run_logs(
                                         "redact" => "REDACT".purple().bold(),
                                         _ => v_str.dimmed(),
                                     };
-                                    let t_str = val.get("url_path").and_then(|t| t.as_str()).unwrap_or("-");
-                                    let lat = val.get("latency_ms").and_then(|l| l.as_f64()).unwrap_or(0.0);
-                                    let rule = val.get("policy_rule").and_then(|r| r.as_str()).unwrap_or("default");
-                                    println!("{} {:<16} {:<24} {:<8.1}ms {}", ts.dimmed(), v_col, t_str.cyan(), lat, rule);
+                                    let t_str =
+                                        val.get("url_path").and_then(|t| t.as_str()).unwrap_or("-");
+                                    let lat = val
+                                        .get("latency_ms")
+                                        .and_then(|l| l.as_f64())
+                                        .unwrap_or(0.0);
+                                    let rule = val
+                                        .get("policy_rule")
+                                        .and_then(|r| r.as_str())
+                                        .unwrap_or("default");
+                                    println!(
+                                        "{} {:<16} {:<24} {:<8.1}ms {}",
+                                        ts.dimmed(),
+                                        v_col,
+                                        t_str.cyan(),
+                                        lat,
+                                        rule
+                                    );
                                 }
                             }
                         }
@@ -697,7 +712,11 @@ pub async fn run_logs(
                 0
             }
             Err(e) => {
-                eprintln!("{} Failed to connect to live event stream: {}", "✖".red(), e);
+                eprintln!(
+                    "{} Failed to connect to live event stream: {}",
+                    "✖".red(),
+                    e
+                );
                 1
             }
         }
@@ -723,7 +742,10 @@ pub async fn run_logs(
                     .collect();
 
                 if format == "json" {
-                    println!("{}", serde_json::to_string_pretty(&filtered).unwrap_or_default());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&filtered).unwrap_or_default()
+                    );
                 } else {
                     println!("\n{}", "=== Vexa Agent Control Audit Log ===".cyan().bold());
                     println!(
@@ -764,7 +786,11 @@ pub async fn run_logs(
                 0
             }
             Err(e) => {
-                eprintln!("{} Failed to read audit events from events.db: {}", "✖".red(), e);
+                eprintln!(
+                    "{} Failed to read audit events from events.db: {}",
+                    "✖".red(),
+                    e
+                );
                 1
             }
         }
@@ -793,11 +819,7 @@ pub async fn run_hitl_decision(id: &str, decision: &str, session: bool, gateway:
                         if session { "Session" } else { "Once" }
                     );
                 } else {
-                    println!(
-                        "{} Action '{}' has been DENIED.",
-                        "✖".red().bold(),
-                        id
-                    );
+                    println!("{} Action '{}' has been DENIED.", "✖".red().bold(), id);
                 }
                 0
             } else {

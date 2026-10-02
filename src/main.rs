@@ -251,7 +251,11 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 let baseline = agentcontrol::generate_policy::generate_default_baseline_policy();
                 match std::fs::write(&output, baseline) {
                     Ok(_) => {
-                        println!("{} Created default baseline policy at {}", "✔".green().bold(), output);
+                        println!(
+                            "{} Created default baseline policy at {}",
+                            "✔".green().bold(),
+                            output
+                        );
                         0
                     }
                     Err(e) => {
@@ -277,16 +281,29 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                         if resp.status().is_success() {
                             let data: serde_json::Value = resp.json().await.unwrap_or_default();
                             if json {
-                                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                                );
                             } else if let Some(yaml) = data.get("yaml").and_then(|y| y.as_str()) {
-                                println!("\n{}", "=== Vexa Agent Control Active Policy ===".cyan().bold());
+                                println!(
+                                    "\n{}",
+                                    "=== Vexa Agent Control Active Policy ===".cyan().bold()
+                                );
                                 println!("{}", yaml);
                             } else {
-                                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                                );
                             }
                             0
                         } else {
-                            eprintln!("{} Failed to fetch policy: HTTP {}", "✖".red(), resp.status());
+                            eprintln!(
+                                "{} Failed to fetch policy: HTTP {}",
+                                "✖".red(),
+                                resp.status()
+                            );
                             1
                         }
                     }
@@ -294,8 +311,12 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                         let local_path = "agentcontrol-policy.yaml";
                         if let Ok(content) = std::fs::read_to_string(local_path) {
                             if json {
-                                let val: serde_json::Value = serde_yaml::from_str(&content).unwrap_or_default();
-                                println!("{}", serde_json::to_string_pretty(&val).unwrap_or_default());
+                                let val: serde_json::Value =
+                                    serde_yaml::from_str(&content).unwrap_or_default();
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&val).unwrap_or_default()
+                                );
                             } else {
                                 println!("{}", content);
                             }
@@ -332,9 +353,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             tool,
             follow,
             gateway,
-        } => {
-            agentcontrol::support::run_logs(limit, &format, verdict, tool, follow, &gateway).await
-        }
+        } => agentcontrol::support::run_logs(limit, &format, verdict, tool, follow, &gateway).await,
         Commands::Approve {
             id,
             session,

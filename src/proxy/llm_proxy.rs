@@ -151,9 +151,17 @@ pub(crate) fn record_llm_event(
         method: Some("POST".to_string()),
         target_host,
         target_port: Some(443),
-        url_path: Some(format!("{} (model: {})", url_path.split('?').next().unwrap_or(url_path), model)),
+        url_path: Some(format!(
+            "{} (model: {})",
+            url_path.split('?').next().unwrap_or(url_path),
+            model
+        )),
         request_headers: None,
-        request_body: if display_body.is_empty() { None } else { Some(display_body) },
+        request_body: if display_body.is_empty() {
+            None
+        } else {
+            Some(display_body)
+        },
         request_body_hash: None,
         response_status: Some(status_code as i64),
         response_body: resp_body_text.map(|s| s.to_string()),
@@ -163,7 +171,10 @@ pub(crate) fn record_llm_event(
         latency_ms: Some(latency_ms),
         verdict: Some(verdict.to_string()),
         semantic_anomaly_score: None,
-        identity_context: session.identity_sub.clone().or_else(|| crate::identity::device::load_user_email()),
+        identity_context: session
+            .identity_sub
+            .clone()
+            .or_else(|| crate::identity::device::load_user_email()),
         source: Some("production".to_string()),
         policy_rule: Some(policy_rule.to_string()),
     };
@@ -177,7 +188,6 @@ pub(crate) fn record_llm_event(
         db.prune();
     });
 }
-
 
 /// Sanitizes tool/function parameter schemas in a request body so they conform
 /// to OpenAI broker requirements:
@@ -2074,7 +2084,9 @@ pub async fn handle_request(
                         );
                     }
 
-                    let completion_text = brokered_resp.response.get("choices")
+                    let completion_text = brokered_resp
+                        .response
+                        .get("choices")
                         .and_then(|c| c.get(0))
                         .and_then(|m| m.get("message"))
                         .and_then(|t| t.get("content"))
@@ -3549,7 +3561,11 @@ pub async fn handle_request(
                         &model_clone,
                         "/v1/chat/completions",
                         Some(&body_clone),
-                        if accumulated_text.is_empty() { None } else { Some(&accumulated_text) },
+                        if accumulated_text.is_empty() {
+                            None
+                        } else {
+                            Some(&accumulated_text)
+                        },
                         200,
                         "allow",
                         "llm_egress_allowlist",
@@ -3864,7 +3880,11 @@ pub async fn handle_request(
                     &model,
                     &req_path,
                     Some(&body),
-                    if completion_text.is_empty() { None } else { Some(&completion_text) },
+                    if completion_text.is_empty() {
+                        None
+                    } else {
+                        Some(&completion_text)
+                    },
                     status.as_u16(),
                     "allow",
                     "llm_egress_allowlist",
