@@ -16,8 +16,8 @@ This is the primary and recommended installation path for Windows 10 and Windows
 
 | Windows Architecture | Release Asset | Status | Notes |
 |---|---|---|---|
-| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.92-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
-| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.92-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
+| **Windows x86_64 (AMD64 / Intel)** | `agentcontrol-v1.0.93-windows-x86_64.zip` | **Supported (Verified)** | Standard 64-bit Windows PCs |
+| **Windows on ARM (ARM64)** | `agentcontrol-v1.0.93-windows-aarch64.zip` | *Experimental* | Requires specific ARM64 release asset |
 
 ---
 
@@ -60,7 +60,7 @@ docker run -d `
   -v agentcontrol-data:/app/data `
   -v agentcontrol-logs:/var/log/agentcontrol `
   -e AGENTCONTROL_ADMIN_TOKEN="$token" `
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 `
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.93 `
   start --listen 0.0.0.0:18080
 ```
 
@@ -77,9 +77,11 @@ Access the Web Management Console at `http://localhost:3000`. See the complete [
 
 ## Starting Protection
 
-Launch the local security gateway and dashboard on `127.0.0.1:18080`:
+Set your upstream LLM provider key (or run local Ollama/LM Studio) and start the gateway:
 
 ```powershell
+$env:OPENAI_API_KEY = "sk-proj-..."
+# or: $env:ANTHROPIC_API_KEY = "sk-ant-..."
 agentcontrol.exe start
 ```
 

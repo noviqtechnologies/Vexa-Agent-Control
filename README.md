@@ -10,7 +10,7 @@
 <br/>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Release Version](https://img.shields.io/badge/Version-1.0.92-10B981.svg?style=flat-square)](Cargo.toml)
+[![Release Version](https://img.shields.io/badge/Version-1.0.93-10B981.svg?style=flat-square)](Cargo.toml)
 [![Rust Core](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fnoviqtechnologies%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
 [![OWASP ASI](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
@@ -137,11 +137,11 @@
 
 ### Option A: Standalone Developer Workstation (CLI)
 
-Get complete local MCP firewall, secret redaction, and developer dashboard running in under 2 minutes:
+Run a complete local MCP firewall, inline DLP secret redaction, and developer dashboard on your machine in under 2 minutes (100% offline, zero cloud dependency, no account required):
 
-#### 1. Install the Standalone Binary
+#### Step 1: Install the Standalone Binary
 
-**macOS / Linux / WSL:**
+**macOS / Linux / WSL (Bash/Zsh):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -154,33 +154,71 @@ irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/
 agentcontrol.exe --version
 ```
 
-#### 2. Canonical Onboarding & Connection Flow
-```bash
-# 1. Authenticate once via browser PKCE and enroll device machine identity:
-agentcontrol login --hub https://app.vexasec.io
+#### Step 2: Configure Upstream Model Provider & Start Gateway
 
-# 2. Inspect active device posture, signed policy, and supervisor status:
-agentcontrol status
+Set your upstream LLM provider API key (or point to local models like Ollama/LM Studio):
 
-# 3. Run read-only diagnostic checks:
-agentcontrol doctor
-
-# 4. Automatically connect your coding assistant (no manual keys needed):
-agentcontrol connect codex
-agentcontrol connect cursor
-
-# 5. Execute synthetic verification probe:
-agentcontrol verify
+**PowerShell (Windows):**
+```powershell
+$env:OPENAI_API_KEY = "sk-proj-..."
+# or: $env:ANTHROPIC_API_KEY = "sk-ant-..."
+agentcontrol.exe start
 ```
 
-#### 3. Open the Local Dashboard
-Navigate to `http://127.0.0.1:18080` in your browser to view real-time traffic, DLP redacting, and token analytics.
-
-#### 4. Clean Reversal Anytime
+**Bash / Zsh (macOS / Linux):**
 ```bash
-# Non-destructively disconnect assistants and restore pristine settings:
-agentcontrol disconnect codex
+export OPENAI_API_KEY="sk-proj-..."
+# or: export ANTHROPIC_API_KEY="sk-ant-..."
+agentcontrol start
+```
+
+*(Alternatively, add `OPENAI_API_KEY=sk-proj-...` to a `.env` file in your working directory, or run local engines like Ollama on `http://localhost:11434` / LM Studio).*
+
+> [!NOTE]
+> Keep this terminal open or run it as a service. The proxy actively intercepts local tool calls, enforces DLP & prompt security, and serves the developer dashboard on loopback (`http://127.0.0.1:18080`).
+
+#### Step 3: Open the Local Developer Dashboard
+
+Open your web browser and navigate to:
+👉 **[http://127.0.0.1:18080](http://127.0.0.1:18080)**
+
+You will see the **"This Device"** dashboard displaying active listener health, loaded DLP patterns, and an event feed waiting for agent traffic.
+
+#### Step 4: Connect Your AI Coding Assistant
+
+In a **new terminal window**, connect the AI coding assistant(s) installed on your machine:
+
+```bash
+# Connect Cursor IDE:
+agentcontrol connect cursor
+
+# Or connect Claude Desktop / Claude Code:
+agentcontrol connect claude
+
+# Or connect OpenAI Codex / VS Code Continue:
+agentcontrol connect codex
+```
+
+*What happens behind the scenes:* Agent Control writes a safe, cryptographically hashed ownership manifest (`~/.agentcontrol/manifests/<client>.manifest.json`) and points your IDE's MCP and LLM routing to `127.0.0.1:18080`.
+
+#### Step 5: Verify Active Posture & Live Telemetry
+
+1. Check your connected assistants and gateway health:
+```bash
+agentcontrol status     # Inspect target capability vectors & LLM routing
+agentcontrol clients    # List all detected vs protected clients
+agentcontrol doctor     # Run read-only diagnostic checks (returns 0 if healthy)
+```
+2. Now, prompt your AI assistant in Cursor, Claude, or Codex. Watch prompts, token counts, and DLP redactions immediately stream live across your open dashboard at `http://127.0.0.1:18080`!
+
+#### Step 6: Non-Destructive Disconnect & Cleanup
+
+Whenever you wish to return your IDE configurations to their pristine original state:
+
+```bash
+# Cleanly restore original client configurations anytime:
 agentcontrol disconnect cursor
+agentcontrol disconnect claude
 ```
 
 ---
@@ -249,6 +287,13 @@ docker compose -f docker-compose.team.yml up -d
 | **Web Console UI** | `http://localhost:18300` | Guardrail presets, model gateways, cost & budgets, audit logs |
 | **Control Plane API** | `http://localhost:18081` | Policy distribution, enrollment, audit checkpoint API |
 | **Security Gateway** | `http://localhost:18080` | High-throughput Rust LLM and MCP proxy |
+
+#### Developer Workstation Enrollment to Team Hub:
+```bash
+# Authenticate workstation via browser SSO and enroll machine identity with the Hub:
+agentcontrol login --hub http://localhost:18081
+agentcontrol connect cursor
+```
 
 ---
 
@@ -343,36 +388,54 @@ tools:
 
 ---
 
-## 🛠️ CLI Reference & Day-to-Day Operations
+## 🖥️ Unified UI Experience Across Workstation & Fleet
 
-The `agentcontrol` CLI provides complete management over workstation protection, security diagnostics, caching, and spend governance:
+Vexa Agent Control provides a seamless, unified governance interface designed for two distinct scopes:
 
-```bash
-# --- Core Gateway Lifecycle ---
-agentcontrol start                     # Launch local security gateway proxy
-agentcontrol connect cursor            # Connect Cursor IDE with ownership manifest
-agentcontrol disconnect cursor         # Non-destructively disconnect Cursor IDE
-agentcontrol status                    # Display active client connections and capability status
-agentcontrol doctor                    # Run read-only diagnostic health check
-
-# --- Live Verification & Security ---
-agentcontrol verify                    # Run live 4-point security probe (DLP, injection, MCP, auth)
-agentcontrol scan --path policy.yaml   # Scan policy or MCP config for security risks
-
-# --- Semantic Cache & Economics ---
-agentcontrol cache status              # Inspect cache hit ratio, tokens saved, and cost avoidance
-agentcontrol cache clear               # Flush in-memory and vector cache entries
-
-# --- FinOps Spend & Budgets ---
-agentcontrol spend status              # View current spend against active budget cap
-agentcontrol spend set-cap --agent-id dev --cap-cents 500 --period daily
-agentcontrol spend export --format csv --output spend_report.csv
-
-# --- Database & Cryptographic Audit Integrity ---
-agentcontrol backup                    # Create consistent online backup of events.db and audit.jsonl
-agentcontrol verify-db                 # Verify SQLite integrity and HMAC-SHA256 audit chain
-agentcontrol support-bundle            # Generate sanitized diagnostic archive for support
 ```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 VEXA AGENT CONTROL UI                                  │
+├───────────────────────────────────────────┬────────────────────────────────────────────┤
+│ 💻 THIS DEVICE (`127.0.0.1:18080`)        │ 🏢 TEAM HUB (`localhost:18300` / Cloud)    │
+│ • Local Workstation Developer Dashboard   │ • Multi-Workstation Fleet Governance       │
+│ • Zero External Dependencies (Embedded)   │ • Organization SSO & Policy Distribution   │
+│ • Live SSE Traffic & DLP Redactions       │ • Global Spend Caps & Virtual Key Vault    │
+│ • Interactive HITL Approval Prompts       │ • Multi-Agent Audits & SIEM Export         │
+│ • Client Connection & Port Posture        │ • Centralized SOC 2 / ISO 27001 Dossiers   │
+└───────────────────────────────────────────┴────────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ Complete CLI Reference & Operations
+
+The `agentcontrol` CLI conforms strictly to PRD §12, providing deterministic, cross-platform lifecycle commands:
+
+| Command | Arguments / Flags | Description |
+|---|---|---|
+| `agentcontrol start` | `[--listen <addr>] [--centralized]` | Launch local security gateway proxy daemon (`127.0.0.1:18080`) |
+| `agentcontrol stop` | `[--gateway <url>]` | Gracefully shut down active local gateway proxy |
+| `agentcontrol status` | `[--json]` | Display active target capability vectors, MCP routing, and traffic freshness |
+| `agentcontrol clients` | `[--json]` | List detected, connected, and protected IDE clients and MCP runtimes |
+| `agentcontrol connect <target>` | `[--mode local\|cloud-direct] [--key <k>]` | Connect an IDE assistant (Cursor, Claude, Codex, Antigravity, VS Code) |
+| `agentcontrol disconnect <target>` | — | Non-destructively disconnect an assistant and restore original configs |
+| `agentcontrol policy init` | `[-o <file>]` | Generate standard baseline security policy YAML |
+| `agentcontrol policy validate` | `[-p <file>]` | Validate policy YAML schema and security invariants |
+| `agentcontrol policy show` | `[--json]` | Inspect active effective policy rules (secrets automatically redacted) |
+| `agentcontrol policy test` | `[--policy <p>] [--dry-run]` | Test synthetic fixtures or calls against active policy |
+| `agentcontrol doctor` | `[--json]` | Read-only diagnostic health check (0: healthy, 1: critical, 2: degraded) |
+| `agentcontrol logs` | `[-n <limit>] [-f] [--format text\|json]` | Query or live-stream local audit events and security decisions |
+| `agentcontrol approve <id>` | `[--session]` | Approve a pending Human-in-the-Loop (HITL) action request |
+| `agentcontrol deny <id>` | — | Deny a pending Human-in-the-Loop (HITL) action request |
+| `agentcontrol login` | `[--hub <url>]` | Authenticate via browser PKCE and enroll machine identity with Team Hub |
+| `agentcontrol logout` | — | Clear local session tokens and return to standalone offline mode |
+| `agentcontrol unenroll` | `[--force]` | Disconnect device from Control Hub and clear local identity state |
+| `agentcontrol verify` | `[--json]` | Run live 4-point security verification probe against gateway |
+| `agentcontrol scan` | `[--path <file>] [--format text\|json]` | Scan local MCP server configurations and tool definitions for vulnerabilities |
+| `agentcontrol cache` | `status \| clear` | Manage semantic vector cache, tokens saved, and prompt economics |
+| `agentcontrol spend` | `status \| set-cap \| export` | Enforce FinOps microcent rate caps, budgets, and token accounting |
+| `agentcontrol support-bundle` | `[--output-dir <dir>] [-y]` | Generate sanitized, secret-redacted diagnostic bundle (< 10MB) |
+| `agentcontrol verify-db` | — | Verify SQLite integrity and cryptographic HMAC-SHA256 audit log chain |
 
 ---
 

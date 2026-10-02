@@ -213,6 +213,84 @@ pub enum Commands {
     /// Start the local gateway proxy daemon (listening on 127.0.0.1:18080 by default)
     Start(Box<StartArgs>),
 
+    /// Stop the local gateway proxy daemon
+    Stop {
+        /// Gateway listen address or port to stop (default: 127.0.0.1:18080)
+        #[arg(long, default_value = "127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// List detected, connected, and protected IDE clients and MCP runtimes
+    Clients {
+        /// Output results as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+
+    /// Manage, validate, inspect, and test security policies
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommands,
+    },
+
+    /// Display and query local audit events and security decisions
+    Logs {
+        /// Number of recent events to display (default: 50)
+        #[arg(long, short = 'n', default_value_t = 50)]
+        limit: usize,
+
+        /// Output format (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+
+        /// Filter by verdict (allow|deny|warn|ask|redact)
+        #[arg(long)]
+        verdict: Option<String>,
+
+        /// Filter by tool name
+        #[arg(long)]
+        tool: Option<String>,
+
+        /// Stream live events in real-time (follow)
+        #[arg(long, short = 'f', default_value_t = false)]
+        follow: bool,
+
+        /// Gateway URL for live streaming (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// Approve a pending Human-in-the-Loop (HITL) action request by ID
+    Approve {
+        /// Request ID of the pending escalation
+        id: String,
+
+        /// Approve for the entire current session instead of once
+        #[arg(long, default_value_t = false)]
+        session: bool,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// Deny a pending Human-in-the-Loop (HITL) action request by ID
+    Deny {
+        /// Request ID of the pending escalation
+        id: String,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// Remove device enrollment with Control Hub and return to standalone mode
+    Unenroll {
+        /// Force unenrollment without interactive confirmation prompt
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
     /// Automatically wrap an existing agent command with AgentControl [LEGACY: Use 'connect']
     #[command(hide = true)]
     Wrap(Box<WrapArgs>),
@@ -456,6 +534,54 @@ pub enum CacheCommands {
         /// Gateway URL to query (default: http://127.0.0.1:18080)
         #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum PolicyCommands {
+    /// Create a default baseline policy file
+    Init {
+        /// Destination path for generated policy file
+        #[arg(long, short = 'o', default_value = "agentcontrol-policy.yaml")]
+        output: String,
+    },
+    /// Validate a YAML policy file for schema compliance and security invariants
+    Validate {
+        /// Target YAML policy file path
+        #[arg(long, short = 'p', default_value = "agentcontrol-policy.yaml")]
+        policy: String,
+    },
+    /// Display active effective policy configuration (secrets redacted)
+    Show {
+        /// Gateway URL to query (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+
+        /// Output raw JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Test synthetic tool calls or fixtures against a policy
+    Test {
+        /// YAML policy file path
+        #[arg(long)]
+        policy: Option<String>,
+
+        /// Show DENY verdicts but exit 0 (for review without blocking CI)
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// JSON fixture file
+        #[arg(long)]
+        fixture: Option<String>,
+
+        /// Gateway endpoint URL for runtime validation
+        #[arg(long, env = "VEXA_GATEWAY_URL")]
+        gateway: Option<String>,
+
+        /// OIDC Bearer token for authenticating with the gateway
+        #[arg(long, env = "AGENTCONTROL_OIDC_TOKEN")]
+        oidc_token: Option<String>,
     },
 }
 

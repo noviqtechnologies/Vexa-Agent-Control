@@ -20,8 +20,8 @@ To install prerequisites on common distributions:
 
 | Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.92-linux-x86_64.zip` | **Yes (Verified)** |
-| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.92-linux-aarch64.zip` | **Yes (Verified)** |
+| **Linux x86_64 (AMD64)** | `agentcontrol-v1.0.93-linux-x86_64.zip` | **Yes (Verified)** |
+| **Linux aarch64 (ARM64)** | `agentcontrol-v1.0.93-linux-aarch64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -62,7 +62,7 @@ docker run -d \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" \
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.93 \
   start --listen 0.0.0.0:18080
 ```
 

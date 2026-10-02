@@ -237,7 +237,7 @@ agentcontrol doctor
 ```
 
 ```text
-✔ Binary Integrity:          Pass (v1.0.92)
+✔ Binary Integrity:          Pass (v1.0.93)
 ✔ Local Token Health:        Pass (~/.agentcontrol/local.token, 0600)
 ✔ Daemon Reachability:       Pass (127.0.0.1:18080 responsive)
 ✔ Local Database Health:     Pass (~/.agentcontrol/events.db, WAL active)
@@ -396,7 +396,7 @@ Example Output:
 ● Vexa Agent Control Daemon Health Inspection
   OS Platform:        windows (x86_64)
   Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.92) | Up 23s
+  Daemon Process:     PID 25936 (v1.0.93) | Up 23s
   Listener Binding:   127.0.0.1:18080 (20 ms RTT)
   Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
 ```

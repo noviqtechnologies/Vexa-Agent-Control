@@ -16,8 +16,8 @@ This guide covers installing Vexa Agent Control on macOS for both Apple Silicon 
 
 | Apple Architecture | Release Asset Name | Supported |
 |---|---|---|
-| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.92-macos-aarch64.zip` | **Yes (Verified)** |
-| **Intel Core (x86_64)** | `agentcontrol-v1.0.92-macos-x86_64.zip` | **Yes (Verified)** |
+| **Apple Silicon (M1/M2/M3/M4)** | `agentcontrol-v1.0.93-macos-aarch64.zip` | **Yes (Verified)** |
+| **Intel Core (x86_64)** | `agentcontrol-v1.0.93-macos-x86_64.zip` | **Yes (Verified)** |
 
 ---
 
@@ -58,7 +58,7 @@ docker run -d \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" \
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.93 \
   start --listen 0.0.0.0:18080
 ```
 
@@ -81,7 +81,7 @@ If you prefer to inspect and verify the binary manually before running:
    ```bash
    ARCH=$(uname -m)
    if [[ "$ARCH" == "arm64" ]]; then ARCH="aarch64"; fi
-   VERSION="v1.0.92"
+   VERSION="v1.0.93"
 
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/agentcontrol-${VERSION}-macos-${ARCH}.zip"
    curl -LO "https://github.com/noviqtechnologies/Vexa-Agent-Control/releases/download/${VERSION}/checksums.txt"

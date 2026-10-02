@@ -110,6 +110,75 @@ pub(crate) fn extract_completion_text_from_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).to_string()
 }
 
+pub(crate) fn record_llm_event(
+    state: &Arc<ProxyState>,
+    session: &SessionContext,
+    provider: &str,
+    model: &str,
+    url_path: &str,
+    req_body: Option<&Value>,
+    resp_body_text: Option<&str>,
+    status_code: u16,
+    verdict: &str,
+    policy_rule: &str,
+    latency_ms: f64,
+    dlp_findings: Option<String>,
+    injection_findings: Option<String>,
+) {
+    let prompt_preview = req_body.map(extract_prompt_text).unwrap_or_default();
+    let display_body = if !prompt_preview.is_empty() {
+        prompt_preview
+    } else if let Some(b) = req_body {
+        serde_json::to_string(b).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let target_host = match provider {
+        "anthropic" => "api.anthropic.com".to_string(),
+        "openai" => "api.openai.com".to_string(),
+        "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
+        "groq" => "api.groq.com".to_string(),
+        "deepseek" => "api.deepseek.com".to_string(),
+        "ollama" => "localhost:11434".to_string(),
+        _ => "api.openai.com".to_string(),
+    };
+
+    let event = crate::proxy::db::EgressEvent {
+        timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+        session_id: session.session_id.clone(),
+        transport: "llm".to_string(),
+        method: Some("POST".to_string()),
+        target_host,
+        target_port: Some(443),
+        url_path: Some(format!("{} (model: {})", url_path.split('?').next().unwrap_or(url_path), model)),
+        request_headers: None,
+        request_body: if display_body.is_empty() { None } else { Some(display_body) },
+        request_body_hash: None,
+        response_status: Some(status_code as i64),
+        response_body: resp_body_text.map(|s| s.to_string()),
+        response_body_hash: None,
+        dlp_findings,
+        injection_findings,
+        latency_ms: Some(latency_ms),
+        verdict: Some(verdict.to_string()),
+        semantic_anomaly_score: None,
+        identity_context: session.identity_sub.clone().or_else(|| crate::identity::device::load_user_email()),
+        source: Some("production".to_string()),
+        policy_rule: Some(policy_rule.to_string()),
+    };
+
+    if let Ok(json_str) = serde_json::to_string(&event) {
+        let _ = state.event_tx.send(json_str);
+    }
+    let db = state.db_manager.clone();
+    tokio::spawn(async move {
+        let _ = db.insert(event).await;
+        db.prune();
+    });
+}
+
+
 /// Sanitizes tool/function parameter schemas in a request body so they conform
 /// to OpenAI broker requirements:
 /// - Top-level schema MUST have `type: "object"`
@@ -1514,6 +1583,21 @@ pub async fn handle_request(
                 None,
             )
             .await;
+        record_llm_event(
+            &state,
+            &session,
+            &provider_name,
+            &model,
+            &req_path,
+            Some(&body),
+            Some(&format!("Model '{}' is denied by policy rule", model)),
+            403,
+            "deny",
+            "model_policy_denied",
+            start_time.elapsed().as_secs_f64() * 1000.0,
+            None,
+            None,
+        );
         return Ok(make_error_response_with_protocol(
             StatusCode::FORBIDDEN,
             "agentcontrol",
@@ -1554,6 +1638,21 @@ pub async fn handle_request(
                         &session,
                         &model,
                         control_plane_proto::redact::RawDecision::Denied,
+                    );
+                    record_llm_event(
+                        &state,
+                        &session,
+                        &provider_name,
+                        &model,
+                        &req_path,
+                        Some(&body),
+                        Some(&format!("Virtual key policy violation: {}", reason)),
+                        403,
+                        "deny",
+                        "virtual_key_policy_denied",
+                        start_time.elapsed().as_secs_f64() * 1000.0,
+                        None,
+                        None,
                     );
                     return Ok(make_error_response_with_protocol(
                         StatusCode::FORBIDDEN,
@@ -1689,6 +1788,7 @@ pub async fn handle_request(
                     let req_uuid_for_broker_stream = req_uuid.clone();
                     let is_anthropic_for_broker_stream = is_anthropic_protocol;
                     let is_responses_for_broker_stream = is_responses_protocol;
+                    let body_clone_for_broker_stream = body.clone();
                     tokio::spawn(async move {
                         let mut byte_buffer = Vec::<u8>::new();
                         let mut has_emitted_content = false;
@@ -1837,6 +1937,22 @@ pub async fn handle_request(
                                 },
                             );
                         }
+
+                        record_llm_event(
+                            &state_clone_for_broker_stream,
+                            &session_clone_for_broker_stream,
+                            &provider_name_clone_for_broker_stream,
+                            &model_clone_for_broker_stream,
+                            "/v1/chat/completions",
+                            Some(&body_clone_for_broker_stream),
+                            None,
+                            200,
+                            "allow",
+                            "brokered_stream_allow",
+                            start_time_for_broker_stream.elapsed().as_secs_f64() * 1000.0,
+                            None,
+                            None,
+                        );
                     });
 
                     let stream_body =
@@ -1957,6 +2073,29 @@ pub async fn handle_request(
                             },
                         );
                     }
+
+                    let completion_text = brokered_resp.response.get("choices")
+                        .and_then(|c| c.get(0))
+                        .and_then(|m| m.get("message"))
+                        .and_then(|t| t.get("content"))
+                        .and_then(|s| s.as_str());
+
+                    record_llm_event(
+                        &state,
+                        &session,
+                        &provider_name,
+                        &model,
+                        &req_path,
+                        Some(&body),
+                        completion_text,
+                        200,
+                        "allow",
+                        "brokered_llm_allow",
+                        start_time.elapsed().as_secs_f64() * 1000.0,
+                        None,
+                        None,
+                    );
+
                     let resp_bytes =
                         serde_json::to_vec(&brokered_resp.response).unwrap_or_default();
                     let mut builder = Response::builder().status(StatusCode::OK);
@@ -2059,6 +2198,21 @@ pub async fn handle_request(
                 )
             };
 
+            record_llm_event(
+                &state,
+                &session,
+                &provider_name,
+                &model,
+                &req_path,
+                Some(&body),
+                Some(&msg),
+                503,
+                "deny",
+                code,
+                start_time.elapsed().as_secs_f64() * 1000.0,
+                None,
+                None,
+            );
             return Ok(make_error_response_with_protocol(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "agentcontrol",
@@ -2187,8 +2341,24 @@ pub async fn handle_request(
             let cost_saved_str = format!("{:.4}", hit.cost_saved_usd);
             let tokens_saved_str = format!("{}", hit.prompt_tokens + hit.completion_tokens);
 
+            let cached_text = extract_completion_text_from_bytes(&hit.response_body);
+
             if is_streaming {
-                let cached_text = extract_completion_text_from_bytes(&hit.response_body);
+                record_llm_event(
+                    &state,
+                    &session,
+                    &provider_name,
+                    &model,
+                    &req_path,
+                    Some(&body),
+                    Some(&cached_text),
+                    200,
+                    "allow",
+                    "GATEWAY_VECTOR_CACHE_HIT",
+                    start_time.elapsed().as_secs_f64() * 1000.0,
+                    None,
+                    None,
+                );
                 let (tx, rx) = tokio::sync::mpsc::channel::<
                     Result<hyper::body::Frame<Bytes>, hyper::Error>,
                 >(4);
@@ -2271,6 +2441,21 @@ pub async fn handle_request(
                     .body(stream_body)
                     .unwrap());
             } else {
+                record_llm_event(
+                    &state,
+                    &session,
+                    &provider_name,
+                    &model,
+                    &req_path,
+                    Some(&body),
+                    Some(&cached_text),
+                    200,
+                    "allow",
+                    "GATEWAY_VECTOR_CACHE_HIT",
+                    start_time.elapsed().as_secs_f64() * 1000.0,
+                    None,
+                    None,
+                );
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, hit.content_type)
@@ -2787,6 +2972,22 @@ pub async fn handle_request(
                         let _ = release_builder.json(&release_req).send().await;
                     }
                 }
+
+                record_llm_event(
+                    &state,
+                    &session,
+                    &provider_name,
+                    &model,
+                    &req_path,
+                    Some(&body),
+                    Some(&formatted_msg),
+                    status.as_u16(),
+                    "deny",
+                    "upstream_provider_error",
+                    start_time.elapsed().as_secs_f64() * 1000.0,
+                    None,
+                    None,
+                );
 
                 return Ok(make_error_response_with_protocol(
                     status,
@@ -3341,43 +3542,21 @@ pub async fn handle_request(
                         None,
                     ).await;
 
-                    let egress_event = crate::proxy::db::EgressEvent {
-                        timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                        session_id: session_clone.session_id.clone(),
-                        transport: "llm".to_string(),
-                        method: Some("POST".to_string()),
-                        target_host: match provider_name_clone.as_str() {
-                            "anthropic" => "api.anthropic.com".to_string(),
-                            "openai" => "api.openai.com".to_string(),
-                            "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
-                            _ => "api.openai.com".to_string(),
-                        },
-                        target_port: Some(443),
-                        url_path: Some(format!("/v1/chat/completions?model={}", model_clone)),
-                        request_headers: None,
-                        request_body: Some(serde_json::to_string(&body_clone).unwrap_or_default()),
-                        request_body_hash: None,
-                        response_status: Some(200),
-                        response_body: None,
-                        response_body_hash: None,
-                        dlp_findings: None,
-                        injection_findings: None,
-                        latency_ms: Some(start_time_clone.elapsed().as_secs_f64() * 1000.0),
-                        verdict: Some("allow".to_string()),
-                        semantic_anomaly_score: None,
-                        identity_context: session_clone.identity_sub.clone(),
-                        source: Some("production".to_string()),
-                        policy_rule: Some("llm_egress_allowlist".to_string()),
-                    };
-
-                    let db = state_clone.db_manager.clone();
-                    if let Ok(json_str) = serde_json::to_string(&egress_event) {
-                        let _ = state_clone.event_tx.send(json_str);
-                    }
-                    tokio::spawn(async move {
-                        let _ = db.insert(egress_event).await;
-                        db.prune();
-                    });
+                    record_llm_event(
+                        &state_clone,
+                        &session_clone,
+                        &provider_name_clone,
+                        &model_clone,
+                        "/v1/chat/completions",
+                        Some(&body_clone),
+                        if accumulated_text.is_empty() { None } else { Some(&accumulated_text) },
+                        200,
+                        "allow",
+                        "llm_egress_allowlist",
+                        start_time_clone.elapsed().as_secs_f64() * 1000.0,
+                        None,
+                        None,
+                    );
                 });
 
                 let stream_body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(
@@ -3677,43 +3856,22 @@ pub async fn handle_request(
                     )
                     .await;
 
-                let egress_event = crate::proxy::db::EgressEvent {
-                    timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                    session_id: session.session_id.clone(),
-                    transport: "llm".to_string(),
-                    method: Some("POST".to_string()),
-                    target_host: match provider_name.as_str() {
-                        "anthropic" => "api.anthropic.com".to_string(),
-                        "openai" => "api.openai.com".to_string(),
-                        "google" | "gemini" => "generativelanguage.googleapis.com".to_string(),
-                        _ => "api.openai.com".to_string(),
-                    },
-                    target_port: Some(443),
-                    url_path: Some(format!("/v1/chat/completions?model={}", model)),
-                    request_headers: None,
-                    request_body: Some(serde_json::to_string(&body).unwrap_or_default()),
-                    request_body_hash: None,
-                    response_status: Some(status.as_u16() as i64),
-                    response_body: None,
-                    response_body_hash: None,
-                    dlp_findings: None,
-                    injection_findings: None,
-                    latency_ms: Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                    verdict: Some("allow".to_string()),
-                    semantic_anomaly_score: None,
-                    identity_context: session.identity_sub.clone(),
-                    source: Some("production".to_string()),
-                    policy_rule: Some("llm_egress_allowlist".to_string()),
-                };
-
-                let db = state.db_manager.clone();
-                if let Ok(json_str) = serde_json::to_string(&egress_event) {
-                    let _ = state.event_tx.send(json_str);
-                }
-                tokio::spawn(async move {
-                    let _ = db.insert(egress_event).await;
-                    db.prune();
-                });
+                let completion_text = extract_completion_text_from_bytes(&final_resp_bytes);
+                record_llm_event(
+                    &state,
+                    &session,
+                    &provider_name,
+                    &model,
+                    &req_path,
+                    Some(&body),
+                    if completion_text.is_empty() { None } else { Some(&completion_text) },
+                    status.as_u16(),
+                    "allow",
+                    "llm_egress_allowlist",
+                    start_time.elapsed().as_secs_f64() * 1000.0,
+                    None,
+                    None,
+                );
 
                 if cached_tokens_val > 0 {
                     state

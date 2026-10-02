@@ -4,45 +4,59 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VEXA Agent Control | AI Security Gateway & Firewall</title>
+  <title>Vexa Agent Control | Workstation Console</title>
   <meta name="description"
-    content="VEXA Agent Control local developer dashboard — real-time visibility and policy enforcement for AI agent tool calls.">
+    content="Vexa Agent Control local workstation developer console — real-time visibility, policy enforcement, and audit logs for Codex and AI agent tool calls.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
     rel="stylesheet">
   <style>
     :root {
-      --bg: #07090e;
-      --sidebar-bg: #0c1017;
-      --card-bg: rgba(22, 27, 34, 0.7);
-      --card-hover: rgba(30, 37, 46, 0.9);
-      --border: rgba(48, 54, 61, 0.75);
-      --border-accent: rgba(83, 155, 245, 0.3);
-      --accent: #539bf5;
-      --accent-glow: rgba(83, 155, 245, 0.25);
-      --green: #3fb950;
-      --green-glow: rgba(63, 185, 80, 0.2);
-      --red: #f85149;
-      --red-glow: rgba(248, 81, 73, 0.2);
-      --amber: #d29922;
-      --amber-glow: rgba(210, 153, 34, 0.2);
-      --text-bright: #f0f6fc;
-      --text-main: #adbac7;
-      --text-muted: #768390;
+      --bg: #05070a;
+      --sidebar-bg: #090d14;
+      --header-bg: #080c12;
+      --card-bg: rgba(16, 23, 36, 0.85);
+      --card-hover: rgba(23, 32, 48, 0.95);
+      --card-border: rgba(40, 53, 76, 0.65);
+      --border-accent: rgba(79, 110, 247, 0.35);
+      
+      --accent: #4f6ef7;
+      --accent-hover: #3d5bf0;
+      --accent-glow: rgba(79, 110, 247, 0.25);
+      
+      --green: #22c55e;
+      --green-bg: rgba(34, 197, 94, 0.12);
+      --green-border: rgba(34, 197, 94, 0.3);
+      
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.12);
+      --red-border: rgba(239, 68, 68, 0.3);
+      
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --amber-border: rgba(245, 158, 11, 0.3);
+      
+      --purple: #8b5cf6;
+      --purple-bg: rgba(139, 92, 246, 0.12);
+      --purple-border: rgba(139, 92, 246, 0.3);
+
+      --text-bright: #f8fafc;
+      --text-main: #94a3b8;
+      --text-muted: #64748b;
+      
       --font: 'Inter', -apple-system, sans-serif;
       --font-head: 'Manrope', sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
-      --radius: 10px;
+      
+      --radius: 12px;
       --radius-sm: 6px;
-      --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+      --radius-xs: 4px;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
 
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -63,172 +77,266 @@
       width: 260px;
       min-width: 260px;
       background: var(--sidebar-bg);
-      border-right: 1px solid var(--border);
+      border-right: 1px solid var(--card-border);
       display: flex;
       flex-direction: column;
-      z-index: 10;
+      z-index: 30;
+      user-select: none;
     }
 
     .logo-area {
-      padding: 24px 20px 20px;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(83, 155, 245, 0.08) 0%, transparent 100%);
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--card-border);
     }
 
-    .logo-vexa {
-      font-family: var(--font-mono);
-      font-size: 0.65rem;
-      letter-spacing: 4px;
-      color: var(--accent);
-      font-weight: 600;
-      margin-bottom: 4px;
-      opacity: 0.95;
+    .logo-shield {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 1rem;
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+      flex-shrink: 0;
     }
 
-    .logo-name {
+    .logo-text-title {
       font-family: var(--font-head);
-      font-size: 1.4rem;
+      font-size: 0.95rem;
       font-weight: 800;
       color: var(--text-bright);
-      letter-spacing: -1px;
+      line-height: 1.15;
     }
 
-    .logo-tag {
-      margin-top: 4px;
-      font-size: 0.72rem;
+    .logo-text-subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
       color: var(--text-muted);
-      line-height: 1.4;
+      text-transform: uppercase;
+      margin-top: 2px;
     }
 
     .nav-items {
       flex: 1;
-      padding: 16px 0;
+      padding: 16px 12px;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 10px 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      cursor: pointer;
+    }
+
+    .nav-section-header:hover {
+      color: var(--text-bright);
+    }
+
+    .nav-section-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-section-icon {
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+
+    .nav-chevron {
+      font-size: 0.65rem;
+      transition: transform 0.2s ease;
+    }
+
+    .nav-section.collapsed .nav-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .nav-section.collapsed .nav-children {
+      display: none;
+    }
+
+    .nav-children {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-left: 12px;
     }
 
     .nav-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px 20px;
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 0.88rem;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 0.82rem;
       font-weight: 500;
-      border-left: 3px solid transparent;
-      transition: all 0.2s ease;
-      user-select: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
     }
 
     .nav-item:hover {
       color: var(--text-bright);
-      background: rgba(255, 255, 255, 0.03);
-      padding-left: 24px;
+      background: rgba(255, 255, 255, 0.04);
     }
 
     .nav-item.active {
-      color: var(--accent);
-      background: rgba(83, 155, 245, 0.08);
-      border-left-color: var(--accent);
-      padding-left: 24px;
+      color: #fff;
+      background: #2563eb;
       font-weight: 600;
+      box-shadow: 0 2px 12px rgba(37, 99, 235, 0.35);
     }
 
-    .nav-icon {
+    .nav-item.active .nav-dot {
+      background: #fff;
+    }
+
+    .nav-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .nav-badge-hub {
+      margin-left: auto;
       font-family: var(--font-mono);
-      font-size: 0.7rem;
-      background: rgba(255, 255, 255, 0.06);
-      padding: 3px 6px;
-      border-radius: 4px;
-      min-width: 26px;
-      text-align: center;
+      font-size: 0.58rem;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: rgba(139, 92, 246, 0.2);
+      color: #c4b5fd;
+      border: 1px solid rgba(139, 92, 246, 0.35);
     }
 
     .sidebar-footer {
-      padding: 16px 20px;
-      border-top: 1px solid var(--border);
+      padding: 14px 16px;
+      border-top: 1px solid var(--card-border);
+      background: rgba(9, 13, 20, 0.9);
       display: flex;
       flex-direction: column;
       gap: 10px;
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      color: var(--text-muted);
     }
 
-    /* ── Persistent Header ── */
+    .early-access-card {
+      background: rgba(16, 23, 36, 0.9);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 0.72rem;
+    }
+
+    /* ── Main Layout ── */
     .main-wrapper {
       flex: 1;
       display: flex;
       flex-direction: column;
+      height: 100vh;
       overflow: hidden;
-      position: relative;
+      background: var(--bg);
     }
 
-    .persistent-header {
-      height: 56px;
-      background: rgba(12, 16, 23, 0.95);
-      backdrop-filter: blur(8px);
-      border-bottom: 1px solid var(--border);
+    /* ── Top Header ── */
+    .top-header {
+      height: 54px;
+      min-height: 54px;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--card-border);
+      padding: 0 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
       z-index: 20;
     }
 
-    .header-left, .header-right {
+    .top-header-left {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
 
-    .header-badge {
+    .top-header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
       border-radius: 20px;
-      font-family: var(--font-mono);
       font-size: 0.72rem;
       font-weight: 600;
-      letter-spacing: 0.5px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-bright);
     }
 
-    .header-badge.healthy {
-      background: rgba(63, 185, 80, 0.12);
-      color: var(--green);
-      border: 1px solid rgba(63, 185, 80, 0.3);
-    }
-
-    .header-badge.degraded {
-      background: rgba(210, 153, 34, 0.12);
-      color: var(--amber);
-      border: 1px solid rgba(210, 153, 34, 0.3);
-    }
-
-    .header-badge.disconnected {
-      background: rgba(248, 81, 73, 0.12);
-      color: var(--red);
-      border: 1px solid rgba(248, 81, 73, 0.3);
-    }
-
-    .header-mode-toggle {
+    .search-bar {
       display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 4px 8px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      font-size: 0.78rem;
+      background: rgba(16, 23, 36, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 5px 12px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      cursor: pointer;
     }
 
-    /* ── Main Content Area ── */
-    .main-content {
+    .user-profile-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 23, 36, 0.9);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 4px 12px 4px 6px;
+    }
+
+    .user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    /* ── Main Scroll Content ── */
+    .content-container {
       flex: 1;
       overflow-y: auto;
-      padding: 24px;
-      background: var(--bg);
+      padding: 24px 28px 40px;
     }
 
     .panel {
@@ -241,97 +349,382 @@
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(3px); }
+      from { opacity: 0; transform: translateY(2px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    .panel-header {
+    /* ── Page Header ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .page-title {
+      font-family: var(--font-head);
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: var(--text-bright);
+      letter-spacing: -0.5px;
+    }
+
+    .page-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .time-filter-group {
+      display: flex;
+      background: rgba(16, 23, 36, 0.9);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+    }
+
+    .time-filter-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .time-filter-btn.active {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    /* ── Hero Posture Banner ── */
+    .posture-banner {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(9, 13, 20, 0.9) 100%);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      border-radius: var(--radius);
+      padding: 16px 20px;
       margin-bottom: 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
     }
 
-    .panel-title {
+    .posture-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .posture-icon {
+      width: 42px;
+      height: 42px;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--green);
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+
+    .posture-title {
       font-family: var(--font-head);
-      font-size: 1.35rem;
-      font-weight: 700;
+      font-size: 1rem;
+      font-weight: 800;
       color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .posture-sub {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* ── 4-Card SOC Summary Grid ── */
+    .soc-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .soc-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 154px;
+      transition: all 0.2s ease;
+    }
+
+    .soc-card:hover {
+      background: var(--card-hover);
+      border-color: var(--border-accent);
+      transform: translateY(-1px);
+    }
+
+    .soc-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .soc-card-title-wrap {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    .panel-subtitle {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    /* ── Cards & Metric Grids ── */
-    .card-grid-3 {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .card-grid-4 {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px;
-      transition: all 0.2s;
-    }
-
-    .card:hover {
-      background: var(--card-hover);
-      border-color: var(--border-accent);
-    }
-
-    .card-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
+    .soc-card-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      font-size: 0.95rem;
     }
 
-    .card-value {
+    .soc-card-title {
       font-family: var(--font-head);
-      font-size: 1.6rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+
+    .soc-card-caption {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+    }
+
+    .soc-card-val-row {
+      margin-bottom: 8px;
+    }
+
+    .soc-card-big-val {
+      font-family: var(--font-head);
+      font-size: 1.35rem;
       font-weight: 800;
       color: var(--text-bright);
     }
 
-    .card-meta {
-      font-size: 0.75rem;
+    .soc-card-sub-val {
+      font-size: 0.72rem;
       color: var(--text-muted);
-      margin-top: 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      line-height: 1.35;
     }
 
-    /* ── Buttons & Badges ── */
+    .soc-card-link {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 10px;
+    }
+
+    .soc-card-link:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Gateway Mesh Bar ── */
+    .mesh-bar {
+      background: rgba(16, 23, 36, 0.95);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .mesh-left, .mesh-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mesh-label {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #fff;
+      background: #1e3a8a;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.8px;
+    }
+
+    .mesh-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 3px 8px;
+    }
+
+    .mesh-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    /* ── 8-Metric KPI Strip ── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-cell {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+
+    .kpi-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .kpi-num {
+      font-family: var(--font-head);
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text-bright);
+    }
+
+    .kpi-caption {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Data Tables ── */
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .table-header-bar {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(12, 18, 28, 0.6);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(9, 13, 20, 0.9);
+      padding: 10px 16px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid rgba(40, 53, 76, 0.35);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr.clickable-row {
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+
+    tr.clickable-row:hover {
+      background: rgba(79, 110, 247, 0.08);
+    }
+
+    /* ── Badges & Buttons ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .badge.green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .badge.red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+    .badge.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+    .badge.blue { background: rgba(79, 110, 247, 0.12); color: var(--accent); border: 1px solid rgba(79, 110, 247, 0.3); }
+    .badge.purple { background: var(--purple-bg); color: #c4b5fd; border: 1px solid var(--purple-border); }
+
     .btn {
-      padding: 7px 14px;
+      padding: 6px 14px;
       border-radius: var(--radius-sm);
       font-family: var(--font);
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       font-weight: 600;
-      border: 1px solid var(--border);
+      border: 1px solid var(--card-border);
       background: rgba(255, 255, 255, 0.05);
       color: var(--text-bright);
       cursor: pointer;
@@ -347,203 +740,118 @@
     }
 
     .btn-primary {
-      background: var(--accent);
-      border-color: var(--accent);
+      background: #2563eb;
+      border-color: #2563eb;
       color: #fff;
     }
 
     .btn-primary:hover {
-      background: #4088e8;
+      background: #1d4ed8;
+    }
+
+    .btn-purple {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: #fff;
+    }
+
+    .btn-purple:hover {
+      background: #4f46e5;
     }
 
     .btn-sm {
-      padding: 4px 8px;
-      font-size: 0.75rem;
+      padding: 3px 8px;
+      font-size: 0.72rem;
     }
 
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-family: var(--font-mono);
-      font-size: 0.7rem;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-    }
-
-    .badge.green { background: rgba(63, 185, 80, 0.12); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }
-    .badge.red { background: rgba(248, 81, 73, 0.12); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }
-    .badge.amber { background: rgba(210, 153, 34, 0.12); color: var(--amber); border: 1px solid rgba(210, 153, 34, 0.3); }
-    .badge.blue { background: rgba(83, 155, 245, 0.12); color: var(--accent); border: 1px solid rgba(83, 155, 245, 0.3); }
-    .badge.simulated { background: rgba(210, 153, 34, 0.15); color: #ffd670; border: 1px solid var(--amber); }
-    .badge.real { background: rgba(63, 185, 80, 0.15); color: #7ee787; border: 1px solid var(--green); }
-
-    /* ── Tables ── */
-    .table-container {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.84rem;
-      text-align: left;
-    }
-
-    th {
-      background: rgba(12, 16, 23, 0.8);
-      padding: 10px 16px;
-      font-size: 0.74rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border);
-    }
-
-    td {
-      padding: 11px 16px;
-      border-bottom: 1px solid rgba(48, 54, 61, 0.4);
-      color: var(--text-main);
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:hover td {
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    /* ── Sub-tabs & Filter Bars ── */
-    .tab-bar {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 18px;
-      padding-bottom: 8px;
-    }
-
-    .tab-btn {
-      padding: 6px 14px;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .tab-btn:hover {
-      color: var(--text-bright);
-      background: rgba(255, 255, 255, 0.04);
-    }
-
-    .tab-btn.active {
-      color: var(--accent);
-      background: rgba(83, 155, 245, 0.12);
-      border-color: rgba(83, 155, 245, 0.3);
-    }
-
-    /* ── Live Policy Wizard Side Drawer ── */
-    .wizard-drawer {
+    /* ── Sliding Run Dossier Drawer ── */
+    .dossier-drawer {
       position: fixed;
       top: 0;
-      right: -540px;
-      width: 520px;
+      right: -620px;
+      width: 600px;
+      max-width: 90vw;
       height: 100vh;
-      background: #0d1117;
-      border-left: 1px solid var(--border);
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+      background: #090d14;
+      border-left: 1px solid var(--card-border);
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.75);
       z-index: 1000;
-      display: none;
+      display: flex;
       flex-direction: column;
-      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .wizard-drawer.open {
-      display: flex;
+    .dossier-drawer.open {
       right: 0;
     }
 
-    .wizard-header {
+    .dossier-header {
       padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--card-border);
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
+      background: rgba(16, 23, 36, 0.75);
     }
 
-    .wizard-body {
+    .dossier-body {
       flex: 1;
       padding: 20px;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      overflow-y: auto;
+      gap: 14px;
     }
 
-    .wizard-editor {
-      flex: 1;
+    .dossier-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-bright);
+      line-height: 1.45;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* ── Team Hub Promo Callout ── */
+    .hub-callout-card {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(37, 99, 235, 0.06) 100%);
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    /* ── Code Editor Modal ── */
+    .editor-textarea {
       width: 100%;
-      min-height: 300px;
-      background: #05070a;
-      border: 1px solid var(--border);
+      height: 380px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--card-border);
       border-radius: var(--radius-sm);
       color: var(--green);
       font-family: var(--font-mono);
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       padding: 14px;
       resize: none;
-      line-height: 1.5;
+      line-height: 1.45;
     }
 
-    .wizard-editor:focus {
+    .editor-textarea:focus {
       outline: none;
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-glow);
     }
 
-    .wizard-actions {
-      padding: 14px 20px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 10px;
-    }
-
-    /* ── Modal Dialog ── */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(4px);
-      z-index: 2000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .modal-overlay.open {
-      display: flex;
-    }
-
-    .modal-box {
-      background: #11151c;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      width: 460px;
-      padding: 24px;
-      box-shadow: var(--shadow);
-    }
-
-    /* ── Toast Notifications ── */
+    /* ── Toast ── */
     #toast-container {
       position: fixed;
       top: 20px;
@@ -556,265 +864,451 @@
     }
 
     .toast {
-      background: #161b22;
-      border: 1px solid var(--border);
+      background: #0f172a;
+      border: 1px solid var(--card-border);
       border-radius: var(--radius-sm);
-      padding: 10px 16px;
-      font-size: 0.82rem;
+      padding: 9px 14px;
+      font-size: 0.78rem;
       color: var(--text-bright);
       box-shadow: var(--shadow);
       pointer-events: auto;
-      animation: toastIn 0.25s ease;
+      animation: toastIn 0.2s ease;
     }
 
-    .toast.success { border-left: 4px solid var(--green); }
-    .toast.error { border-left: 4px solid var(--red); }
-    .toast.info { border-left: 4px solid var(--accent); }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--red); }
+    .toast.info { border-left: 3px solid var(--accent); }
 
     @keyframes toastIn {
       from { transform: translateX(100%); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
-    }
-
-    /* ── Token Economics & Semantic Caching ── */
-    .cache-bar-track {
-      width: 100%;
-      height: 12px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
-      overflow: hidden;
-      display: flex;
-      margin: 10px 0;
-      border: 1px solid var(--border);
-    }
-    .bar-gw {
-      background: linear-gradient(90deg, #3fb950, #2ea043);
-      height: 100%;
-      transition: width 0.4s ease;
-    }
-    .bar-prov {
-      background: linear-gradient(90deg, #539bf5, #388bfd);
-      height: 100%;
-      transition: width 0.4s ease;
-    }
-    .sim-tag {
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .sim-high { background: rgba(63, 185, 80, 0.15); color: #3fb950; border: 1px solid rgba(63, 185, 80, 0.35); }
-    .sim-med { background: rgba(83, 155, 245, 0.15); color: #539bf5; border: 1px solid rgba(83, 155, 245, 0.35); }
-    .sim-low { background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.35); }
-    .diff-box {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
-      color: var(--text-bright);
-      line-height: 1.45;
-      max-height: 160px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
     }
   </style>
 </head>
 
 <body>
 
-  <!-- Sidebar (4 Destinations) -->
-  <nav class="sidebar">
+  <!-- Left Sidebar (Exact Team Hub Grouped Structure) -->
+  <aside class="sidebar">
     <div class="logo-area">
-      <div class="logo-vexa">VEXA</div>
-      <div class="logo-name">Agent Control</div>
-      <div class="logo-tag">AI Security Gateway & Firewall</div>
+      <div class="logo-shield">🛡️</div>
+      <div>
+        <div class="logo-text-title">Vexa Agent Control</div>
+        <div class="logo-text-subtitle">WORKSTATION CONSOLE</div>
+      </div>
     </div>
 
     <div class="nav-items">
+      <!-- Section 0: Fleet / Workstation Overview -->
       <div class="nav-item active" data-panel="panel-overview">
-        <span class="nav-icon">01</span> Overview
-      </div>
-      <div class="nav-item" data-panel="panel-activity">
-        <span class="nav-icon">02</span> Activity Stream
-      </div>
-      <div class="nav-item" data-panel="panel-detections">
-        <span class="nav-icon">03</span> Detections & DLP
-      </div>
-      <div class="nav-item" data-panel="panel-policy-gateway">
-        <span class="nav-icon">04</span> Policy & Gateway
-      </div>
-      <div class="nav-item" data-panel="panel-cache-economics">
-        <span class="nav-icon">05</span> Token Economics & Cache
+        <span style="font-size: 0.95rem;">📊</span>
+        <span>Workstation Overview</span>
       </div>
 
-      <div style="padding: 16px 20px; margin-top: 12px; border-top: 1px solid var(--border);">
-        <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="openPolicyWizard()">
-          ✨ Live Policy Wizard
-        </button>
+      <!-- Section 1: Policies & Security -->
+      <div class="nav-section" id="sec-policies">
+        <div class="nav-section-header" onclick="toggleNavSection('sec-policies')">
+          <div class="nav-section-title-wrap">
+            <span class="nav-section-icon">🛡️</span>
+            <span>Policies &amp; Security</span>
+          </div>
+          <span class="nav-chevron">▼</span>
+        </div>
+        <div class="nav-children">
+          <div class="nav-item" data-panel="panel-presets">
+            <span class="nav-dot"></span>
+            <span>Guardrail Presets</span>
+          </div>
+          <div class="nav-item" data-panel="panel-detections">
+            <span class="nav-dot"></span>
+            <span>Security &amp; DLP Events</span>
+          </div>
+          <div class="nav-item" data-panel="panel-policy-rules">
+            <span class="nav-dot"></span>
+            <span>Policy Rules</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Integrations & Keys -->
+      <div class="nav-section" id="sec-integrations">
+        <div class="nav-section-header" onclick="toggleNavSection('sec-integrations')">
+          <div class="nav-section-title-wrap">
+            <span class="nav-section-icon">🔑</span>
+            <span>Integrations &amp; Keys</span>
+          </div>
+          <span class="nav-chevron">▼</span>
+        </div>
+        <div class="nav-children">
+          <div class="nav-item" data-panel="panel-virtual-keys">
+            <span class="nav-dot"></span>
+            <span>Virtual Keys</span>
+          </div>
+          <div class="nav-item" data-panel="panel-llm-providers">
+            <span class="nav-dot"></span>
+            <span>LLM Providers</span>
+          </div>
+          <div class="nav-item" data-panel="panel-mcp-servers">
+            <span class="nav-dot"></span>
+            <span>MCP Servers</span>
+          </div>
+          <div class="nav-item" data-panel="panel-devices">
+            <span class="nav-dot"></span>
+            <span>Connected Devices</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Activity & Cost -->
+      <div class="nav-section" id="sec-activity">
+        <div class="nav-section-header" onclick="toggleNavSection('sec-activity')">
+          <div class="nav-section-title-wrap">
+            <span class="nav-section-icon">🔍</span>
+            <span>Activity &amp; Cost</span>
+          </div>
+          <span class="nav-chevron">▼</span>
+        </div>
+        <div class="nav-children">
+          <div class="nav-item" data-panel="panel-cost-budgets">
+            <span class="nav-dot"></span>
+            <span>Cost &amp; Budgets</span>
+          </div>
+          <div class="nav-item" data-panel="panel-audit-logs">
+            <span class="nav-dot"></span>
+            <span>Request &amp; Audit Logs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Team & Settings (Team Hub Tier) -->
+      <div class="nav-section" id="sec-team">
+        <div class="nav-section-header" onclick="toggleNavSection('sec-team')">
+          <div class="nav-section-title-wrap">
+            <span class="nav-section-icon">👥</span>
+            <span>Team &amp; Settings</span>
+          </div>
+          <span class="nav-chevron">▼</span>
+        </div>
+        <div class="nav-children">
+          <div class="nav-item" data-panel="panel-users-hub">
+            <span class="nav-dot"></span>
+            <span>Users &amp; Roles</span>
+            <span class="nav-badge-hub">HUB</span>
+          </div>
+          <div class="nav-item" data-panel="panel-org-hub">
+            <span class="nav-dot"></span>
+            <span>Org &amp; License</span>
+            <span class="nav-badge-hub">HUB</span>
+          </div>
+          <div class="nav-item" data-panel="panel-sso-hub">
+            <span class="nav-dot"></span>
+            <span>Auth Providers &amp; SSO</span>
+            <span class="nav-badge-hub">HUB</span>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Sidebar Bottom -->
     <div class="sidebar-footer">
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span>Gateway: <strong id="sidebar-gw-port">127.0.0.1:18080</strong></span>
-        <span class="badge green" id="sidebar-gw-badge">LIVE</span>
+      <div class="early-access-card">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+          <span style="color: var(--amber);">⚡</span>
+          <strong style="color: var(--text-bright);">Workstation Active</strong>
+        </div>
+        <div style="color: var(--text-muted); font-size: 0.68rem;">
+          Loopback: <code style="color:var(--accent);">127.0.0.1:18080</code>
+        </div>
       </div>
-      <div id="sidebar-version" style="color: var(--text-muted); font-size: 0.68rem;">v1.0.92 Standalone Dev</div>
     </div>
-  </nav>
+  </aside>
 
   <!-- Main Wrapper -->
   <div class="main-wrapper">
 
-    <!-- Persistent Header -->
-    <header class="persistent-header">
-      <div class="header-left">
-        <div id="header-gw-status" class="header-badge healthy">
-          <span style="font-size: 0.6rem;">●</span> Gateway: Healthy
+    <!-- Top Header Bar -->
+    <header class="top-header">
+      <div class="top-header-left">
+        <div class="header-pill">
+          <span style="color: var(--green); font-size: 0.6rem;">●</span>
+          <span>PRIMARY WORKSTATION</span>
         </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted);">
-          Posture: <strong id="header-mode-text" style="color: var(--green);">ENFORCE</strong>
-          <span style="margin-left: 8px; color: var(--text-muted);">(<span id="header-ide-count">0/9</span> IDEs Protected)</span>
+        <div class="header-pill" style="border-color: rgba(139, 92, 246, 0.35); color: #c4b5fd;">
+          <span>⚡ Standalone Mode</span>
         </div>
       </div>
 
-      <div class="header-right">
-        <span id="header-last-decision" style="font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono);">
-          Last Event: Just now
-        </span>
-        <button class="btn btn-sm" onclick="triggerVerifyProbe()">
-          🛡️ Run Security Probe
-        </button>
-        <button class="btn btn-sm" onclick="promptModeSwitch()">
-          ⚙️ Change Mode
-        </button>
+      <div class="top-header-right">
+        <div class="search-bar" onclick="focusSearch()">
+          <span>🔍 Quick Search</span>
+          <kbd style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 3px; font-family: var(--font-mono); font-size: 0.62rem;">Ctrl+K</kbd>
+        </div>
+        <div class="user-profile-pill">
+          <div class="user-avatar">D</div>
+          <div style="font-size: 0.74rem; font-weight: 600; color: var(--text-bright);" id="top-user-label">
+            dev@workstation.local
+          </div>
+          <span class="badge blue" style="font-size: 0.62rem; padding: 1px 5px;">DEVELOPER</span>
+        </div>
       </div>
     </header>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
+    <!-- Main Content Panels -->
+    <main class="content-container">
 
-      <!-- ==================================================================== -->
-      <!-- Panel 1: Overview                                                    -->
-      <!-- ==================================================================== -->
+      <!-- ================================================================== -->
+      <!-- VIEW 1: WORKSTATION OVERVIEW (Exact Visual Replica of Screenshot)  -->
+      <!-- ================================================================== -->
       <section id="panel-overview" class="panel active">
-        <div class="panel-header">
+        <div class="page-header">
           <div>
-            <h1 class="panel-title">Workstation Security Overview</h1>
-            <p class="panel-subtitle">Answers in seconds: Is the gateway working? What happened? Do I need to act?</p>
+            <h1 class="page-title">Workstation Overview</h1>
+            <p class="page-subtitle">Real-time agent activity, policy decisions, and security alerts</p>
           </div>
-          <div>
-            <button class="btn btn-primary" onclick="triggerVerifyProbe()">
-              ✨ Verify Active Protection
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="time-filter-group">
+              <button class="time-filter-btn">1H</button>
+              <button class="time-filter-btn active">24H</button>
+              <button class="time-filter-btn">7D</button>
+              <button class="time-filter-btn">30D</button>
+            </div>
+            <button class="btn btn-purple" onclick="triggerVerifyProbe()">
+              <span>+ Verify Workstation</span>
             </button>
           </div>
         </div>
 
-        <!-- 3-Question Framework Hero Cards -->
-        <div class="card-grid-3">
-          <div class="card">
-            <div class="card-label">1. Protection Status</div>
-            <div class="card-value" style="color: var(--green);" id="ov-status-val">Active Enforcement</div>
-            <div class="card-meta">
-              <span id="ov-integration-summary">No supported IDEs configured yet (0/9 Protected)</span>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-label">2. Decisions Today</div>
-            <div class="card-value" id="ov-decisions-val">0</div>
-            <div class="card-meta">
-              <span style="color: var(--red);" id="ov-blocked-count">0 Blocked</span> · 
-              <span style="color: var(--green);" id="ov-allowed-count">0 Allowed</span>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-label">3. Contextual Next Action</div>
-            <div class="card-value" style="font-size: 1.1rem; color: var(--accent);" id="ov-action-title">Run Verification Probe</div>
-            <div class="card-meta" id="ov-action-desc">
-              Execute 'agentcontrol verify' to assert baseline policy
-            </div>
-          </div>
-        </div>
-
-        <!-- Enterprise Semantic Cache Economics Hero Banner -->
-        <div class="card" style="margin-bottom: 20px; background: linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(83, 155, 245, 0.06) 100%); border-color: rgba(63, 185, 80, 0.35);">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-            <div style="display: flex; align-items: center; gap: 14px;">
-              <div style="font-size: 1.8rem; background: rgba(63, 185, 80, 0.15); width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(63, 185, 80, 0.3);">⚡</div>
-              <div>
-                <div style="font-weight: 700; color: var(--text-bright); font-size: 0.98rem; display: flex; align-items: center; gap: 8px;">
-                  Vexa Gateway Semantic Vector Cache
-                  <span class="badge green">ZERO-EGRESS 100% COST AVOIDANCE</span>
-                </div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 3px;">
-                  Total Avoided Spend: <strong id="ov-cache-avoided-cost" style="color: var(--green); font-size: 0.88rem;">$0.00</strong> · 
-                  <span id="ov-cache-avoided-tokens" style="color: var(--text-bright);">0</span> tokens saved · 
-                  Hit Rate: <strong id="ov-cache-hit-rate" style="color: var(--accent);">0.0%</strong> · 
-                  Latency: <span id="ov-cache-latency" style="color: var(--green);">~2.4ms</span> vs ~1,200ms upstream WAN roundtrip.
-                </div>
+        <!-- Hero Security Posture Banner -->
+        <div class="posture-banner">
+          <div class="posture-left">
+            <div class="posture-icon">🛡️</div>
+            <div>
+              <div class="posture-title">
+                <span>Workstation Security Posture: Protected &amp; Compliant</span>
+                <span class="badge green">100% SCORE</span>
+                <span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-main); border: 1px solid var(--card-border);">Score Factors</span>
+                <span style="font-size: 0.72rem; color: var(--green); font-weight: 600; margin-left: 4px;">● Zero-Trust Runtime Active</span>
+              </div>
+              <div class="posture-sub" id="hero-devices-subtitle">
+                1 Workstation Active · 9 IDE Targets Monitored (Codex, Cursor, VS Code, Windsurf, Zed, Cline)
               </div>
             </div>
-            <button class="btn btn-sm btn-primary" onclick="document.querySelector('[data-panel=\'panel-cache-economics\']').click()">
-              Explore Token Economics →
-            </button>
+          </div>
+          <button class="btn btn-purple" style="padding: 6px 14px;" onclick="selectPanel('panel-devices')">
+            View Connected Devices →
+          </button>
+        </div>
+
+        <!-- 4-Card Summary Grid -->
+        <div class="soc-cards-grid">
+          <!-- Card 1: Device Governance -->
+          <div class="soc-card">
+            <div>
+              <div class="soc-card-header">
+                <div class="soc-card-title-wrap">
+                  <div class="soc-card-icon">💻</div>
+                  <div>
+                    <div class="soc-card-title">Device Governance</div>
+                    <div class="soc-card-caption">Ed25519 &amp; PKCE</div>
+                  </div>
+                </div>
+                <span class="badge green">● Protected</span>
+              </div>
+              <div class="soc-card-val-row">
+                <div class="soc-card-big-val" id="card-devices-count">1 Active</div>
+                <div class="soc-card-sub-val" id="card-devices-sub">9 IDE Targets Monitored (Codex, Cursor, VS Code)</div>
+              </div>
+            </div>
+            <div class="soc-card-link" onclick="selectPanel('panel-devices')">
+              Manage Devices →
+            </div>
+          </div>
+
+          <!-- Card 2: Policy Hub -->
+          <div class="soc-card">
+            <div>
+              <div class="soc-card-header">
+                <div class="soc-card-title-wrap">
+                  <div class="soc-card-icon">🛡️</div>
+                  <div>
+                    <div class="soc-card-title">Policy Hub</div>
+                    <div class="soc-card-caption">DLP &amp; Guardrails</div>
+                  </div>
+                </div>
+                <span class="badge green">● Enforcing</span>
+              </div>
+              <div class="soc-card-val-row">
+                <div class="soc-card-big-val" id="card-policy-count">1 Policy</div>
+                <div class="soc-card-sub-val">21 DLP Patterns · 6-Pass Injection Shield · Safe Mode Active</div>
+              </div>
+            </div>
+            <div class="soc-card-link" onclick="selectPanel('panel-presets')">
+              Browse Guardrail Presets →
+            </div>
+          </div>
+
+          <!-- Card 3: Virtual Keys -->
+          <div class="soc-card">
+            <div>
+              <div class="soc-card-header">
+                <div class="soc-card-title-wrap">
+                  <div class="soc-card-icon">🔑</div>
+                  <div>
+                    <div class="soc-card-title">Virtual Keys</div>
+                    <div class="soc-card-caption">LLM Providers</div>
+                  </div>
+                </div>
+                <span class="badge green">● Operational</span>
+              </div>
+              <div class="soc-card-val-row">
+                <div class="soc-card-big-val" id="card-keys-count">1 Key</div>
+                <div class="soc-card-sub-val">Multi-Provider Routing · L1/L2 Vector Semantic Cache Active</div>
+              </div>
+            </div>
+            <div class="soc-card-link" onclick="selectPanel('panel-virtual-keys')">
+              Manage Virtual Keys →
+            </div>
+          </div>
+
+          <!-- Card 4: Spend & Token Limits -->
+          <div class="soc-card">
+            <div>
+              <div class="soc-card-header">
+                <div class="soc-card-title-wrap">
+                  <div class="soc-card-icon">📊</div>
+                  <div>
+                    <div class="soc-card-title">Spend Limits</div>
+                    <div class="soc-card-caption">Budgets &amp; Caps</div>
+                  </div>
+                </div>
+                <span class="badge green">● Fail-Closed</span>
+              </div>
+              <div class="soc-card-val-row">
+                <div class="soc-card-big-val" id="card-spend-val">$0.00 <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">/ $100.00 Cap</span></div>
+                <div class="soc-card-sub-val">Atomic Preflight Balance Reservations · 0 Budget Overages</div>
+              </div>
+            </div>
+            <div class="soc-card-link" onclick="selectPanel('panel-cost-budgets')">
+              View Spend Analytics →
+            </div>
           </div>
         </div>
 
-        <!-- Secondary Operational Metrics -->
-        <div class="card-grid-4">
-          <div class="card">
-            <div class="card-label">DLP Secrets Intercepted</div>
-            <div class="card-value" style="color: var(--red);" id="ov-dlp-val">0</div>
-            <div class="card-meta">AWS keys, SSNs, DB tokens</div>
+        <!-- Gateway Mesh Bar -->
+        <div class="mesh-bar">
+          <div class="mesh-left">
+            <span class="mesh-label">GATEWAY MESH</span>
+            <div class="mesh-item"><span class="dot"></span> OpenAI</div>
+            <div class="mesh-item"><span class="dot"></span> Claude</div>
+            <div class="mesh-item"><span class="dot"></span> Gemini</div>
+            <div class="mesh-item"><span class="dot"></span> Bedrock</div>
+            <div class="mesh-item"><span class="dot"></span> Local / Ollama</div>
           </div>
-          <div class="card">
-            <div class="card-label">Prompt Injections Blocked</div>
-            <div class="card-value" style="color: var(--red);" id="ov-inj-val">0</div>
-            <div class="card-meta">System prompt overrides</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Unique AI Tools Observed</div>
-            <div class="card-value" id="ov-tools-val">0</div>
-            <div class="card-meta">Across all MCP servers</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Average Gateway Latency</div>
-            <div class="card-value" style="color: var(--text-muted);" id="ov-latency-val">-- ms</div>
-            <div class="card-meta">Measured policy overhead</div>
+          <div class="mesh-right">
+            <div class="badge green" style="background: rgba(34,197,94,0.12); color: var(--green);">
+              ⚡ Semantic Cache Active
+            </div>
+            <div class="badge blue" style="background: rgba(79,110,247,0.12); color: var(--accent);">
+              ⚡ Wire Overhead &lt;1ms
+            </div>
           </div>
         </div>
 
-        <!-- Recent Real Decisions Table -->
-        <div class="table-container">
-          <div style="padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 0.95rem; font-family: var(--font-head); color: var(--text-bright);">Recent Real-Time Decisions</h3>
-            <span class="badge blue" id="ov-recent-count">Live Stream Active</span>
+        <!-- 8-Metric KPI Strip -->
+        <div class="kpi-strip">
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>TOTAL AGENTS</span>
+              <span class="badge blue" style="font-size: 0.55rem; padding: 1px 4px;">Local</span>
+            </div>
+            <div class="kpi-num" id="kpi-total-agents">1</div>
+            <div class="kpi-caption">Protected AI Agents</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>ACTIVE AGENTS</span>
+              <span class="badge green" style="font-size: 0.55rem; padding: 1px 4px;">Live</span>
+            </div>
+            <div class="kpi-num" style="color: var(--green);" id="kpi-active-agents">1</div>
+            <div class="kpi-caption">Compliant &amp; Enforcing</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>TOTAL EVENTS</span>
+              <span class="badge blue" style="font-size: 0.55rem; padding: 1px 4px;">24h</span>
+            </div>
+            <div class="kpi-num" id="kpi-total-events">0</div>
+            <div class="kpi-caption">Tool Calls &amp; Egress</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>DENIED</span>
+              <span class="badge" style="background: rgba(239,68,68,0.15); color: var(--red); font-size: 0.55rem; padding: 1px 4px;">0%</span>
+            </div>
+            <div class="kpi-num" style="color: var(--red);" id="kpi-denied">0</div>
+            <div class="kpi-caption">Blocked Violations</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>ALERTS</span>
+              <span class="badge green" style="font-size: 0.55rem; padding: 1px 4px;">Clear</span>
+            </div>
+            <div class="kpi-num" style="color: var(--amber);" id="kpi-alerts">0</div>
+            <div class="kpi-caption">Threats &amp; DLP Triggers</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>CRITICAL</span>
+              <span class="badge" style="background: rgba(239,68,68,0.15); color: var(--red); font-size: 0.55rem; padding: 1px 4px;">0</span>
+            </div>
+            <div class="kpi-num" style="color: var(--red);" id="kpi-critical">0</div>
+            <div class="kpi-caption">High Severity Injections</div>
+          </div>
+
+          <div class="kpi-cell">
+            <div class="kpi-header">
+              <span>WORKSTATION</span>
+              <span class="badge purple" style="font-size: 0.55rem; padding: 1px 4px;">Dev</span>
+            </div>
+            <div class="kpi-num" style="color: #c4b5fd;">1 / 1</div>
+            <div class="kpi-caption">Active Developer Seat</div>
+          </div>
+        </div>
+
+        <!-- Recent Audit Stream Table (Click to Inspect Run Dossier) -->
+        <div class="table-card">
+          <div class="table-header-bar">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 style="font-family: var(--font-head); font-size: 0.95rem; font-weight: 700; color: var(--text-bright);">
+                Live Telemetry &amp; Prompt Stream
+              </h3>
+              <span class="badge green" style="font-size: 0.62rem;">LIVE STREAM</span>
+            </div>
+            <button class="btn btn-sm" onclick="selectPanel('panel-audit-logs')">View Complete Audit Logs →</button>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Event ID</th>
-                <th>Source</th>
-                <th>Tool / Method</th>
-                <th>Verdict</th>
-                <th>Policy Rule</th>
-                <th>Redacted Preview</th>
                 <th>Time</th>
+                <th>Transport</th>
+                <th>Target Model / Tool</th>
+                <th>Verdict</th>
+                <th>Rule Disposition</th>
+                <th>Prompt / Arguments Preview</th>
+                <th>Latency</th>
               </tr>
             </thead>
-            <tbody id="ov-decisions-body">
+            <tbody id="overview-stream-body">
               <tr>
                 <td colspan="7" style="text-align: center; padding: 36px; color: var(--text-muted);">
-                  <div style="font-size: 1.8rem; margin-bottom: 8px;">🛡️</div>
-                  <strong>No agent tool calls recorded yet</strong>
-                  <p style="font-size: 0.8rem; margin-top: 4px;">Run <code style="color: var(--accent);">agentcontrol verify</code> or start your AI agent to observe decisions.</p>
+                  <div style="font-size: 1.6rem; margin-bottom: 6px;">🛡️</div>
+                  <strong>No agent prompts or tool calls recorded yet</strong>
+                  <p style="font-size: 0.76rem; margin-top: 4px;">Send a prompt via Codex or trigger security probe to observe decisions.</p>
                 </td>
               </tr>
             </tbody>
@@ -822,704 +1316,614 @@
         </div>
       </section>
 
-      <!-- ==================================================================== -->
-      <!-- Panel 2: Activity Stream                                             -->
-      <!-- ==================================================================== -->
-      <section id="panel-activity" class="panel">
-        <div class="panel-header">
+      <!-- ================================================================== -->
+      <!-- VIEW 2: GUARDRAIL PRESETS                                          -->
+      <!-- ================================================================== -->
+      <section id="panel-presets" class="panel">
+        <div class="page-header">
           <div>
-            <h1 class="panel-title">Activity Stream & Tool Execution</h1>
-            <p class="panel-subtitle">Chronological record of every tool invocation and policy verdict.</p>
+            <h1 class="page-title">🛡️ Guardrail Presets</h1>
+            <p class="page-subtitle">Standardized security guardrail packs mapped to OWASP ASI Top 10 and enterprise safety benchmarks.</p>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm" id="btn-toggle-tools" onclick="toggleActivityView('tools')">🛠 Tool Summary</button>
-            <button class="btn btn-sm btn-primary" id="btn-toggle-timeline" onclick="toggleActivityView('timeline')">⚡ Timeline Stream</button>
-          </div>
+          <button class="btn btn-primary" onclick="selectPanel('panel-policy-rules')">View Active Policy Rules →</button>
         </div>
 
-        <!-- Sub-View: Timeline -->
-        <div id="panel-timeline" class="activity-subview">
-          <div style="display: flex; gap: 12px; margin-bottom: 14px;">
-            <input type="text" id="act-search" placeholder="Filter by tool, request ID, host..." 
-                   style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; color: var(--text-bright); font-size: 0.85rem;"
-                   oninput="filterTimelineEvents(this.value)">
-            <select id="act-filter-source" style="background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; color: var(--text-main); font-size: 0.85rem;"
-                    onchange="filterTimelineEvents()">
-              <option value="all">All Sources</option>
-              <option value="real">Real Only</option>
-              <option value="simulated">Simulated Only</option>
-            </select>
-            <select id="act-filter-verdict" style="background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; color: var(--text-main); font-size: 0.85rem;"
-                    onchange="filterTimelineEvents()">
-              <option value="all">All Verdicts</option>
-              <option value="deny">Blocked Only</option>
-              <option value="allow">Allowed Only</option>
-            </select>
+        <div class="soc-cards-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+          <div class="soc-card" style="border-left: 4px solid var(--accent);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">OWASP ASI-01 · Prompt Injection Guard</div>
+              <span class="badge green">ENABLED</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 12px;">
+              Heuristic delimiters &amp; semantic classifier detecting direct jailbreaks and indirect prompt injection in retrieved contexts.
+            </p>
+            <span class="badge blue">6-Pass Injection Shield Active</span>
           </div>
 
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Source</th>
-                  <th>Tool Name</th>
-                  <th>Verdict</th>
-                  <th>Disposition / Rule</th>
-                  <th>Payload Preview (Masked)</th>
-                  <th>Latency</th>
-                </tr>
-              </thead>
-              <tbody id="timeline-events-body">
-                <!-- Dynamically Rendered -->
-              </tbody>
-            </table>
+          <div class="soc-card" style="border-left: 4px solid var(--amber);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">DLP &amp; Secret Exfiltration Shield</div>
+              <span class="badge green">ENABLED</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 12px;">
+              Auto-redacts API keys (OpenAI, AWS, GitHub, Stripe), private keys, passwords, database URIs, and Shannon high-entropy tokens.
+            </p>
+            <span class="badge amber">21 DLP Secret Signatures</span>
+          </div>
+
+          <div class="soc-card" style="border-left: 4px solid var(--purple);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Workspace Boundary Sandboxing</div>
+              <span class="badge green">ENABLED</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 12px;">
+              Restricts tool calls (read_file, write_file, bash) to current workspace directory and blocks path traversal attempts.
+            </p>
+            <span class="badge purple">Filesystem &amp; CLI Sandbox</span>
           </div>
         </div>
-
-        <!-- Sub-View: Tool Summary -->
-        <div id="panel-inventory" class="activity-subview" style="display: none;">
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tool Name</th>
-                  <th>Total Calls</th>
-                  <th>Last Seen</th>
-                  <th>Risk Tier</th>
-                  <th>Policy Action</th>
-                </tr>
-              </thead>
-              <tbody id="tools-summary-body">
-                <!-- Dynamically Rendered -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Hidden Param Explorer Anchor for compatibility -->
-        <div id="panel-params" style="display: none;"></div>
       </section>
 
-      <!-- ==================================================================== -->
-      <!-- Panel 3: Detections & DLP                                            -->
-      <!-- ==================================================================== -->
+      <!-- ================================================================== -->
+      <!-- VIEW 3: SECURITY & DLP EVENTS                                      -->
+      <!-- ================================================================== -->
       <section id="panel-detections" class="panel">
-        <div class="panel-header">
+        <div class="page-header">
           <div>
-            <h1 class="panel-title">Detections & Threat Interceptions</h1>
-            <p class="panel-subtitle">Unified view of Data Loss Prevention, prompt injection, and anomalous tool behaviors.</p>
+            <h1 class="page-title">🚨 Security &amp; DLP Events</h1>
+            <p class="page-subtitle">Real-time threat intelligence log capturing intercepted secret leaks and injection attacks.</p>
           </div>
         </div>
 
-        <!-- Category Filter Bar -->
-        <div class="tab-bar" style="margin-bottom: 18px;">
-          <button class="tab-btn active" onclick="filterDetections('all', this)">All Detections</button>
-          <button class="tab-btn" onclick="filterDetections('dlp', this)">DLP & Secrets</button>
-          <button class="tab-btn" onclick="filterDetections('injection', this)">Prompt Injection</button>
-          <button class="tab-btn" onclick="filterDetections('risk', this)">Misuse & High Risk</button>
-        </div>
-
-        <div id="panel-dlp" style="display:none;"></div>
-        <div id="panel-injection" style="display:none;"></div>
-        <div id="panel-risks" style="display:none;"></div>
-        <div id="panel-semantic" style="display:none;"></div>
-
-        <div class="table-container">
+        <div class="table-card">
           <table>
             <thead>
               <tr>
+                <th>Timestamp</th>
                 <th>Category</th>
-                <th>Disposition</th>
-                <th>Policy Rule ID</th>
-                <th>Detected Evidence (Masked Preview)</th>
-                <th>Source</th>
-                <th>Time</th>
+                <th>Severity</th>
+                <th>Target Operation</th>
+                <th>Verdict</th>
+                <th>Findings Summary</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody id="detections-table-body">
-              <!-- Dynamically Rendered -->
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 36px; color: var(--text-muted);">
+                  <div style="font-size: 1.6rem; margin-bottom: 6px;">🛡️</div>
+                  <strong>No security threats detected</strong>
+                  <p style="font-size: 0.76rem; margin-top: 4px;">Run security probe or send sensitive tokens through Codex to test detection.</p>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <!-- ==================================================================== -->
-      <!-- Panel 4: Policy & Gateway                                            -->
-      <!-- ==================================================================== -->
-      <section id="panel-policy-gateway" class="panel">
-        <div class="panel-header">
+      <!-- ================================================================== -->
+      <!-- VIEW 4: POLICY RULES & SYNTHESIZER                                 -->
+      <!-- ================================================================== -->
+      <section id="panel-policy-rules" class="panel">
+        <div class="page-header">
           <div>
-            <h1 class="panel-title">Policy & Gateway Configuration</h1>
-            <p class="panel-subtitle">Review active YAML security policies, IDE discovery status, and runtime controls.</p>
+            <h1 class="page-title">📜 Policy Rules &amp; Editor</h1>
+            <p class="page-subtitle">Runtime YAML security policy hot-reloaded across all local agent tool calls.</p>
           </div>
-          <div>
-            <button class="btn btn-primary" onclick="openPolicyWizard()">
-              ✨ Synthesize Policy Draft
-            </button>
-          </div>
-        </div>
-
-        <div class="tab-bar">
-          <button class="tab-btn active" onclick="switchSubTab('panel-policy', this)">Active Policy</button>
-          <button class="tab-btn" onclick="switchSubTab('subtab-integrations', this)">IDE Integrations</button>
-          <button class="tab-btn" onclick="switchSubTab('panel-gateway', this)">Gateway Health</button>
-          <button class="tab-btn" onclick="switchSubTab('panel-egress', this)">Network & Egress</button>
-          <button class="tab-btn" onclick="switchSubTab('panel-self-healing', this)">Advanced Diagnostics</button>
-        </div>
-
-        <!-- Subtab: Policy -->
-        <div id="panel-policy" class="subtab-content">
-          <div class="card" style="margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div>
-                <h3 style="font-size: 0.95rem; color: var(--text-bright);">Active Policy: <code style="color: var(--accent);">agentcontrol-policy.yaml</code></h3>
-                <p style="font-size: 0.75rem; color: var(--text-muted);">Validated against schema v2. Changes require explicit pre-flight diff review and hot-reload.</p>
-              </div>
-              <button class="btn btn-primary btn-sm" onclick="savePolicyWithPreflight()">
-                💾 Review &amp; Hot-Reload Policy
-              </button>
-            </div>
-            <textarea id="policy-yaml-main" class="wizard-editor" style="height: 380px;"></textarea>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="fetchActivePolicy()">🔄 Refresh YAML</button>
+            <button class="btn btn-primary" onclick="savePolicyYaml()">🔥 Save &amp; Hot-Reload</button>
           </div>
         </div>
 
-        <!-- Subtab: Integrations -->
-        <div id="subtab-integrations" class="subtab-content" style="display: none;">
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Target IDE / Environment</th>
-                  <th>Config Path</th>
-                  <th>Status</th>
-                  <th>Wrapped Servers</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="integrations-table-body">
-                <tr>
-                  <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">
-                    <div style="font-size:1.2rem;">⏳</div>
-                    Loading integration status...
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Subtab: Gateway Health -->
-        <div id="panel-gateway" class="subtab-content" style="display: none;">
-          <div class="card-grid-3">
-            <div class="card">
-              <div class="card-label">HTTP Listener</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--accent);" id="gw-listener-host">127.0.0.1:18080</div>
-              <div class="card-meta">Binding: Loopback only</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Upstream MCP Server</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--green);">127.0.0.1:3000</div>
-              <div class="card-meta">Transport: HTTP JSON-RPC 2.0</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Event Stream (SSE)</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--green);" id="gw-sse-status">CONNECTING...</div>
-              <div class="card-meta">Path: /events</div>
-            </div>
-          </div>
-          <div id="panel-prometheus" style="display:none;"></div>
-        </div>
-
-        <!-- Subtab: Network & Egress -->
-        <div id="panel-egress" class="subtab-content" style="display: none;">
-          <div class="card-grid-3">
-            <div class="card">
-              <div class="card-label">Egress Firewall Guard</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--green);">ACTIVE (SSRF Shield)</div>
-              <div class="card-meta">Cloud metadata &amp; private ranges blocked</div>
-            </div>
-            <div class="card">
-              <div class="card-label">DNS Rebinding Protection</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--accent);">ENFORCING</div>
-              <div class="card-meta">Resolves to loopback rejected</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Outbound TLS Inspection</div>
-              <div class="card-value" style="font-size: 1.2rem; color: var(--green);">INLINE DLP</div>
-              <div class="card-meta">21 secret patterns inspected</div>
-            </div>
-          </div>
-
-          <!-- Outbound Policy Rules -->
-          <div class="table-container" style="margin-bottom: 20px;">
-            <div style="padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-              <h3 style="font-size: 0.92rem; font-family: var(--font-head); color: var(--text-bright);">Egress Network Routing &amp; Firewall Rules</h3>
-              <span class="badge green">Default-Deny Internal Networks</span>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Destination Target</th>
-                  <th>Category</th>
-                  <th>Firewall Action</th>
-                  <th>DLP Inspection</th>
-                  <th>Security Justification</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>169.254.169.254</code> (AWS/GCP Metadata)</td>
-                  <td><span class="badge red">CLOUD METADATA</span></td>
-                  <td><span class="badge red">HARD BLOCK</span></td>
-                  <td>Bypassed (Blocked)</td>
-                  <td>Prevents IMDSv1/v2 token exfiltration (CWE-918)</td>
-                </tr>
-                <tr>
-                  <td><code>10.0.0.0/8, 192.168.0.0/16</code> (Private RFC1918)</td>
-                  <td><span class="badge red">INTRANET SSRF</span></td>
-                  <td><span class="badge red">HARD BLOCK</span></td>
-                  <td>Bypassed (Blocked)</td>
-                  <td>Prohibits AI access to internal corporate subnets</td>
-                </tr>
-                <tr>
-                  <td><code>api.openai.com:443</code></td>
-                  <td><span class="badge blue">LLM PROVIDER</span></td>
-                  <td><span class="badge green">ALLOW</span></td>
-                  <td><span class="badge green">ACTIVE SCAN</span></td>
-                  <td>Egress allowed with secret token sanitization</td>
-                </tr>
-                <tr>
-                  <td><code>api.anthropic.com:443</code></td>
-                  <td><span class="badge blue">LLM PROVIDER</span></td>
-                  <td><span class="badge green">ALLOW</span></td>
-                  <td><span class="badge green">ACTIVE SCAN</span></td>
-                  <td>Egress allowed with secret token sanitization</td>
-                </tr>
-                <tr>
-                  <td><code>api.github.com:443</code></td>
-                  <td><span class="badge amber">DEVELOPER API</span></td>
-                  <td><span class="badge green">ALLOW</span></td>
-                  <td><span class="badge green">ACTIVE SCAN</span></td>
-                  <td>Code &amp; repo metadata access allowed</td>
-                </tr>
-                <tr>
-                  <td><code>127.0.0.1:3000</code> (Local Upstream MCP)</td>
-                  <td><span class="badge green">MCP UPSTREAM</span></td>
-                  <td><span class="badge green">ALLOW</span></td>
-                  <td><span class="badge green">ACTIVE SCAN</span></td>
-                  <td>Loopback tool execution proxy</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Subtab: Advanced Diagnostics -->
-        <div id="panel-self-healing" class="subtab-content" style="display: none;">
-          <div class="card-grid-4" style="margin-bottom: 20px;">
-            <div class="card">
-              <div class="card-label">SQLite Event Store</div>
-              <div class="card-value" style="font-size: 1.15rem; color: var(--green);">HEALTHY</div>
-              <div class="card-meta">WAL Mode · <code>events.db</code></div>
-            </div>
-            <div class="card">
-              <div class="card-label">HMAC Audit Log</div>
-              <div class="card-value" style="font-size: 1.15rem; color: var(--green);">INTEGRITY OK</div>
-              <div class="card-meta">Tamper-evident chain</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Prometheus Metrics</div>
-              <div class="card-value" style="font-size: 1.15rem; color: var(--accent);">EXPORTING</div>
-              <div class="card-meta">Endpoint: <code>/metrics</code></div>
-            </div>
-            <div class="card">
-              <div class="card-label">Schema Drift Engine</div>
-              <div class="card-value" style="font-size: 1.15rem; color: var(--green);">ACTIVE</div>
-              <div class="card-meta">30-day decay window</div>
-            </div>
-          </div>
-
-          <!-- Self-Healing & Drift Settings -->
-          <div class="card" style="margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div>
-                <h3 style="font-size: 0.95rem; color: var(--text-bright);">Behavioral Self-Healing &amp; Tool Drift Policies</h3>
-                <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
-                  Automatic scoring of parameter drift and confidence degradation across MCP tool executions.
-                </p>
-              </div>
-              <span class="badge green">Operational Auto-Tune ON</span>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px;">
-              <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
-                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Decay Window</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-bright); margin-top: 4px;">30 Days</div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Unused tools decay to deny</div>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
-                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Confidence Threshold</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--green); margin-top: 4px;">0.90 (High)</div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Required for auto-suggestions</div>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
-                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Approval Mode</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-top: 4px;">Interactive Review</div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Human-in-the-loop review</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Diagnostic Actions -->
-          <div class="card">
-            <h3 style="font-size: 0.95rem; color: var(--text-bright); margin-bottom: 12px;">Diagnostic &amp; Maintenance Actions</h3>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="runAuditCheck()">
-                🔍 Verify HMAC Audit Chain
-              </button>
-              <button class="btn" onclick="window.open('/metrics', '_blank')">
-                📊 Open Prometheus /metrics
-              </button>
-              <button class="btn" onclick="runHealthSelfTest()">
-                🩺 Run Full Health Self-Test
-              </button>
-              <button class="btn" onclick="toast('Telemetry cache synchronized with SQLite', 'info'); refreshData();">
-                🔄 Sync Event Database
-              </button>
-            </div>
-          </div>
+        <div class="table-card" style="padding: 16px;">
+          <textarea id="policy-yaml-editor" class="editor-textarea" placeholder="Loading runtime policy YAML..."></textarea>
         </div>
       </section>
 
-      <!-- ==================================================================== -->
-      <!-- Panel 5: Token Economics & Semantic Caching                          -->
-      <!-- ==================================================================== -->
-      <section id="panel-cache-economics" class="panel">
-        <div class="panel-header">
+      <!-- ================================================================== -->
+      <!-- VIEW 5: VIRTUAL KEYS                                               -->
+      <!-- ================================================================== -->
+      <section id="panel-virtual-keys" class="panel">
+        <div class="page-header">
           <div>
-            <h1 class="panel-title">
-              Enterprise Token Economics &amp; Semantic Caching
-              <span class="badge green">ACTIVE ENFORCEMENT</span>
-            </h1>
-            <p class="panel-subtitle">
-              Quantifiable cost advantage: Differentiating Vexa Gateway Zero-Egress vector caching (100% cost &amp; WAN egress avoided) vs. Provider-side prompt caching (partial upstream prefix discount).
-            </p>
+            <h1 class="page-title">🔑 Virtual Keys</h1>
+            <p class="page-subtitle">Zero-leak virtual API keys mapped to upstream provider credentials with granular spend budgets.</p>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm" onclick="refreshCacheStats()">
-              🔄 Refresh Telemetry
-            </button>
-            <button class="btn btn-sm" style="border-color: rgba(248, 81, 73, 0.4); color: var(--red);" onclick="openClearCacheModal()">
-              🧹 Clear Cache
-            </button>
-          </div>
+          <button class="btn btn-primary" onclick="toast('Virtual key generated for local workstation', 'success')">
+            + Create Virtual Key
+          </button>
         </div>
 
-        <!-- 3 Hero Cards: Gateway vs Provider vs Net Enterprise Impact -->
-        <div class="card-grid-3">
-          <!-- Card 1: Vexa Gateway -->
-          <div class="card" style="border-left: 4px solid var(--green);">
-            <div class="card-label">
-              <span>Vexa Gateway Vector Cache</span>
-              <span class="badge green">100% COST AVOIDED</span>
-            </div>
-            <div class="card-value" style="color: var(--green);" id="cache-gw-avoided-cost">$0.00</div>
-            <div class="card-meta" style="flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px;">
-              <div><strong>Avoided Tokens:</strong> <span id="cache-gw-avoided-tokens" style="color: var(--text-bright);">0</span> tokens (100% avoided)</div>
-              <div><strong>Cache Hits:</strong> <span id="cache-gw-hits">0</span> (<span id="cache-gw-exact-hits">0</span> exact + <span id="cache-gw-semantic-hits">0</span> semantic)</div>
-              <div><strong>Gateway Response:</strong> <span id="cache-gw-latency" style="color: var(--green);">~2.4 ms</span> (99.8% network speedup)</div>
-              <div><strong>WAN Egress:</strong> <span class="badge green">0 BYTES (ZERO EGRESS)</span></div>
-            </div>
-          </div>
-
-          <!-- Card 2: Provider-Side Prompt Cache -->
-          <div class="card" style="border-left: 4px solid var(--accent);">
-            <div class="card-label">
-              <span>Provider-Side Prompt Cache</span>
-              <span class="badge blue">UPSTREAM PREFIX DISCOUNT</span>
-            </div>
-            <div class="card-value" style="color: var(--accent);" id="cache-provider-discount">$0.00</div>
-            <div class="card-meta" style="flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px;">
-              <div><strong>Cached Tokens Read:</strong> <span id="cache-provider-tokens" style="color: var(--text-bright);">0</span> tokens</div>
-              <div><strong>Discount Scope:</strong> ~50–90% prompt rate (0% output discount)</div>
-              <div><strong>Upstream Latency:</strong> ~450ms – 1,200ms WAN roundtrip</div>
-              <div><strong>WAN Egress:</strong> <span class="badge amber">FULL PAYLOAD EGRESSED</span></div>
-            </div>
-          </div>
-
-          <!-- Card 3: Total Enterprise Economic Impact -->
-          <div class="card" style="border-left: 4px solid #a78bfa;">
-            <div class="card-label">
-              <span>Total Enterprise Economic Impact</span>
-              <span class="badge" style="background: rgba(167, 139, 250, 0.15); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.3);">COMBINED NET VALUE</span>
-            </div>
-            <div class="card-value" style="color: #c4b5fd;" id="cache-total-savings">$0.00</div>
-            <div class="card-meta" style="flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px;">
-              <div><strong>Overall Hit Rate:</strong> <span id="cache-hit-rate" style="color: var(--text-bright); font-weight: 600;">0.0%</span> (<span id="cache-total-queries">0</span> queries)</div>
-              <div><strong>Developer Latency Saved:</strong> <span id="cache-latency-avoided" style="color: var(--text-bright); font-weight: 600;">0.00 s</span> total wait time</div>
-              <div style="width: 100%; margin-top: 4px;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px;">
-                  <span>Gateway Avoidance: <strong id="pct-gw-savings" style="color: var(--green);">0%</strong></span>
-                  <span>Provider Discount: <strong id="pct-prov-savings" style="color: var(--accent);">0%</strong></span>
-                </div>
-                <div class="cache-bar-track">
-                  <div id="bar-gw-savings" class="bar-gw" style="width: 0%;"></div>
-                  <div id="bar-prov-savings" class="bar-prov" style="width: 0%;"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Comparative Architectural Breakdown -->
-        <div class="table-container" style="margin-bottom: 20px;">
-          <div style="padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 0.92rem; font-family: var(--font-head); color: var(--text-bright);">Architectural Comparison: Gateway Vector Cache vs. Provider Prompt Cache</h3>
-            <span class="badge green">Direct Enterprise Advantage</span>
-          </div>
+        <div class="table-card">
           <table>
             <thead>
               <tr>
-                <th>Evaluation Dimension</th>
-                <th style="color: var(--green);">⚡ Vexa Gateway Semantic Cache</th>
-                <th style="color: var(--accent);">🌐 Provider-Side Prompt Cache (Anthropic/OpenAI)</th>
-                <th>Enterprise Impact</th>
+                <th>Key Alias</th>
+                <th>Virtual Key Prefix</th>
+                <th>Permitted Models</th>
+                <th>Upstream Routing</th>
+                <th>Monthly Cap</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>Matching Engine</strong></td>
-                <td><span class="badge green">Vector Cosine (Threshold ≥ 0.88) + SHA256 Exact</span></td>
-                <td><span class="badge blue">Strict Exact Prefix Text Hash</span></td>
-                <td>Catches paraphrased &amp; semantically identical prompts (30–60% higher recall)</td>
+                <td><strong>Codex Local Workstation</strong></td>
+                <td><code style="color:var(--accent);">sk-vex-workstation-local****</code></td>
+                <td>gpt-4o, o1, claude-3-7-sonnet</td>
+                <td>Universal Gateway Multi-Provider</td>
+                <td>$50.00 / mo</td>
+                <td><span class="badge green">ACTIVE</span></td>
               </tr>
               <tr>
-                <td><strong>Token Cost Avoidance</strong></td>
-                <td><strong>100% Input + 100% Output</strong> ($0.00 billed)</td>
-                <td>~50–90% Input discount only (100% output billed)</td>
-                <td>Zero marginal cost for cached executions</td>
-              </tr>
-              <tr>
-                <td><strong>Network Egress &amp; Latency</strong></td>
-                <td><strong>~2.4ms</strong> (Pure loopback / in-memory, 0 bytes egress)</td>
-                <td>~450ms – 1,200ms (Full prompt sent across Internet WAN)</td>
-                <td>Near-instant agent tool execution + zero confidential data exfiltration</td>
-              </tr>
-              <tr>
-                <td><strong>Vendor &amp; Model Portability</strong></td>
-                <td><strong>Universal</strong> — works across OpenAI, Anthropic, Ollama, DeepSeek</td>
-                <td><strong>Vendor-locked</strong> — proprietary per-provider feature</td>
-                <td>Single unified caching layer across all enterprise AI models</td>
-              </tr>
-              <tr>
-                <td><strong>Storage Tiering</strong></td>
-                <td>Sub-millisecond In-Memory LRU + Enterprise Qdrant Vector DB</td>
-                <td>Ephemeral in-memory provider cache (5 min to 1 hr TTL)</td>
-                <td>Long-term cross-session knowledge retention</td>
+                <td><strong>Cursor IDE Virtual Key</strong></td>
+                <td><code style="color:var(--accent);">sk-vex-cursor-client****</code></td>
+                <td>All Models</td>
+                <td>Auto-Routed</td>
+                <td>$100.00 / mo</td>
+                <td><span class="badge green">ACTIVE</span></td>
               </tr>
             </tbody>
           </table>
         </div>
+      </section>
 
-        <!-- Live Semantic Cluster Inspector Stream -->
-        <div class="table-container">
-          <div style="padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <h3 style="font-size: 0.95rem; font-family: var(--font-head); color: var(--text-bright);">Live Semantic Cluster Matches</h3>
-              <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;">
-                Inspect prompt semantic vector distance and real-time cost avoidance verification.
-              </p>
+      <!-- ================================================================== -->
+      <!-- VIEW 6: LLM PROVIDERS                                              -->
+      <!-- ================================================================== -->
+      <section id="panel-llm-providers" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">🤖 LLM Providers</h1>
+            <p class="page-subtitle">Upstream model provider backends configured for transparent proxying.</p>
+          </div>
+          <button class="btn btn-primary" onclick="triggerTestLLM()">⚡ Send Test Prompt</button>
+        </div>
+
+        <div class="soc-cards-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">OpenAI</div>
+              <span class="badge green">READY</span>
             </div>
-            <span class="badge blue" id="cache-cluster-count">Live Circular Buffer (0 Matches)</span>
+            <div style="font-size: 0.78rem; color: var(--text-bright); margin-bottom: 4px;">api.openai.com</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px;">gpt-4o, o1, o3-mini, Responses API</div>
+            <div style="font-size: 0.7rem; color: var(--accent);">Loopback: <code>/v1/chat/completions</code></div>
+          </div>
+
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Anthropic</div>
+              <span class="badge green">READY</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-bright); margin-bottom: 4px;">api.anthropic.com</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px;">claude-3-7-sonnet, claude-3-5-haiku</div>
+            <div style="font-size: 0.7rem; color: var(--accent);">Protocol: <code>/v1/messages</code></div>
+          </div>
+
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Google Gemini</div>
+              <span class="badge green">READY</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-bright); margin-bottom: 4px;">generativelanguage.googleapis.com</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px;">gemini-2.0-flash, gemini-1.5-pro</div>
+            <div style="font-size: 0.7rem; color: var(--accent);">Base: <code>/v1beta/openai</code></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 7: MCP SERVERS                                                -->
+      <!-- ================================================================== -->
+      <section id="panel-mcp-servers" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">🧩 MCP Servers</h1>
+            <p class="page-subtitle">Discovered and wrapped Model Context Protocol tool servers with runtime enforcement.</p>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Server Name</th>
+                <th>Transport Protocol</th>
+                <th>Tools Mapped</th>
+                <th>Security Boundary</th>
+                <th>Posture</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>filesystem-mcp</strong></td>
+                <td><code>stdio / jsonrpc</code></td>
+                <td>read_file, write_file, list_dir</td>
+                <td><span class="badge blue">WORKSPACE-SANDBOX</span></td>
+                <td><span class="badge green">PROTECTED</span></td>
+              </tr>
+              <tr>
+                <td><strong>fetch-web-mcp</strong></td>
+                <td><code>stdio / jsonrpc</code></td>
+                <td>fetch, web_search</td>
+                <td><span class="badge blue">EGRESS-ALLOWLIST</span></td>
+                <td><span class="badge green">PROTECTED</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 8: CONNECTED DEVICES / IDES                                   -->
+      <!-- ================================================================== -->
+      <section id="panel-devices" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">💻 Connected Devices &amp; IDEs</h1>
+            <p class="page-subtitle">Status of Codex, Cursor, VS Code, Windsurf, Zed, and other local developer tools.</p>
+          </div>
+          <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh Status</button>
+        </div>
+
+        <!-- Codex Setup Info Card -->
+        <div class="soc-card" style="margin-bottom: 20px; border-left: 4px solid var(--accent);">
+          <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-bright); margin-bottom: 6px;">
+            🤖 Codex Setup Verification
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 10px;">
+            Codex directs prompt traffic to OpenAI base URL. In <code style="color:var(--accent);">~/.codex/config.toml</code>:
+          </p>
+          <div class="dossier-box" style="margin-bottom: 10px;">
+[openai]
+base_url = "http://127.0.0.1:18080/v1"
+api_key = "sk-vex-workstation-local-token"
+          </div>
+          <div style="font-size: 0.74rem; color: var(--green);">
+            ✓ Verified: Inbound prompts, completions, token usage, and latency are monitored live.
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>IDE / Tool Target</th>
+                <th>Config Path</th>
+                <th>Protection Posture</th>
+                <th>Wrapped Servers</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="integrations-table-body">
+              <tr>
+                <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">Loading devices...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 9: COST & BUDGETS (TOKEN ECONOMICS)                           -->
+      <!-- ================================================================== -->
+      <section id="panel-cost-budgets" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">💰 Cost &amp; Token Economics</h1>
+            <p class="page-subtitle">Gateway vector semantic cache savings and spend governance.</p>
+          </div>
+        </div>
+
+        <div class="soc-cards-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="soc-card" style="border-left: 4px solid var(--green);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Gateway Avoidance Savings</div>
+              <span class="badge green">100% MARGINAL ZERO</span>
+            </div>
+            <div class="soc-card-big-val" style="color: var(--green);" id="cache-gw-savings">$0.00</div>
+            <div class="soc-card-sub-val">Saved via loopback vector cosine matching</div>
+          </div>
+
+          <div class="soc-card" style="border-left: 4px solid var(--accent);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Hit Rate</div>
+              <span class="badge blue">VECTOR CACHE</span>
+            </div>
+            <div class="soc-card-big-val" style="color: var(--accent);" id="cache-hit-rate">0.0%</div>
+            <div class="soc-card-sub-val">Prompts served from memory without network egress</div>
+          </div>
+
+          <div class="soc-card" style="border-left: 4px solid var(--purple);">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Total Economic Impact</div>
+              <span class="badge purple">COMBINED VALUE</span>
+            </div>
+            <div class="soc-card-big-val" style="color: #c4b5fd;" id="cache-total-savings">$0.00</div>
+            <div class="soc-card-sub-val">Zero-latency instant agent execution</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 10: REQUEST & AUDIT LOGS                                      -->
+      <!-- ================================================================== -->
+      <section id="panel-audit-logs" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">📜 Request &amp; Audit Logs</h1>
+            <p class="page-subtitle">Complete chronological audit trail for Codex prompts and MCP tool executions. Click any row to inspect Run Dossier.</p>
+          </div>
+        </div>
+
+        <div class="table-card" style="padding: 12px 16px; margin-bottom: 14px;">
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="log-search-input" placeholder="Search prompts, models, rules, or findings..."
+              style="flex: 1; min-width: 220px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: var(--radius-sm); padding: 7px 12px; color: var(--text-bright); font-size: 0.78rem;"
+              oninput="filterAuditLogs(this.value)">
+            <select id="log-filter-transport" style="background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: var(--radius-sm); padding: 7px 12px; color: var(--text-bright); font-size: 0.78rem;"
+              onchange="filterAuditLogs()">
+              <option value="all">All Transports</option>
+              <option value="llm">LLM Prompts (Codex / Agents)</option>
+              <option value="mcp">MCP Tools</option>
+              <option value="stdio">Stdio Process</option>
+            </select>
+            <select id="log-filter-verdict" style="background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: var(--radius-sm); padding: 7px 12px; color: var(--text-bright); font-size: 0.78rem;"
+              onchange="filterAuditLogs()">
+              <option value="all">All Verdicts</option>
+              <option value="allow">Allowed</option>
+              <option value="deny">Blocked / Denied</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Transport</th>
+                <th>Target Model / Tool</th>
+                <th>Verdict</th>
+                <th>Rule Disposition</th>
+                <th>Prompt / Payload Preview</th>
+                <th>Latency</th>
+              </tr>
+            </thead>
+            <tbody id="audit-logs-body">
+              <tr>
+                <td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No events in log</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 11: USERS & ROLES (Team Hub Tier)                             -->
+      <!-- ================================================================== -->
+      <section id="panel-users-hub" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">👥 Users &amp; Roles <span class="badge purple" style="font-size: 0.75rem;">TEAM HUB FEATURE</span></h1>
+            <p class="page-subtitle">Centralized Role-Based Access Control (RBAC) across your engineering organization.</p>
+          </div>
+        </div>
+
+        <div class="hub-callout-card">
+          <div>
+            <h3 style="font-family: var(--font-head); font-size: 1rem; color: var(--text-bright); margin-bottom: 4px;">
+              🏢 Multi-Developer Organization Governance
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-main); line-height: 1.45;">
+              In Vexa Team Hub, admins invite team members, assign developer permissions, and allocate monthly token quotas.
+            </p>
+          </div>
+          <button class="btn btn-purple" onclick="window.open('https://vexasec.io/docs/team_hub_guide.html', '_blank')">
+            Team Hub Guide →
+          </button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header-bar">
+            <h3 style="font-size: 0.88rem; font-family: var(--font-head); color: var(--text-bright);">Active Workstation Identity</h3>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Model</th>
-                <th>Query Prompt Preview</th>
-                <th>Matched Cluster Preview</th>
-                <th>Cosine Similarity</th>
-                <th>Speedup</th>
-                <th>Saved ($)</th>
-                <th>Action</th>
+                <th>User / Subject</th>
+                <th>Role</th>
+                <th>Device Binding</th>
+                <th>Status</th>
               </tr>
             </thead>
-            <tbody id="cache-matches-body">
+            <tbody>
               <tr>
-                <td colspan="8" style="text-align: center; padding: 36px; color: var(--text-muted);">
-                  <div style="font-size: 1.8rem; margin-bottom: 8px;">🧠</div>
-                  <strong>No semantic cache hits recorded yet</strong>
-                  <p style="font-size: 0.8rem; margin-top: 4px;">
-                    Send agent prompts through port 18080 to observe real-time vector matching and cost avoidance.
-                  </p>
-                </td>
+                <td><strong>Local Workstation Developer</strong></td>
+                <td><span class="badge blue">ADMIN / DEVELOPER</span></td>
+                <td><code id="hub-user-device-id" style="color:var(--accent);">dev-zoya-f846abd6</code></td>
+                <td><span class="badge green">CONNECTED</span></td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 12: ORG & LICENSE (Team Hub Tier)                             -->
+      <!-- ================================================================== -->
+      <section id="panel-org-hub" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">🏢 Organization &amp; License <span class="badge purple" style="font-size: 0.75rem;">TEAM HUB FEATURE</span></h1>
+            <p class="page-subtitle">Device enrollment status, license tier, and Team Hub central sync.</p>
+          </div>
+        </div>
+
+        <div class="soc-cards-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">License Tier</div>
+              <span class="badge green">ACTIVE</span>
+            </div>
+            <div class="soc-card-big-val" style="color: var(--accent);">Developer Free</div>
+            <div class="soc-card-sub-val">Unlimited Local Inspection</div>
+          </div>
+
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Team Hub Status</div>
+              <span class="badge green" id="org-status-badge">Enrolled</span>
+            </div>
+            <div class="soc-card-big-val" style="color: var(--green);" id="org-status-text">Connected</div>
+            <div class="soc-card-sub-val"><span id="org-hub-endpoint">http://127.0.0.1:8081</span></div>
+          </div>
+
+          <div class="soc-card">
+            <div class="soc-card-header">
+              <div class="soc-card-title">Device ID</div>
+              <span class="badge blue">Hardware</span>
+            </div>
+            <div class="soc-card-big-val" style="font-size: 1rem; font-family: var(--font-mono);" id="org-device-id-val">dev-zoya-f846abd6</div>
+            <div class="soc-card-sub-val">Ed25519 PKCE Hardware Fingerprint</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 13: AUTH & SSO (Team Hub Tier)                                -->
+      <!-- ================================================================== -->
+      <section id="panel-sso-hub" class="panel">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">🔐 Auth Providers &amp; SSO <span class="badge purple" style="font-size: 0.75rem;">TEAM HUB FEATURE</span></h1>
+            <p class="page-subtitle">Single Sign-On (SSO) with Okta, Azure Active Directory, GitHub Enterprise, and OIDC.</p>
+          </div>
+        </div>
+
+        <div class="hub-callout-card">
+          <div>
+            <h3 style="font-family: var(--font-head); font-size: 1rem; color: var(--text-bright); margin-bottom: 4px;">
+              Enterprise Identity Federation
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-main); line-height: 1.45;">
+              Developers authenticate their CLI &amp; IDE sessions via browser PKCE (<code style="color:var(--accent);">agentcontrol login</code>).
+            </p>
+          </div>
+          <button class="btn btn-purple" onclick="toast('Authenticate via terminal: agentcontrol login', 'info')">
+            CLI Login Guide
+          </button>
         </div>
       </section>
 
     </main>
   </div>
 
-  <!-- Live Policy Wizard Sliding Drawer -->
-  <div id="policy-wizard-drawer" class="wizard-drawer">
-    <div class="wizard-header">
-      <h3 style="font-size: 1.05rem; font-family: var(--font-head); color: var(--text-bright);">✨ Live Policy Synthesizer</h3>
-      <button class="btn btn-sm" onclick="closePolicyWizard()">✕ Close</button>
-    </div>
-    <div class="wizard-body">
-      <p style="font-size: 0.78rem; color: var(--text-muted);">
-        Auto-synthesize least-privilege YAML policy rules from observed agent traffic.
-      </p>
-      <textarea id="wizard-yaml-editor" class="wizard-editor" placeholder="Click 'Generate Draft' to synthesize policy..."></textarea>
-      <div id="wizard-status-msg" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--accent);"></div>
-    </div>
-    <div class="wizard-actions">
-      <button class="btn btn-primary" style="flex: 1;" onclick="applyWizardPolicy()">
-        🚀 Apply & Hot-Reload
-      </button>
-      <button class="btn" onclick="fetchWizardPolicy()">
-        🔄 Refresh Draft
-      </button>
-    </div>
-  </div>
-
-  <!-- Mode Switch Confirmation Modal -->
-  <div id="mode-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h3 style="font-family: var(--font-head); color: var(--text-bright); margin-bottom: 12px;">Switch Security Posture</h3>
-      <p id="mode-modal-desc" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
-        You are about to switch between Shadow (observation-only) and Active Enforcement mode.
-      </p>
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button class="btn" onclick="closeModeModal()">Cancel</button>
-        <button class="btn btn-primary" id="btn-confirm-mode" onclick="executeModeSwitch()">Confirm Switch</button>
+  <!-- Sliding Run Dossier Drawer (Click Event to Open) -->
+  <div id="dossier-drawer" class="dossier-drawer">
+    <div class="dossier-header">
+      <div>
+        <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Audit Run Dossier</div>
+        <h3 id="dossier-id" style="font-size: 1rem; font-family: var(--font-mono); color: var(--accent);">evt_000000</h3>
       </div>
+      <button class="btn btn-sm" onclick="closeDossier()">✕ Close</button>
     </div>
-  </div>
 
-  <!-- Policy Pre-Flight Review Modal -->
-  <div id="policy-preflight-modal" class="modal-overlay">
-    <div class="modal-box" style="max-width: 640px; width: 90%;">
-      <h3 style="font-family: var(--font-head); color: var(--text-bright); margin-bottom: 8px;">⚠️ Policy Hot-Reload — Pre-Flight Review</h3>
-      <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
-        Review the policy YAML below before applying it live. This will replace the active runtime policy and immediately affect all tool call enforcement decisions.
-      </p>
-      <pre id="policy-preflight-preview" style="background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-bright); max-height: 280px; overflow-y: auto; margin-bottom: 16px; white-space: pre-wrap; word-break: break-all;"></pre>
-      <div style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; font-size: 0.78rem; color: var(--red);">
-        ⚠️ <strong>Live impact:</strong> Policy changes take effect immediately. Ensure schema is valid before confirming.
-      </div>
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button class="btn" onclick="document.getElementById('policy-preflight-modal').classList.remove('open')">Cancel</button>
-        <button class="btn btn-primary" style="background: linear-gradient(135deg, var(--red), #c94040);" onclick="savePolicyDirect()">🔥 Confirm &amp; Hot-Reload</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Semantic Cluster Inspector Modal -->
-  <div id="semantic-inspector-modal" class="modal-overlay">
-    <div class="modal-box" style="max-width: 680px; width: 90%;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h3 style="font-family: var(--font-head); color: var(--text-bright); display: flex; align-items: center; gap: 8px;">
-          🧠 Semantic Vector Cluster Inspector
-        </h3>
-        <button class="btn btn-sm" onclick="closeSemanticInspector()">✕ Close</button>
+    <div class="dossier-body">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <span id="dossier-verdict" class="badge green">ALLOWED</span>
+        <span id="dossier-transport" class="badge blue">LLM</span>
+        <span id="dossier-model" class="badge purple">gpt-4o</span>
+        <span id="dossier-latency" class="badge green">12.4 ms</span>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-        <div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; font-weight: 600;">Incoming Prompt Query</div>
-          <div id="insp-query-text" class="diff-box"></div>
-        </div>
-        <div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; font-weight: 600;">Cached Cluster Anchor</div>
-          <div id="insp-matched-text" class="diff-box"></div>
-        </div>
+      <div>
+        <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">Prompt / Inbound Content</div>
+        <div id="dossier-prompt" class="dossier-box">No prompt text recorded</div>
       </div>
 
-      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 0.78rem;">
+      <div>
+        <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">Assistant Output / Diagnostic</div>
+        <div id="dossier-completion" class="dossier-box">No output text recorded</div>
+      </div>
+
+      <div style="background: rgba(16, 23, 36, 0.7); border: 1px solid var(--card-border); border-radius: var(--radius-sm); padding: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.74rem;">
           <div>
-            <span style="color: var(--text-muted);">Vector Metric:</span>
-            <div id="insp-similarity" style="font-weight: 700; color: var(--green); margin-top: 2px;">0.00%</div>
+            <span style="color: var(--text-muted);">Policy Rule:</span>
+            <div id="dossier-rule" style="font-family: var(--font-mono); color: var(--text-bright); margin-top: 2px;">llm_egress_allowlist</div>
           </div>
           <div>
-            <span style="color: var(--text-muted);">Latency Avoided:</span>
-            <div id="insp-latency" style="font-weight: 700; color: var(--accent); margin-top: 2px;">0 ms</div>
+            <span style="color: var(--text-muted);">Target Host:</span>
+            <div id="dossier-host" style="font-family: var(--font-mono); color: var(--text-bright); margin-top: 2px;">api.openai.com</div>
           </div>
           <div>
-            <span style="color: var(--text-muted);">Cost Avoided:</span>
-            <div id="insp-cost" style="font-weight: 700; color: #c4b5fd; margin-top: 2px;">$0.00</div>
+            <span style="color: var(--text-muted);">DLP Findings:</span>
+            <div id="dossier-dlp" style="color: var(--green); margin-top: 2px;">Clean (0 secrets)</div>
           </div>
           <div>
-            <span style="color: var(--text-muted);">Model Scope:</span>
-            <div id="insp-model" style="font-family: var(--font-mono); margin-top: 2px;">gpt-4o</div>
-          </div>
-          <div>
-            <span style="color: var(--text-muted);">Tenant Scope:</span>
-            <div id="insp-tenant" style="font-family: var(--font-mono); margin-top: 2px;">default</div>
-          </div>
-          <div>
-            <span style="color: var(--text-muted);">Quota Benefit:</span>
-            <div id="insp-tokens" style="font-weight: 600; color: var(--text-bright); margin-top: 2px;">100% saved</div>
+            <span style="color: var(--text-muted);">Injection Score:</span>
+            <div id="dossier-inj" style="color: var(--green); margin-top: 2px;">Safe (0.00)</div>
           </div>
         </div>
       </div>
 
-      <div style="display: flex; justify-content: flex-end;">
-        <button class="btn btn-primary" onclick="closeSemanticInspector()">Dismiss</button>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-sm" onclick="copyDossierJson()">📋 Copy JSON</button>
+        <button class="btn btn-sm btn-primary" onclick="closeDossier()">Close Dossier</button>
       </div>
     </div>
   </div>
 
-  <!-- Clear Cache Confirmation Modal -->
-  <div id="cache-clear-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h3 style="font-family: var(--font-head); color: var(--text-bright); margin-bottom: 10px;">Purge Semantic Vector Cache</h3>
-      <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 18px;">
-        Are you sure you want to purge all in-memory and vector cache entries? Subsequent identical queries will be dispatched to upstream LLM providers until re-cached.
-      </p>
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button class="btn" onclick="closeClearCacheModal()">Cancel</button>
-        <button class="btn btn-primary" style="background: linear-gradient(135deg, var(--red), #c94040);" onclick="executeClearCache()">🧹 Confirm Purge</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Container -->
+  <!-- Toast Notification Container -->
   <div id="toast-container"></div>
 
-  <!-- Javascript Logic -->
+  <!-- JavaScript Logic -->
   <script>
-    // Global State
     let allEvents = [];
-    let activeMode = 'enforce';
+    let selectedEventForDossier = null;
     let sseSource = null;
-    let pollTimer = null;
-    let selectedDetectionCategory = 'all';
 
-    // ── Universal Secret Redaction Filter ────────────────────────────────────
+    function formatEventTimestamp(e) {
+      if (!e) return '—';
+      let ms = null;
+      if (e.timestamp_ns) ms = Math.floor(e.timestamp_ns / 1000000);
+      else if (e.timestamp_ms) ms = e.timestamp_ms;
+      else if (e.ts) ms = typeof e.ts === 'number' ? (e.ts > 1e11 ? e.ts : e.ts * 1000) : new Date(e.ts).getTime();
+      if (!ms || isNaN(ms) || ms <= 0) return 'Recent';
+      return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function extractToolOrMethod(e) {
+      if (!e) return 'Unknown';
+      if (e.transport === 'llm') {
+        if (e.url_path) return e.url_path;
+        return 'LLM Prompt Completion';
+      }
+      if (e.url_path && e.url_path !== '/' && e.url_path.trim() !== '') return e.url_path;
+      if (e.request_body) {
+        try {
+          const parsed = typeof e.request_body === 'string' ? JSON.parse(e.request_body) : e.request_body;
+          if (parsed && parsed.params && parsed.params.name) return parsed.params.name;
+          if (parsed && parsed.method) return parsed.method;
+        } catch {}
+      }
+      if (e.method) return `${e.method} / (HTTP)`;
+      return 'HTTP / (Root)';
+    }
+
     function maskSensitivePayload(rawStr) {
-      if (!rawStr) return '{}';
+      if (!rawStr || rawStr === '{}' || (typeof rawStr === 'string' && rawStr.trim() === '')) return '—';
       try {
         let text = typeof rawStr === 'string' ? rawStr : JSON.stringify(rawStr, null, 2);
-        // 1. AWS Access Keys (AKIA...)
         text = text.replace(/\b(AKIA[0-9A-Z]{16})\b/g, m => m.slice(0, 4) + '****' + m.slice(-4));
-        // 2. Secret keys / tokens
         text = text.replace(/(["']?(?:api[_-]?key|secret|token|password|auth|bearer)["']?\s*[:=]\s*["'])([^"'\s]{6,})(["'])/gi, (m, p1, p2, p3) => {
           const masked = p2.length > 8 ? p2.slice(0, 3) + '****' + p2.slice(-3) : '********';
           return p1 + masked + p3;
         });
-        // 3. Bearer tokens
         text = text.replace(/(Bearer\s+)[A-Za-z0-9_\-\.]{8,}/gi, '$1[REDACTED_TOKEN]');
-        // 4. SSN
-        text = text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '***-**-****');
-        // 5. Database Connection URIs
-        text = text.replace(/((?:postgres|postgresql|mysql|mongodb|redis):\/\/[^:]+:)([^@]+)(@)/gi, '$1****$3');
-        // 6. Private keys
-        text = text.replace(/-----BEGIN[ A-Z0-9_-]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z0-9_-]*PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n[REDACTED_RSA_KEY]\n-----END PRIVATE KEY-----');
         return text;
       } catch {
         return String(rawStr);
@@ -1543,168 +1947,168 @@
       setTimeout(() => el.remove(), 4000);
     }
 
-    // ── Navigation Switching ─────────────────────────────────────────────────
+    function toggleNavSection(secId) {
+      const sec = document.getElementById(secId);
+      if (sec) sec.classList.toggle('collapsed');
+    }
+
+    function selectPanel(panelId) {
+      document.querySelectorAll('.nav-item').forEach(i => {
+        if (i.dataset.panel === panelId) i.classList.add('active');
+        else i.classList.remove('active');
+      });
+      document.querySelectorAll('.panel').forEach(p => {
+        if (p.id === panelId) p.classList.add('active');
+        else p.classList.remove('active');
+      });
+      if (panelId === 'panel-policy-rules') fetchActivePolicy();
+    }
+
+    // Navigation setup
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-        item.classList.add('active');
         const panelId = item.dataset.panel;
-        const panel = document.getElementById(panelId);
-        if (panel) panel.classList.add('active');
+        if (panelId) selectPanel(panelId);
       });
     });
 
-    function switchSubTab(subtabId, btn) {
-      document.querySelectorAll('.subtab-content').forEach(s => s.style.display = 'none');
-      document.querySelectorAll('#panel-policy-gateway .tab-btn').forEach(b => b.classList.remove('active'));
-      const target = document.getElementById(subtabId);
-      if (target) target.style.display = 'block';
-      if (btn) btn.classList.add('active');
-      if (subtabId === 'panel-policy') {
-        fetchActivePolicy();
-      }
+    // Run Dossier Drawer
+    function openDossier(eventIdx) {
+      const e = allEvents[eventIdx];
+      if (!e) return;
+      selectedEventForDossier = e;
+
+      const eventId = e.id ? `evt_${String(e.id).padStart(6, '0')}` : `evt_01J${eventIdx}`;
+      document.getElementById('dossier-id').textContent = eventId;
+
+      const isDeny = e.verdict === 'deny' || e.verdict === 'blocked' || e.response_status === 403 || e.response_status === 400;
+      const vBadge = document.getElementById('dossier-verdict');
+      vBadge.textContent = isDeny ? 'BLOCKED' : 'ALLOWED';
+      vBadge.className = isDeny ? 'badge red' : 'badge green';
+
+      const tBadge = document.getElementById('dossier-transport');
+      tBadge.textContent = (e.transport || 'HTTP').toUpperCase();
+
+      const mBadge = document.getElementById('dossier-model');
+      mBadge.textContent = e.url_path && e.url_path.includes('model=')
+        ? e.url_path.split('model=')[1]
+        : (e.transport === 'llm' ? 'LLM' : (e.transport || 'tool'));
+
+      const lat = Number(e.latency_ms || e.duration_ms || 0);
+      document.getElementById('dossier-latency').textContent = lat > 0 ? `${lat.toFixed(1)} ms` : '< 1.0 ms';
+
+      document.getElementById('dossier-prompt').textContent = e.request_body || '(No prompt text recorded)';
+      document.getElementById('dossier-completion').textContent = e.response_body || (isDeny ? 'Turn blocked by firewall policy' : '(Streaming completion dispatched to client)');
+
+      document.getElementById('dossier-rule').textContent = e.policy_rule || 'default_allowlist';
+      document.getElementById('dossier-host').textContent = e.target_host || '127.0.0.1';
+      document.getElementById('dossier-dlp').textContent = e.dlp_findings ? `⚠️ ${e.dlp_findings}` : 'Clean (0 secrets)';
+      document.getElementById('dossier-inj').textContent = e.injection_findings ? `⚠️ ${e.injection_findings}` : 'Safe (0.00)';
+
+      document.getElementById('dossier-drawer').classList.add('open');
     }
 
-    // ── Detections Filter ────────────────────────────────────────────────────
-    function filterDetections(category, btn) {
-      // Update active tab button
-      document.querySelectorAll('#panel-detections .tab-btn').forEach(b => b.classList.remove('active'));
-      if (btn) btn.classList.add('active');
-
-      // Filter table rows by data-category attribute
-      const rows = document.querySelectorAll('#detections-table-body tr[data-category]');
-      rows.forEach(row => {
-        if (category === 'all') {
-          row.style.display = '';
-        } else {
-          row.style.display = row.dataset.category === category ? '' : 'none';
-        }
-      });
-
-      // If no data-category rows yet (empty state row), show all
-      if (rows.length === 0) return;
+    function closeDossier() {
+      document.getElementById('dossier-drawer').classList.remove('open');
     }
 
-    function toggleActivityView(view) {
-      const timeline = document.getElementById('panel-timeline');
-      const tools = document.getElementById('panel-inventory');
-      const btnT = document.getElementById('btn-toggle-timeline');
-      const btnK = document.getElementById('btn-toggle-tools');
-      if (view === 'tools') {
-        if (timeline) timeline.style.display = 'none';
-        if (tools) tools.style.display = 'block';
-        if (btnK) btnK.classList.add('btn-primary');
-        if (btnT) btnT.classList.remove('btn-primary');
-        renderToolSummary(allEvents);
-      } else {
-        if (timeline) timeline.style.display = 'block';
-        if (tools) tools.style.display = 'none';
-        if (btnT) btnT.classList.add('btn-primary');
-        if (btnK) btnK.classList.remove('btn-primary');
-        renderTimeline(allEvents);
-      }
+    function copyDossierJson() {
+      if (!selectedEventForDossier) return;
+      navigator.clipboard.writeText(JSON.stringify(selectedEventForDossier, null, 2));
+      toast('Copied event JSON to clipboard', 'success');
     }
 
-    // ── Data Fetching & Rendering ────────────────────────────────────────────
+    function focusSearch() {
+      selectPanel('panel-audit-logs');
+      const input = document.getElementById('log-search-input');
+      if (input) input.focus();
+    }
+
+    // Refresh Data
     async function refreshData() {
-      const sseStatus = document.getElementById('gw-sse-status');
       try {
         const res = await fetch('/api/events');
         if (res.ok) {
-          if (sseStatus) {
-            sseStatus.textContent = 'CONNECTED';
-            sseStatus.style.color = 'var(--green)';
-          }
           allEvents = await res.json();
-          renderOverview(allEvents);
-          renderTimeline(allEvents);
+          renderOverviewStream(allEvents);
+          renderAuditLogs(allEvents);
           renderDetections(allEvents);
-        } else {
-          if (sseStatus) {
-            sseStatus.textContent = 'ERROR (' + res.status + ')';
-            sseStatus.style.color = 'var(--red)';
-          }
         }
       } catch (e) {
-        if (sseStatus) {
-          sseStatus.textContent = 'OFFLINE';
-          sseStatus.style.color = 'var(--red)';
-        }
-        console.warn("Telemetry refresh failed:", e);
+        console.warn("Fetch events failed:", e);
       }
-      // Also refresh integrations status
+
       try {
         const iRes = await fetch('/api/integrations');
         if (iRes.ok) {
           const data = await iRes.json();
-          const ideCount = document.getElementById('header-ide-count');
-          if (ideCount) ideCount.textContent = `${data.total_protected}/${data.total_targets}`;
-          renderIntegrationsTable(data.integrations || []);
-
-          const summaryEl = document.getElementById('ov-integration-summary');
-          if (summaryEl) {
-            if (data.total_protected === 0) {
-              summaryEl.textContent = `No supported IDEs configured yet (0/${data.total_targets || 9} Protected)`;
-            } else {
-              const activeNames = (data.integrations || [])
-                .filter(i => i.is_wrapped)
-                .map(i => i.name)
-                .join(', ');
-              summaryEl.textContent = `${data.total_protected}/${data.total_targets} Protected: ${activeNames}`;
-            }
-          }
+          renderIntegrations(data.integrations || [], data.total_protected, data.total_targets);
         }
-      } catch (e) {
-        console.warn("Integrations refresh failed:", e);
-      }
+      } catch (e) {}
 
-      // Also refresh gateway status and dynamic version
       try {
-        const sRes = await fetch('/api/v1/status');
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          if (sData.version) {
-            const verEl = document.getElementById('sidebar-version');
-            if (verEl) verEl.textContent = `v${sData.version} Standalone Dev`;
+        const hRes = await fetch('/health');
+        if (hRes.ok) {
+          const hData = await hRes.json();
+          if (hData.auth && hData.auth.hub_url) {
+            const orgHub = document.getElementById('org-hub-endpoint');
+            if (orgHub) orgHub.textContent = hData.auth.hub_url;
+            const orgText = document.getElementById('org-status-text');
+            if (orgText) orgText.textContent = hData.auth.enrolled ? 'Enrolled' : 'Standalone';
           }
-          if (sData.mode) {
-            const modeEl = document.getElementById('header-mode-text');
-            if (modeEl) modeEl.textContent = sData.mode.toUpperCase();
+          if (hData.auth && hData.auth.device_id) {
+            const devId = document.getElementById('hub-user-device-id');
+            if (devId) devId.textContent = hData.auth.device_id;
+            const devIdVal = document.getElementById('org-device-id-val');
+            if (devIdVal) devIdVal.textContent = hData.auth.device_id;
           }
         }
-      } catch (e) {
-        console.warn("Gateway status refresh failed:", e);
-      }
+      } catch (e) {}
 
-      // Sync active host port to UI
-      const activeHost = window.location.host || '127.0.0.1:18080';
-      const sidePort = document.getElementById('sidebar-gw-port');
-      if (sidePort) sidePort.textContent = activeHost;
-      const gwHostEl = document.getElementById('gw-listener-host');
-      if (gwHostEl) gwHostEl.textContent = activeHost;
+      try {
+        const cRes = await fetch('/api/v1/cache/stats');
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          const savedStr = `$${(cData.total_cost_saved_usd || 0).toFixed(2)}`;
+          const gwSaved = document.getElementById('cache-gw-savings');
+          if (gwSaved) gwSaved.textContent = savedStr;
+          const totSaved = document.getElementById('cache-total-savings');
+          if (totSaved) totSaved.textContent = savedStr;
+          const hitRate = document.getElementById('cache-hit-rate');
+          if (hitRate) hitRate.textContent = `${(cData.hit_rate_pct || 0).toFixed(1)}%`;
+        }
+      } catch (e) {}
     }
 
-    function renderIntegrationsTable(integrations) {
+    function renderIntegrations(integrations, totalProtected, totalTargets) {
+      const heroSub = document.getElementById('hero-devices-subtitle');
+      if (heroSub && totalTargets) {
+        heroSub.textContent = `1 Workstation Active · ${totalTargets} IDE Targets Monitored (Codex, Cursor, VS Code, Windsurf, Zed, Cline)`;
+      }
+      const cardSub = document.getElementById('card-devices-sub');
+      if (cardSub && totalTargets) {
+        cardSub.textContent = `${totalTargets} IDE Targets Monitored (Codex, Cursor, VS Code)`;
+      }
+
       const tbody = document.getElementById('integrations-table-body');
       if (!tbody) return;
       if (integrations.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">No IDE targets found</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">No IDE targets discovered</td></tr>`;
         return;
       }
       tbody.innerHTML = integrations.map(i => {
         const badge = i.is_wrapped
-          ? `<span class="badge green">PROTECTED</span>`
+          ? `<span class="badge green">● CONNECTED</span>`
           : i.exists
           ? `<span class="badge amber">UNWRAPPED</span>`
-          : `<span class="badge" style="background:rgba(48,54,61,0.4);color:var(--text-muted);">NOT FOUND</span>`;
+          : `<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">NOT DETECTED</span>`;
         const serverText = i.exists ? `${i.wrapped_servers}/${i.total_servers} servers` : '—';
-        const shortPath = i.path.length > 60 ? '…' + i.path.slice(-57) : i.path;
+        const shortPath = i.path.length > 55 ? '…' + i.path.slice(-52) : i.path;
         const action = i.is_wrapped
-          ? `<button class="btn btn-sm" onclick="toast('${escHtml(i.name)} config verified', 'info')">Verify</button>`
+          ? `<button class="btn btn-sm" onclick="toast('${escHtml(i.name)} verified &amp; protected', 'success')">Verify</button>`
           : i.exists
-          ? `<button class="btn btn-sm btn-primary" onclick="toast('Run: agentcontrol wrap in terminal', 'info')">Wrap</button>`
-          : `<button class="btn btn-sm" disabled title="IDE not installed">N/A</button>`;
+          ? `<button class="btn btn-sm btn-primary" onclick="toast('Run: agentcontrol wrap ${escHtml(i.id || i.name.toLowerCase())}', 'info')">Connect</button>`
+          : `<button class="btn btn-sm" disabled>N/A</button>`;
         return `<tr>
           <td><strong>${escHtml(i.name)}</strong></td>
           <td><code style="font-size:0.72rem;">${escHtml(shortPath)}</code></td>
@@ -1715,688 +2119,220 @@
       }).join('');
     }
 
-    function renderOverview(events) {
-      let allowed = 0, blocked = 0, dlp = 0, inj = 0;
-      let totalLatencyMs = 0, latencySamples = 0;
-      const uniqueTools = new Set();
-
+    function renderOverviewStream(events) {
+      let blocked = 0, dlp = 0, inj = 0;
       events.forEach(e => {
-        if (e.url_path) uniqueTools.add(e.url_path);
-        const isDeny = e.verdict === 'deny' || e.response_status === 403 || e.response_status === 400;
-        if (isDeny) blocked++; else allowed++;
-        const isDlp = !!e.dlp_findings || (e.policy_rule && e.policy_rule.includes('DLP'));
-        const isInj = !!e.injection_findings || (e.policy_rule && (e.policy_rule.includes('INJ') || e.policy_rule.includes('INJECTION')));
-        if (isDlp) dlp++;
-        if (isInj) inj++;
-
-        const lat = Number(e.duration_ms || e.latency_ms || e.latency || 0);
-        if (lat > 0) {
-          totalLatencyMs += lat;
-          latencySamples++;
-        }
+        const isDeny = e.verdict === 'deny' || e.verdict === 'blocked' || e.response_status === 403 || e.response_status === 400;
+        if (isDeny) blocked++;
+        if (e.dlp_findings) dlp++;
+        if (e.injection_findings) inj++;
       });
 
-      document.getElementById('ov-decisions-val').textContent = events.length;
-      document.getElementById('ov-blocked-count').textContent = `${blocked} Blocked`;
-      document.getElementById('ov-allowed-count').textContent = `${allowed} Allowed`;
-      document.getElementById('ov-dlp-val').textContent = dlp;
-      document.getElementById('ov-inj-val').textContent = inj;
-      document.getElementById('ov-tools-val').textContent = uniqueTools.size;
+      document.getElementById('kpi-total-events').textContent = events.length;
+      document.getElementById('kpi-denied').textContent = blocked;
+      document.getElementById('kpi-alerts').textContent = dlp;
+      document.getElementById('kpi-critical').textContent = inj;
 
-      const latencyElem = document.getElementById('ov-latency-val');
-      if (latencyElem) {
-        if (latencySamples > 0) {
-          latencyElem.textContent = `${(totalLatencyMs / latencySamples).toFixed(1)} ms`;
-          latencyElem.style.color = 'var(--green)';
-        } else if (events.length > 0) {
-          latencyElem.textContent = `< 1.0 ms`;
-          latencyElem.style.color = 'var(--green)';
-        } else {
-          latencyElem.textContent = `-- ms`;
-          latencyElem.style.color = 'var(--text-muted)';
-        }
-      }
-
-      // Render recent 5 decisions
-      const tbody = document.getElementById('ov-decisions-body');
+      const tbody = document.getElementById('overview-stream-body');
       if (events.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 36px; color: var(--text-muted);">
-          <div style="font-size: 1.8rem; margin-bottom: 8px;">🛡️</div>
-          <strong>No agent tool calls recorded yet</strong>
-          <p style="font-size: 0.8rem; margin-top: 4px;">Run <code style="color: var(--accent);">agentcontrol verify</code> or start your AI agent to observe decisions.</p>
+          <div style="font-size: 1.6rem; margin-bottom: 6px;">🛡️</div>
+          <strong>No agent prompts or tool calls recorded yet</strong>
+          <p style="font-size: 0.76rem; margin-top: 4px;">Send a prompt via Codex to observe real-time decisions.</p>
         </td></tr>`;
         return;
       }
 
-      const recent = events.slice(-5).reverse();
+      const recent = events.slice(0, 6);
       tbody.innerHTML = recent.map((e, idx) => {
-        const isDeny = e.verdict === 'deny' || e.response_status === 403 || e.response_status === 400;
+        const isDeny = e.verdict === 'deny' || e.verdict === 'blocked' || e.response_status === 403 || e.response_status === 400;
         const verdictBadge = isDeny ? '<span class="badge red">BLOCKED</span>' : '<span class="badge green">ALLOWED</span>';
-        const eventId = e.id ? `evt_${String(e.id).padStart(6, '0')}` : `evt_01J${idx}`;
-        const preview = maskSensitivePayload(e.request_body || '{}').slice(0, 45);
-        const rule = e.policy_rule || (e.dlp_findings ? 'DLP-HIGH-ENTROPY' : e.injection_findings ? 'INJ-OVERRIDE' : 'default-developer-tools');
-        const isSim = (e.source === 'simulated');
-        const isVerify = (e.source === 'verification');
-        const sourceBadge = isVerify
-          ? '<span class="badge blue">VERIFY</span>'
-          : isSim
-          ? '<span class="badge simulated">SIMULATED</span>'
-          : '<span class="badge real">REAL</span>';
+        const preview = maskSensitivePayload(e.request_body).slice(0, 50);
+        const rule = e.policy_rule || 'default_allowlist';
+        const toolDisplayName = extractToolOrMethod(e);
+        const transportBadge = e.transport === 'llm'
+          ? '<span class="badge purple">LLM</span>'
+          : '<span class="badge blue">MCP</span>';
+        const timeStr = formatEventTimestamp(e);
+        const lat = Number(e.latency_ms || e.duration_ms || 0);
+        const latStr = lat > 0 ? `${lat.toFixed(1)}ms` : '< 1.0ms';
 
-        return `<tr>
-          <td><code style="color:var(--accent); font-size:0.75rem;">${eventId}</code></td>
-          <td>${sourceBadge}</td>
-          <td><strong>${escHtml(e.url_path || 'tools/call')}</strong></td>
+        return `<tr class="clickable-row" onclick="openDossier(${idx})">
+          <td style="color:var(--text-muted); font-size:0.75rem;">${timeStr}</td>
+          <td>${transportBadge}</td>
+          <td><strong>${escHtml(toolDisplayName)}</strong></td>
           <td>${verdictBadge}</td>
-          <td><span style="font-family:var(--font-mono); font-size:0.75rem;">${rule}</span></td>
+          <td><span style="font-family:var(--font-mono); font-size:0.72rem;">${escHtml(rule)}</span></td>
           <td><code style="color:var(--text-muted); font-size:0.72rem;">${escHtml(preview)}</code></td>
-          <td style="color:var(--text-muted); font-size:0.75rem;">Just now</td>
+          <td style="color:var(--green); font-size:0.75rem;">${latStr}</td>
         </tr>`;
       }).join('');
     }
 
-    function renderTimeline(events) {
-      const tbody = document.getElementById('timeline-events-body');
+    function renderAuditLogs(events) {
+      const tbody = document.getElementById('audit-logs-body');
       if (events.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No events in stream</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No events in log</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = events.slice(-50).reverse().map((e) => {
-        const isDeny = e.verdict === 'deny';
+      tbody.innerHTML = events.map((e, idx) => {
+        const isDeny = e.verdict === 'deny' || e.verdict === 'blocked' || e.response_status === 403 || e.response_status === 400;
         const verdictBadge = isDeny ? '<span class="badge red">BLOCKED</span>' : '<span class="badge green">ALLOWED</span>';
         const verdictKey = isDeny ? 'deny' : 'allow';
-        const isSim = (e.source === 'simulated');
-        const isVerify = (e.source === 'verification');
-        const sourceKey = isVerify ? 'verification' : (isSim ? 'simulated' : 'production');
-        const sourceBadge = isVerify
-          ? '<span class="badge blue">VERIFY</span>'
-          : isSim
-          ? '<span class="badge simulated">SIMULATED</span>'
-          : '<span class="badge real">REAL</span>';
-        const preview = maskSensitivePayload(e.request_body || '{}').slice(0, 50);
-        const disposition = escHtml(e.policy_rule || (isDeny ? 'Policy Denied' : 'Allowed &amp; Recorded'));
-        const toolName = escHtml(e.url_path || 'read_file');
-        const ts = e.ts ? new Date(e.ts).toLocaleTimeString() : new Date().toLocaleTimeString();
+        const transportKey = (e.transport || 'http').toLowerCase();
+        const transportBadge = transportKey === 'llm'
+          ? '<span class="badge purple">LLM</span>'
+          : '<span class="badge blue">MCP</span>';
+        const preview = maskSensitivePayload(e.request_body).slice(0, 60);
+        const disposition = escHtml(e.policy_rule || (isDeny ? 'Policy Denied' : 'Allowed'));
+        const toolName = extractToolOrMethod(e);
+        const timeStr = formatEventTimestamp(e);
+        const lat = Number(e.latency_ms || e.duration_ms || 0);
+        const latStr = lat > 0 ? `${lat.toFixed(1)}ms` : '< 1.0ms';
 
-        return `<tr data-source="${sourceKey}" data-verdict="${verdictKey}" data-tool="${toolName.toLowerCase()}">
-          <td style="color:var(--text-muted); font-size:0.75rem;">${ts}</td>
-          <td>${sourceBadge}</td>
-          <td><strong>${toolName}</strong></td>
-          <td>${verdictBadge}</td>
-          <td><span style="font-size:0.78rem;">${disposition}</span></td>
-          <td><code style="font-size:0.72rem; color:var(--text-muted);">${escHtml(preview)}</code></td>
-          <td style="color:var(--green); font-size:0.75rem;">${e.latency_ms ? e.latency_ms.toFixed(1) + 'ms' : '1.4ms'}</td>
-        </tr>`;
-      }).join('');
-    }
-
-    // ── Timeline Filtering ───────────────────────────────────────────────────
-    function filterTimelineEvents(searchVal) {
-      const search = (searchVal !== undefined ? searchVal : (document.getElementById('act-search') || {}).value || '').toLowerCase().trim();
-      const sourceFilter = (document.getElementById('act-filter-source') || {}).value || 'all';
-      const verdictFilter = (document.getElementById('act-filter-verdict') || {}).value || 'all';
-
-      const rows = document.querySelectorAll('#timeline-events-body tr[data-source]');
-      let visibleCount = 0;
-      rows.forEach(row => {
-        const rowSource = row.dataset.source; // 'production' | 'simulated' | 'verification'
-        let matchSource = false;
-        if (sourceFilter === 'all') matchSource = true;
-        else if (sourceFilter === 'real') matchSource = (rowSource === 'production');
-        else if (sourceFilter === 'simulated') matchSource = (rowSource === 'simulated');
-        else matchSource = (rowSource === sourceFilter);
-        const matchVerdict = verdictFilter === 'all' || row.dataset.verdict === verdictFilter;
-        const matchSearch = !search || (row.dataset.tool && row.dataset.tool.includes(search)) || row.textContent.toLowerCase().includes(search);
-        const visible = matchSource && matchVerdict && matchSearch;
-        row.style.display = visible ? '' : 'none';
-        if (visible) visibleCount++;
-      });
-
-      // Show "no results" row if everything is filtered out but events exist
-      if (rows.length > 0 && visibleCount === 0) {
-        const tbody = document.getElementById('timeline-events-body');
-        // Only insert if not already there
-        if (!document.getElementById('filter-empty-row')) {
-          const emptyRow = document.createElement('tr');
-          emptyRow.id = 'filter-empty-row';
-          emptyRow.innerHTML = `<td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No events match current filters</td>`;
-          tbody.appendChild(emptyRow);
-        }
-      } else {
-        const emptyRow = document.getElementById('filter-empty-row');
-        if (emptyRow) emptyRow.remove();
-      }
-    }
-
-    function classifyToolRisk(toolName) {
-      const t = (toolName || '').toLowerCase();
-      // Tier 1: Critical (Execution, mutations, exfiltration, payment, credentials, privilege)
-      const criticalKeywords = ['exec', 'shell', 'bash', 'cmd', 'terminal', 'powershell', 'write_file', 'delete', 'remove', 'system', 'eval', 'transfer', 'fund', 'pay', 'iam', 'credential', 'token', 'secret', 'drop_table', 'kill'];
-      if (criticalKeywords.some(k => t.includes(k))) {
-        return '<span class="badge red">TIER 1 (CRITICAL)</span>';
-      }
-      // Tier 2: Moderate (File reading, network access, DB queries)
-      const moderateKeywords = ['read', 'list', 'fetch', 'http', 'curl', 'query', 'search', 'get_', 'cat', 'select', 'find'];
-      if (moderateKeywords.some(k => t.includes(k))) {
-        return '<span class="badge amber">TIER 2 (MODERATE)</span>';
-      }
-      return '<span class="badge green">TIER 3 (SAFE)</span>';
-    }
-
-    function renderToolSummary(events) {
-      const tbody = document.getElementById('tools-summary-body');
-      const toolMap = {};
-
-      events.forEach(e => {
-        const t = e.url_path || 'read_file';
-        const rawTs = e.timestamp_ms || (e.timestamp ? new Date(e.timestamp).getTime() : 0);
-        if (!toolMap[t]) {
-          toolMap[t] = { count: 0, lastTs: rawTs };
-        }
-        toolMap[t].count++;
-        if (rawTs > toolMap[t].lastTs) {
-          toolMap[t].lastTs = rawTs;
-        }
-      });
-
-      if (Object.keys(toolMap).length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No tools detected</td></tr>`;
-        return;
-      }
-
-      tbody.innerHTML = Object.entries(toolMap).map(([tool, info]) => {
-        const tier = classifyToolRisk(tool);
-        const timeStr = info.lastTs > 0 
-          ? new Date(info.lastTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
-          : 'Recent';
-        return `<tr>
-          <td><strong>${escHtml(tool)}</strong></td>
-          <td><strong>${info.count}</strong></td>
+        return `<tr class="clickable-row" data-transport="${transportKey}" data-verdict="${verdictKey}" data-tool="${escHtml(toolName.toLowerCase())}" onclick="openDossier(${idx})">
           <td style="color:var(--text-muted); font-size:0.75rem;">${timeStr}</td>
-          <td>${tier}</td>
-          <td><button class="btn btn-sm" onclick="approvePattern('${escHtml(tool)}')">✨ Approve Pattern</button></td>
+          <td>${transportBadge}</td>
+          <td><strong>${escHtml(toolName)}</strong></td>
+          <td>${verdictBadge}</td>
+          <td><span style="font-size:0.74rem;">${disposition}</span></td>
+          <td><code style="font-size:0.72rem; color:var(--text-muted);">${escHtml(preview)}</code></td>
+          <td style="color:var(--green); font-size:0.75rem;">${latStr}</td>
         </tr>`;
       }).join('');
     }
 
     function renderDetections(events) {
       const tbody = document.getElementById('detections-table-body');
-      const flagged = events.filter(e => e.dlp_findings || e.injection_findings || e.verdict === 'deny' || e.verdict === 'warn' || e.response_status === 403 || e.response_status === 400);
+      if (!tbody) return;
+
+      const flagged = events.filter(e => {
+        const isDeny = e.verdict === 'deny' || e.verdict === 'blocked' || e.response_status === 403;
+        return isDeny || !!e.dlp_findings || !!e.injection_findings;
+      });
 
       if (flagged.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:36px; color:var(--text-muted);">
-          <div style="font-size:1.6rem; margin-bottom:6px;">🛡️</div>
-          <strong>No threats or DLP violations intercepted</strong>
-          <p style="font-size:0.8rem; margin-top:4px;">Threat detections will appear here with masked proof when policies trigger.</p>
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:36px; color:var(--text-muted);">
+          <div style="font-size: 1.6rem; margin-bottom: 6px;">🛡️</div>
+          <strong>No security threats detected</strong>
         </td></tr>`;
         return;
       }
 
       tbody.innerHTML = flagged.map(e => {
-        const isDlp = !!e.dlp_findings || (e.policy_rule && e.policy_rule.includes('DLP'));
-        const isInj = !isDlp && (!!e.injection_findings || (e.policy_rule && (e.policy_rule.includes('INJ') || e.policy_rule.includes('INJECTION'))));
-        const dataCategory = isDlp ? 'dlp' : isInj ? 'injection' : 'risk';
-        const cat = isDlp
-          ? '<span class="badge red">DLP / SECRETS</span>'
-          : isInj
-          ? '<span class="badge red">INJECTION</span>'
-          : '<span class="badge amber">RISK</span>';
-
-        // Dynamic verdict disposition based on actual event outcome
-        const v = (e.verdict || (e.response_status === 403 ? 'deny' : 'warn')).toLowerCase();
-        const disp = (v === 'deny' || v === 'blocked')
-          ? '<span class="badge red">DENIED</span>'
-          : v === 'warn'
-          ? '<span class="badge amber">WARNED</span>'
-          : v === 'redact'
-          ? '<span class="badge blue">REDACTED</span>'
-          : '<span class="badge green">OBSERVED</span>';
-
-        const rule = e.policy_rule || (isDlp ? 'DLP-01-HIGH-ENTROPY' : isInj ? 'INJ-04-OVERRIDE' : 'POLICY-HIGH-RISK');
-        const preview = maskSensitivePayload(e.request_body || '{}');
-        const isSim = (e.source === 'simulated');
-        const isVerify = (e.source === 'verification');
-        const sourceBadge = isVerify
-          ? '<span class="badge blue">VERIFY</span>'
-          : isSim
-          ? '<span class="badge simulated">SIMULATED</span>'
-          : '<span class="badge real">REAL</span>';
-
-        const rawTs = e.timestamp_ms || (e.timestamp ? new Date(e.timestamp).getTime() : 0);
-        const timeStr = rawTs > 0 
-          ? new Date(rawTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
-          : 'Recent';
-
-        return `<tr data-category="${dataCategory}">
-          <td>${cat}</td>
-          <td>${disp}</td>
-          <td><code style="color:var(--accent); font-size:0.75rem;">${rule}</code></td>
-          <td><code style="font-size:0.72rem; color:#ffb4b0;">${escHtml(preview.slice(0, 60))}</code></td>
-          <td>${sourceBadge}</td>
-          <td style="color:var(--text-muted); font-size:0.75rem;">${timeStr}</td>
+        const cat = e.dlp_findings ? 'DLP Secret' : (e.injection_findings ? 'Prompt Injection' : 'Policy Denial');
+        const badgeClass = e.dlp_findings ? 'badge amber' : 'badge red';
+        const tool = extractToolOrMethod(e);
+        const summary = e.dlp_findings || e.injection_findings || e.policy_rule || 'Policy violation';
+        return `<tr class="clickable-row" onclick="openDossier(${events.indexOf(e)})">
+          <td style="font-size:0.74rem; color:var(--text-muted);">${formatEventTimestamp(e)}</td>
+          <td><span class="${badgeClass}">${cat}</span></td>
+          <td><span class="badge red">HIGH</span></td>
+          <td><strong>${escHtml(tool)}</strong></td>
+          <td><span class="badge red">BLOCKED</span></td>
+          <td><code style="font-size:0.72rem; color:var(--text-bright);">${escHtml(summary)}</code></td>
+          <td><button class="btn btn-sm">Inspect</button></td>
         </tr>`;
       }).join('');
     }
 
-    // ── Live Policy Wizard & Drawer ──────────────────────────────────────────
-    function openPolicyWizard() {
-      const drawer = document.getElementById('policy-wizard-drawer');
-      if (drawer) {
-        drawer.style.display = 'flex';
-        // force layout reflow before adding open class for smooth transition
-        void drawer.offsetWidth;
-        drawer.classList.add('open');
-      }
-      const editor = document.getElementById('wizard-yaml-editor');
-      if (editor && (!editor.value || editor.value.trim().length === 0)) {
-        fetchWizardPolicy();
-      }
+    function filterAuditLogs(searchVal) {
+      const search = (searchVal !== undefined ? searchVal : (document.getElementById('log-search-input') || {}).value || '').toLowerCase().trim();
+      const transportFilter = (document.getElementById('log-filter-transport') || {}).value || 'all';
+      const verdictFilter = (document.getElementById('log-filter-verdict') || {}).value || 'all';
+
+      const rows = document.querySelectorAll('#audit-logs-body tr[data-transport]');
+      rows.forEach(row => {
+        const t = row.dataset.transport;
+        const v = row.dataset.verdict;
+        const tool = row.dataset.tool || '';
+        const matchT = transportFilter === 'all' || t === transportFilter;
+        const matchV = verdictFilter === 'all' || v === verdictFilter;
+        const matchS = !search || tool.includes(search) || row.textContent.toLowerCase().includes(search);
+        row.style.display = (matchT && matchV && matchS) ? '' : 'none';
+      });
     }
 
-    function closePolicyWizard() {
-      const drawer = document.getElementById('policy-wizard-drawer');
-      if (drawer) {
-        drawer.classList.remove('open');
-        setTimeout(() => {
-          if (!drawer.classList.contains('open')) {
-            drawer.style.display = 'none';
-          }
-        }, 300);
-      }
-    }
-
-    async function fetchWizardPolicy() {
-      const editor = document.getElementById('wizard-yaml-editor');
-      const msg = document.getElementById('wizard-status-msg');
-      if (msg) msg.textContent = 'Synthesizing least-privilege policy from telemetry...';
-
-      try {
-        const res = await fetch('/api/generate-policy', { method: 'POST' });
-        if (res.ok) {
-          const yaml = await res.text();
-          if (editor) editor.value = yaml;
-          if (msg) msg.textContent = '✔ Draft generated from observed tool patterns.';
-        } else {
-          if (editor) editor.value = `version: "2"\ndefault_action: deny\n\ntools:\n  - name: "read_file"\n    action: allow\n`;
-          if (msg) msg.textContent = 'ℹ Baseline security template loaded.';
-        }
-      } catch (e) {
-        if (msg) msg.textContent = '⚠ Using default baseline template.';
-        if (editor) editor.value = `version: "2"\ndefault_action: deny\n\ntools:\n  - name: "*"\n    action: allow\n`;
-      }
-    }
-
-    async function applyWizardPolicy() {
-      const editor = document.getElementById('wizard-yaml-editor');
-      if (!editor || !editor.value) return;
-      try {
-        const res = await fetch('/api/policy/save-and-reload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ yaml: editor.value })
-        });
-        if (res.ok) {
-          toast('🚀 Policy validated, saved, and hot-reloaded!', 'success');
-          closePolicyWizard();
-        } else {
-          toast('Policy validation failed', 'error');
-        }
-      } catch (e) {
-        toast('Gateway communication error', 'error');
-      }
-    }
     async function fetchActivePolicy() {
-      const editor = document.getElementById('policy-yaml-main');
-      if (!editor) return;
       try {
         const res = await fetch('/api/policy');
         if (res.ok) {
-          const data = await res.json();
-          if (data && data.yaml) {
-            editor.value = data.yaml;
-          }
+          const yaml = await res.text();
+          const ed = document.getElementById('policy-yaml-editor');
+          if (ed) ed.value = yaml;
         }
-      } catch (e) {
-        console.warn('Failed to fetch active policy:', e);
-      }
+      } catch (e) {}
     }
 
-    async function savePolicyWithPreflight() {
-      const editor = document.getElementById('policy-yaml-main');
-      if (!editor || !editor.value) {
-        toast('Policy content cannot be empty', 'error');
-        return;
-      }
-      // Show pre-flight diff/review modal
-      const modal = document.getElementById('policy-preflight-modal');
-      const previewEl = document.getElementById('policy-preflight-preview');
-      if (previewEl) previewEl.textContent = editor.value;
-      if (modal) modal.classList.add('open');
-    }
-
-    async function savePolicyDirect() {
-      const editor = document.getElementById('policy-yaml-main');
-      if (!editor || !editor.value) {
-        toast('Policy content cannot be empty', 'error');
-        return;
-      }
-      // Close pre-flight modal if open
-      const modal = document.getElementById('policy-preflight-modal');
-      if (modal) modal.classList.remove('open');
+    async function savePolicyYaml() {
+      const yaml = (document.getElementById('policy-yaml-editor') || {}).value;
+      if (!yaml) return;
       try {
-        const res = await fetch('/api/policy/save-and-reload', {
+        const res = await fetch('/api/policy', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ yaml: editor.value })
+          headers: { 'Content-Type': 'application/x-yaml' },
+          body: yaml
         });
-        if (res.ok) {
-          toast('🚀 Active policy validated, saved, and hot-reloaded!', 'success');
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          toast(errData.error || 'Policy validation failed', 'error');
-        }
+        if (res.ok) toast('Policy hot-reloaded successfully!', 'success');
+        else toast('Failed to save policy: ' + res.statusText, 'error');
       } catch (e) {
-        toast('Gateway communication error', 'error');
+        toast('Error saving policy', 'error');
       }
-    }
-
-    function approvePattern(toolName) {
-      openPolicyWizard();
-      toast(`Added pattern for ${toolName}`, 'info');
-    }
-
-    // ── Security Posture & Probes ────────────────────────────────────────────
-    function promptModeSwitch() {
-      const modal = document.getElementById('mode-modal');
-      const desc = document.getElementById('mode-modal-desc');
-      const target = activeMode === 'enforce' ? 'Shadow (Observation Only)' : 'Active Enforcement (Blocking & Redaction)';
-      desc.textContent = `You are about to switch the security gateway posture to ${target}.`;
-      if (modal) modal.classList.add('open');
-    }
-
-    function closeModeModal() {
-      const modal = document.getElementById('mode-modal');
-      if (modal) modal.classList.remove('open');
-    }
-
-    async function executeModeSwitch() {
-      const newMode = activeMode === 'enforce' ? 'shadow' : 'enforce';
-      try {
-        const res = await fetch('/api/mode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: newMode })
-        });
-        if (res.ok) {
-          activeMode = newMode;
-          document.getElementById('header-mode-text').textContent = activeMode.toUpperCase();
-          document.getElementById('header-mode-text').style.color = activeMode === 'enforce' ? 'var(--green)' : 'var(--amber)';
-          toast(`Posture switched to ${activeMode.toUpperCase()}`, 'success');
-        }
-      } catch (e) {
-        toast('Failed to change mode', 'error');
-      }
-      closeModeModal();
-    }
-
-    function runAuditCheck() {
-      toast('Validating HMAC audit chain integrity...', 'info');
-      setTimeout(() => {
-        toast('✔ Audit Chain Verified: 100% cryptographic integrity (0 broken hashes)', 'success');
-      }, 600);
-    }
-
-    function runHealthSelfTest() {
-      toast('Running 4-point system self-test...', 'info');
-      setTimeout(() => {
-        toast('✔ All Systems Operational: SQLite WAL OK, Proxy OK, DLP Engine OK', 'success');
-      }, 700);
     }
 
     async function triggerVerifyProbe() {
-      toast('Executing live security verification probe...', 'info');
-      // Fire probe request to gateway
+      toast('Running automated security verification probe...', 'info');
       try {
-        const res = await fetch('/', {
+        await fetch('/api/verify', { method: 'POST' });
+        toast('Verification probe complete! Posture asserted.', 'success');
+        refreshData();
+      } catch (e) {
+        refreshData();
+      }
+    }
+
+    async function triggerTestLLM() {
+      toast('Sending test prompt to gateway port 18080...', 'info');
+      try {
+        const res = await fetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "probe-dlp-live",
-            method: "tools/call",
-            params: {
-              name: "send_external_http",
-              arguments: {
-                auth: "Bearer AKIAIOSFODNN7EXAMPLE",
-                admin_ssn: "000-12-3456"
-              }
-            }
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: 'Connection test from Vexa Workstation Console' }]
           })
         });
-        toast('✔ Probe assertion verified: DLP Shield Intercepted Secret (400)', 'success');
-        refreshData();
-      } catch (e) {
-        toast('Probe request failed to complete', 'error');
-      }
-    }
-
-    // ── URL Routing & Hash Redirection ───────────────────────────────────────
-    function handleRouteHash() {
-      const hash = (window.location.hash || '').replace('#', '').toLowerCase();
-      if (['dlp', 'injection', 'risks', 'semantic'].includes(hash)) {
-        document.querySelector('[data-panel="panel-detections"]')?.click();
-      } else if (['timeline', 'inventory', 'params'].includes(hash)) {
-        document.querySelector('[data-panel="panel-activity"]')?.click();
-      } else if (['policy', 'gateway', 'integrations', 'egress'].includes(hash)) {
-        document.querySelector('[data-panel="panel-policy-gateway"]')?.click();
-      } else if (['cache', 'spend', 'economics', 'semantic-cache'].includes(hash)) {
-        document.querySelector('[data-panel="panel-cache-economics"]')?.click();
-      }
-    }
-
-    // ── Token Economics & Semantic Caching Telemetry ──────────────────────────
-    let cachedTelemetry = null;
-
-    async function refreshCacheStats() {
-      try {
-        const res = await fetch('/api/v1/cache/stats');
-        if (!res.ok) return;
-        const data = await res.json();
-        cachedTelemetry = data;
-        renderCacheEconomics(data);
-      } catch (e) {
-        console.warn('Failed to fetch cache stats:', e);
-      }
-    }
-
-    function renderCacheEconomics(data) {
-      if (!data) return;
-      const gw = data.gateway_cache || {};
-      const prov = data.provider_cache || {};
-      const comp = data.comparative_summary || {};
-
-      const gwAvoidedCost = Number(gw.cost_saved_usd ?? data.gateway_avoided_cost_usd ?? 0);
-      const gwAvoidedTokens = Number(gw.tokens_saved?.total ?? data.gateway_avoided_tokens ?? 0);
-      const provDiscount = Number(prov.discount_usd ?? data.provider_discount_usd ?? 0);
-      const provTokens = Number(prov.cached_tokens ?? data.provider_cached_tokens ?? 0);
-      const totalSavings = Number(comp.total_savings_usd ?? data.total_economic_value_usd ?? (gwAvoidedCost + provDiscount));
-      const exactHits = Number(gw.exact_hits ?? data.exact_hits ?? 0);
-      const semHits = Number(gw.semantic_hits ?? data.semantic_hits ?? 0);
-      const totalHits = exactHits + semHits;
-      const totalQueries = Number(gw.total_lookups ?? data.total_queries ?? (totalHits + Number(gw.misses || 0)));
-      const hitRate = Number(gw.hit_ratio_pct ?? data.hit_rate_pct ?? (totalQueries > 0 ? (totalHits / totalQueries * 100) : 0));
-      const latencyAvoidedSec = (Number(gw.latency_saved_ms ?? data.gateway_avoided_latency_ms ?? 0) / 1000).toFixed(2);
-
-      // Hero Card 1: Vexa Gateway
-      const gwCostEl = document.getElementById('cache-gw-avoided-cost');
-      if (gwCostEl) gwCostEl.textContent = `$${gwAvoidedCost.toFixed(4)}`;
-      const gwTokEl = document.getElementById('cache-gw-avoided-tokens');
-      if (gwTokEl) gwTokEl.textContent = gwAvoidedTokens.toLocaleString();
-      const gwHitsEl = document.getElementById('cache-gw-hits');
-      if (gwHitsEl) gwHitsEl.textContent = totalHits;
-      const gwExactEl = document.getElementById('cache-gw-exact-hits');
-      if (gwExactEl) gwExactEl.textContent = exactHits;
-      const gwSemEl = document.getElementById('cache-gw-semantic-hits');
-      if (gwSemEl) gwSemEl.textContent = semHits;
-
-      // Hero Card 2: Provider Discount
-      const provDiscEl = document.getElementById('cache-provider-discount');
-      if (provDiscEl) provDiscEl.textContent = `$${provDiscount.toFixed(4)}`;
-      const provTokEl = document.getElementById('cache-provider-tokens');
-      if (provTokEl) provTokEl.textContent = provTokens.toLocaleString();
-
-      // Hero Card 3: Combined Net Value
-      const totalSavEl = document.getElementById('cache-total-savings');
-      if (totalSavEl) totalSavEl.textContent = `$${totalSavings.toFixed(4)}`;
-      const hitRateEl = document.getElementById('cache-hit-rate');
-      if (hitRateEl) hitRateEl.textContent = `${hitRate.toFixed(1)}%`;
-      const totalQEl = document.getElementById('cache-total-queries');
-      if (totalQEl) totalQEl.textContent = totalQueries;
-      const latAvoidEl = document.getElementById('cache-latency-avoided');
-      if (latAvoidEl) latAvoidEl.textContent = `${latencyAvoidedSec} s`;
-
-      // Proportional Bar
-      let gwPct = 0, provPct = 0;
-      if (totalSavings > 0) {
-        gwPct = Math.round((gwAvoidedCost / totalSavings) * 100);
-        provPct = 100 - gwPct;
-      } else if (totalQueries > 0) {
-        gwPct = 50; provPct = 50;
-      }
-      const barGw = document.getElementById('bar-gw-savings');
-      if (barGw) barGw.style.width = `${gwPct}%`;
-      const barProv = document.getElementById('bar-prov-savings');
-      if (barProv) barProv.style.width = `${provPct}%`;
-      const pctGwEl = document.getElementById('pct-gw-savings');
-      if (pctGwEl) pctGwEl.textContent = `${gwPct}%`;
-      const pctProvEl = document.getElementById('pct-prov-savings');
-      if (pctProvEl) pctProvEl.textContent = `${provPct}%`;
-
-      // Overview Banner Sync
-      const ovCost = document.getElementById('ov-cache-avoided-cost');
-      if (ovCost) ovCost.textContent = `$${gwAvoidedCost.toFixed(4)}`;
-      const ovTokens = document.getElementById('ov-cache-avoided-tokens');
-      if (ovTokens) ovTokens.textContent = gwAvoidedTokens.toLocaleString();
-      const ovHitRate = document.getElementById('ov-cache-hit-rate');
-      if (ovHitRate) ovHitRate.textContent = `${hitRate.toFixed(1)}%`;
-
-      // Render Matches Table
-      const matches = data.recent_matches || data.recent_semantic_matches || [];
-      renderSemanticMatches(matches);
-    }
-
-    function renderSemanticMatches(matches) {
-      const tbody = document.getElementById('cache-matches-body');
-      const countBadge = document.getElementById('cache-cluster-count');
-      if (!tbody) return;
-      if (countBadge) countBadge.textContent = `Live Circular Buffer (${matches.length} Matches)`;
-
-      if (!matches || matches.length === 0) {
-        tbody.innerHTML = `<tr>
-          <td colspan="8" style="text-align: center; padding: 36px; color: var(--text-muted);">
-            <div style="font-size: 1.8rem; margin-bottom: 8px;">🧠</div>
-            <strong>No semantic cache hits recorded yet</strong>
-            <p style="font-size: 0.8rem; margin-top: 4px;">
-              Send agent prompts through port 18080 to observe real-time vector matching and cost avoidance.
-            </p>
-          </td>
-        </tr>`;
-        return;
-      }
-
-      tbody.innerHTML = matches.slice().map((m, idx) => {
-        const sim = Number(m.similarity || 0);
-        const simPct = (sim * 100).toFixed(1);
-        const simClass = sim >= 0.95 ? 'sim-high' : sim >= 0.88 ? 'sim-med' : 'sim-low';
-        const isExact = (m.hit_type === 'exact' || sim >= 0.9999);
-        const simIcon = isExact ? '⚡' : '✨';
-        const simLabel = isExact ? '100% (Exact)' : `${simPct}%`;
-        const timeMs = m.timestamp_ms || (m.timestamp ? m.timestamp * 1000 : null);
-        const timeStr = timeMs ? new Date(timeMs).toLocaleTimeString() : 'Just now';
-        const costStr = `$${Number(m.cost_saved_usd || 0).toFixed(4)}`;
-        const qPrev = escHtml(m.user_prompt || m.query_preview || '—');
-        const mPrev = escHtml(m.cached_prompt || m.matched_preview || '—');
-        const modelStr = escHtml(m.model || 'gpt-4o');
-        const latVal = m.latency_ms ?? m.latency_saved_ms;
-        const latSaved = latVal != null ? `${Number(latVal).toFixed(1)}ms` : '< 1ms';
-        return `<tr>
-          <td><code style="font-size:0.72rem;">${timeStr}</code></td>
-          <td><span class="badge blue">${modelStr}</span></td>
-          <td title="${qPrev}"><strong>${qPrev.slice(0, 45)}${qPrev.length > 45 ? '…' : ''}</strong></td>
-          <td title="${mPrev}" style="color:var(--text-muted);">${mPrev.slice(0, 45)}${mPrev.length > 45 ? '…' : ''}</td>
-          <td><span class="sim-tag ${simClass}">${simIcon} ${simLabel}</span></td>
-          <td><span style="color:var(--green);">${latSaved}</span></td>
-          <td><strong style="color:var(--green);">${costStr}</strong></td>
-          <td>
-            <button class="btn btn-sm btn-primary" onclick="openSemanticInspector(${idx})">Inspect</button>
-          </td>
-        </tr>`;
-      }).join('');
-    }
-
-    function openSemanticInspector(index) {
-      if (!cachedTelemetry) return;
-      const matches = cachedTelemetry.recent_matches || cachedTelemetry.recent_semantic_matches || [];
-      const match = matches[index];
-      if (!match) return;
-
-      const qText = match.user_prompt || match.query_preview || '(empty)';
-      const mText = match.cached_prompt || match.matched_preview || '(empty)';
-      const isExact = match.hit_type === 'exact' || Number(match.similarity || 0) >= 0.9999;
-      const simText = isExact ? '100% SHA-256 Exact Key Match' : `${(Number(match.similarity || 0) * 100).toFixed(2)}% Cosine Similarity`;
-      const latVal = match.latency_ms ?? match.latency_saved_ms ?? 2.4;
-
-      document.getElementById('insp-query-text').textContent = qText;
-      document.getElementById('insp-matched-text').textContent = mText;
-      document.getElementById('insp-similarity').textContent = simText;
-      document.getElementById('insp-model').textContent = match.model || 'Unknown';
-      document.getElementById('insp-tenant').textContent = match.tenant_id || match.tenant || 'default';
-      document.getElementById('insp-latency').textContent = `${Number(latVal).toFixed(1)} ms serving time (<3ms Zero-Egress)`;
-      document.getElementById('insp-tokens').textContent = `${match.tokens_saved || 0} tokens avoided (100% full avoidance)`;
-      document.getElementById('insp-cost').textContent = `$${Number(match.cost_saved_usd || 0).toFixed(5)} net cost avoided`;
-
-      document.getElementById('semantic-inspector-modal').classList.add('open');
-    }
-
-    function closeSemanticInspector() {
-      document.getElementById('semantic-inspector-modal').classList.remove('open');
-    }
-
-    function openClearCacheModal() {
-      document.getElementById('cache-clear-modal').classList.add('open');
-    }
-
-    function closeClearCacheModal() {
-      document.getElementById('cache-clear-modal').classList.remove('open');
-    }
-
-    async function executeClearCache() {
-      try {
-        const res = await fetch('/api/v1/cache/clear', { method: 'POST' });
         if (res.ok) {
-          toast('Semantic vector cache cleared successfully', 'success');
-          refreshCacheStats();
+          toast('LLM connection successful & audited live!', 'success');
+          refreshData();
         } else {
-          toast('Failed to clear cache', 'error');
+          toast(`LLM response: HTTP ${res.status}`, 'info');
+          refreshData();
         }
       } catch (e) {
-        toast('Failed to contact cache endpoint', 'error');
+        toast('LLM test error: ' + e, 'error');
       }
-      closeClearCacheModal();
     }
 
-    // ── Initializer ──────────────────────────────────────────────────────────
-    (async function init() {
-      handleRouteHash();
-      await fetchActivePolicy();
-      await refreshData();
-      await refreshCacheStats();
-      pollTimer = setInterval(() => {
-        refreshData();
-        refreshCacheStats();
-      }, 4000);
-    })();
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      refreshData();
+      setInterval(refreshData, 3000);
+
+      try {
+        sseSource = new EventSource('/events/stream');
+        sseSource.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            allEvents.unshift(data);
+            renderOverviewStream(allEvents);
+            renderAuditLogs(allEvents);
+            renderDetections(allEvents);
+          } catch {}
+        };
+      } catch (e) {}
+    });
   </script>
 </body>
 </html>

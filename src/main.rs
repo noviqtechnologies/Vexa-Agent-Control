@@ -244,6 +244,106 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             // centralized daemon directly.
             dispatch_start(*args).await
         }
+        Commands::Stop { gateway } => agentcontrol::support::run_stop(&gateway).await,
+        Commands::Clients { json } => agentcontrol::wrap::run_clients(json),
+        Commands::Policy { command } => match command {
+            cli::PolicyCommands::Init { output } => {
+                let baseline = agentcontrol::generate_policy::generate_default_baseline_policy();
+                match std::fs::write(&output, baseline) {
+                    Ok(_) => {
+                        println!("{} Created default baseline policy at {}", "✔".green().bold(), output);
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to write policy to {}: {}", "✖".red(), output, e);
+                        1
+                    }
+                }
+            }
+            cli::PolicyCommands::Validate { policy } => {
+                match agentcontrol::lint::execute(&policy) {
+                    Ok(code) => code,
+                    Err(e) => {
+                        eprintln!("Lint failed: {}", e);
+                        1
+                    }
+                }
+            }
+            cli::PolicyCommands::Show { gateway, json } => {
+                let url = format!("{}/api/policy", gateway.trim_end_matches('/'));
+                let client = reqwest::Client::new();
+                match client.get(&url).send().await {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            let data: serde_json::Value = resp.json().await.unwrap_or_default();
+                            if json {
+                                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                            } else if let Some(yaml) = data.get("yaml").and_then(|y| y.as_str()) {
+                                println!("\n{}", "=== Vexa Agent Control Active Policy ===".cyan().bold());
+                                println!("{}", yaml);
+                            } else {
+                                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                            }
+                            0
+                        } else {
+                            eprintln!("{} Failed to fetch policy: HTTP {}", "✖".red(), resp.status());
+                            1
+                        }
+                    }
+                    Err(_) => {
+                        let local_path = "agentcontrol-policy.yaml";
+                        if let Ok(content) = std::fs::read_to_string(local_path) {
+                            if json {
+                                let val: serde_json::Value = serde_yaml::from_str(&content).unwrap_or_default();
+                                println!("{}", serde_json::to_string_pretty(&val).unwrap_or_default());
+                            } else {
+                                println!("{}", content);
+                            }
+                            0
+                        } else {
+                            eprintln!("{} Gateway not reachable and no local agentcontrol-policy.yaml found.", "✖".red());
+                            1
+                        }
+                    }
+                }
+            }
+            cli::PolicyCommands::Test {
+                policy,
+                dry_run,
+                fixture,
+                gateway,
+                oidc_token,
+            } => {
+                let pol = policy.unwrap_or_else(|| "agentcontrol-policy.yaml".to_string());
+                let fix = fixture.unwrap_or_else(|| "".to_string());
+                check::run_check(
+                    Path::new(&pol),
+                    Path::new(&fix),
+                    dry_run,
+                    gateway.as_deref(),
+                    oidc_token.as_deref(),
+                )
+            }
+        },
+        Commands::Logs {
+            limit,
+            format,
+            verdict,
+            tool,
+            follow,
+            gateway,
+        } => {
+            agentcontrol::support::run_logs(limit, &format, verdict, tool, follow, &gateway).await
+        }
+        Commands::Approve {
+            id,
+            session,
+            gateway,
+        } => agentcontrol::support::run_hitl_decision(&id, "allow", session, &gateway).await,
+        Commands::Deny { id, gateway } => {
+            agentcontrol::support::run_hitl_decision(&id, "deny", false, &gateway).await
+        }
+        Commands::Unenroll { force } => agentcontrol::support::run_unenroll(force),
         Commands::Test {
             policy,
             fixture,

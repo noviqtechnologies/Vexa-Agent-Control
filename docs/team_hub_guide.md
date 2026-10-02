@@ -148,7 +148,19 @@ Enforce hard spending ceilings across engineering teams and detect recursive too
 
 ## 5. Async HITL Approval Queue
 
-Route high-risk tool execution prompts (e.g. `DROP DATABASE`, `aws iam attach-user-policy`) to Slack or Microsoft Teams webhooks. The LLM completion pauses asynchronously until an authorized engineer clicks **Approve** or **Reject**.
+Route high-risk tool execution prompts (e.g. `DROP DATABASE`, `aws iam attach-user-policy`) to Slack, Microsoft Teams, or local CLI queues. The LLM completion pauses asynchronously until an authorized engineer acts on the request.
+
+**CLI HITL Decisions:**
+```bash
+# Approve a pending escalation request:
+agentcontrol approve req-hitl-1042
+
+# Approve all subsequent occurrences for the current session:
+agentcontrol approve req-hitl-1042 --session
+
+# Deny a pending escalation request:
+agentcontrol deny req-hitl-1042
+```
 
 ---
 
@@ -157,6 +169,10 @@ Route high-risk tool execution prompts (e.g. `DROP DATABASE`, `aws iam attach-us
 The Team Control Hub provides isolated organization boundaries where all telemetry and credentials are scoped to your private organization UUID:
 - **Early Access Evaluation:** Enjoy full Team Hub capabilities for 30 days of evaluation with up to 5 devices (expanding to 50 devices post-v1.0 GA).
 - **Fleet Governance:** Real-time device enrollment tracking with automatic quota enforcement and instant capacity reclamation upon device revocation.
+- **Device Unenrollment:** Workstations can cleanly unenroll from the hub anytime:
+  ```bash
+  agentcontrol unenroll --force
+  ```
 - **Seamless Upgrade:** Converting to a dedicated Enterprise SLA or connecting > 5 devices occurs in-place via cryptographically signed Ed25519 tokens.
 
 ---

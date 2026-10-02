@@ -63,7 +63,7 @@ The **Workstation Sidecar** profile installs a single statically-linked binary t
 > **Prefer Running with Docker?**
 > If you prefer not to install binaries on your host machine, you can run the standalone gateway via `docker compose -f docker-compose.standalone.yml up -d` or `docker run`:
 > ```bash
-> docker run -d --name agentcontrol -p 127.0.0.1:18080:18080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 start --listen 0.0.0.0:18080 --container-bridge-mode
+> docker run -d --name agentcontrol -p 127.0.0.1:18080:18080 -v agentcontrol-data:/app/data -v agentcontrol-logs:/var/log/agentcontrol -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" ghcr.io/noviqtechnologies/agentcontrol:v1.0.93 start --listen 0.0.0.0:18080 --container-bridge-mode
 > ```
 > See the full [Docker Deployment Guide](guides/docker-deployment.md).
 
@@ -102,7 +102,7 @@ Example Output:
 ● Vexa Agent Control Daemon Health Inspection
   OS Platform:        windows (x86_64)
   Supervisor Type:    Windows User Startup (HKCU\Run) (ACTIVE / SUPERVISED)
-  Daemon Process:     PID 25936 (v1.0.92) | Up 23s
+  Daemon Process:     PID 25936 (v1.0.93) | Up 23s
   Listener Binding:   127.0.0.1:18080 (20 ms RTT)
   Hub Connection:     ENROLLED (http://127.0.0.1:8081) | Policy: ACTIVE (local-safe-mode)
 ```
@@ -194,9 +194,11 @@ The recommended standalone developer flow automatically discovers all installed 
 # 1-command protection with transaction journal safety:
 agentcontrol protect
 
-# Check verified ports, status, and health:
+# Check verified ports, status, connected clients, and health:
 agentcontrol status
+agentcontrol clients
 agentcontrol doctor
+agentcontrol logs -n 10
 
 # Cleanly unprotect all assistants anytime:
 agentcontrol unprotect

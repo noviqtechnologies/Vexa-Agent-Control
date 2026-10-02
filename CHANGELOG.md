@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.93] - 2026-10-02
+
+### Added & Enhanced
+- **CLI & PRD Feature Parity Suite:** Implemented full CLI subcommands for workstation wrapping, daemon status diagnostics, offline support bundle generation (`agentcontrol support-bundle`), and automated CLI parity test suite (`tests/prd_cli_parity_test.rs`).
+- **Standardized Gateway Network Architecture:** Standardized default gateway listener port to `18080` across documentation, installers, Docker configurations, and workstation supervisor modules.
+- **Enhanced LLM Proxy & Provider Routing:** Hardened multi-provider token capture, streaming response inspection, and upstream fallback pipelines.
+- **Codebase Styling & Type Formatting:** Synchronized Go, Rust, and TypeScript formatting across operator controllers, spend reconciliation routines, and web consoles.
+
+---
+
 ## [1.0.92] - 2026-10-01
 
 ### Added & Enhanced
@@ -208,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.92...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.93...HEAD
+[1.0.93]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.92...v1.0.93
 [1.0.92]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...v1.0.92
 [1.0.91]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...v1.0.91
 [1.0.90]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.89...v1.0.90

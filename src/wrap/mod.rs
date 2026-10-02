@@ -17,6 +17,7 @@ pub mod transformer;
 pub mod watch;
 
 pub use connect::{run_connect, run_disconnect, ConnectMode, ConnectTarget};
+pub use status::run_clients;
 
 use crate::cli::{UnwrapTarget, WatchTarget, WrapTarget};
 use colored::*;

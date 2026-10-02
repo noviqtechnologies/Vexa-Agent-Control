@@ -314,6 +314,11 @@ pub struct StatusEndpoints {
 }
 
 /// Print the status table or structured JSON for verified targets.
+pub fn run_status(json: bool) {
+    print_all_targets(json);
+}
+
+/// Print the status table or structured JSON for verified targets.
 pub fn print_all_targets(json: bool) {
     let summaries = get_all_integrations_summary();
     let hub_url = crate::identity::device::load_hub_url()
@@ -469,6 +474,63 @@ pub fn print_all_targets(json: bool) {
     println!();
 }
 
+/// Lists all detected, connected, and protected IDE clients and MCP runtimes (PRD §12).
+pub fn run_clients(json: bool) -> i32 {
+    let list = get_all_integrations_summary();
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&list).unwrap_or_default());
+        return 0;
+    }
+
+    println!();
+    println!(
+        "{}",
+        "Vexa Agent Control — Connected Clients & Interceptions"
+            .bold()
+            .white()
+    );
+    println!("{}", "─".repeat(95).dimmed());
+    println!(
+        "  {:<22} {:<16} {:<20} {}",
+        "CLIENT / TARGET", "STATUS", "MCP GOVERNANCE", "CONFIGURATION PATH"
+    );
+    println!("{}", "─".repeat(95).dimmed());
+
+    for item in &list {
+        let status_colored = if item.is_wrapped {
+            "PROTECTED".green().bold()
+        } else if item.exists {
+            "DETECTED".yellow().bold()
+        } else {
+            "NOT DETECTED".dimmed()
+        };
+
+        let governance = if item.is_wrapped {
+            format!("Wrapped ({}/{})", item.wrapped_servers, item.total_servers).green()
+        } else if item.exists && item.total_servers > 0 {
+            format!("Unwrapped ({})", item.total_servers).yellow()
+        } else if item.exists {
+            "No MCP servers".dimmed()
+        } else {
+            "-".dimmed()
+        };
+
+        let path_disp = shorten_path(Path::new(&item.path));
+        println!(
+            "  {:<22} {:<25} {:<29} {}",
+            item.name.cyan().bold(),
+            status_colored,
+            governance,
+            path_disp.dimmed()
+        );
+    }
+    println!("{}", "─".repeat(95).dimmed());
+    println!("  Run 'agentcontrol connect <target>' to protect a detected client.");
+    println!("  Run 'agentcontrol disconnect <target>' to cleanly restore original configuration.\n");
+    0
+}
+
 /// Map an IDE display name to the valid `agentcontrol wrap <target>` CLI argument.
 ///
 /// P2-a fix: `t.name.to_lowercase().replace(' ', "-")` previously produced
@@ -622,5 +684,14 @@ args = ["stdio-proxy", "--", "node", "server.js"]
         let (total, wrapped) = check_wrap_status(&config_path).unwrap();
         assert_eq!(total, 1);
         assert_eq!(wrapped, 1);
+    }
+
+    #[test]
+    fn test_run_clients_output() {
+        let code = run_clients(true);
+        assert_eq!(code, 0);
+
+        let code_text = run_clients(false);
+        assert_eq!(code_text, 0);
     }
 }

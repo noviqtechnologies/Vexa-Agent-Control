@@ -39,7 +39,7 @@ docker run -d \
   -v agentcontrol-data:/app/data \
   -v agentcontrol-logs:/var/log/agentcontrol \
   -e AGENTCONTROL_ADMIN_TOKEN="${AGENTCONTROL_ADMIN_TOKEN:-$(openssl rand -hex 32)}" \
-  ghcr.io/noviqtechnologies/agentcontrol:v1.0.92 \
+  ghcr.io/noviqtechnologies/agentcontrol:v1.0.93 \
   start --listen 0.0.0.0:18080
 ```
 Because WSL2 seamlessly mirrors localhost ports, the gateway on port `18080` (or `127.0.0.1:18080`) and the web console on port `18300` are accessible from both inside WSL2 and from Windows desktop browsers at `http://localhost:18080` / `http://localhost:18300`.

@@ -549,6 +549,295 @@ pub async fn run_rotate_local_token() -> i32 {
     0
 }
 
+/// Gracefully stops the local background protection daemon (PRD §12).
+pub async fn run_stop(gateway_addr: &str) -> i32 {
+    println!("Stopping Vexa Agent Control protection daemon...");
+    let mut stopped_anything = false;
+
+    // 1. Check ~/.agentcontrol/daemon.pid
+    let pid_path = dirs::home_dir().map(|h| h.join(".agentcontrol").join("daemon.pid"));
+    if let Some(ref p) = pid_path {
+        if p.exists() {
+            if let Ok(content) = fs::read_to_string(p) {
+                if let Ok(pid) = content.trim().parse::<u32>() {
+                    #[cfg(windows)]
+                    {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/F", "/PID", &pid.to_string()])
+                            .output();
+                        stopped_anything = true;
+                    }
+                    #[cfg(unix)]
+                    {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-15", &pid.to_string()])
+                            .output();
+                        stopped_anything = true;
+                    }
+                }
+            }
+            let _ = fs::remove_file(p);
+        }
+    }
+
+    // 2. Stop registered OS background service if active
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("sc.exe")
+            .args(["stop", "VexaAgentControl"])
+            .output();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let plist = home.join("Library/LaunchAgents/io.vexasec.agentcontrol.plist");
+            if plist.exists() {
+                let _ = std::process::Command::new("launchctl")
+                    .args(["unload", &plist.to_string_lossy()])
+                    .output();
+                stopped_anything = true;
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("systemctl")
+            .args(["--user", "stop", "agentcontrol.service"])
+            .output();
+    }
+
+    let target = if gateway_addr.starts_with("http") {
+        gateway_addr
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .to_string()
+    } else {
+        gateway_addr.to_string()
+    };
+
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    if tokio::net::TcpStream::connect(&target).await.is_err() {
+        println!(
+            "{} Local protection daemon stopped successfully.",
+            "✔".green().bold()
+        );
+        0
+    } else if stopped_anything {
+        println!(
+            "{} Daemon process was signaled. Port {} is releasing.",
+            "✔".green(),
+            target
+        );
+        0
+    } else {
+        println!(
+            "{} Local gateway on {} is not running.",
+            "ℹ".cyan(),
+            target
+        );
+        0
+    }
+}
+
+/// Display and query local audit events and security decisions (PRD §12).
+pub async fn run_logs(
+    limit: usize,
+    format: &str,
+    verdict: Option<String>,
+    tool: Option<String>,
+    follow: bool,
+    gateway: &str,
+) -> i32 {
+    if follow {
+        let stream_url = format!("{}/api/events/stream", gateway.trim_end_matches('/'));
+        println!(
+            "Streaming live events from {} (Press Ctrl+C to stop)...",
+            stream_url.cyan()
+        );
+        let client = reqwest::Client::new();
+        match client.get(&stream_url).send().await {
+            Ok(resp) => {
+                use futures_util::StreamExt;
+                let mut stream = resp.bytes_stream();
+                while let Some(chunk_res) = stream.next().await {
+                    if let Ok(chunk) = chunk_res {
+                        let text = String::from_utf8_lossy(&chunk);
+                        for line in text.lines() {
+                            if let Some(data) = line.strip_prefix("data: ") {
+                                if format == "json" {
+                                    println!("{}", data);
+                                } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                                    let ts = val
+                                        .get("timestamp_ns")
+                                        .and_then(|t| t.as_i64())
+                                        .map(|ns| {
+                                            chrono::DateTime::from_timestamp_nanos(ns)
+                                                .format("%H:%M:%S%.3f")
+                                                .to_string()
+                                        })
+                                        .unwrap_or_else(|| "live".to_string());
+                                    let v_str = val.get("verdict").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                    let v_col = match v_str.to_lowercase().as_str() {
+                                        "allow" => "ALLOW".green().bold(),
+                                        "deny" => "DENY".red().bold(),
+                                        "warn" => "WARN".yellow().bold(),
+                                        "ask" => "ASK".blue().bold(),
+                                        "redact" => "REDACT".purple().bold(),
+                                        _ => v_str.dimmed(),
+                                    };
+                                    let t_str = val.get("url_path").and_then(|t| t.as_str()).unwrap_or("-");
+                                    let lat = val.get("latency_ms").and_then(|l| l.as_f64()).unwrap_or(0.0);
+                                    let rule = val.get("policy_rule").and_then(|r| r.as_str()).unwrap_or("default");
+                                    println!("{} {:<16} {:<24} {:<8.1}ms {}", ts.dimmed(), v_col, t_str.cyan(), lat, rule);
+                                }
+                            }
+                        }
+                    }
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("{} Failed to connect to live event stream: {}", "✖".red(), e);
+                1
+            }
+        }
+    } else {
+        let db_manager = crate::proxy::db::DbManager::init();
+        match db_manager.get_events(limit).await {
+            Ok(events) => {
+                let filtered: Vec<_> = events
+                    .into_iter()
+                    .filter(|e| {
+                        if let Some(ref v) = verdict {
+                            if !e.verdict.as_deref().unwrap_or("").eq_ignore_ascii_case(v) {
+                                return false;
+                            }
+                        }
+                        if let Some(ref t) = tool {
+                            if !e.url_path.as_deref().unwrap_or("").contains(t) {
+                                return false;
+                            }
+                        }
+                        true
+                    })
+                    .collect();
+
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&filtered).unwrap_or_default());
+                } else {
+                    println!("\n{}", "=== Vexa Agent Control Audit Log ===".cyan().bold());
+                    println!(
+                        "{:<22} {:<10} {:<26} {:<10} {}",
+                        "TIMESTAMP", "VERDICT", "TOOL / TARGET", "LATENCY", "POLICY RULE"
+                    );
+                    println!("{}", "─".repeat(90).dimmed());
+                    if filtered.is_empty() {
+                        println!("  No recent events found.");
+                    }
+                    for ev in filtered {
+                        let ts = chrono::DateTime::from_timestamp_nanos(ev.timestamp_ns)
+                            .format("%Y-%m-%d %H:%M:%S")
+                            .to_string();
+                        let verdict_str = ev.verdict.as_deref().unwrap_or("unknown");
+                        let verdict_colored = match verdict_str.to_lowercase().as_str() {
+                            "allow" => "ALLOW".green().bold(),
+                            "deny" => "DENY".red().bold(),
+                            "warn" => "WARN".yellow().bold(),
+                            "ask" => "ASK".blue().bold(),
+                            "redact" => "REDACT".purple().bold(),
+                            _ => verdict_str.dimmed(),
+                        };
+                        let tool_str = ev.url_path.as_deref().unwrap_or("-");
+                        let latency = format!("{:.1}ms", ev.latency_ms.unwrap_or(0.0));
+                        let rule = ev.policy_rule.as_deref().unwrap_or("default");
+                        println!(
+                            "{:<22} {:<19} {:<26} {:<10} {}",
+                            ts.dimmed(),
+                            verdict_colored,
+                            tool_str.cyan(),
+                            latency.dimmed(),
+                            rule
+                        );
+                    }
+                    println!();
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("{} Failed to read audit events from events.db: {}", "✖".red(), e);
+                1
+            }
+        }
+    }
+}
+
+/// Process Human-in-the-Loop (HITL) escalation decisions via CLI (PRD §12, §16).
+pub async fn run_hitl_decision(id: &str, decision: &str, session: bool, gateway: &str) -> i32 {
+    let url = format!("{}/api/v1/hitl/respond", gateway.trim_end_matches('/'));
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "request_id": id,
+        "decision": decision,
+        "signed_hmac": "",
+        "scope": if session { "session" } else { "once" }
+    });
+
+    match client.post(&url).json(&body).send().await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                if decision == "allow" {
+                    println!(
+                        "{} Action '{}' has been APPROVED successfully (Scope: {}).",
+                        "✔".green().bold(),
+                        id,
+                        if session { "Session" } else { "Once" }
+                    );
+                } else {
+                    println!(
+                        "{} Action '{}' has been DENIED.",
+                        "✖".red().bold(),
+                        id
+                    );
+                }
+                0
+            } else {
+                eprintln!(
+                    "{} Failed to submit decision for '{}': HTTP {}",
+                    "✖".red(),
+                    id,
+                    resp.status()
+                );
+                1
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "{} Failed to connect to gateway at {}: {}",
+                "✖".red(),
+                gateway,
+                e
+            );
+            1
+        }
+    }
+}
+
+/// Unenrolls device from Control Hub and returns to standalone mode (PRD §12).
+pub fn run_unenroll(force: bool) -> i32 {
+    if !force {
+        print!("Are you sure you want to unenroll this device from Control Hub? [y/N]: ");
+        use std::io::{self, Write};
+        let _ = io::stdout().flush();
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() || !input.trim().eq_ignore_ascii_case("y") {
+            println!("Unenroll operation cancelled.");
+            return 0;
+        }
+    }
+
+    run_logout()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -583,5 +872,20 @@ mod tests {
         assert!(!redacted.contains("sk-1234567890123456789012"));
         assert!(!redacted.contains("my_secret_token_1234567890"));
         assert!(redacted.contains("[REDACTED_SECRET]"));
+    }
+
+    #[test]
+    fn test_run_unenroll_force() {
+        let code = run_unenroll(true);
+        assert_eq!(code, 0);
+    }
+
+    #[tokio::test]
+    async fn test_run_logs_offline() {
+        let code = run_logs(5, "text", None, None, false, "http://127.0.0.1:18080").await;
+        assert_eq!(code, 0);
+
+        let code_json = run_logs(5, "json", None, None, false, "http://127.0.0.1:18080").await;
+        assert_eq!(code_json, 0);
     }
 }
