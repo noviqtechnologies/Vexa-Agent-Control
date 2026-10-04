@@ -1,0 +1,48 @@
+name: Public Preview Feedback
+description: Help us improve Vexa-Agent-Control by sharing your experience!
+title: "[Preview Feedback]: "
+labels: ["preview-feedback", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Thank you for testing Vexa-Agent-Control! 🚀
+        Your feedback helps us shape the final release. Please fill out the quick form below.
+        
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: Operating Environment
+      description: Where are you testing this agent control system?
+      options:
+        - label: Local Machine / Docker
+        - label: Cloud Deployment (AWS/GCP/Azure)
+        - label: Production-like Environment
+        
+  - type: dropdown
+    id: satisfaction
+    attributes:
+      label: How would you rate your initial experience?
+      options:
+        - "⭐ Amazing, worked out of the box"
+        - "🙂 Good, but needs minor improvements"
+        - "😐 Neutral / Average"
+        - "⚠️ Frustrating / Hard to configure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: core-feedback
+    attributes:
+      label: What do you like most, or what needs immediate improvement?
+      placeholder: "e.g., The setup was incredibly fast, but the documentation on agent state management could be clearer..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature-requests
+    attributes:
+      label: Are there any specific features or integrations you feel are missing?
+      placeholder: "e.g., I would love to see support for..."
+    validations:
+      required: false
