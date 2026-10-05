@@ -56,7 +56,7 @@ func ExtractOrGenerateTraceContext(r *http.Request) *TraceContext {
 	return &TraceContext{
 		TraceID:  GenerateRandomHex(16), // 32 hex chars
 		ParentID: GenerateRandomHex(8),  // 16 hex chars
-		Flags:    "01",                 // Sampled
+		Flags:    "01",                  // Sampled
 	}
 }
 

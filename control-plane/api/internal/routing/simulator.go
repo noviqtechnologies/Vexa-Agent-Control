@@ -19,13 +19,13 @@ type SimulationFixture struct {
 
 // SimulationItemResult captures the evaluated decision for one fixture.
 type SimulationItemResult struct {
-	FixtureName      string                    `json:"fixture_name"`
-	Matched          bool                      `json:"matched"`
-	SelectedPrimary  string                    `json:"selected_primary,omitempty"`
-	SelectedFallback string                    `json:"selected_fallback,omitempty"`
-	DecisionVerdict  string                    `json:"decision_verdict"` // ALLOW | DENY
-	ReasonCode       string                    `json:"reason_code"`
-	CandidateReasons map[string]string         `json:"candidate_reasons"`
+	FixtureName      string            `json:"fixture_name"`
+	Matched          bool              `json:"matched"`
+	SelectedPrimary  string            `json:"selected_primary,omitempty"`
+	SelectedFallback string            `json:"selected_fallback,omitempty"`
+	DecisionVerdict  string            `json:"decision_verdict"` // ALLOW | DENY
+	ReasonCode       string            `json:"reason_code"`
+	CandidateReasons map[string]string `json:"candidate_reasons"`
 }
 
 // SimulationReport summarizes the batch fixture evaluation.

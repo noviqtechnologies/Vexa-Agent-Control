@@ -12,7 +12,7 @@ type RouteProfile struct {
 	Name             string    `json:"name"`
 	Version          int       `json:"version"`
 	ContentDigest    string    `json:"content_digest"`
-	APIFamily        string    `json:"api_family"` // chat_completions | messages | responses
+	APIFamily        string    `json:"api_family"`  // chat_completions | messages | responses
 	MatchModel       string    `json:"match_model"` // *, gpt-*, claude-*, or exact model name
 	PrimaryProvider  string    `json:"primary_provider"`
 	PrimaryModel     string    `json:"primary_model"`

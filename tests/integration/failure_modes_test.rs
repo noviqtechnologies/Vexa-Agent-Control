@@ -150,9 +150,9 @@ fn test_failure_mode_upstream_timeout_mapping() {
 #[test]
 fn test_failure_mode_nonexistent_directory_write_failure() {
     use std::fs::File;
-    use std::path::Path;
 
-    let invalid_path = Path::new("Z:\\nonexistent_volume_9999\\audit.log");
+    let temp = tempfile::tempdir().unwrap();
+    let invalid_path = temp.path().join("nonexistent_dir_9999").join("audit.log");
     let open_res = File::create(invalid_path);
     assert!(
         open_res.is_err(),

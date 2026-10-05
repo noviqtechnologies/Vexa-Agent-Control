@@ -17,13 +17,13 @@ type TargetCandidate struct {
 
 // RouteResult captures the authoritative route decision for an incoming request.
 type RouteResult struct {
-	Profile       *model.RouteProfile
-	Primary       TargetCandidate
-	Fallback      *TargetCandidate
-	Decision      *model.ExplainableRouteDecision
-	MaxAttempts   int
-	DeadlineMs    int
-	RetryClasses  []string
+	Profile      *model.RouteProfile
+	Primary      TargetCandidate
+	Fallback     *TargetCandidate
+	Decision     *model.ExplainableRouteDecision
+	MaxAttempts  int
+	DeadlineMs   int
+	RetryClasses []string
 }
 
 // RouterDataStore provides route query capabilities.

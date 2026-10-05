@@ -180,11 +180,14 @@ jobs:
           cat checksums.txt
 
       - name: Sign Checksums with Cosign (Keyless)
+        continue-on-error: true
         shell: bash
         run: |
-          cosign sign-blob --yes \
-            --bundle artifacts/checksums.txt.bundle \
-            artifacts/checksums.txt
+          for i in 1 2 3; do
+            cosign sign-blob --yes \
+              --bundle artifacts/checksums.txt.bundle \
+              artifacts/checksums.txt && break || sleep 5
+          done
 
       - name: Generate SLSA Build Provenance Attestation
         uses: actions/attest-build-provenance@v1
@@ -253,8 +256,11 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol:${{ env.VERSION }}
 
       - name: Sign Gateway Docker Image (Keyless)
+        continue-on-error: true
         run: |
-          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol@${{ steps.build_gateway.outputs.digest }}"
+          for i in 1 2 3; do
+            cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol@${{ steps.build_gateway.outputs.digest }}" && break || sleep 5
+          done
 
       - name: Build and push Dashboard API image
         id: build_api
@@ -268,8 +274,11 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:${{ env.VERSION }}
 
       - name: Sign Dashboard API Docker Image (Keyless)
+        continue-on-error: true
         run: |
-          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api@${{ steps.build_api.outputs.digest }}"
+          for i in 1 2 3; do
+            cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api@${{ steps.build_api.outputs.digest }}" && break || sleep 5
+          done
 
       - name: Build and push Dashboard Frontend image
         id: build_frontend
@@ -283,8 +292,11 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:${{ env.VERSION }}
 
       - name: Sign Dashboard Frontend Docker Image (Keyless)
+        continue-on-error: true
         run: |
-          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend@${{ steps.build_frontend.outputs.digest }}"
+          for i in 1 2 3; do
+            cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend@${{ steps.build_frontend.outputs.digest }}" && break || sleep 5
+          done
 
       - name: Build and push Database image
         id: build_db
@@ -298,8 +310,11 @@ jobs:
             ghcr.io/noviqtechnologies/agentcontrol-db:${{ env.VERSION }}
 
       - name: Sign Database Docker Image (Keyless)
+        continue-on-error: true
         run: |
-          cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-db@${{ steps.build_db.outputs.digest }}"
+          for i in 1 2 3; do
+            cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-db@${{ steps.build_db.outputs.digest }}" && break || sleep 5
+          done
 
       - name: Install Helm
         uses: azure/setup-helm@v4

@@ -42,10 +42,10 @@ func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	checks := map[string]string{
-		"database":       "ok",
-		"spend_engine":   "ok",
-		"route_engine":   "ok",
-		"audit_spool":    "ok",
+		"database":     "ok",
+		"spend_engine": "ok",
+		"route_engine": "ok",
+		"audit_spool":  "ok",
 	}
 	ready := true
 
@@ -76,8 +76,8 @@ func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpCode)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":     status,
-		"checks":     checks,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"status":    status,
+		"checks":    checks,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }

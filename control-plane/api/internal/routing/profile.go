@@ -9,10 +9,10 @@ import (
 )
 
 var (
-	ErrNoMatchingRoute   = errors.New("no matching route profile found")
+	ErrNoMatchingRoute     = errors.New("no matching route profile found")
 	ErrMaxAttemptsExceeded = errors.New("max attempts must be between 1 and 2")
-	ErrInvalidAPIFamily  = errors.New("unsupported api family")
-	ErrPrimaryRequired   = errors.New("primary provider and model are required")
+	ErrInvalidAPIFamily    = errors.New("unsupported api family")
+	ErrPrimaryRequired     = errors.New("primary provider and model are required")
 )
 
 // SupportedAPIFamilies lists the protocol families supported by Vexa LLM Router.
