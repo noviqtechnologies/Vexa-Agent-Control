@@ -26,7 +26,7 @@ param(
 
     $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
     $Repo = "noviqtechnologies/Vexa-Agent-Control"
-    $FallbackVersion = "v1.0.94"
+    $FallbackVersion = "v1.0.95"
 
     # Resolve version: use provided value, env var, or fetch latest from GitHub
     if (-not $Version) { $Version = $env:AGENTCONTROL_VERSION }

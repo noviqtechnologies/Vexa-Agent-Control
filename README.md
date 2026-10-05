@@ -10,7 +10,7 @@
 <br/>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Release Version](https://img.shields.io/badge/Version-1.0.94-10B981.svg?style=flat-square)](Cargo.toml)
+[![Release Version](https://img.shields.io/badge/Version-1.0.95-10B981.svg?style=flat-square)](Cargo.toml)
 [![Rust Core](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fnoviqtechnologies%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
 [![OWASP ASI](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)

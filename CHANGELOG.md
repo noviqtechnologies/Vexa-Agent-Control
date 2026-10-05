@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.95] - 2026-10-05
+
+### Security
+- **HITL Secret Isolation:** Desktop subprocess prompts now contain only opaque reference IDs; zero cryptographic material (HMAC, callback URLs) exposed to OS process tree.
+- **PERMANENT_ALLOW Prohibition:** `process_callback()` rejects `PERMANENT_ALLOW` decisions; "Permanently Authorize" button removed from control-plane UI.
+
+### Added
+- **Durable WAL Crash Recovery:** Append-only JSONL Write-Ahead Log (`hitl_wal.jsonl`) with `OutcomeUnknown` reconciliation on daemon restart.
+- **Release Gate Workflow:** `release.yml` now gates artifact builds on `cargo fmt --check`, `cargo clippy`, and `cargo test`.
+- **Regression Tests:** `test_hitl_webhook_rejects_permanent_allow`, `test_desktop_toast_script_contains_zero_secrets`, `test_hitl_wal_persistence_and_recovery`, WAL crash harness scenario.
+- **Public Preview Scope:** README now includes explicit public preview limitations and operational boundaries.
+
+### Fixed
+- **Benchmark Receipt Integrity:** Release receipt now uses live Criterion measurements, real commit SHA, CPU identification, and corpus digest instead of hardcoded values.
+- **CI Benchmark Gate:** Removed `continue-on-error` from benchmark step; receipt must exist and have `PASS` decision.
+- **Feedback Form Link:** Fixed broken `github.com` link to point to the actual issue template.
+
+---
+
 ## [1.0.94] - 2026-10-05
 
 ### Added & Enhanced
@@ -231,7 +250,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.94...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.95...HEAD
+[1.0.95]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.94...v1.0.95
 [1.0.94]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.93...v1.0.94
 [1.0.93]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.92...v1.0.93
 [1.0.92]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...v1.0.92
