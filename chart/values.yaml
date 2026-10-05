@@ -27,7 +27,7 @@ crds:
 operator:
   # COMMON. Container image for the operator.
   image:
-    repository: noviqtech/agentcontrol-operator
+    repository: ghcr.io/noviqtechnologies/agentcontrol-operator
     tag: ""   # defaults to Chart.appVersion — override to pin an exact digest
     pullPolicy: IfNotPresent
 
@@ -77,7 +77,7 @@ gateway:
 
   # COMMON. Container image for the gateway.
   image:
-    repository: noviqtech/agentcontrol
+    repository: ghcr.io/noviqtechnologies/agentcontrol
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
 
@@ -197,7 +197,7 @@ gateway:
 dashboardApi:
   enabled: false
   image:
-    repository: noviqtech/agentcontrol-dashboard-api
+    repository: ghcr.io/noviqtechnologies/agentcontrol-dashboard-api
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
   replicas: 1
@@ -234,7 +234,7 @@ dashboardApi:
 dashboardFrontend:
   enabled: false
   image:
-    repository: noviqtech/agentcontrol-dashboard-frontend
+    repository: ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend
     tag: ""   # defaults to Chart.appVersion
     pullPolicy: IfNotPresent
   replicas: 1

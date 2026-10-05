@@ -497,8 +497,16 @@ Deploy Vexa Agent Control to your production infrastructure using enterprise-gra
 ### 1. Kubernetes (Helm Chart)
 Deploy scalable gateway pods with sidecar injection and native Horizontal Pod Autoscaling:
 ```bash
+# Option A: Official Vexa Helm Repository
 helm repo add vexa https://charts.vexasec.io
-helm install agentcontrol ./chart -f values.yaml
+helm repo update
+helm install agentcontrol vexa/agentcontrol -n agentcontrol-system --create-namespace
+
+# Option B: Local Repository Checkout
+helm install agentcontrol ./chart -f ./chart/values.yaml -n agentcontrol-system --create-namespace
+
+# Option C: OCI Registry (GHCR)
+helm install agentcontrol oci://ghcr.io/noviqtechnologies/charts/agentcontrol -n agentcontrol-system --create-namespace
 ```
 [**Read the Kubernetes Guide →**](chart/README.md)
 

@@ -133,15 +133,26 @@ jobs:
           format: spdx-json
           output-file: artifacts/agentcontrol-sbom.spdx.json
 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package Helm Chart
+        shell: bash
+        run: |
+          CHART_VER="${VERSION#v}"
+          helm package ./chart --version "$CHART_VER" --app-version "$CHART_VER" -d artifacts/
+
       - name: Generate Checksums Manifest (SHA-256 & SHA-512)
         shell: bash
         run: |
           cd artifacts
           echo "# SHA-256 Digests" > checksums.txt
-          find . -type f -name "*.zip" -exec sha256sum {} + | sed 's|./[^/]*/||' >> checksums.txt
+          find . -type f \( -name "*.zip" -o -name "*.tgz" \) -exec sha256sum {} + | sed 's|./[^/]*/||' >> checksums.txt
           echo "" >> checksums.txt
           echo "# SHA-512 Digests" >> checksums.txt
-          find . -type f -name "*.zip" -exec sha512sum {} + | sed 's|./[^/]*/||' >> checksums.txt
+          find . -type f \( -name "*.zip" -o -name "*.tgz" \) -exec sha512sum {} + | sed 's|./[^/]*/||' >> checksums.txt
           echo "Generated checksums.txt:"
           cat checksums.txt
 
@@ -155,7 +166,9 @@ jobs:
       - name: Generate SLSA Build Provenance Attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'artifacts/**/*.zip'
+          subject-path: |
+            artifacts/**/*.zip
+            artifacts/*.tgz
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -164,6 +177,7 @@ jobs:
           name: Vexa Agent Control ${{ env.VERSION }}
           files: |
             artifacts/**/*.zip
+            artifacts/*.tgz
             artifacts/checksums.txt
             artifacts/checksums.txt.bundle
             artifacts/agentcontrol-sbom.spdx.json
@@ -263,4 +277,17 @@ jobs:
       - name: Sign Database Docker Image (Keyless)
         run: |
           cosign sign --yes "ghcr.io/noviqtechnologies/agentcontrol-db@${{ steps.build_db.outputs.digest }}"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package and Push Helm Chart to GHCR (OCI)
+        shell: bash
+        run: |
+          CHART_VER="${VERSION#v}"
+          helm package ./chart --version "$CHART_VER" --app-version "$CHART_VER"
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm push "agentcontrol-${CHART_VER}.tgz" oci://ghcr.io/noviqtechnologies/charts
 
