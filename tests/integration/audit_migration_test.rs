@@ -94,6 +94,10 @@ fn ensure_fixtures_exist() {
         let sparse_path = dir.join("legacy_v1_sparse.jsonl");
         let rotated_path = dir.join("legacy_v1_rotated.jsonl");
 
+        if standard_path.exists() && sparse_path.exists() && rotated_path.exists() {
+            return;
+        }
+
         // Clean any partial or malformed files
         let _ = fs::remove_file(&standard_path);
         let _ = fs::remove_file(&sparse_path);

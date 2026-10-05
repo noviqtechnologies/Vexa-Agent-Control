@@ -231,10 +231,10 @@ jobs:
         run: cargo test --lib eval
 
       - name: Run Audit Migration Matrix
-        run: cargo test --test audit_migration_test
+        run: cargo test --test integration audit_migration
 
       - name: Run HITL State Machine Tests
-        run: cargo test --test hitl_state_machine_test
+        run: cargo test --test integration hitl_state_machine
 
       - name: Run Benchmark Suite (Release mode — generates release receipt)
         run: cargo bench --bench benchmark_suite -- --output-format bencher
