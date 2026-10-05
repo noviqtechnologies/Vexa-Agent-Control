@@ -247,8 +247,8 @@ impl VerdictReport {
         });
 
         if !self.triggered_rules.is_empty() {
-            detail["triggered_rules"] = serde_json::to_value(&self.triggered_rules)
-                .unwrap_or_default();
+            detail["triggered_rules"] =
+                serde_json::to_value(&self.triggered_rules).unwrap_or_default();
         }
 
         if let Some(ref remediation) = self.remediation {
@@ -354,7 +354,10 @@ mod tests {
 
         let audit_v = v.to_audit_verdict().unwrap();
         assert_eq!(audit_v.rule_id, "injection-001");
-        assert_eq!(audit_v.evidence_snippet, Some("ignore previous instructions".to_string()));
+        assert_eq!(
+            audit_v.evidence_snippet,
+            Some("ignore previous instructions".to_string())
+        );
     }
 
     #[test]

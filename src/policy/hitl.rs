@@ -44,11 +44,17 @@ pub enum ApprovalState {
     /// Ingress evaluation demands approval. Request generated with opaque reference.
     Pending,
     /// Atomically acquired by execution engine via CAS. Holds idempotency key.
-    Reserved { idempotency_key: String, reserved_by: String },
+    Reserved {
+        idempotency_key: String,
+        reserved_by: String,
+    },
     /// Intent flushed to disk immediately before dispatching the tool call.
     Executing { idempotency_key: String },
     /// Action completed with verified success. Outcome logged to audit log.
-    Executed { idempotency_key: String, completed_at: Instant },
+    Executed {
+        idempotency_key: String,
+        completed_at: Instant,
+    },
     /// Tool invocation rejected or terminated with error.
     Failed { reason: String },
     /// Token time-to-live elapsed before reservation.
@@ -56,7 +62,10 @@ pub enum ApprovalState {
     /// Explicit cancellation by operator or security policy.
     Revoked { reason: String },
     /// Crash occurred during tool execution; outcome is uncertain and requires manual review.
-    OutcomeUnknown { idempotency_key: String, reason: String },
+    OutcomeUnknown {
+        idempotency_key: String,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +143,8 @@ impl HitlStateMachine {
         workspace_id: &str,
     ) -> Result<String, String> {
         let mut map = self.records.lock().unwrap();
-        let record = self.find_record_mut(&mut map, approval_id)
+        let record = self
+            .find_record_mut(&mut map, approval_id)
             .ok_or_else(|| "Approval not found".to_string())?;
 
         // 1. Expiry check
@@ -164,35 +174,31 @@ impl HitlStateMachine {
             ApprovalState::Reserved { .. } => {
                 Err("Double-spend rejected: approval already reserved".to_string())
             }
-            ApprovalState::Executing { .. } => {
-                Err("Approval already in execution".to_string())
-            }
-            ApprovalState::Executed { .. } => {
-                Err("Approval already consumed".to_string())
-            }
-            ApprovalState::Revoked { reason } => {
-                Err(format!("Approval was revoked: {}", reason))
-            }
-            ApprovalState::Expired => {
-                Err("Approval expired".to_string())
-            }
+            ApprovalState::Executing { .. } => Err("Approval already in execution".to_string()),
+            ApprovalState::Executed { .. } => Err("Approval already consumed".to_string()),
+            ApprovalState::Revoked { reason } => Err(format!("Approval was revoked: {}", reason)),
+            ApprovalState::Expired => Err("Approval expired".to_string()),
             ApprovalState::Failed { reason } => {
                 Err(format!("Approval previously failed: {}", reason))
             }
-            ApprovalState::OutcomeUnknown { .. } => {
-                Err("Prior execution outcome unknown/uncertain; manual resolution required".to_string())
-            }
+            ApprovalState::OutcomeUnknown { .. } => Err(
+                "Prior execution outcome unknown/uncertain; manual resolution required".to_string(),
+            ),
         }
     }
 
     /// Transition from Reserved -> Executing (Write-ahead intent flush).
     pub fn start_execution(&self, approval_id: &str, idempotency_key: &str) -> Result<(), String> {
         let mut map = self.records.lock().unwrap();
-        let record = self.find_record_mut(&mut map, approval_id)
+        let record = self
+            .find_record_mut(&mut map, approval_id)
             .ok_or_else(|| "Approval not found".to_string())?;
 
         match &record.state {
-            ApprovalState::Reserved { idempotency_key: existing_key, .. } => {
+            ApprovalState::Reserved {
+                idempotency_key: existing_key,
+                ..
+            } => {
                 if existing_key != idempotency_key {
                     return Err("Idempotency key mismatch".to_string());
                 }
@@ -206,13 +212,20 @@ impl HitlStateMachine {
     }
 
     /// Transition to Executed upon successful tool completion.
-    pub fn complete_execution(&self, approval_id: &str, idempotency_key: &str) -> Result<(), String> {
+    pub fn complete_execution(
+        &self,
+        approval_id: &str,
+        idempotency_key: &str,
+    ) -> Result<(), String> {
         let mut map = self.records.lock().unwrap();
-        let record = self.find_record_mut(&mut map, approval_id)
+        let record = self
+            .find_record_mut(&mut map, approval_id)
             .ok_or_else(|| "Approval not found".to_string())?;
 
         match &record.state {
-            ApprovalState::Executing { idempotency_key: existing_key } => {
+            ApprovalState::Executing {
+                idempotency_key: existing_key,
+            } => {
                 if existing_key != idempotency_key {
                     return Err("Idempotency key mismatch".to_string());
                 }
@@ -230,7 +243,8 @@ impl HitlStateMachine {
     /// Transition to Failed upon tool failure or pre-execution error.
     pub fn fail_execution(&self, approval_id: &str, reason: &str) -> Result<(), String> {
         let mut map = self.records.lock().unwrap();
-        let record = self.find_record_mut(&mut map, approval_id)
+        let record = self
+            .find_record_mut(&mut map, approval_id)
             .ok_or_else(|| "Approval not found".to_string())?;
 
         record.state = ApprovalState::Failed {
@@ -242,35 +256,44 @@ impl HitlStateMachine {
     /// Crash recovery reconciliation: inspect uncommitted Executing records on daemon start.
     /// If tool execution cannot be verified, transitions to `OutcomeUnknown`.
     /// Invariant: NEVER silently re-execute an uncertain side effect (ADR-010 §2.2).
-    pub fn recover_from_crash(&self, approval_id: &str, tool_confirmed: Option<bool>) -> ApprovalState {
+    pub fn recover_from_crash(
+        &self,
+        approval_id: &str,
+        tool_confirmed: Option<bool>,
+    ) -> ApprovalState {
         let mut map = self.records.lock().unwrap();
         let record = match self.find_record_mut(&mut map, approval_id) {
             Some(r) => r,
-            None => return ApprovalState::Failed { reason: "Record not found during recovery".to_string() },
+            None => {
+                return ApprovalState::Failed {
+                    reason: "Record not found during recovery".to_string(),
+                }
+            }
         };
 
         match &record.state {
-            ApprovalState::Executing { idempotency_key } | ApprovalState::Reserved { idempotency_key, .. } => {
-                match tool_confirmed {
-                    Some(true) => {
-                        record.state = ApprovalState::Executed {
-                            idempotency_key: idempotency_key.clone(),
-                            completed_at: Instant::now(),
-                        };
-                    }
-                    Some(false) => {
-                        record.state = ApprovalState::Failed {
-                            reason: "Tool confirmed non-execution after crash".to_string(),
-                        };
-                    }
-                    None => {
-                        record.state = ApprovalState::OutcomeUnknown {
-                            idempotency_key: idempotency_key.clone(),
-                            reason: "Process crashed during side effect; outcome uncertain".to_string(),
-                        };
-                    }
+            ApprovalState::Executing { idempotency_key }
+            | ApprovalState::Reserved {
+                idempotency_key, ..
+            } => match tool_confirmed {
+                Some(true) => {
+                    record.state = ApprovalState::Executed {
+                        idempotency_key: idempotency_key.clone(),
+                        completed_at: Instant::now(),
+                    };
                 }
-            }
+                Some(false) => {
+                    record.state = ApprovalState::Failed {
+                        reason: "Tool confirmed non-execution after crash".to_string(),
+                    };
+                }
+                None => {
+                    record.state = ApprovalState::OutcomeUnknown {
+                        idempotency_key: idempotency_key.clone(),
+                        reason: "Process crashed during side effect; outcome uncertain".to_string(),
+                    };
+                }
+            },
             _ => {}
         }
         record.state.clone()
@@ -307,19 +330,30 @@ impl HitlStateMachine {
                 record.tool_name, record.opaque_reference
             )
         } else {
-            format!("[Vexa Agent Control HITL] Approval Requested. ID: {}", approval_id)
+            format!(
+                "[Vexa Agent Control HITL] Approval Requested. ID: {}",
+                approval_id
+            )
         }
     }
 
     // ── Helper: lookup by exact approval_id OR opaque_reference ─────────
-    fn find_record<'a>(&self, map: &'a HashMap<String, ApprovalRecord>, id: &str) -> Option<&'a ApprovalRecord> {
+    fn find_record<'a>(
+        &self,
+        map: &'a HashMap<String, ApprovalRecord>,
+        id: &str,
+    ) -> Option<&'a ApprovalRecord> {
         if let Some(record) = map.get(id) {
             return Some(record);
         }
         map.values().find(|r| r.opaque_reference == id)
     }
 
-    fn find_record_mut<'a>(&self, map: &'a mut HashMap<String, ApprovalRecord>, id: &str) -> Option<&'a mut ApprovalRecord> {
+    fn find_record_mut<'a>(
+        &self,
+        map: &'a mut HashMap<String, ApprovalRecord>,
+        id: &str,
+    ) -> Option<&'a mut ApprovalRecord> {
         if map.contains_key(id) {
             return map.get_mut(id);
         }
@@ -368,7 +402,10 @@ impl HitlManager {
 
     /// Submits an escalation request into the state machine.
     pub fn submit_escalation(&self, request: EscalationRequest) {
-        let args_hash = format!("sha256:{}", hex::encode(sha2::Sha256::digest(request.command.as_bytes())));
+        let args_hash = format!(
+            "sha256:{}",
+            hex::encode(sha2::Sha256::digest(request.command.as_bytes()))
+        );
         self.state_machine.submit_request(
             request.request_id,
             request.command,
@@ -407,7 +444,9 @@ impl HitlManager {
             return Err("Invalid HMAC signature on escalation callback".to_string());
         }
 
-        let record = self.state_machine.get_record(&response.request_id)
+        let record = self
+            .state_machine
+            .get_record(&response.request_id)
             .ok_or_else(|| "Request ID not found or already processed".to_string())?;
 
         let is_allowed = response.decision == "ALLOW_ONCE"
@@ -426,25 +465,37 @@ impl HitlManager {
 
             match idem_res {
                 Ok(idem) => {
-                    let _ = self.state_machine.start_execution(&record.approval_id, &idem);
-                    let _ = self.state_machine.complete_execution(&record.approval_id, &idem);
+                    let _ = self
+                        .state_machine
+                        .start_execution(&record.approval_id, &idem);
+                    let _ = self
+                        .state_machine
+                        .complete_execution(&record.approval_id, &idem);
                 }
                 Err(err) => {
                     // Send rejection to channel if still present
                     let mut responders = self.responders.lock().unwrap();
-                    if let Some(tx) = responders.remove(&record.approval_id).or_else(|| responders.remove(&record.opaque_reference)) {
+                    if let Some(tx) = responders
+                        .remove(&record.approval_id)
+                        .or_else(|| responders.remove(&record.opaque_reference))
+                    {
                         let _ = tx.send(false);
                     }
                     return Err(format!("Approval transition failed: {}", err));
                 }
             }
         } else {
-            let _ = self.state_machine.fail_execution(&record.approval_id, "Rejected by operator");
+            let _ = self
+                .state_machine
+                .fail_execution(&record.approval_id, "Rejected by operator");
         }
 
         // Dispatch async channel notification if awaiting
         let mut responders = self.responders.lock().unwrap();
-        if let Some(tx) = responders.remove(&record.approval_id).or_else(|| responders.remove(&record.opaque_reference)) {
+        if let Some(tx) = responders
+            .remove(&record.approval_id)
+            .or_else(|| responders.remove(&record.opaque_reference))
+        {
             let _ = tx.send(is_allowed);
         }
 
@@ -468,7 +519,10 @@ impl HitlManager {
         let allow_sig = self.sign_decision(&request_id, "ALLOW_ONCE");
         let deny_sig = self.sign_decision(&request_id, "DENY");
 
-        let args_hash = format!("sha256:{}", hex::encode(sha2::Sha256::digest(tool_name.as_bytes())));
+        let args_hash = format!(
+            "sha256:{}",
+            hex::encode(sha2::Sha256::digest(tool_name.as_bytes()))
+        );
         let opaque_ref = self.state_machine.submit_request(
             request_id.clone(),
             tool_name.to_string(),
@@ -500,7 +554,9 @@ impl HitlManager {
             Ok(Ok(allowed)) => allowed,
             _ => {
                 // Timeout or channel closed — mark expired/failed and fail closed
-                let _ = self.state_machine.fail_execution(&request_id, "Request timed out");
+                let _ = self
+                    .state_machine
+                    .fail_execution(&request_id, "Request timed out");
                 let mut responders = self.responders.lock().unwrap();
                 responders.remove(&request_id);
                 false
@@ -742,7 +798,9 @@ mod tests {
         assert!(fail_res.is_err());
 
         // Successful reservation
-        let idem = sm.reserve(&appr_id, "dev", "bash", "sha256:valid_hash", "ws-test").unwrap();
+        let idem = sm
+            .reserve(&appr_id, "dev", "bash", "sha256:valid_hash", "ws-test")
+            .unwrap();
         assert!(idem.starts_with("idem-"));
 
         // Double spend prevention

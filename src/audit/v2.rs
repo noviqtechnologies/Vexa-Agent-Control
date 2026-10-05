@@ -217,8 +217,7 @@ impl AuditEntryV2 {
 
         let canonical_bytes = canonical_json_bytes(&value);
 
-        let mut mac = HmacSha256::new_from_slice(session_secret)
-            .expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(session_secret).expect("HMAC key length is valid");
         mac.update(&canonical_bytes);
         Ok(hex::encode(mac.finalize().into_bytes()))
     }
@@ -292,7 +291,8 @@ mod tests {
             request_ip: None,
             matched_group_id: None,
             entry_index: 0,
-            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             hmac: Some("will-be-stripped".to_string()),
             migration_metadata: None,
             verdict: None,
@@ -384,7 +384,8 @@ mod tests {
             request_ip: None,
             matched_group_id: None,
             entry_index: 0,
-            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             hmac: None,
             migration_metadata: Some(MigrationMetadata {
                 from_schema_version: 1,

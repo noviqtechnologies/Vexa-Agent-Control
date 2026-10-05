@@ -180,7 +180,8 @@ fn phase3_gate2_rbac_developer_viewer_see_masked_payload() {
         let result = apply_rbac_redaction(&raw_payload, role);
         let args = result.get("arguments");
         assert!(
-            args.map(|a| a.as_str() == Some("[redacted]")).unwrap_or(false),
+            args.map(|a| a.as_str() == Some("[redacted]"))
+                .unwrap_or(false),
             "Role '{}' must see redacted arguments, got: {:?}",
             role,
             args
@@ -229,7 +230,9 @@ fn phase3_gate3_tamper_detection_on_yaml_modification() {
     let mut bundle = sign_policy(&sk, "tamper-test", 1, policy_yaml, None);
 
     // Tamper with the policy YAML after signing
-    bundle.policy_yaml.push_str("\n  - tool: exec_cmd\n    action: allow\n");
+    bundle
+        .policy_yaml
+        .push_str("\n  - tool: exec_cmd\n    action: allow\n");
 
     let result = verify_signed_bundle(&bundle, Some(&[pk_hex]));
     assert!(
@@ -253,7 +256,10 @@ fn phase3_gate3_policy_storage_manager_apply_and_rollback() {
     let bundle_v1 = sign_policy(&sk, "collab-policy", 1, yaml_v1, None);
     mgr.apply_signed_bundle(&bundle_v1, Some(&[pk_hex.clone()]))
         .expect("apply_signed_bundle v1 must succeed");
-    assert!(mgr.current_policy_path().exists(), "current_policy.yaml must exist after apply");
+    assert!(
+        mgr.current_policy_path().exists(),
+        "current_policy.yaml must exist after apply"
+    );
 
     // Apply revision 2
     let bundle_v2 = sign_policy(&sk, "collab-policy", 2, yaml_v2, None);
@@ -266,7 +272,10 @@ fn phase3_gate3_policy_storage_manager_apply_and_rollback() {
 
     // Active policy should be revision 2 (contains the v2 marker comment)
     let content = std::fs::read_to_string(mgr.current_policy_path()).unwrap();
-    assert!(content.contains("collab-v2"), "Active policy must be revision 2");
+    assert!(
+        content.contains("collab-v2"),
+        "Active policy must be revision 2"
+    );
 
     // Rollback to revision 1 (should not contain the v2 marker)
     mgr.rollback().expect("rollback to revision 1 must succeed");
@@ -351,7 +360,11 @@ async fn phase3_gate4_concurrent_revocation_isolation() {
         if idx == 3 {
             assert!(was_blocked, "agent-3 must be blocked after revocation");
         } else {
-            assert!(!was_blocked, "agent-{} must NOT be blocked (cross-session leak)", idx);
+            assert!(
+                !was_blocked,
+                "agent-{} must NOT be blocked (cross-session leak)",
+                idx
+            );
         }
     }
 }
@@ -368,16 +381,33 @@ fn phase3_gate5_w3c_traceparent_format_valid() {
 
     // W3C traceparent: "00-{32hex}-{16hex}-{2hex}"
     let parts: Vec<&str> = header.splitn(4, '-').collect();
-    assert_eq!(parts.len(), 4, "traceparent must have 4 dash-separated components");
+    assert_eq!(
+        parts.len(),
+        4,
+        "traceparent must have 4 dash-separated components"
+    );
     assert_eq!(parts[0], "00", "version component must be '00'");
-    assert_eq!(parts[1].len(), 32, "trace_id must be 32 hex chars (16 bytes)");
+    assert_eq!(
+        parts[1].len(),
+        32,
+        "trace_id must be 32 hex chars (16 bytes)"
+    );
     assert_eq!(parts[2].len(), 16, "span_id must be 16 hex chars (8 bytes)");
     assert_eq!(parts[3].len(), 2, "flags must be 2 hex chars");
 
     // All hex content
-    assert!(parts[1].chars().all(|c| c.is_ascii_hexdigit()), "trace_id must be hex");
-    assert!(parts[2].chars().all(|c| c.is_ascii_hexdigit()), "span_id must be hex");
-    assert!(parts[3].chars().all(|c| c.is_ascii_hexdigit()), "flags must be hex");
+    assert!(
+        parts[1].chars().all(|c| c.is_ascii_hexdigit()),
+        "trace_id must be hex"
+    );
+    assert!(
+        parts[2].chars().all(|c| c.is_ascii_hexdigit()),
+        "span_id must be hex"
+    );
+    assert!(
+        parts[3].chars().all(|c| c.is_ascii_hexdigit()),
+        "flags must be hex"
+    );
 }
 
 #[test]
@@ -398,7 +428,10 @@ fn phase3_gate5_child_span_preserves_trace_id_and_links_parent() {
         Some(root.span_id.as_str()),
         "Child parent_span_id must equal root span_id"
     );
-    assert_eq!(child.developer_id, root.developer_id, "developer_id must propagate to child");
+    assert_eq!(
+        child.developer_id, root.developer_id,
+        "developer_id must propagate to child"
+    );
     assert_eq!(child.run_id, root.run_id, "run_id must propagate to child");
 }
 
@@ -426,9 +459,18 @@ fn phase3_gate5_traceparent_parse_roundtrip() {
     let header = original.to_traceparent();
 
     let parsed = TraceContext::from_traceparent_or_generate(Some(&header), None, None);
-    assert_eq!(original.trace_id, parsed.trace_id, "Parsed trace_id must match original");
-    assert_eq!(original.span_id, parsed.span_id, "Parsed span_id must match original");
-    assert_eq!(original.flags, parsed.flags, "Parsed flags must match original");
+    assert_eq!(
+        original.trace_id, parsed.trace_id,
+        "Parsed trace_id must match original"
+    );
+    assert_eq!(
+        original.span_id, parsed.span_id,
+        "Parsed span_id must match original"
+    );
+    assert_eq!(
+        original.flags, parsed.flags,
+        "Parsed flags must match original"
+    );
 }
 
 // ===========================================================================
@@ -449,26 +491,34 @@ fn phase3_gate6_otlp_export_request_schema_compliance() {
         "allow",
         ctx.developer_id.as_deref(),
         ctx.run_id.as_deref(),
-        5,    // duration_ms
+        5,     // duration_ms
         false, // not an error
     );
 
     let export_request = exporter.build_export_request(vec![span]);
 
     // Serialise to JSON to mirror what the OTLP HTTP endpoint would receive
-    let json_bytes = serde_json::to_string(&export_request).expect("OTLP request must serialise to JSON");
+    let json_bytes =
+        serde_json::to_string(&export_request).expect("OTLP request must serialise to JSON");
     let payload: serde_json::Value =
         serde_json::from_str(&json_bytes).expect("Serialised OTLP must be valid JSON");
 
     // Top-level: resourceSpans array
-    let resource_spans = payload.get("resourceSpans").expect("OTLP payload must contain 'resourceSpans'");
-    assert!(resource_spans.is_array(), "'resourceSpans' must be an array");
+    let resource_spans = payload
+        .get("resourceSpans")
+        .expect("OTLP payload must contain 'resourceSpans'");
+    assert!(
+        resource_spans.is_array(),
+        "'resourceSpans' must be an array"
+    );
 
     let first = &resource_spans[0];
 
     // resource.attributes must include service.name
     let resource = first.get("resource").expect("Must have 'resource'");
-    let attrs = resource.get("attributes").expect("Resource must have 'attributes'");
+    let attrs = resource
+        .get("attributes")
+        .expect("Resource must have 'attributes'");
     assert!(attrs.is_array(), "Resource attributes must be an array");
 
     let service_name_present = attrs
@@ -476,20 +526,35 @@ fn phase3_gate6_otlp_export_request_schema_compliance() {
         .unwrap()
         .iter()
         .any(|a| a["key"].as_str() == Some("service.name"));
-    assert!(service_name_present, "OTLP resource must include 'service.name' attribute");
+    assert!(
+        service_name_present,
+        "OTLP resource must include 'service.name' attribute"
+    );
 
     // scopeSpans with at least one span
     let scope_spans = first.get("scopeSpans").expect("Must have 'scopeSpans'");
     let spans = scope_spans[0].get("spans").expect("Must have 'spans'");
-    assert!(!spans.as_array().unwrap_or(&vec![]).is_empty(), "'spans' must not be empty");
+    assert!(
+        !spans.as_array().unwrap_or(&vec![]).is_empty(),
+        "'spans' must not be empty"
+    );
 
     let span_obj = &spans[0];
     // Required OTLP span fields
-    assert!(span_obj.get("traceId").is_some(), "Span must have 'traceId'");
+    assert!(
+        span_obj.get("traceId").is_some(),
+        "Span must have 'traceId'"
+    );
     assert!(span_obj.get("spanId").is_some(), "Span must have 'spanId'");
     assert!(span_obj.get("name").is_some(), "Span must have 'name'");
-    assert!(span_obj.get("startTimeUnixNano").is_some(), "Span must have 'startTimeUnixNano'");
-    assert!(span_obj.get("endTimeUnixNano").is_some(), "Span must have 'endTimeUnixNano'");
+    assert!(
+        span_obj.get("startTimeUnixNano").is_some(),
+        "Span must have 'startTimeUnixNano'"
+    );
+    assert!(
+        span_obj.get("endTimeUnixNano").is_some(),
+        "Span must have 'endTimeUnixNano'"
+    );
 
     // GenAI semantic convention: mcp.tool.name
     let span_attrs = span_obj
@@ -528,8 +593,14 @@ fn phase3_gate7_backup_archive_creation_and_sha256_manifest() {
     )
     .expect("Backup archive creation must succeed");
 
-    assert!(!archive.files.is_empty(), "Backup archive must contain at least one file");
-    assert!(backup_path.exists(), "Backup archive file must exist on disk");
+    assert!(
+        !archive.files.is_empty(),
+        "Backup archive must contain at least one file"
+    );
+    assert!(
+        backup_path.exists(),
+        "Backup archive file must exist on disk"
+    );
 
     // Every entry must have a non-empty SHA-256
     for entry in &archive.files {
@@ -563,7 +634,10 @@ fn phase3_gate7_restore_roundtrip_integrity() {
     let report = restore_backup(&backup_path, restore_dir.path(), None)
         .expect("Restore must succeed with a valid backup archive");
 
-    assert_eq!(report.restored_files_count, 2, "Restore must recover exactly 2 files");
+    assert_eq!(
+        report.restored_files_count, 2,
+        "Restore must recover exactly 2 files"
+    );
 
     // Verify policy.yaml was restored faithfully
     let restored = std::fs::read(restore_dir.path().join("policy.yaml"))

@@ -37,8 +37,15 @@ pub struct RestoreReport {
 pub enum DisasterRecoveryError {
     Io(std::io::Error),
     Serialization(serde_json::Error),
-    ManifestCorrupted { stored: String, computed: String },
-    FileIntegrityFailure { path: String, stored: String, computed: String },
+    ManifestCorrupted {
+        stored: String,
+        computed: String,
+    },
+    FileIntegrityFailure {
+        path: String,
+        stored: String,
+        computed: String,
+    },
     AuditVerificationFailed(String),
 }
 
@@ -48,12 +55,26 @@ impl std::fmt::Display for DisasterRecoveryError {
             Self::Io(e) => write!(f, "I/O error: {}", e),
             Self::Serialization(e) => write!(f, "Serialization error: {}", e),
             Self::ManifestCorrupted { stored, computed } => {
-                write!(f, "Corrupted backup: manifest hash mismatch (stored={}, computed={})", stored, computed)
+                write!(
+                    f,
+                    "Corrupted backup: manifest hash mismatch (stored={}, computed={})",
+                    stored, computed
+                )
             }
-            Self::FileIntegrityFailure { path, stored, computed } => {
-                write!(f, "File integrity failure for '{}': stored={}, computed={}", path, stored, computed)
+            Self::FileIntegrityFailure {
+                path,
+                stored,
+                computed,
+            } => {
+                write!(
+                    f,
+                    "File integrity failure for '{}': stored={}, computed={}",
+                    path, stored, computed
+                )
             }
-            Self::AuditVerificationFailed(e) => write!(f, "Audit chain verification failed on restored logs: {}", e),
+            Self::AuditVerificationFailed(e) => {
+                write!(f, "Audit chain verification failed on restored logs: {}", e)
+            }
         }
     }
 }
@@ -195,7 +216,10 @@ pub fn restore_backup(
             crate::audit::verifier::VerifyResult::Valid { .. } => {
                 audit_chain_verified = true;
             }
-            crate::audit::verifier::VerifyResult::Invalid { entry_index, reason } => {
+            crate::audit::verifier::VerifyResult::Invalid {
+                entry_index,
+                reason,
+            } => {
                 return Err(DisasterRecoveryError::AuditVerificationFailed(format!(
                     "Invalid HMAC chain at index {}: {}",
                     entry_index, reason
@@ -245,24 +269,29 @@ mod tests {
             matched_group_id: None,
             entry_index: 0,
             prev_hmac: crate::audit::logger::ZERO_HMAC.to_string(),
-            hmac: Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            hmac: Some(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            ),
         };
         let audit_content = serde_json::to_string(&entry).unwrap();
         fs::write(src.path().join("policy.yaml"), policy_content).unwrap();
         fs::write(src.path().join("audit.jsonl"), &audit_content).unwrap();
 
         // Backup
-        let bkp = create_backup(
-            src.path(),
-            &["policy.yaml", "audit.jsonl"],
-            &archive_path,
-        ).unwrap();
+        let bkp =
+            create_backup(src.path(), &["policy.yaml", "audit.jsonl"], &archive_path).unwrap();
         assert_eq!(bkp.files.len(), 2);
 
         // Restore
         let report = restore_backup(&archive_path, dst.path(), None).unwrap();
         assert_eq!(report.restored_files_count, 2);
-        assert_eq!(fs::read_to_string(dst.path().join("policy.yaml")).unwrap(), policy_content);
-        assert_eq!(fs::read_to_string(dst.path().join("audit.jsonl")).unwrap(), audit_content);
+        assert_eq!(
+            fs::read_to_string(dst.path().join("policy.yaml")).unwrap(),
+            policy_content
+        );
+        assert_eq!(
+            fs::read_to_string(dst.path().join("audit.jsonl")).unwrap(),
+            audit_content
+        );
     }
 }

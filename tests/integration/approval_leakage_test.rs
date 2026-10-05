@@ -16,10 +16,10 @@
 //!   7. `ALLOW_N` scope rejects wildcard broadening in v1.
 //!   8. Headless environment produces zero signed tokens in stdout/stderr.
 
-use std::time::Duration;
 use agentcontrol::policy::hitl::{ApprovalState, HitlStateMachine};
-use agentcontrol::proxy::security::{ApiScope, validate_persistent_token};
+use agentcontrol::proxy::security::{validate_persistent_token, ApiScope};
 use hyper::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use std::time::Duration;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,8 +47,8 @@ fn forbidden_secret_patterns() -> Vec<&'static str> {
         "\"signed_hmac\":",
         "\"approval_token\":",
         // Generic credential leak patterns
-        "Bearer eyJ",     // JWT in notification
-        "sk-",            // OpenAI key prefix
+        "Bearer eyJ", // JWT in notification
+        "sk-",        // OpenAI key prefix
     ]
 }
 
@@ -155,7 +155,8 @@ fn test_no_replayable_signed_url_in_any_output() {
 fn test_hitl_respond_endpoint_requires_approval_write_scope() {
     // Simulate an unauthenticated request to /api/v1/hitl/respond
     let unauthenticated_headers = HeaderMap::new();
-    let result = validate_persistent_token(&unauthenticated_headers, Some("correct-capability-token"));
+    let result =
+        validate_persistent_token(&unauthenticated_headers, Some("correct-capability-token"));
     assert!(
         result.is_err(),
         "Unauthenticated request to hitl/respond must be rejected"
@@ -167,7 +168,8 @@ fn test_hitl_respond_endpoint_requires_approval_write_scope() {
         AUTHORIZATION,
         HeaderValue::from_static("Bearer wrong-token-111"),
     );
-    let result_wrong = validate_persistent_token(&wrong_token_headers, Some("correct-capability-token"));
+    let result_wrong =
+        validate_persistent_token(&wrong_token_headers, Some("correct-capability-token"));
     assert!(
         result_wrong.is_err(),
         "Wrong token must be rejected for hitl/respond"
@@ -264,7 +266,13 @@ fn test_revoked_approval_error_contains_no_secret_material() {
     sm.revoke(&appr_id, "Security policy: operator emergency stop");
 
     let err = sm
-        .reserve(&appr_id, "user", "terminate_service", "sha256:svc_args", "ws-prod")
+        .reserve(
+            &appr_id,
+            "user",
+            "terminate_service",
+            "sha256:svc_args",
+            "ws-prod",
+        )
         .unwrap_err();
 
     // Error message must say "revoked" but must not contain raw HMAC/secret data
@@ -295,7 +303,13 @@ fn test_outcome_unknown_surfaces_to_operator_not_silently_retried() {
     );
 
     let idem = sm
-        .reserve(&appr_id, "sre-on-call", "provision_cloud_resource", "sha256:cloud_resource_hash", "ws-production")
+        .reserve(
+            &appr_id,
+            "sre-on-call",
+            "provision_cloud_resource",
+            "sha256:cloud_resource_hash",
+            "ws-production",
+        )
         .unwrap();
     sm.start_execution(&appr_id, &idem).unwrap();
 
@@ -355,7 +369,11 @@ async fn test_concurrent_approval_only_one_actor_wins_no_token_leak() {
     let successes: Vec<_> = results.iter().filter(|r| r.is_ok()).collect();
     let failures: Vec<_> = results.iter().filter(|r| r.is_err()).collect();
 
-    assert_eq!(successes.len(), 1, "Exactly one actor must win the CAS race");
+    assert_eq!(
+        successes.len(),
+        1,
+        "Exactly one actor must win the CAS race"
+    );
     assert_eq!(failures.len(), 7, "All other actors must be rejected");
 
     // The winning idempotency key must not contain secret material

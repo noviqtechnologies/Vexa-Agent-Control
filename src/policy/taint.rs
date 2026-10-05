@@ -129,7 +129,10 @@ impl TaintEngine {
             state.events.push(TaintEvent {
                 tool_name: tool_name.to_string(),
                 label: TaintLabel::PrivateDataRead,
-                reason: format!("Accessed sensitive credentials or private keys via '{}'", tool_name),
+                reason: format!(
+                    "Accessed sensitive credentials or private keys via '{}'",
+                    tool_name
+                ),
                 timestamp_ms: now_ms,
             });
         }
@@ -183,13 +186,7 @@ pub fn is_private_data_read(tool_name: &str, params: &Value) -> bool {
     let lower = tool_name.to_lowercase();
     let is_file_tool = matches!(
         lower.as_str(),
-        "read_file"
-            | "read_text_file"
-            | "view_file"
-            | "open_file"
-            | "cat"
-            | "get_file"
-            | "read"
+        "read_file" | "read_text_file" | "view_file" | "open_file" | "cat" | "get_file" | "read"
     );
 
     if is_file_tool {
@@ -211,10 +208,7 @@ pub fn is_private_data_read(tool_name: &str, params: &Value) -> bool {
     // Direct secret retrieval tools
     matches!(
         lower.as_str(),
-        "get_secret"
-            | "read_secret"
-            | "dump_credentials"
-            | "export_keys"
+        "get_secret" | "read_secret" | "dump_credentials" | "export_keys"
     )
 }
 
@@ -236,10 +230,17 @@ pub fn is_exfil_capable_sink(tool_name: &str, params: &Value) -> bool {
     }
 
     // Shell tools running curl/wget with upload or POST flags
-    if matches!(lower.as_str(), "exec_command" | "bash" | "sh" | "powershell" | "run_command") {
+    if matches!(
+        lower.as_str(),
+        "exec_command" | "bash" | "sh" | "powershell" | "run_command"
+    ) {
         let p_str = params.to_string().to_lowercase();
         if (p_str.contains("curl") || p_str.contains("wget"))
-            && (p_str.contains("-d") || p_str.contains("-x post") || p_str.contains("-x put") || p_str.contains("--data") || p_str.contains("--post-file"))
+            && (p_str.contains("-d")
+                || p_str.contains("-x post")
+                || p_str.contains("-x put")
+                || p_str.contains("--data")
+                || p_str.contains("--post-file"))
         {
             return true;
         }
@@ -289,7 +290,9 @@ mod tests {
         );
 
         match v3 {
-            ToxicFlowVerdict::ToxicFlowDetected { action, rule_id, .. } => {
+            ToxicFlowVerdict::ToxicFlowDetected {
+                action, rule_id, ..
+            } => {
                 assert_eq!(action, ToxicFlowAction::Block);
                 assert_eq!(rule_id, "TOXIC-FLOW-001");
             }

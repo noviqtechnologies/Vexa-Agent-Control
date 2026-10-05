@@ -3,9 +3,9 @@
 //! Provides sub-second revocation of compromised agent tokens, devices, and tool permissions
 //! with propagation to connected gateways, satisfying the Phase 3 <30s exit gate requirement.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use serde::{Deserialize, Serialize};
 
 /// Target types that can be explicitly revoked
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -110,7 +110,11 @@ impl RevocationRegistry {
         self.check_single(RevocationTargetType::Token, token_id)
     }
 
-    fn check_single(&self, target_type: RevocationTargetType, target_id: &str) -> Option<RevocationCheckFailure> {
+    fn check_single(
+        &self,
+        target_type: RevocationTargetType,
+        target_id: &str,
+    ) -> Option<RevocationCheckFailure> {
         let map = self.entries.read().unwrap();
         if let Some(entry) = map.get(&(target_type, target_id.to_string())) {
             // Check expiry if set
@@ -178,7 +182,9 @@ mod tests {
         let registry = RevocationRegistry::new();
 
         // 1. Initial state: clean
-        assert!(registry.check(Some("agent-007"), Some("exec_cmd"), Some("tok-abc")).is_ok());
+        assert!(registry
+            .check(Some("agent-007"), Some("exec_cmd"), Some("tok-abc"))
+            .is_ok());
 
         // 2. Revoke tool
         registry.revoke_tool("exec_cmd", "Critical zero-day exploit detected in tool");
@@ -190,14 +196,20 @@ mod tests {
         assert!(err.reason.contains("Critical zero-day"));
 
         // 3. Different tool remains allowed
-        assert!(registry.check(Some("agent-007"), Some("read_file"), Some("tok-abc")).is_ok());
+        assert!(registry
+            .check(Some("agent-007"), Some("read_file"), Some("tok-abc"))
+            .is_ok());
 
         // 4. Revoke agent
         registry.revoke_agent("agent-007", "Rogue agent loop detected");
-        assert!(registry.check(Some("agent-007"), Some("read_file"), Some("tok-abc")).is_err());
+        assert!(registry
+            .check(Some("agent-007"), Some("read_file"), Some("tok-abc"))
+            .is_err());
 
         // 5. Unrevoke
         assert!(registry.remove(RevocationTargetType::Agent, "agent-007"));
-        assert!(registry.check(Some("agent-007"), Some("read_file"), Some("tok-abc")).is_ok());
+        assert!(registry
+            .check(Some("agent-007"), Some("read_file"), Some("tok-abc"))
+            .is_ok());
     }
 }

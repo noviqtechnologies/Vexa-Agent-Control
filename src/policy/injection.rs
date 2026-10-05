@@ -159,8 +159,18 @@ const PATTERN_DEFS: &[(&str, &str, &str, f32)] = &[
         r"(?i)<system>.*?</system>",
         0.95,
     ),
-    ("INJ-BND-001", "Model Instruction Boundary: INST", r"(?i)\[/?INST\]", 0.95),
-    ("INJ-BND-002", "Model Instruction Boundary: SYS", r"(?i)<<SYS>>", 0.95),
+    (
+        "INJ-BND-001",
+        "Model Instruction Boundary: INST",
+        r"(?i)\[/?INST\]",
+        0.95,
+    ),
+    (
+        "INJ-BND-002",
+        "Model Instruction Boundary: SYS",
+        r"(?i)<<SYS>>",
+        0.95,
+    ),
     (
         "INJ-BND-003",
         "Model Instruction Boundary: IM",
@@ -210,7 +220,10 @@ impl Default for InjectionScanner {
 
 impl InjectionScanner {
     pub fn new() -> Result<Self, regex::Error> {
-        let raw_patterns: Vec<String> = PATTERN_DEFS.iter().map(|(_, _, p, _)| p.to_string()).collect();
+        let raw_patterns: Vec<String> = PATTERN_DEFS
+            .iter()
+            .map(|(_, _, p, _)| p.to_string())
+            .collect();
         let regex_set = RegexSet::new(&raw_patterns)?;
 
         let mut patterns = Vec::new();
@@ -233,7 +246,11 @@ impl InjectionScanner {
     }
 
     /// Add a rule allow override with optional expiry (PRD F2-S3)
-    pub fn add_rule_override(&self, rule_id: &str, expires_at: Option<chrono::DateTime<chrono::Utc>>) {
+    pub fn add_rule_override(
+        &self,
+        rule_id: &str,
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) {
         let mut overrides = self.allow_overrides.write().unwrap();
         overrides.push(RuleAllowOverride {
             rule_id: rule_id.to_string(),
@@ -610,7 +627,10 @@ mod tests {
             "content": "We are currently running the integration tests in developer mode with verbose logging enabled."
         });
         let res = scanner.scan_response(&benign, "read_file", "s1", true);
-        assert!(matches!(res, ScanResult::Clean), "Benign developer mode mention must NOT block");
+        assert!(
+            matches!(res, ScanResult::Clean),
+            "Benign developer mode mention must NOT block"
+        );
     }
 
     #[test]

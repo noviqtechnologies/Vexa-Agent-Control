@@ -1,9 +1,9 @@
 //! Integration test harness for ADR-010: HITL 6-State Crash/Recovery Machine,
 //! Idempotency Keys, Scope Binding, and Secret Isolation.
 
+use agentcontrol::policy::hitl::{ApprovalState, HitlStateMachine};
 use std::sync::Arc;
 use std::time::Duration;
-use agentcontrol::policy::hitl::{ApprovalState, HitlStateMachine};
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,10 @@ async fn test_hitl_atomic_cas_double_spend_prevention() {
         }
     }
 
-    assert_eq!(success_count, 1, "Exactly one thread must succeed in CAS reservation");
+    assert_eq!(
+        success_count, 1,
+        "Exactly one thread must succeed in CAS reservation"
+    );
     assert_eq!(failure_count, 15, "All competing threads must be rejected");
 }
 
@@ -66,7 +69,9 @@ fn test_hitl_full_lifecycle_happy_path() {
         1,
     );
 
-    let idem = sm.reserve(&appr_id, "user-dev", "bash", "sha256:args123", "ws-1").unwrap();
+    let idem = sm
+        .reserve(&appr_id, "user-dev", "bash", "sha256:args123", "ws-1")
+        .unwrap();
     assert!(idem.starts_with("idem-"));
 
     assert!(sm.start_execution(&appr_id, &idem).is_ok());
@@ -88,7 +93,15 @@ fn test_hitl_crash_recovery_outcome_unknown_no_silent_reexecution() {
         1,
     );
 
-    let idem = sm.reserve(&appr_id, "admin", "cloud_delete_resource", "sha256:cloud_args", "ws-prod").unwrap();
+    let idem = sm
+        .reserve(
+            &appr_id,
+            "admin",
+            "cloud_delete_resource",
+            "sha256:cloud_args",
+            "ws-prod",
+        )
+        .unwrap();
     sm.start_execution(&appr_id, &idem).unwrap();
 
     // Simulate crash before complete_execution: tool_confirmed is None
@@ -101,7 +114,13 @@ fn test_hitl_crash_recovery_outcome_unknown_no_silent_reexecution() {
     }
 
     // Proves ADR-010 invariant: Cannot silently retry an uncertain side effect
-    let retry_res = sm.reserve(&appr_id, "admin", "cloud_delete_resource", "sha256:cloud_args", "ws-prod");
+    let retry_res = sm.reserve(
+        &appr_id,
+        "admin",
+        "cloud_delete_resource",
+        "sha256:cloud_args",
+        "ws-prod",
+    );
     assert!(retry_res.is_err());
     assert!(retry_res.unwrap_err().contains("uncertain"));
 }
@@ -122,12 +141,24 @@ fn test_hitl_scope_binding_mismatch_rejected() {
     );
 
     // Mismatched arguments_hash
-    let res = sm.reserve(&appr_id, "user", "read_file", "sha256:TAMPERED_HASH", "ws-1");
+    let res = sm.reserve(
+        &appr_id,
+        "user",
+        "read_file",
+        "sha256:TAMPERED_HASH",
+        "ws-1",
+    );
     assert!(res.is_err());
     assert!(res.unwrap_err().contains("Scope mismatch"));
 
     // Mismatched tool_name
-    let res_tool = sm.reserve(&appr_id, "user", "dangerous_tool", "sha256:valid_hash", "ws-1");
+    let res_tool = sm.reserve(
+        &appr_id,
+        "user",
+        "dangerous_tool",
+        "sha256:valid_hash",
+        "ws-1",
+    );
     assert!(res_tool.is_err());
     assert!(res_tool.unwrap_err().contains("Scope mismatch"));
 }
@@ -148,9 +179,15 @@ fn test_hitl_notification_secret_isolation() {
     );
 
     let notif = sm.format_notification(&appr_id);
-    assert!(notif.contains("appr-01925b3a"), "Must contain opaque reference ID");
+    assert!(
+        notif.contains("appr-01925b3a"),
+        "Must contain opaque reference ID"
+    );
     assert!(!notif.contains("secret"), "Must not leak secret keys");
-    assert!(!notif.contains("http://127.0.0.1:18080/api/v1/hitl/respond?token="), "Must not contain executable signed URL");
+    assert!(
+        !notif.contains("http://127.0.0.1:18080/api/v1/hitl/respond?token="),
+        "Must not contain executable signed URL"
+    );
 }
 
 #[test]

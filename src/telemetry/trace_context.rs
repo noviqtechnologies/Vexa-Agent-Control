@@ -51,7 +51,12 @@ impl TraceContext {
     ) -> Self {
         if let Some(raw) = raw_header {
             let parts: Vec<&str> = raw.trim().split('-').collect();
-            if parts.len() == 4 && parts[0] == "00" && parts[1].len() == 32 && parts[2].len() == 16 && parts[3].len() == 2 {
+            if parts.len() == 4
+                && parts[0] == "00"
+                && parts[1].len() == 32
+                && parts[2].len() == 16
+                && parts[3].len() == 2
+            {
                 let trace_id = parts[1].to_lowercase();
                 // Reject all-zero trace_id per W3C specification
                 if trace_id != "00000000000000000000000000000000" {

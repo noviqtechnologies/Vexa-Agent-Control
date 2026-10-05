@@ -288,7 +288,6 @@ pub enum Commands {
         collector: Option<String>,
     },
 
-
     /// Restore disaster recovery archive with cryptographic integrity and HMAC chain verification (Phase 3)
     Restore {
         /// Path to the backup archive file (.json)
@@ -315,7 +314,10 @@ pub enum Commands {
         target_id: String,
 
         /// Reason for revocation
-        #[arg(long, default_value = "Compromised capability revoked by administrator")]
+        #[arg(
+            long,
+            default_value = "Compromised capability revoked by administrator"
+        )]
         reason: String,
 
         /// Gateway URL (default: http://127.0.0.1:18080)

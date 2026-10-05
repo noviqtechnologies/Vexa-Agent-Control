@@ -14,9 +14,9 @@
 //! This file lives in `tests/harness/` (not `tests/integration/`) to make it
 //! independently runnable: `cargo test --test hitl_harness`
 
+use agentcontrol::policy::hitl::{ApprovalState, HitlStateMachine};
 use std::sync::Arc;
 use std::time::Duration;
-use agentcontrol::policy::hitl::{ApprovalState, HitlStateMachine};
 
 // ─── Harness Utilities ────────────────────────────────────────────────────────
 
@@ -67,7 +67,10 @@ async fn harness_cas_double_spend_32_concurrent_attackers() {
     let losses = results.iter().filter(|r| r.is_err()).count();
 
     assert_eq!(wins, 1, "[32-attacker] CAS must produce exactly 1 winner");
-    assert_eq!(losses, 31, "[32-attacker] All 31 other actors must be rejected");
+    assert_eq!(
+        losses, 31,
+        "[32-attacker] All 31 other actors must be rejected"
+    );
 }
 
 // ─── Scenario 2: Crash during EXECUTING — must flag OUTCOME_UNKNOWN ───────────
@@ -104,9 +107,9 @@ fn harness_crash_during_executing_flags_outcome_unknown() {
                 "Crash recovery reason must mention uncertainty. Got: {reason}"
             );
         }
-        other => panic!(
-            "[crash-during-executing] Expected OutcomeUnknown after crash, got: {other:?}"
-        ),
+        other => {
+            panic!("[crash-during-executing] Expected OutcomeUnknown after crash, got: {other:?}")
+        }
     }
 
     // ADR-010 invariant: MUST NOT allow silent re-execution
@@ -154,16 +157,18 @@ fn harness_crash_during_reserved_before_execution_start() {
     match &recovered {
         ApprovalState::Failed { reason } => {
             assert!(
-                reason.contains("not executed") || reason.contains("crash") || reason.contains("aborted"),
+                reason.contains("not executed")
+                    || reason.contains("crash")
+                    || reason.contains("aborted"),
                 "Pre-execution crash recovery should flag as failed/not-executed. Got: {reason}"
             );
         }
         ApprovalState::OutcomeUnknown { .. } => {
             // Also acceptable — system may conservatively flag uncertain even for pre-execution
         }
-        other => panic!(
-            "[crash-during-reserved] Expected Failed or OutcomeUnknown, got: {other:?}"
-        ),
+        other => {
+            panic!("[crash-during-reserved] Expected Failed or OutcomeUnknown, got: {other:?}")
+        }
     }
 }
 
@@ -187,7 +192,8 @@ fn harness_idempotency_key_reconciles_confirmed_execution() {
         )
         .expect("Reserve should succeed");
 
-    sm.start_execution("appr-harness-idem-reconcile", &idem).unwrap();
+    sm.start_execution("appr-harness-idem-reconcile", &idem)
+        .unwrap();
 
     // Process crashes. Tool server later confirms via idempotency key: tool_executed=true
     let recovered = sm.recover_from_crash("appr-harness-idem-reconcile", Some(true));
@@ -270,11 +276,14 @@ fn harness_expired_approval_cannot_be_reserved() {
     // Give the TTL a moment to elapse
     std::thread::sleep(Duration::from_millis(10));
 
-    let result = sm.reserve(appr_id, "user", "zero_ttl_tool", "sha256:ttl_args", "ws-harness");
-    assert!(
-        result.is_err(),
-        "Expired approval must be rejected"
+    let result = sm.reserve(
+        appr_id,
+        "user",
+        "zero_ttl_tool",
+        "sha256:ttl_args",
+        "ws-harness",
     );
+    assert!(result.is_err(), "Expired approval must be rejected");
     let err = result.unwrap_err();
     assert!(
         err.contains("expired") || err.contains("revoked"),
@@ -297,7 +306,7 @@ fn harness_scope_binding_arguments_hash_mutation_rejected() {
         "appr-harness-scope-mutate",
         "attacker",
         "update_config",
-        "sha256:ATTACKER_CONFIG_HASH",  // mutated!
+        "sha256:ATTACKER_CONFIG_HASH", // mutated!
         "ws-harness",
     );
     assert!(
@@ -326,7 +335,7 @@ fn harness_scope_binding_wrong_workspace_rejected() {
         "lateral-mover",
         "deploy_service",
         "sha256:deploy_args",
-        "ws-ATTACKER-WORKSPACE",  // wrong workspace
+        "ws-ATTACKER-WORKSPACE", // wrong workspace
     );
     assert!(
         result.is_err(),

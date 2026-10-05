@@ -381,7 +381,10 @@ fn phase4_gate5_cost_estimation_and_token_attribution_accuracy() {
     assert_eq!(attr.cost_center, "cc-security-ops");
     assert_eq!(attr.client_id, "fintech-corp-client");
     assert_eq!(attr.project_id, "fraud-detection-model");
-    assert_eq!(AttributionContext::sanitize_slug("  dirty slug/123  "), "dirty_slug_123");
+    assert_eq!(
+        AttributionContext::sanitize_slug("  dirty slug/123  "),
+        "dirty_slug_123"
+    );
 }
 
 // ---------------------------------------------------------------------------

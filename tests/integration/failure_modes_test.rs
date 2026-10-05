@@ -113,7 +113,9 @@ fn test_failure_mode_unconfirmed_side_effect_blocks_retry() {
 
     let retry_res = manager.can_retry();
     assert!(retry_res.is_err());
-    assert!(retry_res.unwrap_err().contains("Cannot silently re-execute"));
+    assert!(retry_res
+        .unwrap_err()
+        .contains("Cannot silently re-execute"));
 }
 
 // ─── 4. Upstream Gateway Timeout Mapping ───────────────────────────────────
@@ -152,5 +154,8 @@ fn test_failure_mode_nonexistent_directory_write_failure() {
 
     let invalid_path = Path::new("Z:\\nonexistent_volume_9999\\audit.log");
     let open_res = File::create(invalid_path);
-    assert!(open_res.is_err(), "Opening file on nonexistent volume must fail cleanly");
+    assert!(
+        open_res.is_err(),
+        "Opening file on nonexistent volume must fail cleanly"
+    );
 }

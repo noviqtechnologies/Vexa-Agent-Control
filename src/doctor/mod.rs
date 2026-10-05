@@ -384,7 +384,8 @@ pub async fn run_diagnostics() -> DoctorReport {
     } else {
         (
             DiagnosticStatus::Pass,
-            "No custom agentcontrol-policy.yaml found (using built-in dev-safe defaults)".to_string(),
+            "No custom agentcontrol-policy.yaml found (using built-in dev-safe defaults)"
+                .to_string(),
             None,
         )
     };
@@ -412,7 +413,10 @@ pub async fn run_diagnostics() -> DoctorReport {
     } else {
         (
             DiagnosticStatus::Pass,
-            format!("Connected IDE configurations synchronized ({} target(s) tracked)", connected_count),
+            format!(
+                "Connected IDE configurations synchronized ({} target(s) tracked)",
+                connected_count
+            ),
             None,
         )
     };
@@ -518,7 +522,11 @@ mod tests {
             remediation: Some("Run 'agentcontrol login --hub <url>' to authenticate and auto-register the background daemon, or 'agentcontrol start' to run it interactively.".to_string()),
         };
         assert_eq!(check.status, DiagnosticStatus::Warn);
-        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol start"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("agentcontrol start"));
     }
 
     #[test]
@@ -532,7 +540,11 @@ mod tests {
             remediation: Some("Ensure user has write permissions to ~/.agentcontrol or change directory permissions (chmod u+w / icacls).".to_string()),
         };
         assert_eq!(check.status, DiagnosticStatus::Fail);
-        assert!(check.remediation.as_ref().unwrap().contains("chmod u+w / icacls"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("chmod u+w / icacls"));
     }
 
     #[test]
@@ -546,7 +558,11 @@ mod tests {
             remediation: Some("Run 'agentcontrol lint agentcontrol-policy.yaml' to locate and fix YAML schema errors.".to_string()),
         };
         assert_eq!(check.status, DiagnosticStatus::Fail);
-        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol lint"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("agentcontrol lint"));
     }
 
     #[test]
@@ -557,10 +573,17 @@ mod tests {
             status: DiagnosticStatus::Warn,
             message: "Device not enrolled with Control Hub.".to_string(),
             details: None,
-            remediation: Some("Run 'agentcontrol login' to authenticate and provision device credentials.".to_string()),
+            remediation: Some(
+                "Run 'agentcontrol login' to authenticate and provision device credentials."
+                    .to_string(),
+            ),
         };
         assert_eq!(check.status, DiagnosticStatus::Warn);
-        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol login"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("agentcontrol login"));
     }
 
     #[test]
@@ -574,7 +597,11 @@ mod tests {
             remediation: Some("Restart your IDE editor (VS Code, Cursor, or Claude Desktop) to load updated MCP proxy settings.".to_string()),
         };
         assert_eq!(check.status, DiagnosticStatus::Warn);
-        assert!(check.remediation.as_ref().unwrap().contains("Restart your IDE editor"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("Restart your IDE editor"));
     }
 
     #[test]
@@ -585,9 +612,15 @@ mod tests {
             status: DiagnosticStatus::Warn,
             message: "1 connected target(s) have detected external modifications.".to_string(),
             details: None,
-            remediation: Some("Run 'agentcontrol repair' to re-verify manifests and endpoints.".to_string()),
+            remediation: Some(
+                "Run 'agentcontrol repair' to re-verify manifests and endpoints.".to_string(),
+            ),
         };
         assert_eq!(check.status, DiagnosticStatus::Warn);
-        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol repair"));
+        assert!(check
+            .remediation
+            .as_ref()
+            .unwrap()
+            .contains("agentcontrol repair"));
     }
 }

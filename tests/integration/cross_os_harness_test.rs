@@ -50,7 +50,10 @@ fn test_posix_uds_file_mode_invariants() {
         std::fs::set_permissions(&sock_path, perms).unwrap();
 
         let updated_mode = std::fs::metadata(&sock_path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(updated_mode, 0o600, "UDS file permissions must be exactly 0600 (owner read/write only)");
+        assert_eq!(
+            updated_mode, 0o600,
+            "UDS file permissions must be exactly 0600 (owner read/write only)"
+        );
     }
 }
 
@@ -91,13 +94,11 @@ fn test_graceful_shutdown_signal_handler() {
 
     // Simulate signal receiver
     let flag_clone = shutdown_flag.clone();
-    let simulate_signal = move |signal_name: &str| {
-        match signal_name {
-            "CTRL_C_EVENT" | "CTRL_SHUTDOWN_EVENT" | "SIGTERM" | "SIGINT" => {
-                flag_clone.store(true, Ordering::SeqCst);
-            }
-            _ => {}
+    let simulate_signal = move |signal_name: &str| match signal_name {
+        "CTRL_C_EVENT" | "CTRL_SHUTDOWN_EVENT" | "SIGTERM" | "SIGINT" => {
+            flag_clone.store(true, Ordering::SeqCst);
         }
+        _ => {}
     };
 
     assert!(!shutdown_flag.load(Ordering::SeqCst));

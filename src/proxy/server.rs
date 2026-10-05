@@ -1164,18 +1164,26 @@ async fn handle_request(
 
                 let mut authorized = false;
                 if let Some(expected) = state.admin_token.as_deref() {
-                    if !expected.is_empty() && constant_time_eq(token.as_bytes(), expected.as_bytes()) {
+                    if !expected.is_empty()
+                        && constant_time_eq(token.as_bytes(), expected.as_bytes())
+                    {
                         authorized = true;
                     }
                 }
                 if !authorized {
                     if let Ok(local_tok) = crate::identity::oauth::get_or_create_local_token() {
-                        if !local_tok.is_empty() && constant_time_eq(token.as_bytes(), local_tok.as_bytes()) {
+                        if !local_tok.is_empty()
+                            && constant_time_eq(token.as_bytes(), local_tok.as_bytes())
+                        {
                             authorized = true;
                         }
                     }
                 }
-                if !authorized && std::env::var("AGENTCONTROL_DEV_MODE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+                if !authorized
+                    && std::env::var("AGENTCONTROL_DEV_MODE")
+                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false)
+                {
                     authorized = true;
                 }
 
@@ -1206,7 +1214,10 @@ async fn handle_request(
 
                 match state.db_manager.get_events(100).await {
                     Ok(events) => {
-                        if let Some(ev) = events.into_iter().find(|e| e.session_id == trace_id || trace_id.is_empty()) {
+                        if let Some(ev) = events
+                            .into_iter()
+                            .find(|e| e.session_id == trace_id || trace_id.is_empty())
+                        {
                             let json_val = serde_json::to_value(&ev).unwrap_or_default();
                             return Ok(json_response(StatusCode::OK, &json_val));
                         }
@@ -1322,7 +1333,10 @@ async fn handle_request(
             }
             "/api/v1/revocations" => {
                 let list = state.revocation_registry.list();
-                return Ok(json_response(StatusCode::OK, &serde_json::to_value(&list).unwrap_or_default()));
+                return Ok(json_response(
+                    StatusCode::OK,
+                    &serde_json::to_value(&list).unwrap_or_default(),
+                ));
             }
             "/metrics" => {
                 return Ok(prometheus_metrics_response(&state));
@@ -1486,7 +1500,9 @@ async fn handle_request(
     if method == hyper::Method::POST && path == "/api/v1/revocations" {
         if let Ok(collected) = req.into_body().collect().await {
             let body_bytes = collected.to_bytes();
-            if let Ok(entry) = serde_json::from_slice::<crate::policy::revocation::RevocationEntry>(&body_bytes) {
+            if let Ok(entry) =
+                serde_json::from_slice::<crate::policy::revocation::RevocationEntry>(&body_bytes)
+            {
                 state.revocation_registry.add(entry.clone());
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
@@ -1497,20 +1513,28 @@ async fn handle_request(
                         "reason": entry.reason,
                     }),
                 );
-                return Ok(json_response(StatusCode::CREATED, &serde_json::json!({
-                    "status": "revoked",
-                    "entry": entry,
-                })));
+                return Ok(json_response(
+                    StatusCode::CREATED,
+                    &serde_json::json!({
+                        "status": "revoked",
+                        "entry": entry,
+                    }),
+                ));
             }
         }
-        return Ok(json_response(StatusCode::BAD_REQUEST, &serde_json::json!({"error": "invalid_revocation_payload"})));
+        return Ok(json_response(
+            StatusCode::BAD_REQUEST,
+            &serde_json::json!({"error": "invalid_revocation_payload"}),
+        ));
     }
 
     // Phase 3: Signed Cryptographic Policy Distribution Push
     if method == hyper::Method::POST && path == "/api/v1/policy/signed-push" {
         if let Ok(collected) = req.into_body().collect().await {
             let body_bytes = collected.to_bytes();
-            if let Ok(bundle) = serde_json::from_slice::<crate::policy::signed::SignedPolicyBundle>(&body_bytes) {
+            if let Ok(bundle) =
+                serde_json::from_slice::<crate::policy::signed::SignedPolicyBundle>(&body_bytes)
+            {
                 let compile_res = if let Some(ref mgr) = state.policy_storage_manager {
                     mgr.apply_signed_bundle(&bundle, None)
                 } else {
@@ -1522,7 +1546,9 @@ async fn handle_request(
                         if let Ok(mut guard) = state.policy.write() {
                             *guard = Some(compiled);
                         }
-                        state.policy_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                        state
+                            .policy_loaded
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
                         crate::logging::log_event(
                             crate::logging::Level::Info,
                             "SIGNED_POLICY_APPLIED",
@@ -1531,11 +1557,14 @@ async fn handle_request(
                                 "revision": bundle.policy_revision,
                             }),
                         );
-                        return Ok(json_response(StatusCode::OK, &serde_json::json!({
-                            "status": "applied",
-                            "policy_id": bundle.policy_id,
-                            "revision": bundle.policy_revision,
-                        })));
+                        return Ok(json_response(
+                            StatusCode::OK,
+                            &serde_json::json!({
+                                "status": "applied",
+                                "policy_id": bundle.policy_id,
+                                "revision": bundle.policy_revision,
+                            }),
+                        ));
                     }
                     Err(e) => {
                         crate::logging::log_event(
@@ -1543,15 +1572,21 @@ async fn handle_request(
                             "SIGNED_POLICY_REJECTED",
                             serde_json::json!({"error": e.to_string()}),
                         );
-                        return Ok(json_response(StatusCode::BAD_REQUEST, &serde_json::json!({
-                            "error": "policy_verification_failed",
-                            "details": e.to_string(),
-                        })));
+                        return Ok(json_response(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({
+                                "error": "policy_verification_failed",
+                                "details": e.to_string(),
+                            }),
+                        ));
                     }
                 }
             }
         }
-        return Ok(json_response(StatusCode::BAD_REQUEST, &serde_json::json!({"error": "invalid_signed_bundle_json"})));
+        return Ok(json_response(
+            StatusCode::BAD_REQUEST,
+            &serde_json::json!({"error": "invalid_signed_bundle_json"}),
+        ));
     }
 
     // Phase 3: Policy Rollback
@@ -1562,28 +1597,39 @@ async fn handle_request(
                     if let Ok(mut guard) = state.policy.write() {
                         *guard = Some(compiled);
                     }
-                    state.policy_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                    state
+                        .policy_loaded
+                        .store(true, std::sync::atomic::Ordering::SeqCst);
                     crate::logging::log_event(
                         crate::logging::Level::Warn,
                         "POLICY_ROLLED_BACK",
                         serde_json::json!({"status": "restored_from_snapshot"}),
                     );
-                    return Ok(json_response(StatusCode::OK, &serde_json::json!({
-                        "status": "rolled_back",
-                        "message": "Policy reverted to previous rollback snapshot successfully",
-                    })));
+                    return Ok(json_response(
+                        StatusCode::OK,
+                        &serde_json::json!({
+                            "status": "rolled_back",
+                            "message": "Policy reverted to previous rollback snapshot successfully",
+                        }),
+                    ));
                 }
                 Err(e) => {
-                    return Ok(json_response(StatusCode::BAD_REQUEST, &serde_json::json!({
-                        "error": "rollback_failed",
-                        "details": e.to_string(),
-                    })));
+                    return Ok(json_response(
+                        StatusCode::BAD_REQUEST,
+                        &serde_json::json!({
+                            "error": "rollback_failed",
+                            "details": e.to_string(),
+                        }),
+                    ));
                 }
             }
         } else {
-            return Ok(json_response(StatusCode::BAD_REQUEST, &serde_json::json!({
-                "error": "storage_manager_not_configured"
-            })));
+            return Ok(json_response(
+                StatusCode::BAD_REQUEST,
+                &serde_json::json!({
+                    "error": "storage_manager_not_configured"
+                }),
+            ));
         }
     }
 

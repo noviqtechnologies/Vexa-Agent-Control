@@ -226,7 +226,8 @@ fn evaluate_denylist(
             rule_id: "PATH-SYS-001",
             original_path: original.to_string(),
             canonical_path: canonical_str.to_string(),
-            reason: "Access to core OS password databases and system hives is prohibited".to_string(),
+            reason: "Access to core OS password databases and system hives is prohibited"
+                .to_string(),
         });
     }
 
@@ -269,8 +270,9 @@ fn evaluate_denylist(
                 rule_id: "PATH-BROWSER-001",
                 original_path: original.to_string(),
                 canonical_path: canonical_str.to_string(),
-                reason: "Access to browser profiles, session cookies, or saved logins is prohibited"
-                    .to_string(),
+                reason:
+                    "Access to browser profiles, session cookies, or saved logins is prohibited"
+                        .to_string(),
             });
         }
     }
@@ -523,8 +525,12 @@ mod tests {
         let guard = SensitivePathGuard::new(Some(PathBuf::from("/workspace/my-project")));
 
         // Inside workspace -> allowed (if not on denylist)
-        assert!(guard.check_path("/workspace/my-project/src/lib.rs").is_none());
-        assert!(guard.check_path("/workspace/my-project/README.md").is_none());
+        assert!(guard
+            .check_path("/workspace/my-project/src/lib.rs")
+            .is_none());
+        assert!(guard
+            .check_path("/workspace/my-project/README.md")
+            .is_none());
 
         // Outside workspace -> blocked
         let outside = guard.check_path("/workspace/other-project/secret.txt");

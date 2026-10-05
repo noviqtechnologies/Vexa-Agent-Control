@@ -41,7 +41,10 @@ fn test_client_compatibility_openai_chat_completions() {
 
     let tools = client_request["tools"].as_array().expect("tools array");
     assert_eq!(tools.len(), 1);
-    assert_eq!(tools[0]["function"]["name"].as_str().unwrap(), "read_source_file");
+    assert_eq!(
+        tools[0]["function"]["name"].as_str().unwrap(),
+        "read_source_file"
+    );
 
     // Synthesize trace envelope span for OpenAI completion
     let span = json!({

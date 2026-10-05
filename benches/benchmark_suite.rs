@@ -15,22 +15,28 @@ fn benchmark_pipeline(c: &mut Criterion) {
     let injection = InjectionScanner::default();
 
     // 1. Small payload benchmark (1KB)
-    let small_payload = "Please inspect the file at src/audit/verifier.rs and verify the HMAC calculation.".repeat(12);
+    let small_payload =
+        "Please inspect the file at src/audit/verifier.rs and verify the HMAC calculation."
+            .repeat(12);
     let small_val = json!({ "content": small_payload });
     c.bench_function("pipeline_eval_small_1kb", |b| {
         b.iter(|| {
             let _ = dlp.scan_content(black_box(&small_payload));
-            let _ = injection.scan_response(black_box(&small_val), "read_file", "bench-session", true);
+            let _ =
+                injection.scan_response(black_box(&small_val), "read_file", "bench-session", true);
         })
     });
 
     // 2. Large payload benchmark (100KB)
-    let large_payload = "fn process_data(input: &str) -> Result<String, Error> { Ok(input.to_uppercase()) }\n".repeat(1250);
+    let large_payload =
+        "fn process_data(input: &str) -> Result<String, Error> { Ok(input.to_uppercase()) }\n"
+            .repeat(1250);
     let large_val = json!({ "content": large_payload });
     c.bench_function("pipeline_eval_large_100kb", |b| {
         b.iter(|| {
             let _ = dlp.scan_content(black_box(&large_payload));
-            let _ = injection.scan_response(black_box(&large_val), "read_file", "bench-session", true);
+            let _ =
+                injection.scan_response(black_box(&large_val), "read_file", "bench-session", true);
         })
     });
 

@@ -1,9 +1,9 @@
 //! Integration tests validating the 8 Phase 0a canonical trace scenario fixtures.
 //! Conforms to ADR-002: Canonical Event Envelope Schema and Decoupled Data Model.
 
+use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use serde_json::Value;
 
 #[test]
 fn test_all_eight_phase_0a_trace_fixtures_conformance() {
@@ -55,29 +55,69 @@ fn test_all_eight_phase_0a_trace_fixtures_conformance() {
 
         // 2. Validate correlation block
         let corr = &v["correlation"];
-        assert!(corr["trace_id"].as_str().is_some(), "trace_id required in {}", filename);
-        assert!(corr["run_id"].as_str().is_some(), "run_id required in {}", filename);
-        assert!(corr["span_id"].as_str().is_some(), "span_id required in {}", filename);
-        assert!(corr["session_id"].as_str().is_some(), "session_id required in {}", filename);
-        assert!(corr["audit_entry_index"].as_u64().is_some(), "audit_entry_index required in {}", filename);
+        assert!(
+            corr["trace_id"].as_str().is_some(),
+            "trace_id required in {}",
+            filename
+        );
+        assert!(
+            corr["run_id"].as_str().is_some(),
+            "run_id required in {}",
+            filename
+        );
+        assert!(
+            corr["span_id"].as_str().is_some(),
+            "span_id required in {}",
+            filename
+        );
+        assert!(
+            corr["session_id"].as_str().is_some(),
+            "session_id required in {}",
+            filename
+        );
+        assert!(
+            corr["audit_entry_index"].as_u64().is_some(),
+            "audit_entry_index required in {}",
+            filename
+        );
 
         // 3. Validate provenance block
         let prov = &v["provenance"];
-        assert!(prov["data_freshness"].as_str().is_some(), "provenance.data_freshness required in {}", filename);
-        assert!(prov["evidence_source"].as_str().is_some(), "provenance.evidence_source required in {}", filename);
-        assert!(prov["confidence"].as_str().is_some(), "provenance.confidence required in {}", filename);
+        assert!(
+            prov["data_freshness"].as_str().is_some(),
+            "provenance.data_freshness required in {}",
+            filename
+        );
+        assert!(
+            prov["evidence_source"].as_str().is_some(),
+            "provenance.evidence_source required in {}",
+            filename
+        );
+        assert!(
+            prov["confidence"].as_str().is_some(),
+            "provenance.confidence required in {}",
+            filename
+        );
 
         // 4. Validate event_type & payload
         let event_type = v["event_type"].as_str().expect("event_type must be string");
         assert!(
             matches!(
                 event_type,
-                "tool_execution" | "policy_verdict" | "dlp_finding" | "hitl_decision" | "llm_generation"
+                "tool_execution"
+                    | "policy_verdict"
+                    | "dlp_finding"
+                    | "hitl_decision"
+                    | "llm_generation"
             ),
             "Unrecognized event_type: {} in {}",
             event_type,
             filename
         );
-        assert!(v["payload"].is_object(), "payload must be an object in {}", filename);
+        assert!(
+            v["payload"].is_object(),
+            "payload must be an object in {}",
+            filename
+        );
     }
 }

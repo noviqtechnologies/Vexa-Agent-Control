@@ -592,7 +592,10 @@ pub async fn evaluate_jsonrpc(
     // Phase 3: Instant Capability Revocation Check (<30s propagation guarantee)
     let agent_id = session.identity_sub.as_deref();
     let credential_id = session.active_credential_id.as_deref();
-    if let Err(revoked) = state.revocation_registry.check(agent_id, Some(tool_name), credential_id) {
+    if let Err(revoked) = state
+        .revocation_registry
+        .check(agent_id, Some(tool_name), credential_id)
+    {
         state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
         let _ = state
             .audit_logger
@@ -601,7 +604,10 @@ pub async fn evaluate_jsonrpc(
                 "capability_revoked_blocked",
                 tool_name,
                 None,
-                Some(format!("revoked target={:?}:{} reason={}", revoked.target_type, revoked.target_id, revoked.reason)),
+                Some(format!(
+                    "revoked target={:?}:{} reason={}",
+                    revoked.target_type, revoked.target_id, revoked.reason
+                )),
                 None,
                 session.identity_sub.clone(),
                 session.identity_email.clone(),
@@ -1498,16 +1504,18 @@ pub async fn evaluate_jsonrpc(
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let taint_engine = crate::policy::taint::TaintEngine::default();
-        taint_engine.evaluate_and_update(
-            &mut taint,
-            tool_name,
-            &tool_params,
-            None,
-        )
+        taint_engine.evaluate_and_update(&mut taint, tool_name, &tool_params, None)
     };
 
-    if let crate::policy::taint::ToxicFlowVerdict::ToxicFlowDetected { action, rule_id, reason } = toxic_flow_verdict {
-        if state.shadow_mode.load(Ordering::Relaxed) || action == crate::policy::taint::ToxicFlowAction::Warn {
+    if let crate::policy::taint::ToxicFlowVerdict::ToxicFlowDetected {
+        action,
+        rule_id,
+        reason,
+    } = toxic_flow_verdict
+    {
+        if state.shadow_mode.load(Ordering::Relaxed)
+            || action == crate::policy::taint::ToxicFlowAction::Warn
+        {
             logging::log_event(
                 Level::Warn,
                 "toxic_flow_detected",

@@ -145,8 +145,8 @@ fn parse_line_dispatched(line: &str, line_num: usize) -> Result<Option<ParsedEnt
                 }
                 (Err(_), Err(_)) => {
                     // Try streaming parser as crash-recovery fallback.
-                    let mut stream = serde_json::Deserializer::from_str(trimmed)
-                        .into_iter::<AuditEntry>();
+                    let mut stream =
+                        serde_json::Deserializer::from_str(trimmed).into_iter::<AuditEntry>();
                     if let Some(Ok(e)) = stream.next() {
                         return Ok(Some(ParsedEntry {
                             entry_index: e.entry_index,
@@ -159,35 +159,37 @@ fn parse_line_dispatched(line: &str, line_num: usize) -> Result<Option<ParsedEnt
                             current_entry: Some(e),
                         }));
                     }
-                    Err(format!("malformed JSON at line {}: {}", line_num + 1, trimmed))
+                    Err(format!(
+                        "malformed JSON at line {}: {}",
+                        line_num + 1,
+                        trimmed
+                    ))
                 }
             }
         }
-        SchemaVersion::V2 => {
-            match serde_json::from_str::<AuditEntryV2>(trimmed) {
-                Ok(v2) => Ok(Some(ParsedEntry {
-                    entry_index: v2.entry_index,
-                    prev_hmac: v2.prev_hmac.clone(),
-                    stored_hmac: v2.hmac.clone().unwrap_or_default(),
-                    event: v2.event.clone(),
-                    schema,
-                    v1_entry: None,
-                    v2_entry: Some(v2),
-                    current_entry: None,
-                })),
-                Err(e) => Err(format!(
-                    "malformed V2 JSON at line {}: {} ({})",
-                    line_num + 1, e, trimmed
-                )),
-            }
-        }
-        SchemaVersion::Unknown(ver) => {
-            Err(format!(
-                "unsupported schema_version {} at line {}",
-                ver,
-                line_num + 1
-            ))
-        }
+        SchemaVersion::V2 => match serde_json::from_str::<AuditEntryV2>(trimmed) {
+            Ok(v2) => Ok(Some(ParsedEntry {
+                entry_index: v2.entry_index,
+                prev_hmac: v2.prev_hmac.clone(),
+                stored_hmac: v2.hmac.clone().unwrap_or_default(),
+                event: v2.event.clone(),
+                schema,
+                v1_entry: None,
+                v2_entry: Some(v2),
+                current_entry: None,
+            })),
+            Err(e) => Err(format!(
+                "malformed V2 JSON at line {}: {} ({})",
+                line_num + 1,
+                e,
+                trimmed
+            )),
+        },
+        SchemaVersion::Unknown(ver) => Err(format!(
+            "unsupported schema_version {} at line {}",
+            ver,
+            line_num + 1
+        )),
     }
 }
 

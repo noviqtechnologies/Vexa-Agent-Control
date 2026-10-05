@@ -139,7 +139,9 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         }
         Commands::Repair => agentcontrol::support::run_repair().await,
         Commands::Logout => agentcontrol::support::run_logout(),
-        Commands::Backup { output, source } => agentcontrol::support::run_backup(&output, source.as_deref()),
+        Commands::Backup { output, source } => {
+            agentcontrol::support::run_backup(&output, source.as_deref())
+        }
         Commands::VerifyDb {
             audit_path,
             db_path,
@@ -351,9 +353,10 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 revision,
                 output,
             } => agentcontrol::support::run_policy_sign(&policy, &policy_id, revision, &output),
-            cli::PolicyCommands::Verify { bundle, trusted_key } => {
-                agentcontrol::support::run_policy_verify(&bundle, trusted_key.as_deref())
-            }
+            cli::PolicyCommands::Verify {
+                bundle,
+                trusted_key,
+            } => agentcontrol::support::run_policy_verify(&bundle, trusted_key.as_deref()),
             cli::PolicyCommands::Rollback { dir } => {
                 agentcontrol::support::run_policy_rollback(&dir)
             }
@@ -372,13 +375,31 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             limit,
             gateway,
             collector,
-        } => agentcontrol::support::run_export_traces(&format, &output, limit, &gateway, collector.as_deref()).await,
-        Commands::Restore { input, target, secret } => {
-            agentcontrol::support::run_restore(&input, target.as_deref(), secret.as_deref().map(|s| s.as_bytes()))
+        } => {
+            agentcontrol::support::run_export_traces(
+                &format,
+                &output,
+                limit,
+                &gateway,
+                collector.as_deref(),
+            )
+            .await
         }
-        Commands::Revoke { target_type, target_id, reason, gateway } => {
-            agentcontrol::support::run_revoke(&target_type, &target_id, &reason, &gateway).await
-        }
+        Commands::Restore {
+            input,
+            target,
+            secret,
+        } => agentcontrol::support::run_restore(
+            &input,
+            target.as_deref(),
+            secret.as_deref().map(|s| s.as_bytes()),
+        ),
+        Commands::Revoke {
+            target_type,
+            target_id,
+            reason,
+            gateway,
+        } => agentcontrol::support::run_revoke(&target_type, &target_id, &reason, &gateway).await,
         Commands::Eval {
             dataset,
             policy,
@@ -386,14 +407,8 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             format,
             dry_run,
         } => {
-            agentcontrol::support::run_eval(
-                &dataset,
-                &policy,
-                report.as_deref(),
-                &format,
-                dry_run,
-            )
-            .await
+            agentcontrol::support::run_eval(&dataset, &policy, report.as_deref(), &format, dry_run)
+                .await
         }
         Commands::Approve {
             id,
@@ -985,14 +1000,10 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             last_hours,
             compliance,
             output,
-        } => {
-            run_report_command(gateway, format, last_hours, compliance, output).await
-        }
+        } => run_report_command(gateway, format, last_hours, compliance, output).await,
 
         // F1-S6: Binary self-integrity check against a signed release manifest
-        Commands::SelfCheck { manifest, json } => {
-            run_self_check_command(manifest, json).await
-        }
+        Commands::SelfCheck { manifest, json } => run_self_check_command(manifest, json).await,
 
         // F7-S4: Pause an agent (or all agents) — next request blocked within 1 s
         Commands::Pause { agent, gateway } => {
@@ -1145,10 +1156,7 @@ async fn run_report_command(
 // F1-S6: SelfCheck command — binary integrity verification
 // ---------------------------------------------------------------------------
 
-async fn run_self_check_command(
-    manifest: Option<std::path::PathBuf>,
-    json: bool,
-) -> i32 {
+async fn run_self_check_command(manifest: Option<std::path::PathBuf>, json: bool) -> i32 {
     use sha2::{Digest, Sha256};
 
     // Resolve the current binary path in a cross-platform way
@@ -1156,7 +1164,10 @@ async fn run_self_check_command(
         Ok(p) => p,
         Err(e) => {
             if json {
-                println!(r#"{{"status":"error","message":"Cannot determine binary path: {}"}}"#, e);
+                println!(
+                    r#"{{"status":"error","message":"Cannot determine binary path: {}"}}"#,
+                    e
+                );
             } else {
                 eprintln!("FAIL: Cannot determine binary path: {}", e);
             }
@@ -1169,7 +1180,10 @@ async fn run_self_check_command(
         Ok(b) => b,
         Err(e) => {
             if json {
-                println!(r#"{{"status":"error","message":"Cannot read binary: {}"}}"#, e);
+                println!(
+                    r#"{{"status":"error","message":"Cannot read binary: {}"}}"#,
+                    e
+                );
             } else {
                 eprintln!("FAIL: Cannot read binary at {}: {}", exe_path.display(), e);
             }
@@ -1208,7 +1222,10 @@ async fn run_self_check_command(
         Ok(s) => s,
         Err(e) => {
             if json {
-                println!(r#"{{"status":"error","message":"Cannot read manifest: {}"}}"#, e);
+                println!(
+                    r#"{{"status":"error","message":"Cannot read manifest: {}"}}"#,
+                    e
+                );
             } else {
                 eprintln!("FAIL: Cannot read manifest: {}", e);
             }
@@ -1220,7 +1237,10 @@ async fn run_self_check_command(
         Ok(v) => v,
         Err(e) => {
             if json {
-                println!(r#"{{"status":"error","message":"Invalid manifest JSON: {}"}}"#, e);
+                println!(
+                    r#"{{"status":"error","message":"Invalid manifest JSON: {}"}}"#,
+                    e
+                );
             } else {
                 eprintln!("FAIL: Invalid manifest JSON: {}", e);
             }
@@ -1296,10 +1316,7 @@ async fn run_pause_resume_command(gateway: &str, agent: &str, pause: bool) -> i3
     let resp = match client.post(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!(
-                "⚠  Could not reach gateway at {}: {}",
-                gateway, e
-            );
+            eprintln!("⚠  Could not reach gateway at {}: {}", gateway, e);
             eprintln!("   Is the gateway running? Try: agentcontrol start");
             return 1;
         }

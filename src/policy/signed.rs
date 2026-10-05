@@ -5,12 +5,12 @@
 //! - Dry-run policy compilation and signature enforcement
 //! - Atomic snapshot creation and automatic rollback to `rollback_policy.yaml`
 
+use crate::policy::engine::CompiledPolicy;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::policy::engine::CompiledPolicy;
 
 /// Cryptographically signed policy distribution bundle
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,11 +45,15 @@ impl std::fmt::Display for PolicyDistributionError {
             Self::InvalidPublicKey(s) => write!(f, "Invalid public key hex: {}", s),
             Self::InvalidSignature(s) => write!(f, "Invalid signature hex: {}", s),
             Self::UntrustedSigner(s) => write!(f, "Untrusted signer public key: {}", s),
-            Self::SignatureVerificationFailed(s) => write!(f, "Signature verification failed: {}", s),
+            Self::SignatureVerificationFailed(s) => {
+                write!(f, "Signature verification failed: {}", s)
+            }
             Self::PolicyExpired(s) => write!(f, "Policy bundle has expired at {}", s),
             Self::CompilationFailed(s) => write!(f, "Policy compilation failed: {}", s),
             Self::Io(e) => write!(f, "I/O error during policy storage/rollback: {}", e),
-            Self::NoRollbackSnapshot(p) => write!(f, "No rollback snapshot found at {}", p.display()),
+            Self::NoRollbackSnapshot(p) => {
+                write!(f, "No rollback snapshot found at {}", p.display())
+            }
         }
     }
 }
@@ -117,7 +121,9 @@ pub fn verify_signed_bundle(
         let bundle_pk_hex = bundle.public_key.to_lowercase();
         let is_trusted = trusted.iter().any(|t| t.to_lowercase() == bundle_pk_hex);
         if !is_trusted {
-            return Err(PolicyDistributionError::UntrustedSigner(bundle.public_key.clone()));
+            return Err(PolicyDistributionError::UntrustedSigner(
+                bundle.public_key.clone(),
+            ));
         }
     }
 
@@ -147,7 +153,11 @@ pub fn verify_signed_bundle(
     sig_arr.copy_from_slice(&sig_bytes);
     let signature = Signature::from_bytes(&sig_arr);
 
-    let payload = canonical_sign_bytes(&bundle.policy_id, bundle.policy_revision, &bundle.policy_yaml);
+    let payload = canonical_sign_bytes(
+        &bundle.policy_id,
+        bundle.policy_revision,
+        &bundle.policy_yaml,
+    );
     verifying_key
         .verify(&payload, &signature)
         .map_err(|e| PolicyDistributionError::SignatureVerificationFailed(e.to_string()))?;
@@ -199,13 +209,18 @@ impl PolicyStorageManager {
         }
 
         // Atomically write new policy
-        let tmp_file = self.dir.join(format!(".tmp_policy_{}", uuid::Uuid::new_v4()));
+        let tmp_file = self
+            .dir
+            .join(format!(".tmp_policy_{}", uuid::Uuid::new_v4()));
         fs::write(&tmp_file, &bundle.policy_yaml)?;
         fs::rename(tmp_file, &current)?;
 
         // Also persist the signed envelope
         let bundle_meta = self.dir.join("current_policy_bundle.json");
-        let _ = fs::write(bundle_meta, serde_json::to_string_pretty(bundle).unwrap_or_default());
+        let _ = fs::write(
+            bundle_meta,
+            serde_json::to_string_pretty(bundle).unwrap_or_default(),
+        );
 
         Ok(compiled)
     }
@@ -257,10 +272,15 @@ mod tests {
 
         let mut bundle = sign_policy(&sk, "corp-sec-1", 1, yaml, None);
         // Tamper with the YAML
-        bundle.policy_yaml = "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: true\ntools: []\n".to_string();
+        bundle.policy_yaml =
+            "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: true\ntools: []\n"
+                .to_string();
 
         let res = verify_signed_bundle(&bundle, Some(&[pk_hex]));
-        assert!(matches!(res, Err(PolicyDistributionError::SignatureVerificationFailed(_))));
+        assert!(matches!(
+            res,
+            Err(PolicyDistributionError::SignatureVerificationFailed(_))
+        ));
     }
 
     #[test]
@@ -269,10 +289,14 @@ mod tests {
         let yaml = "version: \"2.0\"\ndefault_action: deny\ntools: []\n";
 
         let bundle = sign_policy(&sk, "corp-sec-1", 1, yaml, None);
-        let different_trusted_key = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let different_trusted_key =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
 
         let res = verify_signed_bundle(&bundle, Some(&[different_trusted_key]));
-        assert!(matches!(res, Err(PolicyDistributionError::UntrustedSigner(_))));
+        assert!(matches!(
+            res,
+            Err(PolicyDistributionError::UntrustedSigner(_))
+        ));
     }
 
     #[test]
@@ -283,13 +307,25 @@ mod tests {
         let pk_hex = hex::encode(pk.to_bytes());
 
         // Apply revision 1
-        let bundle1 = sign_policy(&sk, "policy", 1, "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: false\ntools: []\n", None);
+        let bundle1 = sign_policy(
+            &sk,
+            "policy",
+            1,
+            "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: false\ntools: []\n",
+            None,
+        );
         let res1 = mgr.apply_signed_bundle(&bundle1, Some(&[pk_hex.clone()]));
         assert!(res1.is_ok());
         assert!(mgr.current_policy_path().exists());
 
         // Apply revision 2
-        let bundle2 = sign_policy(&sk, "policy", 2, "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: true\ntools: []\n", None);
+        let bundle2 = sign_policy(
+            &sk,
+            "policy",
+            2,
+            "version: \"2.0\"\ndefault_action: deny\nenforce_safe_mode: true\ntools: []\n",
+            None,
+        );
         let res2 = mgr.apply_signed_bundle(&bundle2, Some(&[pk_hex]));
         assert!(res2.is_ok());
         assert!(mgr.rollback_policy_path().exists());

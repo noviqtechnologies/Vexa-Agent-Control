@@ -149,9 +149,33 @@ fn test_pure_v2_chain_verification() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("v2_chain.jsonl");
 
-    let e0 = make_v2_entry(&TEST_SECRET, "sess-v2", "tool_allow", Some("read_file"), 0, ZERO_HMAC, None);
-    let e1 = make_v2_entry(&TEST_SECRET, "sess-v2", "tool_allow", Some("write_file"), 1, &e0.hmac.clone().unwrap(), None);
-    let e2 = make_v2_entry(&TEST_SECRET, "sess-v2", "tool_deny", Some("bash"), 2, &e1.hmac.clone().unwrap(), None);
+    let e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-v2",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+        None,
+    );
+    let e1 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-v2",
+        "tool_allow",
+        Some("write_file"),
+        1,
+        &e0.hmac.clone().unwrap(),
+        None,
+    );
+    let e2 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-v2",
+        "tool_deny",
+        Some("bash"),
+        2,
+        &e1.hmac.clone().unwrap(),
+        None,
+    );
 
     append_line(&path, &serde_json::to_string(&e0).unwrap());
     append_line(&path, &serde_json::to_string(&e1).unwrap());
@@ -177,7 +201,15 @@ fn test_v2_entry_with_verdict() {
         remediation: Some("Use environment variables".to_string()),
     };
 
-    let e0 = make_v2_entry(&TEST_SECRET, "sess-verdict", "tool_deny", Some("curl"), 0, ZERO_HMAC, Some(verdict));
+    let e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-verdict",
+        "tool_deny",
+        Some("curl"),
+        0,
+        ZERO_HMAC,
+        Some(verdict),
+    );
     append_line(&path, &serde_json::to_string(&e0).unwrap());
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
@@ -194,8 +226,22 @@ fn test_chain_bridge_v1_to_v2() {
     let path = tmp.path().join("bridge.jsonl");
 
     // Write 2 V1 entries
-    let v1_e0 = make_v1_entry(&TEST_SECRET, "sess-bridge", "tool_allow", Some("read_file"), 0, ZERO_HMAC);
-    let v1_e1 = make_v1_entry(&TEST_SECRET, "sess-bridge", "tool_allow", Some("git_status"), 1, &v1_e0.hmac.clone().unwrap());
+    let v1_e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-bridge",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+    );
+    let v1_e1 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-bridge",
+        "tool_allow",
+        Some("git_status"),
+        1,
+        &v1_e0.hmac.clone().unwrap(),
+    );
 
     append_line(&path, &serde_json::to_string(&v1_e0).unwrap());
     append_line(&path, &serde_json::to_string(&v1_e1).unwrap());
@@ -206,7 +252,15 @@ fn test_chain_bridge_v1_to_v2() {
     append_line(&path, &serde_json::to_string(&bridge).unwrap());
 
     // Write V2 entries continuing after bridge
-    let v2_e0 = make_v2_entry(&TEST_SECRET, "sess-bridge-v2", "tool_allow", Some("read_file"), 1, &bridge.hmac.clone().unwrap(), None);
+    let v2_e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-bridge-v2",
+        "tool_allow",
+        Some("read_file"),
+        1,
+        &bridge.hmac.clone().unwrap(),
+        None,
+    );
     append_line(&path, &serde_json::to_string(&v2_e0).unwrap());
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
@@ -223,11 +277,22 @@ fn test_corrupted_bridge_detection() {
     let path = tmp.path().join("bad_bridge.jsonl");
 
     // Write a V1 entry
-    let v1_e0 = make_v1_entry(&TEST_SECRET, "sess-bad-bridge", "tool_allow", Some("read_file"), 0, ZERO_HMAC);
+    let v1_e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-bad-bridge",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+    );
     append_line(&path, &serde_json::to_string(&v1_e0).unwrap());
 
     // Write bridge with WRONG terminal HMAC
-    let bridge = make_bridge_entry(&TEST_SECRET, "sess-bad-bridge", "deadbeef0000000000000000000000000000000000000000000000000000dead");
+    let bridge = make_bridge_entry(
+        &TEST_SECRET,
+        "sess-bad-bridge",
+        "deadbeef0000000000000000000000000000000000000000000000000000dead",
+    );
     append_line(&path, &serde_json::to_string(&bridge).unwrap());
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
@@ -252,14 +317,44 @@ fn test_mixed_v1_v2_separate_sessions() {
     let path = tmp.path().join("mixed.jsonl");
 
     // V1 session
-    let v1_e0 = make_v1_entry(&TEST_SECRET, "sess-v1", "tool_allow", Some("read_file"), 0, ZERO_HMAC);
-    let v1_e1 = make_v1_entry(&TEST_SECRET, "sess-v1", "tool_allow", Some("git_status"), 1, &v1_e0.hmac.clone().unwrap());
+    let v1_e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-v1",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+    );
+    let v1_e1 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-v1",
+        "tool_allow",
+        Some("git_status"),
+        1,
+        &v1_e0.hmac.clone().unwrap(),
+    );
     append_line(&path, &serde_json::to_string(&v1_e0).unwrap());
     append_line(&path, &serde_json::to_string(&v1_e1).unwrap());
 
     // V2 session (new session starts at index 0 with ZERO_HMAC)
-    let v2_e0 = make_v2_entry(&TEST_SECRET, "sess-v2", "tool_allow", Some("read_file"), 0, ZERO_HMAC, None);
-    let v2_e1 = make_v2_entry(&TEST_SECRET, "sess-v2", "tool_deny", Some("bash"), 1, &v2_e0.hmac.clone().unwrap(), None);
+    let v2_e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-v2",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+        None,
+    );
+    let v2_e1 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-v2",
+        "tool_deny",
+        Some("bash"),
+        1,
+        &v2_e0.hmac.clone().unwrap(),
+        None,
+    );
     append_line(&path, &serde_json::to_string(&v2_e0).unwrap());
     append_line(&path, &serde_json::to_string(&v2_e1).unwrap());
 
@@ -306,7 +401,15 @@ fn test_v2_hmac_tamper_detection() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("v2_tampered.jsonl");
 
-    let e0 = make_v2_entry(&TEST_SECRET, "sess-tamper", "tool_allow", Some("read_file"), 0, ZERO_HMAC, None);
+    let e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-tamper",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+        None,
+    );
     let mut line = serde_json::to_string(&e0).unwrap();
 
     // Tamper with the event field
@@ -315,7 +418,11 @@ fn test_v2_hmac_tamper_detection() {
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
         VerifyResult::Invalid { reason, .. } => {
-            assert!(reason.contains("HMAC mismatch"), "Expected HMAC mismatch, got: {}", reason);
+            assert!(
+                reason.contains("HMAC mismatch"),
+                "Expected HMAC mismatch, got: {}",
+                reason
+            );
         }
         other => panic!("Expected Invalid for tampered V2, got: {:?}", other),
     }
@@ -328,8 +435,24 @@ fn test_v2_chain_only_verification() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("v2_chain_only.jsonl");
 
-    let e0 = make_v2_entry(&TEST_SECRET, "sess-chain", "tool_allow", Some("read_file"), 0, ZERO_HMAC, None);
-    let e1 = make_v2_entry(&TEST_SECRET, "sess-chain", "tool_allow", Some("write_file"), 1, &e0.hmac.clone().unwrap(), None);
+    let e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-chain",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+        None,
+    );
+    let e1 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-chain",
+        "tool_allow",
+        Some("write_file"),
+        1,
+        &e0.hmac.clone().unwrap(),
+        None,
+    );
 
     append_line(&path, &serde_json::to_string(&e0).unwrap());
     append_line(&path, &serde_json::to_string(&e1).unwrap());
@@ -348,14 +471,29 @@ fn test_v2_wrong_secret_rejection() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("v2_wrong_secret.jsonl");
 
-    let e0 = make_v2_entry(&TEST_SECRET, "sess-wrong", "tool_allow", Some("read_file"), 0, ZERO_HMAC, None);
+    let e0 = make_v2_entry(
+        &TEST_SECRET,
+        "sess-wrong",
+        "tool_allow",
+        Some("read_file"),
+        0,
+        ZERO_HMAC,
+        None,
+    );
     append_line(&path, &serde_json::to_string(&e0).unwrap());
 
     let wrong_secret = [0x99; 32];
     match verify_chain_with_secret(&path, &wrong_secret) {
-        VerifyResult::Invalid { reason, entry_index } => {
+        VerifyResult::Invalid {
+            reason,
+            entry_index,
+        } => {
             assert_eq!(entry_index, 0);
-            assert!(reason.contains("HMAC mismatch"), "Expected HMAC mismatch, got: {}", reason);
+            assert!(
+                reason.contains("HMAC mismatch"),
+                "Expected HMAC mismatch, got: {}",
+                reason
+            );
         }
         other => panic!("Expected Invalid for wrong secret, got: {:?}", other),
     }

@@ -28,7 +28,9 @@ impl CommandViolationCategory {
             CommandViolationCategory::ReverseShell => "Interactive / Network Reverse Shell",
             CommandViolationCategory::DestructiveWipe => "Destructive Filesystem Wipe",
             CommandViolationCategory::SensitiveFileAccess => "Unauthorized Credential File Access",
-            CommandViolationCategory::PrivilegeEscalation => "Privilege Escalation / Permissions Tampering",
+            CommandViolationCategory::PrivilegeEscalation => {
+                "Privilege Escalation / Permissions Tampering"
+            }
             CommandViolationCategory::DataExfiltration => "Outbound Data Exfiltration",
             CommandViolationCategory::CloudMetadataSSRF => "Cloud Instance Metadata SSRF",
         }
@@ -99,7 +101,9 @@ fn check_compound_patterns(cmd: &str) -> Option<CommandViolation> {
                     category: CommandViolationCategory::PipeToShell,
                     rule_id: "CMD-PIPE-001",
                     matched_command: cmd.to_string(),
-                    reason: "Piping remote web content directly into a shell interpreter is prohibited".to_string(),
+                    reason:
+                        "Piping remote web content directly into a shell interpreter is prohibited"
+                            .to_string(),
                 });
             }
         }
@@ -124,7 +128,8 @@ fn check_compound_patterns(cmd: &str) -> Option<CommandViolation> {
                     category: CommandViolationCategory::ReverseShell,
                     rule_id: "CMD-REV-001",
                     matched_command: cmd.to_string(),
-                    reason: "Creation of interactive network reverse shell sessions is prohibited".to_string(),
+                    reason: "Creation of interactive network reverse shell sessions is prohibited"
+                        .to_string(),
                 });
             }
         }
@@ -132,10 +137,28 @@ fn check_compound_patterns(cmd: &str) -> Option<CommandViolation> {
 
     // 3. Destructive Wipes
     let is_rm_wipe = {
-        (lower.starts_with("rm ") || lower.contains(" rm ") || lower.starts_with("sudo rm ") || lower.contains(" sudo rm "))
-            && (lower.contains("-r") || lower.contains("-R") || lower.contains("--recursive") || lower.contains("-fr") || lower.contains("-rf"))
-            && (lower.contains("-f") || lower.contains("--force") || lower.contains("-fr") || lower.contains("-rf"))
-            && (lower.ends_with(" /") || lower.contains(" / ") || lower.contains(" / --") || lower.ends_with(" /*") || lower.contains(" /* ") || lower.ends_with(" ~") || lower.contains(" ~ ") || lower.ends_with(" ~/") || lower.contains(" ~/ "))
+        (lower.starts_with("rm ")
+            || lower.contains(" rm ")
+            || lower.starts_with("sudo rm ")
+            || lower.contains(" sudo rm "))
+            && (lower.contains("-r")
+                || lower.contains("-R")
+                || lower.contains("--recursive")
+                || lower.contains("-fr")
+                || lower.contains("-rf"))
+            && (lower.contains("-f")
+                || lower.contains("--force")
+                || lower.contains("-fr")
+                || lower.contains("-rf"))
+            && (lower.ends_with(" /")
+                || lower.contains(" / ")
+                || lower.contains(" / --")
+                || lower.ends_with(" /*")
+                || lower.contains(" /* ")
+                || lower.ends_with(" ~")
+                || lower.contains(" ~ ")
+                || lower.ends_with(" ~/")
+                || lower.contains(" ~/ "))
     };
     if is_rm_wipe {
         return Some(CommandViolation {
@@ -167,7 +190,10 @@ fn check_compound_patterns(cmd: &str) -> Option<CommandViolation> {
 
     // 4. Cloud Metadata SSRF via curl/wget
     if (lower.contains("169.254.169.254") || lower.contains("metadata.google.internal"))
-        && (lower.contains("curl") || lower.contains("wget") || lower.contains("iwr") || lower.contains("invoke-webrequest"))
+        && (lower.contains("curl")
+            || lower.contains("wget")
+            || lower.contains("iwr")
+            || lower.contains("invoke-webrequest"))
     {
         return Some(CommandViolation {
             category: CommandViolationCategory::CloudMetadataSSRF,
@@ -179,15 +205,26 @@ fn check_compound_patterns(cmd: &str) -> Option<CommandViolation> {
 
     // 5. Exfiltration of sensitive files via HTTP POST / upload flags
     if (lower.contains("curl") || lower.contains("wget"))
-        && (lower.contains("-d") || lower.contains("--data") || lower.contains("-f") || lower.contains("--form") || lower.contains("--post-file"))
+        && (lower.contains("-d")
+            || lower.contains("--data")
+            || lower.contains("-f")
+            || lower.contains("--form")
+            || lower.contains("--post-file"))
         && (lower.contains("@") || lower.contains("--post-file"))
-        && (lower.contains(".ssh") || lower.contains(".aws") || lower.contains(".env") || lower.contains("shadow") || lower.contains("id_rsa") || lower.contains("id_ed25519") || lower.contains("credentials"))
+        && (lower.contains(".ssh")
+            || lower.contains(".aws")
+            || lower.contains(".env")
+            || lower.contains("shadow")
+            || lower.contains("id_rsa")
+            || lower.contains("id_ed25519")
+            || lower.contains("credentials"))
     {
         return Some(CommandViolation {
             category: CommandViolationCategory::DataExfiltration,
             rule_id: "CMD-EXFIL-001",
             matched_command: cmd.to_string(),
-            reason: "Exfiltration of credential files via outbound POST upload is prohibited".to_string(),
+            reason: "Exfiltration of credential files via outbound POST upload is prohibited"
+                .to_string(),
         });
     }
 
@@ -220,12 +257,21 @@ fn check_individual_command(segment: &str) -> Option<CommandViolation> {
     }
 
     let program = words[actual_cmd_idx].to_lowercase();
-    let prog_name = program.rsplit('/').next().unwrap().rsplit('\\').next().unwrap();
+    let prog_name = program
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .rsplit('\\')
+        .next()
+        .unwrap();
     let rest_args = &words[actual_cmd_idx + 1..];
     let rest_joined = rest_args.join(" ").to_lowercase();
 
     // Sensitive file direct read (e.g. cat ~/.ssh/id_rsa, type %USERPROFILE%\.ssh\id_rsa)
-    if matches!(prog_name, "cat" | "type" | "more" | "less" | "head" | "tail" | "get-content" | "gc") {
+    if matches!(
+        prog_name,
+        "cat" | "type" | "more" | "less" | "head" | "tail" | "get-content" | "gc"
+    ) {
         if rest_joined.contains(".ssh/id_rsa")
             || rest_joined.contains(".ssh\\id_rsa")
             || rest_joined.contains(".aws/credentials")
@@ -238,7 +284,8 @@ fn check_individual_command(segment: &str) -> Option<CommandViolation> {
                 category: CommandViolationCategory::SensitiveFileAccess,
                 rule_id: "CMD-FILE-001",
                 matched_command: trimmed.to_string(),
-                reason: "Direct terminal output of credentials and secret keys is prohibited".to_string(),
+                reason: "Direct terminal output of credentials and secret keys is prohibited"
+                    .to_string(),
             });
         }
     }

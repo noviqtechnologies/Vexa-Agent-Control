@@ -122,7 +122,8 @@ impl EgressGuard {
                 rule_id: "EGR-SSRF-001",
                 host: host.to_string(),
                 url: trimmed.to_string(),
-                reason: "Outbound egress to cloud instance metadata service is prohibited".to_string(),
+                reason: "Outbound egress to cloud instance metadata service is prohibited"
+                    .to_string(),
             });
         }
 
@@ -169,7 +170,10 @@ impl EgressGuard {
                     rule_id: "EGR-DENY-001",
                     host: host.to_string(),
                     url: trimmed.to_string(),
-                    reason: format!("Domain '{}' matches explicit egress denylist rule '{}'", host, denied),
+                    reason: format!(
+                        "Domain '{}' matches explicit egress denylist rule '{}'",
+                        host, denied
+                    ),
                 });
             }
         }
@@ -189,7 +193,10 @@ impl EgressGuard {
                     rule_id: "EGR-ALLOW-001",
                     host: host.to_string(),
                     url: trimmed.to_string(),
-                    reason: format!("Domain '{}' is not in the configured egress allowlist", host),
+                    reason: format!(
+                        "Domain '{}' is not in the configured egress allowlist",
+                        host
+                    ),
                 });
             }
         }
@@ -278,10 +285,7 @@ mod tests {
                 "Expected paste site to be blocked: '{}'",
                 url
             );
-            assert_eq!(
-                res.unwrap().category,
-                EgressViolationCategory::PasteSite
-            );
+            assert_eq!(res.unwrap().category, EgressViolationCategory::PasteSite);
         }
     }
 
@@ -298,19 +302,14 @@ mod tests {
 
         for url in raw_ips {
             let res = guard.check_egress(url);
-            assert!(
-                res.is_some(),
-                "Expected raw IP to be blocked: '{}'",
-                url
-            );
-            assert_eq!(
-                res.unwrap().category,
-                EgressViolationCategory::RawIpLiteral
-            );
+            assert!(res.is_some(), "Expected raw IP to be blocked: '{}'", url);
+            assert_eq!(res.unwrap().category, EgressViolationCategory::RawIpLiteral);
         }
 
         // Loopback is allowed
-        assert!(guard.check_egress("http://127.0.0.1:18080/healthz").is_none());
+        assert!(guard
+            .check_egress("http://127.0.0.1:18080/healthz")
+            .is_none());
         assert!(guard.check_egress("http://localhost:3000/api").is_none());
     }
 
@@ -326,16 +325,24 @@ mod tests {
 
         // Allowed
         assert!(guard.check_egress("https://api.github.com/repos").is_none());
-        assert!(guard.check_egress("https://api.openai.com/v1/chat").is_none());
+        assert!(guard
+            .check_egress("https://api.openai.com/v1/chat")
+            .is_none());
 
         // Explicitly denied
         let denied = guard.check_egress("https://evil.github.com/drop");
         assert!(denied.is_some());
-        assert_eq!(denied.unwrap().category, EgressViolationCategory::ExplicitDenylist);
+        assert_eq!(
+            denied.unwrap().category,
+            EgressViolationCategory::ExplicitDenylist
+        );
 
         // Not in allowlist
         let other = guard.check_egress("https://random-site.org/info");
         assert!(other.is_some());
-        assert_eq!(other.unwrap().category, EgressViolationCategory::NotOnAllowlist);
+        assert_eq!(
+            other.unwrap().category,
+            EgressViolationCategory::NotOnAllowlist
+        );
     }
 }

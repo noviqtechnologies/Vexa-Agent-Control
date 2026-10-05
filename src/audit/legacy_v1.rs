@@ -85,8 +85,7 @@ impl AuditEntryV1Legacy {
         let canonical = serde_json::to_string(&verify_copy)
             .map_err(|e| format!("legacy v1 re-serialization error: {}", e))?;
 
-        let mut mac = HmacSha256::new_from_slice(session_secret)
-            .expect("HMAC key length is valid");
+        let mut mac = HmacSha256::new_from_slice(session_secret).expect("HMAC key length is valid");
         mac.update(canonical.as_bytes());
         Ok(hex::encode(mac.finalize().into_bytes()))
     }
@@ -124,7 +123,8 @@ mod tests {
             request_ip: None,
             matched_group_id: None,
             entry_index: 0,
-            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             hmac: None,
         };
 
@@ -136,10 +136,10 @@ mod tests {
         assert!(json.contains("\"ts\":\"2026-01-01T00:00:00+00:00\""));
         assert!(json.contains("\"tool_name\":\"read_file\""));
         assert!(json.contains("\"latency_ms\":1.5"));
-        assert!(!json.contains("\"params_hash\""));  // None → omitted
-        assert!(!json.contains("\"params\""));        // None → omitted
-        assert!(!json.contains("\"reason\""));        // None → omitted
-        assert!(!json.contains("\"hmac\""));          // None → omitted
+        assert!(!json.contains("\"params_hash\"")); // None → omitted
+        assert!(!json.contains("\"params\"")); // None → omitted
+        assert!(!json.contains("\"reason\"")); // None → omitted
+        assert!(!json.contains("\"hmac\"")); // None → omitted
 
         // Pin the exact byte length as a canary.
         let expected = r#"{"ts":"2026-01-01T00:00:00+00:00","session_id":"test-session-id","event":"tool_allow","tool_name":"read_file","latency_ms":1.5,"entry_index":0,"prev_hmac":"0000000000000000000000000000000000000000000000000000000000000000"}"#;
@@ -152,7 +152,10 @@ mod tests {
         let original = r#"{"ts":"2026-01-01T00:00:00+00:00","session_id":"s1","event":"tool_deny","tool_name":"bash","reason":"blocked","entry_index":3,"prev_hmac":"abcd","hmac":"ef01"}"#;
         let parsed: AuditEntryV1Legacy = serde_json::from_str(original).unwrap();
         let reserialized = serde_json::to_string(&parsed).unwrap();
-        assert_eq!(original, reserialized, "Round-trip serialization drift detected");
+        assert_eq!(
+            original, reserialized,
+            "Round-trip serialization drift detected"
+        );
     }
 
     /// HMAC computation must be deterministic for identical inputs.
@@ -173,7 +176,8 @@ mod tests {
             request_ip: None,
             matched_group_id: None,
             entry_index: 0,
-            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             hmac: Some("placeholder".to_string()),
         };
 

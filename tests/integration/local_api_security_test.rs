@@ -32,10 +32,16 @@ fn test_cross_site_fetch_rejected() {
 fn test_dns_rebinding_invalid_host_rejected() {
     let mut headers = HeaderMap::new();
     // Attacker-controlled DNS name pointing to 127.0.0.1
-    headers.insert(HOST, HeaderValue::from_static("evil-rebind.attacker.com:18080"));
+    headers.insert(
+        HOST,
+        HeaderValue::from_static("evil-rebind.attacker.com:18080"),
+    );
 
     let res = validate_rfc3986_authority(&headers, true);
-    assert!(res.is_err(), "External host header must be rejected on loopback listener");
+    assert!(
+        res.is_err(),
+        "External host header must be rejected on loopback listener"
+    );
     let err = res.err().unwrap();
     assert_eq!(err.status, StatusCode::FORBIDDEN);
     assert_eq!(err.code, "invalid_host_authority");
@@ -83,8 +89,7 @@ fn test_scope_trace_read_cannot_access_raw_payload() {
 
 #[test]
 fn test_scope_approval_write_required_for_hitl() {
-    let hitl_required =
-        required_scope_for_endpoint(&hyper::Method::POST, "/api/v1/hitl/respond");
+    let hitl_required = required_scope_for_endpoint(&hyper::Method::POST, "/api/v1/hitl/respond");
     assert_eq!(hitl_required, Some(ApiScope::ApprovalWrite));
 
     // TraceRead cannot write approval

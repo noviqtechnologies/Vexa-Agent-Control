@@ -9,8 +9,8 @@
 //!
 //! Conforms to Plan Review Feedback v4 §Phase-2 "Disaggregated Detector Metrics".
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::eval::replay::{ExpectedVerdict, ReplayVerdict};
 
@@ -79,7 +79,11 @@ impl DetectorMetrics {
         let precision = if tp + fp > 0.0 { tp / (tp + fp) } else { 1.0 };
         let recall = if tp + fn_ > 0.0 { tp / (tp + fn_) } else { 1.0 };
         let false_positive_rate = if fp + tn > 0.0 { fp / (fp + tn) } else { 0.0 };
-        let false_negative_rate = if tp + fn_ > 0.0 { fn_ / (tp + fn_) } else { 0.0 };
+        let false_negative_rate = if tp + fn_ > 0.0 {
+            fn_ / (tp + fn_)
+        } else {
+            0.0
+        };
         let accuracy = if total > 0.0 { (tp + tn) / total } else { 1.0 };
 
         Self {
@@ -135,9 +139,15 @@ pub fn build_disaggregated_metrics(
 /// Render a human-readable table of disaggregated detector metrics.
 pub fn render_metrics_table(metrics: &DisaggregatedMetrics) -> String {
     let mut out = String::new();
-    out.push_str("\n╔══════════════════════════════════════════════════════════════════════════════╗\n");
-    out.push_str("║        Vexa AgentControl — Disaggregated Detector Evaluation Report          ║\n");
-    out.push_str("╚══════════════════════════════════════════════════════════════════════════════╝\n\n");
+    out.push_str(
+        "\n╔══════════════════════════════════════════════════════════════════════════════╗\n",
+    );
+    out.push_str(
+        "║        Vexa AgentControl — Disaggregated Detector Evaluation Report          ║\n",
+    );
+    out.push_str(
+        "╚══════════════════════════════════════════════════════════════════════════════╝\n\n",
+    );
 
     out.push_str(&format!(
         "{:<20}  {:>7}  {:>7}  {:>8}  {:>8}  {:>9}  {:>9}\n",
@@ -163,8 +173,7 @@ pub fn render_metrics_table(metrics: &DisaggregatedMetrics) -> String {
     out.push('\n');
     out.push_str(&format!(
         "\nCorpus bypasses (FN): {}    False positives (FP): {}\n",
-        metrics.corpus_bypass_count,
-        metrics.corpus_false_positive_count
+        metrics.corpus_bypass_count, metrics.corpus_false_positive_count
     ));
     out
 }
@@ -208,7 +217,12 @@ mod tests {
 
     #[test]
     fn test_perfect_precision_recall() {
-        let acc = DetectorAccumulator { tp: 10, tn: 10, fp: 0, fn_: 0 };
+        let acc = DetectorAccumulator {
+            tp: 10,
+            tn: 10,
+            fp: 0,
+            fn_: 0,
+        };
         let m = DetectorMetrics::from_accumulator("dlp", &acc);
         assert!((m.precision - 1.0).abs() < 1e-9);
         assert!((m.recall - 1.0).abs() < 1e-9);
@@ -219,14 +233,24 @@ mod tests {
 
     #[test]
     fn test_zero_precision_on_all_fp() {
-        let acc = DetectorAccumulator { tp: 0, tn: 0, fp: 5, fn_: 0 };
+        let acc = DetectorAccumulator {
+            tp: 0,
+            tn: 0,
+            fp: 5,
+            fn_: 0,
+        };
         let m = DetectorMetrics::from_accumulator("injection", &acc);
         assert!((m.precision - 0.0).abs() < 1e-9);
     }
 
     #[test]
     fn test_zero_recall_on_all_fn() {
-        let acc = DetectorAccumulator { tp: 0, tn: 5, fp: 0, fn_: 5 };
+        let acc = DetectorAccumulator {
+            tp: 0,
+            tn: 5,
+            fp: 0,
+            fn_: 5,
+        };
         let m = DetectorMetrics::from_accumulator("injection", &acc);
         assert!((m.recall - 0.0).abs() < 1e-9);
         assert!((m.false_negative_rate - 1.0).abs() < 1e-9);
@@ -244,8 +268,24 @@ mod tests {
     #[test]
     fn test_build_disaggregated_metrics() {
         let mut map = HashMap::new();
-        map.insert("dlp".to_string(), DetectorAccumulator { tp: 8, tn: 2, fp: 1, fn_: 0 });
-        map.insert("injection".to_string(), DetectorAccumulator { tp: 5, tn: 5, fp: 0, fn_: 1 });
+        map.insert(
+            "dlp".to_string(),
+            DetectorAccumulator {
+                tp: 8,
+                tn: 2,
+                fp: 1,
+                fn_: 0,
+            },
+        );
+        map.insert(
+            "injection".to_string(),
+            DetectorAccumulator {
+                tp: 5,
+                tn: 5,
+                fp: 0,
+                fn_: 1,
+            },
+        );
         let metrics = build_disaggregated_metrics(map);
         assert_eq!(metrics.by_family.len(), 2);
         assert_eq!(metrics.corpus_bypass_count, 1); // fn_ from injection
@@ -255,9 +295,15 @@ mod tests {
     #[test]
     fn test_render_metrics_table_contains_header() {
         let metrics = DisaggregatedMetrics {
-            by_family: vec![
-                DetectorMetrics::from_accumulator("dlp", &DetectorAccumulator { tp: 5, tn: 5, fp: 0, fn_: 0 }),
-            ],
+            by_family: vec![DetectorMetrics::from_accumulator(
+                "dlp",
+                &DetectorAccumulator {
+                    tp: 5,
+                    tn: 5,
+                    fp: 0,
+                    fn_: 0,
+                },
+            )],
             corpus_bypass_count: 0,
             corpus_false_positive_count: 0,
         };

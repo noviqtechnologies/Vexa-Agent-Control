@@ -55,7 +55,9 @@ fn make_v1_entry(
         latency_ms,
         identity_sub: Some("user-sub-12345".to_string()),
         identity_email: Some("developer@corp.local".to_string()),
-        policy_hash: Some("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+        policy_hash: Some(
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+        ),
         request_ip: Some("127.0.0.1".to_string()),
         matched_group_id: Some("dev-security-group".to_string()),
         entry_index,
@@ -270,7 +272,17 @@ fn test_field_tamper_detection() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("tampered.jsonl");
 
-    let e0 = make_v1_entry(&TEST_SECRET, "sess-tamper", "tool_allow", Some("read_file"), None, None, Some(1.0), 0, ZERO_HMAC);
+    let e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-tamper",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        Some(1.0),
+        0,
+        ZERO_HMAC,
+    );
     let mut line = serde_json::to_string(&e0).unwrap();
 
     // Tamper with payload value (change 1.0 to 9.9)
@@ -279,7 +291,11 @@ fn test_field_tamper_detection() {
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
         VerifyResult::Invalid { reason, .. } => {
-            assert!(reason.contains("HMAC mismatch"), "Expected HMAC mismatch, got: {}", reason);
+            assert!(
+                reason.contains("HMAC mismatch"),
+                "Expected HMAC mismatch, got: {}",
+                reason
+            );
         }
         other => panic!("Expected Invalid result, got: {:?}", other),
     }
@@ -292,14 +308,28 @@ fn test_truncated_file_detection() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("truncated.jsonl");
 
-    let e0 = make_v1_entry(&TEST_SECRET, "sess-trunc", "tool_allow", Some("read_file"), None, None, None, 0, ZERO_HMAC);
+    let e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-trunc",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        None,
+        0,
+        ZERO_HMAC,
+    );
     let line = serde_json::to_string(&e0).unwrap();
     // Cut off half the JSON line
     fs::write(&path, &line[..line.len() / 2]).unwrap();
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
         VerifyResult::Error(msg) => {
-            assert!(msg.contains("malformed JSON") || msg.contains("re-serialisation"), "Unexpected error: {}", msg);
+            assert!(
+                msg.contains("malformed JSON") || msg.contains("re-serialisation"),
+                "Unexpected error: {}",
+                msg
+            );
         }
         other => panic!("Expected Error result, got: {:?}", other),
     }
@@ -312,16 +342,40 @@ fn test_duplicate_sequence_index_detection() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("dup_index.jsonl");
 
-    let e0 = make_v1_entry(&TEST_SECRET, "sess-seq", "tool_allow", Some("read_file"), None, None, None, 0, ZERO_HMAC);
+    let e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-seq",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        None,
+        0,
+        ZERO_HMAC,
+    );
     // e1 has index 0 instead of index 1
-    let e1 = make_v1_entry(&TEST_SECRET, "sess-seq", "tool_allow", Some("read_file"), None, None, None, 0, &e0.hmac.clone().unwrap());
+    let e1 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-seq",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        None,
+        0,
+        &e0.hmac.clone().unwrap(),
+    );
 
     append_entry(&path, &e0);
     append_entry(&path, &e1);
 
     match verify_chain_with_secret(&path, &TEST_SECRET) {
         VerifyResult::Invalid { reason, .. } => {
-            assert!(reason.contains("expected entry_index 1, got 0"), "Got: {}", reason);
+            assert!(
+                reason.contains("expected entry_index 1, got 0"),
+                "Got: {}",
+                reason
+            );
         }
         other => panic!("Expected Invalid sequence result, got: {:?}", other),
     }
@@ -334,9 +388,29 @@ fn test_broken_chain_prev_hmac_tampering() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("broken_chain.jsonl");
 
-    let e0 = make_v1_entry(&TEST_SECRET, "sess-chain", "tool_allow", Some("read_file"), None, None, None, 0, ZERO_HMAC);
+    let e0 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-chain",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        None,
+        0,
+        ZERO_HMAC,
+    );
     // e1 has bad prev_hmac
-    let e1 = make_v1_entry(&TEST_SECRET, "sess-chain", "tool_allow", Some("read_file"), None, None, None, 1, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    let e1 = make_v1_entry(
+        &TEST_SECRET,
+        "sess-chain",
+        "tool_allow",
+        Some("read_file"),
+        None,
+        None,
+        None,
+        1,
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    );
 
     append_entry(&path, &e0);
     append_entry(&path, &e1);
@@ -358,9 +432,16 @@ fn test_wrong_secret_key_rejection() {
     let wrong_secret = [0x99; 32];
 
     match verify_chain_with_secret(&dir.join("legacy_v1_standard.jsonl"), &wrong_secret) {
-        VerifyResult::Invalid { reason, entry_index } => {
+        VerifyResult::Invalid {
+            reason,
+            entry_index,
+        } => {
             assert_eq!(entry_index, 0);
-            assert!(reason.contains("HMAC mismatch"), "Expected HMAC mismatch with wrong secret, got: {}", reason);
+            assert!(
+                reason.contains("HMAC mismatch"),
+                "Expected HMAC mismatch with wrong secret, got: {}",
+                reason
+            );
         }
         other => panic!("Expected Invalid for wrong secret, got: {:?}", other),
     }
