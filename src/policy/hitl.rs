@@ -14,10 +14,20 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 type HmacSha256 = Hmac<Sha256>;
+
+fn current_epoch_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 // ─── Legacy Structs (Preserved for 100% Backward Compatibility) ─────────────
 
@@ -33,13 +43,13 @@ pub struct EscalationRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EscalationResponse {
     pub request_id: String,
-    pub decision: String, // "ALLOW_ONCE", "PERMANENT_ALLOW", "DENY"
+    pub decision: String, // "ALLOW_ONCE", "DENY"
     pub signed_hmac: String,
 }
 
 // ─── Formal 6-State Machine Types (ADR-010 §2) ─────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApprovalState {
     /// Ingress evaluation demands approval. Request generated with opaque reference.
     Pending,
@@ -53,7 +63,7 @@ pub enum ApprovalState {
     /// Action completed with verified success. Outcome logged to audit log.
     Executed {
         idempotency_key: String,
-        completed_at: Instant,
+        completed_at_epoch_ms: u64,
     },
     /// Tool invocation rejected or terminated with error.
     Failed { reason: String },
@@ -68,7 +78,7 @@ pub enum ApprovalState {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRecord {
     pub approval_id: String,
     pub opaque_reference: String,
@@ -76,15 +86,29 @@ pub struct ApprovalRecord {
     pub arguments_hash: String,
     pub workspace_id: String,
     pub audience: String,
+    pub created_at_epoch_ms: u64,
+    pub expiry_epoch_ms: u64,
+    #[serde(skip, default = "Instant::now")]
     pub expiry: Instant,
     pub state: ApprovalState,
     pub remaining_uses: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WalEvent {
+    RequestSubmitted(ApprovalRecord),
+    StateTransition {
+        approval_id: String,
+        state: ApprovalState,
+        timestamp_epoch_ms: u64,
+    },
 }
 
 // ─── HitlStateMachine ───────────────────────────────────────────────────────
 
 pub struct HitlStateMachine {
     records: Mutex<HashMap<String, ApprovalRecord>>,
+    wal_path: Option<PathBuf>,
 }
 
 impl Default for HitlStateMachine {
@@ -95,8 +119,115 @@ impl Default for HitlStateMachine {
 
 impl HitlStateMachine {
     pub fn new() -> Self {
-        Self {
-            records: Mutex::new(HashMap::new()),
+        if let Ok(env_path) = std::env::var("AGENTCONTROL_HITL_WAL") {
+            Self::with_wal(PathBuf::from(env_path)).unwrap_or_else(|_| Self {
+                records: Mutex::new(HashMap::new()),
+                wal_path: None,
+            })
+        } else {
+            Self {
+                records: Mutex::new(HashMap::new()),
+                wal_path: None,
+            }
+        }
+    }
+
+    /// Open or create a persistent Write-Ahead Log (WAL) backed state machine.
+    /// Replays historical events and reconciles interrupted execution states.
+    pub fn with_wal(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        let path_buf = path.as_ref().to_path_buf();
+        let mut records = HashMap::new();
+
+        if path_buf.exists() {
+            let file = std::fs::File::open(&path_buf)?;
+            let reader = BufReader::new(file);
+            for line_res in reader.lines() {
+                let line = line_res?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                if let Ok(event) = serde_json::from_str::<WalEvent>(&line) {
+                    match event {
+                        WalEvent::RequestSubmitted(mut record) => {
+                            let now_ms = current_epoch_ms();
+                            if record.expiry_epoch_ms > now_ms {
+                                record.expiry = Instant::now()
+                                    + Duration::from_millis(record.expiry_epoch_ms - now_ms);
+                            } else {
+                                record.state = ApprovalState::Expired;
+                            }
+                            records.insert(record.approval_id.clone(), record);
+                        }
+                        WalEvent::StateTransition {
+                            approval_id, state, ..
+                        } => {
+                            if let Some(record) = records.get_mut(&approval_id) {
+                                record.state = state;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Post-replay crash reconciliation:
+            // Any record left in Executing or Reserved state when daemon crashed
+            // MUST be reconciled to OutcomeUnknown to prevent silent re-execution!
+            let now_ms = current_epoch_ms();
+            let mut recons = Vec::new();
+            for (id, record) in records.iter_mut() {
+                match &record.state {
+                    ApprovalState::Executing { idempotency_key }
+                    | ApprovalState::Reserved {
+                        idempotency_key, ..
+                    } => {
+                        let new_state = ApprovalState::OutcomeUnknown {
+                            idempotency_key: idempotency_key.clone(),
+                            reason: "Interrupted by daemon restart; outcome uncertain".to_string(),
+                        };
+                        record.state = new_state.clone();
+                        recons.push((id.clone(), new_state));
+                    }
+                    ApprovalState::Pending => {
+                        if record.expiry_epoch_ms <= now_ms {
+                            let new_state = ApprovalState::Expired;
+                            record.state = new_state.clone();
+                            recons.push((id.clone(), new_state));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let sm = Self {
+                records: Mutex::new(records),
+                wal_path: Some(path_buf),
+            };
+
+            for (id, state) in recons {
+                sm.append_wal(&WalEvent::StateTransition {
+                    approval_id: id,
+                    state,
+                    timestamp_epoch_ms: now_ms,
+                });
+            }
+
+            Ok(sm)
+        } else {
+            Ok(Self {
+                records: Mutex::new(HashMap::new()),
+                wal_path: Some(path_buf),
+            })
+        }
+    }
+
+    fn append_wal(&self, event: &WalEvent) {
+        if let Some(ref path) = self.wal_path {
+            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+                if let Ok(line) = serde_json::to_string(event) {
+                    let _ = writeln!(file, "{}", line);
+                    let _ = file.flush();
+                }
+            }
         }
     }
 
@@ -114,21 +245,27 @@ impl HitlStateMachine {
     ) -> String {
         let stripped = approval_id.strip_prefix("appr-").unwrap_or(&approval_id);
         let opaque_ref = format!("appr-{}", &stripped[..8.min(stripped.len())]);
+        let now_ms = current_epoch_ms();
+        let expiry_ms = now_ms + ttl.as_millis() as u64;
+
+        let record = ApprovalRecord {
+            approval_id: approval_id.clone(),
+            opaque_reference: opaque_ref.clone(),
+            tool_name,
+            arguments_hash,
+            workspace_id,
+            audience,
+            created_at_epoch_ms: now_ms,
+            expiry_epoch_ms: expiry_ms,
+            expiry: Instant::now() + ttl,
+            state: ApprovalState::Pending,
+            remaining_uses: initial_uses,
+        };
+
+        self.append_wal(&WalEvent::RequestSubmitted(record.clone()));
+
         let mut map = self.records.lock().unwrap();
-        map.insert(
-            approval_id.clone(),
-            ApprovalRecord {
-                approval_id,
-                opaque_reference: opaque_ref.clone(),
-                tool_name,
-                arguments_hash,
-                workspace_id,
-                audience,
-                expiry: Instant::now() + ttl,
-                state: ApprovalState::Pending,
-                remaining_uses: initial_uses,
-            },
-        );
+        map.insert(approval_id, record);
         opaque_ref
     }
 
@@ -162,29 +299,48 @@ impl HitlStateMachine {
         }
 
         // 3. State check & atomic CAS
-        match &record.state {
+        let (idem_key, new_state) = match &record.state {
             ApprovalState::Pending => {
                 let idem_key = format!("idem-{}", generate_nonce());
-                record.state = ApprovalState::Reserved {
+                let state = ApprovalState::Reserved {
                     idempotency_key: idem_key.clone(),
                     reserved_by: actor.to_string(),
                 };
-                Ok(idem_key)
+                (idem_key, state)
             }
             ApprovalState::Reserved { .. } => {
-                Err("Double-spend rejected: approval already reserved".to_string())
+                return Err("Double-spend rejected: approval already reserved".to_string())
             }
-            ApprovalState::Executing { .. } => Err("Approval already in execution".to_string()),
-            ApprovalState::Executed { .. } => Err("Approval already consumed".to_string()),
-            ApprovalState::Revoked { reason } => Err(format!("Approval was revoked: {}", reason)),
-            ApprovalState::Expired => Err("Approval expired".to_string()),
+            ApprovalState::Executing { .. } => {
+                return Err("Approval already in execution".to_string())
+            }
+            ApprovalState::Executed { .. } => return Err("Approval already consumed".to_string()),
+            ApprovalState::Revoked { reason } => {
+                return Err(format!("Approval was revoked: {}", reason))
+            }
+            ApprovalState::Expired => return Err("Approval expired".to_string()),
             ApprovalState::Failed { reason } => {
-                Err(format!("Approval previously failed: {}", reason))
+                return Err(format!("Approval previously failed: {}", reason))
             }
-            ApprovalState::OutcomeUnknown { .. } => Err(
-                "Prior execution outcome unknown/uncertain; manual resolution required".to_string(),
-            ),
-        }
+            ApprovalState::OutcomeUnknown { .. } => {
+                return Err(
+                    "Prior execution outcome unknown/uncertain; manual resolution required"
+                        .to_string(),
+                )
+            }
+        };
+
+        record.state = new_state.clone();
+        let appr_id = record.approval_id.clone();
+        drop(map);
+
+        self.append_wal(&WalEvent::StateTransition {
+            approval_id: appr_id,
+            state: new_state,
+            timestamp_epoch_ms: current_epoch_ms(),
+        });
+
+        Ok(idem_key)
     }
 
     /// Transition from Reserved -> Executing (Write-ahead intent flush).
@@ -202,9 +358,18 @@ impl HitlStateMachine {
                 if existing_key != idempotency_key {
                     return Err("Idempotency key mismatch".to_string());
                 }
-                record.state = ApprovalState::Executing {
+                let new_state = ApprovalState::Executing {
                     idempotency_key: idempotency_key.to_string(),
                 };
+                record.state = new_state.clone();
+                let appr_id = record.approval_id.clone();
+                drop(map);
+
+                self.append_wal(&WalEvent::StateTransition {
+                    approval_id: appr_id,
+                    state: new_state,
+                    timestamp_epoch_ms: current_epoch_ms(),
+                });
                 Ok(())
             }
             other => Err(format!("Cannot start execution from state: {:?}", other)),
@@ -230,10 +395,19 @@ impl HitlStateMachine {
                     return Err("Idempotency key mismatch".to_string());
                 }
                 record.remaining_uses = record.remaining_uses.saturating_sub(1);
-                record.state = ApprovalState::Executed {
+                let new_state = ApprovalState::Executed {
                     idempotency_key: idempotency_key.to_string(),
-                    completed_at: Instant::now(),
+                    completed_at_epoch_ms: current_epoch_ms(),
                 };
+                record.state = new_state.clone();
+                let appr_id = record.approval_id.clone();
+                drop(map);
+
+                self.append_wal(&WalEvent::StateTransition {
+                    approval_id: appr_id,
+                    state: new_state,
+                    timestamp_epoch_ms: current_epoch_ms(),
+                });
                 Ok(())
             }
             other => Err(format!("Cannot complete execution from state: {:?}", other)),
@@ -247,9 +421,18 @@ impl HitlStateMachine {
             .find_record_mut(&mut map, approval_id)
             .ok_or_else(|| "Approval not found".to_string())?;
 
-        record.state = ApprovalState::Failed {
+        let new_state = ApprovalState::Failed {
             reason: reason.to_string(),
         };
+        record.state = new_state.clone();
+        let appr_id = record.approval_id.clone();
+        drop(map);
+
+        self.append_wal(&WalEvent::StateTransition {
+            approval_id: appr_id,
+            state: new_state,
+            timestamp_epoch_ms: current_epoch_ms(),
+        });
         Ok(())
     }
 
@@ -279,7 +462,7 @@ impl HitlStateMachine {
                 Some(true) => {
                     record.state = ApprovalState::Executed {
                         idempotency_key: idempotency_key.clone(),
-                        completed_at: Instant::now(),
+                        completed_at_epoch_ms: current_epoch_ms(),
                     };
                 }
                 Some(false) => {
@@ -296,16 +479,34 @@ impl HitlStateMachine {
             },
             _ => {}
         }
-        record.state.clone()
+        let state = record.state.clone();
+        let appr_id = record.approval_id.clone();
+        drop(map);
+
+        self.append_wal(&WalEvent::StateTransition {
+            approval_id: appr_id,
+            state: state.clone(),
+            timestamp_epoch_ms: current_epoch_ms(),
+        });
+        state
     }
 
     /// Explicit cancellation by operator or security policy.
     pub fn revoke(&self, approval_id: &str, reason: &str) {
         let mut map = self.records.lock().unwrap();
         if let Some(record) = self.find_record_mut(&mut map, approval_id) {
-            record.state = ApprovalState::Revoked {
+            let new_state = ApprovalState::Revoked {
                 reason: reason.to_string(),
             };
+            record.state = new_state.clone();
+            let appr_id = record.approval_id.clone();
+            drop(map);
+
+            self.append_wal(&WalEvent::StateTransition {
+                approval_id: appr_id,
+                state: new_state,
+                timestamp_epoch_ms: current_epoch_ms(),
+            });
         }
     }
 
@@ -378,6 +579,19 @@ impl HitlManager {
         }
     }
 
+    /// Open or create a persistent Write-Ahead Log (WAL) backed HitlManager.
+    pub fn with_wal(
+        secret_key: impl Into<String>,
+        wal_path: impl AsRef<Path>,
+    ) -> Result<Self, std::io::Error> {
+        let sm = HitlStateMachine::with_wal(wal_path)?;
+        Ok(Self {
+            state_machine: Arc::new(sm),
+            responders: Arc::new(Mutex::new(HashMap::new())),
+            secret_key: secret_key.into(),
+        })
+    }
+
     /// Access the underlying formal state machine.
     pub fn state_machine(&self) -> &HitlStateMachine {
         &self.state_machine
@@ -430,9 +644,26 @@ impl HitlManager {
     }
 
     /// Processes an approval/denial callback response.
+    /// Strictly rejects legacy `PERMANENT_ALLOW` (ADR-010 policy gate).
     /// Enforces HMAC signature verification when signature is provided,
     /// transitions the state machine atomically, and fires any awaiting channels.
     pub fn process_callback(&self, response: &EscalationResponse) -> Result<bool, String> {
+        // Enforce removal of permanent allow per ADR-010 policy gate
+        if response.decision == "PERMANENT_ALLOW" {
+            return Err("PERMANENT_ALLOW is prohibited in production: durable exceptions require an auditable policy change".to_string());
+        }
+
+        if response.decision != "ALLOW_ONCE"
+            && response.decision != "DENY"
+            && response.decision != "allow"
+            && response.decision != "deny"
+        {
+            return Err(format!(
+                "Invalid decision '{}': only ALLOW_ONCE and DENY are permitted",
+                response.decision
+            ));
+        }
+
         // If HMAC signature is provided, strictly verify it
         if !response.signed_hmac.is_empty()
             && !self.verify_signature(
@@ -449,9 +680,7 @@ impl HitlManager {
             .get_record(&response.request_id)
             .ok_or_else(|| "Request ID not found or already processed".to_string())?;
 
-        let is_allowed = response.decision == "ALLOW_ONCE"
-            || response.decision == "PERMANENT_ALLOW"
-            || response.decision == "allow";
+        let is_allowed = response.decision == "ALLOW_ONCE" || response.decision == "allow";
 
         if is_allowed {
             // Reserve via CAS
@@ -505,19 +734,18 @@ impl HitlManager {
     /// Dispatches an out-of-band OS desktop notification toast and awaits user confirmation.
     /// Works cross-platform on Windows, macOS, and Linux, with headless/SSH fallback.
     ///
-    /// Hardened per ADR-010 §2.3: Zero cryptographic HMAC secret leakage in notifications or stderr.
+    /// Hardened per ADR-010 §2.3 & Audit Gate: Zero cryptographic HMAC secret leakage in
+    /// notifications, subprocess arguments, shell commands, or stderr. Subprocesses receive
+    /// ONLY the unprivileged opaque reference ID and return a simple boolean exit code.
     pub async fn request_desktop_approval(
         &self,
         tool_name: &str,
         risk_reason: &str,
-        listen_addr: &str,
+        _listen_addr: &str,
         timeout_secs: u64,
     ) -> bool {
         let request_id = format!("appr-{}", uuid::Uuid::new_v4());
         let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
-
-        let allow_sig = self.sign_decision(&request_id, "ALLOW_ONCE");
-        let deny_sig = self.sign_decision(&request_id, "DENY");
 
         let args_hash = format!(
             "sha256:{}",
@@ -526,7 +754,7 @@ impl HitlManager {
         let opaque_ref = self.state_machine.submit_request(
             request_id.clone(),
             tool_name.to_string(),
-            args_hash,
+            args_hash.clone(),
             "workspace-default".to_string(),
             "agent-local".to_string(),
             Duration::from_secs(timeout_secs),
@@ -538,20 +766,46 @@ impl HitlManager {
             responders.insert(request_id.clone(), tx);
         }
 
-        // Dispatch desktop toast / alert dialog asynchronously with opaque reference ID
-        Self::dispatch_os_toast(
-            &request_id,
-            &opaque_ref,
-            tool_name,
-            risk_reason,
-            listen_addr,
-            &allow_sig,
-            &deny_sig,
-        );
+        // Spawn OS dialog asynchronously with opaque reference ID only (NO HMAC SECRETS)
+        let req_id_clone = request_id.clone();
+        let op_ref_clone = opaque_ref.clone();
+        let tool_clone = tool_name.to_string();
+        let reason_clone = risk_reason.to_string();
+        let responders_clone = self.responders.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let decision =
+                Self::dispatch_os_toast(&req_id_clone, &op_ref_clone, &tool_clone, &reason_clone);
+            if let Some(allowed) = decision {
+                let mut responders = responders_clone.lock().unwrap();
+                if let Some(tx) = responders.remove(&req_id_clone) {
+                    let _ = tx.send(allowed);
+                }
+            }
+        });
 
         // Await user approval with timeout
         match tokio::time::timeout(Duration::from_secs(timeout_secs), rx).await {
-            Ok(Ok(allowed)) => allowed,
+            Ok(Ok(true)) => {
+                let idem_res = self.state_machine.reserve(
+                    &request_id,
+                    "desktop_operator",
+                    tool_name,
+                    &args_hash,
+                    "workspace-default",
+                );
+                if let Ok(idem) = idem_res {
+                    let _ = self.state_machine.start_execution(&request_id, &idem);
+                    let _ = self.state_machine.complete_execution(&request_id, &idem);
+                }
+                true
+            }
+            Ok(Ok(false)) => {
+                let _ = self
+                    .state_machine
+                    .fail_execution(&request_id, "Rejected by operator via desktop dialog");
+                false
+            }
             _ => {
                 // Timeout or channel closed — mark expired/failed and fail closed
                 let _ = self
@@ -566,135 +820,118 @@ impl HitlManager {
 
     /// Cross-platform desktop toast dispatcher.
     ///
-    /// Hardened: Emits ONLY opaque reference ID in notification text and logs.
-    /// Never prints HMAC secrets or executable query URLs to stderr or notification centers.
+    /// Hardened per ADR-010 §2.3: Emits ONLY opaque reference ID in notification text and logs.
+    /// Subprocesses receive ZERO secrets, zero HMAC signatures, zero tokens, and zero URLs.
     pub fn dispatch_os_toast(
-        request_id: &str,
+        _request_id: &str,
         opaque_ref: &str,
         tool_name: &str,
         risk_reason: &str,
-        listen_addr: &str,
-        allow_sig: &str,
-        deny_sig: &str,
-    ) {
-        let req_id = request_id.to_string();
+    ) -> Option<bool> {
         let op_ref = opaque_ref.to_string();
         let tool = tool_name.to_string();
         let reason = risk_reason.to_string();
-        let addr = listen_addr.to_string();
-        let allow = allow_sig.to_string();
-        let deny = deny_sig.to_string();
 
-        tokio::task::spawn_blocking(move || {
-            #[cfg(target_os = "windows")]
-            {
-                // Windows: Native modal message dialog via PowerShell PresentationFramework
-                // Dialog displays unprivileged opaque reference ID to user
-                let script = format!(
-                    "Add-Type -AssemblyName PresentationFramework; \
-                     $msg = 'AgentControl Security Approval Required:`n`nTool: {tool}`nReason: {reason}`nReference ID: {op_ref}`n`nAllow this call once?'; \
-                     $res = [System.Windows.MessageBox]::Show($msg, 'AgentControl Security Alert', 'YesNo', 'Warning'); \
-                     $decision = if ($res -eq 'Yes') {{ 'ALLOW_ONCE' }} else {{ 'DENY' }}; \
-                     $sig = if ($res -eq 'Yes') {{ '{allow}' }} else {{ '{deny}' }}; \
-                     $body = @{{ request_id = '{req_id}'; decision = $decision; signed_hmac = $sig }} | ConvertTo-Json; \
-                     try {{ Invoke-RestMethod -Uri 'http://{addr}/api/v1/hitl/respond' -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 5 }} catch {{}}",
-                    tool = tool,
-                    reason = reason,
-                    op_ref = op_ref,
-                    req_id = req_id,
-                    allow = allow,
-                    deny = deny,
-                    addr = addr
-                );
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Native modal message dialog via PowerShell PresentationFramework
+            // Dialog displays unprivileged opaque reference ID to user and exits with 0 on Yes, 1 on No.
+            // Absolutely NO cryptographic secrets or network calls in subprocess arguments.
+            let script = format!(
+                "Add-Type -AssemblyName PresentationFramework; \
+                 $msg = 'AgentControl Security Approval Required:`n`nTool: {tool}`nReason: {reason}`nReference ID: {op_ref}`n`nAllow this call once?'; \
+                 $res = [System.Windows.MessageBox]::Show($msg, 'AgentControl Security Alert', 'YesNo', 'Warning'); \
+                 if ($res -eq 'Yes') {{ exit 0 }} else {{ exit 1 }}",
+                tool = tool,
+                reason = reason,
+                op_ref = op_ref
+            );
 
-                let _ = std::process::Command::new("powershell")
-                    .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-                    .spawn();
+            let status = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .status();
+
+            match status {
+                Ok(s) => Some(s.code() == Some(0)),
+                Err(_) => None,
             }
+        }
 
-            #[cfg(target_os = "macos")]
-            {
-                // macOS: Native alert dialog via osascript
-                let script = format!(
-                    "tell application \"System Events\"\n\
-                     activate\n\
-                     set dialogResult to display alert \"AgentControl Security Alert\" \
-                     message \"Agent requested tool '{tool}'\\nReason: {reason}\\nReference ID: {op_ref}\\n\\nAllow this call once?\" \
-                     buttons {{\"Deny\", \"Approve Once\"}} default button 2 cancel button 1\n\
-                     if button returned of dialogResult is \"Approve Once\" then\n\
-                         do shell script \"curl -s -X POST http://{addr}/api/v1/hitl/respond -H 'Content-Type: application/json' -d '{{\\\"request_id\\\":\\\"{req_id}\\\",\\\"decision\\\":\\\"ALLOW_ONCE\\\",\\\"signed_hmac\\\":\\\"{allow}\\\"}}'\"\n\
-                     else\n\
-                         do shell script \"curl -s -X POST http://{addr}/api/v1/hitl/respond -H 'Content-Type: application/json' -d '{{\\\"request_id\\\":\\\"{req_id}\\\",\\\"decision\\\":\\\"DENY\\\",\\\"signed_hmac\\\":\\\"{deny}\\\"}}'\"\n\
-                     end if\n\
-                     end tell",
-                    tool = tool,
-                    reason = reason,
-                    op_ref = op_ref,
-                    addr = addr,
-                    req_id = req_id,
-                    allow = allow,
-                    deny = deny
-                );
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: Native alert dialog via osascript
+            // Displays ONLY opaque reference ID. Returns stdout APPROVE or DENY.
+            // Absolutely NO HMAC secrets or network calls in subprocess arguments.
+            let script = format!(
+                "tell application \"System Events\"\n\
+                 activate\n\
+                 set dialogResult to display alert \"AgentControl Security Alert\" \
+                 message \"Agent requested tool '{tool}'\\nReason: {reason}\\nReference ID: {op_ref}\\n\\nAllow this call once?\" \
+                 buttons {{\"Deny\", \"Approve Once\"}} default button 2 cancel button 1\n\
+                 if button returned of dialogResult is \"Approve Once\" then\n\
+                     return \"APPROVE\"\n\
+                 else\n\
+                     return \"DENY\"\n\
+                 end if\n\
+                 end tell",
+                tool = tool,
+                reason = reason,
+                op_ref = op_ref
+            );
 
-                let _ = std::process::Command::new("osascript")
-                    .args(["-e", &script])
-                    .spawn();
-            }
+            let output = std::process::Command::new("osascript")
+                .args(["-e", &script])
+                .output();
 
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-            {
-                // Linux / BSD: Check for GUI display server
-                let has_display =
-                    std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
-
-                if has_display {
-                    // Try zenity first
-                    let zenity_res = std::process::Command::new("zenity")
-                        .args([
-                            "--question",
-                            "--title=AgentControl Security Approval",
-                            &format!("--text=Agent requested tool: {}\nReason: {}\nReference ID: {}\n\nAllow this call once?", tool, reason, op_ref),
-                            "--ok-label=Approve Once",
-                            "--cancel-label=Deny",
-                        ])
-                        .status();
-
-                    let is_allowed = match zenity_res {
-                        Ok(status) => status.success(),
-                        Err(_) => {
-                            // Fallback to notify-send: Secret-isolated, emits only reference ID
-                            let _ = std::process::Command::new("notify-send")
-                                .args([
-                                    "AgentControl Security Alert",
-                                    &format!("Tool '{}' paused. Reference ID: {}. Authorize via local console.", tool, op_ref),
-                                ])
-                                .spawn();
-                            false
-                        }
-                    };
-
-                    let decision = if is_allowed { "ALLOW_ONCE" } else { "DENY" };
-                    let sig = if is_allowed { &allow } else { &deny };
-                    let payload = serde_json::json!({
-                        "request_id": req_id,
-                        "decision": decision,
-                        "signed_hmac": sig
-                    });
-
-                    let client = reqwest::blocking::Client::new();
-                    let _ = client
-                        .post(format!("http://{}/api/v1/hitl/respond", addr))
-                        .json(&payload)
-                        .send();
-                } else {
-                    // Headless / SSH fallback: Strictly secret-isolated (ADR-010 §2.3)
-                    eprintln!(
-                        "⚠️ [AgentControl HITL] Headless environment. Tool '{}' requested ({}). Reference ID: {}. Approve via: agentwall hitl allow {}",
-                        tool, reason, op_ref, op_ref
-                    );
+            match output {
+                Ok(out) => {
+                    let s = String::from_utf8_lossy(&out.stdout);
+                    Some(s.trim() == "APPROVE")
                 }
+                Err(_) => None,
             }
-        });
+        }
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        {
+            // Linux / BSD: Check for GUI display server
+            let has_display =
+                std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
+
+            if has_display {
+                // Try zenity first (status.success() on Approve Once)
+                let zenity_res = std::process::Command::new("zenity")
+                    .args([
+                        "--question",
+                        "--title=AgentControl Security Approval",
+                        &format!("--text=Agent requested tool: {}\nReason: {}\nReference ID: {}\n\nAllow this call once?", tool, reason, op_ref),
+                        "--ok-label=Approve Once",
+                        "--cancel-label=Deny",
+                    ])
+                    .status();
+
+                match zenity_res {
+                    Ok(status) => Some(status.success()),
+                    Err(_) => {
+                        // Fallback to notify-send: Secret-isolated, emits only reference ID
+                        let _ = std::process::Command::new("notify-send")
+                            .args([
+                                "AgentControl Security Alert",
+                                &format!("Tool '{}' paused. Reference ID: {}. Authorize via local console.", tool, op_ref),
+                            ])
+                            .spawn();
+                        None
+                    }
+                }
+            } else {
+                // Headless / SSH fallback: Strictly secret-isolated (ADR-010 §2.3)
+                eprintln!(
+                    "⚠️ [AgentControl HITL] Headless environment. Tool '{}' requested ({}). Reference ID: {}. Approve via: agentcontrol hitl allow {}",
+                    tool, reason, op_ref, op_ref
+                );
+                None
+            }
+        }
     }
 }
 
@@ -810,5 +1047,103 @@ mod tests {
         // Execution progression
         assert!(sm.start_execution(&appr_id, &idem).is_ok());
         assert!(sm.complete_execution(&appr_id, &idem).is_ok());
+    }
+
+    #[test]
+    fn test_permanent_allow_is_rejected() {
+        let manager = HitlManager::new("secret-key-perm");
+        let req_id = "req-perm-test";
+        manager.submit_escalation(EscalationRequest {
+            request_id: req_id.to_string(),
+            agent_id: "agent-perm".to_string(),
+            command: "rm -rf /".to_string(),
+            risk_reason: "Root deletion".to_string(),
+            timestamp_ms: 1000,
+        });
+
+        let sig = manager.sign_decision(req_id, "PERMANENT_ALLOW");
+        let callback = EscalationResponse {
+            request_id: req_id.to_string(),
+            decision: "PERMANENT_ALLOW".to_string(),
+            signed_hmac: sig,
+        };
+
+        let result = manager.process_callback(&callback);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("PERMANENT_ALLOW is prohibited in production"),
+            "Expected prohibition error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_hitl_wal_persistence_and_recovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wal_path = tmp.path().join("test_hitl_wal.jsonl");
+
+        // 1. First daemon instance writes request and executes partially
+        {
+            let sm1 = HitlStateMachine::with_wal(&wal_path).expect("Failed to create sm1");
+            let appr_id = "appr-crash-test-wal".to_string();
+            let op_ref = sm1.submit_request(
+                appr_id.clone(),
+                "delete_backup".to_string(),
+                "sha256:backup_hash".to_string(),
+                "ws-prod".to_string(),
+                "agent-1".to_string(),
+                Duration::from_secs(300),
+                1,
+            );
+            assert!(op_ref.starts_with("appr-"));
+
+            let idem = sm1
+                .reserve(
+                    &appr_id,
+                    "operator",
+                    "delete_backup",
+                    "sha256:backup_hash",
+                    "ws-prod",
+                )
+                .expect("Reservation should succeed");
+
+            sm1.start_execution(&appr_id, &idem)
+                .expect("Start execution should succeed");
+
+            // Verify state is Executing in sm1
+            assert!(matches!(
+                sm1.get_state(&appr_id),
+                Some(ApprovalState::Executing { .. })
+            ));
+            // Simulate daemon crash by dropping sm1 without completing execution
+        }
+
+        // 2. Second daemon instance restarts and recovers from WAL
+        {
+            let sm2 = HitlStateMachine::with_wal(&wal_path).expect("Failed to create sm2");
+            let appr_id = "appr-crash-test-wal";
+
+            // State MUST have reconciled to OutcomeUnknown on restart
+            let recovered_state = sm2.get_state(appr_id);
+            assert!(
+                matches!(recovered_state, Some(ApprovalState::OutcomeUnknown { .. })),
+                "Expected OutcomeUnknown after restart, got: {:?}",
+                recovered_state
+            );
+
+            // Silent retry must be rejected
+            let retry_res = sm2.reserve(
+                appr_id,
+                "operator",
+                "delete_backup",
+                "sha256:backup_hash",
+                "ws-prod",
+            );
+            assert!(
+                retry_res.is_err(),
+                "Silent re-execution must be strictly prohibited after crash"
+            );
+        }
     }
 }

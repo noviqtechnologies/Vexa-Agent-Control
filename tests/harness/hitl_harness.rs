@@ -388,3 +388,78 @@ async fn harness_sequential_independent_approvals_all_succeed() {
         );
     }
 }
+
+// ─── Scenario 10: WAL Durable Crash Recovery Across Daemon Restarts ───────────
+
+#[test]
+fn harness_wal_durable_crash_recovery_across_daemon_restarts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let wal_path = tmp.path().join("hitl_wal_crash_harness.jsonl");
+
+    let appr_id = "appr-harness-wal-restart-001";
+    let tool = "drop_database_cascade";
+    let args_hash = "sha256:drop_db_hash";
+    let ws = "ws-prod-finance";
+
+    // ── Phase A: Initial Daemon Execution (Killed during EXECUTING state) ────
+    {
+        let sm1 = HitlStateMachine::with_wal(&wal_path).expect("Failed to initialize sm1 with WAL");
+
+        sm1.submit_request(
+            appr_id.to_string(),
+            tool.to_string(),
+            args_hash.to_string(),
+            ws.to_string(),
+            "daemon-main".to_string(),
+            Duration::from_secs(300),
+            1,
+        );
+
+        let idem = sm1
+            .reserve(appr_id, "lead-sre", tool, args_hash, ws)
+            .expect("Initial reservation must succeed");
+
+        sm1.start_execution(appr_id, &idem)
+            .expect("Flushing EXECUTING intent to WAL must succeed");
+
+        assert!(matches!(
+            sm1.get_state(appr_id),
+            Some(ApprovalState::Executing { .. })
+        ));
+
+        // Daemon suddenly crashes / killed by OS (sm1 is dropped without completing execution)
+    }
+
+    // ── Phase B: Restarted Daemon Recovery (Reconciles from WAL) ──────────────
+    {
+        let sm2 = HitlStateMachine::with_wal(&wal_path).expect("Failed to restart sm2 with WAL");
+
+        // Record must be restored and reconciled to OutcomeUnknown
+        let restored_state = sm2.get_state(appr_id);
+        match restored_state {
+            Some(ApprovalState::OutcomeUnknown {
+                idempotency_key,
+                reason,
+            }) => {
+                assert!(idempotency_key.starts_with("idem-"));
+                assert!(
+                    reason.contains("uncertain") || reason.contains("restart"),
+                    "Recovery reason must explicitly state uncertainty, got: {reason}"
+                );
+            }
+            other => panic!("Expected OutcomeUnknown after restart, got: {other:?}"),
+        }
+
+        // Prohibit silent re-execution: reservation must fail
+        let retry_res = sm2.reserve(appr_id, "lead-sre", tool, args_hash, ws);
+        assert!(
+            retry_res.is_err(),
+            "Silent retry of uncertain side effect must be rejected on restart"
+        );
+        let err = retry_res.unwrap_err();
+        assert!(
+            err.contains("uncertain") || err.contains("OutcomeUnknown"),
+            "Error must indicate uncertain outcome, got: {err}"
+        );
+    }
+}

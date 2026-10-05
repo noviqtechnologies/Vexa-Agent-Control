@@ -238,17 +238,22 @@ jobs:
 
       - name: Run Benchmark Suite (Release mode — generates release receipt)
         run: cargo bench --bench benchmark_suite -- --output-format bencher
-        continue-on-error: true
 
-      - name: Verify Benchmark Release Receipt Exists
+      - name: Verify Benchmark Release Receipt Exists and Passed
         shell: bash
         run: |
-          if [ -f "target/benchmark_release_receipt.json" ]; then
-            echo "✔ Benchmark release receipt generated successfully."
-            cat target/benchmark_release_receipt.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('decision:', d['decision']['status'])"
-          else
-            echo "⚠ Benchmark release receipt not found (non-blocking for now)."
+          if [ ! -f "target/benchmark_release_receipt.json" ]; then
+            echo "❌ CRITICAL: Benchmark release receipt not found! Benchmark suite failed to generate receipt."
+            exit 1
           fi
+          echo "✔ Benchmark release receipt generated successfully:"
+          cat target/benchmark_release_receipt.json
+          STATUS=$(python3 -c "import sys,json; d=json.load(open('target/benchmark_release_receipt.json')); print(d['decision']['status'])")
+          if [ "$STATUS" != "PASS" ]; then
+            echo "❌ CRITICAL: Benchmark gate decision is '$STATUS', required 'PASS'!"
+            exit 1
+          fi
+          echo "✔ Benchmark release gate PASSED with verified measurements."
 
   # ── 5. Phase 3 Team Collaboration & Central Control Gate ─────────────────────
   # ADR-008 / Plan Review Feedback v4 §Phase-3

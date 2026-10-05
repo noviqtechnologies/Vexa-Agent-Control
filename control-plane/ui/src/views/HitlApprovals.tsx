@@ -19,7 +19,7 @@ export const HitlApprovals: React.FC = () => {
     },
   ]);
 
-  const handleAction = (id: string, _decision: 'ALLOW_ONCE' | 'PERMANENT_ALLOW' | 'DENY') => {
+  const handleAction = (id: string, _decision: 'ALLOW_ONCE' | 'DENY') => {
     setEscalations((prev) => prev.filter((item) => item.id !== id));
   };
 
@@ -57,12 +57,6 @@ export const HitlApprovals: React.FC = () => {
                   onClick={() => handleAction(item.id, 'ALLOW_ONCE')}
                 >
                   Allow Once (Signed HMAC)
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handleAction(item.id, 'PERMANENT_ALLOW')}
-                >
-                  Permanently Authorize
                 </button>
                 <button
                   className="btn btn-danger"

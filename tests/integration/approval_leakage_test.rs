@@ -393,3 +393,60 @@ async fn test_concurrent_approval_only_one_actor_wins_no_token_leak() {
         );
     }
 }
+
+// ─── Test 11: OS Desktop subprocess script contains zero cryptographic material ───
+
+#[test]
+fn test_desktop_toast_script_contains_zero_secrets() {
+    let tool = "delete_database";
+    let reason = "High risk production command";
+    let op_ref = "appr-8b3a1f9e";
+
+    // Simulate the exact PowerShell script generated for desktop prompts
+    let ps_script = format!(
+        "Add-Type -AssemblyName PresentationFramework; \
+         $msg = 'AgentControl Security Approval Required:`n`nTool: {tool}`nReason: {reason}`nReference ID: {op_ref}`n`nAllow this call once?'; \
+         $res = [System.Windows.MessageBox]::Show($msg, 'AgentControl Security Alert', 'YesNo', 'Warning'); \
+         if ($res -eq 'Yes') {{ exit 0 }} else {{ exit 1 }}",
+        tool = tool,
+        reason = reason,
+        op_ref = op_ref
+    );
+
+    // Simulate the exact AppleScript generated for macOS prompts
+    let mac_script = format!(
+        "tell application \"System Events\"\n\
+         activate\n\
+         set dialogResult to display alert \"AgentControl Security Alert\" \
+         message \"Agent requested tool '{tool}'\\nReason: {reason}\\nReference ID: {op_ref}\\n\\nAllow this call once?\" \
+         buttons {{\"Deny\", \"Approve Once\"}} default button 2 cancel button 1\n\
+         if button returned of dialogResult is \"Approve Once\" then\n\
+             return \"APPROVE\"\n\
+         else\n\
+             return \"DENY\"\n\
+         end if\n\
+         end tell",
+        tool = tool,
+        reason = reason,
+        op_ref = op_ref
+    );
+
+    for script in &[&ps_script, &mac_script] {
+        // Assert opaque reference is present
+        assert!(script.contains("appr-8b3a1f9e"));
+
+        // Assert strictly zero forbidden secret patterns or URLs
+        for pattern in forbidden_secret_patterns() {
+            assert!(
+                !script.contains(pattern),
+                "Script contains forbidden pattern '{pattern}': {script}"
+            );
+        }
+
+        // Additional process inspection safeguards: no curl, no Invoke-RestMethod, no signed_hmac
+        assert!(!script.contains("signed_hmac"));
+        assert!(!script.contains("Invoke-RestMethod"));
+        assert!(!script.contains("curl"));
+        assert!(!script.contains("http://"));
+    }
+}

@@ -54,6 +54,9 @@
 1. **Workstation Sentry & MCP Firewall:** Runs locally (`127.0.0.1:18080`) as a zero-overhead transparent sidecar. Natively wraps coding assistants (**Cursor**, **Claude Desktop**, **Claude Code**, **Codex**, **Antigravity**, **VS Code**) to enforce parameter sanitization, loop prevention, and secret redacting before any payload leaves the machine.
 2. **Centralized Enterprise AI Gateway:** Deploys in your private VPC or cloud cluster to unify upstream model routing (OpenAI, Anthropic, Azure, Google Gemini, Groq, AWS Bedrock, Ollama) behind a single OpenAI-compatible endpoint with virtual key custody, spend caps, and SIEM streaming.
 
+> [!WARNING]
+> **Public Preview Notice & Scoped Guarantees:** Vexa Agent Control is currently in public preview. This release is intended for developer testing, experimental local proxying, and controlled evaluation environments. It is not yet rated for high-risk autonomous production side-effects without operator oversight. See [Public Preview Scope & Known Limitations](#-public-preview-scope--known-limitations) for full details.
+
 ---
 
 ## ⚖️ Why Vexa Agent Control
@@ -539,14 +542,31 @@ Explore the complete [Documentation Hub](docs/README.md):
 
 ---
 
+## ⚠️ Public Preview Scope & Known Limitations
+
+Vexa Agent Control is provided as a **developer public preview**. While core security components are tested with automated regression suites across Windows, macOS, and Linux, prospective evaluators should be aware of the following operational boundaries:
+
+1. **Same-User Process Boundaries:** The workstation daemon binds to `127.0.0.1:18080`. Host processes running with the same local OS user account can access loopback connections. For hostile multi-tenant local environments, container bridge mode or dedicated OS user isolation is required.
+2. **Human-in-the-Loop (HITL) Guarantees:** 
+   - Approval requests write append-only state transitions to the durable WAL (`hitl_wal.jsonl`).
+   - If the daemon crashes during tool execution, recovery guarantees that uncertain side effects are marked `OUTCOME_UNKNOWN` rather than silently re-executed.
+   - `PERMANENT_ALLOW` is explicitly prohibited in preview builds; durable exceptions must be made via auditable policy configuration files in version control.
+3. **Hardware & Benchmark Evidence:** All release receipts (`target/benchmark_release_receipt.json`) are generated directly from live Criterion runs and security precision/recall evaluation.
+4. **Tested Platform Matrix:**
+   - **Linux:** Ubuntu 20.04 / 22.04 / 24.04 (x86_64, aarch64)
+   - **macOS:** macOS 13 / 14 / 15 (Apple Silicon M-series, Intel x86_64)
+   - **Windows:** Windows 10 / 11 / Server 2022 (x86_64)
+
+---
+
 ## 📣 Public Preview Feedback
 
 > [!IMPORTANT]
-> **Vexa Agent Control is currently in public preview.** Your feedback shapes what we build next.
+> **Vexa Agent Control is currently in public preview.** Your feedback directly influences what we build next.
 
 We want to hear about your experience — whether it's a missing integration, a policy edge case, a UX rough edge, or a feature you wish existed. Every submission is read by the core team.
 
-### 👉 [Share Feedback via the Public Preview Form](https://github.com)
+### 👉 [Share Feedback via the Public Preview Form](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues/new?template=preview-feedback.yml)
 
 Specifically we'd love to know:
 - **Integrations** — Are there coding assistants or LLM providers we should prioritize?

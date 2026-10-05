@@ -20,6 +20,35 @@ fn test_hitl_webhook_integration_flow() {
         timestamp_ms: 5000,
     });
 
+    let message = format!("{}:ALLOW_ONCE", req_id);
+    let mut mac = HmacSha256::new_from_slice(secret_key.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    let sig = hex::encode(mac.finalize().into_bytes());
+
+    let res = hitl.process_callback(&EscalationResponse {
+        request_id: req_id.to_string(),
+        decision: "ALLOW_ONCE".to_string(),
+        signed_hmac: sig,
+    });
+
+    assert!(res.is_ok());
+    assert!(res.unwrap());
+}
+
+#[test]
+fn test_hitl_webhook_rejects_permanent_allow() {
+    let secret_key = "integration-test-secret-key";
+    let hitl = HitlManager::new(secret_key);
+
+    let req_id = "escalate-req-78";
+    hitl.submit_escalation(EscalationRequest {
+        request_id: req_id.to_string(),
+        agent_id: "agent-ci".to_string(),
+        command: "rm -rf /data".to_string(),
+        risk_reason: "Destructive file removal".to_string(),
+        timestamp_ms: 5000,
+    });
+
     let message = format!("{}:PERMANENT_ALLOW", req_id);
     let mut mac = HmacSha256::new_from_slice(secret_key.as_bytes()).unwrap();
     mac.update(message.as_bytes());
@@ -31,6 +60,11 @@ fn test_hitl_webhook_integration_flow() {
         signed_hmac: sig,
     });
 
-    assert!(res.is_ok());
-    assert!(res.unwrap());
+    assert!(res.is_err());
+    let err_msg = res.unwrap_err();
+    assert!(
+        err_msg.contains("PERMANENT_ALLOW is prohibited in production"),
+        "Expected PERMANENT_ALLOW rejection error, got: {}",
+        err_msg
+    );
 }
