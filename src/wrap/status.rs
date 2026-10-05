@@ -495,8 +495,8 @@ pub fn run_clients(json: bool) -> i32 {
     );
     println!("{}", "─".repeat(95).dimmed());
     println!(
-        "  {:<22} {:<16} {:<20} {}",
-        "CLIENT / TARGET", "STATUS", "MCP GOVERNANCE", "CONFIGURATION PATH"
+        "  {:<22} {:<16} {:<20} CONFIGURATION PATH",
+        "CLIENT / TARGET", "STATUS", "MCP GOVERNANCE"
     );
     println!("{}", "─".repeat(95).dimmed());
 

@@ -1227,16 +1227,15 @@ pub async fn run_attack_verification_suite(json_output: bool) -> i32 {
         "Vexa Agent Control — End-to-End Security Attack Suite"
             .bold()
             .white(),
-        format!("(PRD F3-S6, 16 Scenarios)").cyan()
+        "(PRD F3-S6, 16 Scenarios)".cyan()
     );
     println!("{}", "─".repeat(88).dimmed());
     println!(
-        "  {:<8} {:<32} {:<18} {:<18} {}",
+        "  {:<8} {:<32} {:<18} {:<18} Enforcing Rule / Mechanism",
         "ID".dimmed(),
         "Scenario Name".bold(),
         "Category".dimmed(),
-        "Status",
-        "Enforcing Rule / Mechanism"
+        "Status"
     );
     println!("{}", "─".repeat(88).dimmed());
 

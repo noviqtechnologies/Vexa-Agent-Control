@@ -256,7 +256,7 @@ fn domain_matches(domain: &str, pattern: &str) -> bool {
 
     if p.starts_with("*.") {
         let suffix = &p[1..]; // e.g. ".openai.com"
-        d.ends_with(suffix) || d == &p[2..]
+        d.ends_with(suffix) || d == p[2..]
     } else {
         d == p
     }

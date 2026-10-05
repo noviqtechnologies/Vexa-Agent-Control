@@ -291,7 +291,7 @@ impl SafeModeScanner {
             url_set: RegexSet::new(&url_patterns)?,
             url_rules,
             sensitive_path_guard: crate::policy::sensitive_path::SensitivePathGuard::default(),
-            command_policy_guard: crate::policy::command_policy::CommandPolicyGuard::default(),
+            command_policy_guard: crate::policy::command_policy::CommandPolicyGuard,
             egress_guard: crate::policy::egress::EgressGuard::default(),
             rule_count,
         })

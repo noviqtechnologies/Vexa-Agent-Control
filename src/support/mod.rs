@@ -751,8 +751,8 @@ pub async fn run_logs(
                 } else {
                     println!("\n{}", "=== Vexa Agent Control Audit Log ===".cyan().bold());
                     println!(
-                        "{:<22} {:<10} {:<26} {:<10} {}",
-                        "TIMESTAMP", "VERDICT", "TOOL / TARGET", "LATENCY", "POLICY RULE"
+                        "{:<22} {:<10} {:<26} {:<10} POLICY RULE",
+                        "TIMESTAMP", "VERDICT", "TOOL / TARGET", "LATENCY"
                     );
                     println!("{}", "─".repeat(90).dimmed());
                     if filtered.is_empty() {

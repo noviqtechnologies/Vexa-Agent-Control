@@ -243,9 +243,11 @@ fn check_individual_command(segment: &str) -> Option<CommandViolation> {
     let mut actual_cmd_idx = 0;
     while actual_cmd_idx < words.len() {
         let w = &words[actual_cmd_idx];
-        if w.contains('=') && !w.starts_with('-') && !w.starts_with('/') {
-            actual_cmd_idx += 1;
-        } else if *w == "env" || *w == "sudo" || *w == "nohup" {
+        if (w.contains('=') && !w.starts_with('-') && !w.starts_with('/'))
+            || *w == "env"
+            || *w == "sudo"
+            || *w == "nohup"
+        {
             actual_cmd_idx += 1;
         } else {
             break;
@@ -346,7 +348,7 @@ pub fn decompose_command(cmd: &str) -> Vec<String> {
                 chars.next(); // consume '('
                 let mut sub = String::new();
                 let mut depth = 1;
-                while let Some(sc) = chars.next() {
+                for sc in chars.by_ref() {
                     if sc == '(' {
                         depth += 1;
                     } else if sc == ')' {
@@ -366,7 +368,7 @@ pub fn decompose_command(cmd: &str) -> Vec<String> {
             // Backtick subshell `...`
             '`' if !in_single_quote => {
                 let mut sub = String::new();
-                while let Some(sc) = chars.next() {
+                for sc in chars.by_ref() {
                     if sc == '`' {
                         break;
                     }
