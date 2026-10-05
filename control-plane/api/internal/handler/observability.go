@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/spend"
@@ -300,3 +302,71 @@ func (h *ObservabilityHandler) ListDeletedTeams(w http.ResponseWriter, r *http.R
 		"total":           0,
 	})
 }
+
+// GetRequestDossier handles GET /api/v1/observability/request-logs/{id}/dossier
+func (h *ObservabilityHandler) GetRequestDossier(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
+	if tenantID == "" {
+		tenantID = middleware.TenantIDFromContext(r.Context())
+	}
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	reqID := chi.URLParam(r, "id")
+	if reqID == "" {
+		http.Error(w, `{"error":"request_id_required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if h.store == nil {
+		http.Error(w, `{"error":"store_uninitialized"}`, http.StatusInternalServerError)
+		return
+	}
+
+	dossier, err := h.store.GetRequestDossier(r.Context(), tenantID, reqID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":      "dossier_not_found",
+			"request_id": reqID,
+		})
+		return
+	}
+
+	// Phase 3: Multi-User Workspace RBAC — Payload Access Restriction (ADR-010 §3.2, Phase 3 Exit Gate 2)
+	principal := middleware.RequestPrincipalFromContext(r.Context())
+	role := ""
+	isAdmin := false
+	subjectID := "unknown"
+	if principal != nil {
+		role = strings.ToUpper(principal.Role)
+		isAdmin = principal.IsAdmin
+		if principal.SubjectID != "" {
+			subjectID = principal.SubjectID
+		}
+	}
+	isAuditorOrAdmin := isAdmin || role == "ADMIN" || role == "OWNER" || role == "AUDITOR"
+
+	if !isAuditorOrAdmin {
+		// Redact raw payload for developers and viewers
+		if dossier.Request.CachedResponse != nil {
+			dossier.Request.CachedResponse = json.RawMessage(`{"redacted": true, "reason": "Requires Auditor or Admin role to view raw payloads"}`)
+		}
+	} else {
+		// Log raw payload inspection audit event
+		_ = h.store.InsertAuditEvent(r.Context(), tenantID, &store.AuditEvent{
+			Action:         "RAW_PAYLOAD_ACCESSED",
+			ChangedBy:      subjectID,
+			ActorRole:      role,
+			TableName:      "broker_requests",
+			AffectedItemID: reqID,
+			Timestamp:      time.Now().UTC(),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(dossier)
+}
+

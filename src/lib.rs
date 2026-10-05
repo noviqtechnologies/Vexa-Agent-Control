@@ -61,6 +61,8 @@ pub mod spend;
 
 pub mod bench;
 pub mod detector;
+pub mod eval;
+pub mod telemetry;
 
 #[cfg(feature = "passport-injection")]
 pub mod passport;

@@ -208,12 +208,54 @@ A unified hook system provides lifecycle interception across three distinct stag
 
 ---
 
-## 14. Decomposed Control Plane & Asynchronous Batch Durability (AR-3, AR-4, AR-5)
+## 15. P0 Authoritative Central LLM Broker: Bounded Retries & Request Dossiers
 
-The Go Control Plane separates monolithic spend database operations into specialized, high-throughput components:
-* **`runs.Store`:** Decoupled execution history and forensic run dossiers (`ListRuns`, `GetRunDossier`), preventing analytical queries from interfering with transaction hot paths.
-* **`SpendEventWriter`:** Asynchronous bounded queue with batch ingestion via `pgx.Batch`, exponential backoff retry on transient DB errors, in-memory replay buffer, and graceful shutdown draining. Production-wired to transactional `Store.Authorize`, `Store.Settle`, and `Store.Release` commit flows.
-* **Centralized `Scheduler`:** Deterministic background daemon managing periodic tasks (e.g. `SweepJob` for expired reservation holds, `AssignmentStaleSweepJob`) with graceful cancellation and loopback/admin-authenticated live introspection at `/internal/jobs`.
+In accordance with the **P0 Reliability & Safe Operations Standard** ([PRD-P0-Functional](file:///c:/AgentWall/agentwall/PRD/pending/PRD-P0-Functional.md) & [PRD-P0-Non-Functional](file:///c:/AgentWall/agentwall/PRD/pending/PRD-P0-Non-Functional.md)):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Client (IDE / Agent)
+    participant Broker as Go Central Broker
+    participant Router as LLM Router Engine
+    participant Spend as Spend Authorizer
+    participant DB as PostgreSQL
+    participant Primary as Primary Upstream (e.g. OpenAI)
+    participant Fallback as Fallback Upstream (e.g. Anthropic)
+
+    Client->>Broker: POST /api/v2/broker/llm-requests (with X-Request-ID, traceparent)
+    Broker->>Router: ResolveRoute(tenantID, apiFamily, model)
+    Router-->>Broker: RouteResult (Primary + 1 Fallback, max 2 attempts, deadline)
+    Broker->>Spend: Authorize(max ceiling across Primary & Fallback)
+    Spend-->>Broker: AuthorizeResponse (Reservation ID)
+    Broker->>DB: RecordBrokerRequest & RecordBrokerAttemptStart (Attempt 1)
+    Broker->>Primary: ForwardLLMRequest (Attempt 1)
+    
+    alt Primary Returns 503 / 429 / Transient Error
+        Primary-->>Broker: HTTP 503 Service Unavailable
+        Broker->>DB: RecordBrokerAttemptComplete (Attempt 1: 503)
+        Broker->>Broker: Check Retry Barrier & Bounded Jittered Backoff
+        Broker->>DB: RecordBrokerAttemptStart (Attempt 2 - Fallback)
+        Broker->>Fallback: ForwardLLMRequest (Attempt 2)
+        Fallback-->>Broker: HTTP 200 OK + Provider Usage
+        Broker->>DB: RecordBrokerAttemptComplete (Attempt 2: 200)
+        Broker->>Spend: Settle(attempt 1 tokens + attempt 2 tokens)
+        Broker->>DB: FinalizeBrokerRequest (Status: succeeded)
+        Broker-->>Client: HTTP 200 OK (Single Compatible Response)
+    else Primary Returns 200 OK
+        Primary-->>Broker: HTTP 200 OK + Provider Usage
+        Broker->>Spend: Settle(attempt 1 tokens)
+        Broker->>DB: FinalizeBrokerRequest (Status: succeeded)
+        Broker-->>Client: HTTP 200 OK
+    end
+```
+
+### Key Operating Invariants:
+1. **Single Authoritative Retry Authority:** For centrally brokered requests, the Go Control Plane Broker is the sole retry and failover authority. Edge nodes do not perform secondary duplicate retries.
+2. **Immutable Route Profiles:** Routes are defined as immutable versioned objects with candidate simulation fixtures (`/api/v1/routes/simulate`) and zero-downtime atomic rollbacks (`/api/v1/routes/{id}/rollback`).
+3. **Strict Streaming Pre-Commit Barrier:** Upstream failover is permitted **strictly before the first downstream byte** is committed to the client. Once streaming output begins, splicing two providers' outputs is prohibited; errors terminate the stream cleanly.
+4. **Comprehensive Request Dossiers:** Every request and its ordered upstream attempts are queryable via `GET /api/v1/observability/request-logs/{id}/dossier` with complete secret scrubbing and W3C trace correlation.
+
 
 
 

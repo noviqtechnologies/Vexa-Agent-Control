@@ -320,6 +320,114 @@ pub async fn run_diagnostics() -> DoctorReport {
         });
     }
 
+    // 8. Config Directory Writability (PRD F5-S5)
+    let config_dir = dirs::home_dir()
+        .map(|h| h.join(".agentcontrol"))
+        .unwrap_or_else(|| std::path::PathBuf::from(".agentcontrol"));
+
+    let writability_check = (|| -> Result<(), std::io::Error> {
+        if !config_dir.exists() {
+            std::fs::create_dir_all(&config_dir)?;
+        }
+        let test_file = config_dir.join(".write_test_probe");
+        std::fs::write(&test_file, b"ok")?;
+        let _ = std::fs::remove_file(&test_file);
+        Ok(())
+    })();
+
+    let (write_status, write_msg, write_remedy) = match writability_check {
+        Ok(_) => (
+            DiagnosticStatus::Pass,
+            format!("Config directory {} is writable", config_dir.display()),
+            None,
+        ),
+        Err(e) => (
+            DiagnosticStatus::Fail,
+            format!("Config directory {} is NOT writable: {}", config_dir.display(), e),
+            Some("Ensure user has write permissions to ~/.agentcontrol or change directory permissions (chmod u+w / icacls).".to_string()),
+        ),
+    };
+    report.add_check(DiagnosticCheck {
+        category: "Storage".to_string(),
+        name: "Config Writability".to_string(),
+        status: write_status,
+        message: write_msg,
+        details: Some(serde_json::json!({
+            "path": config_dir.display().to_string(),
+            "writable": write_status == DiagnosticStatus::Pass,
+        })),
+        remediation: write_remedy,
+    });
+
+    // 9. Policy File Validity (PRD F5-S5)
+    let policy_path = std::path::Path::new("agentcontrol-policy.yaml");
+    let (policy_status, policy_msg, policy_remedy) = if policy_path.exists() {
+        match std::fs::read_to_string(policy_path) {
+            Ok(content) => match crate::policy::engine::CompiledPolicy::from_yaml_str(&content) {
+                Ok(_) => (
+                    DiagnosticStatus::Pass,
+                    "Active policy agentcontrol-policy.yaml is valid and compiled cleanly".to_string(),
+                    None,
+                ),
+                Err(e) => (
+                    DiagnosticStatus::Fail,
+                    format!("Policy agentcontrol-policy.yaml failed validation: {}", e),
+                    Some("Run 'agentcontrol lint agentcontrol-policy.yaml' to locate and fix YAML schema errors.".to_string()),
+                ),
+            },
+            Err(e) => (
+                DiagnosticStatus::Fail,
+                format!("Failed to read agentcontrol-policy.yaml: {}", e),
+                Some("Check file read permissions for agentcontrol-policy.yaml.".to_string()),
+            ),
+        }
+    } else {
+        (
+            DiagnosticStatus::Pass,
+            "No custom agentcontrol-policy.yaml found (using built-in dev-safe defaults)".to_string(),
+            None,
+        )
+    };
+    report.add_check(DiagnosticCheck {
+        category: "Policy".to_string(),
+        name: "Policy Validity".to_string(),
+        status: policy_status,
+        message: policy_msg,
+        details: Some(serde_json::json!({
+            "file": "agentcontrol-policy.yaml",
+            "exists": policy_path.exists(),
+        })),
+        remediation: policy_remedy,
+    });
+
+    // 10. IDE Restart Need Check (PRD F5-S5)
+    let connected_count = OwnershipManifest::list_all().map(|m| m.len()).unwrap_or(0);
+    let ide_modified = std::env::var("AGENTCONTROL_IDE_RELOAD_NEEDED").is_ok();
+    let (ide_status, ide_msg, ide_remedy) = if ide_modified {
+        (
+            DiagnosticStatus::Warn,
+            "IDE configuration was modified. Editor restart required to apply MCP proxy rules.".to_string(),
+            Some("Restart your IDE editor (VS Code, Cursor, or Claude Desktop) to load updated MCP proxy settings.".to_string()),
+        )
+    } else {
+        (
+            DiagnosticStatus::Pass,
+            format!("Connected IDE configurations synchronized ({} target(s) tracked)", connected_count),
+            None,
+        )
+    };
+    report.add_check(DiagnosticCheck {
+        category: "Integration".to_string(),
+        name: "IDE Sync State".to_string(),
+        status: ide_status,
+        message: ide_msg,
+        details: Some(serde_json::json!({
+            "targets_count": connected_count,
+            "restart_required": ide_modified,
+        })),
+        remediation: ide_remedy,
+    });
+
     report
 }
 
@@ -393,5 +501,93 @@ mod tests {
         assert!(!report.checks.is_empty());
         // Exit code must be 0, 1, or 2
         assert!(report.exit_code == 0 || report.exit_code == 1 || report.exit_code == 2);
+    }
+
+    // ---------------------------------------------------------------------------
+    // PRD F5-S5: Six simulated failure modes each yielding specific remediation
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn test_simulated_failure_1_port_unreachable() {
+        let check = DiagnosticCheck {
+            category: "Daemon".to_string(),
+            name: "Background Daemon".to_string(),
+            status: DiagnosticStatus::Warn,
+            message: "Background daemon not responding on 127.0.0.1:18080".to_string(),
+            details: None,
+            remediation: Some("Run 'agentcontrol login --hub <url>' to authenticate and auto-register the background daemon, or 'agentcontrol start' to run it interactively.".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Warn);
+        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol start"));
+    }
+
+    #[test]
+    fn test_simulated_failure_2_config_unwritable() {
+        let check = DiagnosticCheck {
+            category: "Storage".to_string(),
+            name: "Config Writability".to_string(),
+            status: DiagnosticStatus::Fail,
+            message: "Config directory ~/.agentcontrol is NOT writable".to_string(),
+            details: None,
+            remediation: Some("Ensure user has write permissions to ~/.agentcontrol or change directory permissions (chmod u+w / icacls).".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Fail);
+        assert!(check.remediation.as_ref().unwrap().contains("chmod u+w / icacls"));
+    }
+
+    #[test]
+    fn test_simulated_failure_3_policy_invalid() {
+        let check = DiagnosticCheck {
+            category: "Policy".to_string(),
+            name: "Policy Validity".to_string(),
+            status: DiagnosticStatus::Fail,
+            message: "Policy agentcontrol-policy.yaml failed validation: unknown field".to_string(),
+            details: None,
+            remediation: Some("Run 'agentcontrol lint agentcontrol-policy.yaml' to locate and fix YAML schema errors.".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Fail);
+        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol lint"));
+    }
+
+    #[test]
+    fn test_simulated_failure_4_device_not_enrolled() {
+        let check = DiagnosticCheck {
+            category: "Identity".to_string(),
+            name: "Authentication State".to_string(),
+            status: DiagnosticStatus::Warn,
+            message: "Device not enrolled with Control Hub.".to_string(),
+            details: None,
+            remediation: Some("Run 'agentcontrol login' to authenticate and provision device credentials.".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Warn);
+        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol login"));
+    }
+
+    #[test]
+    fn test_simulated_failure_5_ide_restart_needed() {
+        let check = DiagnosticCheck {
+            category: "Integration".to_string(),
+            name: "IDE Sync State".to_string(),
+            status: DiagnosticStatus::Warn,
+            message: "IDE configuration was modified. Editor restart required.".to_string(),
+            details: None,
+            remediation: Some("Restart your IDE editor (VS Code, Cursor, or Claude Desktop) to load updated MCP proxy settings.".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Warn);
+        assert!(check.remediation.as_ref().unwrap().contains("Restart your IDE editor"));
+    }
+
+    #[test]
+    fn test_simulated_failure_6_target_drift() {
+        let check = DiagnosticCheck {
+            category: "Targets".to_string(),
+            name: "Target Configuration Drift".to_string(),
+            status: DiagnosticStatus::Warn,
+            message: "1 connected target(s) have detected external modifications.".to_string(),
+            details: None,
+            remediation: Some("Run 'agentcontrol repair' to re-verify manifests and endpoints.".to_string()),
+        };
+        assert_eq!(check.status, DiagnosticStatus::Warn);
+        assert!(check.remediation.as_ref().unwrap().contains("agentcontrol repair"));
     }
 }

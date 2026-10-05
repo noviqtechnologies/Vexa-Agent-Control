@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.94] - 2026-10-05
+
+### Added & Enhanced
+- **Phase 0a Architectural Contracts & Canonical Traces:** Added 10 formal Architecture Decision Records (ADRs 001–010), 8 canonical trace fixtures, direct proxy bypass threat model, and audit security specifications.
+- **Dedicated HITL CAS & Crash-Recovery Harness:** Implemented standalone 9-scenario concurrency and crash-window validation harness (`tests/harness/hitl_harness.rs`) verifying atomic compare-and-swap (32-concurrent attackers), scope binding, idempotency reconciliation, and `OUTCOME_UNKNOWN` crash flags without silent retries.
+- **Approval Secret Leakage Prevention:** Implemented comprehensive integration test suite (`tests/integration/approval_leakage_test.rs`) verifying HMAC secrets, signed capability URLs, and tokens never leak through stderr, notifications, or audit logs.
+- **RFC 7807 Structured Block Responses:** Integrated machine-readable RFC 7807 Problem Details into `Verdict::to_problem_detail` with rule IDs, evidence snippets, risk categories, and remediation advice.
+- **Deterministic Replay Engine & CI Security Gates:** Added bit-for-bit offline replay evaluation (`src/eval/replay.rs`), content-addressed corpus runner, disaggregated metrics reporting (`src/eval/report.rs`), JUnit XML export, and CI exit gates in `.github/workflows/ci.yml`.
+- **Team Collaboration & Control Plane (Phase 3):** Added multi-user workspace concurrency, RBAC developer/viewer payload masking, Ed25519 signed policy bundle distribution with instant rollback, sub-30s token revocation, W3C traceparent distributed tracing, and disaster recovery archive creation/restore with SHA-256 integrity verification.
+- **Provider Failover & Resiliency (Phase 4):** Added upstream provider failover, retry classification, SemanticCache multi-tenant namespace isolation, and spend ledger governance.
+
+---
+
 ## [1.0.93] - 2026-10-02
 
 ### Added & Enhanced
@@ -218,7 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.93...HEAD
+[Unreleased]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.94...HEAD
+[1.0.94]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.93...v1.0.94
 [1.0.93]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.92...v1.0.93
 [1.0.92]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.91...v1.0.92
 [1.0.91]: https://github.com/noviqtechnologies/Vexa-Agent-Control/compare/v1.0.90...v1.0.91

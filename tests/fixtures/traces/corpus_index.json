@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "corpus_name": "vexa-security-eval-standard",
+  "fixtures": {
+    "trace-01-success": "181a1b5d8deea5c884fe9ad5a2b85ca026448a537428479d852756c3dbd516ca",
+    "trace-02-blocked": "2069492169edcf7d1ac41fe3fcca78cd0e79363878097e76ddd98bd2c0b9e184",
+    "trace-03-redacted": "12b8f40a050ab520c45b54626d7591ae10f793da72eb8eae4a8cdff9a0c25edf",
+    "trace-04-hitl-flow": "87c3909d8b12e4ca1bcfdb9dfc8ce09ec902bf13be1258604f39e2bc828c361d",
+    "trace-05-provider-failure": "e4df4085f9b6e7eb2763c6bc1ce79c74897f5d810e9ab969369cd5196927de29",
+    "trace-06-streaming-tokens": "5758790dbd5e6d79f1741ce26c5620c3319836fb4da5e0419da31bae80f3a874",
+    "trace-07-nested-spans": "710663c30632a8ebb3089ed4481367274d7527e60f0d7ed93dab2b26f7ab3f93",
+    "trace-08-legacy-correlation": "da9388410a112f55cbe00c70cdbce00859dc077ab53e121fa4f2279dfe629950"
+  }
+}

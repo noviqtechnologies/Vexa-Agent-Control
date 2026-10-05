@@ -249,16 +249,21 @@ func TestAuthHandler_AdminLogin(t *testing.T) {
 }
 
 func TestAuthHandler_DevModeEnforcesPassword(t *testing.T) {
-	// 1. Default dev config without explicit password (defaults to admin12345678)
+	// P0-1: Dev mode now generates a random password at startup (config.Load()).
+	// Tests must explicitly set a password in the config struct — there is no
+	// longer a hardcoded fallback to "admin12345678".
+	const testDevPassword = "dev-test-secure-password-xyz789"
 	devCfg := &config.Config{
-		DevMode: true,
+		DevMode:       true,
+		AdminEmail:    "admin@agentcontrol.local",
+		AdminPassword: testDevPassword,
 	}
 	h := NewAuthHandler(nil, devCfg)
 
 	// Correct password with full email succeeds
 	body1, _ := json.Marshal(LoginReq{
 		Email:    "admin@agentcontrol.local",
-		Password: "admin12345678",
+		Password: testDevPassword,
 	})
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body1))
 	w1 := httptest.NewRecorder()
@@ -270,7 +275,7 @@ func TestAuthHandler_DevModeEnforcesPassword(t *testing.T) {
 	// Correct password with 'admin' shortname succeeds
 	body2, _ := json.Marshal(LoginReq{
 		Email:    "admin",
-		Password: "admin12345678",
+		Password: testDevPassword,
 	})
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body2))
 	w2 := httptest.NewRecorder()

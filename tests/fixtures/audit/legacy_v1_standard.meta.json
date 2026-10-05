@@ -1,0 +1,14 @@
+{
+  "description": "Standard representative legacy v1 audit chain with tool_allow, tool_deny, and full parameters.",
+  "entry_count": 5,
+  "fixture_id": "legacy_v1_standard",
+  "generator_commit": "v1.0.94-phase0b",
+  "schema_version": 1,
+  "scrub_review": {
+    "reviewer_id": "secops-compliance-lead",
+    "secrets_detected": 0,
+    "status": "APPROVED",
+    "timestamp": "2026-10-04T12:00:00Z"
+  },
+  "secret_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+}

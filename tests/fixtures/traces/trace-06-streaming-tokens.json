@@ -1,0 +1,33 @@
+{
+  "$schema": "https://vexasec.io/schemas/v1/event-envelope.json",
+  "envelope_version": "1.0.0",
+  "event_id": "01925b3a-8f12-7006-8000-000000000006",
+  "timestamp": "2026-10-04T12:05:00.000000Z",
+  "correlation": {
+    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "run_id": "b1b9e837-1234-4567-89ab-cdef01234567",
+    "span_id": "00f067aa0ba902b6",
+    "parent_span_id": null,
+    "session_id": "sess-workstation-local-1",
+    "request_id": "req-006",
+    "audit_entry_index": 15
+  },
+  "provenance": {
+    "data_freshness": "2026-10-04T12:05:00.000000Z",
+    "evidence_source": "sse_stream_interceptor",
+    "confidence": "observed"
+  },
+  "event_type": "llm_generation",
+  "payload": {
+    "provider": "anthropic",
+    "model": "claude-3-5-sonnet-20241022",
+    "is_streaming": true,
+    "ttft_ms": 118.4,
+    "total_stream_duration_ms": 1450.2,
+    "chunk_count": 48,
+    "prompt_tokens": 512,
+    "completion_tokens": 128,
+    "finish_reason": "stop",
+    "stream_settlement_status": "completed"
+  }
+}

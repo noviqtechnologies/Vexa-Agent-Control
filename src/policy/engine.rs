@@ -182,6 +182,13 @@ impl CompiledPolicy {
             .collect()
     }
 
+    /// P0-3: Determine whether scanner error/timeout should block or allow.
+    /// In enforce mode or when fail_closed is true: defaults to true (block).
+    /// In shadow mode when fail_closed is false: defaults to false (allow with warning).
+    pub fn should_block_on_scanner_error(&self, enforce_mode: bool) -> bool {
+        self.fail_closed || enforce_mode
+    }
+
     /// Evaluate a tool call against the policy.
     /// Returns Allow or Deny with reason.
     pub fn evaluate(

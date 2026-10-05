@@ -128,6 +128,9 @@ pub struct SessionContext {
 
     /// FR-102: Total tokens consumed in this session for spend cap enforcement.
     pub tokens_used: std::sync::atomic::AtomicU64,
+
+    /// PRD F3-S1: Multi-turn session taint tracking for toxic-flow prevention.
+    pub taint_state: Mutex<crate::policy::taint::SessionTaintState>,
 }
 
 impl SessionContext {
@@ -184,6 +187,7 @@ impl SessionContext {
             active_credential_id,
             agent_scope_header,
             tokens_used: std::sync::atomic::AtomicU64::new(0),
+            taint_state: Mutex::new(crate::policy::taint::SessionTaintState::new()),
         }
     }
 

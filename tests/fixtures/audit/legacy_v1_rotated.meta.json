@@ -1,0 +1,14 @@
+{
+  "description": "Legacy v1 audit chain spanning a log_rotation_seed boundary linking segments.",
+  "entry_count": 4,
+  "fixture_id": "legacy_v1_rotated",
+  "generator_commit": "v1.0.94-phase0b",
+  "schema_version": 1,
+  "scrub_review": {
+    "reviewer_id": "secops-compliance-lead",
+    "secrets_detected": 0,
+    "status": "APPROVED",
+    "timestamp": "2026-10-04T12:00:00Z"
+  },
+  "secret_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+}

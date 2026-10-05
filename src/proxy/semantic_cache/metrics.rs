@@ -60,6 +60,7 @@ pub struct SemanticCacheMetrics {
 pub enum CacheBypassReason {
     SyntacticToolsOrFunctions,
     SyntacticAgentMetadata,
+    MultiTurnAgentTraffic,
     SemanticNonReadOnlyIntent,
     ContextMissingIdentity,
     ContextUnversionedPolicy,
@@ -333,7 +334,8 @@ impl SemanticCacheMetrics {
     pub fn record_bypass(&self, reason: CacheBypassReason) {
         match reason {
             CacheBypassReason::SyntacticToolsOrFunctions
-            | CacheBypassReason::SyntacticAgentMetadata => {
+            | CacheBypassReason::SyntacticAgentMetadata
+            | CacheBypassReason::MultiTurnAgentTraffic => {
                 self.safety_bypasses_syntactic
                     .fetch_add(1, Ordering::Relaxed);
             }

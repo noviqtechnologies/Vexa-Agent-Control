@@ -187,9 +187,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if targetAdminEmail == "" {
 			targetAdminEmail = "admin@agentcontrol.local"
 		}
-		if targetAdminPassword == "" {
-			targetAdminPassword = "admin12345678"
-		}
+		// P0-1: No hardcoded password fallback. Dev-mode password is generated
+		// randomly by config.Load() and printed once to stderr on startup.
+		// If targetAdminPassword is still empty here, auth will fail (correct).
 	}
 
 	isAdminLoginAttempt := false

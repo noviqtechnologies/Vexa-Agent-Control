@@ -1,0 +1,8 @@
+BEGIN;
+
+DROP TABLE IF EXISTS broker_attempts CASCADE;
+DROP TABLE IF EXISTS broker_requests CASCADE;
+DROP TABLE IF EXISTS route_profile_activations CASCADE;
+DROP TABLE IF EXISTS route_profiles CASCADE;
+
+COMMIT;

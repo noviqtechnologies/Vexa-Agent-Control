@@ -25,7 +25,7 @@
 #   docker compose -f docker-compose.team.local.yml up -d --build
 #
 #   # Access points:
-#   # Web Console UI:    http://127.0.0.1:3000  (Default DEV_MODE: admin / admin12345678)
+#   # Web Console UI:    http://127.0.0.1:3000  (Credentials configured via ADMIN_PASSWORD)
 #   # Control Plane API: http://127.0.0.1:8081
 #   # Team Gateway:      http://127.0.0.1:8080
 #   # Workstation Agent: http://127.0.0.1:18080 (Runs locally on host via agentcontrol login)
@@ -98,7 +98,7 @@ services:
       PROVIDER_KEY_ENCRYPTION_SECRET: "${PROVIDER_KEY_ENCRYPTION_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
       AGENTCONTROL_SESSION_SECRET: ${AGENTCONTROL_SESSION_SECRET:-local-dev-session-secret-32-chars-long-123456}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@agentcontrol.local}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345678}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ORGANIZATION_NAME: "${ORGANIZATION_NAME:-Primary Organization}"
       ORGANIZATION_ID: "${ORGANIZATION_ID:-00000000-0000-0000-0000-000000000001}"
       INGRESS_AUTH_SECRET: "${INGRESS_AUTH_SECRET:-}"

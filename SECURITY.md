@@ -67,3 +67,37 @@ We value the time and effort invested by researchers:
 
 - **Local Workstation Mode**: Review the [Audit Log Threat Model](docs/security/audit-threat-model.md) regarding local cryptographic key boundaries.
 - **Production & Cloud Deployments**: Ensure the gateway is deployed with strict network egress controls, mTLS where applicable, and telemetry streaming to a centralized SIEM or Control Hub.
+
+---
+
+## 🎯 Threat Model (PRD F1-S5)
+
+Vexa Agent Control operates as a local-first security boundary between AI agents (Claude Code, Cursor, Codex, custom agents) and developer machine resources (MCP servers, shells, files, network). The following threat model delineates protected assets, threat actors, and security boundaries.
+
+### 1. Protected Assets
+- **Credentials & Private Keys**: Workstation cloud keys (`~/.aws`), SSH keys (`~/.ssh`), environment files (`.env`), OS keychains, and upstream LLM provider keys.
+- **Filesystem Integrity**: Project code, source trees, system binaries, and OS configuration databases.
+- **Execution Boundary**: Shell environments, network sockets, and MCP server endpoints.
+- **Ledger & Audit Integrity**: Local SQLite event logs, token usage records, and cryptographic HMAC audit chains.
+
+### 2. Adversaries & Threat Vectors
+- **Malicious External Content (Untrusted Input)**: Web pages, issue bodies, emails, or repositories containing prompt injection or jailbreak directives.
+- **Compromised MCP Servers**: Upstream or local MCP servers that attempt mid-session tool poisoning or return poisoned descriptions.
+- **Runaway or Hijacked Agents**: Autonomous agents tricked into reading sensitive files or attempting outbound exfiltration.
+- **Malicious Local Web Pages (CSRF / Drive-by)**: Browser-based web apps attempting cross-origin requests to local loopback ports (`127.0.0.1:18080`).
+
+### 3. In-Scope Attacks (Defended by Vexa)
+| Attack Class | Defense Mechanism |
+|---|---|
+| **Prompt Injection & Response Poisoning** | Fast, deterministic regex & normalization inspection (`InjectionScanner`), CJK override detection, tool poisoning hashes. |
+| **Toxic Flow Exfiltration** | Session taint tracking (`TaintEngine`) blocking outbound transmission after reading credentials following untrusted input. |
+| **Path Traversal & Credential Theft** | Cross-platform canonicalization (`SensitivePathGuard`) blocking traversal, Windows 8.3/UNC aliases, and sensitive files across OSes. |
+| **Dangerous Command Execution** | Argument-aware command parser (`CommandPolicyGuard`) blocking reverse shells, pipes-to-shell, and destructive wipes. |
+| **Outbound Egress Exfiltration** | Domain allowlisting, paste site blocking, and raw IP literal restrictions (`EgressGuard`). |
+| **Localhost CSRF / Drive-by** | Strict browser Origin and Host header validation preventing web-to-localhost cross-site request forgery. |
+
+### 4. Out-of-Scope Attacks (What Vexa Does Not Stop)
+- **Kernel / Root Compromise**: If an attacker already possesses root/SYSTEM privileges on the host machine, they can inspect process memory or kill the gateway daemon.
+- **Physical Device Theft**: Physical hardware access without full-disk encryption (BitLocker / FileVault / LUKS).
+- **Explicit User Overrides**: If a developer explicitly runs with `--force`, approves an escalation, or writes an allow policy for a dangerous command, Vexa respects user agency.
+- **Upstream LLM Provider Vulnerabilities**: Zero-day vulnerabilities inside Anthropic, OpenAI, or Google cloud infrastructure.

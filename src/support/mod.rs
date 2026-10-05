@@ -3,6 +3,8 @@
 //! Provides structural allowlisting support bundle generation with secondary secret redaction,
 //! configuration repair, session logout, local state reset, and local token rotation.
 
+pub mod disaster_recovery;
+
 use colored::*;
 use regex::Regex;
 use std::fs;
@@ -808,7 +810,12 @@ pub async fn run_hitl_decision(id: &str, decision: &str, session: bool, gateway:
         "scope": if session { "session" } else { "once" }
     });
 
-    match client.post(&url).json(&body).send().await {
+    let mut req_builder = client.post(&url).json(&body);
+    if let Ok(token) = crate::identity::oauth::get_or_create_local_token() {
+        req_builder = req_builder.bearer_auth(token);
+    }
+
+    match req_builder.send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 if decision == "allow" {
@@ -844,6 +851,288 @@ pub async fn run_hitl_decision(id: &str, decision: &str, session: bool, gateway:
     }
 }
 
+/// Export execution traces in native JSON, JSONL, or OTLP format (ADR-006, PRD Phase 1 & 3).
+pub async fn run_export_traces(
+    format: &str,
+    output: &str,
+    limit: usize,
+    gateway: &str,
+    collector: Option<&str>,
+) -> i32 {
+    let url = format!("{}/api/v1/traces?limit={}", gateway.trim_end_matches('/'), limit);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+
+    let mut req = client.get(&url);
+    if let Ok(tok) = crate::identity::oauth::get_or_create_local_token() {
+        req = req.bearer_auth(tok);
+    }
+
+    let events: Vec<serde_json::Value> = match req.send().await {
+        Ok(resp) if resp.status().is_success() => {
+            resp.json::<Vec<serde_json::Value>>().await.unwrap_or_default()
+        }
+        _ => {
+            // Fallback to offline direct SQLite access
+            let db_manager = crate::proxy::db::DbManager::init();
+            match db_manager.get_events(limit).await {
+                Ok(evs) => evs.into_iter().map(|e| serde_json::to_value(e).unwrap_or_default()).collect(),
+                Err(e) => {
+                    eprintln!("Failed to fetch traces: {}", e);
+                    return 1;
+                }
+            }
+        }
+    };
+
+    let total = events.len();
+    let fmt_lower = format.to_lowercase();
+
+    if fmt_lower == "otlp" {
+        let exporter = crate::telemetry::otlp::OtlpExporter::default();
+        let mut spans = Vec::new();
+
+        for ev in &events {
+            let trace_id = ev.get("trace_id").and_then(|v| v.as_str()).unwrap_or("00000000000000000000000000000001");
+            let span_id = ev.get("span_id").and_then(|v| v.as_str()).unwrap_or("0000000000000001");
+            let parent_id = ev.get("parent_span_id").and_then(|v| v.as_str());
+            let tool = ev.get("tool_name").and_then(|v| v.as_str()).unwrap_or("unknown_tool");
+            let verdict = ev.get("verdict").and_then(|v| v.as_str()).unwrap_or("allow");
+            let dev_id = ev.get("identity_sub").and_then(|v| v.as_str());
+            let is_err = verdict.eq_ignore_ascii_case("deny") || verdict.eq_ignore_ascii_case("block");
+
+            let span = exporter.create_span(
+                trace_id,
+                span_id,
+                parent_id,
+                tool,
+                verdict,
+                dev_id,
+                None,
+                50,
+                is_err,
+            );
+            spans.push(span);
+        }
+
+        let collector_target = collector
+            .map(|s| s.to_string())
+            .or_else(|| std::env::var("AGENTCONTROL_OTLP_ENDPOINT").ok());
+
+        if let Some(endpoint) = collector_target {
+            println!("Exporting {} trace span(s) to OTLP collector: {}", spans.len(), endpoint.cyan());
+            match exporter.export_to_collector(&endpoint, spans).await {
+                Ok(n) => {
+                    eprintln!("{} Successfully exported {} span(s) to OTLP collector", "✔".green().bold(), n);
+                    return 0;
+                }
+                Err(e) => {
+                    eprintln!("{} OTLP export failed: {}", "✖".red().bold(), e);
+                    return 1;
+                }
+            }
+        } else {
+            let req_body = exporter.build_export_request(spans);
+            let content = serde_json::to_string_pretty(&req_body).unwrap_or_else(|_| "{}".to_string());
+            if output == "-" || output.is_empty() {
+                println!("{}", content);
+            } else {
+                let out_path = std::path::Path::new(output);
+                if let Some(parent) = out_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                }
+                if let Err(e) = std::fs::write(out_path, content.as_bytes()) {
+                    eprintln!("Failed to write OTLP traces to '{}': {}", output, e);
+                    return 1;
+                }
+                eprintln!("{} Successfully exported {} trace span(s) to {}", "✔".green().bold(), total, output.cyan());
+            }
+            return 0;
+        }
+    }
+
+    let content = match fmt_lower.as_str() {
+        "json" => serde_json::to_string_pretty(&events).unwrap_or_else(|_| "[]".to_string()),
+        _ => {
+            // Default to JSONL (NDJSON)
+            let mut lines = Vec::with_capacity(events.len());
+            for ev in &events {
+                if let Ok(line) = serde_json::to_string(ev) {
+                    lines.push(line);
+                }
+            }
+            lines.join("\n")
+        }
+    };
+
+    if output == "-" || output.is_empty() {
+        println!("{}", content);
+    } else {
+        let out_path = std::path::Path::new(output);
+        if let Some(parent) = out_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+        }
+        if let Err(e) = std::fs::write(out_path, content.as_bytes()) {
+            eprintln!("Failed to write traces to '{}': {}", output, e);
+            return 1;
+        }
+        eprintln!(
+            "{} Successfully exported {} trace{} to {}",
+            "✔".green().bold(),
+            total,
+            if total == 1 { "" } else { "s" },
+            output.cyan()
+        );
+    }
+
+    0
+}
+
+/// Phase 3: Instantly revoke an agent, tool, or token capability across gateways
+pub async fn run_revoke(
+    target_type: &str,
+    target_id: &str,
+    reason: &str,
+    gateway: &str,
+) -> i32 {
+    use crate::policy::revocation::{RevocationEntry, RevocationTargetType};
+
+    let tt = match target_type.to_lowercase().as_str() {
+        "agent" => RevocationTargetType::Agent,
+        "tool" => RevocationTargetType::Tool,
+        "token" => RevocationTargetType::Token,
+        "device" => RevocationTargetType::Device,
+        _ => {
+            eprintln!("{} Invalid target_type '{}'. Supported: agent, tool, token, device", "✖".red(), target_type);
+            return 1;
+        }
+    };
+
+    let entry = RevocationEntry {
+        id: uuid::Uuid::new_v4().to_string(),
+        target_type: tt,
+        target_id: target_id.to_string(),
+        reason: reason.to_string(),
+        revoked_at: chrono::Utc::now().to_rfc3339(),
+        expires_at: None,
+    };
+
+    let url = format!("{}/api/v1/revocations", gateway.trim_end_matches('/'));
+    let client = reqwest::Client::new();
+    let mut req = client.post(&url).json(&entry);
+    if let Ok(tok) = crate::identity::oauth::get_or_create_local_token() {
+        req = req.bearer_auth(tok);
+    }
+
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => {
+            println!(
+                "{} Successfully registered instant capability revocation for {:?} '{}' ({})",
+                "✔".green().bold(),
+                tt,
+                target_id.cyan(),
+                reason
+            );
+            0
+        }
+        Ok(resp) => {
+            eprintln!("{} Gateway returned HTTP {}: {}", "✖".red(), resp.status(), resp.text().await.unwrap_or_default());
+            1
+        }
+        Err(e) => {
+            eprintln!("{} Failed to connect to gateway at {}: {}", "✖".red(), gateway, e);
+            1
+        }
+    }
+}
+
+/// Phase 3: Sign a policy YAML with an Ed25519 signing key
+pub fn run_policy_sign(policy_path: &str, policy_id: &str, revision: u64, output: &str) -> i32 {
+    let yaml = match fs::read_to_string(policy_path) {
+        Ok(y) => y,
+        Err(e) => {
+            eprintln!("{} Failed to read policy file '{}': {}", "✖".red(), policy_path, e);
+            return 1;
+        }
+    };
+
+    let (sk, pk) = crate::policy::signed::generate_signing_keypair();
+    let bundle = crate::policy::signed::sign_policy(&sk, policy_id, revision, &yaml, None);
+
+    let json = match serde_json::to_string_pretty(&bundle) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("{} Serialization error: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+
+    if let Err(e) = fs::write(output, json) {
+        eprintln!("{} Failed to write signed bundle to '{}': {}", "✖".red(), output, e);
+        return 1;
+    }
+
+    println!("{} Successfully signed policy '{}' (rev {})", "✔".green().bold(), policy_id.cyan(), revision);
+    println!("  Output bundle: {}", output.cyan());
+    println!("  Signer pubkey: {}", hex::encode(pk.to_bytes()).yellow());
+    0
+}
+
+/// Phase 3: Verify an Ed25519-signed policy bundle
+pub fn run_policy_verify(bundle_path: &str, trusted_key: Option<&str>) -> i32 {
+    let content = match fs::read_to_string(bundle_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{} Failed to read bundle file '{}': {}", "✖".red(), bundle_path, e);
+            return 1;
+        }
+    };
+
+    let bundle: crate::policy::signed::SignedPolicyBundle = match serde_json::from_str(&content) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{} Bundle parse failure: {}", "✖".red(), e);
+            return 1;
+        }
+    };
+
+    let trusted_vec = trusted_key.map(|k| vec![k.to_string()]);
+    match crate::policy::signed::verify_signed_bundle(&bundle, trusted_vec.as_deref()) {
+        Ok(_) => {
+            println!("{} Policy bundle signature and schema verified successfully!", "✔".green().bold());
+            println!("  Policy ID: {}", bundle.policy_id.cyan());
+            println!("  Revision:  {}", bundle.policy_revision);
+            println!("  Signer PK: {}", bundle.public_key.yellow());
+            0
+        }
+        Err(e) => {
+            eprintln!("{} Policy verification failed: {}", "✖".red().bold(), e);
+            1
+        }
+    }
+}
+
+/// Phase 3: Rollback policy to previous snapshot
+pub fn run_policy_rollback(dir: &str) -> i32 {
+    let mgr = crate::policy::signed::PolicyStorageManager::new(dir);
+    match mgr.rollback() {
+        Ok(_) => {
+            println!("{} Policy successfully rolled back to rollback snapshot!", "✔".green().bold());
+            0
+        }
+        Err(e) => {
+            eprintln!("{} Policy rollback failed: {}", "✖".red().bold(), e);
+            1
+        }
+    }
+}
+
 /// Unenrolls device from Control Hub and returns to standalone mode (PRD §12).
 pub fn run_unenroll(force: bool) -> i32 {
     if !force {
@@ -860,8 +1149,218 @@ pub fn run_unenroll(force: bool) -> i32 {
     run_logout()
 }
 
+/// Phase 2: Run deterministic policy replay evaluation over a content-addressed trace corpus.
+///
+/// Returns:
+/// - `0` PASS — no regressions detected
+/// - `1` FAIL — one or more regressions (malicious payload previously blocked now allowed)
+/// - `2` ERROR — corpus integrity failure, policy compile error, or I/O error
+pub async fn run_eval(
+    dataset: &std::path::Path,
+    policy: &std::path::Path,
+    report_path: Option<&std::path::Path>,
+    format: &str,
+    dry_run: bool,
+) -> i32 {
+    use colored::*;
+    use crate::eval::replay::{run_replay, render_junit_xml, ReplayError};
+    use crate::eval::report::render_metrics_table;
+
+    println!(
+        "{}",
+        "Vexa AgentControl — Phase 2 Deterministic Replay Evaluator".bold().cyan()
+    );
+    println!("  Dataset:  {}", dataset.display().to_string().cyan());
+    println!("  Policy:   {}", policy.display().to_string().cyan());
+    if let Some(rp) = report_path {
+        println!("  Report:   {}", rp.display().to_string().cyan());
+    }
+    println!();
+
+    let report = match run_replay(dataset, policy, report_path) {
+        Ok(r) => r,
+        Err(ReplayError::CorpusNotFound(p)) => {
+            eprintln!("{} Corpus directory not found: {}", "✖".red(), p.display());
+            return 2;
+        }
+        Err(ReplayError::PolicyNotFound(p)) => {
+            eprintln!("{} Policy file not found: {}", "✖".red(), p.display());
+            return 2;
+        }
+        Err(ReplayError::CorpusIntegrityFailure { fixture_id, stored, computed }) => {
+            eprintln!(
+                "{} Corpus integrity failure for '{}'\n  stored:   {}\n  computed: {}",
+                "✖".red(), fixture_id, stored, computed
+            );
+            return 2;
+        }
+        Err(ReplayError::PolicyCompileError(e)) => {
+            eprintln!("{} Policy compile error: {}", "✖".red(), e);
+            return 2;
+        }
+        Err(e) => {
+            eprintln!("{} Replay error: {}", "✖".red(), e);
+            return 2;
+        }
+    };
+
+    // ─ Render summary ─
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        }
+        _ => {
+            // Default: table view
+            println!(
+                "  {} events evaluated | {} passed | {} regressions | {} false positives",
+                report.total_events,
+                report.pass_count,
+                report.regression_count,
+                report.false_positive_count,
+            );
+
+            if report.regression_count > 0 {
+                println!("\n{} REGRESSIONS DETECTED:", "⚠".yellow().bold());
+                for outcome in report.outcomes.iter().filter(|o| o.is_regression) {
+                    println!(
+                        "  {} {}::{} — expected {:?}, got {}{}",
+                        "✖".red(),
+                        outcome.fixture_id,
+                        outcome.tool_name,
+                        outcome.expected,
+                        outcome.actual.as_str(),
+                        outcome.notes.as_ref().map(|n| format!(" ({})", n)).unwrap_or_default()
+                    );
+                }
+            }
+
+            if report.false_positive_count > 0 {
+                println!("\n{} FALSE POSITIVES:", "⚠".yellow());
+                for outcome in report.outcomes.iter().filter(|o| o.is_false_positive) {
+                    println!(
+                        "  {} {}::{} — expected ALLOW, got {}",
+                        "⚠".yellow(),
+                        outcome.fixture_id,
+                        outcome.tool_name,
+                        outcome.actual.as_str(),
+                    );
+                }
+            }
+
+            // Disaggregated metrics table
+            println!("{}", render_metrics_table(&report.disaggregated));
+        }
+    }
+
+    // ─ Write JUnit XML report if requested ─
+    if let Some(report_p) = report_path {
+        let xml = render_junit_xml(&report);
+        if let Some(parent) = report_p.parent() {
+            if !parent.as_os_str().is_empty() {
+                let _ = fs::create_dir_all(parent);
+            }
+        }
+        match fs::write(report_p, xml.as_bytes()) {
+            Ok(_) => println!("{} JUnit XML report written to: {}", "✔".green(), report_p.display()),
+            Err(e) => eprintln!("{} Failed to write JUnit report: {}", "⚠".yellow(), e),
+        }
+    }
+
+    // ─ CI decision ─
+    let exit_code = report.ci_decision.exit_code;
+    let status_str = if exit_code == 0 {
+        format!("{} PASS — {}", "✔".green().bold(), report.ci_decision.reason)
+    } else {
+        format!("{} FAIL — {}", "✖".red().bold(), report.ci_decision.reason)
+    };
+    println!("\n{}", status_str);
+
+    if dry_run {
+        0
+    } else {
+        exit_code
+    }
+}
+
+/// Phase 3: Run disaster recovery backup of active policy, database, and HMAC audit chains
+pub fn run_backup(output_path: &std::path::Path, source_dir: Option<&std::path::Path>) -> i32 {
+    let src = source_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".agentcontrol")
+        });
+
+    println!(
+        "{}",
+        "Vexa AgentControl — Phase 3 Disaster Recovery Backup".bold().cyan()
+    );
+    println!("  Source: {}", src.display().to_string().cyan());
+    println!("  Output: {}", output_path.display().to_string().cyan());
+
+    let targets = ["agentcontrol-policy.yaml", "current_policy.yaml", "audit.jsonl", "audit.v2.jsonl", "agentcontrol.db", "traces.db"];
+    match disaster_recovery::create_backup(&src, &targets, output_path) {
+        Ok(archive) => {
+            println!(
+                "{} Successfully archived {} files (SHA-256: {})",
+                "✔".green().bold(),
+                archive.files.len(),
+                &archive.overall_sha256[..12]
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("{} Backup failed: {}", "✖".red().bold(), e);
+            1
+        }
+    }
+}
+
+/// Phase 3: Run disaster recovery restore with cryptographic integrity verification
+pub fn run_restore(
+    archive_path: &std::path::Path,
+    target_dir: Option<&std::path::Path>,
+    audit_secret: Option<&[u8]>,
+) -> i32 {
+    let dst = target_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".agentcontrol")
+        });
+
+    println!(
+        "{}",
+        "Vexa AgentControl — Phase 3 Disaster Recovery Restore".bold().cyan()
+    );
+    println!("  Archive: {}", archive_path.display().to_string().cyan());
+    println!("  Target:  {}", dst.display().to_string().cyan());
+
+    match disaster_recovery::restore_backup(archive_path, &dst, audit_secret) {
+        Ok(report) => {
+            println!(
+                "{} Restored {} files ({} bytes)",
+                "✔".green().bold(),
+                report.restored_files_count,
+                report.restored_bytes
+            );
+            if report.audit_chain_verified {
+                println!("{} HMAC audit chain continuity verified", "✔".green());
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("{} Restore failed: {}", "✖".red().bold(), e);
+            1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use tempfile::tempdir;
 
@@ -909,5 +1408,19 @@ mod tests {
 
         let code_json = run_logs(5, "json", None, None, false, "http://127.0.0.1:18080").await;
         assert_eq!(code_json, 0);
+    }
+
+    #[tokio::test]
+    async fn test_run_export_traces() {
+        // Test stdout jsonl export
+        let code = run_export_traces("jsonl", "-", 5, "http://127.0.0.1:18080", None).await;
+        assert_eq!(code, 0);
+
+        // Test file json export
+        let dir = tempdir().unwrap();
+        let out_file = dir.path().join("traces.json");
+        let code = run_export_traces("json", out_file.to_str().unwrap(), 5, "http://127.0.0.1:18080", None).await;
+        assert_eq!(code, 0);
+        assert!(out_file.exists());
     }
 }

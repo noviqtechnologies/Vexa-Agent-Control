@@ -370,23 +370,28 @@ fn extract_from_value(value: &Value, path: &str, pairs: &mut Vec<(String, String
 /// Generate a truncated preview for logging — never expose the full secret.
 /// Examples: "AKIA****WXYZ" , "sk-****abcd" , "ghp_****efgh"
 pub fn truncated_preview(secret: &str) -> String {
-    if secret.len() <= 8 {
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() <= 8 {
         return "****".to_string();
     }
 
     // Find a good prefix boundary (up to first _ or - after initial prefix, max 6 chars)
-    let prefix_len = secret
-        .char_indices()
+    let prefix_len = chars
+        .iter()
+        .enumerate()
         .skip(2)
-        .find(|(_, c)| *c == '_' || *c == '-')
+        .find(|(_, &c)| c == '_' || c == '-')
         .map(|(i, _)| (i + 1).min(6))
         .unwrap_or(4)
-        .min(secret.len());
+        .min(chars.len());
 
-    let suffix_len = 4.min(secret.len().saturating_sub(prefix_len + 4));
-    let suffix_start = secret.len() - suffix_len;
+    let suffix_len = 4.min(chars.len().saturating_sub(prefix_len + 4));
+    let suffix_start = chars.len() - suffix_len;
 
-    format!("{}****{}", &secret[..prefix_len], &secret[suffix_start..])
+    let prefix: String = chars[..prefix_len].iter().collect();
+    let suffix: String = chars[suffix_start..].iter().collect();
+
+    format!("{}****{}", prefix, suffix)
 }
 
 #[cfg(test)]

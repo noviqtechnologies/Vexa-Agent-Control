@@ -1,9 +1,11 @@
 # OWASP Top 10 for Agentic Applications (ASI 2026) — Security Architecture & Compliance Mapping
 
-> **Document Version:** 1.0  
-> **Last Reviewed:** 2026-08-09  
+> **Document Version:** 1.1 (P0-5 honest review)
+> **Last Reviewed:** 2026-10-04  
 > **Standard:** [OWASP Top 10 for Agentic Applications 2026 (ASI01–ASI10)](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)  
 > **Audience:** Security Architects, GRC Officers, SecOps, DevSecOps Evaluators
+>
+> ⚠️ **Honest Review Note (P0-5):** Detection and coverage ratings are marked "Full" only where linked automated tests and published evaluation results exist. Ratings without reproducible evidence are listed as "Partial". See the "[What Vexa does not stop](#what-vexa-does-not-stop)" section below.
 
 ---
 
@@ -19,18 +21,20 @@ Autonomous AI agents introduce distinct security vulnerabilities that cannot be 
 
 | Risk ID | Vulnerability Title | Agent Control Status | Primary Enforcement Component | Evidence in Codebase |
 |---|---|:---:|---|---|
-| **ASI01** | **Agent Goal Hijack** | ✅ **Full** | 6-Pass Normalizer & 9 Prompt Injection Scanners | [`src/policy/injection.rs`](../src/policy/injection.rs), [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs) |
+| **ASI01** | **Agent Goal Hijack** | ⚠️ **Partial** | 6-Pass Normalizer & 9 Prompt Injection Scanners | [`src/policy/injection.rs`](../src/policy/injection.rs), [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs) |
 | **ASI02** | **Tool Misuse and Exploitation** | ✅ **Full** | Default-Deny Policy Engine & JSON Parameter Schema Validator | [`src/policy/engine.rs`](../src/policy/engine.rs), [`src/policy/schema.rs`](../src/policy/schema.rs) |
-| **ASI03** | **Identity and Privilege Abuse** | ✅ **Full** | OIDC JWT Validation, Group Claim Binding, & Credential Scopes | [`src/policy/identity.rs`](../src/policy/identity.rs), [`src/policy/credential_scope.rs`](../src/policy/credential_scope.rs) |
-| **ASI04** | **Agentic Supply Chain Vulnerabilities** | ✅ **Full** | MCP Security Scoring Engine & Cross-Session Schema-Drift Detection | [`src/policy/mcp_score.rs`](../src/policy/mcp_score.rs), [`src/policy/schema_drift.rs`](../src/policy/schema_drift.rs) |
+| **ASI03** | **Identity and Privilege Abuse** | ✅ **Full** | OIDC JWT Validation, Group Claim Binding, & Credential Scopes | [`src/policy/identity.rs`](../src/policy/identity.rs) |
+| **ASI04** | **Agentic Supply Chain Vulnerabilities** | ⚠️ **Partial** | MCP Security Scoring Engine & Cross-Session Schema-Drift Detection | [`src/policy/mcp_score.rs`](../src/policy/mcp_score.rs), [`src/policy/schema_drift.rs`](../src/policy/schema_drift.rs) |
 | **ASI05** | **Unexpected Code Execution (RCE)** | ✅ **Full** | Safe Mode Command Blocking & Parameter Traversal Validators | [`src/policy/safe_mode.rs`](../src/policy/safe_mode.rs), [`src/policy/engine.rs`](../src/policy/engine.rs) |
 | **ASI06** | **Memory and Context Poisoning** | ⚠️ **Partial** | Response Poisoning Interceptors & HMAC-Chained Audit Trails | [`src/policy/injection.rs`](../src/policy/injection.rs), [`src/audit/logger.rs`](../src/audit/logger.rs) |
-| **ASI07** | **Insecure Inter-Agent Communication** | ❌ **Gap (Scoped)** | Org-Local OIDC Identity Boundary (Upstream Federation Required) | [`src/policy/identity.rs`](../src/policy/identity.rs), [`docs/LIMITATIONS.md`](../PRD/LIMITATIONS.md) |
+| **ASI07** | **Insecure Inter-Agent Communication** | ❌ **Gap (Scoped)** | Org-Local OIDC Identity Boundary (Upstream Federation Required) | [`src/policy/identity.rs`](../src/policy/identity.rs), [Scope Limitations](#what-vexa-does-not-stop) |
 | **ASI08** | **Cascading Agent Failures** | ✅ **Full** | Cycle & Loop Prevention (`PivotError`), Rate Limits, & Spend Caps | [`src/proxy/handler.rs`](../src/proxy/handler.rs), [`src/spend/ledger.rs`](../src/spend/ledger.rs) |
 | **ASI09** | **Human-Agent Trust Exploitation** | ✅ **Full** | Real-Time Browser Approval Modals & HMAC-Signed Webhook Escalation | [`src/policy/hitl.rs`](../src/policy/hitl.rs), [`src/proxy/server.rs`](../src/proxy/server.rs) |
 | **ASI10** | **Rogue Agents & Unauthorized Egress** | ✅ **Full** | OS Sentry Daemon, PKI Device Enrollment, & Egress Tunneling | [`src/service/`](../src/service), [`src/identity/`](../src/identity), [`src/proxy/egress.rs`](../src/proxy/egress.rs) |
 
-**Official Scorecard:** **8/10 Full Coverage, 1/10 Partial, 1/10 Scoped Gap.**
+**Official Scorecard:** **7/10 Full Coverage, 2/10 Partial (pending published eval results), 1/10 Scoped Gap.**
+
+> Note: ASI01 and ASI04 are downgraded from "Full" to "Partial" pending a published `bench/detect` evaluation harness (PRD F2-S1) that demonstrates detection and false-positive rates against a labeled corpus. They will be re-rated "Full" once reproducible numbers are committed (F2-S1 acceptance criteria).
 
 ---
 
@@ -165,11 +169,53 @@ Generate automated compliance evidence reports directly from production audit lo
 
 ```bash
 # Verify cryptographic integrity of the audit log
-agentcontrol verify-log --path /var/log/agentcontrol/audit.jsonl
+agentcontrol verify-db --audit-path /var/log/agentcontrol/audit.jsonl
 
 # Generate OWASP ASI compliance summary report
-agentcontrol report --compliance --format markdown
+agentcontrol compliance report --format markdown
 
 # Export structured JSON evidence for enterprise security auditors
-agentcontrol report --compliance --format json --output owasp_asi_evidence.json
+agentcontrol compliance report --format json --output owasp_asi_evidence.json
 ```
+
+---
+
+## What Vexa does not stop {#what-vexa-does-not-stop}
+
+> This section is required for honest security positioning (PRD P0-5). Vexa Agent Control provides strong structural controls at the network and transport boundary, but it does **not** protect against every conceivable attack. Understanding these boundaries is essential for accurate threat modeling.
+
+### 1. Novel or paraphrased prompt injections
+
+Vexa's injection scanner uses deterministic regex patterns and heuristic token boundaries. A sufficiently novel jailbreak phrase — one not present in the trained pattern set — may pass through undetected. **Mitigation:** Use shadow mode to log and review, enable the optional local-model classifier plugin (F2-S4), and audit new patterns via the eval harness (`bench/detect`).
+
+### 2. Semantically encoded instructions
+
+Instructions embedded in deeply nested structures, steganographic Unicode sequences not yet in the normalizer, or formats that the normalizer does not decode (e.g. custom encodings) may bypass detection. **Mitigation:** F3 toxic-flow controls limit blast radius even when injection detection fails.
+
+### 3. Cross-organization agent federation
+
+Vexa's identity controls operate within a single organization's OIDC trust boundary. Cross-organization agent-to-agent communication (e.g., MCP server A calling MCP server B in a different org) is not authenticated or authorized by Vexa. **Mitigation:** Deploy upstream IdP cross-tenant federation (Entra ID B2B, Okta Org2Org) before the Vexa gateway.
+
+### 4. In-model reasoning manipulation (pre-tool-call)
+
+Vexa intercepts at the tool-call / API boundary. It cannot inspect or constrain what happens *inside* the LLM's reasoning process prior to a tool call being issued. A compromised system prompt that instructs the model to manipulate future reasoning steps is outside Vexa's enforcement boundary.
+
+### 5. Encrypted or protocol-tunneled egress
+
+Agents that exfiltrate data through cryptographic side-channels (e.g., encoding secrets as timing patterns, using encrypted protocols over allowed ports) cannot be detected by Vexa's egress domain filtering, which operates on plaintext TCP/HTTP metadata.
+
+### 6. LLM-provider-side vulnerabilities
+
+Vexa forwards (after policy evaluation) to upstream LLM providers. Vulnerabilities in the providers themselves (e.g., training data poisoning, model weight compromise) are outside Vexa's control surface.
+
+### 7. Host-level compromise
+
+If the developer workstation or container host is already compromised (kernel rootkit, process injection), the Vexa sentry process can be killed or bypassed before it can enforce policy. Vexa assumes an uncompromised host OS.
+
+### 8. Supply chain attacks on Vexa itself
+
+Until SBOM generation (F1-S1) and verified installer checksums (F1-S3) are shipped, a tampered Vexa binary is not detected. **Status:** Planned for Phase 1.
+
+---
+
+*Last updated: 2026-10-04. This section is reviewed on every release.*

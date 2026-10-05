@@ -139,7 +139,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         }
         Commands::Repair => agentcontrol::support::run_repair().await,
         Commands::Logout => agentcontrol::support::run_logout(),
-        Commands::Backup { output_dir } => agentcontrol::audit::maintenance::run_backup(output_dir),
+        Commands::Backup { output, source } => agentcontrol::support::run_backup(&output, source.as_deref()),
         Commands::VerifyDb {
             audit_path,
             db_path,
@@ -345,6 +345,18 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     oidc_token.as_deref(),
                 )
             }
+            cli::PolicyCommands::Sign {
+                policy,
+                policy_id,
+                revision,
+                output,
+            } => agentcontrol::support::run_policy_sign(&policy, &policy_id, revision, &output),
+            cli::PolicyCommands::Verify { bundle, trusted_key } => {
+                agentcontrol::support::run_policy_verify(&bundle, trusted_key.as_deref())
+            }
+            cli::PolicyCommands::Rollback { dir } => {
+                agentcontrol::support::run_policy_rollback(&dir)
+            }
         },
         Commands::Logs {
             limit,
@@ -354,6 +366,35 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             follow,
             gateway,
         } => agentcontrol::support::run_logs(limit, &format, verdict, tool, follow, &gateway).await,
+        Commands::ExportTraces {
+            format,
+            output,
+            limit,
+            gateway,
+            collector,
+        } => agentcontrol::support::run_export_traces(&format, &output, limit, &gateway, collector.as_deref()).await,
+        Commands::Restore { input, target, secret } => {
+            agentcontrol::support::run_restore(&input, target.as_deref(), secret.as_deref().map(|s| s.as_bytes()))
+        }
+        Commands::Revoke { target_type, target_id, reason, gateway } => {
+            agentcontrol::support::run_revoke(&target_type, &target_id, &reason, &gateway).await
+        }
+        Commands::Eval {
+            dataset,
+            policy,
+            report,
+            format,
+            dry_run,
+        } => {
+            agentcontrol::support::run_eval(
+                &dataset,
+                &policy,
+                report.as_deref(),
+                &format,
+                dry_run,
+            )
+            .await
+        }
         Commands::Approve {
             id,
             session,
@@ -700,6 +741,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             agentcontrol::wrap::run_unprotect_all(dry_run, force)
         }
         Commands::Verify {
+            attacks,
             gateway,
             json,
             hub,
@@ -707,15 +749,19 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
             assignment_id,
             token,
         } => {
-            agentcontrol::verify::run_verification_probe(
-                &gateway,
-                json,
-                hub.as_deref(),
-                user_id.as_deref(),
-                assignment_id.as_deref(),
-                token.as_deref(),
-            )
-            .await
+            if attacks {
+                agentcontrol::verify::run_attack_verification_suite(json).await
+            } else {
+                agentcontrol::verify::run_verification_probe(
+                    &gateway,
+                    json,
+                    hub.as_deref(),
+                    user_id.as_deref(),
+                    assignment_id.as_deref(),
+                    token.as_deref(),
+                )
+                .await
+            }
         }
         Commands::Cache { command } => match command {
             cli::CacheCommands::Status { gateway, json } => {
@@ -931,6 +977,351 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                 1
             }
         },
+
+        // F5-S4: 24-hour session report — tool calls, would-blocks, spend, top risks
+        Commands::Report {
+            gateway,
+            format,
+            last_hours,
+            compliance,
+            output,
+        } => {
+            run_report_command(gateway, format, last_hours, compliance, output).await
+        }
+
+        // F1-S6: Binary self-integrity check against a signed release manifest
+        Commands::SelfCheck { manifest, json } => {
+            run_self_check_command(manifest, json).await
+        }
+
+        // F7-S4: Pause an agent (or all agents) — next request blocked within 1 s
+        Commands::Pause { agent, gateway } => {
+            run_pause_resume_command(&gateway, &agent, true).await
+        }
+
+        // F7-S4: Resume a previously paused agent
+        Commands::Resume { agent, gateway } => {
+            run_pause_resume_command(&gateway, &agent, false).await
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// F5-S4: Report command — 24-hour session summary
+// ---------------------------------------------------------------------------
+
+async fn run_report_command(
+    gateway: String,
+    format: String,
+    last_hours: u64,
+    compliance: bool,
+    output: Option<std::path::PathBuf>,
+) -> i32 {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {}", e);
+            return 1;
+        }
+    };
+
+    let endpoint = if compliance {
+        format!("{}/admin/report/compliance", gateway.trim_end_matches('/'))
+    } else {
+        format!(
+            "{}/admin/report?last_hours={}",
+            gateway.trim_end_matches('/'),
+            last_hours
+        )
+    };
+
+    let resp = match client.get(&endpoint).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("⚠  Could not reach gateway at {}: {}", gateway, e);
+            eprintln!("   Is the gateway running? Try: agentcontrol start");
+            return 1;
+        }
+    };
+
+    if !resp.status().is_success() {
+        eprintln!(
+            "Gateway returned HTTP {}: {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        );
+        return 1;
+    }
+
+    let body = match resp.text().await {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Failed to read response: {}", e);
+            return 1;
+        }
+    };
+
+    let content = match format.as_str() {
+        "json" => body,
+        "markdown" => {
+            // Gateway returns JSON; render a markdown summary
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                format!(
+                    "# Agent Control Report\n\n\
+                     | Metric | Value |\n\
+                     |---|---|\n\
+                     | Tool calls | {} |\n\
+                     | Would-block events | {} |\n\
+                     | Estimated spend | {} |\n\
+                     | Top risks | {} |\n",
+                    v.get("tool_calls").unwrap_or(&serde_json::Value::Null),
+                    v.get("would_block").unwrap_or(&serde_json::Value::Null),
+                    v.get("spend_usd").unwrap_or(&serde_json::Value::Null),
+                    v.get("top_risks")
+                        .and_then(|r| r.as_array())
+                        .map(|a| a
+                            .iter()
+                            .filter_map(|x| x.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "))
+                        .unwrap_or_else(|| "none".to_string()),
+                )
+            } else {
+                body
+            }
+        }
+        _ => {
+            // text: render a human-readable summary
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                let calls = v.get("tool_calls").and_then(|x| x.as_u64()).unwrap_or(0);
+                let blocks = v.get("would_block").and_then(|x| x.as_u64()).unwrap_or(0);
+                let spend = v
+                    .get("spend_usd")
+                    .and_then(|x| x.as_f64())
+                    .map(|f| format!("${:.4}", f))
+                    .unwrap_or_else(|| "$0.0000".to_string());
+                let risks = v
+                    .get("top_risks")
+                    .and_then(|r| r.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_else(|| "none detected".to_string());
+                format!(
+                    "Agent Control — Last {} hours\n\
+                     ─────────────────────────────\n\
+                     Tool calls:        {}\n\
+                     Would-block events:{}\n\
+                     Estimated spend:   {}\n\
+                     Top risks:         {}\n",
+                    last_hours, calls, blocks, spend, risks
+                )
+            } else {
+                body
+            }
+        }
+    };
+
+    match output {
+        Some(path) => {
+            if let Err(e) = std::fs::write(&path, &content) {
+                eprintln!("Failed to write to {}: {}", path.display(), e);
+                return 1;
+            }
+            println!("Report written to {}", path.display());
+        }
+        None => print!("{}", content),
+    }
+    0
+}
+
+// ---------------------------------------------------------------------------
+// F1-S6: SelfCheck command — binary integrity verification
+// ---------------------------------------------------------------------------
+
+async fn run_self_check_command(
+    manifest: Option<std::path::PathBuf>,
+    json: bool,
+) -> i32 {
+    use sha2::{Digest, Sha256};
+
+    // Resolve the current binary path in a cross-platform way
+    let exe_path = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            if json {
+                println!(r#"{{"status":"error","message":"Cannot determine binary path: {}"}}"#, e);
+            } else {
+                eprintln!("FAIL: Cannot determine binary path: {}", e);
+            }
+            return 2;
+        }
+    };
+
+    // Read and hash the binary
+    let binary_bytes = match std::fs::read(&exe_path) {
+        Ok(b) => b,
+        Err(e) => {
+            if json {
+                println!(r#"{{"status":"error","message":"Cannot read binary: {}"}}"#, e);
+            } else {
+                eprintln!("FAIL: Cannot read binary at {}: {}", exe_path.display(), e);
+            }
+            return 2;
+        }
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(&binary_bytes);
+    let computed_hash = format!("{:x}", hasher.finalize());
+
+    // Resolve the manifest path — default to <exe-dir>/agentcontrol.manifest.json
+    let manifest_path = manifest.unwrap_or_else(|| {
+        exe_path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("agentcontrol.manifest.json")
+    });
+
+    if !manifest_path.exists() {
+        if json {
+            println!(
+                r#"{{"status":"warn","message":"No manifest found at {}; run 'agentcontrol update' to download one","binary_sha256":"{}"}}"#,
+                manifest_path.display(),
+                computed_hash
+            );
+        } else {
+            println!("WARN: No manifest found at {}", manifest_path.display());
+            println!("      Run 'agentcontrol update' to download a signed manifest.");
+            println!("Binary SHA-256: {}", computed_hash);
+        }
+        return 0;
+    }
+
+    let manifest_content = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(e) => {
+            if json {
+                println!(r#"{{"status":"error","message":"Cannot read manifest: {}"}}"#, e);
+            } else {
+                eprintln!("FAIL: Cannot read manifest: {}", e);
+            }
+            return 2;
+        }
+    };
+
+    let manifest_json: serde_json::Value = match serde_json::from_str(&manifest_content) {
+        Ok(v) => v,
+        Err(e) => {
+            if json {
+                println!(r#"{{"status":"error","message":"Invalid manifest JSON: {}"}}"#, e);
+            } else {
+                eprintln!("FAIL: Invalid manifest JSON: {}", e);
+            }
+            return 2;
+        }
+    };
+
+    let expected_hash = manifest_json
+        .get("sha256")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if expected_hash.is_empty() {
+        if json {
+            println!(r#"{{"status":"error","message":"Manifest missing sha256 field"}}"#);
+        } else {
+            eprintln!("FAIL: Manifest missing 'sha256' field.");
+        }
+        return 2;
+    }
+
+    if computed_hash == expected_hash {
+        if json {
+            println!(
+                r#"{{"status":"ok","message":"Binary integrity verified","binary_sha256":"{}"}}"#,
+                computed_hash
+            );
+        } else {
+            println!("OK: Binary integrity verified ✓");
+            println!("SHA-256: {}", computed_hash);
+        }
+        0
+    } else {
+        if json {
+            println!(
+                r#"{{"status":"fail","message":"Binary hash mismatch — possible tampering","computed":"{}","expected":"{}"}}"#,
+                computed_hash, expected_hash
+            );
+        } else {
+            eprintln!("FAIL: Binary hash mismatch — possible tampering detected!");
+            eprintln!("  Computed:  {}", computed_hash);
+            eprintln!("  Expected:  {}", expected_hash);
+            eprintln!("  Action:    Re-install from a trusted source.");
+        }
+        2
+    }
+}
+
+// ---------------------------------------------------------------------------
+// F7-S4: Pause / Resume agent command
+// ---------------------------------------------------------------------------
+
+async fn run_pause_resume_command(gateway: &str, agent: &str, pause: bool) -> i32 {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {}", e);
+            return 1;
+        }
+    };
+
+    let action = if pause { "pause" } else { "resume" };
+    let url = format!(
+        "{}/admin/agents/{}/{}",
+        gateway.trim_end_matches('/'),
+        agent,
+        action
+    );
+
+    let resp = match client.post(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "⚠  Could not reach gateway at {}: {}",
+                gateway, e
+            );
+            eprintln!("   Is the gateway running? Try: agentcontrol start");
+            return 1;
+        }
+    };
+
+    if resp.status().is_success() {
+        if pause {
+            println!(
+                "✓ Agent '{}' paused — next request will be blocked within 1 s.",
+                agent
+            );
+        } else {
+            println!("✓ Agent '{}' resumed.", agent);
+        }
+        0
+    } else {
+        eprintln!(
+            "Gateway returned HTTP {}: {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        );
+        1
     }
 }
 
@@ -1272,7 +1663,7 @@ fn build_proxy_state(
         metrics_siem_export_failed_total: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         event_tx: tokio::sync::broadcast::channel(1024).0,
         credential_scope_validator,
-        policy_path,
+        policy_path: policy_path.clone(),
         gateway_start_time: std::time::Instant::now(),
         spend_ledger,
         pricing_table,
@@ -1314,6 +1705,13 @@ fn build_proxy_state(
         hitl_manager: Arc::new(agentcontrol::policy::hitl::HitlManager::new(hex::encode(
             resolve_hmac_key(),
         ))),
+        revocation_registry: Arc::new(agentcontrol::policy::revocation::RevocationRegistry::new()),
+        policy_storage_manager: policy_path.as_ref().and_then(|p| {
+            std::path::Path::new(p)
+                .parent()
+                .map(|dir| Arc::new(agentcontrol::policy::signed::PolicyStorageManager::new(dir)))
+        }),
+        otlp_exporter: Arc::new(agentcontrol::telemetry::otlp::OtlpExporter::default()),
     })
 }
 

@@ -59,6 +59,7 @@ device_token
 .DS_Store
 Thumbs.db
 .claude/
+.antigravity/
 
 # Compiled binaries & packages in root
 vexa

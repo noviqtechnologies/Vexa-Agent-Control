@@ -16,4 +16,21 @@ mod integration {
     mod stdio_tests;
     mod verify_probe_test;
     mod wrap_integration_test;
+    mod trace_canonical_envelope_test;
+    mod audit_migration_test;
+    mod hitl_state_machine_test;
+    mod failure_modes_test;
+    mod client_matrix_test;
+    mod schema_dispatch_test;
+    mod hitl_webhook_integration_test;
+    /// Phase 1: Approval token leakage prevention (ADR-010 §Amendment-3, Phase 1 Gate 8)
+    mod approval_leakage_test;
+    /// Phase 3: Team Collaboration & Central Control — 7-gate exit criteria
+    mod phase3_collaboration_test;
+    /// Phase 4: Gateway Resiliency & Commercial Operations — 6-gate exit criteria
+    mod phase4_resiliency_test;
+    /// Local API Security & Scopes (Table 5.A)
+    mod local_api_security_test;
+    /// Cross-OS IPC, Permissions & Signal Harness (Table 5.A)
+    mod cross_os_harness_test;
 }

@@ -57,4 +57,14 @@ For team and centralized components:
 
 ---
 
+## 6. Cryptographic Audit Chain Longevity & Backward Compatibility Guarantee (ADR-009)
+
+Audit logs produced by Vexa Agent Control serve as legal and forensic evidence of security compliance:
+
+- **Immutable Historical Compatibility:** In accordance with [ADR-009](adr/ADR-009-audit-chain-migration.md), historical audit logs written under schema v1 are verified against permanently frozen schema definitions (`AuditEntryV1Legacy`). Future releases of Vexa will **never** alter, reorder, or rename fields in legacy verifiers in a manner that breaks past log verification.
+- **Cryptographic Chain Bridges:** When transitioning across schema versions (e.g. from v1 to canonical RFC 8785 v2), the system writes a cryptographic `schema_migration_bridge` linking the terminal HMAC of the previous chain segment to the new genesis block, guaranteeing unbroken mathematical continuity.
+- **Offline Self-Verification:** The `agentcontrol verify-log` tool functions fully offline and will maintain perpetual support for verifying mixed historical and modern chains.
+
+---
+
 *For questions or custom enterprise compliance inquiries, please contact [`contact@vexasec.io`](mailto:contact@vexasec.io).*

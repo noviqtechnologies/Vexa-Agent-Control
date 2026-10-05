@@ -235,6 +235,13 @@ pub struct SafeModeScanner {
     url_set: RegexSet,
     url_rules: Vec<RuleDef>,
 
+    /// PRD F3-S3: Sensitive path & traversal guard
+    pub sensitive_path_guard: crate::policy::sensitive_path::SensitivePathGuard,
+    /// PRD F3-S4: Argument-aware command policy guard
+    pub command_policy_guard: crate::policy::command_policy::CommandPolicyGuard,
+    /// PRD F3-S2: Egress control guard
+    pub egress_guard: crate::policy::egress::EgressGuard,
+
     /// Total rule count for startup message
     pub rule_count: usize,
 }
@@ -283,6 +290,9 @@ impl SafeModeScanner {
             command_rules: cmd_rules,
             url_set: RegexSet::new(&url_patterns)?,
             url_rules,
+            sensitive_path_guard: crate::policy::sensitive_path::SensitivePathGuard::default(),
+            command_policy_guard: crate::policy::command_policy::CommandPolicyGuard::default(),
+            egress_guard: crate::policy::egress::EgressGuard::default(),
             rule_count,
         })
     }
@@ -348,6 +358,87 @@ impl SafeModeScanner {
         value: &str,
         param_name: &str,
     ) -> Option<ThreatMatch> {
+        // 1. Evaluate specialized Phase 1 guards
+        match target {
+            RuleTarget::FilePath => {
+                if let Some(finding) = self.sensitive_path_guard.check_path(value) {
+                    let cat = match finding.category {
+                        crate::policy::sensitive_path::SensitivePathCategory::SshKey => {
+                            ThreatCategory::SensitiveFiles
+                        }
+                        crate::policy::sensitive_path::SensitivePathCategory::AwsCredentials
+                        | crate::policy::sensitive_path::SensitivePathCategory::CloudCredentials
+                        | crate::policy::sensitive_path::SensitivePathCategory::KubeConfig
+                        | crate::policy::sensitive_path::SensitivePathCategory::EnvironmentFile => {
+                            ThreatCategory::SecretsConfig
+                        }
+                        crate::policy::sensitive_path::SensitivePathCategory::DockerCredentials
+                        | crate::policy::sensitive_path::SensitivePathCategory::SystemCredentials
+                        | crate::policy::sensitive_path::SensitivePathCategory::OsKeychain
+                        | crate::policy::sensitive_path::SensitivePathCategory::BrowserProfile
+                        | crate::policy::sensitive_path::SensitivePathCategory::WorkspaceEscape => {
+                            ThreatCategory::SystemPaths
+                        }
+                    };
+                    return Some(ThreatMatch {
+                        category: cat,
+                        pattern_name: finding.rule_id.to_string(),
+                        param_name: param_name.to_string(),
+                        reason: finding.reason,
+                        pattern: finding.canonical_path,
+                    });
+                }
+            }
+            RuleTarget::Command => {
+                if let Some(violation) = self.command_policy_guard.evaluate_command(value) {
+                    let cat = match violation.category {
+                        crate::policy::command_policy::CommandViolationCategory::PipeToShell
+                        | crate::policy::command_policy::CommandViolationCategory::DataExfiltration => {
+                            ThreatCategory::Exfiltration
+                        }
+                        crate::policy::command_policy::CommandViolationCategory::ReverseShell => {
+                            ThreatCategory::PersistenceShell
+                        }
+                        crate::policy::command_policy::CommandViolationCategory::DestructiveWipe => {
+                            ThreatCategory::Destructive
+                        }
+                        crate::policy::command_policy::CommandViolationCategory::SensitiveFileAccess
+                        | crate::policy::command_policy::CommandViolationCategory::PrivilegeEscalation => {
+                            ThreatCategory::SensitiveFiles
+                        }
+                        crate::policy::command_policy::CommandViolationCategory::CloudMetadataSSRF => {
+                            ThreatCategory::NetworkSSRF
+                        }
+                    };
+                    return Some(ThreatMatch {
+                        category: cat,
+                        pattern_name: violation.rule_id.to_string(),
+                        param_name: param_name.to_string(),
+                        reason: violation.reason,
+                        pattern: violation.matched_command,
+                    });
+                }
+            }
+            RuleTarget::Url => {
+                if let Some(violation) = self.egress_guard.check_egress(value) {
+                    let cat = match violation.category {
+                        crate::policy::egress::EgressViolationCategory::MetadataSSRF => {
+                            ThreatCategory::NetworkSSRF
+                        }
+                        _ => ThreatCategory::Exfiltration,
+                    };
+                    return Some(ThreatMatch {
+                        category: cat,
+                        pattern_name: violation.rule_id.to_string(),
+                        param_name: param_name.to_string(),
+                        reason: violation.reason,
+                        pattern: violation.url,
+                    });
+                }
+            }
+        }
+
+        // 2. Fall back to base regex rules
         let (regex_set, rules) = match target {
             RuleTarget::FilePath => (&self.file_path_set, &self.file_path_rules),
             RuleTarget::Command => (&self.command_set, &self.command_rules),

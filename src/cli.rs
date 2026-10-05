@@ -91,11 +91,15 @@ pub enum Commands {
     /// Flush local workstation credentials and invalidate session
     Logout,
 
-    /// Create a consistent online backup of local databases and audit logs (ADR 0.6)
+    /// Create a disaster recovery backup archive of policy, database, and HMAC audit chains (Phase 3)
     Backup {
-        /// Optional destination directory (defaults to ~/.agentcontrol/backups)
+        /// Destination archive file path (.json)
+        #[arg(long, short, default_value = "agentcontrol-backup.json")]
+        output: std::path::PathBuf,
+
+        /// Source state directory (default: ~/.agentcontrol)
         #[arg(long)]
-        output_dir: Option<std::path::PathBuf>,
+        source: Option<std::path::PathBuf>,
     },
 
     /// Verify the cryptographic HMAC chain of audit.jsonl and SQLite integrity of events.db (ADR 0.6)
@@ -258,6 +262,103 @@ pub enum Commands {
         /// Gateway URL for live streaming (default: http://127.0.0.1:18080)
         #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
+    },
+
+    /// Export execution traces in native JSON, JSONL, or OTLP format (ADR-006, PRD Phase 1 & 3)
+    #[command(name = "export-traces")]
+    ExportTraces {
+        /// Export format: jsonl, json, or otlp
+        #[arg(long, default_value = "jsonl")]
+        format: String,
+
+        /// Output file path (or '-' for stdout)
+        #[arg(long, short, default_value = "-")]
+        output: String,
+
+        /// Maximum number of traces to export
+        #[arg(long, short = 'n', default_value_t = 1000)]
+        limit: usize,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+
+        /// Optional OTLP HTTP collector endpoint (e.g. http://localhost:4318/v1/traces) when --format otlp
+        #[arg(long)]
+        collector: Option<String>,
+    },
+
+
+    /// Restore disaster recovery archive with cryptographic integrity and HMAC chain verification (Phase 3)
+    Restore {
+        /// Path to the backup archive file (.json)
+        #[arg(long, short)]
+        input: std::path::PathBuf,
+
+        /// Target destination directory (default: ~/.agentcontrol)
+        #[arg(long)]
+        target: Option<std::path::PathBuf>,
+
+        /// Optional session secret for verifying HMAC audit chain continuity
+        #[arg(long)]
+        secret: Option<String>,
+    },
+
+    /// Instantly revoke an agent, MCP tool, or token capability across gateways (Phase 3)
+    Revoke {
+        /// Target type: agent, tool, or token
+        #[arg(long)]
+        target_type: String,
+
+        /// Target identifier (agent ID, tool name, or token ID)
+        #[arg(long)]
+        target_id: String,
+
+        /// Reason for revocation
+        #[arg(long, default_value = "Compromised capability revoked by administrator")]
+        reason: String,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// Deterministic policy replay evaluation over a content-addressed trace corpus (Phase 2 CI Gate)
+    ///
+    /// Re-evaluates recorded traces against a candidate policy and returns exit code 1 if any
+    /// malicious payload that was previously blocked is now allowed (regression).
+    ///
+    /// ## CI Integration
+    ///
+    /// ```sh
+    /// agentcontrol eval \
+    ///   --dataset ./tests/corpus \
+    ///   --policy ./candidate-policy.yaml \
+    ///   --report junit.xml \
+    ///   --format json
+    /// ```
+    ///
+    /// Exit codes: 0=PASS, 1=REGRESSION, 2=ERROR (corpus integrity / policy compile failure)
+    Eval {
+        /// Path to the corpus directory containing trace fixture files (.json / .jsonl)
+        #[arg(long, default_value = "./tests/corpus")]
+        dataset: std::path::PathBuf,
+
+        /// YAML policy file to evaluate against
+        #[arg(long, default_value = "agentcontrol-policy.yaml")]
+        policy: std::path::PathBuf,
+
+        /// Optional output path for JUnit XML report (for CI/CD integration)
+        #[arg(long)]
+        report: Option<std::path::PathBuf>,
+
+        /// Output format for the summary: table (default) or json
+        #[arg(long, default_value = "table")]
+        format: String,
+
+        /// Exit 0 even if regressions are detected (dry-run mode: show results without blocking CI)
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
     },
 
     /// Approve a pending Human-in-the-Loop (HITL) action request by ID
@@ -483,8 +584,12 @@ pub enum Commands {
         target: Option<WatchTarget>,
     },
 
-    /// Run live security verification probe against gateway (3-point smoke test)
+    /// Run live security verification probe against gateway (3-point smoke test or 16-scenario attack suite)
     Verify {
+        /// Run end-to-end security attack test suite (>=15 scenarios) (PRD F3-S6)
+        #[arg(long, default_value_t = false)]
+        attacks: bool,
+
         /// Gateway URL to test (default: http://127.0.0.1:18080)
         #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
@@ -514,6 +619,66 @@ pub enum Commands {
     Cache {
         #[command(subcommand)]
         command: CacheCommands,
+    },
+
+    /// Show tool-call count, would-block count, spend, and top 3 risks in plain language (F5-S4)
+    ///
+    /// Default mode is shadow — shows what Agent Control observed over the last 24 hours.
+    /// Use --format json or --format markdown for machine-readable or document output.
+    Report {
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+
+        /// Output format: text (default), json, or markdown
+        #[arg(long, default_value = "text")]
+        format: String,
+
+        /// Restrict report to the last N hours (default: 24)
+        #[arg(long, default_value_t = 24)]
+        last_hours: u64,
+
+        /// Generate OWASP ASI compliance evidence instead of the default session summary
+        #[arg(long, default_value_t = false)]
+        compliance: bool,
+
+        /// Write output to a file instead of stdout
+        #[arg(long)]
+        output: Option<std::path::PathBuf>,
+    },
+
+    /// Verify the running binary against a signed release manifest (F1-S6)
+    ///
+    /// Works offline using a cached manifest. A modified binary returns FAIL with exit code 2.
+    #[command(name = "self-check")]
+    SelfCheck {
+        /// Path to a locally cached signed manifest (downloaded on install or by `agentcontrol update`)
+        #[arg(long)]
+        manifest: Option<std::path::PathBuf>,
+
+        /// Output results as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+
+    /// Pause an agent or all agents — next request is blocked within 1 s (F7-S4)
+    Pause {
+        /// Agent ID to pause, or "all" to pause all agents
+        agent: String,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
+    },
+
+    /// Resume a previously paused agent (F7-S4)
+    Resume {
+        /// Agent ID to resume, or "all" to resume all agents
+        agent: String,
+
+        /// Gateway URL (default: http://127.0.0.1:18080)
+        #[arg(long, default_value = "http://127.0.0.1:18080")]
+        gateway: String,
     },
 }
 
@@ -582,6 +747,40 @@ pub enum PolicyCommands {
         /// OIDC Bearer token for authenticating with the gateway
         #[arg(long, env = "AGENTCONTROL_OIDC_TOKEN")]
         oidc_token: Option<String>,
+    },
+    /// Cryptographically sign a policy YAML file with an Ed25519 key (Phase 3)
+    Sign {
+        /// Policy YAML file path
+        #[arg(long, short = 'p', default_value = "agentcontrol-policy.yaml")]
+        policy: String,
+
+        /// Policy identifier
+        #[arg(long, default_value = "corp-policy-baseline")]
+        policy_id: String,
+
+        /// Policy revision number
+        #[arg(long, default_value_t = 1)]
+        revision: u64,
+
+        /// Output path for the signed policy bundle (.json)
+        #[arg(long, short = 'o', default_value = "signed_policy_bundle.json")]
+        output: String,
+    },
+    /// Verify an Ed25519-signed policy bundle (Phase 3)
+    Verify {
+        /// Signed policy bundle (.json)
+        #[arg(long, short = 'b')]
+        bundle: String,
+
+        /// Optional trusted public key hex to verify against
+        #[arg(long)]
+        trusted_key: Option<String>,
+    },
+    /// Rollback active policy to the previous rollback snapshot (Phase 3)
+    Rollback {
+        /// Policy directory containing rollback_policy.yaml (default: current directory)
+        #[arg(long, default_value = ".")]
+        dir: String,
     },
 }
 

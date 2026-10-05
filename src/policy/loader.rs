@@ -563,6 +563,18 @@ fn compile_policy_yaml(
             )
         };
 
+    let mut fail_closed = fail_closed;
+    // P0-3: on_scanner_error setting overrides scanner error behavior:
+    // "block" -> fail_closed = true
+    // "allow" -> fail_closed = false
+    if let Some(ref action) = policy_file.on_scanner_error {
+        match action.to_lowercase().as_str() {
+            "block" => fail_closed = true,
+            "allow" => fail_closed = false,
+            _ => {}
+        }
+    }
+
     // FR-306: Extract firewall configuration
     let firewall_config = policy_file.firewall.clone();
     if let Some(ref fw) = firewall_config {
@@ -978,5 +990,50 @@ mod tests {
         // Central permitted tool_a, but repo tightened it to deny
         let tool_a = policy.tools.iter().find(|t| t.name == "tool_a").unwrap();
         assert_eq!(tool_a.action, "deny");
+    }
+
+    #[test]
+    fn test_on_scanner_error_configuration_p0_3() {
+        let yaml_block = r#"
+version: "2.0"
+default_action: deny
+on_scanner_error: block
+"#;
+        match load_policy_from_str(yaml_block, None) {
+            PolicyLoadResult::Loaded { policy, .. } => {
+                assert!(policy.fail_closed);
+                assert!(policy.should_block_on_scanner_error(true));
+                assert!(policy.should_block_on_scanner_error(false));
+            }
+            _ => panic!("Expected policy to load with on_scanner_error: block"),
+        }
+
+        let yaml_allow = r#"
+version: "2.0"
+default_action: deny
+on_scanner_error: allow
+"#;
+        match load_policy_from_str(yaml_allow, None) {
+            PolicyLoadResult::Loaded { policy, .. } => {
+                assert!(!policy.fail_closed);
+                assert!(policy.should_block_on_scanner_error(true));
+                assert!(!policy.should_block_on_scanner_error(false));
+            }
+            _ => panic!("Expected policy to load with on_scanner_error: allow"),
+        }
+
+        let yaml_default = r#"
+version: "2.0"
+default_action: deny
+"#;
+        match load_policy_from_str(yaml_default, None) {
+            PolicyLoadResult::Loaded { policy, .. } => {
+                assert!(!policy.fail_closed);
+                // Default: block in enforce, allow in shadow
+                assert!(policy.should_block_on_scanner_error(true));
+                assert!(!policy.should_block_on_scanner_error(false));
+            }
+            _ => panic!("Expected policy to load with default on_scanner_error"),
+        }
     }
 }

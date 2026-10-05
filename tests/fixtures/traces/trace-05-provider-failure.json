@@ -1,0 +1,32 @@
+{
+  "$schema": "https://vexasec.io/schemas/v1/event-envelope.json",
+  "envelope_version": "1.0.0",
+  "event_id": "01925b3a-8f12-7005-8000-000000000005",
+  "timestamp": "2026-10-04T12:04:10.150000Z",
+  "correlation": {
+    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "run_id": "b1b9e837-1234-4567-89ab-cdef01234567",
+    "span_id": "00f067aa0ba902b5",
+    "parent_span_id": null,
+    "session_id": "sess-workstation-local-1",
+    "request_id": "req-005",
+    "audit_entry_index": 14
+  },
+  "provenance": {
+    "data_freshness": "2026-10-04T12:04:10.150000Z",
+    "evidence_source": "upstream_proxy_handler",
+    "confidence": "observed"
+  },
+  "event_type": "llm_generation",
+  "payload": {
+    "provider": "openai",
+    "target_model": "gpt-4o",
+    "http_status": 502,
+    "error_code": "bad_gateway",
+    "error_message": "Upstream OpenAI connection dropped unexpectedly",
+    "retry_attempt": 1,
+    "max_retries": 2,
+    "failover_triggered": false,
+    "latency_ms": 320.5
+  }
+}

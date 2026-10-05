@@ -248,6 +248,8 @@ func main() {
 	sessionH := handler.NewSessionHandler(spendStore, db)
 	coverageHealthH := handler.NewCoverageHealthHandler(deviceStore)
 	healthH := handler.NewHealthHandler(db)
+	healthH.SetDependencies(db, spendStore)
+	routeMgmtH := handler.NewRouteMgmtHandler(db, sseBroker)
 	pkceH := handler.NewPKCEOAuthHandler(db)
 
 	// OAuth PKCE Endpoints for Workstation Agent Login (agentcontrol login)
@@ -471,6 +473,7 @@ func main() {
 		// Observability Center
 		r.Route("/observability", func(r chi.Router) {
 			r.Get("/request-logs", observabilityH.ListRequestLogs)
+			r.Get("/request-logs/{id}/dossier", observabilityH.GetRequestDossier)
 			r.Get("/request-logs/stream", observabilityH.StreamRequestLogs)
 			r.Get("/client-logs", observabilityH.ListClientLogs)
 			r.Get("/audit-logs", observabilityH.ListAuditLogs)
@@ -478,6 +481,16 @@ func main() {
 			r.Get("/deleted-teams", observabilityH.ListDeletedTeams)
 		})
 		r.Get("/audit/logs", observabilityH.ListAuditLogs)
+
+		// LLM Route Profile Management
+		r.Route("/routes", func(r chi.Router) {
+			r.Get("/", routeMgmtH.List)
+			r.Post("/simulate", routeMgmtH.Simulate)
+			r.With(middleware.RequireAdmin()).Post("/", routeMgmtH.Create)
+			r.Get("/{id}", routeMgmtH.GetByID)
+			r.With(middleware.RequireAdmin()).Post("/{id}/activate", routeMgmtH.Activate)
+			r.With(middleware.RequireAdmin()).Post("/{id}/rollback", routeMgmtH.Rollback)
+		})
 
 		// Run Explorer & Forensics
 		r.Get("/runs", runH.ListRuns)

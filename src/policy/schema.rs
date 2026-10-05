@@ -129,6 +129,10 @@ pub struct PolicyFile {
 
     /// Optional explicit allowed egress providers list (hostnames or wildcards like *.openai.azure.com).
     pub allowed_providers: Option<Vec<String>>,
+
+    /// P0-3: Action on scanner error or timeout: "block" | "allow".
+    /// Default is block in enforce mode, allow (with warning) in shadow mode.
+    pub on_scanner_error: Option<String>,
 }
 
 /// Policy metadata block including attribution tags (client_id, project_id, cost_center)

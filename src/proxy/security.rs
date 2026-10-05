@@ -305,3 +305,120 @@ pub fn load_daemon_port() -> Option<u16> {
     }
     None
 }
+
+// ─── Scoped Capability Tokens (ADR-010 §3.2) ──────────────────────────────
+
+/// Scoped API Capability tokens per ADR-010 §3.2
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ApiScope {
+    /// Read operational telemetry with redacted payloads (GET /api/v1/traces, GET /api/v1/stats)
+    TraceRead,
+    /// Read unmasked raw prompts and completions (GET /api/v1/traces/{id}/raw)
+    RawPayloadRead,
+    /// Authorize or reject pending HITL requests (POST /api/v1/hitl/respond)
+    ApprovalWrite,
+    /// Administrative mutations: reload policies, clear cache, rotate tokens
+    AdminWrite,
+}
+
+impl ApiScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ApiScope::TraceRead => "trace:read",
+            ApiScope::RawPayloadRead => "raw_payload:read",
+            ApiScope::ApprovalWrite => "approval:write",
+            ApiScope::AdminWrite => "admin:write",
+        }
+    }
+
+    pub fn from_str_scope(s: &str) -> Option<Self> {
+        match s {
+            "trace:read" | "TraceRead" => Some(ApiScope::TraceRead),
+            "raw_payload:read" | "RawPayloadRead" => Some(ApiScope::RawPayloadRead),
+            "approval:write" | "ApprovalWrite" => Some(ApiScope::ApprovalWrite),
+            "admin:write" | "AdminWrite" | "admin" | "*" => Some(ApiScope::AdminWrite),
+            _ => None,
+        }
+    }
+
+    /// Check whether this scope satisfies the required scope.
+    /// AdminWrite / wildcard satisfies all scopes.
+    pub fn satisfies(&self, required: ApiScope) -> bool {
+        if *self == ApiScope::AdminWrite {
+            return true;
+        }
+        *self == required
+    }
+}
+
+/// Resolves the required API scope for a given method and path per ADR-010 Table 3.2.
+pub fn required_scope_for_endpoint(method: &hyper::Method, path: &str) -> Option<ApiScope> {
+    if method == hyper::Method::GET {
+        if path.starts_with("/api/v1/traces/") && path.ends_with("/raw") {
+            return Some(ApiScope::RawPayloadRead);
+        }
+        if path.starts_with("/api/v1/traces")
+            || path.starts_with("/api/v1/stats")
+            || path.starts_with("/api/stats")
+        {
+            return Some(ApiScope::TraceRead);
+        }
+    } else if method == hyper::Method::POST {
+        if path.starts_with("/api/v1/hitl/respond") {
+            return Some(ApiScope::ApprovalWrite);
+        }
+        if path == "/reload"
+            || path == "/api/policy/reload"
+            || path.starts_with("/api/v1/cache/")
+            || path.starts_with("/api/cache/")
+            || path.starts_with("/api/v1/policy/reload")
+        {
+            return Some(ApiScope::AdminWrite);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_scope_satisfaction() {
+        // AdminWrite satisfies all scopes
+        assert!(ApiScope::AdminWrite.satisfies(ApiScope::TraceRead));
+        assert!(ApiScope::AdminWrite.satisfies(ApiScope::RawPayloadRead));
+        assert!(ApiScope::AdminWrite.satisfies(ApiScope::ApprovalWrite));
+        assert!(ApiScope::AdminWrite.satisfies(ApiScope::AdminWrite));
+
+        // Specific scopes only satisfy themselves
+        assert!(ApiScope::TraceRead.satisfies(ApiScope::TraceRead));
+        assert!(!ApiScope::TraceRead.satisfies(ApiScope::RawPayloadRead));
+        assert!(!ApiScope::TraceRead.satisfies(ApiScope::ApprovalWrite));
+        assert!(!ApiScope::TraceRead.satisfies(ApiScope::AdminWrite));
+
+        assert!(ApiScope::ApprovalWrite.satisfies(ApiScope::ApprovalWrite));
+        assert!(!ApiScope::ApprovalWrite.satisfies(ApiScope::AdminWrite));
+    }
+
+    #[test]
+    fn test_endpoint_scope_resolution() {
+        assert_eq!(
+            required_scope_for_endpoint(&hyper::Method::GET, "/api/v1/traces"),
+            Some(ApiScope::TraceRead)
+        );
+        assert_eq!(
+            required_scope_for_endpoint(&hyper::Method::GET, "/api/v1/traces/tr-123/raw"),
+            Some(ApiScope::RawPayloadRead)
+        );
+        assert_eq!(
+            required_scope_for_endpoint(&hyper::Method::POST, "/api/v1/hitl/respond"),
+            Some(ApiScope::ApprovalWrite)
+        );
+        assert_eq!(
+            required_scope_for_endpoint(&hyper::Method::POST, "/api/policy/reload"),
+            Some(ApiScope::AdminWrite)
+        );
+    }
+}
+

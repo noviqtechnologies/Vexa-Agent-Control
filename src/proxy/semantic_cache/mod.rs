@@ -233,6 +233,26 @@ impl SemanticCache {
             return Err(CacheBypassReason::SyntacticAgentMetadata);
         }
 
+        // P0-4: Requests with more than one user turn or tool interaction history bypass semantic cache
+        if let Some(messages) = body.get("messages").and_then(|m| m.as_array()) {
+            let mut user_turns = 0;
+            for msg in messages {
+                if let Some(role) = msg.get("role").and_then(|r| r.as_str()) {
+                    if role == "user" {
+                        user_turns += 1;
+                    } else if role == "tool" || role == "function" {
+                        return Err(CacheBypassReason::MultiTurnAgentTraffic);
+                    }
+                }
+                if msg.get("tool_calls").is_some() || msg.get("function_call").is_some() {
+                    return Err(CacheBypassReason::MultiTurnAgentTraffic);
+                }
+            }
+            if user_turns > 1 {
+                return Err(CacheBypassReason::MultiTurnAgentTraffic);
+            }
+        }
+
         // Gate 2: Context Bypass
         if context.tenant_id.trim().is_empty() || context.subject_id.trim().is_empty() {
             return Err(CacheBypassReason::ContextMissingIdentity);
@@ -695,5 +715,82 @@ impl SemanticCache {
             VectorBackend::Qdrant(_) => {}
             VectorBackend::Hybrid { in_memory, .. } => in_memory.clear(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn test_context() -> CanonicalContext {
+        CanonicalContext {
+            tenant_id: "org_1".to_string(),
+            subject_id: "usr_1".to_string(),
+            virtual_key_scope: Some("vk_1".to_string()),
+            provider: "openai".to_string(),
+            model: "gpt-4o".to_string(),
+            model_version: None,
+            policy_version: "v1".to_string(),
+            workspace_hash: None,
+            system_prompt_hash: "sys_hash".to_string(),
+            developer_message_hash: None,
+            temperature_fixed: "0.000".to_string(),
+            top_p_fixed: None,
+            top_k: None,
+            seed: None,
+            max_tokens: None,
+            stop_sequences: vec![],
+            response_format: None,
+            reasoning_effort: None,
+            locale: None,
+            normalized_prompt: "how to sort in rust".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_single_turn_is_cacheable() {
+        let ctx = test_context();
+        let body = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "how to sort in rust"}
+            ]
+        });
+        assert!(SemanticCache::is_request_cacheable(&body, &ctx).is_ok());
+    }
+
+    #[test]
+    fn test_multi_turn_bypasses_cache_p0_4() {
+        let ctx = test_context();
+        let body = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "hi there"},
+                {"role": "user", "content": "how to sort in rust"}
+            ]
+        });
+        let result = SemanticCache::is_request_cacheable(&body, &ctx);
+        assert_eq!(result, Err(CacheBypassReason::MultiTurnAgentTraffic));
+    }
+
+    #[test]
+    fn test_tool_call_history_bypasses_cache_p0_4() {
+        let ctx = test_context();
+        let body = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "read the file"},
+                {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "read_file"}}]
+                },
+                {"role": "tool", "content": "file contents", "tool_call_id": "call_1"}
+            ]
+        });
+        let result = SemanticCache::is_request_cacheable(&body, &ctx);
+        assert_eq!(result, Err(CacheBypassReason::MultiTurnAgentTraffic));
     }
 }

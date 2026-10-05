@@ -56,19 +56,40 @@ func TestSecurityGA_DevModeRequiresBothFlags(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized when DevMode is false, got %d", w.Code)
 	}
 
-	// 2. cfg with DevMode = true (both flags were present) - valid dev password succeeds
-	cfgDev := &config.Config{
+	// P0-1: DevMode with no explicit password set → all logins must fail (no hardcoded fallback).
+	cfgDevNoPass := &config.Config{
 		DevMode: true,
+		// AdminPassword intentionally empty
+	}
+	authHDevNoPass := NewAuthHandler(nil, cfgDevNoPass)
+
+	req1b := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyDevCreds))
+	w1b := httptest.NewRecorder()
+	authHDevNoPass.Login(w1b, req1b)
+	if w1b.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized when DevMode=true but no admin password is configured, got %d", w1b.Code)
+	}
+
+	// 2. cfg with DevMode = true and explicit password configured — correct password succeeds
+	const testDevPass = "generated-dev-secret-abc123xyz456"
+	cfgDev := &config.Config{
+		DevMode:       true,
+		AdminEmail:    "admin@agentcontrol.local",
+		AdminPassword: testDevPass,
 	}
 	authHDev := NewAuthHandler(nil, cfgDev)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyDevCreds))
+	bodyValidCreds, _ := json.Marshal(LoginReq{
+		Email:    "admin",
+		Password: testDevPass,
+	})
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(bodyValidCreds))
 	w2 := httptest.NewRecorder()
 
 	authHDev.Login(w2, req2)
 
 	if w2.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK when DevMode is true with valid dev password, got %d", w2.Code)
+		t.Fatalf("expected 200 OK when DevMode is true with correct explicit password, got %d", w2.Code)
 	}
 
 	// 3. cfg with DevMode = true - random/wrong password MUST be rejected

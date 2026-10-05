@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -175,7 +177,18 @@ func Load() (*Config, error) {
 		adminPassword = os.Getenv("CONTROL_HUB_ADMIN_PASSWORD")
 	}
 	if adminPassword == "" && devMode {
-		adminPassword = "admin12345678"
+		// P0-1: Generate a random ≥24-char admin secret for dev mode rather than
+		// using the hardcoded placeholder. Printed once to stderr so the operator
+		// can copy it. Never persisted — intentional: restarting dev generates a
+		// new secret (acceptable for local dev; prod requires ADMIN_PASSWORD env).
+		var rawSecret [16]byte
+		if _, err := rand.Read(rawSecret[:]); err != nil {
+			return nil, fmt.Errorf("failed to generate dev admin password: %w", err)
+		}
+		adminPassword = hex.EncodeToString(rawSecret[:])
+		fmt.Fprintf(os.Stderr, "\n⚠️  DEV MODE: Generated ephemeral admin password (not persisted): %s\n"+
+			"   Set ADMIN_EMAIL + ADMIN_PASSWORD env vars to use a stable credential.\n\n",
+			adminPassword)
 	}
 
 	orgName := os.Getenv("ORGANIZATION_NAME")

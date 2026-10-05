@@ -196,6 +196,12 @@ pub struct ProxyState {
     pub hook_registry: Arc<super::hooks::HookRegistry>,
     /// Human-in-the-Loop policy escalation and desktop toast approval manager
     pub hitl_manager: Arc<crate::policy::hitl::HitlManager>,
+    /// Phase 3: Instant Capability Revocation Registry
+    pub revocation_registry: Arc<crate::policy::revocation::RevocationRegistry>,
+    /// Phase 3: Policy Storage Manager for signed bundles and rollback
+    pub policy_storage_manager: Option<Arc<crate::policy::signed::PolicyStorageManager>>,
+    /// Phase 3: OpenTelemetry Exporter
+    pub otlp_exporter: Arc<crate::telemetry::otlp::OtlpExporter>,
 }
 
 impl ProxyState {
@@ -283,6 +289,9 @@ impl ProxyState {
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
             hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
+            revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
+            policy_storage_manager: None,
+            otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
         })
     }
 
@@ -370,6 +379,9 @@ impl ProxyState {
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
             hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
+            revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
+            policy_storage_manager: None,
+            otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
         })
     }
 
@@ -455,6 +467,9 @@ impl ProxyState {
             provider_router: Arc::new(super::provider_router::ProviderRouter::default()),
             hook_registry: Arc::new(super::hooks::HookRegistry::default()),
             hitl_manager: Arc::new(crate::policy::hitl::HitlManager::new("mock-secret")),
+            revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
+            policy_storage_manager: None,
+            otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
         })
     }
 }
@@ -573,6 +588,57 @@ pub async fn evaluate_jsonrpc(
     // tools/call — extract tool name and arguments
     let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
     let mut tool_params = params.get("arguments").cloned().unwrap_or(Value::Null);
+
+    // Phase 3: Instant Capability Revocation Check (<30s propagation guarantee)
+    let agent_id = session.identity_sub.as_deref();
+    let credential_id = session.active_credential_id.as_deref();
+    if let Err(revoked) = state.revocation_registry.check(agent_id, Some(tool_name), credential_id) {
+        state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+        let _ = state
+            .audit_logger
+            .write_entry(
+                &session.session_id,
+                "capability_revoked_blocked",
+                tool_name,
+                None,
+                Some(format!("revoked target={:?}:{} reason={}", revoked.target_type, revoked.target_id, revoked.reason)),
+                None,
+                session.identity_sub.clone(),
+                session.identity_email.clone(),
+                None,
+                session.request_ip.clone(),
+                None,
+            )
+            .await;
+        logging::log_event(
+            Level::Warn,
+            "capability_revoked_blocked",
+            json!({
+                "tool": tool_name,
+                "session": &session.session_id,
+                "target_type": format!("{:?}", revoked.target_type),
+                "target_id": &revoked.target_id,
+                "reason": &revoked.reason,
+            }),
+        );
+        return ProxyAction::RespondWithStatus(
+            hyper::StatusCode::FORBIDDEN,
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32003,
+                    "message": format!("Capability revoked: {}", revoked.reason),
+                    "data": {
+                        "target_type": format!("{:?}", revoked.target_type).to_lowercase(),
+                        "target_id": revoked.target_id,
+                        "reason": revoked.reason,
+                        "revoked_at": revoked.revoked_at,
+                    }
+                }
+            }),
+        );
+    }
 
     // Rate limit check (FR-107) — strictly isolated per session
     if !session.rate_limiter.acquire() {
@@ -1423,6 +1489,55 @@ pub async fn evaluate_jsonrpc(
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         tracker.push(ToolCallFingerprint::new(tool_name, &tool_params));
+    }
+
+    // F3-S1: Session Taint Model & Toxic-Flow Evaluation
+    let toxic_flow_verdict = {
+        let mut taint = session
+            .taint_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let taint_engine = crate::policy::taint::TaintEngine::default();
+        taint_engine.evaluate_and_update(
+            &mut taint,
+            tool_name,
+            &tool_params,
+            None,
+        )
+    };
+
+    if let crate::policy::taint::ToxicFlowVerdict::ToxicFlowDetected { action, rule_id, reason } = toxic_flow_verdict {
+        if state.shadow_mode.load(Ordering::Relaxed) || action == crate::policy::taint::ToxicFlowAction::Warn {
+            logging::log_event(
+                Level::Warn,
+                "toxic_flow_detected",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "rule_id": rule_id,
+                    "reason": &reason,
+                    "mode": "shadow_warn"
+                }),
+            );
+        } else {
+            state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+            logging::log_event(
+                Level::Error,
+                "toxic_flow_blocked",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "rule_id": rule_id,
+                    "reason": &reason,
+                    "mode": "enforce_block"
+                }),
+            );
+            return ProxyAction::Respond(make_error(
+                &id,
+                -32603,
+                &format!("Toxic flow violation ({}): {}", rule_id, reason),
+            ));
+        }
     }
 
     // Safe Mode Evaluation (FR-303a) — tool-aware scanning

@@ -1,9 +1,11 @@
 //! Policy engine module for evaluation, DLP inspection, prompt injection, and schema loading.
 
+pub mod command_policy;
 pub mod community_rules;
 /// FR-5 v2.0: Credential scope stub validator (FR-22 integration pending).
 pub mod credential_scope;
 pub mod dlp;
+pub mod egress;
 pub mod engine;
 pub mod hitl;
 pub mod identity;
@@ -19,13 +21,18 @@ pub mod remote;
 /// Remote provider keys & desired state reconciler (REQ-DSM-004)
 pub mod remote_keys;
 pub mod response_scanner;
+pub mod revocation;
 pub mod safe_mode;
 pub mod schema;
 pub mod schema_drift;
 pub mod semantic;
+pub mod sensitive_path;
 pub mod sharding;
+pub mod signed;
 pub mod snapshot;
+pub mod taint;
 pub mod threat_intel;
+pub mod verdict;
 
 use std::sync::Arc;
 

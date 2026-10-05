@@ -682,25 +682,39 @@ The Go Control Plane manages true background daemons using a centralized, contex
 
 ## 10. Human-in-the-Loop (HITL) Action Escalation
 
-High-risk actions (e.g., database drops, production deployments, sensitive file access) can be routed for human authorization.
+High-risk actions (e.g., destructive bash commands, database migrations, cloud resource modifications) are routed to human operators for cryptographic authorization.
 
-### Real-Time Interactive Browser Modals
-When running locally, dangerous tool calls trigger a real-time modal in the Local Dashboard (`http://127.0.0.1:18080`). The execution pauses safely until the user clicks **Approve** or **Deny**.
+### The Formal 6-State Lifecycle (ADR-010)
 
-### Asynchronous Slack / MS Teams / Webhook Queue
-For team and enterprise deployments, the gateway dispatches an async webhook payload containing:
-- Request ID & Timestamp
-- Agent OIDC Identity & Project Context
-- Tool Name & Raw Parameters
-- Cryptographic HMAC-SHA256 Signature
+To prevent replay attacks and resolve process crashes during side-effect execution, all approvals follow a formal 6-state machine:
 
-Approvers submit decisions via HTTP callback:
+$$\text{PENDING} \longrightarrow \text{RESERVED} \longrightarrow \text{EXECUTING} \longrightarrow \text{EXECUTED} \,/\, \text{FAILED} \,/\, \text{EXPIRED} \,/\, \text{REVOKED}$$
+
+1. **`PENDING`**: Request generated with an unprivileged opaque reference ID (e.g. `appr-8f3a91-4b2c`).
+2. **`RESERVED`**: Atomically acquired by the execution engine via compare-and-set (CAS) before tool invocation; generates an **idempotency key** (`idem-<uuid>`).
+3. **`EXECUTING`**: Write-ahead record committed to disk immediately before dispatching the tool call.
+4. **`EXECUTED` / `FAILED`**: Side effect completed and verified; outcome committed to audit log.
+5. **Crash Recovery & `OUTCOME_UNKNOWN`**:
+   - If the daemon restarts while an action is `EXECUTING`, it reconciles via the tool's idempotency key.
+   - If execution status cannot be proven, the record transitions to **`OUTCOME_UNKNOWN`**.
+   - **Safety Invariant:** Vexa will **never silently re-execute an uncertain side effect**. Operator intervention is required.
+
+### Secret Isolation & Notification Delivery
+- **Opaque References Only:** Terminal output (`stderr`) and desktop notifications display only an unprivileged reference ID (`appr-<uuid>`). No cryptographic HMAC secrets or executable approval URLs are leaked to logs or notification daemons.
+- **Authenticated Local Capabilities:** Submitting an approval decision requires presenting a session capability token over loopback:
+
 ```bash
-curl -X POST http://localhost:18080/api/v1/hitl/respond \
+curl -X POST http://127.0.0.1:18080/api/v1/hitl/respond \
+  -H "Authorization: Bearer <CAPABILITY_TOKEN>" \
   -H "Content-Type: application/json" \
-  -H "X-Agent-Control-Signature: <HMAC_SIGNATURE>" \
-  -d '{"request_id": "req-9842", "decision": "approve"}'
+  -d '{
+    "approval_id": "appr-8f3a91-4b2c",
+    "decision": "approve",
+    "scope": "ALLOW_ONCE"
+  }'
 ```
+
+- **Scope Binding:** `ALLOW_N` scopes are strictly bound to `(tool_name, arguments_hash, workspace_id, audience)`. Broad wildcard approvals are prohibited.
 
 ---
 
@@ -708,17 +722,19 @@ curl -X POST http://localhost:18080/api/v1/hitl/respond \
 
 Every tool call, policy evaluation, DLP finding, and administrative action is recorded in an immutable, cryptographically chained audit log.
 
-### HMAC-SHA256 Hash Chaining
+### HMAC-SHA256 Hash Chaining & Schema Migration (ADR-009)
 
 Each record in `~/.agentcontrol/audit.jsonl` contains the SHA-256 hash of the preceding record:
 $$\text{Hash}_n = \text{HMAC-SHA256}(\text{Record}_n \parallel \text{Hash}_{n-1}, K_{\text{audit}})$$
 
-If any record is altered or deleted, the hash chain breaks immediately.
+- **Legacy Compatibility Invariant:** Historical entries (lacking `schema_version`) are verified using the permanently frozen `AuditEntryV1Legacy` schema.
+- **Modern Canonical Schema:** V2+ entries use `schema_version = 2` and RFC 8785 canonical JSON bytes, eliminating struct field ordering sensitivity.
+- **Chain Migration Bridges:** Transitions between schemas write a `schema_migration_bridge` record linking the previous terminal HMAC to the new genesis block.
 
 ### Verifying Log Integrity
 
 ```bash
-# Verify HMAC integrity across the entire audit log
+# Verify HMAC integrity across historical and modern chains
 agentcontrol verify-log ~/.agentcontrol/audit.jsonl
 
 # Verify with custom HMAC key file
