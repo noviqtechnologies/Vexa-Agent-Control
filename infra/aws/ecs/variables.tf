@@ -57,6 +57,12 @@ variable "control_plane_db_image" {
   default     = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
 }
 
+variable "force_image_pull" {
+  description = "When true, injects dynamic revision timestamp to force ECS Task Definition updates and pull the latest image from the registry (e.g. ghcr.io/...:latest)."
+  type        = bool
+  default     = true
+}
+
 # ─── Task Sizing & Resources ──────────────────────────────────────────────────
 
 variable "task_cpu" {

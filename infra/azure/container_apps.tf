@@ -235,6 +235,10 @@ resource "azurerm_container_app" "api" {
         name        = "INGRESS_AUTH_SECRET"
         secret_name = "gateway-secret"
       }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
+      }
 
       readiness_probe {
         transport               = "HTTP"
@@ -306,6 +310,10 @@ resource "azurerm_container_app" "ui" {
       env {
         name  = "DASHBOARD_API_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
       }
 
       readiness_probe {
@@ -418,6 +426,10 @@ resource "azurerm_container_app" "gateway" {
       env {
         name  = "AGENTWALL_LOG_PATH"
         value = "/var/log/agentcontrol/audit.log"
+      }
+      env {
+        name  = "IMAGE_PULL_TRIGGER"
+        value = var.force_image_pull ? timestamp() : "static"
       }
 
       readiness_probe {

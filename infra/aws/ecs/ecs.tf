@@ -79,7 +79,8 @@ locals {
         { name = "AGENTWALL_SESSION_SECRET", value = local.session_secret },
         { name = "AGENTCONTROL_SESSION_SECRET", value = local.session_secret },
         { name = "DIRECT_TLS_ENABLED", value = "true" },
-        { name = "INGRESS_AUTH_SECRET", value = local.gateway_secret }
+        { name = "INGRESS_AUTH_SECRET", value = local.gateway_secret },
+        { name = "IMAGE_PULL_TRIGGER", value = var.force_image_pull ? timestamp() : "static" }
       ],
       var.admin_email != "" ? [{ name = "ADMIN_EMAIL", value = var.admin_email }] : [],
       var.admin_password != "" ? [{ name = "ADMIN_PASSWORD", value = var.admin_password }] : []
@@ -120,7 +121,8 @@ locals {
       environment = [
         { name = "AGENTCONTROL_API_URL", value = "http://127.0.0.1:8400" },
         { name = "AGENTCONTROL_API_UPSTREAM", value = "127.0.0.1:8400" },
-        { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" }
+        { name = "DASHBOARD_API_URL", value = "http://127.0.0.1:8400" },
+        { name = "IMAGE_PULL_TRIGGER", value = var.force_image_pull ? timestamp() : "static" }
       ]
       dependsOn = [
         {
@@ -159,7 +161,8 @@ locals {
         { name = "GATEWAY_SECRET", value = local.gateway_secret },
         { name = "POLICY_POLL_INTERVAL_SECS", value = "30" },
         { name = "AGENTCONTROL_LOG_PATH", value = "/var/log/agentcontrol/audit.log" },
-        { name = "AGENTWALL_LOG_PATH", value = "/var/log/agentcontrol/audit.log" }
+        { name = "AGENTWALL_LOG_PATH", value = "/var/log/agentcontrol/audit.log" },
+        { name = "IMAGE_PULL_TRIGGER", value = var.force_image_pull ? timestamp() : "static" }
       ]
       dependsOn = [
         {

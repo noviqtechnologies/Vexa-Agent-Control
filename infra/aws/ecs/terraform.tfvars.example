@@ -11,6 +11,7 @@ container_image         = "ghcr.io/noviqtechnologies/agentcontrol:latest"
 control_plane_ui_image  = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-frontend:latest"
 control_plane_api_image = "ghcr.io/noviqtechnologies/agentcontrol-dashboard-api:latest"
 control_plane_db_image  = "ghcr.io/noviqtechnologies/agentcontrol-db:latest"
+force_image_pull        = true
 
 # Task Resources
 task_cpu      = "1024" # 1 vCPU
