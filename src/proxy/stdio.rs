@@ -675,6 +675,22 @@ pub async fn run_stdio_bridge(
 
                                 if let Err(e) = upstream_writer.send(json).await {
                                     eprintln!("Error sending to upstream: {}", e);
+                                    let _ = state
+                                        .audit_logger
+                                        .write_entry(
+                                            &local_session.session_id,
+                                            "upstream_delivery_failed",
+                                            &tool_name,
+                                            None,
+                                            Some(format!("Upstream send failure (downstream_outcome=unknown): {}", e)),
+                                            None,
+                                            local_session.identity_sub.clone(),
+                                            local_session.identity_email.clone(),
+                                            None,
+                                            local_session.request_ip.clone(),
+                                            None,
+                                        )
+                                        .await;
                                     break;
                                 }
                             }
@@ -1479,6 +1495,25 @@ pub async fn run_stdio_to_http_bridge(
                                 }
                             }
                             Err(e) => {
+                                let _ = state
+                                    .audit_logger
+                                    .write_entry(
+                                        &local_session.session_id,
+                                        "upstream_delivery_failed",
+                                        &tool_name,
+                                        None,
+                                        Some(format!(
+                                            "Forwarding error (downstream_outcome=unknown): {}",
+                                            e
+                                        )),
+                                        None,
+                                        local_session.identity_sub.clone(),
+                                        local_session.identity_email.clone(),
+                                        None,
+                                        local_session.request_ip.clone(),
+                                        None,
+                                    )
+                                    .await;
                                 let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
                                 let err_resp = serde_json::json!({
                                     "jsonrpc": "2.0",

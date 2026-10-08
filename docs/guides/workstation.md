@@ -71,11 +71,21 @@ agentcontrol start --policy agentcontrol-policy.yaml
 - **Prompt Injection:** Input containing jailbreak / system prompt override heuristics is blocked with verdict `DENY`.
 - **Recursion / Loop Prevention:** Excessive circular tool calls are halted before draining your API budget.
 
-### Verify Active Enforcement
+### Verify Active Enforcement & Posture
 In another terminal:
 ```bash
+# Check current protection profile across all IDE targets:
+agentcontrol status
+
+# Run the automated security verification probe:
 agentcontrol verify
 ```
+
+#### Understanding Your Protection Posture (FR-P0-1):
+- `ENFORCED`: The operation is affirmatively inspected and blocked before reaching downstream tools (e.g. wrapped MCP tools).
+- `OBSERVED`: Traffic is inspected in shadow mode; operations are permitted.
+- `UNCOVERED`: No interception path exists for this route (e.g. Claude Desktop direct cloud completions, native OS shell execution in Codex). Pair Vexa with container/OS-level isolation for uncovered vectors.
+- `UNKNOWN / UNHEALTHY`: The proxy daemon is stopped or configuration is unmanaged.
 
 ---
 
@@ -90,7 +100,7 @@ agentcontrol disconnect --all
 # Stop the daemon:
 agentcontrol stop
 
-# Verify target status:
+# Verify target status (should show UNCOVERED / UNMANAGED):
 agentcontrol status
 ```
 

@@ -236,3 +236,102 @@ async fn test_verification_probe_suite_injection_failure_honest_fail() {
 
     assert_eq!(exit_code, 1, "Expected verify suite to fail (exit 1) when injection is forwarded upstream instead of blocked");
 }
+
+#[tokio::test]
+async fn test_verification_probe_suite_safe_tool_upstream_offline_fails_honestly() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr: SocketAddr = listener.local_addr().unwrap();
+    let gateway_url = format!("http://127.0.0.1:{}", addr.port());
+
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    // Mock gateway that blocks DLP and Prompt injection, but fails to reach upstream for safe tool
+    let server_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                res = listener.accept() => {
+                    if let Ok((stream, _)) = res {
+                        let io = TokioIo::new(stream);
+                        tokio::spawn(async move {
+                            let _ = http1::Builder::new()
+                                .serve_connection(io, service_fn(|req: Request<Incoming>| async move {
+                                    if req.uri().path() == "/healthz" {
+                                        return Ok::<_, Infallible>(Response::builder()
+                                            .status(StatusCode::OK)
+                                            .header("Connection", "close")
+                                            .body(http_body_util::Full::new(bytes::Bytes::from("OK")))
+                                            .unwrap());
+                                    }
+                                    use http_body_util::BodyExt;
+                                    let bytes = req.into_body().collect().await.unwrap().to_bytes();
+                                    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(json!({}));
+                                    let id = body.get("id").cloned().unwrap_or(json!("1"));
+                                    let params = body.get("params").cloned().unwrap_or(json!({}));
+                                    let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                                    let args_str = params.get("arguments").map(|a| a.to_string()).unwrap_or_default();
+
+                                    if tool_name == "read_file" && args_str.contains("SYSTEM PROMPT OVERRIDE") {
+                                        let resp_body = json!({
+                                            "jsonrpc": "2.0",
+                                            "id": id,
+                                            "error": { "code": -32001, "message": "Policy violation: injection: Jailbreak" }
+                                        });
+                                        return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .header("Content-Type", "application/json")
+                                            .header("Connection", "close")
+                                            .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                                            .unwrap());
+                                    }
+
+                                    if tool_name == "send_external_http" {
+                                        let resp_body = json!({
+                                            "jsonrpc": "2.0",
+                                            "id": id,
+                                            "error": { "code": -32001, "message": "Policy violation: dlp: AWS Key" }
+                                        });
+                                        return Ok(Response::builder()
+                                            .status(StatusCode::BAD_REQUEST)
+                                            .header("Content-Type", "application/json")
+                                            .header("Connection", "close")
+                                            .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                                            .unwrap());
+                                    }
+
+                                    // Upstream is offline for safe tool!
+                                    let resp_body = json!({
+                                        "jsonrpc": "2.0",
+                                        "id": id,
+                                        "error": { "code": -32603, "message": "Upstream error: Connection refused (os error 111)" }
+                                    });
+                                    Ok(Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("Content-Type", "application/json")
+                                        .header("Connection", "close")
+                                        .body(http_body_util::Full::new(bytes::Bytes::from(resp_body.to_string())))
+                                        .unwrap())
+                                }))
+                                .await;
+                        });
+                    }
+                }
+            }
+        }
+    });
+
+    let exit_code = tokio::time::timeout(
+        Duration::from_secs(30),
+        run_verification_probe(&gateway_url, true, None, None, None, None),
+    )
+    .await
+    .unwrap_or_else(|_| 1);
+
+    let _ = shutdown_tx.send(());
+    server_task.abort();
+
+    assert_eq!(
+        exit_code, 1,
+        "Verify suite must fail (exit 1) if downstream upstream was unreachable for safe tool"
+    );
+}

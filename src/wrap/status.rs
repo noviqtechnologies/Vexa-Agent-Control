@@ -19,6 +19,34 @@ pub enum TargetState {
     BypassPossible,
 }
 
+/// Canonical security posture for a governed agent surface (PRD FR-P0-1).
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum EnforcementPosture {
+    #[serde(rename = "ENFORCED")]
+    Enforced,
+    #[serde(rename = "OBSERVED")]
+    Observed,
+    #[serde(rename = "UNCOVERED")]
+    Uncovered,
+    #[serde(rename = "UNKNOWN_UNHEALTHY")]
+    UnknownUnhealthy,
+}
+
+impl EnforcementPosture {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Enforced => "ENFORCED",
+            Self::Observed => "OBSERVED",
+            Self::Uncovered => "UNCOVERED",
+            Self::UnknownUnhealthy => "UNKNOWN_UNHEALTHY",
+        }
+    }
+}
+
+pub fn default_posture() -> EnforcementPosture {
+    EnforcementPosture::Uncovered
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum FreshnessTier {
     ActiveFresh,  // < 15 minutes
@@ -283,12 +311,94 @@ fn check_wrap_status(path: &PathBuf) -> Result<(usize, usize), String> {
     }
 }
 
+/// Check whether the local gateway daemon is actively listening on 127.0.0.1:18080 (FR-P0-1).
+pub fn is_gateway_running() -> bool {
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+    if let Ok(addr) = "127.0.0.1:18080".parse::<SocketAddr>() {
+        TcpStream::connect_timeout(&addr, Duration::from_millis(80)).is_ok()
+    } else {
+        false
+    }
+}
+
+/// Runtime-effective policy summary report (FR-P0-3).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EffectivePolicyReport {
+    pub path: Option<String>,
+    pub sha256_hash: String,
+    pub rule_count: usize,
+    pub default_action: String,
+    pub execution_mode: String,
+    pub status: String,
+}
+
+pub fn get_effective_policy_report() -> Option<EffectivePolicyReport> {
+    let (compiled_opt, path_opt) = crate::policy::loader::resolve_active_policy(None, None);
+    let path_str = path_opt.map(|p| p.to_string_lossy().to_string());
+
+    let shadow_mode = std::env::var("AGENTCONTROL_SHADOW_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    let execution_mode = if shadow_mode {
+        "shadow".to_string()
+    } else {
+        "enforce".to_string()
+    };
+
+    if let Some(compiled) = compiled_opt {
+        let hash = if let Some(ref p_str) = path_str {
+            if let Ok(raw) = std::fs::read(p_str) {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(&raw);
+                format!("sha256:{}", hex::encode(hasher.finalize()))
+            } else {
+                "sha256:active_in_memory".to_string()
+            }
+        } else {
+            "sha256:default_allowlist".to_string()
+        };
+
+        Some(EffectivePolicyReport {
+            path: path_str,
+            sha256_hash: hash,
+            rule_count: compiled.tools.len(),
+            default_action: "deny".to_string(),
+            execution_mode,
+            status: "HEALTHY (ACTIVE)".to_string(),
+        })
+    } else {
+        Some(EffectivePolicyReport {
+            path: None,
+            sha256_hash: "none".to_string(),
+            rule_count: 0,
+            default_action: "deny".to_string(),
+            execution_mode,
+            status: "NO_POLICY_CONFIGURED (FAIL_CLOSED)".to_string(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TargetStatusDetails {
     pub target: String,
     pub config_path: String,
     pub exists: bool,
     pub states: Vec<TargetState>,
+    #[serde(default = "default_posture")]
+    pub posture: EnforcementPosture,
+    #[serde(default = "default_posture")]
+    pub mcp_posture: EnforcementPosture,
+    #[serde(default = "default_posture")]
+    pub llm_posture: EnforcementPosture,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_enforcing_component: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm_enforcing_component: Option<String>,
+    #[serde(default)]
+    pub known_bypasses: Vec<String>,
     pub llm_routing: String,
     pub mcp_governance: String,
     pub freshness: String,
@@ -301,6 +411,8 @@ pub struct TargetStatusDetails {
 pub struct StatusReport {
     pub version: String,
     pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_policy: Option<EffectivePolicyReport>,
     pub targets: Vec<TargetStatusDetails>,
     pub endpoints: StatusEndpoints,
     pub global_disclosures: Vec<String>,
@@ -324,28 +436,65 @@ pub fn print_all_targets(json: bool) {
     let hub_url = crate::identity::device::load_hub_url()
         .unwrap_or_else(|| "https://app.vexasec.io".to_string());
     let enrolled = crate::identity::device::is_device_enrolled();
+    let gateway_active = is_gateway_running();
+    let effective_policy = get_effective_policy_report();
 
     let targets_details: Vec<TargetStatusDetails> = summaries
         .iter()
         .map(|s| {
-            let llm_routing = if !s.exists {
-                "NOT_DETECTED".to_string()
+            let is_proxied = s.states.contains(&TargetState::Configured);
+            let mut known_bypasses = Vec::new();
+
+            let (llm_routing, llm_posture, llm_enforcing_component) = if !s.exists {
+                ("NOT_DETECTED".to_string(), EnforcementPosture::Uncovered, None)
             } else if s.name == "Claude Desktop" {
-                "DIRECT_CLOUD (Anthropic)".to_string()
-            } else if s.states.contains(&TargetState::Configured) {
-                "PROXIED (18080)".to_string()
+                known_bypasses.push("Direct HTTPS completion route to Anthropic Cloud bypasses local proxy (Out-of-band)".to_string());
+                ("DIRECT_CLOUD (Anthropic)".to_string(), EnforcementPosture::Uncovered, None)
+            } else if is_proxied {
+                if gateway_active {
+                    ("PROXIED (18080)".to_string(), EnforcementPosture::Enforced, Some("agentcontrol http-proxy (18080)".to_string()))
+                } else {
+                    ("PROXIED (18080 - DAEMON DOWN)".to_string(), EnforcementPosture::UnknownUnhealthy, Some("agentcontrol http-proxy (offline)".to_string()))
+                }
             } else {
-                "UNMANAGED".to_string()
+                ("UNMANAGED".to_string(), EnforcementPosture::Uncovered, None)
             };
 
-            let mcp_gov = if !s.exists {
-                "NOT_INSTALLED".to_string()
+            let (mcp_gov, mcp_posture, mcp_enforcing_component) = if !s.exists {
+                ("NOT_INSTALLED".to_string(), EnforcementPosture::Uncovered, None)
             } else if s.total_servers == 0 {
-                "NO_SERVERS".to_string()
+                ("NO_SERVERS".to_string(), EnforcementPosture::Uncovered, None)
             } else if s.wrapped_servers == s.total_servers {
-                format!("WRAPPED ({}/{})", s.wrapped_servers, s.total_servers)
+                (format!("WRAPPED ({}/{})", s.wrapped_servers, s.total_servers), EnforcementPosture::Enforced, Some("agentcontrol stdio-proxy".to_string()))
+            } else if s.wrapped_servers > 0 {
+                known_bypasses.push(format!("Partial MCP coverage ({}/{} wrapped); unwrapped tools run ungoverned", s.wrapped_servers, s.total_servers));
+                (format!("PARTIAL ({}/{})", s.wrapped_servers, s.total_servers), EnforcementPosture::Observed, Some("agentcontrol stdio-proxy (partial)".to_string()))
             } else {
-                format!("PARTIAL ({}/{})", s.wrapped_servers, s.total_servers)
+                known_bypasses.push(format!("All {} MCP server entries are unwrapped and ungoverned", s.total_servers));
+                (format!("UNWRAPPED (0/{})", s.total_servers), EnforcementPosture::Uncovered, None)
+            };
+
+            if s.name == "Codex" && s.exists {
+                known_bypasses.push("Native shell execution (bash/git) is UNGOVERNED by local proxy".to_string());
+            }
+
+            // Target overall posture reflects verifiable prevention capability
+            let posture = if !s.exists {
+                EnforcementPosture::Uncovered
+            } else if s.name == "Claude Desktop" {
+                if mcp_posture == EnforcementPosture::Enforced {
+                    EnforcementPosture::Enforced
+                } else {
+                    EnforcementPosture::Uncovered
+                }
+            } else if mcp_posture == EnforcementPosture::UnknownUnhealthy || llm_posture == EnforcementPosture::UnknownUnhealthy {
+                EnforcementPosture::UnknownUnhealthy
+            } else if mcp_posture == EnforcementPosture::Enforced || llm_posture == EnforcementPosture::Enforced {
+                EnforcementPosture::Enforced
+            } else if mcp_posture == EnforcementPosture::Observed || llm_posture == EnforcementPosture::Observed {
+                EnforcementPosture::Observed
+            } else {
+                EnforcementPosture::Uncovered
             };
 
             TargetStatusDetails {
@@ -353,6 +502,12 @@ pub fn print_all_targets(json: bool) {
                 config_path: s.path.clone(),
                 exists: s.exists,
                 states: s.states.clone(),
+                posture,
+                mcp_posture,
+                llm_posture,
+                mcp_enforcing_component,
+                llm_enforcing_component,
+                known_bypasses,
                 llm_routing,
                 mcp_governance: mcp_gov,
                 freshness: s.freshness.label().to_string(),
@@ -367,6 +522,7 @@ pub fn print_all_targets(json: bool) {
         let report = StatusReport {
             version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
+            effective_policy,
             targets: targets_details,
             endpoints: StatusEndpoints {
                 default_proxy_url: "http://127.0.0.1:18080/v1".to_string(),
@@ -376,7 +532,7 @@ pub fn print_all_targets(json: bool) {
             global_disclosures: vec![
                 "Native shell execution (bash/git) is UNGOVERNED by local proxy across all targets.".to_string(),
                 "Workstation developers can configure personal API keys in environment variables (Bypass Possible).".to_string(),
-                "Binary 'COMPLIANT' state is retired; independent capability states reflect actual workstation posture.".to_string(),
+                "Binary 'COMPLIANT' state is retired; independent capability postures (ENFORCED/OBSERVED/UNCOVERED) reflect actual security boundary.".to_string(),
             ],
         };
         println!(
@@ -389,31 +545,50 @@ pub fn print_all_targets(json: bool) {
     println!();
     println!(
         "{} {}",
-        "Vexa Agent Control — Target Governance & Capability Posture"
+        "Vexa Agent Control — Target Governance & Protection Posture"
             .bold()
             .white(),
         format!("(v{})", env!("CARGO_PKG_VERSION")).cyan()
     );
-    println!("{}", "─".repeat(105).dimmed());
+    if let Some(ref pol) = effective_policy {
+        println!(
+            "  Active Policy: {} | Mode: {} | Rules: {} | Hash: {}",
+            pol.path.as_deref().unwrap_or("none").cyan(),
+            pol.execution_mode.yellow(),
+            pol.rule_count,
+            pol.sha256_hash.dimmed()
+        );
+    }
+    println!("{}", "─".repeat(110).dimmed());
     println!(
-        "  {:<16} {:<32} {:<18} {:<18} {:<12}",
+        "  {:<16} {:<28} {:<14} {:<20} {:<18}",
         "TARGET".bold(),
         "CONFIG PATH".bold(),
+        "POSTURE".bold(),
         "LLM ROUTING".bold(),
         "MCP GOVERNANCE".bold(),
-        "FRESHNESS".bold()
     );
-    println!("{}", "─".repeat(105).dimmed());
+    println!("{}", "─".repeat(110).dimmed());
 
     for t in &targets_details {
         let path_disp = shorten_path(Path::new(&t.config_path));
-        let routing_colored = if t.llm_routing.starts_with("PROXIED") {
-            t.llm_routing.green()
-        } else if t.llm_routing == "DIRECT_CLOUD" {
-            t.llm_routing.yellow()
-        } else {
-            t.llm_routing.dimmed()
+        let posture_colored = match t.posture {
+            EnforcementPosture::Enforced => "ENFORCED".green().bold(),
+            EnforcementPosture::Observed => "OBSERVED".yellow().bold(),
+            EnforcementPosture::Uncovered => "UNCOVERED".dimmed(),
+            EnforcementPosture::UnknownUnhealthy => "UNHEALTHY".red().bold(),
         };
+
+        let routing_colored =
+            if t.llm_routing.starts_with("PROXIED") && !t.llm_routing.contains("DOWN") {
+                t.llm_routing.green()
+            } else if t.llm_routing.starts_with("PROXIED") {
+                t.llm_routing.red()
+            } else if t.llm_routing.starts_with("DIRECT_CLOUD") {
+                t.llm_routing.yellow()
+            } else {
+                t.llm_routing.dimmed()
+            };
 
         let mcp_colored = if t.mcp_governance.starts_with("WRAPPED") {
             t.mcp_governance.green()
@@ -424,22 +599,22 @@ pub fn print_all_targets(json: bool) {
         };
 
         println!(
-            "  {:<16} {:<32} {:<18} {:<18} {:<12}",
+            "  {:<16} {:<28} {:<14} {:<20} {:<18}",
             t.target.cyan().bold(),
             path_disp.dimmed(),
+            posture_colored,
             routing_colored,
             mcp_colored,
-            t.freshness.dimmed()
         );
     }
 
-    println!("{}", "─".repeat(105).dimmed());
+    println!("{}", "─".repeat(110).dimmed());
     println!("{}", "  ACTIVE CAPABILITY STATES:".bold());
     for t in &targets_details {
         if t.exists {
             let names: Vec<String> = t.states.iter().map(|st| format!("{:?}", st)).collect();
             let note = if t.target == "Claude Desktop" {
-                " (LLM completions route out-of-band to Anthropic Cloud)"
+                " (LLM completions route out-of-band to Anthropic Cloud; MCP governed via stdio)"
             } else {
                 ""
             };
@@ -469,7 +644,7 @@ pub fn print_all_targets(json: bool) {
         "    ℹ Claude Desktop: Native completions route directly to Anthropic Cloud; MCP tools governed via stdio-proxy."
     );
     println!(
-        "    ℹ Integrity: Binary 'COMPLIANT' state is retired; capability states reflect exact workstation posture."
+        "    ℹ Integrity: Binary 'COMPLIANT' state is retired; independent capability postures (ENFORCED/OBSERVED/UNCOVERED) reflect actual security boundary."
     );
     println!();
 }

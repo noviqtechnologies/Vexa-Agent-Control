@@ -53,9 +53,10 @@ fn write_echo_upstream(dir: &std::path::Path) -> PathBuf {
     let script = dir.join("echo_upstream.py");
     let content = r#"#!/usr/bin/env python3
 """Minimal controllable MCP upstream for integration testing (P1 fix)."""
-import sys, json, os
+import sys, json, os, tempfile
 
-HIT_LOG = os.environ.get("UPSTREAM_HIT_LOG", "/tmp/upstream_hits.log")
+default_log = os.path.join(tempfile.gettempdir(), "upstream_hits.log")
+HIT_LOG = os.environ.get("UPSTREAM_HIT_LOG", default_log)
 
 for line in sys.stdin:
     line = line.strip()
@@ -99,10 +100,16 @@ fn send_and_recv(
 
 #[test]
 fn test_stdio_proxy_process_integration() {
-    // Skip gracefully when the binary has not been built yet.
+    // When running under CI, missing binary is a hard fatal failure (FR-P0-7).
     let binary = match find_agentcontrol_binary() {
         Some(b) => b,
         None => {
+            if std::env::var("CI").is_ok() {
+                panic!(
+                    "[FATAL CI] test_stdio_proxy_process_integration: agentcontrol binary not found. \
+                     Release CI must build `cargo build` before running security integration tests."
+                );
+            }
             eprintln!(
                 "[SKIP] test_stdio_proxy_process_integration: agentcontrol binary not found. \
                  Build first: `cargo build` or `cargo build --release`."

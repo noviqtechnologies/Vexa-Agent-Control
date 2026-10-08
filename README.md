@@ -150,17 +150,23 @@ Vexa Agent Control provides transparent proxying and central broker governance a
 
 > **Operating Standard:** Centrally brokered requests execute an authoritative, bounded retry loop (Primary + max 1 Fallback, max 2 attempts total) with W3C `traceparent` correlation, atomic preflight spend ceilings, and fail-closed security. Auto-failover is tested and verified across OpenAI, Anthropic Claude, and Google Gemini adapters.
 
-### Supported Coding Assistants & IDEs
+### Supported Coding Assistants & Protection Profiles (FR-P0-1)
 
-| Client / Agent | Interception Method | Completion Traffic | MCP Tool Sandbox | Verified Status |
-|---|---|:---:|:---:|:---:|
-| **Cursor IDE** | `settings.json` (`http.proxy`) | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
-| **Claude Code (CLI)** | `settings.json` (`ANTHROPIC_BASE_URL`) | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
-| **Claude Desktop** | `claude_desktop_config.json` (`stdio-proxy`) | ℹ️ Direct Cloud | ✅ Sandboxed (18080) | **Verified** |
-| **Google Antigravity** | `mcp_config.json` (`proxy_url`) | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
-| **OpenAI Codex CLI** | Shell Wrapper (`codex-intercept.sh`) | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
-| **VS Code (Continue)** | `config.yaml` / `settings.json` | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
-| **Custom Agents (Python/TS)** | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080` | ✅ Proxied (18080) | ✅ Proxied (18080) | **Verified** |
+| Client / Agent | Interception Method | MCP Tool Posture | LLM Completion Posture | Documented Boundary / Known Bypasses |
+|---|---|:---:|:---:|---|
+| **Cursor IDE** | `settings.json` (`http.proxy`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Unwrapped MCP tools in configuration run ungoverned. |
+| **Claude Code (CLI)** | `settings.json` (`ANTHROPIC_BASE_URL`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Shell-spawned processes bypass proxy unless wrapped. |
+| **Claude Desktop** | `claude_desktop_config.json` (`stdio-proxy`) | `ENFORCED` (stdio-proxy) | `UNCOVERED` (Direct Cloud) | Completions route out-of-band directly to Anthropic Cloud; only wrapped MCP tools are governed. |
+| **Google Antigravity** | `mcp_config.json` (`proxy_url`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Unwrapped custom sidecars run ungoverned. |
+| **OpenAI Codex CLI** | Shell Wrapper (`codex-intercept.sh`) | `ENFORCED` (stdio-proxy) | `ENFORCED` (18080) | Native shell execution (bash/git) is UNGOVERNED by local proxy. |
+| **VS Code (Continue)** | `config.yaml` / `settings.json` | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Direct API keys configured in extension bypass proxy. |
+| **Custom Agents (Python/TS)** | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080` | `ENFORCED` (18080) | `ENFORCED` (18080) | Unconfigured direct sockets bypass transport proxy. |
+
+> **Security Posture Definitions (PRD FR-P0-1):**
+> - `ENFORCED`: Affirmatively inspected and blocked before downstream execution.
+> - `OBSERVED`: Inspected in shadow mode; operations permitted.
+> - `UNCOVERED`: No interception path exists for this route (e.g. direct cloud egress or native OS shell commands). Layer with container/OS isolation.
+> - `UNKNOWN / UNHEALTHY`: Proxy daemon offline, configuration drifted, or unmanaged.
 
 ---
 

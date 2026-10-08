@@ -261,12 +261,12 @@ pub async fn run_verification_probe(
             } else if !err_msg.is_empty() {
                 if err_msg.contains("Upstream error") || err_msg.contains("Connection refused") {
                     (
-                        true,
+                        false,
                         status,
-                        "POLICY ALLOWED (NO UPSTREAM TOOL)".to_string(),
+                        "OUTCOME_UNKNOWN (DOWNSTREAM_UNAVAILABLE)".to_string(),
                         req_id,
                         Some("default_allowlist".to_string()),
-                        "Tool operation affirmatively allowed by policy; upstream handled gracefully".to_string(),
+                        "Tool operation allowed by policy, but downstream upstream was unreachable. Full end-to-end delivery could not be confirmed.".to_string(),
                     )
                 } else if err_msg.contains("Policy violation") {
                     (

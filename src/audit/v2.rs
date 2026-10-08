@@ -75,6 +75,15 @@ pub struct AuditEntryV2 {
     /// Structured verdict explanation — present for explainable block decisions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verdict: Option<VerdictExplanation>,
+    /// Enforcing component that evaluated and acted on the request (FR-P0-4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enforcement_component: Option<String>,
+    /// Verified downstream delivery outcome: "not_forwarded", "forwarded", "unknown" (FR-P0-4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downstream_outcome: Option<String>,
+    /// Health state of the security control at decision time: "healthy", "degraded" (FR-P0-4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_health: Option<String>,
 }
 
 /// Metadata attached to a `schema_migration_bridge` entry linking the
@@ -296,6 +305,9 @@ mod tests {
             hmac: Some("will-be-stripped".to_string()),
             migration_metadata: None,
             verdict: None,
+            enforcement_component: None,
+            downstream_outcome: None,
+            control_health: None,
         };
 
         let secret = [0x42u8; 32];
@@ -329,6 +341,9 @@ mod tests {
             hmac: None,
             migration_metadata: None,
             verdict: None,
+            enforcement_component: None,
+            downstream_outcome: None,
+            control_health: None,
         };
 
         let secret = [0xAB; 32];
@@ -367,6 +382,46 @@ mod tests {
     }
 
     #[test]
+    fn test_v2_downstream_outcome_hmac_binding() {
+        let entry_denied = AuditEntryV2 {
+            schema_version: SCHEMA_VERSION_V2,
+            ts: "2026-10-08T12:00:00Z".to_string(),
+            session_id: "outcome-test".to_string(),
+            event: "tool_deny".to_string(),
+            tool_name: Some("read_file".to_string()),
+            params_hash: Some("abc".to_string()),
+            params: None,
+            reason: Some("DLP pattern matched: AWS Key".to_string()),
+            latency_ms: Some(1.2),
+            identity_sub: None,
+            identity_email: None,
+            policy_hash: Some("sha256:policy123".to_string()),
+            request_ip: Some("127.0.0.1".to_string()),
+            matched_group_id: None,
+            entry_index: 1,
+            prev_hmac: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
+            hmac: None,
+            migration_metadata: None,
+            verdict: None,
+            enforcement_component: Some("stdio_proxy".to_string()),
+            downstream_outcome: Some("not_forwarded".to_string()),
+            control_health: Some("healthy".to_string()),
+        };
+
+        let secret = [0x77u8; 32];
+        let mut signed = entry_denied.clone();
+        signed.hmac = Some(signed.compute_hmac(&secret).unwrap());
+
+        assert!(signed.verify_hmac(&secret).unwrap());
+
+        // Tampering with downstream outcome must invalidate HMAC
+        let mut tampered = signed.clone();
+        tampered.downstream_outcome = Some("forwarded".to_string());
+        assert!(!tampered.verify_hmac(&secret).unwrap());
+    }
+
+    #[test]
     fn test_migration_bridge_entry() {
         let bridge = AuditEntryV2 {
             schema_version: SCHEMA_VERSION_V2,
@@ -394,6 +449,9 @@ mod tests {
                 bridge_signature: None,
             }),
             verdict: None,
+            enforcement_component: None,
+            downstream_outcome: None,
+            control_health: None,
         };
 
         let secret = [0x55; 32];

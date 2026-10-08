@@ -97,6 +97,9 @@ fn make_v2_entry(
         hmac: None,
         migration_metadata: None,
         verdict,
+        enforcement_component: None,
+        downstream_outcome: None,
+        control_health: None,
     };
 
     let hmac = entry.compute_hmac(session_secret).unwrap();
@@ -135,6 +138,9 @@ fn make_bridge_entry(
             bridge_signature: None,
         }),
         verdict: None,
+        enforcement_component: None,
+        downstream_outcome: None,
+        control_health: None,
     };
 
     let hmac = entry.compute_hmac(session_secret).unwrap();
@@ -538,4 +544,75 @@ fn test_active_struct_mutation_isolation() {
     let parsed: AuditEntryV1Legacy = serde_json::from_str(&json1).unwrap();
     let hmac2 = parsed.compute_hmac(&TEST_SECRET).unwrap();
     assert_eq!(hmac, hmac2, "Round-trip HMAC diverged");
+}
+
+#[test]
+fn test_v2_provenance_and_downstream_outcome_verification_and_tamper_detection() {
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("audit_provenance.jsonl");
+
+    let mut entry = AuditEntryV2 {
+        schema_version: SCHEMA_VERSION_V2,
+        ts: "2026-06-01T12:00:00Z".to_string(),
+        session_id: "sess-provenance-test".to_string(),
+        event: "tool_deny".to_string(),
+        tool_name: Some("execute_bash".to_string()),
+        params_hash: None,
+        params: None,
+        reason: Some("Disallowed command pattern detected".to_string()),
+        latency_ms: Some(2.4),
+        identity_sub: None,
+        identity_email: None,
+        policy_hash: None,
+        request_ip: None,
+        matched_group_id: None,
+        entry_index: 0,
+        prev_hmac: ZERO_HMAC.to_string(),
+        hmac: None,
+        migration_metadata: None,
+        verdict: Some(VerdictExplanation {
+            rule_id: "SHELL-DENY-001".to_string(),
+            risk_category: "command_injection".to_string(),
+            evidence_snippet: Some("execute_bash".to_string()),
+            remediation: Some("Use read_file or pre-approved CLI instead".to_string()),
+        }),
+        enforcement_component: Some("stdio_proxy".to_string()),
+        downstream_outcome: Some("not_forwarded".to_string()),
+        control_health: Some("healthy".to_string()),
+    };
+
+    let hmac = entry.compute_hmac(&TEST_SECRET).unwrap();
+    entry.hmac = Some(hmac);
+
+    let line = serde_json::to_string(&entry).unwrap();
+    append_line(&log_path, &line);
+
+    // 1. Verify valid entry passes cryptographic check
+    let res = verify_chain_with_secret(&log_path, &TEST_SECRET);
+    match res {
+        VerifyResult::Valid { entry_count } => {
+            assert_eq!(entry_count, 1);
+        }
+        other => panic!("Expected VerifyResult::Valid, got: {:?}", other),
+    }
+
+    // 2. Tampering with downstream_outcome from "not_forwarded" to "forwarded" MUST trigger tamper detection
+    let mut tampered_entry: AuditEntryV2 = serde_json::from_str(&line).unwrap();
+    tampered_entry.downstream_outcome = Some("forwarded".to_string());
+    // (keep the original HMAC)
+    let tampered_line = serde_json::to_string(&tampered_entry).unwrap();
+
+    let tampered_path = dir.path().join("audit_tampered.jsonl");
+    append_line(&tampered_path, &tampered_line);
+
+    let tampered_res = verify_chain_with_secret(&tampered_path, &TEST_SECRET);
+    match tampered_res {
+        VerifyResult::Invalid { entry_index, .. } => {
+            assert_eq!(
+                entry_index, 0,
+                "Tampered downstream outcome must be detected at entry 0"
+            );
+        }
+        other => panic!("Expected VerifyResult::Invalid, got: {:?}", other),
+    }
 }

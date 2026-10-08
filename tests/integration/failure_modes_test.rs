@@ -1,9 +1,14 @@
-//! Integration tests for Phase 0b: Failure-Mode Matrix & Chaos Recovery.
-//! Validates resilience under disk full, network timeout, process crash,
-//! token expiry, and policy corruption scenarios.
+//! Integration tests for Phase 0b & Phase 5: Failure-Mode Matrix & Chaos Recovery.
+//! Validates real-runtime resilience under disk errors, unreachable daemons,
+//! revocation expiry, policy corruption, and timeout scaling using actual production handlers.
 
+use agentcontrol::audit::logger::{AuditError, AuditLogger, AuditLoggerConfig};
 use agentcontrol::policy::loader::{load_policy_from_str, PolicyLoadResult};
-use std::time::{Duration, Instant};
+use agentcontrol::policy::revocation::{RevocationRegistry, RevocationTargetType};
+use agentcontrol::proxy::adaptive_timeout::AdaptiveTimeoutManager;
+use agentcontrol::verify::run_verification_probe;
+use std::path::PathBuf;
+use std::time::Duration;
 
 // ─── 1. Policy Corruption Resilience ────────────────────────────────────────
 
@@ -40,122 +45,126 @@ tools:
     assert_eq!(initial_policy.tools[0].name, "safe_tool");
 }
 
-// ─── 2. Capability Token Expiration ─────────────────────────────────────────
+// ─── 2. Production Capability & Token Revocation ─────────────────────────────
 
 #[test]
-fn test_failure_mode_token_expiration() {
-    #[allow(dead_code)]
-    struct CapabilityToken {
-        token: String,
-        expires_at: Instant,
-    }
+fn test_failure_mode_revocation_registry_production_enforcement() {
+    let registry = RevocationRegistry::new();
 
-    impl CapabilityToken {
-        fn validate(&self) -> Result<(), &'static str> {
-            if Instant::now() > self.expires_at {
-                Err("Capability token expired")
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    // Token with 0 TTL (already expired)
-    let expired_token = CapabilityToken {
-        token: "cap-test-expired".to_string(),
-        expires_at: Instant::now() - Duration::from_millis(50),
-    };
-
-    assert_eq!(
-        expired_token.validate(),
-        Err("Capability token expired"),
-        "Expired token must be rejected"
+    // Revoke an agent credential/token and a sensitive tool
+    registry.revoke_token("token-expired-001", "Token TTL exceeded (session expired)");
+    registry.revoke_tool("dangerous_tool", "Tool disabled by incident response");
+    registry.revoke_agent(
+        "agent-quarantined",
+        "Agent quarantined due to prompt injection",
     );
-}
 
-// ─── 3. Unconfirmed Side Effect After Process Crash ─────────────────────────
-
-#[test]
-fn test_failure_mode_unconfirmed_side_effect_blocks_retry() {
-    #[derive(Debug, PartialEq, Eq)]
-    enum ToolExecutionStatus {
-        Executing,
-        OutcomeUnknown,
-    }
-
-    struct CrashRecoveryManager {
-        state: ToolExecutionStatus,
-    }
-
-    impl CrashRecoveryManager {
-        fn recover(&mut self, tool_acknowledgement: Option<bool>) {
-            if self.state == ToolExecutionStatus::Executing && tool_acknowledgement.is_none() {
-                self.state = ToolExecutionStatus::OutcomeUnknown;
-            }
-        }
-
-        fn can_retry(&self) -> Result<(), &'static str> {
-            if self.state == ToolExecutionStatus::OutcomeUnknown {
-                Err("Cannot silently re-execute uncertain side effect; operator intervention required")
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    let mut manager = CrashRecoveryManager {
-        state: ToolExecutionStatus::Executing,
-    };
-
-    // Simulate crash where tool server gives no ACK
-    manager.recover(None);
-    assert_eq!(manager.state, ToolExecutionStatus::OutcomeUnknown);
-
-    let retry_res = manager.can_retry();
-    assert!(retry_res.is_err());
-    assert!(retry_res
-        .unwrap_err()
-        .contains("Cannot silently re-execute"));
-}
-
-// ─── 4. Upstream Gateway Timeout Mapping ───────────────────────────────────
-
-#[test]
-fn test_failure_mode_upstream_timeout_mapping() {
-    #[derive(Debug, PartialEq, Eq)]
-    struct UpstreamErrorResponse {
-        status_code: u16,
-        error_type: String,
-        message: String,
-        correlation_id: String,
-    }
-
-    fn map_upstream_timeout(correlation_id: &str) -> UpstreamErrorResponse {
-        UpstreamErrorResponse {
-            status_code: 504,
-            error_type: "gateway_timeout".to_string(),
-            message: "Upstream AI provider did not respond within configured deadline".to_string(),
-            correlation_id: correlation_id.to_string(),
-        }
-    }
-
-    let err = map_upstream_timeout("req-timeout-001");
-    assert_eq!(err.status_code, 504);
-    assert_eq!(err.error_type, "gateway_timeout");
-    assert_eq!(err.correlation_id, "req-timeout-001");
-}
-
-// ─── 5. Write Failure / File Descriptor Handling ────────────────────────────
-
-#[test]
-fn test_failure_mode_nonexistent_directory_write_failure() {
-    use std::fs::File;
-
-    let temp = tempfile::tempdir().unwrap();
-    let invalid_path = temp.path().join("nonexistent_dir_9999").join("audit.log");
-    let open_res = File::create(invalid_path);
+    // Valid check
     assert!(
-        open_res.is_err(),
-        "Opening file on nonexistent volume must fail cleanly"
+        registry
+            .check(Some("agent-good"), Some("safe_tool"), Some("token-valid"))
+            .is_ok(),
+        "Unrevoked tuple must be allowed"
     );
+
+    // Revoked token check
+    let token_err = registry
+        .check(
+            Some("agent-good"),
+            Some("safe_tool"),
+            Some("token-expired-001"),
+        )
+        .expect_err("Revoked token must be rejected");
+    assert_eq!(token_err.target_type, RevocationTargetType::Token);
+    assert_eq!(token_err.target_id, "token-expired-001");
+    assert!(token_err.reason.contains("Token TTL exceeded"));
+
+    // Revoked tool check
+    let tool_err = registry
+        .check(
+            Some("agent-good"),
+            Some("dangerous_tool"),
+            Some("token-valid"),
+        )
+        .expect_err("Revoked tool must be rejected");
+    assert_eq!(tool_err.target_type, RevocationTargetType::Tool);
+    assert_eq!(tool_err.target_id, "dangerous_tool");
+
+    // Revoked agent check
+    let agent_err = registry
+        .check(
+            Some("agent-quarantined"),
+            Some("safe_tool"),
+            Some("token-valid"),
+        )
+        .expect_err("Quarantined agent must be rejected");
+    assert_eq!(agent_err.target_type, RevocationTargetType::Agent);
+}
+
+// ─── 3. Unreachable Daemon Fail-Closed Verification ──────────────────────────
+
+#[tokio::test]
+async fn test_failure_mode_unreachable_daemon_fails_closed() {
+    // Attempt verification probe against a non-existent port (unreachable daemon)
+    let unreachable_url = "http://127.0.0.1:58999";
+    let exit_code = run_verification_probe(unreachable_url, true, None, None, None, None).await;
+
+    // Must fail closed with non-zero exit code (1), not crash or falsely succeed
+    assert_eq!(
+        exit_code, 1,
+        "Unreachable gateway daemon must fail closed with exit code 1"
+    );
+}
+
+// ─── 4. Adaptive Timeout & Model Deadline Scaling ───────────────────────────
+
+#[test]
+fn test_failure_mode_adaptive_timeout_production_scaling() {
+    // Reasoning models (e.g. o1, r1) require dynamic timeout expansion
+    let o1_timeout = AdaptiveTimeoutManager::calculate_timeout("o1-preview", Some(1000));
+    assert!(
+        o1_timeout >= Duration::from_millis(60_000),
+        "Reasoning model base timeout must exceed 60s"
+    );
+
+    // Fast models (e.g. gpt-4o-mini, haiku) require bounded deadlines to prevent hanging
+    let mini_timeout = AdaptiveTimeoutManager::calculate_timeout("gpt-4o-mini", Some(1000));
+    assert!(
+        mini_timeout <= Duration::from_millis(60_000),
+        "Fast model deadline must be tightly bounded"
+    );
+    assert!(
+        mini_timeout < o1_timeout,
+        "Lightweight model timeout must be strictly lower than reasoning model timeout"
+    );
+}
+
+// ─── 5. Audit Logger Unwritable Path / Broken Disk Fails Closed ─────────────
+
+#[test]
+fn test_failure_mode_audit_logger_unwritable_path_fails_closed() {
+    // Attempt to construct an AuditLogger targeting an impossible/uncreatable path
+    #[cfg(windows)]
+    let impossible_path = PathBuf::from(r#"\\?\CON\audit.log"#);
+    #[cfg(not(windows))]
+    let impossible_path = PathBuf::from("/proc/nonexistent/sub/audit.log");
+
+    let cfg = AuditLoggerConfig {
+        log_path: impossible_path,
+        session_id: "fail-closed-session".to_string(),
+        session_secret: vec![0u8; 32],
+        max_bytes: 1024,
+        siem_exporter: None,
+        include_params: false,
+    };
+
+    let result = AuditLogger::new(cfg);
+    assert!(
+        result.is_err(),
+        "Audit logger initialization on unwritable filesystem must fail immediately"
+    );
+    match result {
+        Err(AuditError::IoError(_)) => {}
+        _ => panic!("Expected AuditError::IoError on unwritable file path"),
+    }
 }

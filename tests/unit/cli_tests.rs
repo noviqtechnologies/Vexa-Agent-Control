@@ -4,7 +4,8 @@
 use agentcontrol::cli::{CacheCommands, Cli, Commands};
 use agentcontrol::doctor::{run_diagnostics, DiagnosticCheck, DiagnosticStatus, DoctorReport};
 use agentcontrol::wrap::status::{
-    FreshnessTier, StatusEndpoints, StatusReport, TargetState, TargetStatusDetails,
+    EnforcementPosture, FreshnessTier, StatusEndpoints, StatusReport, TargetState,
+    TargetStatusDetails,
 };
 use clap::{CommandFactory, Parser};
 
@@ -182,11 +183,18 @@ fn test_status_report_serialization_and_disclosures() {
     let report = StatusReport {
         version: "1.0.87".to_string(),
         timestamp: "2026-09-14T00:00:00Z".to_string(),
+        effective_policy: None,
         targets: vec![TargetStatusDetails {
             target: "Claude Desktop".to_string(),
             config_path: "C:\\Users\\test\\claude_desktop_config.json".to_string(),
             exists: true,
             states: vec![TargetState::Detected, TargetState::McpWrapped],
+            posture: EnforcementPosture::Enforced,
+            mcp_posture: EnforcementPosture::Enforced,
+            llm_posture: EnforcementPosture::Uncovered,
+            mcp_enforcing_component: Some("agentcontrol stdio-proxy".to_string()),
+            llm_enforcing_component: None,
+            known_bypasses: vec!["Direct Anthropic Cloud egress".to_string()],
             llm_routing: "DIRECT_CLOUD".to_string(),
             mcp_governance: "WRAPPED (2/2)".to_string(),
             freshness: FreshnessTier::ActiveFresh.label().to_string(),
@@ -212,12 +220,22 @@ fn test_status_report_serialization_and_disclosures() {
     assert!(serialized.contains("DIRECT_CLOUD"));
     assert!(serialized.contains("http://127.0.0.1:18080/v1"));
     assert!(serialized.contains("Native shell execution (bash/git) is UNGOVERNED"));
+    assert!(serialized.contains("\"ENFORCED\""));
+    assert!(serialized.contains("\"UNCOVERED\""));
 
     let deserialized: StatusReport =
         serde_json::from_str(&serialized).expect("StatusReport deserialization failed");
     assert_eq!(deserialized.version, "1.0.87");
     assert_eq!(deserialized.targets.len(), 1);
     assert_eq!(deserialized.targets[0].wrapped_servers, 2);
+    assert_eq!(
+        deserialized.targets[0].posture,
+        EnforcementPosture::Enforced
+    );
+    assert_eq!(
+        deserialized.targets[0].llm_posture,
+        EnforcementPosture::Uncovered
+    );
     assert_eq!(deserialized.global_disclosures.len(), 3);
 }
 
