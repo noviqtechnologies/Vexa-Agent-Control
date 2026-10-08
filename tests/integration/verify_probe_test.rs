@@ -325,7 +325,7 @@ async fn test_verification_probe_suite_safe_tool_upstream_offline_fails_honestly
         run_verification_probe(&gateway_url, true, None, None, None, None),
     )
     .await
-    .unwrap_or_else(|_| 1);
+    .unwrap_or(1);
 
     let _ = shutdown_tx.send(());
     server_task.abort();
