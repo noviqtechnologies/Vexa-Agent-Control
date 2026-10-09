@@ -81,37 +81,47 @@ impl DbManager {
         let record_payloads = std::env::var("AGENTCONTROL_RECORD_PAYLOADS")
             .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
             .unwrap_or(false);
-        Self::init_with_options(record_payloads)
+        Self::init_with_path(None, record_payloads)
     }
 
     /// Initialise the manager with explicit payload logging configuration.
     pub fn init_with_options(record_payloads: bool) -> Self {
-        // Resolve path with fallback
-        let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
-        let old_dir = PathBuf::from(&home_dir).join(".agentwall");
+        Self::init_with_path(None, record_payloads)
+    }
 
-        if !new_dir.exists() {
-            let _ = fs::create_dir_all(&new_dir);
-            // Auto-migrate legacy database and credentials if they exist
-            if old_dir.exists() {
-                let old_db = old_dir.join("events.db");
-                let new_db = new_dir.join("events.db");
-                if old_db.exists() && !new_db.exists() {
-                    let _ = fs::copy(&old_db, &new_db);
+    /// Initialise the manager with optional custom database path and payload logging configuration.
+    pub fn init_with_path(custom_path: Option<PathBuf>, record_payloads: bool) -> Self {
+        let db_path = if let Some(p) = custom_path {
+            p
+        } else {
+            // Resolve path with fallback
+            let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            let new_dir = PathBuf::from(&home_dir).join(".agentcontrol");
+            let old_dir = PathBuf::from(&home_dir).join(".agentwall");
+
+            if !new_dir.exists() {
+                let _ = fs::create_dir_all(&new_dir);
+                // Auto-migrate legacy database and credentials if they exist
+                if old_dir.exists() {
+                    let old_db = old_dir.join("events.db");
+                    let new_db = new_dir.join("events.db");
+                    if old_db.exists() && !new_db.exists() {
+                        let _ = fs::copy(&old_db, &new_db);
+                    }
                 }
             }
-        }
+            new_dir.join("events.db")
+        };
 
-        let db_path = new_dir.join("events.db");
         // Open connection with in-memory fallback on filesystem failure
         let conn = Connection::open(&db_path).unwrap_or_else(|e| {
             eprintln!("[db] warning: failed to open persistent SQLite at {:?}: {}. Falling back to in-memory DB.", db_path, e);
             Connection::open_in_memory().expect("failed to open fallback in-memory SQLite DB")
         });
 
-        // Enable WAL mode so concurrent stdio-proxy processes can write without SQLITE_BUSY errors.
-        if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;") {
+        // Set busy timeout first, then attempt WAL mode
+        let _ = conn.execute_batch("PRAGMA busy_timeout=5000;");
+        if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL;") {
             eprintln!("[db] warning: failed to set WAL mode: {}", e);
         }
 

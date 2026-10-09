@@ -111,8 +111,13 @@ impl SpendLedger {
         };
 
         let conn = Connection::open(&db_path).expect("Failed to open SQLite DB for spend");
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
-            .expect("Failed to set WAL mode / busy timeout for spend ledger");
+        let _ = conn.execute_batch("PRAGMA busy_timeout=5000;");
+        if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL;") {
+            eprintln!(
+                "[spend] warning: failed to set WAL mode on {:?}: {}",
+                db_path, e
+            );
+        }
 
         // Write latency measurement
         let start = Instant::now();

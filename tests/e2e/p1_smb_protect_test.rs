@@ -39,7 +39,9 @@ async fn test_p1_hitl_respond_payload_handling() {
 
 #[tokio::test]
 async fn test_p1_spend_tracking_ledger_persistence() {
-    let db = agentcontrol::proxy::db::DbManager::init();
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("events.db");
+    let db = agentcontrol::proxy::db::DbManager::init_with_path(Some(db_path), false);
 
     let event = agentcontrol::proxy::db::EgressEvent {
         timestamp_ns: std::time::SystemTime::now()
