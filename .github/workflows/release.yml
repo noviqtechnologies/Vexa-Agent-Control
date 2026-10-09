@@ -155,6 +155,7 @@ jobs:
           path: ./artifacts
           format: spdx-json
           output-file: artifacts/agentcontrol-sbom.spdx.json
+          upload-release-assets: false
 
       - name: Install Helm
         uses: azure/setup-helm@v4
