@@ -757,6 +757,7 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
         }
         Commands::Verify {
             attacks,
+            policy_only,
             gateway,
             json,
             hub,
@@ -774,8 +775,17 @@ async fn dispatch_command(command: Box<Commands>) -> i32 {
                     user_id.as_deref(),
                     assignment_id.as_deref(),
                     token.as_deref(),
+                    policy_only,
                 )
                 .await
+            }
+        }
+        Commands::MockMcp { listen } => {
+            if let Err(e) = agentcontrol::mock_mcp::run_mock_mcp_server(&listen).await {
+                eprintln!("Mock MCP server error: {}", e);
+                1
+            } else {
+                0
             }
         }
         Commands::Cache { command } => match command {

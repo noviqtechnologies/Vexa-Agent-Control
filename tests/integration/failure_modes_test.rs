@@ -107,7 +107,8 @@ fn test_failure_mode_revocation_registry_production_enforcement() {
 async fn test_failure_mode_unreachable_daemon_fails_closed() {
     // Attempt verification probe against a non-existent port (unreachable daemon)
     let unreachable_url = "http://127.0.0.1:58999";
-    let exit_code = run_verification_probe(unreachable_url, true, None, None, None, None).await;
+    let exit_code =
+        run_verification_probe(unreachable_url, true, None, None, None, None, false).await;
 
     // Must fail closed with non-zero exit code (1), not crash or falsely succeed
     assert_eq!(

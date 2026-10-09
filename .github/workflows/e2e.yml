@@ -54,11 +54,15 @@ jobs:
 
       - name: Run Live Verification Smoke Test (Background Gateway)
         run: |
+          ./target/release/${{ matrix.bin_name }} mock-mcp &
+          MOCK_PID=$!
           ./target/release/${{ matrix.bin_name }} protect --no-browser &
           GATEWAY_PID=$!
           sleep 4
           ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:18080"
-          kill -9 $GATEWAY_PID || true
+          ./target/release/${{ matrix.bin_name }} verify --gateway "http://127.0.0.1:18080" --policy-only
+          kill -9 $GATEWAY_PID 2>/dev/null || true
+          kill -9 $MOCK_PID 2>/dev/null || true
 
       - name: Test Dry-Run Unprotect
         run: ./target/release/${{ matrix.bin_name }} unprotect --dry-run

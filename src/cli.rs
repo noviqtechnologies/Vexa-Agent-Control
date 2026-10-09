@@ -592,6 +592,10 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         attacks: bool,
 
+        /// Verify policy evaluation rules only (treat downstream MCP offline as valid policy pass)
+        #[arg(long, default_value_t = false)]
+        policy_only: bool,
+
         /// Gateway URL to test (default: http://127.0.0.1:18080)
         #[arg(long, default_value = "http://127.0.0.1:18080")]
         gateway: String,
@@ -615,6 +619,14 @@ pub enum Commands {
         /// Optional Gateway Auth Token / Secret (defaults to GATEWAY_SECRET or AGENTCONTROL_ADMIN_TOKEN env vars)
         #[arg(long)]
         token: Option<String>,
+    },
+
+    /// Start a lightweight mock upstream MCP server for testing and live smoke verification
+    #[command(name = "mock-mcp", hide = true)]
+    MockMcp {
+        /// Listen address for mock MCP server (default: 127.0.0.1:3000)
+        #[arg(long, default_value = "127.0.0.1:3000")]
+        listen: String,
     },
 
     /// Manage gateway semantic vector cache and prompt economics

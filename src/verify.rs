@@ -30,6 +30,7 @@ pub async fn run_verification_probe(
     user_id_opt: Option<&str>,
     assignment_id_opt: Option<&str>,
     gateway_token_opt: Option<&str>,
+    policy_only: bool,
 ) -> i32 {
     let start = Instant::now();
 
@@ -260,14 +261,25 @@ pub async fn run_verification_probe(
                 )
             } else if !err_msg.is_empty() {
                 if err_msg.contains("Upstream error") || err_msg.contains("Connection refused") {
-                    (
-                        false,
-                        status,
-                        "OUTCOME_UNKNOWN (DOWNSTREAM_UNAVAILABLE)".to_string(),
-                        req_id,
-                        Some("default_allowlist".to_string()),
-                        "Tool operation allowed by policy, but downstream upstream was unreachable. Full end-to-end delivery could not be confirmed.".to_string(),
-                    )
+                    if policy_only {
+                        (
+                            true,
+                            status,
+                            "POLICY ALLOWED (NO UPSTREAM TOOL)".to_string(),
+                            req_id,
+                            Some("default_allowlist".to_string()),
+                            "Tool operation affirmatively allowed by policy (policy-only verification mode)".to_string(),
+                        )
+                    } else {
+                        (
+                            false,
+                            status,
+                            "OUTCOME_UNKNOWN (DOWNSTREAM_UNAVAILABLE)".to_string(),
+                            req_id,
+                            Some("default_allowlist".to_string()),
+                            "Tool operation allowed by policy, but downstream upstream was unreachable. Full end-to-end delivery could not be confirmed. (Tip: start upstream MCP server, or pass --policy-only)".to_string(),
+                        )
+                    }
                 } else if err_msg.contains("Policy violation") {
                     (
                         false,

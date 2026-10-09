@@ -44,6 +44,7 @@ pub mod lint;
 pub mod local_dashboard;
 pub mod logging;
 pub mod mcp;
+pub mod mock_mcp;
 pub mod policy;
 pub mod promote;
 pub mod proxy;
