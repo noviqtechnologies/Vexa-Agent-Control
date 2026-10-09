@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This directory contains the frozen architectural specifications established in **Phase 0a** of the Vexa Agent Control implementation plan, governed by [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md).
+This directory contains the frozen architectural specifications established in **Phase 0a** of the Vexa Agent Control implementation plan, governed by the Architecture & Security Hardening Standard.
 
 | ADR | Title | Status | Scope |
 |---|---|---|---|

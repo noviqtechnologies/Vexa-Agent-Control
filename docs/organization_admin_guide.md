@@ -186,7 +186,7 @@ Administrators can bind tool access and model permissions to Identity Provider g
    ```
 6. Click **Publish Version** to dynamically assemble and broadcast the active policy to all connected agent gateways.
 
-For complete details, step-by-step IdP token claim setup, and testing instructions, see the dedicated [Group Policies Guide](file:///c:/AgentWall/agentwall/docs/guides/group_policies_guide.md).
+For complete details, step-by-step IdP token claim setup, and testing instructions, see the dedicated [Group Policies Guide](./guides/group_policies_guide.md).
 
 
 

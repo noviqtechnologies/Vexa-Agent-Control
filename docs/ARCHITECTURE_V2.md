@@ -210,7 +210,7 @@ A unified hook system provides lifecycle interception across three distinct stag
 
 ## 15. P0 Authoritative Central LLM Broker: Bounded Retries & Request Dossiers
 
-In accordance with the **P0 Reliability & Safe Operations Standard** ([PRD-P0-Functional](file:///c:/AgentWall/agentwall/PRD/pending/PRD-P0-Functional.md) & [PRD-P0-Non-Functional](file:///c:/AgentWall/agentwall/PRD/pending/PRD-P0-Non-Functional.md)):
+In accordance with the **P0 Reliability & Safe Operations Standard** ([PRD-P0-Functional](../PRD/pending/PRD-P0-Functional.md) & [PRD-P0-Non-Functional](../PRD/pending/PRD-P0-Non-Functional.md)):
 
 ```mermaid
 sequenceDiagram

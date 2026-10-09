@@ -3,7 +3,7 @@
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
 **Author:** Architecture Team  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md)
+**Governing Standard:** Architecture & Security Hardening Standard
 
 ---
 
@@ -19,7 +19,7 @@ Earlier designs used a boolean flag or a single server-side compare-and-set (CAS
    - Blocks the action with no diagnostic feedback, leaving the system in an inconsistent state.
 
 ### 1.2 Approval Secret Leakage
-In [`policy/hitl.rs` L264-L287](file:///c:/AgentWall/agentwall/src/policy/hitl.rs#L264-L287), headless and notification fallbacks printed signed approval URLs containing cryptographic HMAC secrets to `stderr` and desktop notification text (`notify-send`). Any unprivileged local process reading process output or desktop notification history could capture and replay the approval before the user acted.
+In [`policy/hitl.rs` L264-L287](../../src/policy/hitl.rs#L264-L287), headless and notification fallbacks printed signed approval URLs containing cryptographic HMAC secrets to `stderr` and desktop notification text (`notify-send`). Any unprivileged local process reading process output or desktop notification history could capture and replay the approval before the user acted.
 
 ---
 

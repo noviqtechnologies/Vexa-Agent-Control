@@ -455,7 +455,7 @@ Now that you've validated the API layer directly, test end-to-end with an actual
 
 ### 9.1 Enable Spend Caps in Your Policy
 
-Add a `spend_caps` block to your active policy file. For example, edit [test-llm-policy.yaml](file:///c:/AgentWall/agentwall/test-llm-policy.yaml):
+Add a `spend_caps` block to your active policy file. For example, edit [test-llm-policy.yaml](../test-llm-policy.yaml):
 
 ```yaml
 version: "2"

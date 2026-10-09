@@ -94,7 +94,7 @@ agentcontrol verify
   ```bash
   agentcontrol protect
   ```
-  *(To start only the background security proxy without modifying IDE client files, run `agentcontrol start`.)*
+  *(To start only the background security proxy without modifying IDE client files, run `agentcontrol start --standalone`.)*
 - **Expected Result:**
   - Pre-flight check verifies listener port `18080`.
   - Staged atomic transaction journal created at `~/.agentcontrol/protect_journal.json`.

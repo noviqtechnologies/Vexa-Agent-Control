@@ -162,8 +162,15 @@ This quickstart is designed for individual software developers evaluating Vexa A
 Launch the local security gateway and proxy daemon on your workstation:
 
 ```bash
-agentcontrol start
+# Recommended for local developer workstations (standalone & offline):
+agentcontrol start --standalone
+
+# Or with custom policy:
+agentcontrol start --standalone --policy agentcontrol-policy.yaml
 ```
+
+> [!TIP]
+> **Standalone Mode (`--standalone`):** Runs 100% self-contained on loopback. Disables remote telemetry and Control Hub sync, storing all audit entries purely in local SQLite / audit files with zero remote connectivity needed.
 
 **What occurs automatically:**
 1. 🔒 **Local Bearer Token:** Automatically generates a persistent, high-entropy bearer token at `~/.agentcontrol/local.token` (restricted with `0600` / Windows User ACL).
@@ -780,7 +787,7 @@ Vexa Agent Control provides a streamlined set of 12 canonical CLI commands for d
 | `agentcontrol repair` | *(none)* | Validates configuration files against manifests; repairs missing user tasks and broken loopback endpoints without modifying custom user edits. |
 | `agentcontrol rotate-local-token` | *(none)* | Atomically rotates the 32-byte local session bearer token in `~/.agentcontrol/local.token`, updates connected configs, and notifies the running daemon. |
 | `agentcontrol service` | `install`, `uninstall`, `status` `[--hub-url <URL>]` | Manages the per-user background agent daemon (Windows startup / Task Scheduler, macOS launchd LaunchAgent, Linux systemd user service). |
-| `agentcontrol start` | `[--listen <ADDR>]`, `[--policy <PATH>]` | Runs the local background proxy daemon listening on `127.0.0.1:18080`. |
+| `agentcontrol start` | `[--listen <ADDR>]`, `[--policy <PATH>]`, `[--standalone]` | Runs the local background proxy daemon listening on `127.0.0.1:18080`. Add `--standalone` to run offline without remote Hub connections. |
 | `agentcontrol logout` | *(none)* | Flushes local cached tokens from OS keyring and notifies Control Hub to revoke device session. |
 | `agentcontrol reset-local-state` | `[--force]` | Interactive recovery command to purge local SQLite event ledger and cache while preserving pristine baseline backups. |
 | `agentcontrol stdio-proxy -- <cmd>` | `<command> [args...]` | Dedicated child process wrapper for MCP servers enforcing frame quotas (< 16MB), memory limits (< 64MB RSS), 60s timeouts, and parameter DLP. |

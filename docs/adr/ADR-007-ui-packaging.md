@@ -3,7 +3,7 @@
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
 **Author:** Architecture Team  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md)
+**Governing Standard:** Architecture & Security Hardening Standard
 
 ---
 
@@ -46,7 +46,7 @@ We adopt an **API-First design**. The core product contract is the **versioned l
    - All diagnostic, telemetry, trace querying, and HITL approval capabilities are exposed through versioned HTTP endpoints under `/api/v1/`.
    - The CLI (`agentwall status`, `agentwall traces`) consumes these exact endpoints.
 2. **Phase 1 UI (Embedded Lightweight Dashboard)**:
-   - Modern, responsive, single-file HTML/CSS/JS embedded directly into the Rust binary using `include_str!()` (expanding [`local_dashboard.html`](file:///c:/AgentWall/agentwall/src/local_dashboard/local_dashboard.html)).
+   - Modern, responsive, single-file HTML/CSS/JS embedded directly into the Rust binary using `include_str!()` (expanding [`local_dashboard.html`](../../src/local_dashboard/local_dashboard.html)).
    - Pure Vanilla CSS/JS; zero runtime npm dependencies; zero external CDN dependencies (works 100% offline in air-gapped workstations).
 3. **Phase 3 Deferral (React Team Console)**:
    - A full-featured React / TypeScript web console is explicitly deferred to **Phase 3 (Team Collaboration Hub)**, where it connects to the centralized Docker Compose / Kubernetes management plane.

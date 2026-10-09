@@ -69,7 +69,7 @@ Vexa provides defined response times and escalation paths based on incident seve
 ## 5. Upgrade, Migration & Rollback Guarantees
 
 ### 5.1 Two-Way Schema Migrations
-All database migrations in [`control-plane/db/migrations/`](file:///c:/AgentWall/agentwall/control-plane/db/migrations) are strictly paired:
+All database migrations in [`control-plane/db/migrations/`](../control-plane/db/migrations) are strictly paired:
 - Every `.up.sql` migration is accompanied by a tested, deterministic `.down.sql` reversal.
 - Automated CI migration tests verify that migrating `Up -> Down -> Up` leaves the database schema in a clean, identical state with zero data corruption.
 
@@ -84,5 +84,5 @@ If an upgraded gateway binary or control plane container experiences an issue:
 ## 6. Contact & Escalation
 
 - **Support Portal:** [https://support.vexasec.io](https://support.vexasec.io)
-- **Security Vulnerability Reporting:** [SECURITY.md](file:///c:/AgentWall/agentwall/SECURITY.md) or [`contact@vexasec.io`](mailto:contact@vexasec.io)
+- **Security Vulnerability Reporting:** [SECURITY.md](../SECURITY.md) or [`contact@vexasec.io`](mailto:contact@vexasec.io)
 - **Sales & Custom SLAs:** [`sales@vexasec.io`](mailto:sales@vexasec.io)

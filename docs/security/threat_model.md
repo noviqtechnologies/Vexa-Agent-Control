@@ -2,7 +2,7 @@
 
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md) & [ADR-010](file:///c:/AgentWall/agentwall/docs/adr/ADR-010-hitl-and-local-api-security.md)
+**Governing Standard:** Enterprise Hardening Standard & [ADR-010](../adr/ADR-010-hitl-and-local-api-security.md)
 
 ---
 

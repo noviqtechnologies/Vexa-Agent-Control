@@ -40,6 +40,8 @@ agentcontrol start [OPTIONS]
 - `--listen <ADDR>`: Gateway listen address (default: `127.0.0.1:18080`).
 - `--policy <PATH>`: Path to YAML policy file (default: `agentcontrol-policy.yaml`).
 - `--profile <PROFILE>`: Deployment profile: `local-gateway`, `local-firewall`, `team-gateway`, `container-sidecar`.
+- `--standalone`: Run in 100% standalone mode; disables remote dashboard/hub telemetry export and background Hub polling.
+- `--centralized`: Run in centralized mode, binding to `0.0.0.0` and enabling Hub credential management.
 - `--shadow-mode`: Start in observation/audit mode without actively blocking calls.
 
 ---

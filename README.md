@@ -199,17 +199,20 @@ Set your upstream LLM provider API key (or point to local models like Ollama/LM 
 ```powershell
 $env:OPENAI_API_KEY = "sk-proj-..."
 # or: $env:ANTHROPIC_API_KEY = "sk-ant-..."
-agentcontrol.exe start
+agentcontrol.exe start --standalone
 ```
 
 **Bash / Zsh (macOS / Linux):**
 ```bash
 export OPENAI_API_KEY="sk-proj-..."
 # or: export ANTHROPIC_API_KEY="sk-ant-..."
-agentcontrol start
+agentcontrol start --standalone
 ```
 
 *(Alternatively, add `OPENAI_API_KEY=sk-proj-...` to a `.env` file in your working directory, or run local engines like Ollama on `http://localhost:11434` / LM Studio).*
+
+> [!TIP]
+> Add `--standalone` (or set `AGENTCONTROL_STANDALONE=true`) for local, offline development to run the gateway self-contained without connecting to an external or central Control Hub.
 
 > [!NOTE]
 > Keep this terminal open or run it as a service. The proxy actively intercepts local tool calls, enforces DLP & prompt security, and serves the developer dashboard on loopback (`http://127.0.0.1:18080`).
@@ -472,7 +475,7 @@ The `agentcontrol` CLI conforms strictly to PRD §12, providing deterministic, c
 
 | Command | Arguments / Flags | Description |
 |---|---|---|
-| `agentcontrol start` | `[--listen <addr>] [--centralized]` | Launch local security gateway proxy daemon (`127.0.0.1:18080`) |
+| `agentcontrol start` | `[--listen <addr>] [--centralized] [--standalone]` | Launch local security gateway proxy daemon (`127.0.0.1:18080`). Add `--standalone` to run offline without remote Hub connections |
 | `agentcontrol stop` | `[--gateway <url>]` | Gracefully shut down active local gateway proxy |
 | `agentcontrol status` | `[--json]` | Display active target capability vectors, MCP routing, and traffic freshness |
 | `agentcontrol clients` | `[--json]` | List detected, connected, and protected IDE clients and MCP runtimes |

@@ -35,6 +35,7 @@ pub mod check;
 pub mod cli;
 pub mod control_plane_client;
 pub mod doctor;
+pub mod enforcement;
 pub mod errors;
 pub mod generate_policy;
 pub mod identity;

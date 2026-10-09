@@ -6,7 +6,9 @@
 #>
 
 param(
-    [string]$Version = $env:AGENTCONTROL_VERSION
+    [string]$Version = $env:AGENTCONTROL_VERSION,
+    [switch]$SkipSignatureVerification,
+    [switch]$RequireSignature
 )
 
 & {
@@ -132,7 +134,7 @@ param(
         }
     }
 
-    # 5. Checksum Verification (Fail-Closed)
+    # 5. Checksum & Signature Verification (Fail-Closed)
     Write-Host "Verifying SHA-256 cryptographic checksum..." -ForegroundColor $ColorCyan
     try {
         Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath -UseBasicParsing
@@ -141,6 +143,50 @@ param(
         Write-Host "[!] FATAL: Checksum manifest not published for release $Version." -ForegroundColor $ColorRed
         Write-Host "    Installation halted in accordance with strict security posture." -ForegroundColor $ColorRed
         throw "Checksum manifest missing."
+    }
+
+    # Cryptographic Provenance & Signature Verification
+    $BundleUrl = "$BaseUrl/checksums.txt.bundle"
+    $BundlePath = Join-Path $TempDir "checksums.txt.bundle"
+    if (-not $SkipSignatureVerification) {
+        Write-Host "Checking cryptographic release signature..." -ForegroundColor $ColorCyan
+        $BundleDownloaded = $false
+        try {
+            Invoke-WebRequest -Uri $BundleUrl -OutFile $BundlePath -UseBasicParsing
+            $BundleDownloaded = $true
+        } catch { }
+
+        if ($BundleDownloaded) {
+            $CosignCmd = Get-Command "cosign" -ErrorAction SilentlyContinue
+            if ($CosignCmd) {
+                Write-Host "Verifying checksum bundle via Cosign transparency log..." -ForegroundColor $ColorCyan
+                & cosign verify-blob `
+                    --bundle $BundlePath `
+                    --certificate-identity-regexp "https://github.com/$Repo/.*" `
+                    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
+                    $ChecksumsPath 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[!] FATAL: Cryptographic signature verification failed for checksums.txt!" -ForegroundColor $ColorRed
+                    Write-Host "    The manifest signature did not match the official repository identity." -ForegroundColor $ColorRed
+                    throw "Cryptographic signature verification failed!"
+                }
+                Write-Host "[+] Cryptographic Cosign signature verified successfully." -ForegroundColor $ColorGreen
+            }
+            elseif ($RequireSignature) {
+                Write-Host "[!] FATAL: -RequireSignature specified, but 'cosign' was not found on PATH." -ForegroundColor $ColorRed
+                throw "cosign not found on PATH."
+            }
+            else {
+                Write-Host "[!] Notice: cosign not found on PATH; verified SHA-256 digest." -ForegroundColor $ColorYellow
+            }
+        }
+        elseif ($RequireSignature) {
+            Write-Host "[!] FATAL: Checksum signature bundle missing from release and -RequireSignature was requested." -ForegroundColor $ColorRed
+            throw "Signature bundle missing."
+        }
+    }
+    else {
+        Write-Host "[!] Notice: Cryptographic signature verification skipped (-SkipSignatureVerification)." -ForegroundColor $ColorYellow
     }
 
     $ExpectedHashStr = (Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($AssetName) -and ($_ -split '\s+')[0].Length -eq 64 } | Select-Object -First 1)

@@ -3,13 +3,13 @@
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
 **Author:** Architecture Team  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md)
+**Governing Standard:** Architecture & Security Hardening Standard
 
 ---
 
 ## 1. Context & Problem Statement
 
-Agent Control incorporates a 20+ pattern DLP scanner ([`policy/dlp.rs`](file:///c:/AgentWall/agentwall/src/policy/dlp.rs)) detecting credentials, private keys, API tokens, and PII. However, previous designs lacked clear boundary definitions for *where* redaction occurs in the processing lifecycle:
+Agent Control incorporates a 20+ pattern DLP scanner ([`policy/dlp.rs`](../../src/policy/dlp.rs)) detecting credentials, private keys, API tokens, and PII. However, previous designs lacked clear boundary definitions for *where* redaction occurs in the processing lifecycle:
 - If redaction occurs before the LLM prompt egresses, does the trace explorer see raw or redacted text?
 - If tool parameters contain secrets, how can forensic review occur without creating an unencrypted plaintext secret database?
 

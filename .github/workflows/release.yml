@@ -179,15 +179,24 @@ jobs:
           echo "Generated checksums.txt:"
           cat checksums.txt
 
-      - name: Sign Checksums with Cosign (Keyless)
-        continue-on-error: true
+      - name: Sign Checksums with Cosign (Keyless - Fail-Closed)
         shell: bash
         run: |
+          SIGNED=0
           for i in 1 2 3; do
-            cosign sign-blob --yes \
+            if cosign sign-blob --yes \
               --bundle artifacts/checksums.txt.bundle \
-              artifacts/checksums.txt && break || sleep 5
+              artifacts/checksums.txt; then
+              SIGNED=1
+              break
+            fi
+            echo "Retrying cosign sign-blob in 5s (attempt $i/3)..."
+            sleep 5
           done
+          if [ "$SIGNED" -ne 1 ]; then
+            echo "::error::Cryptographic signing with Cosign failed. Failing release gate closed."
+            exit 1
+          fi
 
       - name: Generate SLSA Build Provenance Attestation
         uses: actions/attest-build-provenance@v1

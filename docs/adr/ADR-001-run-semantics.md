@@ -3,7 +3,7 @@
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
 **Author:** Architecture Team  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md)
+**Governing Standard:** Architecture & Security Hardening Standard
 
 ---
 
@@ -48,7 +48,7 @@ We establish a strict, 7-tier correlation hierarchy for all agent operations:
    - Scope: Represents a single execution attempt or plan execution cycle of an agent. A user task may involve multiple runs if retried or resumed.
    - Origin: Gateway generated or supplied by orchestrator SDK.
 3. **`session_id`** (UUIDv4 or client-assigned string, e.g. `sess-workstation-1`):
-   - Scope: The transport/gateway connection lifecycle. Corresponds directly to the existing `session_id` in [`AuditEntry`](file:///c:/AgentWall/agentwall/src/audit/logger.rs#L58).
+   - Scope: The transport/gateway connection lifecycle. Corresponds directly to the existing `session_id` in [`AuditEntry`](../../src/audit/logger.rs#L58).
    - Invariant: **Must remain backward-compatible** with existing audit chains.
 4. **`span_id`** (16-hex characters / W3C `parent_id`):
    - Scope: A timed execution segment (e.g. LLM inference, tool execution, policy evaluation).

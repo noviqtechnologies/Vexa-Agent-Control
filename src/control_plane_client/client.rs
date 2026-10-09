@@ -100,7 +100,7 @@ impl DashboardClient {
         tokio::spawn(async move {
             if let Err(e) = req.send().await {
                 crate::logging::log_event(
-                    crate::logging::Level::Warn,
+                    crate::logging::Level::Debug,
                     "dashboard_send_event_failed",
                     serde_json::json!({"error": e.to_string()}),
                 );

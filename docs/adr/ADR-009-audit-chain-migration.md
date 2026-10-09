@@ -3,13 +3,13 @@
 **Status:** APPROVED (Phase 0a Baseline)  
 **Date:** 2026-10-04  
 **Author:** Architecture Team  
-**Governing Standard:** [Plan Review Feedback v4](file:///C:/Users/wasim/.gemini/antigravity-ide/brain/9469605e-81c2-40a5-9567-198d8ebbf4c0/plan_review_feedback_v4.md)
+**Governing Standard:** Architecture & Security Hardening Standard
 
 ---
 
 ## 1. Context & Technical Diagnosis
 
-In [`verifier.rs` L199-L216](file:///c:/AgentWall/agentwall/src/audit/verifier.rs#L199-L216), audit verification recomputes entry HMACs by stripping `hmac: None`, re-serializing the struct to string via `serde_json::to_string()`, and updating HMAC-SHA256:
+In [`verifier.rs` L199-L216](../../src/audit/verifier.rs#L199-L216), audit verification recomputes entry HMACs by stripping `hmac: None`, re-serializing the struct to string via `serde_json::to_string()`, and updating HMAC-SHA256:
 
 ```rust
 // verifier.rs (current implementation)
@@ -76,7 +76,7 @@ pub struct AuditEntryV1Legacy {
 
 ### 2.2 Verifier Schema Dispatch
 
-The verifier in [`src/audit/verifier.rs`](file:///c:/AgentWall/agentwall/src/audit/verifier.rs) dispatches line verification:
+The verifier in [`src/audit/verifier.rs`](../../src/audit/verifier.rs) dispatches line verification:
 
 ```
 Raw JSON Line

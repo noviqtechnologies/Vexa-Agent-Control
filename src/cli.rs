@@ -1247,6 +1247,10 @@ pub struct StartArgs {
     #[arg(long, env = "AGENTCONTROL_CENTRALIZED", default_value_t = false)]
     pub centralized: bool,
 
+    /// Run in standalone mode: disables remote dashboard/hub telemetry export and hub polling
+    #[arg(long, env = "AGENTCONTROL_STANDALONE", default_value_t = false)]
+    pub standalone: bool,
+
     /// Deployment profile (local-shadow, local-enforce, team-enforce, dedicated-enforce)
     #[arg(long, env = "AGENTCONTROL_PROFILE")]
     pub profile: Option<String>,
@@ -1447,6 +1451,7 @@ impl StartArgs {
             tls_cert: None,
             tls_key: None,
             centralized: true,
+            standalone: false,
             profile: Some("team-enforce".to_string()),
             admin_listen: None,
             admin_token: None,

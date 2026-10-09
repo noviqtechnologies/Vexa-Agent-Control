@@ -463,9 +463,9 @@ To view wrapper status and gateway health:
 agentcontrol status
 ```
 
-To enable **enforcing (blocking) mode** after observation:
+To enable **enforcing (blocking) mode** after observation (use `--standalone` for offline local workstations):
 ```bash
-agentcontrol start --policy agentcontrol-policy.yaml --listen 127.0.0.1:18080
+agentcontrol start --standalone --policy agentcontrol-policy.yaml --listen 127.0.0.1:18080
 ```
 
 For full policy authoring, see → [Common Reference Guide — YAML Policies](common_guide.md#writing-yaml-policies-v2-schema).

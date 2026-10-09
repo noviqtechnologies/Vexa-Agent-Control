@@ -26,6 +26,8 @@ echo "[*] Detected Arch: $ARCH"
 
 VERSION="${AGENTCONTROL_VERSION:-}"
 MODE="${AGENTCONTROL_MODE:-solo}"
+SKIP_SIG_VERIFY=0
+REQUIRE_SIG="${AGENTCONTROL_REQUIRE_SIG:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,10 +39,20 @@ while [[ $# -gt 0 ]]; do
       MODE="$2"
       shift 2
       ;;
+    --skip-signature-verification)
+      SKIP_SIG_VERIFY=1
+      shift
+      ;;
+    --require-signature)
+      REQUIRE_SIG=1
+      shift
+      ;;
     -h|--help)
-      echo "Usage: install.sh [-v <version>] [-m <solo|team|enterprise>]"
-      echo "  -v, --version         Version tag to install (default: latest)"
-      echo "  -m, --mode, --edition Edition mode: solo (default), team, enterprise"
+      echo "Usage: install.sh [-v <version>] [-m <solo|team|enterprise>] [--require-signature] [--skip-signature-verification]"
+      echo "  -v, --version                     Version tag to install (default: latest)"
+      echo "  -m, --mode, --edition             Edition mode: solo (default), team, enterprise"
+      echo "  --require-signature               Enforce mandatory Cosign signature verification (fail-closed if missing)"
+      echo "  --skip-signature-verification     Skip cryptographic provenance/signature check (air-gapped only)"
       exit 0
       ;;
     *)
@@ -116,6 +128,7 @@ ASSET_NAME="agentcontrol-${VERSION}-${OS}-${ARCH}.zip"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 ASSET_URL="${BASE_URL}/${ASSET_NAME}"
 CHECKSUMS_URL="${BASE_URL}/checksums.txt"
+BUNDLE_URL="${BASE_URL}/checksums.txt.bundle"
 
 TEMPDIR=$(mktemp -d)
 trap 'rm -rf "$TEMPDIR"' EXIT
@@ -134,6 +147,39 @@ fi
 
 echo "[*] Verifying cryptographic SHA-256 checksum..."
 if curl -fsSL "$CHECKSUMS_URL" -o "${TEMPDIR}/checksums.txt" 2>/dev/null; then
+  # Cryptographic Provenance & Signature Verification (Fail-Closed)
+  if [[ "$SKIP_SIG_VERIFY" -eq 0 ]]; then
+    echo "[*] Checking cryptographic release signature..."
+    if curl -fsSL "$BUNDLE_URL" -o "${TEMPDIR}/checksums.txt.bundle" 2>/dev/null; then
+      if command -v cosign &>/dev/null; then
+        echo "[*] Verifying checksum bundle via Cosign transparency log..."
+        if cosign verify-blob \
+          --bundle "${TEMPDIR}/checksums.txt.bundle" \
+          --certificate-identity-regexp "https://github.com/${REPO}/.*" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "${TEMPDIR}/checksums.txt" >/dev/null 2>&1; then
+          echo "[✓] Cryptographic Cosign signature verified successfully."
+        else
+          echo "[!] FATAL: Cryptographic signature verification failed for checksums.txt!"
+          echo "    The manifest signature did not match the official repository identity."
+          echo "    Aborting installation in accordance with strict security posture."
+          exit 1
+        fi
+      elif [[ "$REQUIRE_SIG" -eq 1 ]]; then
+        echo "[!] FATAL: --require-signature specified, but 'cosign' was not found on PATH."
+        echo "    Install cosign (https://github.com/sigstore/cosign) or omit --require-signature."
+        exit 1
+      else
+        echo "[!] Notice: cosign not found on PATH; verified SHA-256 digest."
+      fi
+    elif [[ "$REQUIRE_SIG" -eq 1 ]]; then
+      echo "[!] FATAL: Checksum signature bundle missing from release and --require-signature was requested."
+      exit 1
+    fi
+  else
+    echo "[!] Notice: Cryptographic signature verification skipped (--skip-signature-verification)."
+  fi
+
   EXPECTED_HASH=$(grep -F "$ASSET_NAME" "${TEMPDIR}/checksums.txt" | awk 'length($1) == 64 {print $1}' | head -1 || true)
   if [[ -n "$EXPECTED_HASH" ]]; then
     ACTUAL_HASH=""
