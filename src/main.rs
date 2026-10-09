@@ -2143,20 +2143,19 @@ async fn run_start(args: cli::StartArgs) -> i32 {
         };
 
     // Initialize dashboard client early for SpendLedger sync and LLM request logs telemetry
-    let dashboard_client = if args.standalone
-        || matches!(profile, cli::DeploymentProfile::LocalFirewall)
-    {
-        None
-    } else if profile.is_team()
-        || is_enrolled
-        || std::env::var("AGENTCONTROL_HUB_URL").is_ok()
-        || std::env::var("DASHBOARD_API_URL").is_ok()
-    {
-        agentcontrol::control_plane_client::client::DashboardClient::from_env()
-            .map(std::sync::Arc::new)
-    } else {
-        None
-    };
+    let dashboard_client =
+        if args.standalone || matches!(profile, cli::DeploymentProfile::LocalFirewall) {
+            None
+        } else if profile.is_team()
+            || is_enrolled
+            || std::env::var("AGENTCONTROL_HUB_URL").is_ok()
+            || std::env::var("DASHBOARD_API_URL").is_ok()
+        {
+            agentcontrol::control_plane_client::client::DashboardClient::from_env()
+                .map(std::sync::Arc::new)
+        } else {
+            None
+        };
 
     // --- FR-120: Spend Caps License Validation ---
     let spend_ledger = if let Some(ref policy) = compiled_policy {
