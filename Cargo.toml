@@ -27,6 +27,7 @@ uninlined_format_args = "allow"
 useless_vec = "allow"
 redundant_closure = "allow"
 match_result_ok = "allow"
+unnecessary_lazy_evaluations = "allow"
 
 [package]
 name = "agentcontrol"
