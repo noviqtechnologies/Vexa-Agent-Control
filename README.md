@@ -182,13 +182,13 @@ Run a complete local MCP firewall, inline DLP secret redaction, and developer da
 ```bash
 curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
-agentcontrol --version
+agentcontrol clients
 ```
 
 **Windows (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
-agentcontrol.exe --version
+agentcontrol.exe clients
 ```
 
 #### Step 2: Configure Upstream Model Provider & Start Gateway

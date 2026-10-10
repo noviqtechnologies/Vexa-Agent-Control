@@ -160,8 +160,13 @@ if ($CurrentPath -notlike "*$LocalBinDir*") {
     $env:Path = "$LocalBinDir;$env:Path"
 }
 
-Write-Host "`nGet started by running:" -ForegroundColor $ColorGreen
-Write-Host "  agentcontrol login" -ForegroundColor $ColorGreen
-Write-Host "  agentcontrol connect codex" -ForegroundColor $ColorGreen
-Write-Host "  agentcontrol doctor" -ForegroundColor $ColorGreen
+Write-Host "`n► Get started in THIS terminal session right now:" -ForegroundColor $ColorCyan
+Write-Host "  1. Discover installed coding assistants:" -ForegroundColor $ColorWhite
+Write-Host "     agentcontrol.exe clients" -ForegroundColor $ColorGreen
+Write-Host "  2. Start local security gateway & dashboard (http://127.0.0.1:18080):" -ForegroundColor $ColorWhite
+Write-Host "     agentcontrol.exe start --standalone" -ForegroundColor $ColorGreen
+Write-Host "  3. Connect your coding assistant (in a new terminal):" -ForegroundColor $ColorWhite
+Write-Host "     agentcontrol.exe connect cursor   # or: claude, claude-code" -ForegroundColor $ColorGreen
+Write-Host "  4. Run live security verification probe:" -ForegroundColor $ColorWhite
+Write-Host "     agentcontrol.exe verify" -ForegroundColor $ColorGreen
 Write-Host ""

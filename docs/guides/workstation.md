@@ -21,10 +21,10 @@ In **Shadow Mode**, Agent Control records every tool call, parameter, response, 
 
 ### Start Shadow Gateway
 ```bash
-agentcontrol start --shadow
+agentcontrol start --standalone --shadow
 ```
 
-Or connect a target IDE:
+### Connect a Target Assistant (New Terminal)
 ```bash
 agentcontrol connect cursor
 ```

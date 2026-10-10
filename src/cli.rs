@@ -1232,7 +1232,12 @@ pub struct StartArgs {
     pub include_params: bool,
 
     /// Enable shadow mode: observe all traffic without enforcement
-    #[arg(long, env = "AGENTCONTROL_SHADOW_MODE", default_value_t = false)]
+    #[arg(
+        long,
+        alias = "shadow",
+        env = "AGENTCONTROL_SHADOW_MODE",
+        default_value_t = false
+    )]
     pub shadow_mode: bool,
 
     /// Upgrade credential scope mismatches from WARN to DENY

@@ -272,16 +272,23 @@ param(
 
     Write-Host ""
     Write-Host "=========================================================================" -ForegroundColor $ColorCyan
-    Write-Host "  Vexa Agent Control $Version successfully installed!" -ForegroundColor $ColorCyan
+    Write-Host "  ✨ Vexa Agent Control $Version successfully installed!" -ForegroundColor $ColorCyan
     Write-Host "=========================================================================" -ForegroundColor $ColorCyan
     Write-Host "  Binary Location : $FinalBinaryPath" -ForegroundColor $ColorCyan
-    Write-Host "  Get started by authenticating and connecting your assistant:" -ForegroundColor $ColorCyan
     Write-Host ""
-    Write-Host "    agentcontrol login" -ForegroundColor $ColorGreen
-    Write-Host "    agentcontrol status" -ForegroundColor $ColorGreen
-    Write-Host "    agentcontrol doctor" -ForegroundColor $ColorGreen
-    Write-Host "    agentcontrol connect codex" -ForegroundColor $ColorGreen
-    Write-Host "    agentcontrol verify" -ForegroundColor $ColorGreen
+    Write-Host "  ► Get started in THIS terminal session right now:" -ForegroundColor $ColorCyan
+    Write-Host ""
+    Write-Host "    1. Discover installed coding assistants:" -ForegroundColor $ColorWhite
+    Write-Host "       agentcontrol.exe clients" -ForegroundColor $ColorGreen
+    Write-Host ""
+    Write-Host "    2. Start local security gateway & dashboard (http://127.0.0.1:18080):" -ForegroundColor $ColorWhite
+    Write-Host "       agentcontrol.exe start --standalone" -ForegroundColor $ColorGreen
+    Write-Host ""
+    Write-Host "    3. Connect your coding assistant (in a new terminal):" -ForegroundColor $ColorWhite
+    Write-Host "       agentcontrol.exe connect cursor   # or: claude, claude-code" -ForegroundColor $ColorGreen
+    Write-Host ""
+    Write-Host "    4. Run live security verification probe:" -ForegroundColor $ColorWhite
+    Write-Host "       agentcontrol.exe verify" -ForegroundColor $ColorGreen
     Write-Host ""
     Write-Host "  Community Support & Issues:" -ForegroundColor $ColorCyan
     Write-Host "     Discord : https://discord.gg/vexasec" -ForegroundColor $ColorCyan
