@@ -116,21 +116,74 @@ impl LocalDualAgentDetector {
     }
 
     /// Collect and sanitize recent audit trace events, redacting credentials and truncating to bounds.
+    /// Inspects canonical audit.jsonl locations and falls back safely if none exist.
     pub fn collect_sanitized_trace(max_events: usize, max_bytes: usize) -> Vec<serde_json::Value> {
-        // Collect bounded trace samples safely
         let mut trace = Vec::with_capacity(max_events);
 
-        // Bounded sample events representing multi-turn agent interaction
-        let sample = json!({
-            "event_id": uuid::Uuid::new_v4().to_string(),
-            "event_type": "trace_heartbeat",
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "summary": "session trace active"
-        });
+        // 1. Check canonical audit.jsonl locations
+        let candidate_paths = [
+            dirs::home_dir().map(|h| h.join(".agentcontrol").join("audit.jsonl")),
+            dirs::home_dir().map(|h| h.join(".agentcontrol").join("logs").join("audit.jsonl")),
+            Some(std::path::PathBuf::from(
+                "/var/log/agentcontrol/audit.jsonl",
+            )),
+        ];
 
-        let s = sample.to_string();
-        if s.len() <= max_bytes && trace.len() < max_events {
-            trace.push(sample);
+        let mut lines = Vec::new();
+        for candidate in candidate_paths.into_iter().flatten() {
+            if candidate.exists() {
+                if let Ok(file) = std::fs::File::open(&candidate) {
+                    use std::io::BufRead;
+                    let reader = std::io::BufReader::new(file);
+                    let file_lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+                    if !file_lines.is_empty() {
+                        lines = file_lines;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Parse recent lines in chronological order
+        let start_idx = if lines.len() > max_events {
+            lines.len() - max_events
+        } else {
+            0
+        };
+
+        for line in &lines[start_idx..] {
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(line) {
+                // Sanitize credentials from payload / parameters
+                if let Some(obj) = val.as_object_mut() {
+                    if let Some(params) = obj.get_mut("params").and_then(|p| p.as_object_mut()) {
+                        for secret_key in ["key", "token", "secret", "password", "authorization"] {
+                            if params.contains_key(secret_key) {
+                                params.insert(secret_key.to_string(), json!("[REDACTED]"));
+                            }
+                        }
+                    }
+                }
+                let s = val.to_string();
+                if s.len() <= max_bytes && trace.len() < max_events {
+                    trace.push(val);
+                }
+            }
+        }
+
+        // 3. If trace is empty and synthetic test mode is explicitly requested, generate a bounded sample
+        if trace.is_empty()
+            && std::env::var("AGENTCONTROL_DETECTOR_SYNTHETIC").unwrap_or_default() == "1"
+        {
+            let sample = json!({
+                "event_id": uuid::Uuid::new_v4().to_string(),
+                "event_type": "trace_heartbeat",
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "summary": "session trace active"
+            });
+            let s = sample.to_string();
+            if s.len() <= max_bytes {
+                trace.push(sample);
+            }
         }
 
         trace

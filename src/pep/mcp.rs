@@ -218,7 +218,7 @@ pub async fn handle_mcp_tools_call(
         );
         return Err(PepError::Denied {
             reason: decision.reason_code.clone(),
-            decision,
+            decision: Box::new(decision),
         });
     }
 
@@ -255,7 +255,7 @@ pub async fn handle_mcp_tools_call(
         );
         return Err(PepError::Denied {
             reason: decision.reason_code.clone(),
-            decision,
+            decision: Box::new(decision),
         });
     }
 
@@ -282,7 +282,7 @@ pub async fn handle_mcp_tools_call(
         let decision = Decision::deny("hard_invariant_violation", Some(threat.pattern_name));
         return Err(PepError::Denied {
             reason: decision.reason_code.clone(),
-            decision,
+            decision: Box::new(decision),
         });
     }
 
@@ -342,7 +342,7 @@ pub async fn handle_mcp_tools_call(
                 .await;
             Err(PepError::Denied {
                 reason: decision.reason_code.clone(),
-                decision,
+                decision: Box::new(decision),
             })
         }
         Verdict::RequireApproval => {
@@ -375,14 +375,14 @@ pub async fn handle_mcp_tools_call(
 
             Err(PepError::ApprovalRequired {
                 approval_id,
-                decision,
+                decision: Box::new(decision),
             })
         }
         Verdict::Indeterminate => {
             state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
             Err(PepError::Denied {
                 reason: "indeterminate_fail_closed".to_string(),
-                decision,
+                decision: Box::new(decision),
             })
         }
         Verdict::Allow => {

@@ -11,11 +11,14 @@ use decision_v1::Decision;
 #[derive(Debug)]
 pub enum PepError {
     /// Action denied by policy or pre-evaluation constraint
-    Denied { reason: String, decision: Decision },
+    Denied {
+        reason: String,
+        decision: Box<Decision>,
+    },
     /// Action suspended pending human-in-the-loop approval
     ApprovalRequired {
         approval_id: String,
-        decision: Decision,
+        decision: Box<Decision>,
     },
     /// Malformed protocol or payload structure rejected before PDP
     ValidationFailed(String),

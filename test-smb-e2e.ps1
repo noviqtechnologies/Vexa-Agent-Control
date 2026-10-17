@@ -1,4 +1,4 @@
-# Vexa AgentWall v4.0 SMB End-to-End Test Script (PowerShell)
+# Vexa Agent Control v4.0 SMB End-to-End Test Script (PowerShell)
 # Requirements: Control Plane API running on http://localhost:8400
 
 $ErrorActionPreference = "Stop"
@@ -110,7 +110,7 @@ $brokerPayload = @{
     model          = "gpt-4.1-mini"
     protocol       = "openai_chat_completions"
     stream         = $false
-    payload        = @{ messages = @( @{ role = "user"; content = "Hello AgentWall" } ) }
+    payload        = @{ messages = @( @{ role = "user"; content = "Hello Vexa Agent Control" } ) }
 } | ConvertTo-Json
 
 $brokerResp = Invoke-RestMethod -Uri "http://localhost:8400/api/v2/broker/llm-requests" `

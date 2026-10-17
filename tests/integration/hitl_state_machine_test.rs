@@ -17,7 +17,7 @@ async fn test_hitl_atomic_cas_double_spend_prevention() {
         "write_file".to_string(),
         "sha256:target_args_hash".to_string(),
         "ws-main".to_string(),
-        "agentwall-daemon".to_string(),
+        "agentcontrol-daemon".to_string(),
         Duration::from_secs(60),
         1,
     );

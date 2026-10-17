@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Cross-Platform Test Script for AgentWall Group Policy & Spend Caps
+Cross-Platform Test Script for Vexa Agent Control Group Policy & Spend Caps
 -------------------------------------------------------------------
 Runs across Windows, macOS, and Linux using Python standard library (no pip dependencies required).
-Simulates an agent sending requests through AgentWall Gateway with Group claims.
+Simulates an agent sending requests through Vexa Agent Control Gateway with Group claims.
 """
 
 import os
@@ -83,7 +83,7 @@ def main():
     token = create_dev_jwt(sub=agent_id, groups=[group_name])
 
     print("\n" + "=" * 60)
-    print(" 🛡️ AgentWall Group Policy & Spend Caps Verification Test")
+    print(" 🛡️ Vexa Agent Control Group Policy & Spend Caps Verification Test")
     print("=" * 60)
     print(f" OS Platform    : {sys.platform}")
     print(f" Target Gateway : {gateway_url}")

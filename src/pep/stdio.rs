@@ -241,7 +241,7 @@ pub async fn evaluate_stdio_request(
         );
         return Err(PepError::Denied {
             reason: decision.reason_code.clone(),
-            decision,
+            decision: Box::new(decision),
         });
     }
 
@@ -293,7 +293,7 @@ pub async fn evaluate_stdio_request(
             );
             return Err(PepError::Denied {
                 reason: decision.reason_code.clone(),
-                decision,
+                decision: Box::new(decision),
             });
         }
 
@@ -319,7 +319,7 @@ pub async fn evaluate_stdio_request(
             let decision = Decision::deny("hard_invariant_violation", Some(threat.pattern_name));
             return Err(PepError::Denied {
                 reason: decision.reason_code.clone(),
-                decision,
+                decision: Box::new(decision),
             });
         }
 
@@ -381,7 +381,7 @@ pub async fn evaluate_stdio_request(
                     .await;
                 return Err(PepError::Denied {
                     reason: decision.reason_code.clone(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::RequireApproval => {
@@ -416,14 +416,14 @@ pub async fn evaluate_stdio_request(
 
                 return Err(PepError::ApprovalRequired {
                     approval_id,
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Indeterminate => {
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 return Err(PepError::Denied {
                     reason: "indeterminate_fail_closed".to_string(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Allow => {
@@ -481,7 +481,7 @@ pub async fn evaluate_stdio_request(
             );
             return Err(PepError::Denied {
                 reason: decision.reason_code.clone(),
-                decision,
+                decision: Box::new(decision),
             });
         }
 
@@ -523,7 +523,7 @@ pub async fn evaluate_stdio_request(
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 return Err(PepError::Denied {
                     reason: decision.reason_code.clone(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::RequireApproval => {
@@ -531,14 +531,14 @@ pub async fn evaluate_stdio_request(
                 let approval_id = format!("appr-{}", uuid::Uuid::new_v4());
                 return Err(PepError::ApprovalRequired {
                     approval_id,
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Indeterminate => {
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 return Err(PepError::Denied {
                     reason: "indeterminate_fail_closed".to_string(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Allow => {
@@ -571,7 +571,7 @@ pub async fn evaluate_stdio_request(
             );
             return Err(PepError::Denied {
                 reason: decision.reason_code.clone(),
-                decision,
+                decision: Box::new(decision),
             });
         }
 
@@ -613,7 +613,7 @@ pub async fn evaluate_stdio_request(
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 return Err(PepError::Denied {
                     reason: decision.reason_code.clone(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::RequireApproval => {
@@ -621,14 +621,14 @@ pub async fn evaluate_stdio_request(
                 let approval_id = format!("appr-{}", uuid::Uuid::new_v4());
                 return Err(PepError::ApprovalRequired {
                     approval_id,
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Indeterminate => {
                 state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
                 return Err(PepError::Denied {
                     reason: "indeterminate_fail_closed".to_string(),
-                    decision,
+                    decision: Box::new(decision),
                 });
             }
             Verdict::Allow => {

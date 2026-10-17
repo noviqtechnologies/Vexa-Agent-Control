@@ -1578,7 +1578,7 @@ async fn handle_request(
             {
                 let trusted_keys = state.policy_trust_profile.trusted_keys();
                 if state.policy_trust_profile.is_managed()
-                    && trusted_keys.as_ref().map_or(true, |k| k.is_empty())
+                    && trusted_keys.as_ref().is_none_or(|k| k.is_empty())
                 {
                     return Ok(json_response(
                         StatusCode::FORBIDDEN,
