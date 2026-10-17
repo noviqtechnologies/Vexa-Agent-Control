@@ -136,3 +136,45 @@ func TestBroker_PublishNoSubscribers(t *testing.T) {
 	// Should not panic.
 	b.Publish("nobody listening")
 }
+
+func TestBroker_WorkspaceIsolation(t *testing.T) {
+	b := NewBroker()
+	orgID := "org-alpha-123"
+	wsFinance := "finance-ws"
+	wsEngineering := "engineering-ws"
+
+	chFinance, cleanupFinance := b.SubscribeWorkspace(orgID, wsFinance)
+	defer cleanupFinance()
+
+	chEng, cleanupEng := b.SubscribeWorkspace(orgID, wsEngineering)
+	defer cleanupEng()
+
+	if b.WorkspaceClientCount(orgID, wsFinance) != 1 {
+		t.Fatalf("expected 1 finance subscriber, got %d", b.WorkspaceClientCount(orgID, wsFinance))
+	}
+	if b.WorkspaceClientCount(orgID, wsEngineering) != 1 {
+		t.Fatalf("expected 1 engineering subscriber, got %d", b.WorkspaceClientCount(orgID, wsEngineering))
+	}
+
+	// Publish strictly to Finance workspace
+	b.PublishWorkspace(orgID, wsFinance, map[string]string{"secret": "payroll-policy-delta"})
+
+	// Finance must receive the update
+	select {
+	case msg := <-chFinance:
+		if !strings.Contains(string(msg), "payroll-policy-delta") {
+			t.Fatalf("unexpected message in finance channel: %s", msg)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for finance workspace message")
+	}
+
+	// Engineering must NOT receive the update (intra-org multi-workspace isolation)
+	select {
+	case msg := <-chEng:
+		t.Fatalf("leak detected: engineering received finance workspace update: %s", msg)
+	case <-time.After(100 * time.Millisecond):
+		// Expected: no message for engineering
+	}
+}
+

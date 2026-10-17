@@ -84,6 +84,19 @@ impl SensitivePathGuard {
             return Some(finding);
         }
 
+        // 3. Block unresolved relative directory traversal escaping the root
+        if canonical_lower.starts_with("../") || canonical_lower == ".." {
+            return Some(SensitivePathFinding {
+                category: SensitivePathCategory::WorkspaceEscape,
+                rule_id: "PATH-TRAVERSAL-001",
+                original_path: trimmed.to_string(),
+                canonical_path: canonical_str,
+                reason:
+                    "Directory traversal escaping relative root directory boundary is prohibited"
+                        .to_string(),
+            });
+        }
+
         // 3. Check workspace root escape if workspace root is configured
         if let Some(ref ws) = self.workspace_root {
             let ws_str = ws.to_string_lossy().to_string();
@@ -180,13 +193,15 @@ fn evaluate_denylist(
         });
     }
 
-    // D. Environment and Secrets files (.env, .env.*)
+    // D. Environment and Secrets files (.env, .env.*, *.env)
     if lower == ".env"
         || lower.starts_with(".env.")
         || lower.starts_with(".env_")
         || lower.ends_with("/.env")
+        || lower.ends_with(".env")
         || lower.contains("/.env.")
         || lower.contains("/.env_")
+        || lower.contains("secrets.env")
     {
         return Some(SensitivePathFinding {
             category: SensitivePathCategory::EnvironmentFile,

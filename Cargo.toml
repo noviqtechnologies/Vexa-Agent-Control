@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "control-plane/proto"]
+members = [".", "control-plane/proto", "contracts/decision-v1"]
 
 [workspace.lints.clippy]
 too_many_arguments = "allow"
@@ -61,7 +61,6 @@ enterprise = ["team", "oidc-auth", "mtls-identity", "siem-export"]
 local-core = []
 passport-injection = []
 hub-sync = []
-saas-sync = ["hub-sync"] # Deprecated backwards-compatibility alias
 oidc-auth = []
 mtls-identity = []
 siem-export = []
@@ -69,6 +68,7 @@ siem-export = []
 [dependencies]
 # FR-23: Dashboard wire-boundary types
 control-plane-proto = { path = "control-plane/proto" }
+decision-v1 = { path = "contracts/decision-v1" }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }

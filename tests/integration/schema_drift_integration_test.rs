@@ -1,5 +1,7 @@
 //! Integration tests for FR-601: MCP Schema-Drift Detection
 
+#![allow(deprecated)]
+
 use agentcontrol::policy::engine::CompiledPolicy;
 use agentcontrol::policy::schema::SchemaDriftConfig;
 use agentcontrol::policy::schema_drift::SchemaDriftDetector;
@@ -31,6 +33,10 @@ fn create_test_state_with_drift(
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     });
 
     (state, dir)

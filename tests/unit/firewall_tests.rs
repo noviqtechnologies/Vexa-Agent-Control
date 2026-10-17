@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use agentcontrol::policy::engine::CompiledPolicy;
 use agentcontrol::policy::schema::{CycleAction, CycleDetectionConfig, FirewallConfig};
 use agentcontrol::proxy::handler::{
@@ -53,6 +55,10 @@ fn test_tool_history_memory_bounding() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     });
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -115,6 +121,10 @@ fn test_cycle_detection_blocking() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     });
 
     let req = json!({
@@ -204,6 +214,10 @@ fn test_pause_interactive_fallback_in_non_tty() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     });
 
     let req = json!({

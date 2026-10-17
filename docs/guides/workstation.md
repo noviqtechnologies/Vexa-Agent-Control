@@ -81,11 +81,17 @@ agentcontrol status
 agentcontrol verify
 ```
 
-#### Understanding Your Protection Posture (FR-P0-1):
-- `ENFORCED`: The operation is affirmatively inspected and blocked before reaching downstream tools (e.g. wrapped MCP tools).
-- `OBSERVED`: Traffic is inspected in shadow mode; operations are permitted.
-- `UNCOVERED`: No interception path exists for this route (e.g. Claude Desktop direct cloud completions, native OS shell execution in Codex). Pair Vexa with container/OS-level isolation for uncovered vectors.
-- `UNKNOWN / UNHEALTHY`: The proxy daemon is stopped or configuration is unmanaged.
+> [!IMPORTANT]
+> **Enforcement Boundary & Local Proxy Scope:**  
+> Vexa does not by itself prevent a workstation owner or unmanaged process from bypassing a local proxy. Use managed endpoint (MDM/EDR) and network egress controls when mandatory, non-bypassable enforcement is required.
+
+#### Understanding Your Per-Surface Enforcement Posture (PRD FR-001 / FR-005):
+- `ENFORCED_ON_ROUTED_TRAFFIC`: Daemon healthy, policy in enforce mode loaded from trusted source, and evaluated on requests reaching Vexa. Does not imply all traffic reaches Vexa.
+- `OBSERVED`: Gateway is operating in shadow / observe mode; traffic is inspected and logged, but actions are permitted.
+- `CONFIGURED`: The client target configuration points to Vexa. This proves configuration only.
+- `UNCOVERED`: No interception path exists for this route (e.g. Claude Desktop direct cloud completions, native OS shell execution).
+- `DEGRADED`: Operating with missing dependencies, failed policy refresh, invalid signature, or expired freshness window.
+- `UNKNOWN_UNHEALTHY`: The daemon is stopped, probe failed, or system cannot determine state. Never elevated to enforced.
 
 ---
 

@@ -787,9 +787,13 @@ pub async fn run_verification_probe(
 
     if json_output {
         let json_res = json!({
+            "product": "Vexa AgentControl",
+            "version": env!("CARGO_PKG_VERSION"),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
             "gateway_url": gateway_url,
             "all_passed": all_passed,
             "total_latency_ms": total_elapsed,
+            "disclaimer": "This report proves that the tested request path was governed. It does not prove that all organizational traffic uses this path.",
             "probes": reports
         });
         println!("{}", serde_json::to_string_pretty(&json_res).unwrap());
@@ -1222,11 +1226,15 @@ pub async fn run_attack_verification_suite(json_output: bool) -> i32 {
 
     if json_output {
         let out = json!({
+            "product": "Vexa AgentControl",
+            "version": env!("CARGO_PKG_VERSION"),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
             "suite": "verify --attacks",
             "passed": all_passed,
             "total_scenarios": results.len(),
             "passed_scenarios": results.iter().filter(|r| r.passed).count(),
             "elapsed_ms": elapsed,
+            "disclaimer": "This report proves that the tested request path was governed. It does not prove that all organizational traffic uses this path.",
             "scenarios": results,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());

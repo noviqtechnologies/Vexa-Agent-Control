@@ -1262,7 +1262,8 @@ pub async fn handle_request(
         }
     };
 
-    let policy_attr = session.policy.as_ref().and_then(|p| p.attribution.as_ref());
+    let policy_opt = session.get_policy();
+    let policy_attr = policy_opt.as_ref().and_then(|p| p.attribution.as_ref());
     let req_attribution = crate::spend::types::AttributionContext::resolve(
         client_id_hdr.as_deref(),
         project_id_hdr.as_deref(),
@@ -1360,239 +1361,45 @@ pub async fn handle_request(
     // Sanitize tool schemas early across all protocols and tool nesting levels
     sanitize_tool_schemas(&mut body);
 
-    // Evaluate LLM policy — resolve from session scope, active global state, or JIT disk policy
-    let global_policy = state.policy.read().ok().and_then(|g| g.clone());
-    let (provider_rule, provider_name) = match session.policy.as_ref().or(global_policy.as_ref()) {
-        Some(policy) => {
-            if let Some(llm_config) = &policy.llm {
-                if let Some(providers) = &llm_config.providers {
-                    let mut matched = None;
-                    for provider in providers {
-                        if let Some(models) = &provider.models {
-                            if models.iter().any(|m| {
-                                m == "*"
-                                    || m == &model
-                                    || (m.ends_with('*')
-                                        && model.starts_with(m.trim_end_matches('*')))
-                            }) {
-                                matched = Some((provider.clone(), provider.name.clone()));
-                                break;
-                            }
-                        } else {
-                            matched = Some((provider.clone(), provider.name.clone()));
-                            break;
-                        }
-                    }
-                    match matched {
-                        Some(m) => m,
-                        None => {
-                            emit_llm_telemetry(
-                                &state,
-                                &session,
-                                &model,
-                                control_plane_proto::redact::RawDecision::Denied,
-                            );
-                            let _ = state
-                                .audit_logger
-                                .write_entry(
-                                    &session.session_id,
-                                    "llm_deny",
-                                    &format!("llm:{}", model),
-                                    Some(json!({"model": model})),
-                                    Some(format!("Model '{}' not allowed by policy", model)),
-                                    Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                                    session.identity_sub.clone(),
-                                    session.identity_email.clone(),
-                                    Some("sha256:active".to_string()),
-                                    session.request_ip.clone(),
-                                    None,
-                                )
-                                .await;
-                            return Ok(make_error_response_with_protocol(
-                                StatusCode::FORBIDDEN,
-                                "agentcontrol",
-                                "model_not_allowed",
-                                &format!("Model '{}' is not allowed by policy", model),
-                                None,
-                                is_streaming,
-                                &req_uuid,
-                                is_anthropic_protocol,
-                                is_responses_protocol,
-                            ));
-                        }
-                    }
-                } else {
-                    return Ok(make_error_response_with_protocol(
-                        StatusCode::FORBIDDEN,
-                        "agentcontrol",
-                        "providers_not_configured",
-                        "LLM providers not configured in active policy",
-                        None,
-                        is_streaming,
-                        &req_uuid,
-                        is_anthropic_protocol,
-                        is_responses_protocol,
-                    ));
-                }
-            } else {
-                (
-                    crate::policy::schema::LlmProviderRule {
-                        name: "default".to_string(),
-                        action: "allow".to_string(),
-                        models: None,
-                        max_tokens_per_request: None,
-                        dlp_tier: None,
-                    },
-                    "default".to_string(),
-                )
-            }
-        }
-        None => {
-            // Check if local policy file exists on disk and load it JIT
-            let mut loaded_policy = None;
-            let candidate_paths = [
-                std::path::PathBuf::from("agentcontrol-policy.yaml"),
-                dirs::home_dir()
-                    .map(|h| h.join("agentcontrol-policy.yaml"))
-                    .unwrap_or_default(),
-                dirs::home_dir()
-                    .map(|h| h.join(".agentcontrol/agentcontrol-policy.yaml"))
-                    .unwrap_or_default(),
-                std::path::PathBuf::from(
-                    r"C:\Windows\System32\config\systemprofile\.agentcontrol\agentcontrol-policy.yaml",
-                ),
-                std::path::PathBuf::from(r"C:\Program Files\AgentControl\agentcontrol-policy.yaml"),
-            ];
+    let provider_name = infer_provider_from_model(&model);
 
-            for p in &candidate_paths {
-                if p.exists() {
-                    if let crate::policy::loader::PolicyLoadResult::Loaded { policy, .. } =
-                        crate::policy::loader::load_policy(p, None)
-                    {
-                        if let Ok(mut w) = state.policy.write() {
-                            *w = Some(policy.clone());
-                            state
-                                .policy_loaded
-                                .store(true, std::sync::atomic::Ordering::SeqCst);
-                        }
-                        loaded_policy = Some(policy);
-                        break;
-                    }
-                }
-            }
-
-            if let Some(policy) = loaded_policy {
-                if let Some(llm_config) = &policy.llm {
-                    if let Some(providers) = &llm_config.providers {
-                        let mut matched = None;
-                        for provider in providers {
-                            if let Some(models) = &provider.models {
-                                if models.iter().any(|m| {
-                                    m == "*"
-                                        || m == &model
-                                        || (m.ends_with('*')
-                                            && model.starts_with(m.trim_end_matches('*')))
-                                }) {
-                                    matched = Some((provider.clone(), provider.name.clone()));
-                                    break;
-                                }
-                            } else {
-                                matched = Some((provider.clone(), provider.name.clone()));
-                                break;
-                            }
-                        }
-                        match matched {
-                            Some(m) => m,
-                            None => {
-                                emit_llm_telemetry(
-                                    &state,
-                                    &session,
-                                    &model,
-                                    control_plane_proto::redact::RawDecision::Denied,
-                                );
-                                return Ok(make_error_response_with_protocol(
-                                    StatusCode::FORBIDDEN,
-                                    "agentcontrol",
-                                    "model_not_allowed",
-                                    &format!("Model '{}' is not allowed by policy", model),
-                                    None,
-                                    is_streaming,
-                                    &req_uuid,
-                                    is_anthropic_protocol,
-                                    is_responses_protocol,
-                                ));
-                            }
-                        }
-                    } else {
-                        return Ok(make_error_response_with_protocol(
-                            StatusCode::FORBIDDEN,
-                            "agentcontrol",
-                            "providers_not_configured",
-                            "LLM providers not configured in loaded policy",
-                            None,
-                            is_streaming,
-                            &req_uuid,
-                            is_anthropic_protocol,
-                            is_responses_protocol,
-                        ));
-                    }
-                } else {
-                    (
-                        crate::policy::schema::LlmProviderRule {
-                            name: "default".to_string(),
-                            action: "allow".to_string(),
-                            models: None,
-                            max_tokens_per_request: None,
-                            dlp_tier: None,
-                        },
-                        "default".to_string(),
-                    )
-                }
-            } else {
-                emit_llm_telemetry(
-                    &state,
-                    &session,
-                    &model,
-                    control_plane_proto::redact::RawDecision::Denied,
-                );
-                return Ok(make_error_response_with_protocol(
-                    StatusCode::FORBIDDEN,
-                    "agentcontrol",
-                    "no_active_policy",
-                    "No active policy configured on the gateway",
-                    None,
-                    is_streaming,
-                    &req_uuid,
-                    is_anthropic_protocol,
-                    is_responses_protocol,
-                ));
-            }
-        }
-    };
-
-    if provider_rule.action == "deny" {
+    // Evaluate LLM policy via authoritative PEP (Gate 1 Unified PEP)
+    if let Err(pep_err) = crate::pep::http_llm::evaluate_http_llm_request(
+        &state,
+        &session,
+        &provider_name,
+        &req_path,
+        &body,
+    )
+    .await
+    {
         emit_llm_telemetry(
             &state,
             &session,
             &model,
             control_plane_proto::redact::RawDecision::Denied,
         );
-        let _ = state
-            .audit_logger
-            .write_entry(
-                &session.session_id,
-                "llm_deny",
-                &format!("{}:{}", provider_name, model),
-                Some(json!({"provider": provider_name, "model": model})),
-                Some(format!("Model '{}' is denied by policy", model)),
-                Some(start_time.elapsed().as_secs_f64() * 1000.0),
-                session.identity_sub.clone(),
-                session.identity_email.clone(),
-                Some("sha256:active".to_string()),
-                session.request_ip.clone(),
-                None,
-            )
-            .await;
+        let (err_code, err_msg) = match &pep_err {
+            crate::pep::PepError::Denied { reason, decision } => (
+                reason.clone(),
+                decision
+                    .reason_detail
+                    .clone()
+                    .unwrap_or_else(|| format!("Model '{}' is not allowed by policy", model)),
+            ),
+            crate::pep::PepError::ApprovalRequired { approval_id, .. } => (
+                "approval_required".to_string(),
+                format!("Approval required for model '{}': {}", model, approval_id),
+            ),
+            crate::pep::PepError::ValidationFailed(msg) => (
+                "validation_failed".to_string(),
+                format!("LLM request validation failed: {}", msg),
+            ),
+            other => (
+                "policy_denied".to_string(),
+                format!("LLM request blocked: {}", other),
+            ),
+        };
         record_llm_event(
             &state,
             &session,
@@ -1600,10 +1407,10 @@ pub async fn handle_request(
             &model,
             &req_path,
             Some(&body),
-            Some(&format!("Model '{}' is denied by policy rule", model)),
+            Some(&err_msg),
             403,
             "deny",
-            "model_policy_denied",
+            &err_code,
             start_time.elapsed().as_secs_f64() * 1000.0,
             None,
             None,
@@ -1611,8 +1418,8 @@ pub async fn handle_request(
         return Ok(make_error_response_with_protocol(
             StatusCode::FORBIDDEN,
             "agentcontrol",
-            "policy_denied",
-            &format!("Model '{}' is denied by policy rule", model),
+            &err_code,
+            &err_msg,
             None,
             is_streaming,
             &req_uuid,
@@ -1620,12 +1427,6 @@ pub async fn handle_request(
             is_responses_protocol,
         ));
     }
-
-    let provider_name = if provider_name == "default" {
-        infer_provider_from_model(&model)
-    } else {
-        provider_name
-    };
 
     // Validate virtual key against local key cache if present
     if let Some(ref auth) = auth_header {

@@ -41,7 +41,10 @@ type mockStore struct {
 	getProviderKeyByProviderFunc func(ctx context.Context, tenantID, provider string) (*store.ProviderKey, error)
 	updateVirtualKeyFunc         func(ctx context.Context, tenantID, id string, params store.UpdateVirtualKeyParams) (*store.VirtualKey, error)
 	getVirtualKeyByHashFunc      func(ctx context.Context, keyHash string) (*store.VirtualKey, error)
-	incrementVirtualKeySpendFunc func(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error)
+	incrementVirtualKeySpendFunc   func(ctx context.Context, tenantID, id string, deltaMicrocents int64) (int64, error)
+	getActiveGroupPolicyFunc       func(ctx context.Context, tenantID, groupID string) (*store.GroupPolicyVersion, error)
+	insertEncryptedProviderKeyFunc func(ctx context.Context, tenantID, provider, keyAlias, plainSecret string, kmsProvider kms.KMSProvider) error
+	getDecryptedProviderKeyFunc    func(ctx context.Context, tenantID, provider string, kmsProvider kms.KMSProvider) (string, error)
 }
 
 func (m *mockStore) GetFleetStats(ctx context.Context, tenantID string, hours int) (*store.FleetStats, error) {
@@ -183,6 +186,9 @@ func (m *mockStore) ListIncreaseRequests(ctx context.Context, tenantID string) (
 }
 
 func (m *mockStore) GetActiveGroupPolicy(ctx context.Context, tenantID, groupID string) (*store.GroupPolicyVersion, error) {
+	if m.getActiveGroupPolicyFunc != nil {
+		return m.getActiveGroupPolicyFunc(ctx, tenantID, groupID)
+	}
 	return nil, nil
 }
 func (m *mockStore) PublishGroupPolicy(ctx context.Context, tenantID, groupID string, claims json.RawMessage, tools json.RawMessage, createdBy string) (*store.GroupPolicyVersion, error) {
@@ -254,9 +260,15 @@ func (m *mockStore) ResetVirtualKeySpend(ctx context.Context, tenantID, id strin
 
 // Central Provider Key Vault stubs
 func (m *mockStore) InsertEncryptedProviderKey(ctx context.Context, tenantID, provider, keyAlias, plainSecret string, kmsProvider kms.KMSProvider) error {
+	if m.insertEncryptedProviderKeyFunc != nil {
+		return m.insertEncryptedProviderKeyFunc(ctx, tenantID, provider, keyAlias, plainSecret, kmsProvider)
+	}
 	return nil
 }
 func (m *mockStore) GetDecryptedProviderKey(ctx context.Context, tenantID, provider string, kmsProvider kms.KMSProvider) (string, error) {
+	if m.getDecryptedProviderKeyFunc != nil {
+		return m.getDecryptedProviderKeyFunc(ctx, tenantID, provider, kmsProvider)
+	}
 	return "", store.ErrProviderKeyNotFound
 }
 func (m *mockStore) ListEncryptedProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKeyMeta, error) {
@@ -265,6 +277,10 @@ func (m *mockStore) ListEncryptedProviderKeys(ctx context.Context, tenantID stri
 func (m *mockStore) DeleteEncryptedProviderKey(ctx context.Context, tenantID, provider string) error {
 	return nil
 }
+func (m *mockStore) ListAuditCheckpoints(ctx context.Context, tenantID string) ([]store.AuditCheckpoint, error) {
+	return []store.AuditCheckpoint{}, nil
+}
+
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

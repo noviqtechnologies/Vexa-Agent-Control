@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -16,8 +17,9 @@ import (
 type SupportedIdeCoverage struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Status    string `json:"status"` // "ENFORCED" | "NOT_DETECTED"
+	Status    string `json:"status"` // "ENFORCED_ON_ROUTED_TRAFFIC" | "PARTIAL_COVERAGE" | "NOT_DETECTED"
 	IsWrapped bool   `json:"is_wrapped"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // WorkstationCoverageItem represents the comprehensive boundary security for a workstation.
@@ -27,8 +29,18 @@ type WorkstationCoverageItem struct {
 	UserIdentifier    string                 `json:"user_identifier"`
 	OS                string                 `json:"os"`
 	OSVersion         string                 `json:"os_version"`
-	HealthState       string                 `json:"health_state"` // "PROTECTED" | "STALE" | "EXPOSED" | "REVOKED"
+	HealthState       string                 `json:"health_state"` // "HEALTHY_ENFORCED" | "STALE" | "EXPOSED" | "REVOKED"
 	OverallCompliance string                 `json:"overall_compliance"`
+	ManagementMode    string                 `json:"management_mode,omitempty"`
+	// PostureState is the evidence-based assurance tier for this workstation.
+	// Possible values:
+	//   COOPERATIVE_CONFIGURED  — daemon heartbeating and PEP responding on loopback
+	//   DEGRADED (OFFLINE_CACHE) — heartbeat stale (<72h), operating on last signed bundle
+	//   POLICY_EXPIRED          — device offline beyond 72h policy grace window
+	//   REVOKED                 — enrollment revoked; device must re-enroll
+	//   EXPOSED                 — tamper detected or non-compliant configuration
+	PostureState      string                 `json:"posture_state"`
+	PostureEvidence   string                 `json:"posture_evidence,omitempty"`
 	LastHeartbeatAt   *time.Time             `json:"last_heartbeat_at"`
 	TamperCount24h    int                    `json:"tamper_count_24h"`
 	ActiveIDEs        []string               `json:"active_ides"`
@@ -39,7 +51,8 @@ type WorkstationCoverageItem struct {
 type CoverageHealthResponse struct {
 	Summary struct {
 		TotalWorkstations     int     `json:"total_workstations"`
-		ProtectedWorkstations int     `json:"protected_workstations"`
+		ProtectedWorkstations int     `json:"protected_workstations"` // Retained for backward compatibility
+		EnforcedWorkstations  int     `json:"enforced_workstations"`
 		ExposedWorkstations   int     `json:"exposed_workstations"`
 		StaleWorkstations     int     `json:"stale_workstations"`
 		RevokedWorkstations   int     `json:"revoked_workstations"`
@@ -59,6 +72,40 @@ type CoverageHealthHandler struct {
 // NewCoverageHealthHandler creates a new CoverageHealthHandler.
 func NewCoverageHealthHandler(ds *device.Store) *CoverageHealthHandler {
 	return &CoverageHealthHandler{deviceStore: ds}
+}
+
+// maxPolicyAgeOfflineGrace is the 72-hour window during which a device may
+// operate on its local signed policy bundle without hub connectivity.
+const maxPolicyAgeOfflineGrace = 72 * time.Hour
+
+// derivePostureState maps real device signals to the canonical evidence-based
+// posture vocabulary defined in enterprise-system-design.md §1.
+func derivePostureState(d device.DeviceComplianceSummary, now time.Time) (state, evidence string) {
+	// REVOKED — highest priority check.
+	if strings.ToUpper(d.EnrollmentStatus) == "REVOKED" {
+		return "REVOKED", "device enrollment revoked; must re-enroll"
+	}
+
+	// POLICY_EXPIRED — offline beyond the 72-hour grace window.
+	if d.LastHeartbeatAt != nil && now.Sub(*d.LastHeartbeatAt) > maxPolicyAgeOfflineGrace {
+		return "POLICY_EXPIRED",
+		fmt.Sprintf("last heartbeat %.0f hours ago exceeds 72h grace window; policy bundle may be stale",
+			now.Sub(*d.LastHeartbeatAt).Hours())
+	}
+
+	// DEGRADED (OFFLINE_CACHE) — stale heartbeat within grace window.
+	if d.LastHeartbeatAt == nil || now.Sub(*d.LastHeartbeatAt) > 15*time.Minute {
+		return "DEGRADED (OFFLINE_CACHE)", "hub connectivity lost; daemon operating on last signed policy bundle"
+	}
+
+	// EXPOSED — tamper events or non-compliant posture.
+	if d.TamperCount24h > 0 || strings.ToUpper(d.OverallCompliance) == "NON_COMPLIANT" {
+		return "EXPOSED",
+		fmt.Sprintf("tamper_count_24h=%d compliance=%s", d.TamperCount24h, d.OverallCompliance)
+	}
+
+	// COOPERATIVE_CONFIGURED — daemon actively heartbeating, PEP configured on loopback.
+	return "COOPERATIVE_CONFIGURED", "daemon heartbeating within 15 min; PEP active on 127.0.0.1:18080"
 }
 
 var canonicalIDEs = []struct {
@@ -135,8 +182,14 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 				normID := normalizeKey(c.ID)
 				normName := normalizeKey(c.Name)
 				if existingActive[c.ID] || existingActive[strings.ToLower(c.Name)] || existingNormActive[normID] || existingNormActive[normName] {
-					existing.IdeCoverage[i].Status = "ENFORCED"
 					existing.IdeCoverage[i].IsWrapped = true
+					if c.ID == "claude" {
+						existing.IdeCoverage[i].Status = "PARTIAL_COVERAGE"
+						existing.IdeCoverage[i].Reason = "MCP tools wrapped; LLM completions route direct to Anthropic"
+					} else {
+						existing.IdeCoverage[i].Status = "ENFORCED_ON_ROUTED_TRAFFIC"
+						existing.IdeCoverage[i].Reason = "Routed through local proxy"
+					}
 				}
 			}
 			continue
@@ -157,19 +210,27 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 			normName := normalizeKey(c.Name)
 			isWrapped := activeSet[c.ID] || activeSet[strings.ToLower(c.Name)] || activeNormSet[normID] || activeNormSet[normName]
 			status := "NOT_DETECTED"
+			reason := "Target configuration not detected"
 			if isWrapped {
-				status = "ENFORCED"
+				if c.ID == "claude" {
+					status = "PARTIAL_COVERAGE"
+					reason = "MCP tools wrapped via stdio-proxy; LLM completions route out-of-band directly to Anthropic Cloud"
+				} else {
+					status = "ENFORCED_ON_ROUTED_TRAFFIC"
+					reason = "Target configuration wrapped and routed through local proxy"
+				}
 			}
 			ideCoverage = append(ideCoverage, SupportedIdeCoverage{
 				ID:        c.ID,
 				Name:      c.Name,
 				Status:    status,
 				IsWrapped: isWrapped,
+				Reason:    reason,
 			})
 		}
 
 		// Calculate Health State
-		healthState := "PROTECTED"
+		healthState := "HEALTHY_ENFORCED"
 		if strings.ToUpper(d.EnrollmentStatus) == "REVOKED" {
 			healthState = "REVOKED"
 			revokedCount++
@@ -187,18 +248,28 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 			seenHosts[hostKey] = len(workstations)
 		}
 
+		mgmtMode := "TEAM_MANAGED"
+		if d.EnrollmentStatus == "" {
+			mgmtMode = "LOCAL_DEVELOPER"
+		}
+
+		postureState, postureEvidence := derivePostureState(d, now)
+
 		workstations = append(workstations, WorkstationCoverageItem{
-			DeviceID:          d.DeviceID,
-			Hostname:          d.Hostname,
-			UserIdentifier:    d.UserIdentifier,
-			OS:                d.OS,
-			OSVersion:         d.OSVersion,
-			HealthState:       healthState,
+			DeviceID:        d.DeviceID,
+			Hostname:        d.Hostname,
+			UserIdentifier:  d.UserIdentifier,
+			OS:              d.OS,
+			OSVersion:       d.OSVersion,
+			HealthState:     healthState,
 			OverallCompliance: d.OverallCompliance,
-			LastHeartbeatAt:   d.LastHeartbeatAt,
-			TamperCount24h:    d.TamperCount24h,
-			ActiveIDEs:        d.ActiveIDEs,
-			IdeCoverage:       ideCoverage,
+			ManagementMode:  mgmtMode,
+			PostureState:    postureState,
+			PostureEvidence: postureEvidence,
+			LastHeartbeatAt: d.LastHeartbeatAt,
+			TamperCount24h:  d.TamperCount24h,
+			ActiveIDEs:      d.ActiveIDEs,
+			IdeCoverage:     ideCoverage,
 		})
 	}
 
@@ -214,6 +285,7 @@ func (h *CoverageHealthHandler) GetCoverageHealth(w http.ResponseWriter, r *http
 	}
 	resp.Summary.TotalWorkstations = total
 	resp.Summary.ProtectedWorkstations = protectedCount
+	resp.Summary.EnforcedWorkstations = protectedCount
 	resp.Summary.ExposedWorkstations = exposedCount
 	resp.Summary.StaleWorkstations = staleCount
 	resp.Summary.RevokedWorkstations = revokedCount

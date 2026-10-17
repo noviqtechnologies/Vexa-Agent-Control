@@ -1739,6 +1739,8 @@ fn build_proxy_state(
                 .map(|dir| Arc::new(agentcontrol::policy::signed::PolicyStorageManager::new(dir)))
         }),
         otlp_exporter: Arc::new(agentcontrol::telemetry::otlp::OtlpExporter::default()),
+        policy_trust_profile: agentcontrol::policy::trust::PolicyTrustProfile::from_env(),
+        policy_epoch: std::sync::atomic::AtomicU64::new(1),
     })
 }
 
@@ -2795,20 +2797,7 @@ async fn run_start(args: cli::StartArgs) -> i32 {
                         raw_hash,
                         warnings,
                     }) => {
-                        match sighup_state.policy.write() {
-                            Ok(mut guard) => *guard = Some(policy),
-                            Err(_) => {
-                                agentcontrol::logging::log_event(
-                                    agentcontrol::logging::Level::Error,
-                                    "sighup_reload_failed",
-                                    serde_json::json!({"error": "Policy lock poisoned"}),
-                                );
-                                continue;
-                            }
-                        }
-                        sighup_state
-                            .policy_loaded
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        sighup_state.update_policy(Some(policy));
 
                         let elapsed_ms = reload_start.elapsed().as_secs_f64() * 1000.0;
 

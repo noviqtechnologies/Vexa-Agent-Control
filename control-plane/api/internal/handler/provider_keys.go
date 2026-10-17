@@ -7,17 +7,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/kms"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type ProviderKeysHandler struct {
-	store     DataStore
-	masterKey []byte
+	store       DataStore
+	masterKey   []byte
+	kmsProvider kms.KMSProvider
 }
 
-func NewProviderKeysHandler(s DataStore, masterKey []byte) *ProviderKeysHandler {
-	return &ProviderKeysHandler{store: s, masterKey: masterKey}
+func NewProviderKeysHandler(s DataStore, masterKey []byte, kmsProviders ...kms.KMSProvider) *ProviderKeysHandler {
+	var kp kms.KMSProvider
+	if len(kmsProviders) > 0 {
+		kp = kmsProviders[0]
+	}
+	return &ProviderKeysHandler{store: s, masterKey: masterKey, kmsProvider: kp}
 }
 
 // List GET /api/v1/providers/keys
@@ -56,8 +62,30 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mask the key for display (e.g., sk-...abcd)
+	provider := strings.ToLower(strings.TrimSpace(req.Provider))
 	masked := crypto.MaskAPIKey(req.APIKey)
+
+	ctx := r.Context()
+	tenantID := middleware.TenantIDFromContext(ctx)
+
+	// If KMS provider is active, persist via the unified KMS Provider Vault
+	if h.kmsProvider != nil {
+		if err := h.store.InsertEncryptedProviderKey(ctx, tenantID, provider, "default", req.APIKey, h.kmsProvider); err != nil {
+			http.Error(w, `{"error":"failed to save key"}`, http.StatusInternalServerError)
+			return
+		}
+
+		k := &store.ProviderKey{
+			TenantID:     tenantID,
+			Provider:     provider,
+			APIKeyMasked: masked,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(k)
+		return
+	}
 
 	// Encrypt the raw API key using AES-256-GCM before persisting to database
 	encryptedKey, err := crypto.Encrypt(h.masterKey, req.APIKey)
@@ -66,12 +94,9 @@ func (h *ProviderKeysHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	tenantID := middleware.TenantIDFromContext(ctx)
-
 	k := &store.ProviderKey{
 		TenantID:        tenantID,
-		Provider:        strings.ToLower(req.Provider),
+		Provider:        provider,
 		APIKeyMasked:    masked,
 		APIKeyEncrypted: encryptedKey,
 	}

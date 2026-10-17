@@ -81,13 +81,17 @@ Gateway                                               Control Hub API
 - `credential_rotation` — Signals a provider API key rotation; gateway fetches updated ciphertext from `GET /api/v1/credentials/:provider`.
 - `: ping` — Sent every 15 seconds. No ping within 30 seconds triggers a warning and exponential backoff reconnect.
 
-**Connecting gateways in centralized mode:**
+**Connecting gateways in centralized managed mode:**
+
+Centralized mode requires independently managed Ed25519 cryptographic signing keys (PRD FR-006). On the Central Hub, set `POLICY_SIGNING_PRIVATE_KEY`. On endpoints, configure the matching public keys:
 
 * **Linux / macOS (Bash / Zsh):**
   ```bash
   export DASHBOARD_API_URL="https://acme-health.vexasec.io"
   export POLICY_READ_SECRET="your-policy-read-secret"
   export GATEWAY_SECRET="your-gateway-secret"
+  export AGENTCONTROL_MANAGED_MODE="1"
+  export AGENTCONTROL_TRUSTED_KEYS="<org-ed25519-public-key-hex>"
 
   agentcontrol start --listen 0.0.0.0:18080 --centralized
   ```
@@ -97,9 +101,21 @@ Gateway                                               Control Hub API
   $env:DASHBOARD_API_URL="https://acme-health.vexasec.io"
   $env:POLICY_READ_SECRET="your-policy-read-secret"
   $env:GATEWAY_SECRET="your-gateway-secret"
+  $env:AGENTCONTROL_MANAGED_MODE="1"
+  $env:AGENTCONTROL_TRUSTED_KEYS="<org-ed25519-public-key-hex>"
 
   agentcontrol.exe start --listen 0.0.0.0:18080 --centralized
   ```
+
+### Central Policy Lifecycle & Convergence Tracking
+Policies follow an 8-stage formal promotion workflow:
+`DRAFT` &rarr; `VALIDATED` &rarr; `SIMULATED` &rarr; `APPROVED` &rarr; `STAGED` &rarr; `ACTIVE` &rarr; `ACKNOWLEDGED` &rarr; `REVOKED`
+
+1. **Simulate & Backtest:** Policies are simulated against historical traffic logs to measure false positives before approval.
+2. **Cryptographic Signing:** Security Leads approve and sign policy bundles using independent Ed25519 authority.
+3. **Canary Staging:** Policies are staged to specific cohorts before general fleet broadcast.
+4. **Endpoint Convergence:** Endpoints report cryptographic receipts upon successful signature verification and compilation. Admins track fleet convergence in real time.
+See → [Managed Mode Bootstrap Guide](guides/managed-mode-bootstrap.md) for full setup.
 
 ---
 
@@ -132,8 +148,8 @@ For complete identity architecture and claim mappings, see → [OIDC Identity Bi
 ## 3. Vault & API Key Custody (Zero-Trust BYOK)
 
 Agent Control implements customer-isolated encrypted credential storage using AES-256-GCM. 
-- SaaS Platform Operators **never** have visibility into customer LLM keys.
-- Organization Admins configure keys inside their tenant console under **Settings ➔ LLM Providers**.
+- Sovereign self-hosted architecture ensures your organization maintains 100% custody of encryption keys and provider credentials.
+- Organization Admins configure keys inside their self-hosted console under **Settings ➔ LLM Providers**.
 - Workstations and Gateways receive scoped credentials with automated TTL expiration.
 
 ---
@@ -164,16 +180,49 @@ agentcontrol deny req-hitl-1042
 
 ---
 
-## 6. Multi-Tenant Teams & Zero-Trust BYOK
+## 6. Intra-Organization Multi-Workspace Isolation & Scoping
 
-The Team Control Hub provides isolated organization boundaries where all telemetry and credentials are scoped to your private organization UUID:
-- **Early Access Evaluation:** Enjoy full Team Hub capabilities for 30 days of evaluation with up to 5 devices (expanding to 50 devices post-v1.0 GA).
+The Team Control Hub provides strictly isolated intra-organization workspace boundaries where all telemetry, policies, virtual keys, and credentials are scoped:
+- **Intra-Org Workspace Boundaries (FR-020, NFR-005):** Multi-workspace isolation is strictly internal (teams, projects, workspaces); cross-customer multi-tenant SaaS is explicitly out of scope.
+- **Server-Side Scope Derivation:** The active `workspace_id` is derived server-side directly from the authenticated principal (OIDC claims or API token). Client requests cannot override their derived scope.
+- **Anti-Substitution Protection:** Passing another workspace's ID via query parameters or request body payload is strictly rejected with `403 Forbidden` unless the authenticated principal holds the `ORG_ADMIN` role.
+- **Role Matrix:**
+  | Role | Permissions |
+  |---|---|
+  | `ORG_ADMIN` | Full fleet administration, workspace management, policy authoring, cross-workspace visibility |
+  | `TEAM_ADMIN` | Workspace policy management, team virtual key provisioning, team member management |
+  | `MEMBER` | Execute within assigned workspace, manage own virtual keys, view workspace telemetry |
+  | `VIEWER` | Read-only access to assigned workspace telemetry and audit logs |
+- **Virtual Key Provisioning:** Virtual keys are bound to specific workspace IDs and team IDs with spend ceilings, rate limits, and allowed model lists.
 - **Fleet Governance:** Real-time device enrollment tracking with automatic quota enforcement and instant capacity reclamation upon device revocation.
 - **Device Unenrollment:** Workstations can cleanly unenroll from the hub anytime:
   ```bash
   agentcontrol unenroll --force
   ```
-- **Seamless Upgrade:** Converting to a dedicated Enterprise SLA or connecting > 5 devices occurs in-place via cryptographically signed Ed25519 tokens.
+
+---
+
+## 7. Advanced Governance, Delegation & Resilient Failover
+
+### Capability Delegation & Attenuation (FR-035)
+Enforces hierarchical capability reduction for sub-agents. A child agent's permissions must be a strict subset of its parent agent's capabilities. Escalation attempts (such as adding unapproved tools or removing path restrictions) are blocked deterministically.
+
+### Data Provenance & Taint Flow Tracking (FR-036)
+Tracks data lineage and taint labels across agent execution steps. Taint flow rules prevent untrusted or external data (e.g., untrusted web content or third-party tool outputs) from propagating into high-privilege sinks (e.g., database writes, file exfiltration, or shell execution).
+
+### Autonomy Ceilings & Run Budgets (FR-034)
+Guards against runaway agent execution:
+- **Recursion Depth:** Maximum nested sub-agent or tool-call depth (default: 8).
+- **Run Duration:** Maximum wall-clock execution time per run (default: 300s).
+- **Token Ceilings:** Combined prompt and completion token limits per run.
+- **Repetitive Loop Blocker:** Halts agents repeating identical tool calls or failing loops without progress.
+
+### Circuit Breaking & Resilient Failover (FR-030, FR-031)
+Upstream provider routing with automated circuit breakers:
+- **Health State Machine:** Transitions between `Closed` (normal), `Open` (tripped after consecutive upstream failures), and `HalfOpen` (probing canary recovery).
+- **Idempotency-Aware Retries:** Retries 502/503/504 and 429 errors safely without duplicate state-changing operations.
+- **Seamless Fallback:** Transparently reroutes requests to pre-configured fallback providers (e.g., OpenAI → Anthropic → Gemini) within the specified deadline.
+
 
 ---
 

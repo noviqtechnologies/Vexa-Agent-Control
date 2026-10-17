@@ -202,9 +202,31 @@ pub struct ProxyState {
     pub policy_storage_manager: Option<Arc<crate::policy::signed::PolicyStorageManager>>,
     /// Phase 3: OpenTelemetry Exporter
     pub otlp_exporter: Arc<crate::telemetry::otlp::OtlpExporter>,
+    /// Gate 0.1: Policy Trust Profile for verification
+    pub policy_trust_profile: crate::policy::trust::PolicyTrustProfile,
+    /// Gate 2: Monotonically increasing policy epoch. Incremented whenever active policy is updated.
+    pub policy_epoch: std::sync::atomic::AtomicU64,
 }
 
 impl ProxyState {
+    /// Gate 2: Update active compiled policy atomically and increment the policy epoch.
+    /// This causes all active sessions to lazily rebind to the new policy on their next request.
+    pub fn update_policy(&self, new_policy: Option<CompiledPolicy>) -> u64 {
+        if let Ok(mut guard) = self.policy.write() {
+            *guard = new_policy;
+        }
+        self.policy_loaded
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.policy_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1
+    }
+
+    /// Read active policy safely as an owned clone.
+    pub fn get_policy(&self) -> Option<CompiledPolicy> {
+        self.policy.read().ok().and_then(|p| p.clone())
+    }
+
     /// Constructs a standardized, pre-configured ProxyState for unit, integration, and E2E tests.
     /// Eliminates brittle 40+ field struct literal definitions across test suites.
     pub fn mock_test_default() -> Arc<Self> {
@@ -292,6 +314,8 @@ impl ProxyState {
             revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
             policy_storage_manager: None,
             otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
+            policy_trust_profile: crate::policy::trust::PolicyTrustProfile::default(),
+            policy_epoch: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
@@ -382,6 +406,8 @@ impl ProxyState {
             revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
             policy_storage_manager: None,
             otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
+            policy_trust_profile: crate::policy::trust::PolicyTrustProfile::default(),
+            policy_epoch: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
@@ -470,6 +496,8 @@ impl ProxyState {
             revocation_registry: Arc::new(crate::policy::revocation::RevocationRegistry::new()),
             policy_storage_manager: None,
             otlp_exporter: Arc::new(crate::telemetry::otlp::OtlpExporter::default()),
+            policy_trust_profile: crate::policy::trust::PolicyTrustProfile::default(),
+            policy_epoch: std::sync::atomic::AtomicU64::new(1),
         })
     }
 }
@@ -533,6 +561,9 @@ pub enum ProxyAction {
 
 /// Handle an incoming JSON-RPC request body to determine the proxy action.
 /// Returns a `ProxyAction`. Evaluates against the dynamic, isolated `SessionContext`.
+#[deprecated(
+    note = "Direct tool calls must use crate::pep::mcp::handle_mcp_tools_call or crate::pep::stdio::handle_stdio_jsonrpc"
+)]
 pub async fn evaluate_jsonrpc(
     state: &ProxyState,
     session: &Arc<super::session::SessionContext>,
@@ -542,20 +573,37 @@ pub async fn evaluate_jsonrpc(
     let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = body.get("params").cloned().unwrap_or(Value::Null);
 
-    // Whitelist standard MCP lifecycle and discovery methods (FR-304)
+    // Gate 0.2: Exact standard MCP protocol lifecycle and discovery methods
     if method == "initialize"
         || method == "notifications/initialized"
         || method == "ping"
-        || method == "tools/list"
-        || method.starts_with("notifications/")
-        || method.starts_with("resources/")
-        || method.starts_with("prompts/")
+        || method == "notifications/cancelled"
+        || method == "notifications/progress"
+        || method == "notifications/message"
+        || method == "notifications/roots/list_changed"
     {
-        // Transparent proxy — no policy evaluation for lifecycle and discovery
+        // Transparent proxy for lifecycle/control messages
         return ProxyAction::Forward;
     }
 
-    if method != "tools/call" {
+    if method == "tools/list"
+        || method == "resources/list"
+        || method == "prompts/list"
+        || method == "resources/templates/list"
+    {
+        // Discovery methods: Forward transparently
+        return ProxyAction::Forward;
+    }
+
+    // Identify data-bearing or tool call operations
+    let (tool_name, mut tool_params) = if method == "tools/call" {
+        let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
+        (name, arguments)
+    } else if method.starts_with("resources/") || method.starts_with("prompts/") {
+        // Data access methods require policy evaluation (Gate 0.2)
+        (method, params.clone())
+    } else {
         // Unknown method — reject and log as DENY
         let _ = state
             .audit_logger
@@ -583,11 +631,7 @@ pub async fn evaluate_jsonrpc(
             JSONRPC_METHOD_NOT_FOUND,
             "Method not found",
         ));
-    }
-
-    // tools/call — extract tool name and arguments
-    let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    let mut tool_params = params.get("arguments").cloned().unwrap_or(Value::Null);
+    };
 
     // Phase 3: Instant Capability Revocation Check (<30s propagation guarantee)
     let agent_id = session.identity_sub.as_deref();
@@ -699,7 +743,8 @@ pub async fn evaluate_jsonrpc(
     // can intercept loops even for tools not yet in the allow-list.
     // Strictly isolated per session via session.tool_history.
     let cycle_action_to_take = {
-        let firewall_cfg = session.policy.as_ref().and_then(|p| p.firewall.as_ref());
+        let policy_opt = session.get_policy();
+        let firewall_cfg = policy_opt.as_ref().and_then(|p| p.firewall.as_ref());
         let effective_cfg = firewall_cfg.cloned().unwrap_or_default();
 
         if effective_cfg.enabled {
@@ -919,9 +964,10 @@ pub async fn evaluate_jsonrpc(
             );
         } else {
             // Evaluate ladder actions per finding
+            let policy_opt = session.get_policy();
             let actions: Vec<crate::policy::dlp::DlpAction> = dlp_findings
                 .iter()
-                .map(|f| state.dlp_scanner.resolve_action(f, session.policy.as_ref()))
+                .map(|f| state.dlp_scanner.resolve_action(f, policy_opt.as_ref()))
                 .collect();
 
             if actions.contains(&crate::policy::dlp::DlpAction::Block) {
@@ -1088,6 +1134,57 @@ pub async fn evaluate_jsonrpc(
                     "pattern": &f.pattern_name
                 }),
             );
+        }
+        Err(_) => {
+            let fail_closed = session.get_policy().map(|p| p.fail_closed).unwrap_or(true);
+            let decision = crate::proxy::scanner_failure::handle_scanner_failure(
+                crate::proxy::scanner_failure::ScannerFailureKind::Panic,
+                enforce_mode,
+                fail_closed,
+                "mcp_injection_scanner",
+            );
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    decision.audit_event,
+                    tool_name,
+                    None,
+                    Some(decision.log_reason),
+                    None,
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+            logging::log_event(
+                Level::Error,
+                decision.audit_event,
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "reason": "scanner_panic"
+                }),
+            );
+            if decision.should_block {
+                return handle_deny(
+                    state,
+                    &session.session_id,
+                    &id,
+                    tool_name,
+                    "injection_scanner_panic",
+                    session.identity_sub.clone(),
+                    session.identity_email.clone(),
+                    session.request_ip.clone(),
+                    true,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            }
         }
         _ => {}
     }
@@ -1363,7 +1460,8 @@ pub async fn evaluate_jsonrpc(
     }
 
     // ── Step 2.5: Spend Cap & Token Limit Enforcement (FR-102 / US-101) ─────
-    if let Some(spend_caps) = session.policy.as_ref().and_then(|p| p.spend_caps.as_ref()) {
+    let policy_opt = session.get_policy();
+    if let Some(spend_caps) = policy_opt.as_ref().and_then(|p| p.spend_caps.as_ref()) {
         if spend_caps.enabled {
             let is_licensed =
                 crate::license::validator::is_license_valid(spend_caps.license_key.as_deref());
@@ -1471,7 +1569,8 @@ pub async fn evaluate_jsonrpc(
     }
 
     // ADR: Sequence rule evaluation against sliding window tracker
-    if let Some(ref policy) = session.policy {
+    let policy_opt = session.get_policy();
+    if let Some(ref policy) = policy_opt {
         let tracker = session
             .sliding_window
             .lock()
@@ -1553,7 +1652,8 @@ pub async fn evaluate_jsonrpc(
 
     // Policy evaluation against frozen session-specific policy context
     let start = Instant::now();
-    let eval_result = session.policy.as_ref().map(|policy| {
+    let policy_opt = session.get_policy();
+    let eval_result = policy_opt.as_ref().map(|policy| {
         policy.evaluate(
             tool_name,
             &tool_params,
@@ -1564,18 +1664,55 @@ pub async fn evaluate_jsonrpc(
     let eval_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     let final_eval = match (eval_result, safe_mode_threat) {
-        (Some(EvalResult::Allow { matched_group_id }), Some(threat)) => {
-            // Escape Hatch: User policy explicitly allowed this, overriding Safe Mode block.
+        (
+            Some(EvalResult::Allow {
+                matched_group_id: _,
+            }),
+            Some(threat),
+        ) => {
+            // Gate 0.4: Hard safety findings cannot be overridden by user policy Allow
             logging::log_event(
-                Level::Warn,
-                "safe_mode_override",
-                json!({"tool": tool_name, "session": &session.session_id, "threat": threat.category.as_str(), "reason": "user_policy_override"}),
+                Level::Error,
+                "safe_mode_override_blocked",
+                json!({"tool": tool_name, "session": &session.session_id, "threat": threat.category.as_str(), "reason": "hard_safety_invariant_violation"}),
             );
-            EvalResult::Allow { matched_group_id }
+            EvalResult::Deny {
+                reason_code: "safe_mode_deny".to_string(),
+                param_name: Some(threat.param_name.clone()),
+                param_value: None,
+                pattern: Some(threat.pattern_name.clone()),
+                json_pointer: Some(format!(
+                    "{} Edit policy: agentwall edit-policy",
+                    threat.reason
+                )),
+                validator_name: None,
+                matched_group_id: None,
+            }
         }
         (Some(EvalResult::Allow { matched_group_id }), None) => {
             EvalResult::Allow { matched_group_id }
         }
+        (Some(EvalResult::RequireApproval { reason }), _) => EvalResult::RequireApproval { reason },
+        (
+            Some(EvalResult::WarnObserve {
+                reason_code,
+                would_deny,
+            }),
+            _,
+        ) => EvalResult::WarnObserve {
+            reason_code,
+            would_deny,
+        },
+        (
+            Some(EvalResult::ErrorIndeterminate {
+                reason_code,
+                message,
+            }),
+            _,
+        ) => EvalResult::ErrorIndeterminate {
+            reason_code,
+            message,
+        },
         (
             Some(EvalResult::Deny {
                 matched_group_id, ..
@@ -1641,8 +1778,14 @@ pub async fn evaluate_jsonrpc(
                         validator_name: None,
                         matched_group_id: None,
                     }
+                } else if state.shadow_mode.load(Ordering::Relaxed) {
+                    // Shadow mode: record as WarnObserve with would_deny=true (Gate 0.5)
+                    EvalResult::WarnObserve {
+                        reason_code: "no_valid_policy_loaded_shadow".to_string(),
+                        would_deny: true,
+                    }
                 } else {
-                    // Out-Of-The-Box Local Safe Mode / Shadow Mode: No custom policy loaded, Safe Mode is clean.
+                    // Out-Of-The-Box Local Safe Mode / Clean state
                     EvalResult::Allow {
                         matched_group_id: None,
                     }
@@ -1803,6 +1946,113 @@ pub async fn evaluate_jsonrpc(
                 )
                 .await
             }
+        }
+        EvalResult::RequireApproval { reason } => {
+            state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "tool_require_approval",
+                    tool_name,
+                    Some(tool_params.clone()),
+                    Some(reason.clone()),
+                    Some(eval_ms),
+                    identity_sub.clone(),
+                    identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+
+            logging::log_event(
+                Level::Warn,
+                "tool_require_approval",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "reason": &reason,
+                    "sub": &identity_sub,
+                }),
+            );
+
+            let err_val = json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32001,
+                    "message": format!("Execution halted: human-in-the-loop approval required: {}", reason),
+                    "data": {
+                        "tool": tool_name,
+                        "status": "pending_approval"
+                    }
+                }
+            });
+            ProxyAction::Respond(err_val)
+        }
+        EvalResult::WarnObserve {
+            reason_code,
+            would_deny,
+        } => {
+            state.metrics_allow_total.fetch_add(1, Ordering::Relaxed);
+            let _ = state
+                .audit_logger
+                .write_entry(
+                    &session.session_id,
+                    "tool_warn_observe",
+                    tool_name,
+                    Some(tool_params.clone()),
+                    Some(format!(
+                        "observe: reason={} would_deny={}",
+                        reason_code, would_deny
+                    )),
+                    Some(eval_ms),
+                    identity_sub.clone(),
+                    identity_email.clone(),
+                    None,
+                    session.request_ip.clone(),
+                    None,
+                )
+                .await;
+
+            logging::log_event(
+                Level::Warn,
+                "tool_warn_observe",
+                json!({
+                    "tool": tool_name,
+                    "session": &session.session_id,
+                    "reason": &reason_code,
+                    "would_deny": would_deny,
+                }),
+            );
+
+            ProxyAction::Forward
+        }
+        EvalResult::ErrorIndeterminate {
+            reason_code,
+            message,
+        } => {
+            state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+            let reason = format!(
+                "indeterminate_fail_closed: reason={} message={}",
+                reason_code, message
+            );
+            handle_deny(
+                state,
+                &session.session_id,
+                &id,
+                tool_name,
+                &reason,
+                identity_sub,
+                identity_email,
+                session.request_ip.clone(),
+                false,
+                None,
+                None,
+                None,
+            )
+            .await
         }
     }
 }

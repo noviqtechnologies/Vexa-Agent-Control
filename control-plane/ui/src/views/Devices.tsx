@@ -83,7 +83,8 @@ export default function Devices() {
     if (Date.now() - hbTime > 15 * 60 * 1000) {
       return 'OFFLINE'
     }
-    return (d.overall_compliance as any) || 'COMPLIANT'
+    // Missing/unknown compliance is never promoted to COMPLIANT.
+    return d.overall_compliance === 'COMPLIANT' ? 'COMPLIANT' : 'OFFLINE'
   }
 
   useEffect(() => {
@@ -108,13 +109,15 @@ export default function Devices() {
             auth_provider_type: d.auth_provider_type,
             os: d.os_family,
             os_version: d.architecture,
-            overall_compliance: d.status === 'REVOKED' ? 'NON_COMPLIANT' : (d.last_freshness === 'STALE' ? 'OFFLINE' : 'COMPLIANT'),
-            active_ides: ['Cursor', 'VS Code', 'Windsurf'],
-            tamper_count_24h: 0,
+            overall_compliance: d.status === 'REVOKED'
+              ? 'NON_COMPLIANT'
+              : (d.last_freshness === 'ACTIVE_FRESH' || d.last_freshness === 'ACTIVE_RECENT' ? 'COMPLIANT' : 'OFFLINE'),
+            active_ides: (d as any).active_ides || [],
+            tamper_count_24h: (d as any).tamper_count_24h ?? 0,
             last_heartbeat_at: d.last_seen_at,
             enrollment_status: d.status,
-            capability_vector: d.capability_vector || ['CONFIGURED', 'TRAFFIC_VERIFIED'],
-            last_freshness: d.last_freshness || 'ACTIVE_FRESH',
+            capability_vector: d.capability_vector || [],
+            last_freshness: d.last_freshness,
           }))
           fleetTotal = v2Res.total_count || rawList.length
         }
@@ -131,7 +134,8 @@ export default function Devices() {
       const seen = new Set<string>()
       const deduped: SentryDeviceSummary[] = []
       for (const d of rawList) {
-        const key = (d.hostname || d.device_id || '').toLowerCase()
+        // Key by immutable device ID; hostnames are not unique.
+        const key = (d.device_id || d.hostname || '').toLowerCase()
         const effective = getEffectiveCompliance(d)
         d.overall_compliance = effective
         if (key && !seen.has(key)) {

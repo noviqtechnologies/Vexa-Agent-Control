@@ -155,11 +155,7 @@ pub async fn start_policy_subscriber(
                                             &yaml_str, &raw_hash,
                                         );
 
-                                        let mut w = state.policy.write().unwrap();
-                                        *w = Some(policy);
-                                        state
-                                            .policy_loaded
-                                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                                        state.update_policy(Some(policy));
                                         logging::log_event(
                                             Level::Info,
                                             "policy_reloaded_from_hub",

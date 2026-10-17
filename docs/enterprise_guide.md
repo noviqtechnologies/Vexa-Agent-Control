@@ -20,7 +20,8 @@ The **Enterprise Fleet** profile delivers the full Agent Control security stack 
 | **Hardened Agent Container Runtime (HAR)** | Pre-built <100 MB Distroless/Alpine OCI sidecar image for Kubernetes pod deployments |
 | **MCP Cross-Session Schema-Drift Defense** | Automatic detection and blocking of tool catalog modifications / rug pulls across sessions |
 | **OWASP Agentic Top 10 (ASI 2026) Coverage** | Full architectural alignment with 8/10 full coverage, 1/10 partial, and automated audit evidence CLI |
-| **Provider Key AES-256-GCM Encryption** | AES-256-GCM encrypted database custody for LLM provider API keys using 32-byte master key |
+| **Provider Key AES-256-GCM Encryption (KMS)** | AES-256-GCM encrypted database custody with production fail-fast enforcement (missing `AGENTCONTROL_MASTER_KEY` terminates service) |
+| **Ed25519 Policy Signing & Anti-Rollback** | Central PAP signs policy bundles; distributed endpoints verify signatures and enforce monotonic revision storage |
 | **Offline Ed25519 Licensing & Seat Gating** | Ed25519-signed JWT licensing with zero telemetry and automatic seat enforcement (429 HTTP rejection) |
 | **Air-Gapped OIDC & JWKS Support** | Offline disk-based JWKS key loading (`auth.jwks_file`) and `agentcontrol identity export-jwks` CLI tool |
 | **Compliance Control Mapping & Evidence CLI** | Automated report generator (`agentcontrol compliance report`) mapped to OWASP ASI 2026, SOC 2, ISO 27001, and NIST AI RMF |
@@ -446,3 +447,56 @@ The following technical reference sections are maintained in the shared [Common 
 | ADR Security Benchmark Reference | [common_guide.md → ADR Benchmark](common_guide.md#adr-security-benchmark) |
 | Environment Variables Reference | [common_guide.md → Environment Variables](common_guide.md#environment-variables) |
 | Troubleshooting Common Issues | [common_guide.md → Troubleshooting](common_guide.md#troubleshooting-common-issues) |
+
+---
+
+## 11. Mandatory Keyring Setup & Managed Mode Operations
+
+In enterprise production deployments, Agent Control must run under `PolicyTrustProfile::Managed`. In this mode, unsigned policies, ephemeral signing keys, and unauthenticated offline cache fallbacks are strictly rejected by the gateway daemon.
+
+### 11.1 Generating and Distributing Trusted Keyrings
+1. **Generate Root Security Authority Keypair:**
+   ```bash
+   # Generate an Ed25519 signing keypair for the SecOps authority
+   agentcontrol policy keygen --output ~/.agentcontrol/secops_authority.key
+   ```
+2. **Configure Trusted Public Keys on Gateways:**
+   Export the public key hex into the gateway deployment environment:
+   ```bash
+   export AGENTCONTROL_MANAGED_MODE=true
+   export AGENTCONTROL_TRUST_PROFILE=managed
+   export AGENTCONTROL_TRUSTED_KEYS="d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+   export AGENTCONTROL_REQUIRE_MONOTONIC_REVISION=true
+   ```
+   Or mount a fleet-wide `keyring.json`:
+   ```json
+   {
+     "keys": [
+       {
+         "key_id": "secops-lead-2026",
+         "public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+         "description": "Enterprise Production Security Authority",
+         "created_at": "2026-01-01T00:00:00Z"
+       }
+     ],
+     "rotation_policy": "manual"
+   }
+   ```
+
+### 11.2 Signing and Publishing Policy Bundles
+All active policies must be signed into a length-framed `SignedPolicyBundle`:
+```bash
+agentcontrol policy sign \
+  --policy policy.yaml \
+  --signing-key ~/.agentcontrol/secops_authority.key \
+  --policy-id corp-sec-fleet \
+  --revision 1 \
+  --output bundle.json
+```
+The Control Hub API publishes signed bundles over `/api/v2/device/policy/bundle` (device mTLS/token auth) or `/api/v1/policy/bundle`.
+
+### 11.3 Invariant Enforcement & Rollback Protection
+* **Monotonic Revision Enforcement:** In Managed mode, any received policy bundle with a revision lower than the currently active revision is permanently rejected as a rollback attempt.
+* **Tamper-Proof Storage:** When a new bundle is verified and activated, previous versions are preserved as atomic generation snapshots (`current_policy_bundle.json` and `rollback_policy_bundle.json`). Rollback operations re-verify the cryptographic envelope against the keyring before hot-swap.
+* **Offline Resilience:** If the Central Hub is unreachable during gateway restart or network partition, the gateway activates the local verified signed bundle from disk. It **never** falls back to raw unsigned YAML.
+

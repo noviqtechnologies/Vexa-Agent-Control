@@ -10,6 +10,7 @@ mod integration {
     mod dashboard_test;
     mod egress_proxy_tests;
     mod failure_modes_test;
+    mod fixture_probe_test;
     /// FR-5: Centralized Enforcement Gateway acceptance criteria tests
     mod gateway_fr5;
     mod hitl_state_machine_test;

@@ -71,19 +71,29 @@ export default function LlmProviders() {
       }
 
       // If initial spend limit specified, create & publish provider spend policy
+      let capError: string | null = null
       if (initialSpendLimit && parseFloat(initialSpendLimit) > 0) {
-        await api.createSpendPolicyV2({
-          scope_type: 'provider',
-          scope_id: provider.toLowerCase(),
-          period_type: 'monthly',
-          limit_usd: parseFloat(initialSpendLimit),
-          action: 'hard_deny'
-        })
+        try {
+          await api.createSpendPolicyV2({
+            scope_type: 'provider',
+            scope_id: provider.toLowerCase(),
+            period_type: 'monthly',
+            limit_usd: parseFloat(initialSpendLimit),
+            action: 'hard_deny'
+          })
+        } catch (capErr: any) {
+          capError = capErr?.message || 'unknown error'
+        }
       }
 
       setApiKey('')
-      setInitialSpendLimit('')
-      setSuccessMsg(`Configured API key and governance for ${provider.toUpperCase()}`)
+      if (capError) {
+        // Key is stored; keep the cap amount so the operator can retry only the cap.
+        setError(`API key for ${provider.toUpperCase()} was saved, but the spend cap was NOT applied and the key is currently uncapped: ${capError}. Do not re-submit the key; set the cap from the Spend settings.`)
+      } else {
+        setInitialSpendLimit('')
+        setSuccessMsg(`Configured API key and governance for ${provider.toUpperCase()}`)
+      }
       await fetchData()
     } catch (err: any) {
       setError(err.message)

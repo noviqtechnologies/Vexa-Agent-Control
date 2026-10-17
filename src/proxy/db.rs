@@ -113,11 +113,19 @@ impl DbManager {
             new_dir.join("events.db")
         };
 
-        // Open connection with in-memory fallback on filesystem failure
-        let conn = Connection::open(&db_path).unwrap_or_else(|e| {
-            eprintln!("[db] warning: failed to open persistent SQLite at {:?}: {}. Falling back to in-memory DB.", db_path, e);
+        // Open connection with in-memory fallback on filesystem failure or network mount
+        let conn = if crate::audit::outbox::is_network_filesystem_path(&db_path) {
+            eprintln!(
+                "[db] warning: SQLite WAL mode requires local filesystem storage. Network paths (UNC/SMB/NFS) rejected: {:?}. Falling back to in-memory DB.",
+                db_path
+            );
             Connection::open_in_memory().expect("failed to open fallback in-memory SQLite DB")
-        });
+        } else {
+            Connection::open(&db_path).unwrap_or_else(|e| {
+                eprintln!("[db] warning: failed to open persistent SQLite at {:?}: {}. Falling back to in-memory DB.", db_path, e);
+                Connection::open_in_memory().expect("failed to open fallback in-memory SQLite DB")
+            })
+        };
 
         // Set busy timeout first, then attempt WAL mode
         let _ = conn.execute_batch("PRAGMA busy_timeout=5000;");

@@ -1,6 +1,8 @@
 /target
 PRD/
-design/
+design/*
+design/enterprise/
+design/enterprise/**
 agentinfo/
 scratch/
 !scripts/

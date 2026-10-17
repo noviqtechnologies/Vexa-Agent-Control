@@ -11,6 +11,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Re-export the formal 6-state HITL CAS machine (FR-009)
+pub use crate::policy::hitl as hitl_cas;
+
 /// Operational enforcement mode for agent execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

@@ -839,3 +839,52 @@ func (s *Store) DeleteDevice(ctx context.Context, organizationID, deviceID strin
 	}
 	return nil
 }
+
+// AuditCheckpoint represents a signed ledger checkpoint recorded in the control plane.
+type AuditCheckpoint struct {
+	ID             string    `json:"id"`
+	OrganizationID string    `json:"organization_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	SequenceStart  int64     `json:"sequence_start"`
+	SequenceEnd    int64     `json:"sequence_end"`
+	CheckpointHash string    `json:"checkpoint_hash"`
+	Signature      string    `json:"signature"`
+	Algorithm      string    `json:"algorithm"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ListAuditCheckpoints returns real committed checkpoints from audit_checkpoints table.
+func (s *Store) ListAuditCheckpoints(ctx context.Context, organizationID string) ([]AuditCheckpoint, error) {
+	if s.pool == nil {
+		return []AuditCheckpoint{}, nil
+	}
+	if organizationID == "" {
+		organizationID = DefaultOrgID
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, organization_id, workspace_id, sequence_start, sequence_end,
+		       checkpoint_hash, signature, algorithm, created_at
+		FROM audit_checkpoints
+		WHERE organization_id::text = $1 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid
+		ORDER BY sequence_end DESC
+		LIMIT 50
+	`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	checkpoints := make([]AuditCheckpoint, 0)
+	for rows.Next() {
+		var c AuditCheckpoint
+		if err := rows.Scan(
+			&c.ID, &c.OrganizationID, &c.WorkspaceID, &c.SequenceStart, &c.SequenceEnd,
+			&c.CheckpointHash, &c.Signature, &c.Algorithm, &c.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		checkpoints = append(checkpoints, c)
+	}
+	return checkpoints, nil
+}
+

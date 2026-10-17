@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vexa.ai/schemas/contracts/decision-v1/action-decision.schema.json",
+  "title": "VexaDecisionV1",
+  "description": "Defines schemas for ActionRequest, EvaluationContext, and Decision contracts in Vexa Agent Control v1",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ActionRequest"
+    },
+    "context": {
+      "$ref": "#/$defs/EvaluationContext"
+    },
+    "decision": {
+      "$ref": "#/$defs/Decision"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ActionRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "McpToolCall" },
+            "tool_name": { "type": "string" },
+            "arguments": { "type": "object" },
+            "server_id": { "type": ["string", "null"] }
+          },
+          "required": ["type", "tool_name", "arguments"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "LlmRequest" },
+            "provider": { "type": "string" },
+            "model": { "type": "string" },
+            "request_type": {
+              "type": "string",
+              "enum": ["chat", "completion", "embedding"]
+            }
+          },
+          "required": ["type", "provider", "model", "request_type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "ResourceAccess" },
+            "resource_uri": { "type": "string" },
+            "access_type": {
+              "type": "string",
+              "enum": ["read", "list", "subscribe", "unsubscribe"]
+            }
+          },
+          "required": ["type", "resource_uri", "access_type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "PromptAccess" },
+            "prompt_name": { "type": "string" },
+            "arguments": { "type": ["object", "null"] }
+          },
+          "required": ["type", "prompt_name"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EvaluationContext": {
+      "type": "object",
+      "properties": {
+        "principal": { "$ref": "#/$defs/AuthenticatedPrincipal" },
+        "organization_id": { "type": ["string", "null"] },
+        "workspace_id": { "type": ["string", "null"] },
+        "session_id": { "type": "string" },
+        "device_id": { "type": ["string", "null"] },
+        "adapter_id": { "type": "string" },
+        "adapter_protocol": { "$ref": "#/$defs/Protocol" },
+        "policy_revision": { "type": ["integer", "null"], "minimum": 0 },
+        "policy_hash": { "type": ["string", "null"] }
+      },
+      "required": ["principal", "session_id", "adapter_id", "adapter_protocol"],
+      "additionalProperties": false
+    },
+    "AuthenticatedPrincipal": {
+      "type": "object",
+      "properties": {
+        "identity_sub": { "type": "string" },
+        "identity_email": { "type": ["string", "null"] },
+        "identity_groups": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "client_id": { "type": ["string", "null"] }
+      },
+      "required": ["identity_sub", "identity_groups"],
+      "additionalProperties": false
+    },
+    "Protocol": {
+      "type": "string",
+      "enum": ["stdio", "http_json_rpc", "sse", "llm_rest"]
+    },
+    "Verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "REQUIRE_APPROVAL", "INDETERMINATE"]
+    },
+    "Obligation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "require_approval" },
+            "approval_id": { "type": "string" },
+            "action_hash": { "type": "string" },
+            "ttl_secs": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["type", "approval_id", "action_hash", "ttl_secs"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "redact_parameters" },
+            "parameter_paths": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["type", "parameter_paths"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Decision": {
+      "type": "object",
+      "properties": {
+        "verdict": { "$ref": "#/$defs/Verdict" },
+        "reason_code": { "type": "string" },
+        "reason_detail": { "type": ["string", "null"] },
+        "matched_group_id": { "type": ["string", "null"] },
+        "obligations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Obligation" }
+        }
+      },
+      "required": ["verdict", "reason_code", "obligations"],
+      "additionalProperties": false
+    }
+  }
+}

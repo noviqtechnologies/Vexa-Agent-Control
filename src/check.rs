@@ -204,6 +204,30 @@ pub fn run_check(
                     reason: Some(reason_parts.join(" ").yellow().to_string()),
                 }
             }
+            EvalResult::RequireApproval { reason } => CheckResult {
+                tool: call.tool.clone(),
+                verdict: "APPROVAL".yellow().bold().to_string(),
+                reason: Some(reason.clone()),
+            },
+            EvalResult::WarnObserve {
+                reason_code,
+                would_deny,
+            } => CheckResult {
+                tool: call.tool.clone(),
+                verdict: "OBSERVE".cyan().bold().to_string(),
+                reason: Some(format!("reason={} would_deny={}", reason_code, would_deny)),
+            },
+            EvalResult::ErrorIndeterminate {
+                reason_code,
+                message,
+            } => {
+                any_denied = true;
+                CheckResult {
+                    tool: call.tool.clone(),
+                    verdict: "ERROR".red().bold().to_string(),
+                    reason: Some(format!("reason={} msg={}", reason_code, message)),
+                }
+            }
         };
 
         // Output one line per call

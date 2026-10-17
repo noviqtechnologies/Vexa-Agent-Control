@@ -12,13 +12,15 @@ async fn test_stdio_bridge() {
     let python_bin = if std::process::Command::new("python3")
         .arg("--version")
         .output()
-        .is_ok()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
     {
         "python3"
     } else if std::process::Command::new("python")
         .arg("--version")
         .output()
-        .is_ok()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
     {
         "python"
     } else {

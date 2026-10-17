@@ -74,7 +74,37 @@ pub fn generate_signing_keypair() -> (SigningKey, VerifyingKey) {
     (signing_key, verifying_key)
 }
 
-/// Canonical payload format for signing: `policy_id:policy_revision:policy_yaml`
+/// Canonical payload format for signing: length-framed, domain-separated binary format
+pub fn canonical_sign_payload(
+    schema_version: &str,
+    policy_id: &str,
+    revision: u64,
+    yaml: &str,
+    issued_at: &str,
+    expires_at: Option<&str>,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"vexa-policy-bundle-v1\0");
+    write_length_prefixed(&mut payload, schema_version.as_bytes());
+    write_length_prefixed(&mut payload, policy_id.as_bytes());
+    payload.extend_from_slice(&revision.to_be_bytes());
+    write_length_prefixed(&mut payload, yaml.as_bytes());
+    write_length_prefixed(&mut payload, issued_at.as_bytes());
+    if let Some(exp) = expires_at {
+        payload.push(1);
+        write_length_prefixed(&mut payload, exp.as_bytes());
+    } else {
+        payload.push(0);
+    }
+    payload
+}
+
+fn write_length_prefixed(buf: &mut Vec<u8>, data: &[u8]) {
+    buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    buf.extend_from_slice(data);
+}
+
+/// Helper for backwards-compatibility
 pub fn canonical_sign_bytes(policy_id: &str, revision: u64, yaml: &str) -> Vec<u8> {
     format!("{}:{}:{}", policy_id, revision, yaml).into_bytes()
 }
@@ -87,18 +117,27 @@ pub fn sign_policy(
     policy_yaml: &str,
     expires_at: Option<String>,
 ) -> SignedPolicyBundle {
-    let payload = canonical_sign_bytes(policy_id, policy_revision, policy_yaml);
+    let schema_version = "2.0".to_string();
+    let issued_at = chrono::Utc::now().to_rfc3339();
+    let payload = canonical_sign_payload(
+        &schema_version,
+        policy_id,
+        policy_revision,
+        policy_yaml,
+        &issued_at,
+        expires_at.as_deref(),
+    );
     let signature = signing_key.sign(&payload);
     let verifying_key = signing_key.verifying_key();
 
     SignedPolicyBundle {
-        schema_version: "2.0".to_string(),
+        schema_version,
         policy_id: policy_id.to_string(),
         policy_revision,
         policy_yaml: policy_yaml.to_string(),
         signature: hex::encode(signature.to_bytes()),
         public_key: hex::encode(verifying_key.to_bytes()),
-        issued_at: chrono::Utc::now().to_rfc3339(),
+        issued_at,
         expires_at,
     }
 }
@@ -132,16 +171,24 @@ pub fn verify_signed_bundle(
     let verifying_key = VerifyingKey::from_bytes(&pk_arr)
         .map_err(|e| PolicyDistributionError::InvalidPublicKey(e.to_string()))?;
 
-    // 2. Check expiration if present
+    // 2. Check expiration if present (hard error on malformed timestamp)
     if let Some(ref exp_str) = bundle.expires_at {
-        if let Ok(exp_dt) = chrono::DateTime::parse_from_rfc3339(exp_str) {
-            if chrono::Utc::now() > exp_dt.with_timezone(&chrono::Utc) {
-                return Err(PolicyDistributionError::PolicyExpired(exp_str.clone()));
+        match chrono::DateTime::parse_from_rfc3339(exp_str) {
+            Ok(exp_dt) => {
+                if chrono::Utc::now() > exp_dt.with_timezone(&chrono::Utc) {
+                    return Err(PolicyDistributionError::PolicyExpired(exp_str.clone()));
+                }
+            }
+            Err(e) => {
+                return Err(PolicyDistributionError::InvalidSignature(format!(
+                    "Malformed expires_at timestamp '{}': {}",
+                    exp_str, e
+                )));
             }
         }
     }
 
-    // 3. Verify cryptographic Ed25519 signature
+    // 3. Verify cryptographic Ed25519 signature over canonical length-prefixed payload
     let sig_bytes = hex::decode(&bundle.signature)
         .map_err(|e| PolicyDistributionError::InvalidSignature(e.to_string()))?;
     if sig_bytes.len() != 64 {
@@ -153,20 +200,83 @@ pub fn verify_signed_bundle(
     sig_arr.copy_from_slice(&sig_bytes);
     let signature = Signature::from_bytes(&sig_arr);
 
-    let payload = canonical_sign_bytes(
+    let payload = canonical_sign_payload(
+        &bundle.schema_version,
         &bundle.policy_id,
         bundle.policy_revision,
         &bundle.policy_yaml,
+        &bundle.issued_at,
+        bundle.expires_at.as_deref(),
     );
     verifying_key
         .verify(&payload, &signature)
         .map_err(|e| PolicyDistributionError::SignatureVerificationFailed(e.to_string()))?;
 
     // 4. Dry-run compile the policy to ensure schema integrity
-    let compiled = CompiledPolicy::from_yaml_str(&bundle.policy_yaml)
+    let mut compiled = CompiledPolicy::from_yaml_str(&bundle.policy_yaml)
         .map_err(PolicyDistributionError::CompilationFailed)?;
+    compiled.policy_revision = Some(bundle.policy_revision);
+    compiled.policy_hash = Some(format!("rev:{}", bundle.policy_revision));
 
     Ok(compiled)
+}
+
+/// Durable cross-platform atomic replace helper.
+///
+/// On Windows, `fs::rename` fails if target exists.
+/// This helper writes to a sibling temp file, flushes/syncs to disk,
+/// and performs a resilient atomic replace with retry backoff for Windows file locks,
+/// followed by a parent directory fsync.
+pub fn durable_atomic_replace(target: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let tmp_file = parent.join(format!(
+        ".tmp_{}_{}",
+        uuid::Uuid::new_v4(),
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+    ));
+    {
+        let mut f = fs::File::create(&tmp_file)?;
+        use std::io::Write;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+
+    let mut success = false;
+    let mut last_err = None;
+    for attempt in 0..5 {
+        if target.exists() {
+            let _ = fs::remove_file(target);
+        }
+        match fs::rename(&tmp_file, target) {
+            Ok(()) => {
+                success = true;
+                break;
+            }
+            Err(e) => {
+                last_err = Some(e);
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+            }
+        }
+    }
+
+    if !success {
+        let _ = fs::remove_file(&tmp_file);
+        return Err(last_err.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to replace file atomically across OS boundary",
+            )
+        }));
+    }
+
+    if let Ok(dir) = fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
 }
 
 /// Manages atomic application, snapshotting, and rollback of policy files on disk
@@ -189,6 +299,14 @@ impl PolicyStorageManager {
         self.dir.join("rollback_policy.yaml")
     }
 
+    pub fn current_bundle_path(&self) -> PathBuf {
+        self.dir.join("current_policy_bundle.json")
+    }
+
+    pub fn rollback_bundle_path(&self) -> PathBuf {
+        self.dir.join("rollback_policy_bundle.json")
+    }
+
     /// Atomically applies a verified signed bundle, preserving previous policy as rollback snapshot
     pub fn apply_signed_bundle(
         &self,
@@ -202,32 +320,55 @@ impl PolicyStorageManager {
 
         let current = self.current_policy_path();
         let rollback = self.rollback_policy_path();
+        let current_bundle = self.current_bundle_path();
+        let rollback_bundle = self.rollback_bundle_path();
 
-        // If current policy exists, snapshot it to rollback
+        // If current policy exists, snapshot both YAML and envelope
         if current.exists() {
             let _ = fs::copy(&current, &rollback);
+            if current_bundle.exists() {
+                let _ = fs::copy(&current_bundle, &rollback_bundle);
+            }
         }
 
-        // Atomically write new policy
-        let tmp_file = self
-            .dir
-            .join(format!(".tmp_policy_{}", uuid::Uuid::new_v4()));
-        fs::write(&tmp_file, &bundle.policy_yaml)?;
-        fs::rename(tmp_file, &current)?;
+        // Atomically write new policy (with cross-OS safe rename)
+        durable_atomic_replace(&current, bundle.policy_yaml.as_bytes())?;
 
-        // Also persist the signed envelope
-        let bundle_meta = self.dir.join("current_policy_bundle.json");
-        let _ = fs::write(
-            bundle_meta,
-            serde_json::to_string_pretty(bundle).unwrap_or_default(),
-        );
+        // Also persist the signed envelope - propagate error instead of ignoring
+        let bundle_json = serde_json::to_string_pretty(bundle)
+            .map_err(|e| PolicyDistributionError::CompilationFailed(e.to_string()))?;
+        durable_atomic_replace(&current_bundle, bundle_json.as_bytes())?;
 
         Ok(compiled)
     }
 
-    /// Rollback to the previous snapshot (`rollback_policy.yaml`)
+    /// Rollback to the previous snapshot, re-verifying the signed envelope if present
     pub fn rollback(&self) -> Result<CompiledPolicy, PolicyDistributionError> {
+        self.rollback_with_keys(None)
+    }
+
+    /// Rollback with trusted keys verification
+    pub fn rollback_with_keys(
+        &self,
+        trusted_keys: Option<&[String]>,
+    ) -> Result<CompiledPolicy, PolicyDistributionError> {
         let rollback = self.rollback_policy_path();
+        let rollback_bundle = self.rollback_bundle_path();
+
+        // If signed rollback bundle exists, re-verify it
+        if rollback_bundle.exists() {
+            if let Ok(bundle_data) = fs::read_to_string(&rollback_bundle) {
+                if let Ok(bundle) = serde_json::from_str::<SignedPolicyBundle>(&bundle_data) {
+                    let compiled = verify_signed_bundle(&bundle, trusted_keys)?;
+                    let current = self.current_policy_path();
+                    let current_bundle = self.current_bundle_path();
+                    durable_atomic_replace(&current, bundle.policy_yaml.as_bytes())?;
+                    durable_atomic_replace(&current_bundle, bundle_data.as_bytes())?;
+                    return Ok(compiled);
+                }
+            }
+        }
+
         if !rollback.exists() {
             return Err(PolicyDistributionError::NoRollbackSnapshot(rollback));
         }
@@ -237,8 +378,7 @@ impl PolicyStorageManager {
         let compiled = CompiledPolicy::from_yaml_str(&yaml)
             .map_err(PolicyDistributionError::CompilationFailed)?;
 
-        // Restore snapshot to current
-        fs::copy(&rollback, &current)?;
+        durable_atomic_replace(&current, yaml.as_bytes())?;
 
         Ok(compiled)
     }
@@ -339,5 +479,63 @@ mod tests {
         assert!(rb_res.is_ok());
         let restored_content = fs::read_to_string(mgr.current_policy_path()).unwrap();
         assert!(!restored_content.contains("enforce_safe_mode: true"));
+    }
+
+    #[test]
+    fn test_tamper_metadata_detected() {
+        let (sk, pk) = generate_signing_keypair();
+        let pk_hex = hex::encode(pk.to_bytes());
+        let yaml = "version: \"2.0\"\ndefault_action: deny\ntools: []\n";
+
+        let mut bundle = sign_policy(&sk, "corp-sec-1", 1, yaml, None);
+        // Tamper with unsigned field issued_at
+        bundle.issued_at = "2020-01-01T00:00:00Z".to_string();
+
+        let res = verify_signed_bundle(&bundle, Some(&[pk_hex.clone()]));
+        assert!(matches!(
+            res,
+            Err(PolicyDistributionError::SignatureVerificationFailed(_))
+        ));
+
+        // Tamper with expires_at
+        let mut bundle2 = sign_policy(&sk, "corp-sec-1", 1, yaml, None);
+        bundle2.expires_at = Some("2099-01-01T00:00:00Z".to_string());
+        let res2 = verify_signed_bundle(&bundle2, Some(&[pk_hex]));
+        assert!(matches!(
+            res2,
+            Err(PolicyDistributionError::SignatureVerificationFailed(_))
+        ));
+    }
+
+    #[test]
+    fn test_malformed_expiry_timestamp() {
+        let (sk, pk) = generate_signing_keypair();
+        let pk_hex = hex::encode(pk.to_bytes());
+        let yaml = "version: \"2.0\"\ndefault_action: deny\ntools: []\n";
+
+        let bundle = sign_policy(
+            &sk,
+            "corp-sec-1",
+            1,
+            yaml,
+            Some("not-a-timestamp".to_string()),
+        );
+        let res = verify_signed_bundle(&bundle, Some(&[pk_hex]));
+        assert!(matches!(
+            res,
+            Err(PolicyDistributionError::InvalidSignature(_))
+        ));
+    }
+
+    #[test]
+    fn test_delimiter_ambiguity_eliminated() {
+        let (sk, pk) = generate_signing_keypair();
+        let pk_hex = hex::encode(pk.to_bytes());
+        let yaml = "version: \"2.0\"\ndefault_action: deny\ntools: []\n";
+
+        // policy_id with colons should verify cleanly and not collide
+        let bundle = sign_policy(&sk, "corp:sec:1", 1, yaml, None);
+        let res = verify_signed_bundle(&bundle, Some(&[pk_hex]));
+        assert!(res.is_ok());
     }
 }

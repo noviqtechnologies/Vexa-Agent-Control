@@ -119,9 +119,19 @@ fn test_stdio_proxy_process_integration() {
     };
 
     // Skip if python3 or python is unavailable (the echo upstream needs it).
-    let python_bin = if Command::new("python3").arg("--version").output().is_ok() {
+    let python_bin = if Command::new("python3")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         "python3"
-    } else if Command::new("python").arg("--version").output().is_ok() {
+    } else if Command::new("python")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         "python"
     } else {
         eprintln!("[SKIP] test_stdio_proxy_process_integration: python3/python not found in PATH.");
@@ -132,7 +142,28 @@ fn test_stdio_proxy_process_integration() {
     let upstream_script = write_echo_upstream(dir.path());
     let hit_log = dir.path().join("upstream_hits.log");
 
+    // Write a minimal test policy using a recognized POLICY_FILE_CANDIDATES name
+    // (.agentcontrol.yaml) so that resolve_active_policy() discovers it by walking
+    // upward from the process CWD (the tempdir). Without this file the binary starts
+    // in default-deny posture and blocks every tool call including the safe read_file.
+    let policy_path = dir.path().join(".agentcontrol.yaml");
+    std::fs::write(
+        &policy_path,
+        r#"version: "2"
+default_action: deny
+tools:
+  - name: "read_file"
+    action: allow
+    parameters:
+      - name: "path"
+        type: string
+        required: false
+"#,
+    )
+    .expect("write test policy");
+
     // Spawn: agentcontrol stdio-proxy -- <python_bin> -u <echo_upstream.py>
+    // CWD is set to the tempdir so resolve_active_policy() finds .agentcontrol.yaml.
     let mut proxy = Command::new(&binary)
         .current_dir(dir.path())
         .args(["stdio-proxy", "--", python_bin, "-u"])

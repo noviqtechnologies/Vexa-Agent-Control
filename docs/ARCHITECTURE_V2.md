@@ -256,7 +256,36 @@ sequenceDiagram
 3. **Strict Streaming Pre-Commit Barrier:** Upstream failover is permitted **strictly before the first downstream byte** is committed to the client. Once streaming output begins, splicing two providers' outputs is prohibited; errors terminate the stream cleanly.
 4. **Comprehensive Request Dossiers:** Every request and its ordered upstream attempts are queryable via `GET /api/v1/observability/request-logs/{id}/dossier` with complete secret scrubbing and W3C trace correlation.
 
+---
 
+## 16. Security Overhaul & PDP-PEP Separation (Gates 0 - 3)
 
+### 16.1 PDP / PEP Layered Architecture
+In accordance with the Security Overhaul Architecture:
+* **Authoritative Policy Decision Point (PDP):**
+  - Evaluates typed `ActionRequest` and `EvaluationContext` from the `contracts/decision-v1` crate.
+  - Implements the **5-Stage Combining Algorithm**:
+    1. *Structural Pre-Validation:* Structural validation, framing, nesting depth limits.
+    2. *Hard Safety Invariants:* Non-overridable structural invariants (SafeMode scanner, path traversal, injection confidence thresholds). Cannot be bypassed by customer policy YAML.
+    3. *Revocation Verification:* Real-time check against the in-memory `RevocationRegistry` with sub-30s propagation.
+    4. *Customer Rule Evaluation:* Deny-overrides combining logic (Global Deny > Agent Deny > Group Deny > Agent Allow > Group Allow > Default Action).
+    5. *Result Boundary Enforcement:* Post-execution response scanning and DLP redaction/withholding.
+* **Single Forwarding Gate Invariant (PEP):**
+  - Protocol adapters (`src/pep/mcp.rs`, `src/pep/stdio.rs`, `src/pep/http_llm.rs`) have exclusive access to downstream dispatch.
+  - Downstream targets are **never** invoked under any deny, validation, or revocation condition.
 
+### 16.2 Policy Trust Profile & Keyring Management
+Separates operational security (`EnforcementMode`) from policy provenance validation:
+* **`PolicyTrustProfile::Managed`:**
+  - All policy activation requires a cryptographic `SignedPolicyBundle` signed with Ed25519.
+  - Enforces length-framed, domain-separated binary payload format (`b"vexa-policy-bundle-v1\0"`).
+  - Verifies signatures against the configured `TrustedKeyring`.
+  - Enforces anti-rollback revision monotonicity (`policy_revision >= last_revision`).
+  - Offline cache persists verified signed bundles; falls back strictly to the cached signed bundle on Hub failure (never raw unsigned YAML).
+* **`PolicyTrustProfile::Development`:**
+  - Permissive local workflow allowing unsigned YAML and local authoring.
 
+### 16.3 Cross-OS Resilience & Process Containment
+* **Atomic File Replacement:** Durable cross-OS activation protocol (`durable_atomic_replace`) with exponential retry backoff for Windows file locks, handle races, and parent directory fsync.
+* **SQLite WAL Protection:** Validates database paths to strictly reject network filesystem mounts (`\\unc`, `smb://`, `nfs://`), falling back to memory to prevent database corruption.
+* **Process Tree Containment:** Monitored processes are killed via `taskkill /F /T /PID` on Windows and `kill -9 -<pgid>` on POSIX platforms.

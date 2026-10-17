@@ -53,6 +53,17 @@ func (s *Store) InsertEncryptedProviderKey(
 	}
 
 	version := 1
+	var existingVersion int
+	err := s.pool.QueryRow(ctx, `
+		SELECT version FROM provider_keys
+		WHERE provider = $1 AND (organization_id::text = $2 OR organization_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, provider, orgID).Scan(&existingVersion)
+	if err == nil && existingVersion > 0 {
+		version = existingVersion + 1
+	}
+
 	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", orgID, provider, keyAlias, version))
 
 	cipherBytes, err := kmsProvider.Encrypt(ctx, []byte(plainSecret), aad)
@@ -73,7 +84,7 @@ func (s *Store) InsertEncryptedProviderKey(
 	ON CONFLICT (organization_id, provider, key_alias) DO UPDATE
 	SET api_key_encrypted = EXCLUDED.api_key_encrypted,
 	    api_key_masked = EXCLUDED.api_key_masked,
-	    version = provider_keys.version + 1,
+	    version = EXCLUDED.version,
 	    status = 'ACTIVE',
 	    updated_at = EXCLUDED.updated_at`
 
@@ -119,8 +130,7 @@ func (s *Store) GetDecryptedProviderKey(
 
 	cipherBytes, err := hex.DecodeString(cipherHex)
 	if err != nil {
-		// If stored as plaintext in legacy rows, return directly
-		return cipherHex, nil
+		return "", fmt.Errorf("invalid ciphertext hex: %w", err)
 	}
 
 	aad := []byte(fmt.Sprintf("%s|%s|%s|%d", orgID, provider, keyAlias, version))

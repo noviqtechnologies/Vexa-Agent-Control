@@ -16,6 +16,8 @@ const UserClaimsKey contextKey = "user_claims"
 type UserClaims struct {
 	OrganizationID string `json:"organization_id"`
 	TenantID       string `json:"tenant_id"` // Alias for backward compatibility
+	WorkspaceID    string `json:"workspace_id,omitempty"`
+	ProjectID      string `json:"project_id,omitempty"`
 	UserID         string `json:"user_id"`
 	IsAdmin        bool   `json:"is_admin"`
 	IsSaaSOperator bool   `json:"is_saas_operator"`

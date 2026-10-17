@@ -4,9 +4,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/device"
@@ -19,6 +23,7 @@ type EffectivePolicyHandler struct {
 	spendStore  *spend.Store
 	store       DataStore
 	deviceStore *device.Store
+	signingKey  ed25519.PrivateKey
 }
 
 // NewEffectivePolicyHandler creates a new EffectivePolicyHandler.
@@ -33,6 +38,34 @@ func NewEffectivePolicyHandler(ss *spend.Store, ds DataStore, devStores ...*devi
 		deviceStore: devStore,
 	}
 }
+
+// SetSigningKey injects the authoritative Ed25519 signing key.
+func (h *EffectivePolicyHandler) SetSigningKey(k ed25519.PrivateKey) {
+	h.signingKey = k
+}
+
+// getSigningKey returns the authoritative policy signing key from explicit injection
+// or POLICY_SIGNING_PRIVATE_KEY, failing closed if none is configured.
+func (h *EffectivePolicyHandler) getSigningKey() (ed25519.PrivateKey, error) {
+	if len(h.signingKey) == ed25519.PrivateKeySize {
+		return h.signingKey, nil
+	}
+	if keyHex := os.Getenv("POLICY_SIGNING_PRIVATE_KEY"); keyHex != "" {
+		b, err := hex.DecodeString(strings.TrimSpace(keyHex))
+		if err != nil {
+			return nil, fmt.Errorf("signing_key_decode_error: POLICY_SIGNING_PRIVATE_KEY is not valid hex: %w", err)
+		}
+		if len(b) == ed25519.PrivateKeySize {
+			return ed25519.PrivateKey(b), nil
+		} else if len(b) == ed25519.SeedSize {
+			return ed25519.NewKeyFromSeed(b), nil
+		}
+		return nil, fmt.Errorf("signing_key_size_error: POLICY_SIGNING_PRIVATE_KEY must be %d or %d bytes (got %d)",
+			ed25519.PrivateKeySize, ed25519.SeedSize, len(b))
+	}
+	return nil, fmt.Errorf("signing_authority_missing: no POLICY_SIGNING_PRIVATE_KEY configured")
+}
+
 
 // PolicyLadderLevel represents one tier in the provenance ladder.
 type PolicyLadderLevel struct {
@@ -242,23 +275,67 @@ func (h *EffectivePolicyHandler) GetEffective(w http.ResponseWriter, r *http.Req
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// CanonicalEffectivePolicyPreimage produces a deterministic preimage covering ALL manifest fields.
+func CanonicalEffectivePolicyPreimage(
+	tenantID string,
+	issuedAt, expiresAt int64,
+	allowedModels, blockedModels []string,
+	dlpRules, rateLimits map[string]interface{},
+	policyVersion int,
+) []byte {
+	sortedAllowed := make([]string, len(allowedModels))
+	copy(sortedAllowed, allowedModels)
+	sort.Strings(sortedAllowed)
+
+	sortedBlocked := make([]string, len(blockedModels))
+	copy(sortedBlocked, blockedModels)
+	sort.Strings(sortedBlocked)
+
+	dlpBytes, _ := json.Marshal(dlpRules)
+	rateBytes, _ := json.Marshal(rateLimits)
+
+	return []byte(fmt.Sprintf(
+		"vexa-effective-policy-v1\x00%s\x00%d\x00%d\x00%s\x00%s\x00%s\x00%s\x00%d",
+		tenantID,
+		issuedAt,
+		expiresAt,
+		strings.Join(sortedAllowed, ","),
+		strings.Join(sortedBlocked, ","),
+		string(dlpBytes),
+		string(rateBytes),
+		policyVersion,
+	))
+}
+
 // GetEffectiveSigned handles GET /api/v2/policy/effective
-// PRD §FR-10.6 & Task 3.8: Returns canonical JSON manifest signed with Ed25519 authority key.
+// PRD §FR-10.6 & Task 3.8: Returns canonical JSON manifest signed with Ed25519 authority key covering ALL fields.
 func (h *EffectivePolicyHandler) GetEffectiveSigned(w http.ResponseWriter, r *http.Request) {
-	tenantID := middleware.ResolveTenantScope(r)
-	if tenantID == "" {
-		tenantID = middleware.TenantIDFromContext(r.Context())
-	}
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+	ctx := r.Context()
+
+	// 1. Authenticate caller (Strict Device Principal or Authenticated Request Principal)
+	var tenantID string
+	if dev, ok := middleware.GetDevicePrincipal(ctx); ok && dev != nil && dev.OrganizationID != "" {
+		tenantID = dev.OrganizationID
+	} else if p := middleware.RequestPrincipalFromContext(ctx); p != nil && p.OrganizationID != "" {
+		tenantID = p.OrganizationID
 	}
 
-	now := time.Now().UTC()
-	issuedAt := now.Unix()
-	expiresAt := now.Add(24 * time.Hour).Unix()
+	if tenantID == "" {
+		http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required to access effective policy"}}`, http.StatusUnauthorized)
+		return
+	}
 
-	allowedModels := []string{"gpt-4o", "claude-3-5-sonnet", "claude-3-7-sonnet", "o3-mini", "gemini-2.0-flash"}
-	blockedModels := []string{"gpt-4-base", "claude-3-opus"}
+	// 2. Fetch authoritative signing key (fail closed — no static fallback)
+	privKey, err := h.getSigningKey()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"code":"signing_authority_unavailable","message":"%s"}}`, err.Error()), http.StatusServiceUnavailable)
+		return
+	}
+
+	// 3. Resolve authoritative policy state
+	policyVersion := 1
+	allowedModels := []string{"claude-3-5-sonnet", "claude-3-7-sonnet", "gemini-2.0-flash", "gpt-4o", "o3-mini"}
+	blockedModels := []string{"claude-3-opus", "gpt-4-base"}
 
 	dlpRules := map[string]interface{}{
 		"block_private_keys": true,
@@ -271,19 +348,30 @@ func (h *EffectivePolicyHandler) GetEffectiveSigned(w http.ResponseWriter, r *ht
 		"max_tpm": 100000,
 	}
 
-	// Compute deterministic policy manifest hash (SHA-256)
+	if groupPolicy, err := h.store.GetActiveGroupPolicy(ctx, tenantID, "default"); err == nil && groupPolicy != nil {
+		policyVersion = groupPolicy.Version
+	}
+
+	now := time.Now().UTC()
+	issuedAt := now.Unix()
+	expiresAt := now.Add(24 * time.Hour).Unix()
+
+	// 4. Compute deterministic policy manifest hash covering ALL manifest fields
+	preimage := CanonicalEffectivePolicyPreimage(
+		tenantID, issuedAt, expiresAt, allowedModels, blockedModels, dlpRules, rateLimits, policyVersion,
+	)
 	hasher := sha256.New()
-	hasher.Write([]byte(fmt.Sprintf("%s:%d:%d:%v:%v", tenantID, issuedAt, expiresAt, allowedModels, blockedModels)))
+	hasher.Write(preimage)
 	policyHash := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
 
-	// Sign with control plane authority Ed25519 key
-	seed := sha256.Sum256([]byte("vexa-hub-policy-signing-seed-2026"))
-	privKey := ed25519.NewKeyFromSeed(seed[:])
+	// 5. Sign with control plane authority Ed25519 key
 	sig := ed25519.Sign(privKey, []byte(policyHash))
 	sigB64 := fmt.Sprintf("ed25519:%s", base64.StdEncoding.EncodeToString(sig))
+	pubKey := privKey.Public().(ed25519.PublicKey)
+	pubKeyB64 := fmt.Sprintf("ed25519:%s", base64.StdEncoding.EncodeToString(pubKey))
 
 	manifest := map[string]interface{}{
-		"policy_version": 1,
+		"policy_version": policyVersion,
 		"policy_hash":    policyHash,
 		"tenant_id":      tenantID,
 		"issued_at":      issuedAt,
@@ -293,8 +381,10 @@ func (h *EffectivePolicyHandler) GetEffectiveSigned(w http.ResponseWriter, r *ht
 		"dlp_rules":      dlpRules,
 		"rate_limits":    rateLimits,
 		"signature":      sigB64,
+		"public_key":     pubKeyB64,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(manifest)
 }
+

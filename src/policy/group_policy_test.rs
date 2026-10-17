@@ -108,6 +108,8 @@ mod tests {
             fail_closed: false,
             attribution: None,
             allowed_providers: vec![],
+            policy_revision: None,
+            policy_hash: None,
         }
     }
 
@@ -204,10 +206,10 @@ mod tests {
         }
     }
 
-    // ─── Test 5: Agent-level rule takes precedence over group rule ────────────
+    // ─── Test 5: Deny-overrides: Group deny beats agent-level allow (Gate 1.1) ────
 
     #[test]
-    fn test_agent_level_beats_group_level() {
+    fn test_group_deny_beats_agent_allow() {
         let policy = base_policy(
             // Top-level agent-specific allow for "alice"
             vec![allow_tool_identity("sensitive_tool", "alice")],
@@ -219,7 +221,7 @@ mod tests {
             )],
         );
 
-        // Alice is also in "group-a" which would deny — agent rule wins
+        // Alice is also in "group-a" which denies — under deny-overrides, group deny beats agent allow
         let result = policy.evaluate(
             "sensitive_tool",
             &json!({}),
@@ -227,8 +229,8 @@ mod tests {
             &["group-a".to_string()],
         );
         assert!(
-            matches!(result, EvalResult::Allow { .. }),
-            "Agent-level rule should override group deny",
+            matches!(result, EvalResult::Deny { .. }),
+            "Group-level deny must override agent-level allow under deny-overrides combining algorithm",
         );
     }
 

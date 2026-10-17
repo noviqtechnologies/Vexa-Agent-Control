@@ -231,7 +231,7 @@ pub async fn run_repair() -> i32 {
     // if self-healing is running).
     let service_action = crate::service::ServiceAction::Install {
         hub_url: crate::identity::device::load_hub_url()
-            .unwrap_or_else(|| "https://app.vexasec.io".to_string()),
+            .unwrap_or_else(|| "http://127.0.0.1:8080".to_string()),
         gateway_secret: None,
         policy_read_secret: None,
         agent_id: None,
@@ -434,7 +434,7 @@ pub async fn run_rotate_local_token() -> i32 {
             let is_cloud_direct = manifest.connect_mode.as_deref() == Some("cloud-direct");
             let effective_token = if is_cloud_direct {
                 let hub_url = crate::identity::device::load_hub_url()
-                    .unwrap_or_else(|| "https://app.vexasec.io".to_string());
+                    .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
                 match crate::wrap::connect::fetch_assigned_virtual_key(&hub_url).await {
                     Ok(Some(vk)) if !vk.trim().is_empty() => Some(vk),
                     _ => {
@@ -491,7 +491,7 @@ pub async fn run_rotate_local_token() -> i32 {
             let is_cloud_direct = manifest.connect_mode.as_deref() == Some("cloud-direct");
             let effective_token = if is_cloud_direct {
                 let hub_url = crate::identity::device::load_hub_url()
-                    .unwrap_or_else(|| "https://app.vexasec.io".to_string());
+                    .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
                 match crate::wrap::connect::fetch_assigned_virtual_key(&hub_url).await {
                     Ok(Some(vk)) if !vk.trim().is_empty() => Some(vk),
                     _ => {

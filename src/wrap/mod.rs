@@ -4,6 +4,7 @@
 //! VS Code, JetBrains, Zed, Cline, OpenCode, Antigravity) to route tool execution through Agent Control.
 
 pub mod backup;
+pub mod capability_manifest;
 pub mod claude;
 pub mod config_path;
 pub mod connect;

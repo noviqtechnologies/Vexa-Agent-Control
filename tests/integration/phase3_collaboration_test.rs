@@ -9,6 +9,8 @@
 //!  6. OTLP Export Compliance (HTTP/JSON serialisation against expected schema)
 //!  7. Disaster Recovery (backup archive + restore with SHA-256 integrity verification)
 
+#![allow(deprecated)]
+
 use agentcontrol::policy::engine::CompiledPolicy;
 use agentcontrol::policy::revocation::{RevocationRegistry, RevocationTargetType};
 use agentcontrol::policy::signed::{
@@ -46,6 +48,10 @@ fn open_policy() -> CompiledPolicy {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     }
 }
 

@@ -14,6 +14,7 @@ mod unit {
     mod pipeline_test;
     mod policy_loader_tests;
     mod policy_tests;
+    mod posture_truth_table_test;
     mod prompt_cache_test;
     mod routing_tests;
     mod schema_drift_test;

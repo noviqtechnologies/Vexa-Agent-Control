@@ -101,9 +101,13 @@ pub struct SessionContext {
     /// FR-112: Authenticated groups extracted from OIDC claim via group_claim_key
     pub identity_groups: Vec<String>,
 
-    /// The frozen compiled policy context active at the moment of session initiation.
-    /// This ensures that policy hot-reloads do not disrupt in-flight sessions (FR-106).
-    pub policy: Option<CompiledPolicy>,
+    /// The compiled policy context active for this session.
+    /// In Gate 2, this is protected by RwLock so that stale sessions dynamically
+    /// rebind when the global policy_epoch increments (revocation/anti-rollback).
+    pub policy: std::sync::RwLock<Option<CompiledPolicy>>,
+
+    /// Gate 2: Active policy epoch at session startup or last refresh.
+    pub session_epoch: std::sync::atomic::AtomicU64,
 
     /// Isolated token-bucket rate limiter for this specific session context
     pub rate_limiter: RateLimiter,
@@ -135,7 +139,6 @@ pub struct SessionContext {
 
 impl SessionContext {
     /// Create a new isolated session context bound to a validated OIDC identity or client token.
-    /// Freezes the active policy rules at session startup to protect in-flight workflows (FR-106).
     pub fn new(
         identity_sub: Option<String>,
         identity_email: Option<String>,
@@ -144,7 +147,7 @@ impl SessionContext {
         request_ip: Option<String>,
         active_credential_id: Option<String>,
     ) -> Self {
-        Self::new_with_scope(
+        Self::new_with_scope_and_epoch(
             identity_sub,
             identity_email,
             identity_groups,
@@ -152,6 +155,7 @@ impl SessionContext {
             request_ip,
             active_credential_id,
             None,
+            1,
         )
     }
 
@@ -163,6 +167,28 @@ impl SessionContext {
         request_ip: Option<String>,
         active_credential_id: Option<String>,
         agent_scope_header: Option<String>,
+    ) -> Self {
+        Self::new_with_scope_and_epoch(
+            identity_sub,
+            identity_email,
+            identity_groups,
+            active_policy,
+            request_ip,
+            active_credential_id,
+            agent_scope_header,
+            1,
+        )
+    }
+
+    pub fn new_with_scope_and_epoch(
+        identity_sub: Option<String>,
+        identity_email: Option<String>,
+        identity_groups: Vec<String>,
+        active_policy: Option<CompiledPolicy>,
+        request_ip: Option<String>,
+        active_credential_id: Option<String>,
+        agent_scope_header: Option<String>,
+        epoch: u64,
     ) -> Self {
         let session_id = Uuid::new_v4().to_string();
         let start_time = Instant::now();
@@ -178,7 +204,8 @@ impl SessionContext {
             identity_sub,
             identity_email,
             identity_groups,
-            policy: active_policy,
+            policy: std::sync::RwLock::new(active_policy),
+            session_epoch: std::sync::atomic::AtomicU64::new(epoch),
             rate_limiter: RateLimiter::new(limit),
             tool_history: Mutex::new(Vec::new()),
             sliding_window: Mutex::new(SlidingWindowTracker::new(10)),
@@ -189,6 +216,20 @@ impl SessionContext {
             tokens_used: std::sync::atomic::AtomicU64::new(0),
             taint_state: Mutex::new(crate::policy::taint::SessionTaintState::new()),
         }
+    }
+
+    /// Read active policy safely as an owned clone.
+    pub fn get_policy(&self) -> Option<CompiledPolicy> {
+        self.policy.read().ok().and_then(|p| p.clone())
+    }
+
+    /// Dynamically rebind the session to a refreshed policy context and update the session epoch.
+    pub fn refresh_policy(&self, new_policy: Option<CompiledPolicy>, new_epoch: u64) {
+        if let Ok(mut guard) = self.policy.write() {
+            *guard = new_policy;
+        }
+        self.session_epoch
+            .store(new_epoch, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Fix 3: Returns true if the session has exceeded SESSION_TTL_SECS since creation.

@@ -74,5 +74,26 @@ pub fn execute(policy_path: &str, tool_name: &str, payload_path: &str) -> Result
             }
             Err(err_msg)
         }
+        EvalResult::RequireApproval { reason } => {
+            println!("VALIDATION REQUIRES APPROVAL: {}", reason);
+            Ok(())
+        }
+        EvalResult::WarnObserve {
+            reason_code,
+            would_deny,
+        } => {
+            println!(
+                "VALIDATION WARN (OBSERVE MODE): reason={}, would_deny={}",
+                reason_code, would_deny
+            );
+            Ok(())
+        }
+        EvalResult::ErrorIndeterminate {
+            reason_code,
+            message,
+        } => Err(format!(
+            "VALIDATION INDETERMINATE (FAIL-CLOSED): reason={}, message={}",
+            reason_code, message
+        )),
     }
 }

@@ -22,6 +22,13 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+// NewNilStore returns a Store backed by a nil pool.
+// All operations return empty results without error.
+// Intended for unit tests that exercise handler logic without a real database.
+func NewNilStore() *Store {
+	return &Store{pool: nil}
+}
+
 func (s *Store) EnsureSchema(ctx context.Context) error {
 	if s.pool == nil {
 		return nil

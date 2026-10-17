@@ -35,6 +35,10 @@ fn make_deny_policy() -> CompiledPolicy {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     }
 }
 
@@ -97,6 +101,10 @@ fn test_ac5_2_policy_evaluation_latency_under_5ms() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let iterations = 1000;
@@ -253,6 +261,10 @@ fn test_ac5_5_deny_all_when_policy_loaded_but_missing() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let result = policy.evaluate("any_tool", &serde_json::json!({}), None, &[]);

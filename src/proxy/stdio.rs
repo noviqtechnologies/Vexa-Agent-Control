@@ -10,7 +10,7 @@ use crate::kill::KillMode;
 use crate::logging;
 use crate::policy::response_scanner::ScanResult;
 use crate::proxy::codec::JsonRpcCodec;
-use crate::proxy::handler::{evaluate_jsonrpc, ProxyAction, ProxyState};
+use crate::proxy::handler::ProxyState;
 
 /// Expands leading `~` to $HOME if present.
 pub fn expand_arg(arg: &str) -> String {
@@ -629,23 +629,26 @@ pub async fn run_stdio_bridge(
                         let req_body_preview = serde_json::to_string(&json).ok()
                             .map(|s| s.chars().take(512).collect::<String>());
                         let timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-                        let action = evaluate_jsonrpc(&state, &local_session, &json).await;
-                        match action {
-                            ProxyAction::Forward => {
-                                // Track the tool name for response scanning using its ID
-                                if let Some(id) = json.get("id") {
-                                    forwarded_requests.insert(id.clone(), tool_name.clone());
+                        let eval_res = crate::pep::stdio::evaluate_stdio_request(&state, &local_session, &json).await;
+                        match eval_res {
+                            Ok(crate::pep::stdio::StdioEvaluationResult::Forward {
+                                tool_name: evaluated_tool_name,
+                                forwarded_request,
+                                is_tool_call,
+                            }) => {
+                                if is_tool_call {
+                                    if let Some(id) = json.get("id") {
+                                        forwarded_requests.insert(id.clone(), evaluated_tool_name.clone());
+                                    }
                                 }
-                                // P0 fix: persist tool_allow event to events.db so the dashboard
-                                // can observe real stdio traffic from wrapped clients.
                                 let event = crate::proxy::db::EgressEvent {
                                     timestamp_ns,
                                     session_id: local_session.session_id.clone(),
                                     transport: "stdio".to_string(),
-                                    method: Some(tool_name.clone()),
+                                    method: Some(evaluated_tool_name.clone()),
                                     target_host: "localhost".to_string(),
                                     target_port: None,
-                                    url_path: Some(format!("/{}", tool_name)),
+                                    url_path: Some(format!("/{}", evaluated_tool_name)),
                                     request_headers: None,
                                     request_body: req_body_preview,
                                     request_body_hash: None,
@@ -669,18 +672,18 @@ pub async fn run_stdio_bridge(
                                 send_dashboard_event(
                                     &state,
                                     &local_session,
-                                    &tool_name,
+                                    &evaluated_tool_name,
                                     control_plane_proto::redact::RawDecision::Allowed,
                                 );
 
-                                if let Err(e) = upstream_writer.send(json).await {
+                                if let Err(e) = upstream_writer.send(forwarded_request).await {
                                     eprintln!("Error sending to upstream: {}", e);
                                     let _ = state
                                         .audit_logger
                                         .write_entry(
                                             &local_session.session_id,
                                             "upstream_delivery_failed",
-                                            &tool_name,
+                                            &evaluated_tool_name,
                                             None,
                                             Some(format!("Upstream send failure (downstream_outcome=unknown): {}", e)),
                                             None,
@@ -694,8 +697,9 @@ pub async fn run_stdio_bridge(
                                     break;
                                 }
                             }
-                            ProxyAction::Respond(resp) | ProxyAction::RespondWithStatus(_, resp) => {
-                                // P0 fix: persist canonical tool_deny event with full threat fidelity
+                            Err(pep_err) => {
+                                let req_id = json.get("id").unwrap_or(&serde_json::Value::Null);
+                                let resp = pep_err.to_jsonrpc_error(req_id);
                                 let (response_status, response_body, dlp_findings, injection_findings, policy_rule, verdict) =
                                     extract_decision_evidence(&resp);
 
@@ -738,49 +742,7 @@ pub async fn run_stdio_bridge(
                                     eprintln!("Error sending to agent: {}", e);
                                     break;
                                 }
-                            }
-                            ProxyAction::KillAndRespond(resp) | ProxyAction::KillAndRespondWithStatus(_, resp) => {
-                                // P0 fix: persist canonical denial event with complete threat findings
-                                // before terminating child process.
-                                let (response_status, response_body, dlp_findings, injection_findings, policy_rule, verdict) =
-                                    extract_decision_evidence(&resp);
 
-                                let event = crate::proxy::db::EgressEvent {
-                                    timestamp_ns,
-                                    session_id: local_session.session_id.clone(),
-                                    transport: "stdio".to_string(),
-                                    method: Some(tool_name.clone()),
-                                    target_host: "localhost".to_string(),
-                                    target_port: None,
-                                    url_path: Some(format!("/{}", tool_name)),
-                                    request_headers: None,
-                                    request_body: req_body_preview,
-                                    request_body_hash: None,
-                                    response_status,
-                                    response_body,
-                                    response_body_hash: None,
-                                    dlp_findings,
-                                    injection_findings,
-                                    latency_ms: Some(0.0),
-                                    verdict: Some(verdict),
-                                    semantic_anomaly_score: None,
-                                    identity_context: None,
-                                    source: Some("production".to_string()),
-                                    policy_rule,
-                                };
-                                if let Ok(json_str) = serde_json::to_string(&event) {
-                                    let _ = state.event_tx.send(json_str);
-                                }
-                                let _ = state.db_manager.insert(event).await;
-
-                                send_dashboard_event(
-                                    &state,
-                                    &local_session,
-                                    &tool_name,
-                                    control_plane_proto::redact::RawDecision::Denied,
-                                );
-
-                                let _ = agent_writer.send(resp).await;
                                 #[allow(deprecated)]
                                 if state.kill_mode == KillMode::Process || state.kill_mode == KillMode::Both {
                                     eprintln!("Violation: Killing process and exiting.");
@@ -1424,6 +1386,23 @@ async fn stdio_scan_response(
     }
 }
 
+struct HttpStdioDownstream<'a> {
+    http_client: &'a reqwest::Client,
+    upstream_url: &'a str,
+}
+
+#[async_trait::async_trait]
+impl<'a> crate::pep::stdio::StdioDownstream for HttpStdioDownstream<'a> {
+    async fn send_request(
+        &mut self,
+        request: &serde_json::Value,
+    ) -> Result<serde_json::Value, crate::pep::PepError> {
+        crate::proxy::forward::forward_request(self.http_client, self.upstream_url, request)
+            .await
+            .map_err(|e| crate::pep::PepError::DownstreamError(format!("Forwarding error: {}", e)))
+    }
+}
+
 pub async fn run_stdio_to_http_bridge(
     state: Arc<ProxyState>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -1463,95 +1442,50 @@ pub async fn run_stdio_to_http_bridge(
                         .to_string()
                 };
 
-                let action = evaluate_jsonrpc(&state, &local_session, &json).await;
-                match action {
-                    ProxyAction::Forward => {
+                let mut downstream = HttpStdioDownstream {
+                    http_client: &state.http_client,
+                    upstream_url: &state.upstream_url,
+                };
+
+                let res = crate::pep::stdio::handle_stdio_jsonrpc(
+                    &state,
+                    &local_session,
+                    &json,
+                    &mut downstream,
+                )
+                .await;
+
+                match res {
+                    Ok(resp) => {
                         send_dashboard_event(
                             &state,
                             &local_session,
                             &tool_name,
                             control_plane_proto::redact::RawDecision::Allowed,
                         );
-
-                        let response = crate::proxy::forward::forward_request(
-                            &state.http_client,
-                            &state.upstream_url,
-                            &json,
-                        )
-                        .await;
-
-                        match response {
-                            Ok(resp) => {
-                                let processed = stdio_scan_response(
-                                    &state,
-                                    &local_session.session_id,
-                                    &resp,
-                                    &tool_name,
-                                )
-                                .await;
-                                if let Err(e) = agent_writer.send(processed).await {
-                                    eprintln!("Error sending to agent: {}", e);
-                                    break;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = state
-                                    .audit_logger
-                                    .write_entry(
-                                        &local_session.session_id,
-                                        "upstream_delivery_failed",
-                                        &tool_name,
-                                        None,
-                                        Some(format!(
-                                            "Forwarding error (downstream_outcome=unknown): {}",
-                                            e
-                                        )),
-                                        None,
-                                        local_session.identity_sub.clone(),
-                                        local_session.identity_email.clone(),
-                                        None,
-                                        local_session.request_ip.clone(),
-                                        None,
-                                    )
-                                    .await;
-                                let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                                let err_resp = serde_json::json!({
-                                    "jsonrpc": "2.0",
-                                    "id": id,
-                                    "error": {
-                                        "code": -32001,
-                                        "message": format!("Forwarding error: {}", e)
-                                    }
-                                });
-                                if let Err(e) = agent_writer.send(err_resp).await {
-                                    eprintln!("Error sending to agent: {}", e);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    ProxyAction::Respond(resp) | ProxyAction::RespondWithStatus(_, resp) => {
-                        send_dashboard_event(
-                            &state,
-                            &local_session,
-                            &tool_name,
-                            control_plane_proto::redact::RawDecision::Denied,
-                        );
                         if let Err(e) = agent_writer.send(resp).await {
                             eprintln!("Error sending to agent: {}", e);
                             break;
                         }
                     }
-                    ProxyAction::KillAndRespond(resp)
-                    | ProxyAction::KillAndRespondWithStatus(_, resp) => {
+                    Err(pep_err) => {
                         send_dashboard_event(
                             &state,
                             &local_session,
                             &tool_name,
                             control_plane_proto::redact::RawDecision::Denied,
                         );
-                        let _ = agent_writer.send(resp).await;
-                        break;
+                        let id = json.get("id").unwrap_or(&serde_json::Value::Null);
+                        let err_resp = pep_err.to_jsonrpc_error(id);
+                        if let Err(e) = agent_writer.send(err_resp).await {
+                            eprintln!("Error sending to agent: {}", e);
+                            break;
+                        }
+                        #[allow(deprecated)]
+                        if state.kill_mode == KillMode::Process || state.kill_mode == KillMode::Both
+                        {
+                            break;
+                        }
                     }
                 }
             }

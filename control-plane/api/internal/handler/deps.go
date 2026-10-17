@@ -75,4 +75,8 @@ type DataStore interface {
 	GetDecryptedProviderKey(ctx context.Context, tenantID, provider string, kmsProvider kms.KMSProvider) (string, error)
 	ListEncryptedProviderKeys(ctx context.Context, tenantID string) ([]store.ProviderKeyMeta, error)
 	DeleteEncryptedProviderKey(ctx context.Context, tenantID, provider string) error
+
+	// Audit Checkpoints (P0-1 Verifiable Checkpoints)
+	ListAuditCheckpoints(ctx context.Context, tenantID string) ([]store.AuditCheckpoint, error)
 }
+

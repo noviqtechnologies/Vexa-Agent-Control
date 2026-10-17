@@ -364,7 +364,7 @@ pub async fn resolve_token_and_mode(
     match mode {
         Some(ConnectMode::CloudDirect) => {
             let hub_url = crate::identity::device::load_hub_url()
-                .unwrap_or_else(|| "https://app.vexasec.io".to_string());
+                .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
             match fetch_assigned_virtual_key(&hub_url).await {
                 Ok(Some(vk)) if !vk.trim().is_empty() => Ok((vk, ConnectMode::CloudDirect)),
                 Ok(_) => Err(

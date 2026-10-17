@@ -206,6 +206,10 @@ export default function PolicyEditor() {
   }
 
   const handleSave = async () => {
+    const targetLabel = version || 'a new revision'
+    if (!window.confirm(`Apply policy revision "${targetLabel}" now? It takes effect immediately for all active sessions. You can roll back by re-applying a previous revision from history.`)) {
+      return
+    }
     try {
       setSaving(true)
       setMessage(null)

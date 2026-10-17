@@ -752,11 +752,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_initiate_login_session() {
-        let provider = SmbBrowserAuthProvider::new("https://app.vexasec.io");
+        let provider = SmbBrowserAuthProvider::new("http://127.0.0.1:8080");
         let session = provider.initiate_login().await.unwrap();
         assert!(session
             .auth_url
-            .contains("https://app.vexasec.io/oauth/authorize"));
+            .contains("http://127.0.0.1:8080/oauth/authorize"));
         assert!(session.auth_url.contains("code_challenge="));
         assert!(session.auth_url.contains("code_challenge_method=S256"));
         assert!(session.callback_port > 0);

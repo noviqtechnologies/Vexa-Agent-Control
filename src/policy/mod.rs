@@ -1,12 +1,15 @@
 //! Policy engine module for evaluation, DLP inspection, prompt injection, and schema loading.
 
+pub mod autonomy;
 pub mod command_policy;
 pub mod community_rules;
 /// FR-5 v2.0: Credential scope stub validator (FR-22 integration pending).
 pub mod credential_scope;
+pub mod delegation;
 pub mod dlp;
 pub mod egress;
 pub mod engine;
+pub mod failover;
 pub mod hitl;
 pub mod identity;
 pub mod injection;
@@ -15,6 +18,7 @@ pub mod mcp_score;
 /// File-system watcher that hot-reloads the `--policy` YAML file when it changes
 /// on disk, without requiring a daemon restart.
 pub mod policy_file_watcher;
+pub mod provenance;
 /// Remote policy loader: fetches active policy from the dashboard API (PostgreSQL)
 /// and provides a background polling task for automatic hot-reload.
 pub mod remote;
@@ -23,6 +27,7 @@ pub mod remote_keys;
 pub mod response_scanner;
 pub mod revocation;
 pub mod safe_mode;
+pub mod safety;
 pub mod schema;
 pub mod schema_drift;
 pub mod semantic;
@@ -32,6 +37,7 @@ pub mod signed;
 pub mod snapshot;
 pub mod taint;
 pub mod threat_intel;
+pub mod trust;
 pub mod verdict;
 
 use std::sync::Arc;

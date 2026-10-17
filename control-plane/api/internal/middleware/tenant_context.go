@@ -12,10 +12,13 @@ import (
 // DefaultOrganizationID is the authoritative singleton UUID for the organization.
 const DefaultOrganizationID = "00000000-0000-0000-0000-000000000001"
 const DefaultTenantID = DefaultOrganizationID
+const DefaultWorkspaceID = "default"
+const DefaultProjectID = "default"
 
 // ErrUnauthenticatedOrganizationScope is returned when an operation requires an authenticated organization context.
 var ErrUnauthenticatedOrganizationScope = errors.New("unauthenticated organization scope")
 var ErrUnauthenticatedTenantScope = ErrUnauthenticatedOrganizationScope
+var ErrCrossWorkspaceAccessDenied = errors.New("forbidden: cross-workspace access denied; scope mismatch with authenticated principal")
 
 // AuthnType describes how the caller authenticated.
 type AuthnType string
@@ -31,6 +34,8 @@ const (
 type RequestPrincipal struct {
 	OrganizationID string    `json:"organization_id"`
 	TenantID       string    `json:"tenant_id"` // Alias for backward compatibility
+	WorkspaceID    string    `json:"workspace_id,omitempty"`
+	ProjectID      string    `json:"project_id,omitempty"`
 	SubjectID      string    `json:"subject_id,omitempty"`
 	DeviceID       string    `json:"device_id,omitempty"`
 	AuthnType      AuthnType `json:"authn_type"`
@@ -56,6 +61,12 @@ func RequestPrincipalFromContext(ctx context.Context) *RequestPrincipal {
 		if p.TenantID == "" && p.OrganizationID != "" {
 			p.TenantID = p.OrganizationID
 		}
+		if p.WorkspaceID == "" {
+			p.WorkspaceID = DefaultWorkspaceID
+		}
+		if p.ProjectID == "" {
+			p.ProjectID = DefaultProjectID
+		}
 		return p
 	}
 	// Derive from UserClaims if present
@@ -67,12 +78,23 @@ func RequestPrincipalFromContext(ctx context.Context) *RequestPrincipal {
 		if orgID == "" {
 			orgID = DefaultOrganizationID
 		}
+		wsID := claims.WorkspaceID
+		if wsID == "" {
+			wsID = DefaultWorkspaceID
+		}
+		projID := claims.ProjectID
+		if projID == "" {
+			projID = DefaultProjectID
+		}
 		return &RequestPrincipal{
 			OrganizationID: orgID,
 			TenantID:       orgID,
+			WorkspaceID:    wsID,
+			ProjectID:      projID,
 			SubjectID:      claims.UserID,
 			AuthnType:      AuthnTypeSession,
 			IsAdmin:        claims.IsAdmin,
+			Role:           claims.Role,
 		}
 	}
 	// Derive from DevicePrincipal if present
@@ -84,6 +106,8 @@ func RequestPrincipalFromContext(ctx context.Context) *RequestPrincipal {
 		return &RequestPrincipal{
 			OrganizationID: orgID,
 			TenantID:       orgID,
+			WorkspaceID:    DefaultWorkspaceID,
+			ProjectID:      DefaultProjectID,
 			DeviceID:       dev.DeviceID,
 			AuthnType:      AuthnTypeMTLS,
 			Capabilities:   dev.Capabilities,
@@ -213,4 +237,75 @@ func UserClaimsFromContext(ctx context.Context) *UserClaims {
 		return nil
 	}
 	return claims
+}
+
+// WorkspaceIDFromContext extracts the workspace scope strictly from the authenticated principal context.
+// Per FR-020 / NFR-005: Workspace scope is derived from the authenticated principal and cannot be overridden by request payload.
+func WorkspaceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return DefaultWorkspaceID
+	}
+	if p := RequestPrincipalFromContext(ctx); p != nil && p.WorkspaceID != "" {
+		return p.WorkspaceID
+	}
+	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil && claims.WorkspaceID != "" {
+		return claims.WorkspaceID
+	}
+	return DefaultWorkspaceID
+}
+
+// ProjectIDFromContext extracts the project scope strictly from the authenticated principal context.
+func ProjectIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return DefaultProjectID
+	}
+	if p := RequestPrincipalFromContext(ctx); p != nil && p.ProjectID != "" {
+		return p.ProjectID
+	}
+	if claims, ok := ctx.Value(UserClaimsKey).(*UserClaims); ok && claims != nil && claims.ProjectID != "" {
+		return claims.ProjectID
+	}
+	return DefaultProjectID
+}
+
+// ValidateWorkspaceScope enforces that an operation on targetWorkspaceID strictly matches
+// the authenticated principal's workspace. Rejects cross-workspace access attempts (FR-020, NFR-005).
+func ValidateWorkspaceScope(ctx context.Context, targetWorkspaceID string) error {
+	if targetWorkspaceID == "" || targetWorkspaceID == DefaultWorkspaceID {
+		return nil
+	}
+	authenticatedWorkspace := WorkspaceIDFromContext(ctx)
+	if targetWorkspaceID != authenticatedWorkspace {
+		p := RequestPrincipalFromContext(ctx)
+		if p != nil && p.IsAdmin && (p.Role == "org_admin" || p.Role == "admin") {
+			return nil
+		}
+		return ErrCrossWorkspaceAccessDenied
+	}
+	return nil
+}
+
+// RequireWorkspaceScopeMiddleware verifies that any requested workspace parameter in the route
+// conforms to the authenticated principal's workspace context.
+func RequireWorkspaceScopeMiddleware(targetWorkspaceGetter func(r *http.Request) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			target := ""
+			if targetWorkspaceGetter != nil {
+				target = targetWorkspaceGetter(r)
+			}
+			if err := ValidateWorkspaceScope(r.Context(), target); err != nil {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    "forbidden_workspace_scope_mismatch",
+						"message": err.Error(),
+					},
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

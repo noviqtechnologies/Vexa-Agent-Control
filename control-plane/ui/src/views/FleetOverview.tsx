@@ -110,13 +110,15 @@ export default function FleetOverview() {
           auth_provider_type: d.auth_provider_type,
           os: d.os_family,
           os_version: d.architecture,
-          overall_compliance: d.status === 'REVOKED' ? 'NON_COMPLIANT' : (d.last_freshness === 'STALE' ? 'OFFLINE' : 'COMPLIANT'),
-          active_ides: ['Cursor', 'VS Code', 'Windsurf'],
-          tamper_count_24h: 0,
+          overall_compliance: d.status === 'REVOKED'
+            ? 'NON_COMPLIANT'
+            : (d.last_freshness === 'ACTIVE_FRESH' || d.last_freshness === 'ACTIVE_RECENT' ? 'COMPLIANT' : 'OFFLINE'),
+          active_ides: (d as any).active_ides || [],
+          tamper_count_24h: (d as any).tamper_count_24h ?? 0,
           last_heartbeat_at: d.last_seen_at,
           enrollment_status: d.status,
-          capability_vector: d.capability_vector || ['CONFIGURED', 'TRAFFIC_VERIFIED'],
-          last_freshness: d.last_freshness || 'ACTIVE_FRESH',
+          capability_vector: d.capability_vector || [],
+          last_freshness: d.last_freshness,
         }))
         workstationTotal = devV2.total_count || workstationDevices.length
       } else if (snt && snt.devices && snt.devices.length > 0) {
@@ -175,7 +177,7 @@ export default function FleetOverview() {
     const seen = new Set<string>()
     const deduped: any[] = []
     for (const d of sentryDevices) {
-      const key = (d.hostname || d.device_id || '').toLowerCase()
+      const key = (d.device_id || d.hostname || '').toLowerCase()
       if (key && !seen.has(key)) {
         seen.add(key)
         deduped.push(d)
@@ -218,22 +220,24 @@ export default function FleetOverview() {
     ? Math.round(((activeWorkstations - (driftedWorkstations * 0.5)) / Math.max(1, totalEnrolledWorkstations)) * endpointWeight)
     : 0
 
-  // 2. Active Guardrails & 21 DLP Wire Rules (35% weight)
+  // 2. Configured policies (35% weight) — configuration evidence only, not enforcement proof
   const guardrailWeight = 35
   const activePolicyCount = policies.length
-  const guardrailScore = Math.min(guardrailWeight, 20 + (activePolicyCount > 0 ? 15 : 0)) // Safe Mode + DLP active
+  const guardrailScore = activePolicyCount > 0 ? guardrailWeight : 0
 
-  // 3. Universal Gateway & Key Custody (15% weight)
+  // 3. Virtual keys issued (15% weight) — no keys, no points
   const gatewayWeight = 15
-  const gatewayScore = virtualKeys.length > 0 ? gatewayWeight : 10 // Baseline gateway operational
+  const gatewayScore = virtualKeys.length > 0 ? gatewayWeight : 0
 
-  // 4. Spend Governance & Preflight Caps (15% weight)
+  // 4. Published spend policy (15% weight) — no policy, no points
   const spendWeight = 15
-  const spendScore = spendWeight // Preflight reservations active + 0 budget overages
+  const spendScore = activeSpendPolicy ? spendWeight : 0
 
-  const compositePostureScore = totalEnrolledWorkstations > 0
+  // No score is produced for a fleet with zero enrolled endpoints (unknown, not measured).
+  const compositePostureScore: number | null = totalEnrolledWorkstations > 0
     ? Math.min(100, Math.max(0, endpointScore + guardrailScore + gatewayScore + spendScore))
-    : Math.min(100, guardrailScore + gatewayScore + spendScore) // Baseline security when initializing
+    : null
+  const scoreLabel = compositePostureScore === null ? 'N/A' : `${compositePostureScore}%`
 
   let postureTitle = 'Fleet Security Posture: Protected & Compliant'
   let postureScore = compositePostureScore
@@ -335,7 +339,7 @@ export default function FleetOverview() {
                   {postureTitle}
                 </h3>
                 <span className={`soc-delta-badge ${badgeClass}`} style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 700 }}>
-                  {postureScore}% Score
+                  {postureScore === null ? 'N/A · No enrolled endpoints' : `${postureScore}% Config Index`}
                 </span>
                 <button
                   type="button"
@@ -373,7 +377,7 @@ export default function FleetOverview() {
           <div className="soc-breakdown-popover">
             <div style={{ fontWeight: 700, color: '#f8fafc', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
               <span>Composite Security & Governance Index Breakdown</span>
-              <span style={{ color: '#34d399' }}>{postureScore} / 100 Pts</span>
+              <span style={{ color: '#34d399' }}>{postureScore === null ? 'N/A' : `${postureScore} / 100 Pts`}</span>
             </div>
             <div className="soc-breakdown-row">
               <span style={{ color: '#cbd5e1' }}>1. Workstations & Sentry Compliance (35% weight)</span>
@@ -382,26 +386,26 @@ export default function FleetOverview() {
               </span>
             </div>
             <div className="soc-breakdown-row">
-              <span style={{ color: '#cbd5e1' }}>2. Active Guardrails & 21 DLP Wire Rules (35% weight)</span>
-              <span style={{ fontWeight: 600, color: '#34d399' }}>
-                {guardrailScore} / 35 pts (Safe Mode active, 21 DLP patterns enforcing)
+              <span style={{ color: '#cbd5e1' }}>2. Configured Policies (35% weight)</span>
+              <span style={{ fontWeight: 600, color: guardrailScore > 0 ? '#34d399' : '#f59e0b' }}>
+                {guardrailScore} / 35 pts ({activePolicyCount > 0 ? `${activePolicyCount} policies configured; enforcement not verified here` : 'no policies configured'})
               </span>
             </div>
             <div className="soc-breakdown-row">
               <span style={{ color: '#cbd5e1' }}>3. Universal AI Gateway & Key Custody (15% weight)</span>
-              <span style={{ fontWeight: 600, color: '#34d399' }}>
-                {gatewayScore} / 15 pts ({virtualKeys.length > 0 ? `${virtualKeys.length} Virtual Keys active, rate limits enforced` : 'Universal Gateway active, awaiting virtual keys'})
+              <span style={{ fontWeight: 600, color: gatewayScore > 0 ? '#34d399' : '#f59e0b' }}>
+                {gatewayScore} / 15 pts ({virtualKeys.length > 0 ? `${virtualKeys.length} virtual keys issued` : 'no virtual keys issued'})
               </span>
             </div>
             <div className="soc-breakdown-row">
-              <span style={{ color: '#cbd5e1' }}>4. Spend Boundaries & Preflight Settlement (15% weight)</span>
-              <span style={{ fontWeight: 600, color: '#34d399' }}>
-                {spendScore} / 15 pts (Fail-closed preflight active, 0 overages)
+              <span style={{ color: '#cbd5e1' }}>4. Spend Boundaries (15% weight)</span>
+              <span style={{ fontWeight: 600, color: spendScore > 0 ? '#34d399' : '#f59e0b' }}>
+                {spendScore} / 15 pts ({activeSpendPolicy ? 'spend policy published; enforcement not verified here' : 'no published spend policy'})
               </span>
             </div>
             <div className="soc-breakdown-row">
               <span style={{ color: '#f8fafc' }}>Total Posture Index</span>
-              <span style={{ color: '#34d399', fontSize: '13px' }}>{postureScore}%</span>
+              <span style={{ color: '#34d399', fontSize: '13px' }}>{scoreLabel}</span>
             </div>
           </div>
         )}
@@ -461,8 +465,8 @@ export default function FleetOverview() {
                 <div className="soc-capability-role">DLP & Guardrails</div>
               </div>
             </div>
-            <span className="soc-status-pill pill-success">
-              ● Enforcing
+            <span className={`soc-status-pill ${policies.length > 0 ? 'pill-success' : 'pill-neutral'}`}>
+              {policies.length > 0 ? '● Configured' : '○ No Policies'}
             </span>
           </div>
           <div
@@ -474,10 +478,10 @@ export default function FleetOverview() {
             title="View Current Active Policy"
           >
             <span className="metric-primary">{`${policies.length} ${policies.length === 1 ? 'Policy' : 'Policies'}`}</span>
-            <span className="metric-secondary">Active Postures</span>
+            <span className="metric-secondary">Configured</span>
           </div>
           <div className="soc-capability-subtext">
-            21 DLP Patterns · 6-Pass Injection Shield · Safe Mode Active
+            Configuration view only · enforcement state is not verified here
           </div>
           <div
             className="soc-capability-footer"
@@ -507,17 +511,17 @@ export default function FleetOverview() {
               </div>
             </div>
             <span className={`soc-status-pill ${virtualKeys.length > 0 ? 'pill-success' : 'pill-neutral'}`}>
-              {virtualKeys.length > 0 ? '● Operational' : '○ No Keys'}
+              {virtualKeys.length > 0 ? '● Keys Issued' : '○ No Keys'}
             </span>
           </div>
           <div className="soc-capability-metric">
             <span className="metric-primary">{`${virtualKeys.length} ${virtualKeys.length === 1 ? 'Key' : 'Keys'}`}</span>
-            <span className="metric-secondary">Governed</span>
+            <span className="metric-secondary">Issued</span>
           </div>
           <div className="soc-capability-subtext">
             {virtualKeys.length > 0
-              ? 'Multi-Provider Routing · L1/L2 Vector Semantic Cache Active'
-              : 'No virtual keys issued · Universal gateway awaiting keys'}
+              ? 'Gateway route health and cache status are not measured here'
+              : 'No virtual keys issued'}
           </div>
           <div className="soc-capability-footer">
             <span>Manage Virtual Keys</span>
@@ -540,7 +544,7 @@ export default function FleetOverview() {
               </div>
             </div>
             <span className={`soc-status-pill ${totalLimitMicrocents > 0 ? 'pill-success' : 'pill-neutral'}`}>
-              {totalLimitMicrocents > 0 ? '● Fail-Closed' : '○ No Cap Set'}
+              {totalLimitMicrocents > 0 ? '● Cap Configured' : '○ No Cap Set'}
             </span>
           </div>
           <div className="soc-capability-metric">
@@ -554,7 +558,7 @@ export default function FleetOverview() {
             </span>
           </div>
           <div className="soc-capability-subtext">
-            Atomic Preflight Balance Reservations · 0 Budget Overages
+            Settled spend vs. configured cap · overage enforcement not verified here
           </div>
           <div
             className="soc-capability-footer"
@@ -575,29 +579,29 @@ export default function FleetOverview() {
         <div className="soc-gateway-left">
           <span className="soc-mesh-tag">GATEWAY MESH</span>
           <div className="soc-provider-pills">
-            <span className="soc-provider-badge active" title="OpenAI GPT-4o, o1, o3-mini routes active">
+            <span className="soc-provider-badge" title="OpenAI route health not verified">
               <span className="provider-dot" /> OpenAI
             </span>
-            <span className="soc-provider-badge active" title="Anthropic Claude 3.7 Sonnet, Haiku routes active">
+            <span className="soc-provider-badge" title="Anthropic route health not verified">
               <span className="provider-dot" /> Claude
             </span>
-            <span className="soc-provider-badge active" title="Google Gemini 2.0 Flash routes active">
+            <span className="soc-provider-badge" title="Google Gemini route health not verified">
               <span className="provider-dot" /> Gemini
             </span>
-            <span className="soc-provider-badge active" title="AWS Bedrock Claude & Nova routes active">
+            <span className="soc-provider-badge" title="AWS Bedrock route health not verified">
               <span className="provider-dot" /> Bedrock
             </span>
-            <span className="soc-provider-badge active" title="Local Ollama & LM Studio routes active">
+            <span className="soc-provider-badge" title="Local Ollama & LM Studio route health not verified">
               <span className="provider-dot" /> Local / Ollama
             </span>
           </div>
         </div>
         <div className="soc-gateway-right">
-          <span className="soc-cache-badge" title="Dual-tier exact SHA-256 and vector cosine semantic cache active">
-            ⚡ Semantic Cache: Active
+          <span className="soc-cache-badge" title="Cache status is not reported to this view">
+            ⚡ Semantic Cache: Not measured
           </span>
-          <span className="soc-latency-badge" title="Local Rust sidecar wire latency">
-            ⚡ Wire Overhead: &lt;1ms
+          <span className="soc-latency-badge" title="Latency is not reported to this view">
+            ⚡ Wire Overhead: Not measured
           </span>
         </div>
       </div>

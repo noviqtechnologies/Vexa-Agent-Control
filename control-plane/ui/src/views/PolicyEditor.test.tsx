@@ -102,6 +102,7 @@ describe('PolicyEditor View', () => {
   })
 
   it('saves and applies new policy revision', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.mocked(api.savePolicy).mockResolvedValue({
       id: 'pol-124',
       version: '1.0.1',

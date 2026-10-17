@@ -75,6 +75,10 @@ fn make_policy(n: usize) -> CompiledPolicy {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     }
 }
 
@@ -123,6 +127,10 @@ fn make_policy_with_schema() -> CompiledPolicy {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     }
 }
 

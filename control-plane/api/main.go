@@ -215,9 +215,22 @@ func main() {
 	safeModeH := handler.NewSafeModeHandler()
 	spendH := handler.NewSpendHandler(db)
 
+	// KMS provider and Virtual Key infrastructure.
+	// Gate 3 hardening: fail fast in production if no enterprise key is configured.
+	kmsProvider, err := kms.NewLocalMasterKeyProvider()
+	if err != nil {
+		log.Fatalf("kms: %v", err)
+	}
+	if err := kmsProvider.ValidateProductionConfig(); err != nil {
+		log.Fatalf("kms: production config validation failed: %v", err)
+	}
+	if kmsProvider.IsDevFallback() {
+		log.Println("[WARN] kms: DEV_KEY_ACTIVE — static fallback key in use. Set AGENTCONTROL_MASTER_KEY before going to production.")
+	}
+
 	groupPolicyH := handler.NewGroupPolicyHandler(db)
 	gatewayH := handler.NewGatewayHandler()
-	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret)
+	providerKeysH := handler.NewProviderKeysHandler(db, cfg.ProviderKeyEncryptionSecret, kmsProvider)
 	hubSpecH := handler.NewHubSpecHandler(db, sseBroker, cfg.ProviderKeyEncryptionSecret)
 
 	enrollmentH := handler.NewEnrollmentHandler(db, cfg.GatewaySecret)
@@ -234,11 +247,6 @@ func main() {
 	genericProviderClient := broker.NewGenericProviderClient()
 	brokerV2H := handler.NewBrokerV2Handler(db, genericProviderClient, cfg.ProviderKeyEncryptionSecret, spendStore)
 
-	// KMS provider and Virtual Key infrastructure
-	kmsProvider, err := kms.NewLocalMasterKeyProvider()
-	if err != nil {
-		log.Fatalf("kms: %v", err)
-	}
 	invalidationBroadcaster := handler.NewInvalidationBroadcaster()
 	virtualKeyH := handler.NewVirtualKeyHandler(db, invalidationBroadcaster)
 	brokerV3H := handler.NewBrokerV3Handler(db, kmsProvider, spendStore, genericProviderClient)
@@ -301,6 +309,7 @@ func main() {
 		r.Post("/heartbeats", deviceV2H.SubmitHeartbeat)
 		r.Get("/status", deviceV2H.GetDeviceStatus)
 		r.Get("/policy/active", policyMgmtH.GetActive)
+		r.Get("/policy/bundle", policyMgmtH.GetActiveBundle)
 		r.Get("/policy/subscribe", policyMgmtH.Subscribe)
 		r.Get("/provider-keys/active", deviceV2H.GetActiveProviderKeys)
 		r.Post("/assignments/{id}/ack", deviceV2H.AcknowledgeAssignment)
@@ -324,10 +333,22 @@ func main() {
 		r.Post("/dispatch", brokerV3H.Dispatch)
 	})
 
-	// Effective signed policy manifest & Telemetry v2 Ingestion / Audit Checkpoints
-	r.Get("/api/v2/policy/effective", effectivePolicyH.GetEffectiveSigned)
-	r.Post("/api/v2/telemetry/ingest", ingestH.PostTelemetryIngest)
-	r.Get("/api/v2/audit/checkpoints", ingestH.GetAuditCheckpoints)
+	// 5. Strict Evidence, Telemetry & Effective Policy (P0-1 Enforced Authentication)
+	r.Route("/api/v2/policy", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
+		r.Get("/effective", effectivePolicyH.GetEffectiveSigned)
+	})
+
+	r.Route("/api/v2/telemetry", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
+		r.Post("/ingest", ingestH.PostTelemetryIngest)
+	})
+
+	r.Route("/api/v2/audit", func(r chi.Router) {
+		r.Use(middleware.StrictDeviceOrAssertionAuth(db, cfg.IngressAuthSecret))
+		r.Get("/checkpoints", ingestH.GetAuditCheckpoints)
+	})
+
 
 	// Virtual Key management
 	r.Route("/api/v1/virtual-keys", func(r chi.Router) {
@@ -406,6 +427,8 @@ func main() {
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Post("/api/v1/credentials/rotate", hubSpecH.RotateCredential)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policies/active", policyMgmtH.GetActive)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/active", policyMgmtH.GetActive)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policies/bundle", policyMgmtH.GetActiveBundle)
+	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/bundle", policyMgmtH.GetActiveBundle)
 	r.With(middleware.PolicyReadAuth(cfg.PolicyReadSecret, legacyAuthCfg)).Get("/api/v1/policy/subscribe", policyMgmtH.Subscribe)
 	r.With(middleware.GatewayAuth(cfg.GatewaySecret, db, legacyAuthCfg)).Post("/api/v1/telemetry", hubSpecH.PostTelemetry)
 

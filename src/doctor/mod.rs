@@ -196,7 +196,7 @@ pub async fn run_diagnostics() -> DoctorReport {
     });
 
     // 5. Gateway Broker Reachability Check
-    let hub_url = load_hub_url().unwrap_or_else(|| "https://app.vexasec.io".to_string());
+    let hub_url = load_hub_url().unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
     let health_url = format!("{}/healthz", hub_url.trim_end_matches('/'));
     let start_t = Instant::now();
     let client = reqwest::Client::builder()

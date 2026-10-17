@@ -204,42 +204,28 @@ async fn handle_change(
             raw_hash,
             warnings,
         }) => {
-            match state.policy.write() {
-                Ok(mut guard) => {
-                    *guard = Some(policy);
-                    state
-                        .policy_loaded
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
-                    // Update our tracked hash only on success.
-                    *last_hash = new_hash;
+            state.update_policy(Some(policy));
+            // Update our tracked hash only on success.
+            *last_hash = new_hash;
 
-                    logging::log_event(
-                        Level::Info,
-                        "policy_reloaded_file_watch",
-                        serde_json::json!({
-                            "path": path.display().to_string(),
-                            "hash": &raw_hash,
-                            "warnings": &warnings,
-                        }),
-                    );
+            logging::log_event(
+                Level::Info,
+                "policy_reloaded_file_watch",
+                serde_json::json!({
+                    "path": path.display().to_string(),
+                    "hash": &raw_hash,
+                    "warnings": &warnings,
+                }),
+            );
 
-                    // Broadcast SSE event so the local dashboard updates live.
-                    let sse_event = serde_json::json!({
-                        "event": "policy_reloaded",
-                        "source": "file_watch",
-                        "hash": &raw_hash,
-                    });
-                    if let Ok(s) = serde_json::to_string(&sse_event) {
-                        let _ = state.event_tx.send(s);
-                    }
-                }
-                Err(_) => {
-                    logging::log_event(
-                        Level::Error,
-                        "policy_file_watch_error",
-                        serde_json::json!({"error": "Policy RwLock poisoned during file-watch reload"}),
-                    );
-                }
+            // Broadcast SSE event so the local dashboard updates live.
+            let sse_event = serde_json::json!({
+                "event": "policy_reloaded",
+                "source": "file_watch",
+                "hash": &raw_hash,
+            });
+            if let Ok(s) = serde_json::to_string(&sse_event) {
+                let _ = state.event_tx.send(s);
             }
         }
         Ok(PolicyLoadResult::Degraded { reason }) => {

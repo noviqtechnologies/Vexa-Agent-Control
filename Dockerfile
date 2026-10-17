@@ -12,23 +12,26 @@ RUN apt-get update && apt-get install -y \
 # Copy workspace manifests to leverage Docker layer caching for dependencies
 COPY Cargo.toml Cargo.lock ./
 COPY control-plane/proto/Cargo.toml ./control-plane/proto/Cargo.toml
+COPY contracts/decision-v1/Cargo.toml ./contracts/decision-v1/Cargo.toml
 
 # Pre-fetch and compile third-party dependencies with dummy source and bench files
-RUN mkdir -p src control-plane/proto/src benches && \
+RUN mkdir -p src control-plane/proto/src contracts/decision-v1/src benches && \
     echo "fn main() {}" > src/main.rs && \
     touch src/lib.rs && \
     touch control-plane/proto/src/lib.rs && \
+    touch contracts/decision-v1/src/lib.rs && \
     echo "fn main() {}" > benches/policy_eval.rs && \
     echo "fn main() {}" > benches/proxy_overhead.rs && \
     echo "fn main() {}" > benches/safe_mode.rs && \
     echo "fn main() {}" > benches/gateway_capacity.rs && \
     echo "fn main() {}" > benches/workstation_throughput.rs && \
     cargo build --release --bin agentcontrol || true && \
-    rm -rf src control-plane/proto/src benches
+    rm -rf src control-plane/proto/src contracts/decision-v1/src benches
 
 # Copy actual application source code and benchmarks
 COPY src/ ./src/
 COPY control-plane/proto/src/ ./control-plane/proto/src/
+COPY contracts/ ./contracts/
 COPY benches/ ./benches/
 COPY keys/ ./keys/
 COPY policy.example.yaml ./policy.example.yaml
@@ -39,8 +42,11 @@ RUN rm -rf target/release/deps/agentcontrol* \
            target/release/deps/libagentcontrol* \
            target/release/deps/control_plane_proto* \
            target/release/deps/libcontrol_plane_proto* \
+           target/release/deps/decision_v1* \
+           target/release/deps/libdecision_v1* \
            target/release/.fingerprint/agentcontrol* \
            target/release/.fingerprint/control_plane_proto* \
+           target/release/.fingerprint/decision_v1* \
            target/release/agentcontrol \
            target/release/agentcontrol.d && \
     if [ -n "$CARGO_FEATURES" ]; then \

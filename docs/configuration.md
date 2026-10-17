@@ -258,18 +258,115 @@ llm:
 3. **`weighted_random`:** Distributes requests proportionally according to the relative weights configured on each deployment (useful for canary deployments or load distribution).
 4. **`region_affinity`:** Strict sovereign data residency enforcement. If a deployment's region is not in `allowed_regions`, Agent Control rejects the request with HTTP 503 `routing_policy_violation` rather than allowing cross-border data transfer.
 
+---
 
+## 10. Advanced Governance, Autonomy & Delegation (Schema v2)
 
+### 10.1 Autonomy Budgets & Ceilings (FR-034)
+Guards against runaway autonomous agents, recursion loops, and budget exhaustion:
+```yaml
+autonomy_budgets:
+  max_call_recursion_depth: 8       # Max nested tool or sub-agent call depth
+  max_run_duration_secs: 300        # Max wall-clock execution time per run
+  max_run_tokens: 150000            # Combined prompt and completion token limit
+  consecutive_failure_limit: 3      # Halt if 3 consecutive failures occur
+  repetitive_loop_threshold: 4      # Halt if identical tool call repeats 4 times
+  human_approval_on_breach: true    # Escalate to HITL CAS queue on ceiling breach
+```
 
-<!--
-## Client SDK Environment Variables
+### 10.2 MCP Tool Schema-Drift Detection (FR-007)
+Detects upstream or malicious modifications to MCP tool schemas using canonical SHA-256 digests:
+```yaml
+schema_drift:
+  action: "block"                   # block | warn | review
+  pinned_catalog_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  strict_canonicalization: true
+```
 
-Thin proxy client SDKs ([Python](../sdks/python) and [TypeScript](../sdks/typescript)) automatically configure themselves using environment variables:
+### 10.3 Hierarchical Capability Delegation (FR-035)
+Enforces monotonic capability reduction when a parent agent delegates tasks to sub-agents ($C_{\text{child}} \subseteq C_{\text{parent}}$):
+```yaml
+delegation:
+  require_monotonic_attenuation: true
+  max_delegation_depth: 3
+  block_cross_workspace_delegation: true
+```
 
-| Variable | Default | Description |
-|---|---|---|
-| `AGENTCONTROL_PROXY_URL` | `http://127.0.0.1:8080` | Target URL of the local or remote Agent Control security gateway. |
-| `AGENTCONTROL_AUTH_TOKEN` | `null` | Corporate OIDC JWT or bearer token for authenticated gateway clusters. |
-| `AGENTCONTROL_SESSION_ID` | Auto-generated UUID | Explicit session context identifier for multi-agent tracing. |
--->
+### 10.4 Data Provenance & Flow Tracking (FR-036)
+Labels data sources and prevents poisoned or untrusted tool data from reaching sensitive sinks:
+```yaml
+provenance:
+  track_source_labels: true
+  flow_rules:
+    - source_label: "UntrustedExternalWeb"
+      forbidden_sinks: ["DatabaseWrite", "FilesystemWrite", "ShellExecution"]
+      action: "block"
+```
 
+### 10.5 Upstream Circuit Breaking & Failover (FR-030, FR-031)
+Automated provider failover with idempotent retries:
+```yaml
+failover:
+  circuit_breaker:
+    failure_threshold: 3            # Consecutive errors before tripping Open
+    recovery_time_secs: 30          # Half-Open canary probe interval
+  retries:
+    max_attempts: 2
+    retry_classes: ["502", "503", "504", "429"]
+    require_idempotency_key_for_mutations: true
+```
+
+---
+
+## 11. Enterprise Policy Trust Profiles & Hard Safety Invariants
+
+### 11.1 Policy Trust Profiles (`PolicyTrustProfile`)
+Controls which policy ingestion sources are accepted by the gateway daemon:
+
+```yaml
+trust_profile:
+  mode: "managed"                 # "development" | "managed"
+  require_monotonic_revision: true
+  max_policy_age_secs: 86400      # 24 hours max freshness before fail-closed
+  trusted_keyring:
+    keys:
+      - key_id: "corp-security-lead-2026"
+        public_key_hex: "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+        description: "Primary Corporate Security Authority"
+        created_at: "2026-01-01T00:00:00Z"
+    rotation_policy: "manual"     # manual | time_based
+```
+
+- **Managed Mode Requirements:**
+  - Unsigned local policy YAML is **strictly rejected**.
+  - Ephemeral signing keys in `promote` are **forbidden**.
+  - Offline cache HMAC fallback is **disabled** (requires explicit device token or secret).
+  - Ingestion via `/api/v1/policy/signed-push` requires verification against the configured keyring.
+
+### 11.2 Hard Safety Invariants vs. Advisory Detections
+- **Hard Invariants:** Severe safety threats (e.g. access to `/etc/shadow`, OS hives, root filesystem destruction) produce unconditional `Deny` decisions. They **cannot be overridden** by user policy `action: allow`.
+- **Advisory Detections:** Heuristic findings that can be mapped by policy to `warn`, `require_approval`, or `deny`. Silent `allow` of active detections is prohibited.
+
+### 11.3 Break-Glass Emergency Overrides
+For authorized operational necessity, an operator can provide an out-of-band break-glass token:
+```yaml
+break_glass:
+  enabled: true
+  require_operator_signature: true
+  max_ttl_secs: 3600             # 1 hour maximum validity
+```
+Each break-glass override is cryptographically pinned to the action's parameter hash and consumed exactly once.
+
+### 11.4 Environment Variables for Policy Trust
+The gateway trust profile can be configured directly via environment variables:
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `POLICY_SIGNING_PRIVATE_KEY` | 64-hex Ed25519 private key used by Central Hub to sign policy bundles. Independently managed — **never** derived from gateway or read secrets. | Required for Team Hub Managed Mode |
+| `AGENTCONTROL_MANAGED_MODE` | Set to `1` or `true` to enforce Managed mode trust profile (fails closed at startup if keyring is empty) | `0` (Development) |
+| `AGENTCONTROL_TRUST_PROFILE` | Set to `managed` or `development` | `development` |
+| `AGENTCONTROL_TRUSTED_KEYS` | Comma-separated hex list or JSON array of trusted Ed25519 public keys | Empty |
+| `AGENTCONTROL_KEYRING_PATH` | Path to `keyring.json` containing trusted public keys | `~/.agentcontrol/keyring.json` |
+| `AGENTCONTROL_REQUIRE_MONOTONIC_REVISION` | Enforce anti-rollback revision monotonicity (`0` to disable) | `1` (true in Managed mode) |
+| `AGENTCONTROL_MAX_POLICY_AGE_SECS` | Maximum acceptable age of policy bundle before fail-closed / degraded | None |
+| `POLICY_READ_SECRET` | Secret used to authenticate policy bundle fetches from Hub (read secret only, cannot sign policies) | Device token |

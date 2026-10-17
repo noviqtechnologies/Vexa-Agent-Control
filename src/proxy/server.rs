@@ -33,6 +33,7 @@ use super::handler::{self, ProxyAction, ProxyState};
 use crate::kill::{self};
 use crate::logging;
 use crate::policy::response_scanner::ScanResult;
+use crate::policy::trust::PolicyTrustProfile;
 
 pub type BoxBody = http_body_util::combinators::BoxBody<Bytes, hyper::Error>;
 
@@ -331,8 +332,17 @@ pub(crate) async fn resolve_session(
         hasher.update(t.as_bytes());
         let token_hash = hex::encode(hasher.finalize());
 
-        // Check if session exists in dashmap
+        // Check if session exists in dashmap and rebind if stale
         if let Some(session) = state.sessions.get(&token_hash) {
+            let current_epoch = state.policy_epoch.load(std::sync::atomic::Ordering::SeqCst);
+            if session
+                .session_epoch
+                .load(std::sync::atomic::Ordering::SeqCst)
+                < current_epoch
+            {
+                let current_policy = state.get_policy();
+                session.refresh_policy(current_policy, current_epoch);
+            }
             return Ok(session.clone());
         }
 
@@ -414,7 +424,8 @@ pub(crate) async fn resolve_session(
                 } else {
                     None
                 };
-                let session = Arc::new(super::session::SessionContext::new_with_scope(
+                let epoch = state.policy_epoch.load(std::sync::atomic::Ordering::SeqCst);
+                let session = Arc::new(super::session::SessionContext::new_with_scope_and_epoch(
                     Some(sub.sub.clone()),
                     email,
                     sub.groups.clone(),
@@ -422,6 +433,7 @@ pub(crate) async fn resolve_session(
                     Some(client_ip.to_string()),
                     credential_header.map(|s| s.to_string()),
                     scope_header.map(|s| s.to_string()),
+                    epoch,
                 ));
 
                 // Fix 3: Evict expired sessions before inserting new one
@@ -513,6 +525,15 @@ pub(crate) async fn resolve_session(
         }
 
         if let Some(session) = state.sessions.get(&session_key) {
+            let current_epoch = state.policy_epoch.load(std::sync::atomic::Ordering::SeqCst);
+            if session
+                .session_epoch
+                .load(std::sync::atomic::Ordering::SeqCst)
+                < current_epoch
+            {
+                let current_policy = state.get_policy();
+                session.refresh_policy(current_policy, current_epoch);
+            }
             return Ok(session.clone());
         }
 
@@ -571,7 +592,8 @@ pub(crate) async fn resolve_session(
                 Some(u)
             }
         });
-        let session = Arc::new(super::session::SessionContext::new_with_scope(
+        let epoch = state.policy_epoch.load(std::sync::atomic::Ordering::SeqCst);
+        let session = Arc::new(super::session::SessionContext::new_with_scope_and_epoch(
             session_sub,
             enrolled_user,
             vec![],
@@ -579,6 +601,7 @@ pub(crate) async fn resolve_session(
             Some(client_ip.to_string()),
             credential_header.map(|s| s.to_string()),
             scope_header.map(|s| s.to_string()),
+            epoch,
         ));
 
         // Fix 3: Evict expired sessions before inserting new one
@@ -1064,6 +1087,13 @@ async fn handle_request(
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(hyper::header::CONTENT_TYPE, "text/html; charset=utf-8")
+                    .header(hyper::header::X_FRAME_OPTIONS, "DENY")
+                    .header(hyper::header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+                    .header(hyper::header::REFERRER_POLICY, "no-referrer")
+                    .header(
+                        hyper::header::CONTENT_SECURITY_POLICY,
+                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none';",
+                    )
                     .body(full_to_box_body(Full::new(Bytes::from(html))))
                     .unwrap());
             }
@@ -1248,19 +1278,27 @@ async fn handle_request(
                 let total = stats.total_events;
                 let risk = stats.risk_flag_count;
                 let safe = (total - risk).max(0);
-                let score = if total > 0 {
-                    ((safe as f64 / total as f64) * 100.0).round()
+                let (score_val, grade_val, status_val) = if total > 0 {
+                    let s = ((safe as f64 / total as f64) * 100.0).round();
+                    let g = if s >= 90.0 {
+                        "Grade A"
+                    } else if s >= 75.0 {
+                        "Grade B"
+                    } else {
+                        "Grade C"
+                    };
+                    (serde_json::json!(s), g, "active")
                 } else {
-                    100.0
+                    (serde_json::Value::Null, "Unmeasured", "unmeasured")
                 };
                 let bench_json = serde_json::json!({
-                    "score": score,
-                    "grade": if score >= 90.0 { "Grade A" } else if score >= 75.0 { "Grade B" } else { "Grade C" },
+                    "score": score_val,
+                    "grade": grade_val,
                     "tasks_executed": total,
                     "unique_tools": stats.unique_tools,
                     "risk_flag_count": risk,
                     "safe_events": safe,
-                    "status": "active"
+                    "status": status_val
                 });
                 return Ok(json_response(StatusCode::OK, &bench_json));
             }
@@ -1504,6 +1542,9 @@ async fn handle_request(
                 serde_json::from_slice::<crate::policy::revocation::RevocationEntry>(&body_bytes)
             {
                 state.revocation_registry.add(entry.clone());
+                state
+                    .policy_epoch
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 crate::logging::log_event(
                     crate::logging::Level::Warn,
                     "CAPABILITY_REVOKED_REGISTERED",
@@ -1535,20 +1576,58 @@ async fn handle_request(
             if let Ok(bundle) =
                 serde_json::from_slice::<crate::policy::signed::SignedPolicyBundle>(&body_bytes)
             {
+                let trusted_keys = state.policy_trust_profile.trusted_keys();
+                if state.policy_trust_profile.is_managed()
+                    && trusted_keys.as_ref().map_or(true, |k| k.is_empty())
+                {
+                    return Ok(json_response(
+                        StatusCode::FORBIDDEN,
+                        &serde_json::json!({
+                            "error": "managed_mode_keyring_required",
+                            "message": "Policy push rejected: managed trust profile requires configured trusted keyring"
+                        }),
+                    ));
+                }
+
+                if let PolicyTrustProfile::Managed {
+                    require_revision_monotonicity: true,
+                    ..
+                } = state.policy_trust_profile
+                {
+                    let persisted = crate::policy::remote::load_persisted_monotonic_revision();
+                    if bundle.policy_revision < persisted {
+                        let msg = format!(
+                            "Anti-rollback rejection: incoming revision {} is older than persisted revision {}",
+                            bundle.policy_revision, persisted
+                        );
+                        crate::logging::log_event(
+                            crate::logging::Level::Error,
+                            "policy_rollback_rejected",
+                            serde_json::json!({ "error": &msg }),
+                        );
+                        return Ok(json_response(
+                            StatusCode::BAD_REQUEST,
+                            &serde_json::json!({
+                                "error": "anti_rollback_violation",
+                                "details": msg,
+                            }),
+                        ));
+                    }
+                }
+
                 let compile_res = if let Some(ref mgr) = state.policy_storage_manager {
-                    mgr.apply_signed_bundle(&bundle, None)
+                    mgr.apply_signed_bundle(&bundle, trusted_keys.as_deref())
                 } else {
-                    crate::policy::signed::verify_signed_bundle(&bundle, None)
+                    crate::policy::signed::verify_signed_bundle(&bundle, trusted_keys.as_deref())
                 };
 
                 match compile_res {
                     Ok(compiled) => {
-                        if let Ok(mut guard) = state.policy.write() {
-                            *guard = Some(compiled);
-                        }
-                        state
-                            .policy_loaded
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        let _ = crate::policy::remote::persist_monotonic_revision(
+                            bundle.policy_revision,
+                            Some(&bundle.policy_yaml),
+                        );
+                        state.update_policy(Some(compiled));
                         crate::logging::log_event(
                             crate::logging::Level::Info,
                             "SIGNED_POLICY_APPLIED",
@@ -1594,12 +1673,7 @@ async fn handle_request(
         if let Some(ref mgr) = state.policy_storage_manager {
             match mgr.rollback() {
                 Ok(compiled) => {
-                    if let Ok(mut guard) = state.policy.write() {
-                        *guard = Some(compiled);
-                    }
-                    state
-                        .policy_loaded
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
+                    state.update_policy(Some(compiled));
                     crate::logging::log_event(
                         crate::logging::Level::Warn,
                         "POLICY_ROLLED_BACK",
@@ -1662,17 +1736,7 @@ async fn handle_request(
                         raw_hash,
                         warnings,
                     }) => {
-                        // Atomically swap the policy — zero dropped connections
-                        match state.policy.write() {
-                            Ok(mut guard) => *guard = Some(policy),
-                            Err(_) => {
-                                let err = serde_json::json!({"error": "Policy lock poisoned during reload"});
-                                return Ok(json_response(StatusCode::INTERNAL_SERVER_ERROR, &err));
-                            }
-                        }
-                        state
-                            .policy_loaded
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        state.update_policy(Some(policy));
 
                         crate::logging::log_event(
                             crate::logging::Level::Info,
@@ -2175,9 +2239,6 @@ async fn handle_request(
         }
     };
 
-    // Handle the JSON-RPC call against the dynamic session context
-    let action = handler::evaluate_jsonrpc(&state, &session, &body).await;
-
     // Extract tool name from original request for response scanning context
     let tool_name = body
         .get("params")
@@ -2188,37 +2249,116 @@ async fn handle_request(
     let mut dlp_findings_json = None;
     let mut injection_findings_json = None;
 
-    let (response, should_kill, status_code) = match action {
-        ProxyAction::Forward => {
-            match forward::forward_request(&state.http_client, &state.upstream_url, &body).await {
-                Ok(resp) => {
-                    // FR-303b: Response scanning
-                    let processed = scan_and_process_response(
-                        &state,
-                        &session,
-                        &resp,
-                        tool_name,
-                        &mut dlp_findings_json,
-                        &mut injection_findings_json,
-                    )
-                    .await;
-                    (processed, false, StatusCode::OK)
-                }
-                Err(e) => (
-                    serde_json::json!({
+    let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
+
+    // Gate 3.4 Cutover: MCP tools/call routed directly through single-forwarding MCP PEP
+    let (_action, response, should_kill, status_code) = if method == "tools/call" {
+        let params = body
+            .get("params")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let mut downstream = crate::pep::mcp::HttpMcpDownstream {
+            client: state.http_client.clone(),
+            upstream_url: state.upstream_url.clone(),
+            request_id: body.get("id").cloned().unwrap_or(serde_json::Value::Null),
+        };
+
+        match crate::pep::mcp::handle_mcp_tools_call(
+            &state,
+            &session,
+            "tools/call",
+            &params,
+            &mut downstream,
+        )
+        .await
+        {
+            Ok(output) => {
+                let resp_json = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "result": output,
+                });
+                (ProxyAction::Forward, resp_json, false, StatusCode::OK)
+            }
+            Err(e) => {
+                let err_json = match e {
+                    crate::pep::PepError::Denied { ref reason, .. } => serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": body.get("id"),
-                        "error": { "code": -32603, "message": format!("Upstream error: {}", e) }
+                        "error": { "code": -32001, "message": format!("Access Denied by Policy: {}", reason) }
                     }),
+                    crate::pep::PepError::ApprovalRequired {
+                        ref approval_id, ..
+                    } => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": { "code": -32002, "message": "Approval Required", "data": { "approval_id": approval_id } }
+                    }),
+                    crate::pep::PepError::ValidationFailed(reason) => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": { "code": -32602, "message": format!("Invalid params: {}", reason) }
+                    }),
+                    crate::pep::PepError::DownstreamError(reason) => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": { "code": -32603, "message": format!("Upstream error: {}", reason) }
+                    }),
+                    crate::pep::PepError::ResponseWithheld { ref reason } => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": { "code": -32004, "message": format!("Response withheld: {}", reason) }
+                    }),
+                    crate::pep::PepError::ScannerFailure { ref reason } => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": { "code": -32005, "message": format!("Scanner failure in fail-closed mode: {}", reason) }
+                    }),
+                };
+                (
+                    ProxyAction::Respond(err_json.clone()),
+                    err_json,
                     false,
                     StatusCode::OK,
-                ),
+                )
             }
         }
-        ProxyAction::Respond(resp) => (resp, false, StatusCode::OK),
-        ProxyAction::RespondWithStatus(status, resp) => (resp, false, status),
-        ProxyAction::KillAndRespond(resp) => (resp, true, StatusCode::OK),
-        ProxyAction::KillAndRespondWithStatus(status, resp) => (resp, true, status),
+    } else {
+        #[allow(deprecated)]
+        let act = handler::evaluate_jsonrpc(&state, &session, &body).await;
+        let (resp, kill, code) = match &act {
+            ProxyAction::Forward => {
+                match forward::forward_request(&state.http_client, &state.upstream_url, &body).await
+                {
+                    Ok(resp) => {
+                        let processed = scan_and_process_response(
+                            &state,
+                            &session,
+                            &resp,
+                            tool_name,
+                            &mut dlp_findings_json,
+                            &mut injection_findings_json,
+                        )
+                        .await;
+                        (processed, false, StatusCode::OK)
+                    }
+                    Err(e) => (
+                        serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": body.get("id"),
+                            "error": { "code": -32603, "message": format!("Upstream error: {}", e) }
+                        }),
+                        false,
+                        StatusCode::OK,
+                    ),
+                }
+            }
+            ProxyAction::Respond(resp) => (resp.clone(), false, StatusCode::OK),
+            ProxyAction::RespondWithStatus(status, resp) => (resp.clone(), false, *status),
+            ProxyAction::KillAndRespond(resp) => (resp.clone(), true, StatusCode::OK),
+            ProxyAction::KillAndRespondWithStatus(status, resp) => (resp.clone(), true, *status),
+        };
+        (act, resp, kill, code)
     };
 
     if body.get("method").and_then(|m| m.as_str()) == Some("tools/call") {
@@ -2747,11 +2887,7 @@ async fn scan_and_process_response(
             *injection_findings_json = Some(findings_json.to_string());
         }
         Ok(crate::policy::injection::ScanResult::ScannerError { error }) => {
-            let fail_closed = session
-                .policy
-                .as_ref()
-                .map(|p| p.fail_closed)
-                .unwrap_or(false);
+            let fail_closed = session.get_policy().map(|p| p.fail_closed).unwrap_or(false);
 
             if fail_closed && enforce_mode {
                 let _ = state
@@ -2815,14 +2951,23 @@ async fn scan_and_process_response(
         }
         Ok(crate::policy::injection::ScanResult::Clean) => {}
         Err(_) => {
+            let fail_closed = session.get_policy().map(|p| p.fail_closed).unwrap_or(true);
+
+            let decision = crate::proxy::scanner_failure::handle_scanner_failure(
+                crate::proxy::scanner_failure::ScannerFailureKind::Panic,
+                enforce_mode,
+                fail_closed,
+                "injection_scanner",
+            );
+
             let _ = state
                 .audit_logger
                 .write_entry(
                     session_id,
-                    "INJECTION_SCANNER_FAILURE",
+                    decision.audit_event,
                     tool_name,
                     None,
-                    Some("Injection scanner panicked — fail-open applied".to_string()),
+                    Some(decision.log_reason.clone()),
                     None,
                     session.identity_sub.clone(),
                     session.identity_email.clone(),
@@ -2833,9 +2978,22 @@ async fn scan_and_process_response(
                 .await;
             logging::log_event(
                 logging::Level::Error,
-                "INJECTION_SCANNER_FAILURE",
+                decision.audit_event,
                 serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}),
             );
+
+            if decision.should_block {
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                return crate::proxy::scanner_failure::make_scanner_blocked_error(
+                    &id,
+                    session_id,
+                    "injection_scanner",
+                    "scanner_panic",
+                );
+            }
         }
     }
 
@@ -2932,15 +3090,23 @@ async fn scan_and_process_response(
     let scan_result = match scan_result {
         Ok(result) => result,
         Err(_) => {
-            // Scanner panicked — fail-open + loud audit log
+            let fail_closed = session.get_policy().map(|p| p.fail_closed).unwrap_or(true);
+
+            let decision = crate::proxy::scanner_failure::handle_scanner_failure(
+                crate::proxy::scanner_failure::ScannerFailureKind::Panic,
+                enforce_mode,
+                fail_closed,
+                "response_scanner",
+            );
+
             let _ = state
                 .audit_logger
                 .write_entry(
                     session_id,
-                    "SCANNER_FAILURE",
+                    decision.audit_event,
                     tool_name,
                     None,
-                    Some("Response scanner panicked — fail-open applied".to_string()),
+                    Some(decision.log_reason.clone()),
                     None,
                     session.identity_sub.clone(),
                     session.identity_email.clone(),
@@ -2951,9 +3117,23 @@ async fn scan_and_process_response(
                 .await;
             logging::log_event(
                 logging::Level::Error,
-                "SCANNER_FAILURE",
+                decision.audit_event,
                 serde_json::json!({"tool": tool_name, "session": session_id, "reason": "scanner_panic"}),
             );
+
+            if decision.should_block {
+                let id = response
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                return crate::proxy::scanner_failure::make_scanner_blocked_error(
+                    &id,
+                    session_id,
+                    "response_scanner",
+                    "scanner_panic",
+                );
+            }
+
             return response.clone();
         }
     };
@@ -3151,11 +3331,7 @@ async fn scan_and_process_response(
         }
 
         ScanResult::ScannerError { error } => {
-            let fail_closed = session
-                .policy
-                .as_ref()
-                .map(|p| p.fail_closed)
-                .unwrap_or(false);
+            let fail_closed = session.get_policy().map(|p| p.fail_closed).unwrap_or(false);
 
             if fail_closed && enforce_mode {
                 let _ = state

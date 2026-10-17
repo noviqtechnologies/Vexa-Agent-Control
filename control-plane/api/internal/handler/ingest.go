@@ -1,10 +1,6 @@
 package handler
 
 import (
-	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,10 +8,12 @@ import (
 	"net/http"
 	"time"
 
+
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/license"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/store"
 )
 
 type IngestHandler struct {
@@ -211,82 +209,108 @@ type TelemetryBatchIngestPayload struct {
 }
 
 // PostTelemetryIngest handles POST /api/v2/telemetry/ingest
-// Enforces sequential SHA-256 hash chaining and records events.
+// Strictly enforces authenticated device identity, rejects device spoofing,
+// validates batch limits, and provides truthful per-event error reporting.
 func (h *IngestHandler) PostTelemetryIngest(w http.ResponseWriter, r *http.Request) {
-	var payload TelemetryBatchIngestPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, `{"error":{"code":"invalid_request","message":"Malformed JSON payload"}}`, http.StatusBadRequest)
+	ctx := r.Context()
+
+	// 1. Authenticate device principal
+	devPrincipal, ok := middleware.GetDevicePrincipal(ctx)
+	if !ok || devPrincipal == nil || devPrincipal.DeviceID == "" || devPrincipal.OrganizationID == "" {
+		http.Error(w, `{"error":{"code":"unauthorized","message":"Valid workstation device authentication required"}}`, http.StatusUnauthorized)
 		return
 	}
 
-	ctx := r.Context()
-	tenantID := middleware.ResolveTenantScope(r)
-	if tenantID == "" {
-		tenantID = middleware.TenantIDFromContext(ctx)
-	}
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+	tenantID := devPrincipal.OrganizationID
+
+	// 2. Decode payload (limit body size to 10MB)
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
+	var payload TelemetryBatchIngestPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"Malformed JSON payload or payload too large"}}`, http.StatusBadRequest)
+		return
 	}
 
+	// 3. Reject device identity spoofing
+	if payload.DeviceID != "" && payload.DeviceID != devPrincipal.DeviceID {
+		http.Error(w, `{"error":{"code":"device_mismatch","message":"Payload device_id does not match authenticated device identity"}}`, http.StatusForbidden)
+		return
+	}
+
+	// 4. Validate batch size
+	if len(payload.Events) == 0 {
+		http.Error(w, `{"error":{"code":"empty_batch","message":"Telemetry batch contains no events"}}`, http.StatusBadRequest)
+		return
+	}
+	if len(payload.Events) > 1000 {
+		http.Error(w, `{"error":{"code":"batch_too_large","message":"Telemetry batch exceeds maximum limit of 1000 events"}}`, http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	// 5. Ingest events with truthful error tracking
 	acceptedCount := 0
-	for _, ev := range payload.Events {
+	var insertErrors []string
+	for i, ev := range payload.Events {
 		eventCopy := ev
 		if !eventCopy.Valid() {
+			insertErrors = append(insertErrors, fmt.Sprintf("event[%d]: failed schema validation", i))
 			continue
 		}
-		_ = h.store.InsertEvent(ctx, tenantID, &eventCopy)
+
+		if eventCopy.AgentID == "" {
+			eventCopy.AgentID = devPrincipal.DeviceID
+		}
+
+		if err := h.store.InsertEvent(ctx, tenantID, &eventCopy); err != nil {
+			insertErrors = append(insertErrors, fmt.Sprintf("event[%d]: %v", i, err))
+			continue
+		}
 		acceptedCount++
 	}
 
+	status := http.StatusCreated
+	if len(insertErrors) > 0 && acceptedCount == 0 {
+		status = http.StatusInternalServerError
+	} else if len(insertErrors) > 0 {
+		status = http.StatusMultiStatus
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"accepted_count": acceptedCount,
-		"device_id":      payload.DeviceID,
+		"failed_count":   len(insertErrors),
+		"errors":         insertErrors,
+		"device_id":      devPrincipal.DeviceID,
 		"tenant_id":      tenantID,
 		"timestamp":      time.Now().UTC(),
 	})
 }
 
 // GetAuditCheckpoints handles GET /api/v2/audit/checkpoints
-// Exposes verifiable periodic signed ledger checkpoints (PRD §FR-10.8, §NFR-6)
+// Exposes verifiable periodic signed ledger checkpoints derived from real committed ledger records.
 func (h *IngestHandler) GetAuditCheckpoints(w http.ResponseWriter, r *http.Request) {
-	tenantID := middleware.ResolveTenantScope(r)
-	if tenantID == "" {
-		tenantID = middleware.TenantIDFromContext(r.Context())
+	ctx := r.Context()
+	var tenantID string
+
+	if p, ok := middleware.GetDevicePrincipal(ctx); ok && p != nil && p.OrganizationID != "" {
+		tenantID = p.OrganizationID
+	} else if p := middleware.RequestPrincipalFromContext(ctx); p != nil && p.OrganizationID != "" {
+		tenantID = p.OrganizationID
 	}
+
 	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
+		http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required to access audit checkpoints"}}`, http.StatusUnauthorized)
+		return
 	}
 
-	now := time.Now().UTC()
-	startSeq := int64(1)
-	endSeq := int64(1000)
-
-	// Compute deterministic checkpoint hash
-	dataToHash := fmt.Sprintf("%s:%d:%d:%d", tenantID, startSeq, endSeq, now.Unix())
-	hasher := sha256.New()
-	hasher.Write([]byte(dataToHash))
-	checkpointHash := hex.EncodeToString(hasher.Sum(nil))
-
-	// Sign checkpoint with Ed25519 ledger signing key
-	seed := sha256.Sum256([]byte("vexa-hub-audit-checkpoint-key-2026"))
-	privKey := ed25519.NewKeyFromSeed(seed[:])
-	sig := ed25519.Sign(privKey, []byte(checkpointHash))
-	sigB64 := base64.StdEncoding.EncodeToString(sig)
-
-	checkpoints := []map[string]interface{}{
-		{
-			"checkpoint_id":   fmt.Sprintf("chk-%x", hasher.Sum(nil)[:8]),
-			"tenant_id":       tenantID,
-			"workspace_id":    "default",
-			"sequence_start":  startSeq,
-			"sequence_end":    endSeq,
-			"checkpoint_hash": checkpointHash,
-			"signature":       sigB64,
-			"algorithm":       "Ed25519",
-			"created_at":      now,
-		},
+	checkpoints, err := h.store.ListAuditCheckpoints(ctx, tenantID)
+	if err != nil {
+		http.Error(w, `{"error":{"code":"internal_error","message":"Failed to retrieve audit checkpoints"}}`, http.StatusInternalServerError)
+		return
+	}
+	if checkpoints == nil {
+		checkpoints = []store.AuditCheckpoint{}
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -295,6 +319,7 @@ func (h *IngestHandler) GetAuditCheckpoints(w http.ResponseWriter, r *http.Reque
 		"total_count": len(checkpoints),
 	})
 }
+
 
 // PostRequestLogs handles POST /api/v1/ingest/request-logs from the gateway.
 func (h *IngestHandler) PostRequestLogs(w http.ResponseWriter, r *http.Request) {

@@ -1,9 +1,11 @@
 //! Policy engine — allowlist evaluation, type enforcement, parameter validators, and group policy evaluation (FR-102).
 
 use super::schema::ParamType;
+use decision_v1::{ActionRequest, Decision, EvaluationContext, Verdict};
 use jsonschema::JSONSchema;
 use regex::Regex;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 /// A compiled, ready-to-evaluate security policy.
@@ -32,6 +34,10 @@ pub struct CompiledPolicy {
     pub attribution: Option<crate::spend::types::AttributionContext>,
     /// Explicit allowed provider endpoints for egress filtering
     pub allowed_providers: Vec<String>,
+    /// Monotonic policy revision number for anti-rollback and posture validation
+    pub policy_revision: Option<u64>,
+    /// Cryptographic digest / bundle hash of active policy
+    pub policy_hash: Option<String>,
 }
 
 impl Default for CompiledPolicy {
@@ -51,6 +57,8 @@ impl Default for CompiledPolicy {
             fail_closed: true,
             attribution: None,
             allowed_providers: Vec::new(),
+            policy_revision: None,
+            policy_hash: None,
         }
     }
 }
@@ -75,6 +83,8 @@ impl std::fmt::Debug for CompiledPolicy {
             .field("llm", &self.llm)
             .field("sequence_rules", &self.sequence_rules)
             .field("schema_drift", &self.schema_drift)
+            .field("policy_revision", &self.policy_revision)
+            .field("policy_hash", &self.policy_hash)
             .finish()
     }
 }
@@ -138,8 +148,8 @@ impl std::fmt::Debug for CompiledParam {
     }
 }
 
-/// Result of policy evaluation
-#[derive(Debug, Clone)]
+/// Result of policy evaluation (PRD FR-003 versioned decision contract)
+#[derive(Debug, Clone, PartialEq)]
 pub enum EvalResult {
     Allow {
         /// FR-115: If allowed by a group policy, the ID of the matched group
@@ -155,6 +165,42 @@ pub enum EvalResult {
         /// FR-115: If denied by a group policy, the ID of the matched group
         matched_group_id: Option<String>,
     },
+    /// FR-009: Exact-action human approval required
+    RequireApproval { reason: String },
+    /// FR-005: Shadow/observe mode evaluation
+    WarnObserve {
+        reason_code: String,
+        would_deny: bool,
+    },
+    /// FR-004: Evaluator error / indeterminate condition (fail-closed)
+    ErrorIndeterminate {
+        reason_code: String,
+        message: String,
+    },
+}
+
+impl EvalResult {
+    pub fn is_allow(&self) -> bool {
+        matches!(self, Self::Allow { .. } | Self::WarnObserve { .. })
+    }
+
+    pub fn is_deny(&self) -> bool {
+        matches!(self, Self::Deny { .. } | Self::ErrorIndeterminate { .. })
+    }
+
+    pub fn is_require_approval(&self) -> bool {
+        matches!(self, Self::RequireApproval { .. })
+    }
+
+    pub fn decision_code(&self) -> &'static str {
+        match self {
+            Self::Allow { .. } => "ALLOW",
+            Self::Deny { .. } => "DENY",
+            Self::RequireApproval { .. } => "REQUIRE_APPROVAL",
+            Self::WarnObserve { .. } => "WARN/OBSERVE",
+            Self::ErrorIndeterminate { .. } => "ERROR/INDETERMINATE",
+        }
+    }
 }
 
 impl CompiledPolicy {
@@ -189,8 +235,274 @@ impl CompiledPolicy {
         self.fail_closed || enforce_mode
     }
 
-    /// Evaluate a tool call against the policy.
-    /// Returns Allow or Deny with reason.
+    /// New authoritative PDP evaluation method consuming typed ActionRequest + EvaluationContext (Gate 2.1).
+    pub fn evaluate_action(&self, action: &ActionRequest, context: &EvaluationContext) -> Decision {
+        // 1. Authoritative check for LLM provider & allowed models policy
+        if let ActionRequest::LlmRequest {
+            provider, model, ..
+        } = action
+        {
+            if let Some(ref llm_cfg) = self.llm {
+                if let Some(ref providers) = llm_cfg.providers {
+                    for prov_rule in providers {
+                        let provider_matches =
+                            prov_rule.name == "*" || prov_rule.name.eq_ignore_ascii_case(provider);
+                        if provider_matches {
+                            if let Some(ref models) = prov_rule.models {
+                                let model_matches = models.iter().any(|m| {
+                                    m == "*"
+                                        || m == model
+                                        || (m.ends_with('*')
+                                            && model.starts_with(m.trim_end_matches('*')))
+                                });
+                                if model_matches {
+                                    return if prov_rule.action == "allow" {
+                                        Decision {
+                                            verdict: Verdict::Allow,
+                                            reason_code: "llm_provider_allowed".to_string(),
+                                            reason_detail: Some(format!(
+                                                "Provider '{}' model '{}' allowed by policy",
+                                                prov_rule.name, model
+                                            )),
+                                            matched_group_id: None,
+                                            obligations: Vec::new(),
+                                        }
+                                    } else {
+                                        Decision {
+                                            verdict: Verdict::Deny,
+                                            reason_code: "llm_provider_denied".to_string(),
+                                            reason_detail: Some(format!(
+                                                "Provider '{}' model '{}' denied by policy",
+                                                prov_rule.name, model
+                                            )),
+                                            matched_group_id: None,
+                                            obligations: Vec::new(),
+                                        }
+                                    };
+                                }
+                            } else {
+                                return if prov_rule.action == "allow" {
+                                    Decision {
+                                        verdict: Verdict::Allow,
+                                        reason_code: "llm_provider_allowed".to_string(),
+                                        reason_detail: Some(format!(
+                                            "Provider '{}' allowed by policy",
+                                            prov_rule.name
+                                        )),
+                                        matched_group_id: None,
+                                        obligations: Vec::new(),
+                                    }
+                                } else {
+                                    Decision {
+                                        verdict: Verdict::Deny,
+                                        reason_code: "llm_provider_denied".to_string(),
+                                        reason_detail: Some(format!(
+                                            "Provider '{}' denied by policy",
+                                            prov_rule.name
+                                        )),
+                                        matched_group_id: None,
+                                        obligations: Vec::new(),
+                                    }
+                                };
+                            }
+                        }
+                    }
+                    return Decision {
+                        verdict: Verdict::Deny,
+                        reason_code: "model_not_allowed".to_string(),
+                        reason_detail: Some(format!(
+                            "Model '{}' not allowed by provider policy",
+                            model
+                        )),
+                        matched_group_id: None,
+                        obligations: Vec::new(),
+                    };
+                }
+                if let Some(ref allowed_models) = llm_cfg.allowed_models {
+                    let matches = allowed_models.iter().any(|m| {
+                        m == "*"
+                            || m == model
+                            || (m.ends_with('*') && model.starts_with(m.trim_end_matches('*')))
+                    });
+                    if !matches && !allowed_models.is_empty() {
+                        return Decision {
+                            verdict: Verdict::Deny,
+                            reason_code: "model_not_allowed".to_string(),
+                            reason_detail: Some(format!(
+                                "Model '{}' not permitted by allowed_models",
+                                model
+                            )),
+                            matched_group_id: None,
+                            obligations: Vec::new(),
+                        };
+                    }
+                }
+            }
+        }
+
+        let (tool_name, params) = match action {
+            ActionRequest::McpToolCall {
+                tool_name,
+                arguments,
+                ..
+            } => (tool_name.as_str(), arguments),
+            ActionRequest::PromptAccess {
+                prompt_name,
+                arguments,
+            } => {
+                static EMPTY_VAL: Value = Value::Null;
+                let args = arguments.as_ref().unwrap_or(&EMPTY_VAL);
+                (prompt_name.as_str(), args)
+            }
+            ActionRequest::ResourceAccess { resource_uri, .. } => {
+                static EMPTY_OBJ: Value = Value::Null;
+                (resource_uri.as_str(), &EMPTY_OBJ)
+            }
+            ActionRequest::LlmRequest { model, .. } => {
+                static EMPTY_OBJ: Value = Value::Null;
+                (model.as_str(), &EMPTY_OBJ)
+            }
+        };
+
+        let mut eval_res = self.evaluate(
+            tool_name,
+            params,
+            Some(&context.principal.identity_sub),
+            &context.principal.identity_groups,
+        );
+
+        if let EvalResult::Deny {
+            ref reason_code, ..
+        } = eval_res
+        {
+            if reason_code == "not_in_policy" {
+                match action {
+                    ActionRequest::LlmRequest { model, .. } => {
+                        let llm_prefixed = format!("llm:{}", model);
+                        let alt = self.evaluate(
+                            &llm_prefixed,
+                            params,
+                            Some(&context.principal.identity_sub),
+                            &context.principal.identity_groups,
+                        );
+                        if !matches!(alt, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy")
+                        {
+                            eval_res = alt;
+                        }
+                    }
+                    ActionRequest::ResourceAccess { resource_uri, .. } => {
+                        let res_prefixed = format!("resource:{}", resource_uri);
+                        let alt = self.evaluate(
+                            &res_prefixed,
+                            params,
+                            Some(&context.principal.identity_sub),
+                            &context.principal.identity_groups,
+                        );
+                        if !matches!(alt, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy")
+                        {
+                            eval_res = alt;
+                        } else {
+                            let generic = self.evaluate(
+                                "resources/read",
+                                params,
+                                Some(&context.principal.identity_sub),
+                                &context.principal.identity_groups,
+                            );
+                            if !matches!(generic, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy")
+                            {
+                                eval_res = generic;
+                            }
+                        }
+                    }
+                    ActionRequest::PromptAccess { prompt_name, .. } => {
+                        let prompt_prefixed = format!("prompt:{}", prompt_name);
+                        let alt = self.evaluate(
+                            &prompt_prefixed,
+                            params,
+                            Some(&context.principal.identity_sub),
+                            &context.principal.identity_groups,
+                        );
+                        if !matches!(alt, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy")
+                        {
+                            eval_res = alt;
+                        } else {
+                            let generic = self.evaluate(
+                                "prompts/get",
+                                params,
+                                Some(&context.principal.identity_sub),
+                                &context.principal.identity_groups,
+                            );
+                            if !matches!(generic, EvalResult::Deny { ref reason_code, .. } if reason_code == "not_in_policy")
+                            {
+                                eval_res = generic;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        match eval_res {
+            EvalResult::Allow { matched_group_id } => Decision {
+                verdict: Verdict::Allow,
+                reason_code: "policy_allow".to_string(),
+                reason_detail: None,
+                matched_group_id,
+                obligations: Vec::new(),
+            },
+            EvalResult::Deny {
+                reason_code,
+                matched_group_id,
+                param_name,
+                ..
+            } => Decision {
+                verdict: Verdict::Deny,
+                reason_code: reason_code.clone(),
+                reason_detail: param_name.map(|p| format!("parameter violation on {}", p)),
+                matched_group_id,
+                obligations: Vec::new(),
+            },
+            EvalResult::RequireApproval { reason } => {
+                let action_hash = format!(
+                    "{:x}",
+                    Sha256::digest(format!("{}:{}", tool_name, params).as_bytes())
+                );
+                Decision::require_approval(
+                    format!("appr-{}", uuid::Uuid::new_v4()),
+                    action_hash,
+                    3600,
+                    reason,
+                )
+            }
+            EvalResult::WarnObserve {
+                would_deny,
+                reason_code,
+            } => Decision {
+                verdict: if would_deny {
+                    Verdict::Deny
+                } else {
+                    Verdict::Allow
+                },
+                reason_code,
+                reason_detail: Some(format!("shadow_mode: would_deny={}", would_deny)),
+                matched_group_id: None,
+                obligations: Vec::new(),
+            },
+            EvalResult::ErrorIndeterminate {
+                reason_code,
+                message,
+            } => Decision {
+                verdict: Verdict::Indeterminate,
+                reason_code,
+                reason_detail: Some(message),
+                matched_group_id: None,
+                obligations: Vec::new(),
+            },
+        }
+    }
+
+    /// Legacy evaluate method for backward compatibility.
     pub fn evaluate(
         &self,
         tool_name: &str,
@@ -245,11 +557,16 @@ impl CompiledPolicy {
                 }
         });
 
-        // Determine which rule governs based on precedence
-        let (tool, matched_group_id) = if let Some(agent_rule) = agent_match {
-            (agent_rule, None)
-        } else if let Some((deny_rule, gid)) = group_deny_rule {
+        // Determine which rule governs based on Deny-Overrides combining algorithm (G1.1):
+        // 1. Group-level Deny beats all Allow rules (including agent-level allow).
+        // 2. Agent-level Deny beats any Allow rule.
+        // 3. If no Deny exists, Agent-level Allow takes precedence over Group Allow.
+        // 4. Group-level Allow takes precedence over Org-level Allow.
+        // 5. Org-level match applies if no more-specific scope matches.
+        let (tool, matched_group_id) = if let Some((deny_rule, gid)) = group_deny_rule {
             (deny_rule, Some(gid))
+        } else if let Some(agent_rule) = agent_match {
+            (agent_rule, None)
         } else if let Some((allow_rule, gid)) = group_allow_rule {
             (allow_rule, Some(gid))
         } else if let Some(org_rule) = org_match {
@@ -559,6 +876,12 @@ impl CompiledPolicy {
                     };
                 }
             }
+        }
+
+        if tool.action == "require_approval" || tool.action == "approval" {
+            return EvalResult::RequireApproval {
+                reason: format!("Tool '{}' requires human-in-the-loop approval", tool.name),
+            };
         }
 
         EvalResult::Allow { matched_group_id }
@@ -958,5 +1281,73 @@ metadata:
         assert!(merged_bad
             .unwrap_err()
             .contains("violates Central Tenant Boundary"));
+    }
+
+    #[test]
+    fn test_group_deny_beats_agent_allow() {
+        let yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: delete_database
+    action: allow
+    identity: "agent-123"
+groups:
+  - id: "contractors"
+    claims: ["role:contractor"]
+    tools:
+      - name: delete_database
+        action: deny
+"#;
+        let policy = CompiledPolicy::from_yaml_str(yaml).unwrap();
+        let res = policy.evaluate(
+            "delete_database",
+            &serde_json::json!({}),
+            Some("agent-123"),
+            &["role:contractor".to_string()],
+        );
+        assert!(matches!(res, EvalResult::Deny { .. }));
+        if let EvalResult::Deny {
+            matched_group_id, ..
+        } = res
+        {
+            assert_eq!(matched_group_id, Some("contractors".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_evaluate_action_typed_mcp_request() {
+        let yaml = r#"
+version: "2.1"
+default_action: deny
+tools:
+  - name: read_file
+    action: allow
+"#;
+        let policy = CompiledPolicy::from_yaml_str(yaml).unwrap();
+        let action = ActionRequest::McpToolCall {
+            tool_name: "read_file".to_string(),
+            arguments: serde_json::json!({"path": "/app/data"}),
+            server_id: None,
+        };
+        let context = EvaluationContext {
+            principal: decision_v1::AuthenticatedPrincipal {
+                identity_sub: "dev-agent".to_string(),
+                identity_email: None,
+                identity_groups: vec![],
+                client_id: None,
+            },
+            organization_id: None,
+            workspace_id: None,
+            session_id: "test-sess-1".to_string(),
+            device_id: None,
+            adapter_id: "mcp-tools-call".to_string(),
+            adapter_protocol: decision_v1::Protocol::Stdio,
+            policy_revision: None,
+            policy_hash: None,
+        };
+        let decision = policy.evaluate_action(&action, &context);
+        assert_eq!(decision.verdict, Verdict::Allow);
+        assert_eq!(decision.reason_code, "policy_allow");
     }
 }

@@ -120,8 +120,18 @@ pub fn run_promote(policy_path: &str, key_path: Option<&str>) -> i32 {
             }
         }
     } else {
+        let is_managed = std::env::var("AGENTCONTROL_MANAGED_MODE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if is_managed {
+            eprintln!(
+                "{} Policy promotion error: ephemeral keys are strictly forbidden in managed trust profile. Pass an explicit --key path.",
+                "✖".red().bold()
+            );
+            return 1;
+        }
         println!(
-            "  {} No key provided, using ephemeral key for signing (DEMO MODE).",
+            "  {} No key provided, using ephemeral key for signing (DEMO MODE). Do not use in production.",
             "⚠".yellow()
         );
         let mut csprng = rand::rngs::OsRng;

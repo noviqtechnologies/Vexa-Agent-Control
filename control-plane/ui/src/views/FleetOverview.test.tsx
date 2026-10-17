@@ -306,7 +306,7 @@ describe('FleetOverview', () => {
     expect(screen.getByText('Gemini')).toBeInTheDocument()
     expect(screen.getByText('Bedrock')).toBeInTheDocument()
     expect(screen.getByText('Local / Ollama')).toBeInTheDocument()
-    expect(screen.getByText(/Semantic Cache: Active/i)).toBeInTheDocument()
+    expect(screen.getByText(/Semantic Cache: Not measured/i)).toBeInTheDocument()
   })
 
   it('toggles composite security posture breakdown popover', async () => {
@@ -326,9 +326,9 @@ describe('FleetOverview', () => {
 
     expect(screen.getByText(/Composite Security & Governance Index Breakdown/i)).toBeInTheDocument()
     expect(screen.getByText(/Workstations & Sentry Compliance/i)).toBeInTheDocument()
-    expect(screen.getByText(/Active Guardrails & 21 DLP Wire Rules/i)).toBeInTheDocument()
+    expect(screen.getByText(/2\. Configured Policies/i)).toBeInTheDocument()
     expect(screen.getByText(/Universal AI Gateway & Key Custody/i)).toBeInTheDocument()
-    expect(screen.getByText(/Spend Boundaries & Preflight Settlement/i)).toBeInTheDocument()
+    expect(screen.getByText(/4\. Spend Boundaries/i)).toBeInTheDocument()
   })
 
   it('renders accurate zero metrics for fresh deployment with no virtual keys or spend', async () => {

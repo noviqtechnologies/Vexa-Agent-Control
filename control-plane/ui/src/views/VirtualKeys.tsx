@@ -70,6 +70,15 @@ export default function VirtualKeys() {
   const [copiedKey, setCopiedKey] = useState(false)
   const [copiedSnippet, setCopiedSnippet] = useState(false)
 
+  // Dismiss the one-time reveal and drop the secret from memory.
+  const closeSecretModal = () => {
+    setSecretModalOpen(false)
+    setRevealedSecret('')
+    setRevealedKey(null)
+    setCopiedKey(false)
+    setCopiedSnippet(false)
+  }
+
   // Rotate Modal
   const [rotateTargetKey, setRotateTargetKey] = useState<VirtualKey | null>(null)
   const [rotateGracePeriodSec, setRotateGracePeriodSec] = useState(3600)
@@ -1282,7 +1291,7 @@ async function main() {
                 </svg>
                 Virtual Key Secret Generated
               </h2>
-              <button className="vk-modal-close-btn" onClick={() => setSecretModalOpen(false)}>✕</button>
+              <button className="vk-modal-close-btn" onClick={closeSecretModal}>✕</button>
             </div>
 
             <div className="vk-modal-body">
@@ -1364,7 +1373,7 @@ async function main() {
             <div className="vk-modal-footer">
               <button
                 className="btn-primary-gradient"
-                onClick={() => setSecretModalOpen(false)}
+                onClick={closeSecretModal}
               >
                 I Have Saved My Secret Key
               </button>

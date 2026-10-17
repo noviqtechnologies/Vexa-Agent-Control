@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use agentcontrol::policy::engine::{CompiledPolicy, CompiledTool};
 use agentcontrol::policy::schema::{
     CycleAction, CycleDetectionConfig, FirewallConfig, SpendCapsConfig,
@@ -47,6 +49,10 @@ async fn test_us100_loop_prevention_pivot_error() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -123,6 +129,10 @@ async fn test_us100_loop_prevention_different_params_not_blocked() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -191,6 +201,10 @@ async fn test_us101_spend_cap_enforcement_licensed_vs_unlicensed() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let state = create_mock_proxy_state(Some(policy.clone()));
@@ -258,6 +272,10 @@ async fn test_us103_credential_scope_strict_mode() {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     };
 
     let state = ProxyState::mock_test_with_strict_scope(true);

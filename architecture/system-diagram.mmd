@@ -1,0 +1,105 @@
+graph TB
+    %% =========================================================================
+    %% VEXA AGENT CONTROL — SELF-HOSTED SYSTEM ARCHITECTURE DIAGRAM
+    %% Baseline: Self-Hosted Sovereign Deployment (Local + Team Profiles)
+    %% Conforms to: vexa-agent-control-requirements.md (24 P0 FRs, 14 P0 NFRs)
+    %% =========================================================================
+
+    subgraph Workstation["Developer Workstation (Self-Hosted Local Profile — P0)"]
+        direction TB
+
+        subgraph DevAgents["AI Coding Assistants & Clients"]
+            IDE_WRAP["Wrapped Assistant (stdio / HTTP proxy)<br/>Cursor / Claude Code / Claude Desktop / Antigravity"]
+            IDE_DIRECT["Unwrapped / Direct Tool Calls<br/>(Tracked as UNCOVERED via Capability Manifest)"]
+        end
+
+        subgraph LocalGateway["Vexa Agent Control Gateway Engine (Rust 1.80+)"]
+            IPC_EP["OS-Native IPC Endpoint<br/>Windows Named Pipe / POSIX UDS 0600"]
+            HTTP_EP["Loopback HTTP/WS Listener<br/>127.0.0.1:18080 (Loopback & Anti-Rebinding)"]
+            
+            subgraph GatewayPipeline["Execution Pipeline (ArcSwap Snapshot)"]
+                AUTHN["Local Identity & Session Validator<br/>OS Token / W3C traceparent (FR-012, FR-013)"]
+                PRE_AUTH["Pre-Execution Policy Evaluator<br/>Deterministic Default-Deny (FR-002, FR-003)"]
+                SCHEMA_PIN["Tool Identity & Schema Drift Guard<br/>SHA-256 Canonical Digest Pinning (FR-007)"]
+                ARG_CONSTR["Param & Path Traversal Guard<br/>Canonical Path / Egress Check (FR-008)"]
+                AUTONOMY["Bounded Autonomy & Loop Guard<br/>Rate / Duration / Call Budgets (FR-034)"]
+                DLP_SCAN["Inline DLP & Secret Redactor<br/>20+ Patterns / Shannon / Luhn (FR-010)"]
+                HITL_CAS["Exact-Action HITL Engine<br/>Atomic CAS Approval State Machine (FR-009)"]
+            end
+
+            subgraph LocalDataPlane["Local Durable Persistence & Outbox"]
+                LOCAL_STORE["Local Credential Vault<br/>DPAPI / Keychain / 0600 File (FR-011)"]
+                LOCAL_AUDIT[("audit.jsonl<br/>HMAC-SHA256 Chain + fsync (FR-014, NFR-007)")]
+                LOCAL_DB[("Local State (SQLite)<br/>traces.db & spend_ledger (FR-013, FR-034)")]
+                OUTBOX_WORKER["Decoupled Durable Outbox<br/>Async SIEM / Telemetry Dispatch (FR-015)"]
+            end
+
+            JOURNAL["Configuration Journal & Rollback<br/>.baseline.bak & Manifest (FR-019, NFR-010)"]
+        end
+
+        CLI["agentcontrol CLI<br/>Status / Connect / Verify / Kill (FR-016, FR-019)"]
+    end
+
+    subgraph ControlPlane["Customer-Operated Control Plane (Team / Enterprise Profile — P1 / Shared Core)"]
+        direction TB
+
+        subgraph HubAPI["Vexa Control Hub API (Go 1.22+)"]
+            HUB_REST["REST Gateway API<br/>/bootstrap, /policies, /telemetry, /gateways"]
+            SSE_BROKER["SSE Policy & Event Broker<br/>Real-Time Delta Stream (pg_notify)"]
+            VIRTUAL_KEY_SVC["Scoped Virtual Key Broker<br/>Revocable Tokens & Provider Key Vault (FR-011)"]
+            POSTURE_SVC["Fleet Readiness & Health Engine<br/>Postures: ENFORCED, OBSERVED, UNHEALTHY (FR-021)"]
+            KILL_SWITCH["Emergency Stop & Revocation<br/>Targeted Agent/Session/Tool Kill (FR-016)"]
+        end
+
+        HUB_UI["Vexa Control Hub Web Console<br/>React 18 + TS (RBAC Role Separation - FR-012)"]
+        
+        subgraph CentralStore["Customer-Managed Central Persistence"]
+            DB_PG[("PostgreSQL 15+<br/>Policies, Keys (AES-256-GCM), Dossiers, Audit")]
+            VALKEY_STATE[("Valkey / Redis (Optional)<br/>Atomic Preflight Spend & Token Buckets")]
+        end
+    end
+
+    subgraph ExternalCustomerInfra["Customer-Controlled Enterprise Services"]
+        IDP["Corporate IdP (OIDC / OAuth 2.0 PKCE)<br/>Google Workspace / Entra ID / Okta"]
+        SIEM["Enterprise SIEM / WORM Storage<br/>Splunk HEC / Datadog / OpenSearch (FR-015, FR-028)"]
+        MCP_SERVERS["External / Local MCP Servers<br/>Filesystem / Git / Postgres / Custom Tools"]
+        EXT_REG["Enterprise Artifact Registry<br/>Offline Signed Bundles & SBOMs (NFR-013, NFR-027)"]
+    end
+
+    subgraph UpstreamLLMs["Upstream Model Endpoints (Connected Modes)"]
+        OAI["OpenAI API"]
+        ANTHROPIC["Anthropic Claude API"]
+        GEMINI["Google Gemini API"]
+        CUSTOM_LLM["Self-Hosted / Private VPC LLMs<br/>vLLM / Ollama / TGI (Air-Gapped Compatible)"]
+    end
+
+    %% Workstation Interconnections
+    IDE_WRAP -->|stdio JSON-RPC / HTTP:18080| LocalGateway
+    IDE_DIRECT -.->|Unmanaged Direct Path| MCP_SERVERS
+    CLI -->|Local IPC / Named Pipe / UDS| IPC_EP
+    IPC_EP --> GatewayPipeline
+    HTTP_EP --> GatewayPipeline
+    GatewayPipeline --> AUTHN --> PRE_AUTH --> SCHEMA_PIN --> ARG_CONSTR --> AUTONOMY --> DLP_SCAN --> HITL_CAS
+    HITL_CAS -->|Durable fsync before dispatch| LOCAL_AUDIT
+    HITL_CAS -->|Record session trace & spend| LOCAL_DB
+    LOCAL_AUDIT --> OUTBOX_WORKER
+
+    %% Outbound Tool & Model Dispatch
+    GatewayPipeline -->|Governed stdio / Streamable HTTP| MCP_SERVERS
+    GatewayPipeline -->|Key-Injected / Brokered Request| UpstreamLLMs
+
+    %% Control Plane & Central Storage Links
+    OUTBOX_WORKER -->|Batch Telemetry / Outbox| HUB_REST
+    LocalGateway -.->|SSE Delta Policy Stream| SSE_BROKER
+    LocalGateway -->|Initial State Bootstrap| HUB_REST
+    LocalGateway -->|Direct Local SIEM Export| SIEM
+
+    HUB_REST --> DB_PG
+    SSE_BROKER --> DB_PG
+    VIRTUAL_KEY_SVC --> DB_PG
+    VIRTUAL_KEY_SVC --> VALKEY_STATE
+    HUB_UI --> HUB_REST
+    HUB_REST --> IDP
+    EXT_REG -->|Signed Offline Bundles| LocalGateway
+    EXT_REG -->|Signed Offline Bundles| HubAPI
+    OUTBOX_WORKER -.->|Central Audit Export| SIEM

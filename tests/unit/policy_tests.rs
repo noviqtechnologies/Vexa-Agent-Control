@@ -33,6 +33,10 @@ fn policy(tools: Vec<CompiledTool>) -> CompiledPolicy {
         fail_closed: false,
         attribution: None,
         allowed_providers: vec![],
+
+        policy_revision: None,
+
+        policy_hash: None,
     }
 }
 

@@ -90,25 +90,9 @@ export function AuthProvider({ children }: Props) {
           // Ignore fetch error for providers
         }
       } else {
-        // Fallback check to fleet overview if /auth/me is not ready
-        const fleetRes = await fetch('/api/v1/fleet/overview')
-        if (fleetRes.ok) {
-          setAuthenticated(true)
-          setUser({
-            id: 'user',
-            organization_id: '00000000-0000-0000-0000-000000000001',
-            tenant_id: '00000000-0000-0000-0000-000000000001',
-            organization_name: 'Primary Organization',
-            license_tier: 'developer',
-            max_devices: 1,
-            enrolled_devices: 0,
-            is_admin: true,
-            is_saas_operator: false,
-          })
-        } else {
-          setAuthenticated(false)
-          setUser(null)
-        }
+        // Identity endpoint failed: never fabricate a principal or role.
+        setAuthenticated(false)
+        setUser(null)
       }
     } catch {
       setAuthenticated(false)

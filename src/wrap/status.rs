@@ -1,6 +1,15 @@
-//! `agentwall status` — enumerate all 8 IDE targets, showing path / exists / wrap status.
+//! `agentcontrol status` — enumerate all IDE targets, showing path / exists / wrap status
+//! and per-surface enforcement posture with evidence (PRD Enforcement Assurance).
 //!
 //! This is read-only inspection — it never modifies any config.
+//!
+//! Posture semantics (PRD Section 5):
+//! - ENFORCED_ON_ROUTED_TRAFFIC: daemon healthy + policy loaded + mode=Enforce + trust established
+//! - OBSERVED: daemon healthy + policy loaded + mode in {Observe,Shadow}
+//! - CONFIGURED: client points to Vexa; proves configuration only
+//! - UNCOVERED: no enforcement point in path
+//! - DEGRADED: missing dependency, stale telemetry, or failed policy check
+//! - UNKNOWN_UNHEALTHY: cannot determine state
 
 use colored::*;
 use std::path::{Path, PathBuf};
@@ -19,15 +28,70 @@ pub enum TargetState {
     BypassPossible,
 }
 
-/// Canonical security posture for a governed agent surface (PRD FR-P0-1).
+/// Management mode reflects how policy is controlled (PRD Section 4).
+/// Three distinct modes — never one ambiguous "protected" state.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum ManagementMode {
+    /// Local/Developer: local YAML, user-controlled, no central authority
+    #[serde(rename = "LOCAL_DEVELOPER")]
+    LocalDeveloper,
+    /// Team Managed: central policy with signed bundles via verified keyring
+    #[serde(rename = "TEAM_MANAGED")]
+    TeamManaged,
+    /// Mandatory Boundary: external controls (MDM/EDR/network egress) verified active
+    #[serde(rename = "MANDATORY_BOUNDARY")]
+    MandatoryBoundary,
+    /// Unknown: cannot determine management mode
+    #[serde(rename = "UNKNOWN")]
+    Unknown,
+}
+
+impl ManagementMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::LocalDeveloper => "LOCAL_DEVELOPER",
+            Self::TeamManaged => "TEAM_MANAGED",
+            Self::MandatoryBoundary => "MANDATORY_BOUNDARY",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+/// Policy freshness state — separate from posture.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum PolicyFreshnessState {
+    /// Policy age within configured window
+    #[serde(rename = "FRESH")]
+    Fresh,
+    /// No max_policy_age configured; freshness unverified
+    #[serde(rename = "UNCHECKED")]
+    Unchecked,
+    /// Policy age exceeds configured max_policy_age_secs
+    #[serde(rename = "EXPIRED")]
+    Expired,
+    /// No policy loaded
+    #[serde(rename = "MISSING")]
+    Missing,
+}
+
+/// Canonical security posture for a governed agent surface (PRD Section 5).
+/// All surfaces use exactly these states. No aliases.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum EnforcementPosture {
-    #[serde(rename = "ENFORCED")]
+    /// Policy in enforce mode evaluated requests routed through Vexa.
+    /// Does NOT imply all traffic reaches Vexa.
+    #[serde(rename = "ENFORCED_ON_ROUTED_TRAFFIC")]
     Enforced,
+    /// Policy evaluated in shadow/observe mode; actions allowed through.
     #[serde(rename = "OBSERVED")]
     Observed,
+    /// No Vexa enforcement point in path, or surface explicitly outside scope.
     #[serde(rename = "UNCOVERED")]
     Uncovered,
+    /// Degraded: missing dependency, stale telemetry, failed policy check, invalid signature.
+    #[serde(rename = "DEGRADED")]
+    Degraded,
+    /// Cannot determine state. Never converted to enforced.
     #[serde(rename = "UNKNOWN_UNHEALTHY")]
     UnknownUnhealthy,
 }
@@ -35,11 +99,18 @@ pub enum EnforcementPosture {
 impl EnforcementPosture {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Enforced => "ENFORCED",
+            Self::Enforced => "ENFORCED_ON_ROUTED_TRAFFIC",
             Self::Observed => "OBSERVED",
             Self::Uncovered => "UNCOVERED",
+            Self::Degraded => "DEGRADED",
             Self::UnknownUnhealthy => "UNKNOWN_UNHEALTHY",
         }
+    }
+
+    /// Returns true only for traffic that is actively governed by a running enforcement point.
+    /// Does NOT return true for observed-only, uncovered, degraded, or unknown states.
+    pub fn is_enforcing(&self) -> bool {
+        matches!(self, Self::Enforced)
     }
 }
 
@@ -322,15 +393,21 @@ pub fn is_gateway_running() -> bool {
     }
 }
 
-/// Runtime-effective policy summary report (FR-P0-3).
+/// Runtime-effective policy summary report (PRD FR-002).
+/// Status field uses accurate posture codes — never "HEALTHY (ACTIVE)" without evidence.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EffectivePolicyReport {
     pub path: Option<String>,
     pub sha256_hash: String,
     pub rule_count: usize,
     pub default_action: String,
+    /// "enforce" or "shadow" — reflects actual execution mode
     pub execution_mode: String,
+    /// Accurate posture code: ENFORCED_ON_ROUTED_TRAFFIC | OBSERVED | DEGRADED | NO_POLICY
+    /// Never "HEALTHY (ACTIVE)" — that label conceals mode and trust state.
     pub status: String,
+    /// Human-readable reason for the status
+    pub reason: String,
 }
 
 pub fn get_effective_policy_report() -> Option<EffectivePolicyReport> {
@@ -361,13 +438,31 @@ pub fn get_effective_policy_report() -> Option<EffectivePolicyReport> {
             "sha256:default_allowlist".to_string()
         };
 
+        // Status reflects actual mode — shadow mode = OBSERVED, not ENFORCED
+        let (status, reason) = if shadow_mode {
+            (
+                "OBSERVED".to_string(),
+                "Policy loaded but execution_mode=shadow; requests are allowed through. \
+                 Set AGENTCONTROL_SHADOW_MODE=0 to enforce."
+                    .to_string(),
+            )
+        } else {
+            (
+                "ENFORCED_ON_ROUTED_TRAFFIC".to_string(),
+                "Policy loaded and enforcement mode active on routed traffic. \
+                 Does not imply all traffic reaches this enforcement point."
+                    .to_string(),
+            )
+        };
+
         Some(EffectivePolicyReport {
             path: path_str,
             sha256_hash: hash,
             rule_count: compiled.tools.len(),
             default_action: "deny".to_string(),
             execution_mode,
-            status: "HEALTHY (ACTIVE)".to_string(),
+            status,
+            reason,
         })
     } else {
         Some(EffectivePolicyReport {
@@ -376,11 +471,13 @@ pub fn get_effective_policy_report() -> Option<EffectivePolicyReport> {
             rule_count: 0,
             default_action: "deny".to_string(),
             execution_mode,
-            status: "NO_POLICY_CONFIGURED (FAIL_CLOSED)".to_string(),
+            status: "NO_POLICY".to_string(),
+            reason: "No policy configured; proxy is in fail-closed mode (all unmatched requests denied).".to_string(),
         })
     }
 }
 
+/// Per-target surface evidence record (PRD FR-002).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TargetStatusDetails {
     pub target: String,
@@ -389,10 +486,14 @@ pub struct TargetStatusDetails {
     pub states: Vec<TargetState>,
     #[serde(default = "default_posture")]
     pub posture: EnforcementPosture,
+    /// Reason code explaining the posture
+    pub posture_reason: String,
     #[serde(default = "default_posture")]
     pub mcp_posture: EnforcementPosture,
+    pub mcp_posture_reason: String,
     #[serde(default = "default_posture")]
     pub llm_posture: EnforcementPosture,
+    pub llm_posture_reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_enforcing_component: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -407,10 +508,32 @@ pub struct TargetStatusDetails {
     pub disclosures: Vec<String>,
 }
 
+/// Full status report — canonical source of truth for CLI and fleet API (PRD FR-002).
+/// All fields are evidence-derived. No field implies more than its evidence proves.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StatusReport {
     pub version: String,
     pub timestamp: String,
+    /// How policy is controlled for this endpoint
+    pub management_mode: ManagementMode,
+    /// Trust profile: Development (local YAML) or Managed (signed bundles)
+    pub policy_trust_profile: String,
+    /// Active policy revision, if known
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_revision: Option<u64>,
+    /// Active policy content hash, if known
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_content_hash: Option<String>,
+    /// Policy issue time (RFC3339)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_issued_at: Option<String>,
+    /// Policy expiry time (RFC3339); None means no expiry configured
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_expires_at: Option<String>,
+    /// Policy freshness state
+    pub policy_freshness_state: PolicyFreshnessState,
+    /// Surfaces known to be outside Vexa's enforcement path
+    pub known_uncovered_surfaces: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effective_policy: Option<EffectivePolicyReport>,
     pub targets: Vec<TargetStatusDetails>,
@@ -425,6 +548,48 @@ pub struct StatusEndpoints {
     pub device_enrolled: bool,
 }
 
+/// Derive management mode from environment and device enrollment state.
+/// This is read-only and never changes enforcement behavior.
+pub fn derive_management_mode() -> ManagementMode {
+    let trust_profile = crate::policy::trust::PolicyTrustProfile::from_env();
+    let enrolled = crate::identity::device::is_device_enrolled();
+
+    match trust_profile {
+        crate::policy::trust::PolicyTrustProfile::Managed {
+            ref trusted_keyring,
+            ..
+        } if !trusted_keyring.keys.is_empty() && enrolled => ManagementMode::TeamManaged,
+        crate::policy::trust::PolicyTrustProfile::Managed {
+            ref trusted_keyring,
+            ..
+        } if !trusted_keyring.keys.is_empty() => {
+            // Has a signing keyring but not enrolled with hub
+            ManagementMode::TeamManaged
+        }
+        _ => ManagementMode::LocalDeveloper,
+    }
+}
+
+/// Derive trust profile label for status output.
+pub fn derive_trust_profile_label() -> String {
+    let trust_profile = crate::policy::trust::PolicyTrustProfile::from_env();
+    match trust_profile {
+        crate::policy::trust::PolicyTrustProfile::Development => {
+            "Development (local YAML accepted unsigned)".to_string()
+        }
+        crate::policy::trust::PolicyTrustProfile::Managed {
+            ref trusted_keyring,
+            ..
+        } => {
+            if trusted_keyring.keys.is_empty() {
+                "Managed (WARNING: empty keyring — no bundles will be accepted)".to_string()
+            } else {
+                format!("Managed ({} trusted key(s))", trusted_keyring.keys.len())
+            }
+        }
+    }
+}
+
 /// Print the status table or structured JSON for verified targets.
 pub fn run_status(json: bool) {
     print_all_targets(json);
@@ -434,7 +599,7 @@ pub fn run_status(json: bool) {
 pub fn print_all_targets(json: bool) {
     let summaries = get_all_integrations_summary();
     let hub_url = crate::identity::device::load_hub_url()
-        .unwrap_or_else(|| "https://app.vexasec.io".to_string());
+        .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
     let enrolled = crate::identity::device::is_device_enrolled();
     let gateway_active = is_gateway_running();
     let effective_policy = get_effective_policy_report();
@@ -445,56 +610,125 @@ pub fn print_all_targets(json: bool) {
             let is_proxied = s.states.contains(&TargetState::Configured);
             let mut known_bypasses = Vec::new();
 
-            let (llm_routing, llm_posture, llm_enforcing_component) = if !s.exists {
-                ("NOT_DETECTED".to_string(), EnforcementPosture::Uncovered, None)
+            // PRD Phase 0: LLM posture requires daemon up AND policy mode check.
+            // Proxy config + open port alone is NOT sufficient for ENFORCED_ON_ROUTED_TRAFFIC.
+            let is_shadow_mode = std::env::var("AGENTCONTROL_SHADOW_MODE")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            let policy_available = effective_policy.is_some();
+
+            let (llm_routing, llm_posture, llm_enforcing_component, llm_posture_reason) = if !s.exists {
+                ("NOT_DETECTED".to_string(), EnforcementPosture::Uncovered, None,
+                 "Target not detected on this system".to_string())
             } else if s.name == "Claude Desktop" {
                 known_bypasses.push("Direct HTTPS completion route to Anthropic Cloud bypasses local proxy (Out-of-band)".to_string());
-                ("DIRECT_CLOUD (Anthropic)".to_string(), EnforcementPosture::Uncovered, None)
+                ("DIRECT_CLOUD (Anthropic)".to_string(), EnforcementPosture::Uncovered, None,
+                 "Claude Desktop routes LLM completions directly to Anthropic Cloud; this surface is UNCOVERED by local proxy".to_string())
             } else if is_proxied {
-                if gateway_active {
-                    ("PROXIED (18080)".to_string(), EnforcementPosture::Enforced, Some("agentcontrol http-proxy (18080)".to_string()))
+                if !gateway_active {
+                    ("PROXIED (18080 - DAEMON DOWN)".to_string(), EnforcementPosture::UnknownUnhealthy,
+                     Some("agentcontrol http-proxy (offline)".to_string()),
+                     "Client configured to use proxy but daemon is not responding on 18080".to_string())
+                } else if !policy_available {
+                    ("PROXIED (18080 - NO POLICY)".to_string(), EnforcementPosture::Degraded,
+                     Some("agentcontrol http-proxy (18080)".to_string()),
+                     "Daemon healthy but no policy loaded; running fail-closed without defined rules".to_string())
+                } else if is_shadow_mode {
+                    // Shadow mode = OBSERVED, never ENFORCED
+                    ("PROXIED (18080 - SHADOW)".to_string(), EnforcementPosture::Observed,
+                     Some("agentcontrol http-proxy (18080, shadow)".to_string()),
+                     "Daemon healthy and policy loaded but AGENTCONTROL_SHADOW_MODE=1; actions allowed through. Set shadow_mode=0 to enforce.".to_string())
                 } else {
-                    ("PROXIED (18080 - DAEMON DOWN)".to_string(), EnforcementPosture::UnknownUnhealthy, Some("agentcontrol http-proxy (offline)".to_string()))
+                    // All three checks pass: daemon up + policy loaded + enforce mode
+                    ("PROXIED (18080)".to_string(), EnforcementPosture::Enforced,
+                     Some("agentcontrol http-proxy (18080)".to_string()),
+                     format!("Daemon healthy, policy loaded (mode=enforce). Policy hash: {}. Direct provider egress not verified as restricted.",
+                         effective_policy.as_ref().map(|p| p.sha256_hash.as_str()).unwrap_or("unknown")))
                 }
             } else {
-                ("UNMANAGED".to_string(), EnforcementPosture::Uncovered, None)
+                ("UNMANAGED".to_string(), EnforcementPosture::Uncovered, None,
+                 "Target configuration exists but not pointed to Vexa proxy".to_string())
             };
 
-            let (mcp_gov, mcp_posture, mcp_enforcing_component) = if !s.exists {
-                ("NOT_INSTALLED".to_string(), EnforcementPosture::Uncovered, None)
+            let (mcp_gov, mcp_posture, mcp_enforcing_component, mcp_posture_reason) = if !s.exists {
+                ("NOT_INSTALLED".to_string(), EnforcementPosture::Uncovered, None,
+                 "Target not detected".to_string())
             } else if s.total_servers == 0 {
-                ("NO_SERVERS".to_string(), EnforcementPosture::Uncovered, None)
+                ("NO_SERVERS".to_string(), EnforcementPosture::Uncovered, None,
+                 "No MCP servers configured; no MCP coverage required".to_string())
+            } else if !gateway_active && s.wrapped_servers > 0 {
+                (format!("WRAPPED ({}/{} - DAEMON DOWN)", s.wrapped_servers, s.total_servers),
+                 EnforcementPosture::UnknownUnhealthy,
+                 Some("agentcontrol stdio-proxy (offline)".to_string()),
+                 "MCP servers configured as wrapped but daemon is not responding".to_string())
             } else if s.wrapped_servers == s.total_servers {
-                (format!("WRAPPED ({}/{})", s.wrapped_servers, s.total_servers), EnforcementPosture::Enforced, Some("agentcontrol stdio-proxy".to_string()))
+                if is_shadow_mode {
+                    (format!("WRAPPED ({}/{} - SHADOW)", s.wrapped_servers, s.total_servers),
+                     EnforcementPosture::Observed,
+                     Some("agentcontrol stdio-proxy (shadow)".to_string()),
+                     format!("All {}/{} MCP servers wrapped but shadow mode active; calls observed not blocked",
+                         s.wrapped_servers, s.total_servers))
+                } else {
+                    (format!("WRAPPED ({}/{})", s.wrapped_servers, s.total_servers),
+                     EnforcementPosture::Enforced,
+                     Some("agentcontrol stdio-proxy".to_string()),
+                     format!("All {}/{} MCP servers wrapped and daemon healthy in enforce mode",
+                         s.wrapped_servers, s.total_servers))
+                }
             } else if s.wrapped_servers > 0 {
-                known_bypasses.push(format!("Partial MCP coverage ({}/{} wrapped); unwrapped tools run ungoverned", s.wrapped_servers, s.total_servers));
-                (format!("PARTIAL ({}/{})", s.wrapped_servers, s.total_servers), EnforcementPosture::Observed, Some("agentcontrol stdio-proxy (partial)".to_string()))
+                known_bypasses.push(format!("Partial MCP coverage ({}/{} wrapped); unwrapped servers run ungoverned",
+                    s.wrapped_servers, s.total_servers));
+                (format!("PARTIAL ({}/{})", s.wrapped_servers, s.total_servers),
+                 // Partial coverage = OBSERVED (not ENFORCED) — some tools ungoverned
+                 EnforcementPosture::Observed,
+                 Some("agentcontrol stdio-proxy (partial)".to_string()),
+                 format!("{}/{} MCP servers wrapped; remaining {} servers route ungoverned",
+                     s.wrapped_servers, s.total_servers, s.total_servers - s.wrapped_servers))
             } else {
                 known_bypasses.push(format!("All {} MCP server entries are unwrapped and ungoverned", s.total_servers));
-                (format!("UNWRAPPED (0/{})", s.total_servers), EnforcementPosture::Uncovered, None)
+                (format!("UNWRAPPED (0/{})", s.total_servers), EnforcementPosture::Uncovered, None,
+                 format!("All {} MCP servers are configured but not wrapped through Vexa stdio-proxy", s.total_servers))
             };
 
             if s.name == "Codex" && s.exists {
                 known_bypasses.push("Native shell execution (bash/git) is UNGOVERNED by local proxy".to_string());
             }
 
-            // Target overall posture reflects verifiable prevention capability
-            let posture = if !s.exists {
-                EnforcementPosture::Uncovered
+            // PRD Phase 0: Overall posture is conservative — partial coverage is NOT fully enforced.
+            // A client with any uncovered surface shows partial/observed, not globally enforced.
+            // Per PRD: "no global green badge based on any one surface enforced"
+            let (posture, posture_reason) = if !s.exists {
+                (EnforcementPosture::Uncovered, "Target not detected".to_string())
             } else if s.name == "Claude Desktop" {
+                // Claude Desktop: LLM is always UNCOVERED (direct Anthropic route).
+                // Report MCP posture as-is; do not elevate to globally enforced.
                 if mcp_posture == EnforcementPosture::Enforced {
-                    EnforcementPosture::Enforced
+                    (EnforcementPosture::Observed,
+                     "MCP enforced via stdio-proxy but LLM completions route directly to Anthropic Cloud (UNCOVERED). Partial coverage.".to_string())
                 } else {
-                    EnforcementPosture::Uncovered
+                    (EnforcementPosture::Uncovered,
+                     "LLM routes directly to Anthropic Cloud (UNCOVERED); MCP not fully wrapped".to_string())
                 }
-            } else if mcp_posture == EnforcementPosture::UnknownUnhealthy || llm_posture == EnforcementPosture::UnknownUnhealthy {
-                EnforcementPosture::UnknownUnhealthy
-            } else if mcp_posture == EnforcementPosture::Enforced || llm_posture == EnforcementPosture::Enforced {
-                EnforcementPosture::Enforced
-            } else if mcp_posture == EnforcementPosture::Observed || llm_posture == EnforcementPosture::Observed {
-                EnforcementPosture::Observed
+            } else if llm_posture == EnforcementPosture::UnknownUnhealthy || mcp_posture == EnforcementPosture::UnknownUnhealthy {
+                (EnforcementPosture::UnknownUnhealthy,
+                 "Daemon not responding; enforcement state cannot be determined".to_string())
+            } else if llm_posture == EnforcementPosture::Degraded || mcp_posture == EnforcementPosture::Degraded {
+                (EnforcementPosture::Degraded,
+                 "One or more surfaces degraded; see per-surface posture for details".to_string())
+            } else if llm_posture == EnforcementPosture::Enforced && (s.total_servers == 0 || mcp_posture == EnforcementPosture::Enforced) {
+                // Fully enforced only when LLM is enforced AND either no MCP servers or all MCP wrapped
+                (EnforcementPosture::Enforced,
+                 "LLM and MCP surfaces both enforced on routed traffic. Direct egress not verified as restricted.".to_string())
+            } else if llm_posture == EnforcementPosture::Observed || mcp_posture == EnforcementPosture::Observed {
+                (EnforcementPosture::Observed,
+                 "One or more surfaces in observe/shadow mode".to_string())
+            } else if llm_posture == EnforcementPosture::Enforced && mcp_posture != EnforcementPosture::Enforced && s.total_servers > 0 {
+                // LLM enforced but MCP partial/uncovered = overall OBSERVED (partial)
+                (EnforcementPosture::Observed,
+                 format!("LLM enforced but MCP coverage partial ({}/{} servers wrapped)",
+                     s.wrapped_servers, s.total_servers))
             } else {
-                EnforcementPosture::Uncovered
+                (EnforcementPosture::Uncovered, "Target not governed".to_string())
             };
 
             TargetStatusDetails {
@@ -503,8 +737,11 @@ pub fn print_all_targets(json: bool) {
                 exists: s.exists,
                 states: s.states.clone(),
                 posture,
+                posture_reason,
                 mcp_posture,
+                mcp_posture_reason,
                 llm_posture,
+                llm_posture_reason,
                 mcp_enforcing_component,
                 llm_enforcing_component,
                 known_bypasses,
@@ -518,10 +755,43 @@ pub fn print_all_targets(json: bool) {
         })
         .collect();
 
+    let management_mode = derive_management_mode();
+    let trust_profile_label = derive_trust_profile_label();
+
+    // Collect known uncovered surfaces across all targets
+    let known_uncovered_surfaces: Vec<String> = {
+        let mut uncovered = vec![
+            "Native shell/process execution (bash, git, etc.): always UNGOVERNED by local proxy"
+                .to_string(),
+            "Direct provider API access: UNGOVERNED unless network egress is restricted externally"
+                .to_string(),
+        ];
+        for t in &targets_details {
+            if t.llm_posture == EnforcementPosture::Uncovered && t.exists {
+                uncovered.push(format!("{}: LLM route UNCOVERED", t.target));
+            }
+            if t.mcp_posture == EnforcementPosture::Uncovered && t.exists && t.total_servers > 0 {
+                uncovered.push(format!(
+                    "{}: MCP route UNCOVERED ({}/{} servers wrapped)",
+                    t.target, t.wrapped_servers, t.total_servers
+                ));
+            }
+        }
+        uncovered
+    };
+
     if json {
         let report = StatusReport {
             version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
+            management_mode,
+            policy_trust_profile: trust_profile_label,
+            policy_revision: None,   // Phase 2: populate from signed bundle metadata
+            policy_content_hash: effective_policy.as_ref().map(|p| p.sha256_hash.clone()),
+            policy_issued_at: None,  // Phase 2: populate from signed bundle
+            policy_expires_at: None, // Phase 2: populate from signed bundle
+            policy_freshness_state: PolicyFreshnessState::Unchecked,
+            known_uncovered_surfaces,
             effective_policy,
             targets: targets_details,
             endpoints: StatusEndpoints {
@@ -530,9 +800,10 @@ pub fn print_all_targets(json: bool) {
                 device_enrolled: enrolled,
             },
             global_disclosures: vec![
-                "Native shell execution (bash/git) is UNGOVERNED by local proxy across all targets.".to_string(),
-                "Workstation developers can configure personal API keys in environment variables (Bypass Possible).".to_string(),
-                "Binary 'COMPLIANT' state is retired; independent capability postures (ENFORCED/OBSERVED/UNCOVERED) reflect actual security boundary.".to_string(),
+                "LIMITATION: Vexa governs traffic explicitly routed through it. A workstation owner can bypass a local proxy without OS-level or network enforcement.".to_string(),
+                "LIMITATION: Native shell execution (bash/git) is UNGOVERNED by local proxy across all targets.".to_string(),
+                "LIMITATION: Workstation developers can configure personal API keys outside Vexa's control.".to_string(),
+                "NOTE: ENFORCED_ON_ROUTED_TRAFFIC means policy evaluated requests that reach this enforcement point. It does not imply all organizational traffic is forced through this path.".to_string(),
             ],
         };
         println!(
@@ -573,9 +844,10 @@ pub fn print_all_targets(json: bool) {
     for t in &targets_details {
         let path_disp = shorten_path(Path::new(&t.config_path));
         let posture_colored = match t.posture {
-            EnforcementPosture::Enforced => "ENFORCED".green().bold(),
+            EnforcementPosture::Enforced => "ENFORCED_ON_ROUTED".green().bold(),
             EnforcementPosture::Observed => "OBSERVED".yellow().bold(),
             EnforcementPosture::Uncovered => "UNCOVERED".dimmed(),
+            EnforcementPosture::Degraded => "DEGRADED".red().bold(),
             EnforcementPosture::UnknownUnhealthy => "UNHEALTHY".red().bold(),
         };
 
@@ -676,8 +948,10 @@ pub fn run_clients(json: bool) -> i32 {
     println!("{}", "─".repeat(95).dimmed());
 
     for item in &list {
+        // PRD Phase 0: Remove "PROTECTED" label — it implies more than config/wrapping proves.
+        // Use "ROUTED" for wrapped targets (configuration proved), not "PROTECTED" (security implied).
         let status_colored = if item.is_wrapped {
-            "PROTECTED".green().bold()
+            "ROUTED".green().bold()
         } else if item.exists {
             "DETECTED".yellow().bold()
         } else {

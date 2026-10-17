@@ -1,11 +1,16 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/crypto"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/middleware"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/model"
 	"github.com/noviqtechnologies/agentcontrol/control-plane/api/internal/sse"
@@ -13,12 +18,66 @@ import (
 )
 
 type PolicyMgmtHandler struct {
-	store  *store.Store
-	broker *sse.Broker
+	store      *store.Store
+	broker     *sse.Broker
+	signingKey ed25519.PrivateKey
 }
 
 func NewPolicyMgmtHandler(s *store.Store, b *sse.Broker) *PolicyMgmtHandler {
 	return &PolicyMgmtHandler{store: s, broker: b}
+}
+
+func (h *PolicyMgmtHandler) SetSigningKey(k ed25519.PrivateKey) {
+	h.signingKey = k
+}
+
+// getSigningKeyOrFail returns the policy signing key from a configured, independently managed source.
+//
+// PRD FR-006: The policy signing key must be separately protected from gateway auth and session secrets.
+// This function enforces that contract by accepting ONLY:
+//   1. An explicitly injected key (set via SetSigningKey, e.g. from a KMS/HSM provider)
+//   2. POLICY_SIGNING_PRIVATE_KEY env variable (explicit, separately managed)
+//
+// REMOVED fallbacks (PRD Phase 2 — these made policy signing meaningless as independent authority):
+//   - POLICY_READ_SECRET derivation  — gateway read secret ≠ independent signing authority
+//   - GATEWAY_SECRET derivation      — shared operational secret ≠ policy signing key
+//   - "default-vexa-hub-policy-signing-key" hard-coded  — public value ≠ cryptographic authority
+//
+// In managed/team mode, callers MUST check this error and fail startup if signing is unavailable.
+func (h *PolicyMgmtHandler) getSigningKeyOrFail() (ed25519.PrivateKey, error) {
+	// Priority 1: explicitly injected key (from KMS/HSM provider via SetSigningKey)
+	if len(h.signingKey) == ed25519.PrivateKeySize {
+		return h.signingKey, nil
+	}
+
+	// Priority 2: POLICY_SIGNING_PRIVATE_KEY — must be configured explicitly and separately
+	if keyHex := os.Getenv("POLICY_SIGNING_PRIVATE_KEY"); keyHex != "" {
+		b, err := hex.DecodeString(strings.TrimSpace(keyHex))
+		if err != nil {
+			return nil, fmt.Errorf("signing_key_decode_error: POLICY_SIGNING_PRIVATE_KEY is not valid hex: %w", err)
+		}
+		if len(b) == ed25519.PrivateKeySize {
+			return ed25519.PrivateKey(b), nil
+		} else if len(b) == ed25519.SeedSize {
+			return ed25519.NewKeyFromSeed(b), nil
+		}
+		return nil, fmt.Errorf("signing_key_size_error: POLICY_SIGNING_PRIVATE_KEY must be %d or %d bytes (got %d)",
+			ed25519.PrivateKeySize, ed25519.SeedSize, len(b))
+	}
+
+	// No valid signing authority found — fail closed.
+	// A bundle signed with a derived or hard-coded key provides no meaningful trust guarantee.
+	return nil, fmt.Errorf("signing_authority_missing: no POLICY_SIGNING_PRIVATE_KEY configured. " +
+		"Managed/team mode requires an explicitly configured, independently managed signing key. " +
+		"See docs/guides/managed-mode-bootstrap.md for setup instructions. " +
+		"Do NOT set POLICY_READ_SECRET or GATEWAY_SECRET as substitutes.")
+}
+
+// getSigningKey is retained for backward compatibility in non-managed contexts.
+// It calls getSigningKeyOrFail and panics only in development mode if no key is found.
+// Production callers (managed mode) must use getSigningKeyOrFail directly.
+func (h *PolicyMgmtHandler) getSigningKey() (ed25519.PrivateKey, error) {
+	return h.getSigningKeyOrFail()
 }
 
 func writeUnauthorizedTenantError(w http.ResponseWriter) {
@@ -80,6 +139,57 @@ func (h *PolicyMgmtHandler) GetActive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(policy)
 }
+
+func (h *PolicyMgmtHandler) GetActiveBundle(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.ResolveTenantScope(r)
+	if tenantID == "" {
+		tenantID = middleware.TenantIDFromContext(r.Context())
+	}
+	if tenantID == "" {
+		writeUnauthorizedTenantError(w)
+		return
+	}
+
+	policy, err := h.store.GetActivePolicy(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if policy == nil || policy.Content == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"no_active_policy"}`))
+		return
+	}
+
+	privKey, err := h.getSigningKey()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"signing_key_error: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	var revision uint64 = 1
+	if policy.UpdatedAt.Unix() > 0 {
+		revision = uint64(policy.UpdatedAt.Unix())
+	}
+
+	policyID := policy.ID
+	if policyID == "" {
+		policyID = fmt.Sprintf("tenant-%s-active", tenantID)
+	}
+
+	expiry := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+
+	bundle, err := crypto.SignPolicyBundle(privKey, policyID, revision, policy.Content, &expiry)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"bundle_signing_failed: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bundle)
+}
+
 
 func (h *PolicyMgmtHandler) Save(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantIDFromContext(r.Context())

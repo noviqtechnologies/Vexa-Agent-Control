@@ -4,8 +4,8 @@
 use agentcontrol::cli::{CacheCommands, Cli, Commands};
 use agentcontrol::doctor::{run_diagnostics, DiagnosticCheck, DiagnosticStatus, DoctorReport};
 use agentcontrol::wrap::status::{
-    EnforcementPosture, FreshnessTier, StatusEndpoints, StatusReport, TargetState,
-    TargetStatusDetails,
+    EnforcementPosture, FreshnessTier, ManagementMode, PolicyFreshnessState, StatusEndpoints,
+    StatusReport, TargetState, TargetStatusDetails,
 };
 use clap::{CommandFactory, Parser};
 
@@ -183,6 +183,17 @@ fn test_status_report_serialization_and_disclosures() {
     let report = StatusReport {
         version: "1.0.87".to_string(),
         timestamp: "2026-09-14T00:00:00Z".to_string(),
+        management_mode: ManagementMode::LocalDeveloper,
+        policy_trust_profile: "Development (local YAML)".to_string(),
+        policy_revision: Some(1),
+        policy_content_hash: Some("sha256:abc123def456".to_string()),
+        policy_issued_at: Some("2026-09-14T00:00:00Z".to_string()),
+        policy_expires_at: None,
+        policy_freshness_state: PolicyFreshnessState::Fresh,
+        known_uncovered_surfaces: vec![
+            "Native shell execution (bash/zsh/PowerShell)".to_string(),
+            "Direct LLM provider egress".to_string(),
+        ],
         effective_policy: None,
         targets: vec![TargetStatusDetails {
             target: "Claude Desktop".to_string(),
@@ -190,8 +201,11 @@ fn test_status_report_serialization_and_disclosures() {
             exists: true,
             states: vec![TargetState::Detected, TargetState::McpWrapped],
             posture: EnforcementPosture::Enforced,
+            posture_reason: "stdio-proxy wrapped".to_string(),
             mcp_posture: EnforcementPosture::Enforced,
+            mcp_posture_reason: "2/2 MCP servers wrapped".to_string(),
             llm_posture: EnforcementPosture::Uncovered,
+            llm_posture_reason: "Direct Anthropic egress".to_string(),
             mcp_enforcing_component: Some("agentcontrol stdio-proxy".to_string()),
             llm_enforcing_component: None,
             known_bypasses: vec!["Direct Anthropic Cloud egress".to_string()],
@@ -204,7 +218,7 @@ fn test_status_report_serialization_and_disclosures() {
         }],
         endpoints: StatusEndpoints {
             default_proxy_url: "http://127.0.0.1:18080/v1".to_string(),
-            hub_url: "https://app.vexasec.io".to_string(),
+            hub_url: "http://127.0.0.1:8080".to_string(),
             device_enrolled: true,
         },
         global_disclosures: vec![
@@ -220,7 +234,7 @@ fn test_status_report_serialization_and_disclosures() {
     assert!(serialized.contains("DIRECT_CLOUD"));
     assert!(serialized.contains("http://127.0.0.1:18080/v1"));
     assert!(serialized.contains("Native shell execution (bash/git) is UNGOVERNED"));
-    assert!(serialized.contains("\"ENFORCED\""));
+    assert!(serialized.contains("\"ENFORCED_ON_ROUTED_TRAFFIC\""));
     assert!(serialized.contains("\"UNCOVERED\""));
 
     let deserialized: StatusReport =

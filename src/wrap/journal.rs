@@ -18,22 +18,9 @@ use std::path::{Path, PathBuf};
 
 use crate::wrap::manifest::OwnershipManifest;
 
-/// Durable atomic file writing helper with sync_all, rename, and parent directory fsync.
+/// Durable atomic file writing helper with sync_all, resilient rename, and parent directory fsync.
 pub fn write_file_durable(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)?;
-    let tmp_path = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
-    {
-        let mut file = fs::File::create(&tmp_path)?;
-        use std::io::Write;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-    }
-    fs::rename(&tmp_path, path)?;
-    if let Ok(dir) = fs::File::open(parent) {
-        let _ = dir.sync_all();
-    }
-    Ok(())
+    crate::policy::signed::durable_atomic_replace(path, bytes)
 }
 
 /// Pre-mutation preimage for an individual configuration or auxiliary file.

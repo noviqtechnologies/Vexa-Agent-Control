@@ -33,7 +33,7 @@ pub enum Commands {
             long,
             alias = "hub",
             env = "AGENTCONTROL_HUB_URL",
-            default_value = "https://app.vexasec.io"
+            default_value = "http://127.0.0.1:8080"
         )]
         hub_url: String,
 
@@ -150,7 +150,7 @@ pub enum Commands {
         token: String,
 
         /// Control Hub URL
-        #[arg(long, default_value = "https://app.vexasec.io")]
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
         hub_url: String,
     },
 

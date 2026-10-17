@@ -90,7 +90,7 @@ fn test_daemon_health_handshake_schema_deserialization() {
         },
         "auth": {
             "enrolled": true,
-            "hub_url": "https://app.vexasec.io",
+            "hub_url": "http://127.0.0.1:8080",
             "device_id": "dev_abc123"
         }
     }"#;

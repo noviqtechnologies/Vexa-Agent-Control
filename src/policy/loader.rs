@@ -45,6 +45,8 @@ pub enum PolicyLoadError {
         group_id: String,
         reason: String,
     },
+    /// Cryptographic policy bundle or signature verification failed
+    VerificationFailed(String),
 }
 
 impl std::fmt::Display for PolicyLoadError {
@@ -77,6 +79,9 @@ impl std::fmt::Display for PolicyLoadError {
             }
             Self::InvalidGroup { group_id, reason } => {
                 write!(f, "Invalid group policy \"{}\": {}", group_id, reason)
+            }
+            Self::VerificationFailed(err) => {
+                write!(f, "Policy cryptographic verification failed: {}", err)
             }
         }
     }
@@ -680,6 +685,8 @@ fn compile_policy_yaml(
             fail_closed,
             attribution,
             allowed_providers,
+            policy_revision: None,
+            policy_hash: Some(raw_hash.clone()),
         },
         raw_hash,
         warnings,

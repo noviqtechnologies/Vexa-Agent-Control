@@ -71,6 +71,31 @@ Every agent tool call and LLM egress payload traversing Agent Control passes seq
 > [!NOTE]
 > **Boundary of Protection:** Agent Control governs all tool calls and network egress routed through its local proxy and wrapped IDE configurations. It is designed to work in synergy with host EDR and OS security policies.
 
+### 1.1 Shadow Mode Semantics & The Result Boundary Model
+
+#### Shadow Mode vs. Enforce Mode
+Agent Control can operate in **Enforce Mode** (default) or **Shadow Mode** (`--shadow` or `AGENTCONTROL_SHADOW_MODE=1`):
+* **Enforce Mode:** Any policy rule yielding `Verdict::Deny` or violating Hard Safety Invariants causes the PEP to withhold downstream execution immediately. The agent receives an explicit JSON-RPC error, and zero downstream side-effects occur.
+* **Shadow Mode:** Used for observation and canary evaluation. When a request violates policy or detector thresholds, the gateway logs a `Verdict::Observe` with status `not_enforced` / `observed_violation` in audit trails, but **releases** the action to the upstream tool.
+* **Audit Integrity:** An observed violation in shadow mode is **never conflated with an enforced ALLOW** in SIEM telemetry or compliance ledgers.
+
+#### The 4-State Result Boundary Model
+Rather than a monolithic pass/fail flag, every action lifecycle decomposes into four orthogonal states:
+1. **Dispatch State (`DispatchState`):** Was the request sent to downstream?
+   - `NotSent`: Denied prior to dispatch (zero downstream impact).
+   - `SendStarted`: In-flight to provider/tool.
+   - `Accepted`: Upstream acknowledged execution.
+   - `DispatchUnknown`: Gateway crashed or timed out mid-flight.
+2. **Downstream Outcome (`DownstreamOutcome`):** What did the tool/provider return?
+   - Return payload, streaming chunks, or upstream error.
+3. **Result Release (`ReleaseDecision`):** What did the gateway return to the agent?
+   - `Released`: Result delivered without modification.
+   - `Redacted`: Sensitive data masked before reaching the agent.
+   - `Withheld`: Downstream result completely withheld due to DLP or response prompt injection.
+4. **Audit Durability (`AuditState`):** Was the transaction logged?
+   - `Committed`: Durably written and synced to local SQLite ledger.
+   - `ExportConfirmed`: Acknowledged by central SIEM / Hub outbox.
+
 ---
 
 ## 2. Operating Profile Selection
