@@ -39,9 +39,7 @@ use agentcontrol::audit::verifier::{verify_chain, verify_chain_with_secret, Veri
 use agentcontrol::pep::mcp::{handle_mcp_tools_call, MockMcpDownstream, PepError};
 use agentcontrol::policy::engine::CompiledPolicy;
 use agentcontrol::policy::sensitive_path::SensitivePathGuard;
-use agentcontrol::policy::signed::{
-    generate_signing_keypair, sign_policy, PolicyStorageManager,
-};
+use agentcontrol::policy::signed::{generate_signing_keypair, sign_policy, PolicyStorageManager};
 use agentcontrol::proxy::handler::ProxyState;
 use agentcontrol::proxy::session::SessionContext;
 
@@ -387,7 +385,8 @@ tools:
 
     // 1. Harmless permitted MCP read of fixture file
     let call_count = Arc::new(AtomicUsize::new(0));
-    let mock_file_content = json!({"content": [{"type": "text", "text": "fn main() { println!(\"Hello\"); }"}]});
+    let mock_file_content =
+        json!({"content": [{"type": "text", "text": "fn main() { println!(\"Hello\"); }"}]});
     let mut downstream = MockMcpDownstream::with_response(call_count.clone(), mock_file_content);
 
     let mcp_params = json!({
@@ -539,7 +538,11 @@ async fn test_pilot_t2_deny_forbidden_path_and_redact_synthetic_canary_data() {
         r"\\remote-server\share\.env",
     ];
     for p in win_paths {
-        assert!(guard.check_path(p).is_some(), "Windows sensitive path must be flagged: {}", p);
+        assert!(
+            guard.check_path(p).is_some(),
+            "Windows sensitive path must be flagged: {}",
+            p
+        );
     }
 
     // 2. Cross-Platform POSIX-style credential paths
@@ -550,7 +553,11 @@ async fn test_pilot_t2_deny_forbidden_path_and_redact_synthetic_canary_data() {
         "/home/dev/project/.env",
     ];
     for p in posix_paths {
-        assert!(guard.check_path(p).is_some(), "POSIX sensitive path must be flagged: {}", p);
+        assert!(
+            guard.check_path(p).is_some(),
+            "POSIX sensitive path must be flagged: {}",
+            p
+        );
     }
 
     // 3. Directory traversal escaping boundaries (both forward and backward slash)
@@ -560,13 +567,21 @@ async fn test_pilot_t2_deny_forbidden_path_and_redact_synthetic_canary_data() {
         "nested/../../.ssh/id_rsa",
     ];
     for p in traversal_paths {
-        assert!(guard.check_path(p).is_some(), "Traversal path must be flagged: {}", p);
+        assert!(
+            guard.check_path(p).is_some(),
+            "Traversal path must be flagged: {}",
+            p
+        );
     }
 
     // 4. Safe regular project files must not be blocked
     let safe_paths = ["src/main.rs", "README.md", "package.json"];
     for p in safe_paths {
-        assert!(guard.check_path(p).is_none(), "Safe project path must be allowed: {}", p);
+        assert!(
+            guard.check_path(p).is_none(),
+            "Safe project path must be allowed: {}",
+            p
+        );
     }
 
     // Action B: Redact synthetic canary data from response/payload
@@ -848,7 +863,10 @@ tools:
 "#;
     let bundle_v1 = sign_policy(&sk, "pilot-policy", 1, yaml_v1, None);
     let applied_v1 = mgr.apply_signed_bundle(&bundle_v1, Some(&keys));
-    assert!(applied_v1.is_ok(), "Applying signed revision 1 must succeed");
+    assert!(
+        applied_v1.is_ok(),
+        "Applying signed revision 1 must succeed"
+    );
 
     let policy_v1 = CompiledPolicy::from_yaml_str(yaml_v1).unwrap();
     let state = harness.make_proxy_state(policy_v1.clone());
@@ -883,13 +901,19 @@ tools:
 "#;
     let bundle_v2 = sign_policy(&sk, "pilot-policy", 2, yaml_v2, None);
     let applied_v2 = mgr.apply_signed_bundle(&bundle_v2, Some(&keys));
-    assert!(applied_v2.is_ok(), "Applying signed revision 2 must succeed");
+    assert!(
+        applied_v2.is_ok(),
+        "Applying signed revision 2 must succeed"
+    );
 
     // Gateway acknowledges Revision 2 atomically and updates epoch
     let mut policy_v2 = CompiledPolicy::from_yaml_str(yaml_v2).unwrap();
     policy_v2.policy_revision = Some(2);
     let new_epoch = state.update_policy(Some(policy_v2));
-    assert_eq!(new_epoch, 2, "Gateway policy epoch must be incremented to 2");
+    assert_eq!(
+        new_epoch, 2,
+        "Gateway policy epoch must be incremented to 2"
+    );
 
     // Step 2: Repeat action — gateway rebinds and denies under Revision 2
     let res2 =
@@ -1022,16 +1046,14 @@ async fn test_pilot_t9_siem_delivery_interruption_and_durable_replay() {
         1,
     );
 
-    let outbox = DurableOutbox::new_with_db_path(
-        Some(siem_exporter),
-        None,
-        100,
-        2,
-        Some(db_path.clone()),
-    );
+    let outbox =
+        DurableOutbox::new_with_db_path(Some(siem_exporter), None, 100, 2, Some(db_path.clone()));
 
     // 2. Interrupt SIEM ingestion (simulate outage)
-    harness.siem_server.is_available.store(false, Ordering::SeqCst);
+    harness
+        .siem_server
+        .is_available
+        .store(false, Ordering::SeqCst);
 
     // 3. Enqueue events during outage
     let entry1 = AuditEntry {
@@ -1083,7 +1105,10 @@ async fn test_pilot_t9_siem_delivery_interruption_and_durable_replay() {
     assert_eq!(count, 2, "Both events must be durably spooled in SQLite");
 
     // 4. Restore SIEM ingestion
-    harness.siem_server.is_available.store(true, Ordering::SeqCst);
+    harness
+        .siem_server
+        .is_available
+        .store(true, Ordering::SeqCst);
 
     // Wait for worker replay and retry loop
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1167,7 +1192,10 @@ async fn test_pilot_t10_audit_integrity_and_access_separation() {
     // Verify tampered log fails cryptographic verification immediately
     let verify_tampered = verify_chain_with_secret(&tampered_log_path, &harness.session_secret);
     match verify_tampered {
-        VerifyResult::Invalid { entry_index, reason } => {
+        VerifyResult::Invalid {
+            entry_index,
+            reason,
+        } => {
             assert_eq!(entry_index, 1, "Tamper detected at corrupted entry index 1");
             assert!(
                 reason.contains("HMAC mismatch"),
