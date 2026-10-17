@@ -19,8 +19,13 @@ func TestTierToFeatures(t *testing.T) {
 	}
 
 	commFeatures := license.TierToFeatures("community")
-	if len(commFeatures) != 0 {
-		t.Errorf("expected community tier to have 0 features, got %d", len(commFeatures))
+	if len(commFeatures) == 0 {
+		t.Error("expected community tier to have baseline features")
+	}
+
+	devFeatures := license.TierToFeatures("developer")
+	if len(devFeatures) != 0 {
+		t.Errorf("expected developer tier to have 0 features, got %d", len(devFeatures))
 	}
 }
 

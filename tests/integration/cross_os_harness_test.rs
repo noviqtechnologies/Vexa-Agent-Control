@@ -16,20 +16,20 @@ use std::sync::Arc;
 #[test]
 fn test_cross_os_ipc_path_resolution() {
     let username = "testuser";
-    let daemon_id = "v4-agentwall";
+    let daemon_id = "v4-agentcontrol";
 
-    // Windows Named Pipe format: \\.\pipe\agentwall-{username}-{hash}
+    // Windows Named Pipe format: \\.\pipe\agentcontrol-{username}-{hash}
     let mut hasher = Sha256::new();
     hasher.update(username.as_bytes());
     hasher.update(daemon_id.as_bytes());
     let hash_hex = hex::encode(&hasher.finalize()[..8]);
 
-    let win_pipe = format!(r"\\.\pipe\agentwall-{}-{}", username, hash_hex);
-    assert!(win_pipe.starts_with(r"\\.\pipe\agentwall-"));
+    let win_pipe = format!(r"\\.\pipe\agentcontrol-{}-{}", username, hash_hex);
+    assert!(win_pipe.starts_with(r"\\.\pipe\agentcontrol-"));
     assert!(win_pipe.contains(username));
 
-    // POSIX UDS format: /run/user/$UID/agentwall.sock or ~/.agentwall/agentwall.sock
-    let posix_uds = PathBuf::from(format!("/run/user/1000/agentwall-{}.sock", hash_hex));
+    // POSIX UDS format: /run/user/$UID/agentcontrol.sock or ~/.agentcontrol/agentcontrol.sock
+    let posix_uds = PathBuf::from(format!("/run/user/1000/agentcontrol-{}.sock", hash_hex));
     assert!(posix_uds.starts_with("/run/user/"));
 }
 
@@ -41,7 +41,7 @@ fn test_posix_uds_file_mode_invariants() {
     {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let sock_path = dir.path().join("agentwall.sock");
+        let sock_path = dir.path().join("agentcontrol.sock");
         std::fs::write(&sock_path, b"socket-stub").unwrap();
 
         // Enforce 0600

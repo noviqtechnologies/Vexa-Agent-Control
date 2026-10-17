@@ -27,10 +27,8 @@ fn derive_posture(
     target_name: &str,
 ) -> (EnforcementPosture, EnforcementPosture, EnforcementPosture) {
     // LLM posture
-    let llm_posture = if !exists {
+    let llm_posture = if !exists || target_name == "Claude Desktop" {
         EnforcementPosture::Uncovered
-    } else if target_name == "Claude Desktop" {
-        EnforcementPosture::Uncovered // always direct Anthropic route
     } else if is_proxied {
         if !gateway_active {
             EnforcementPosture::UnknownUnhealthy
@@ -85,11 +83,9 @@ fn derive_posture(
         EnforcementPosture::Enforced
     } else if llm_posture == EnforcementPosture::Observed
         || mcp_posture == EnforcementPosture::Observed
-    {
-        EnforcementPosture::Observed
-    } else if llm_posture == EnforcementPosture::Enforced
-        && mcp_posture != EnforcementPosture::Enforced
-        && total_servers > 0
+        || (llm_posture == EnforcementPosture::Enforced
+            && mcp_posture != EnforcementPosture::Enforced
+            && total_servers > 0)
     {
         EnforcementPosture::Observed // LLM enforced + MCP partial = partial
     } else {
@@ -297,8 +293,9 @@ fn tt_07_native_shell_always_ungoverned() {
     // The native shell bypass is always reported in known_bypasses for Codex
     // Verified by checking the status.rs code path — this is a compile-time check
     // The test here documents the invariant
-    assert!(
-        true,
+    assert_eq!(
+        _overall,
+        EnforcementPosture::Enforced,
         "Native shell bypass must always be disclosed for Codex regardless of posture"
     );
 }

@@ -252,7 +252,10 @@ pub fn format_text_report(report: &SessionReport) -> String {
     use colored::*;
     let mut out = String::new();
 
-    let title = " AgentWall Session Report ".bold().white().on_cyan();
+    let title = " Vexa Agent Control Session Report "
+        .bold()
+        .white()
+        .on_cyan();
     out.push_str(&format!("\n{}\n", title));
     out.push_str(&format!("{}\n", "─".repeat(60).cyan()));
 

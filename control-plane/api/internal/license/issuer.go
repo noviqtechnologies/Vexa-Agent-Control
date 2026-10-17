@@ -87,9 +87,15 @@ func TierToFeatures(tier string) []string {
 			"aggregated_audit",
 			"alerts",
 		}
-	case "developer":
-		fallthrough
 	case "community":
+		return []string{
+			"spend_caps", "spend_v2",
+			"sse_push",
+			"group_policies",
+			"otet_enrollment",
+			"aggregated_audit",
+		}
+	case "developer":
 		fallthrough
 	default:
 		return []string{}
@@ -102,9 +108,9 @@ func TierToMaxDevices(tier string) int {
 		return -1 // Unlimited
 	case "team":
 		return 50
-	case "developer":
-		fallthrough
 	case "community":
+		return 50
+	case "developer":
 		fallthrough
 	default:
 		return 1

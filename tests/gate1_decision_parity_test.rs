@@ -592,10 +592,10 @@ fn test_uniform_jsonrpc_error_translation_parity() {
     // 1. Policy Denial -> code -32001
     let deny_err = PepError::Denied {
         reason: "tool_not_permitted".to_string(),
-        decision: decision_v1::Decision::deny(
+        decision: Box::new(decision_v1::Decision::deny(
             "tool_not_permitted",
             Some("Not allowed".to_string()),
-        ),
+        )),
     };
     let json_deny = deny_err.to_jsonrpc_error(&id);
     assert_eq!(json_deny["error"]["code"], -32001);
@@ -604,13 +604,13 @@ fn test_uniform_jsonrpc_error_translation_parity() {
     // 2. Approval Required -> code -32002
     let appr_err = PepError::ApprovalRequired {
         approval_id: "appr-123".to_string(),
-        decision: decision_v1::Decision {
+        decision: Box::new(decision_v1::Decision {
             verdict: decision_v1::Verdict::RequireApproval,
             reason_code: "needs_manager_ok".to_string(),
             reason_detail: None,
             matched_group_id: None,
             obligations: vec![],
-        },
+        }),
     };
     let json_appr = appr_err.to_jsonrpc_error(&id);
     assert_eq!(json_appr["error"]["code"], -32002);

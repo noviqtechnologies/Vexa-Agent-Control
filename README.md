@@ -1,697 +1,199 @@
-<div align="center">
+# Vexa Agent Control
 
-# 🛡️ Vexa Agent Control
-### *Zero-Trust AI Security Gateway, MCP Tool Firewall & LLM Spend Guardian for Engineering Teams*
+> **The Sovereign Security & Governance Control Plane for AI Coding Agents.**  
+> Govern Cursor, Claude Code, Windsurf, Codex, and MCP tool workflows with sub-millisecond latency, broker-held credential custody, and cryptographically verifiable audit trails.
 
-**Secure AI agent execution · Prevent credential exfiltration · Enforce deterministic tool & spend policies · Eliminate provider key sprawl**
-
-[🌐 Website](https://vexasec.io/) · [📖 Documentation Hub](docs/README.md) · [⚡ 2-Minute Quickstart](#-quickstart) · [💻 Workstation Guide](docs/guides/workstation.md) · [🏢 Team Hub Guide](docs/team_hub_guide.md) · [🛡️ OWASP ASI Top 10](docs/owasp_agentic_top10.md)
-
-<br/>
-
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-6366F1.svg?style=flat-square)](LICENSE)
-[![Release Version](https://img.shields.io/badge/Version-1.0.95-10B981.svg?style=flat-square)](Cargo.toml)
-[![Rust Core](https://img.shields.io/badge/Engine-Rust%201.80%2B%20(Sub--ms)-F97316.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fnoviqtechnologies%2Fagentcontrol-06B6D4.svg?style=flat-square&logo=docker&logoColor=white)](docs/guides/docker-deployment.md)
-[![OWASP ASI](https://img.shields.io/badge/OWASP-Agentic%20Top%2010%20(ASI%202026)-8B5CF6.svg?style=flat-square)](docs/owasp_agentic_top10.md)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg?style=flat-square)](SECURITY.md)
-
-</div>
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/release-v1.0.95-green.svg)](https://github.com/noviqtechnologies/Vexa-Agent-Control/releases)
+[![Build Status](https://img.shields.io/badge/CI-Gates%200--4%20PASS-brightgreen.svg)](.github/workflows/ci.yml)
+[![Security Policy](https://img.shields.io/badge/security-NIST%20AI%20RMF%20%7C%20ISO%2042001-blueviolet.svg)](enterprise/compliance/NIST-AI-RMF-MAPPING.md)
 
 ---
 
-## 📌 Table of Contents
+## Why Enterprise CISOs, AI Companies & SMBs Deploy Vexa
 
-- [Overview](#-overview)
-- [Why Vexa Agent Control](#-why-vexa-agent-control)
-- [Key Capabilities](#-key-capabilities)
-- [Supported Ecosystem](#-supported-ecosystem)
-- [Quickstart](#-quickstart)
-  - [Option A: Standalone Developer Workstation (CLI)](#option-a-standalone-developer-workstation-cli)
-  - [Option B: Universal LLM Gateway (OpenAI / Python / cURL)](#option-b-universal-llm-gateway-openai--python--curl)
-  - [Option C: Team Hub & Web Console (Docker Compose)](#option-c-team-hub--web-console-docker-compose)
-  - [Option D: Standalone Docker Proxy](#option-d-standalone-docker-proxy)
-- [Architecture & Data Flow](#-architecture--data-flow)
-- [Declarative Policy Specification](#-declarative-policy-specification)
-- [CLI Reference & Day-to-Day Operations](#-cli-reference--day-to-day-operations)
-- [Production & Cloud Deployment](#-production--cloud-deployment)
-- [Security, Privacy & Sovereign Independence](#-security-privacy--sovereign-independence)
-- [Documentation Index](#-documentation-index)
-- [Community & Support](#-community--support)
-- [Public Preview Feedback](#-public-preview-feedback)
+Autonomous coding assistants and tool-calling agents possess file system access, terminal execution authority, and outbound data egress. Security, GRC, and platform teams require answers to critical governance questions:
+
+- **Data Leak Prevention (DLP):** How do we stop agents from reading `.env`, `~/.aws/credentials`, or proprietary source code and exfiltrating them to model providers?
+- **Prompt Injection Defense (OWASP LLM01):** How do we prevent untrusted web content or pull requests from hijacking autonomous agent workflows?
+- **Non-Bypassable Enforcement:** How do we guarantee developers cannot simply disable or route around the local proxy?
+- **Compliance & Forensics:** How do we prove to external auditors (SOC 2, ISO 42001, EU AI Act) what data was sent to LLMs and what actions were blocked?
+
+Vexa Agent Control is an ultra-fast, zero-trust policy engine and sovereign control plane designed specifically to solve these challenges without disrupting developer productivity.
 
 ---
 
-## 💡 Overview
-
-> **Vexa helps engineering teams govern the AI-agent traffic they route through it, with centrally managed policies and verifiable, per-surface enforcement evidence.**
-
-> [!IMPORTANT]
-> **Enforcement Boundary & Non-Bypassability Limitation:**  
-> **Vexa does not by itself prevent a workstation owner or unmanaged process from bypassing a local proxy. Use managed endpoint (MDM/EDR) and network egress controls when mandatory, non-bypassable enforcement is required.**  
-> A local proxy governs only traffic routed through it. Vexa does not claim universal containment, immunity against privileged host attackers, or non-bypassability from uncooperative local software without external controls.
-
-**Vexa Agent Control** is an evidence-first security gateway and transparent runtime proxy purpose-built for AI agents, developer IDEs, and enterprise platform teams. It intercepts Model Context Protocol (MCP) and HTTP/LLM communications to provide deterministic safety, secret protection, token economics, and tamper-evident auditability in sub-millisecond execution times.
-
-### Three Operational Governance Modes:
-1. **Local / Developer Mode:** Frictionless personal guardrails for individual developers. Intercepts local loopback traffic (`127.0.0.1:18080`) using local YAML policies in observe or enforce mode. Does not claim organization-mandated or tamper-resistant enforcement.
-2. **Team Managed Mode:** Centrally authors, cryptographically signs (Ed25519), and distributes policies to enrolled workstations with pinned keyring verification, revision monotonicity, and convergence reporting.
-3. **Mandatory Boundary Mode:** Combines Vexa with external MDM, EDR process validation, network egress blocks to cloud LLMs, and broker-held provider credentials to provide verifiable, non-bypassable enforcement across declared enterprise traffic.
-
----
-
-## ⚖️ Why Vexa Agent Control
-
-| Vector / Risk | Without Vexa Agent Control | With Vexa Agent Control |
-|---|---|---|
-| 🛡️ **MCP Tool Execution** | Agents run arbitrary shell commands, destructive filesystem operations, or untrusted network egress. | **Zero-Trust Tool Guard:** Replay classification, strict JSON schema validation, loop counters, and path traversal blockers. |
-| 🔒 **Secret & DLP Leaks** | API keys, SSH private keys, and cloud credentials leak directly into third-party LLM training or logs. | **20+ Pattern Inline DLP:** Named regex patterns, Shannon entropy analysis, BIP-39 seed phrase detection, Luhn credit card validation, and automatic wire-layer redacting (`[REDACTED:<pattern_name>]`). |
-| 🧠 **Prompt Injections** | Web pages, tool results, or external data hijack the agent system prompt and directive boundaries. | **Deterministic Heuristic Scanner:** Multi-pass pattern detection for system overrides and jailbreaks with ReDoS execution deadlines. |
-| ⚡ **Redundant Token Spend** | Paraphrased or repeated prompts repeatedly hit cloud APIs at full cost and significant latency. | **Dual-Tier Semantic Vector Cache:** L1 exact SHA-256 + L2 cosine-similarity vector index (in-memory or Qdrant backend, 100% avoided token egress on cache hits). |
-| 💰 **Budget Overruns** | Billing surprises discovered post-run after runaway recursive agent loops. | **Atomic Preflight Spend Reservations:** Microcent budget ceilings, concurrency limits, and exact SSE stream settlement. |
-| 👁️ **Audit & Forensics** | Transient terminal output with zero cryptographic proof of agent tool actions or policy verdicts. | **Cryptographic Audit Outbox:** HMAC-SHA256 hash-chained `audit.jsonl` + non-blocking SIEM export (Splunk, Datadog). |
-| 🚀 **Runtime Latency** | Bulky multi-container proxies adding 50–200ms of latency per LLM frame. | **Pure Rust Core:** Sub-millisecond internal routing with zero garbage collection pauses. |
-
----
-
-## 🚀 Key Capabilities
+## Core Capabilities
 
 ```
-  ┌──────────────────────────────────────────────────────────────────────────────────────┐
-  │                           Developer IDEs & AI Agents                                 │
-  │           Cursor · Claude Code · Claude Desktop · Antigravity · Codex · VS Code      │
-  └──────────────────────────────────────────┬───────────────────────────────────────────┘
-                                             │ Wire / MCP / HTTP Proxy (18080)
-                                             │ X-Request-ID · W3C traceparent
-                                             ▼
-  ┌──────────────────────────────────────────────────────────────────────────────────────┐
-  │                    VEXA AGENT CONTROL GATEWAY (Pure Rust Engine)                     │
-  │  ├─ 🔒 20+ Pattern DLP & Credential Redactor (Regex · Entropy · BIP-39 · Luhn)       │
-  │  ├─ 🧠 Deterministic Heuristic Prompt Injection Shield                               │
-  │  ├─ ⚡ Dual-Tier Semantic Vector Cache (L1 SHA-256 exact + L2 Cosine Vector / Qdrant) │
-  │  ├─ 🛡️ Zero-Trust MCP Tool Firewall & Path Traversal Validator (<64MB RSS)           │
-  │  └─ 📜 Tamper-Evident HMAC-SHA256 Audit Stream (non-blocking SIEM fan-out)           │
-  └──────────────────────────────────────────┬───────────────────────────────────────────┘
-                                             │ Scoped Virtual Key (mTLS)
-                                             ▼
-  ┌──────────────────────────────────────────────────────────────────────────────────────┐
-  │              GO CONTROL-PLANE BROKER — Authoritative LLM Request Authority           │
-  │                                                                                      │
-  │  1. Ingress & Trace Validation   ──► Validate / assign RequestID & W3C traceparent  │
-  │  2. Identity & Security Gate     ──► Tenant · Model Allowlist · DLP · Residency     │
-  │  3. LLM Router Engine            ──► Active RouteProfile: Primary + max 1 Fallback  │
-  │  4. Preflight Spend Auth         ──► Reserve ceiling across all route candidates     │
-  │  5. Authoritative Broker Loop    ──► max 2 attempts · Jittered backoff · Deadline   │
-  │     ├─► Attempt 1 (Primary)      ──► Dispatch · Pre-commit retry barrier            │
-  │     │   └─ If 503/429/Timeout    ──► Classify · Check deadline · Proceed to #2     │
-  │     └─► Attempt 2 (Fallback)     ──► Dispatch · Settle spend · Finalize dossier     │
-  │  6. Request Dossier              ──► broker_requests + broker_attempts (PostgreSQL)  │
-  │                                                                                      │
-  └──────────┬──────────────────────────────────────────────────────────┬───────────────┘
-             │                                                          │
-             ▼                                                          ▼
-  ┌──────────────────────────────────┐       ┌─────────────────────────────────────────┐
-  │      Upstream LLM Providers      │       │    Vexa Control Hub (1-Region Topology) │
-  │  ✅ OpenAI  ✅ Anthropic Claude  │       │  PostgreSQL · route_profiles            │
-  │  ✅ Google Gemini                │       │  broker_requests · broker_attempts       │
-  │  ℹ️  Azure · Groq · Bedrock      │       │  Web Console · OIDC SSO · Key Vault     │
-  │  ℹ️  Local / Ollama              │       │  Multi-factor /readyz Probe             │
-  └──────────────────────────────────┘       └─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   VEXA ARCHITECTURAL HIGHLIGHTS                                 │
+├──────────────────────────┬──────────────────────────────────────────────────────────────────────┤
+│ ⚡ Sub-Millisecond Core   │ Native Rust proxy evaluating regex DLP, parameter schemas, and       │
+│                          │ prompt injection heuristics in <1ms p99 latency overhead.            │
+├──────────────────────────┼──────────────────────────────────────────────────────────────────────┤
+│ 🔑 Credential Custody    │ Upstream API keys (Anthropic, OpenAI, Azure) never touch developer   │
+│                          │ workstations. Bypassing the gateway results in 401 Unauthorized.     │
+├──────────────────────────┼──────────────────────────────────────────────────────────────────────┤
+│ 📜 Cryptographic Audit   │ HMAC-SHA256 chained ledger with fail-closed fsync writes, creating a │
+│                          │ tamper-evident, append-only forensic record of every action.         │
+├──────────────────────────┼──────────────────────────────────────────────────────────────────────┤
+│ 🛡️ Multi-OS Deployment   │ Turnkey enterprise packaging for Microsoft Intune (Windows), Jamf     │
+│                          │ Pro (macOS), systemd (Linux), and Kubernetes Helm.                   │
+├──────────────────────────┼──────────────────────────────────────────────────────────────────────┤
+│ 🔒 100% Sovereign & Pure │ Zero external telemetry. No phone-home pings. All prompts, code, and │
+│                          │ policies remain strictly within your organizational perimeter.       │
+└──────────────────────────┴──────────────────────────────────────────────────────────────────────┘
 ```
-> ✅ = P0 Verified Auto-Failover (OpenAI, Anthropic, Gemini) · ℹ️ = Path-Specific (P0 primary only)
-> **Topology:** Single-region production deployment. Brokered requests: max 2 attempts (Primary + 1 Fallback), fail-closed.
-
-- **Universal OpenAI-Compatible LLM Gateway:** Drop-in routing for `/v1/chat/completions` and `/v1/models`. Translates schemas seamlessly between OpenAI, Anthropic, Gemini, Groq, Bedrock, and Ollama.
-- **Intra-Organization Multi-Workspace Isolation:** Strictly isolates internal workspaces, teams, and projects. Enforces server-side scope derivation from authenticated OIDC/IdP principals and blocks scope-ID substitution attacks with HTTP 403 Forbidden.
-- **Hierarchical Capability Delegation & Attenuation:** Enforces monotonic capability reduction for sub-agents, guaranteeing sub-agents operate strictly within a subset of parent permissions with zero privilege escalation.
-- **Data Provenance & Security Taint Flow Tracking:** Real-time lineage tracking and taint propagation across tool calls and model steps to prevent untrusted inputs from reaching sensitive sinks.
-- **Autonomy Ceilings & Run Ceilings:** Enforces maximum recursion depth, wall-clock duration limits, token budgets, and repetitive loop detection to halt runaway autonomous agent tasks.
-- **Resilient Upstream Circuit Breaking & Failover:** Dynamic circuit breakers with Closed/Open/Half-Open state transitions, idempotent retries, and automatic fallback across upstream LLM providers.
-- **Transparent Workstation Sentry:** 1-command connection and atomic rollback for local developer assistants with zero manual proxy configuration.
-- **Enterprise Semantic Vector Caching:** Built-in L1 exact SHA-256 and L2 vector cosine similarity engine (in-memory or Qdrant) delivering sub-3ms responses and 100% token cost elimination on repeated queries.
-- **Fail-Closed Spend Governance:** Enforces microcent rate caps, concurrent connection ceilings, and 500ms upstream cancellation on client disconnects.
-- **Scoped Virtual Keys:** Issue admin-governed developer tokens with model allowlists, spend caps, and CIDR network boundaries without distributing live provider credentials.
-- **Decoupled Trace Store & Immutable Audit Outbox (Phase 0a Baseline):** Parallel analytical trace graph (`traces.db`) joined to cryptographic HMAC audit logs (`audit.jsonl`), preserving historical verification via frozen `AuditEntryV1Legacy` schemas.
-- **Idempotent 6-State HITL Engine:** Server-side atomic CAS state machine (`PENDING` → `RESERVED` → `EXECUTING` → `EXECUTED` / `OUTCOME_UNKNOWN`) with idempotency keys and secret isolation preventing replay attacks and crash ambiguities.
-- **Cross-Platform Parity:** First-class native execution across **Windows** (Named Pipes, DPAPI, Services), **Linux** (Unix Domain Sockets, `systemd --user`, `0600` modes), and **macOS** (UDS, `launchd`, Keychain).
-- **Explicit Host Threat Boundary:** Complete transparent disclosure of protection domains (protecting against rogue agents, prompt injection, and browser CSRF/DNS rebinding while documenting local same-user OS boundaries) in our [Threat Model](docs/security/threat_model.md).
 
 ---
 
-## 🔌 Supported Ecosystem
+## 2-Minute Quickstart (Evaluation Mode)
 
-### Upstream LLM Providers & Routing Tiers
+Evaluate Vexa Agent Control locally on your workstation in under two minutes:
 
-Vexa Agent Control provides transparent proxying and central broker governance across leading LLM providers. In accordance with the **P0 Reliability & Safe Operations** standard, provider capabilities are organized by verified tier:
+### 1. Download & Verify
 
-| Provider | Supported Models / Families | Local Workstation Sentry | Central Broker Gateway | P0 Verified Auto-Failover | Spend Governance |
-|---|---|:---:|:---:|:---:|:---:|
-| **OpenAI** | GPT-4o, GPT-4o-mini, o1, o3-mini | ✅ Proxied | ✅ Brokered | ✅ Primary / Fallback | ✅ Microcent Caps |
-| **Anthropic Claude** | Claude 3.7 Sonnet, Claude 3.5 Haiku, Opus | ✅ Proxied | ✅ Brokered | ✅ Primary / Fallback | ✅ Microcent Caps |
-| **Google Gemini** | Gemini 2.0 Flash, Gemini 1.5 Pro | ✅ Proxied | ✅ Brokered | ✅ Primary / Fallback | ✅ Microcent Caps |
-| **Azure OpenAI** | GPT-4o, Custom Deployments | ✅ Proxied | ✅ Brokered | ℹ️ Path-Specific | ✅ Microcent Caps |
-| **Groq AI** | Llama 3.3 70B, DeepSeek R1 Distill | ✅ Proxied | ✅ Brokered | ℹ️ Path-Specific | ✅ Microcent Caps |
-| **AWS Bedrock** | Claude 3.5 Sonnet, Amazon Nova | ✅ Proxied | ✅ Brokered | ℹ️ Path-Specific | ✅ Microcent Caps |
-| **Local / Ollama** | Llama 3, Qwen 2.5, DeepSeek R1 | ✅ Proxied | ✅ Brokered | ℹ️ Local Only | ✅ Local Tracking |
-
-> **Operating Standard:** Centrally brokered requests execute an authoritative, bounded retry loop (Primary + max 1 Fallback, max 2 attempts total) with W3C `traceparent` correlation, atomic preflight spend ceilings, and fail-closed security. Auto-failover is tested and verified across OpenAI, Anthropic Claude, and Google Gemini adapters.
-
-### Supported Coding Assistants & Protection Profiles
-
-| Client / Agent | Interception Method | MCP Tool Posture | LLM Completion Posture | Documented Boundary / Known Bypasses |
-|---|---|:---:|:---:|---|
-| **Cursor IDE** | `settings.json` (`http.proxy`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Unwrapped MCP tools in configuration run ungoverned. |
-| **Claude Code (CLI)** | `settings.json` (`ANTHROPIC_BASE_URL`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Shell-spawned processes bypass proxy unless wrapped. |
-| **Claude Desktop** | `claude_desktop_config.json` (`stdio-proxy`) | `ENFORCED` (stdio-proxy) | `UNCOVERED` (Direct Cloud) | Completions route out-of-band directly to Anthropic Cloud; only wrapped MCP tools are governed. |
-| **Google Antigravity** | `mcp_config.json` (`proxy_url`) | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Unwrapped custom sidecars run ungoverned. |
-| **OpenAI Codex CLI** | Shell Wrapper (`codex-intercept.sh`) | `ENFORCED` (stdio-proxy) | `ENFORCED` (18080) | Native shell execution (bash/git) is UNGOVERNED by local proxy. |
-| **VS Code (Continue)** | `config.yaml` / `settings.json` | `ENFORCED` (stdio/proxy) | `ENFORCED` (18080) | Direct API keys configured in extension bypass proxy. |
-| **Custom Agents (Python/TS)** | `AGENTCONTROL_PROXY_URL=http://127.0.0.1:18080` | `ENFORCED` (18080) | `ENFORCED` (18080) | Unconfigured direct sockets bypass transport proxy. |
-
-> **Security Posture Definitions:**
-> - `ENFORCED`: Affirmatively inspected and blocked before downstream execution.
-> - `OBSERVED`: Inspected in shadow mode; operations permitted.
-> - `UNCOVERED`: No interception path exists for this route (e.g. direct cloud egress or native OS shell commands). Layer with container/OS isolation.
-> - `UNKNOWN / UNHEALTHY`: Proxy daemon offline, configuration drifted, or unmanaged.
-
----
-
-## ⚡ Quickstart
-
-### Option A: Standalone Developer Workstation (CLI)
-
-Run a complete local MCP firewall, inline DLP secret redaction, and developer dashboard on your machine in under 2 minutes (100% offline, zero cloud dependency, no account required):
-
-#### Step 1: Install the Standalone Binary
-
-**macOS / Linux / WSL (Bash/Zsh):**
+**Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.sh | bash
+# Download and install release binary (v1.0.95)
+curl -fL --proto '=https' --tlsv1.2 \
+  https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/v1.0.95/install/install.sh \
+  -o install.sh && bash install.sh --version v1.0.95
+
 export PATH="$HOME/.local/bin:$PATH"
-agentcontrol clients
+agentcontrol --version
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell 5.1+):**
 ```powershell
-irm https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/main/install/install.ps1 | iex
-agentcontrol.exe clients
+$installer = Join-Path $env:TEMP 'vexa-install.ps1'
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/noviqtechnologies/Vexa-Agent-Control/v1.0.95/install/install.ps1' -OutFile $installer
+& $installer -Version 'v1.0.95'
+agentcontrol.exe --version
 ```
 
-#### Step 2: Configure Upstream Model Provider & Start Gateway
-
-Set your upstream LLM provider API key (or point to local models like Ollama/LM Studio):
-
-**PowerShell (Windows):**
-```powershell
-$env:OPENAI_API_KEY = "sk-proj-..."
-# or: $env:ANTHROPIC_API_KEY = "sk-ant-..."
-agentcontrol.exe start --standalone
-```
-
-**Bash / Zsh (macOS / Linux):**
+### 2. Start Standalone Gateway
 ```bash
-export OPENAI_API_KEY="sk-proj-..."
-# or: export ANTHROPIC_API_KEY="sk-ant-..."
+# Start the local gateway in standalone mode
 agentcontrol start --standalone
-```
 
-*(Alternatively, add `OPENAI_API_KEY=sk-proj-...` to a `.env` file in your working directory, or run local engines like Ollama on `http://localhost:11434` / LM Studio).*
-
-> [!TIP]
-> Add `--standalone` (or set `AGENTCONTROL_STANDALONE=true`) for local, offline development to run the gateway self-contained without connecting to an external or central Control Hub.
-
-> [!NOTE]
-> Keep this terminal open or run it as a service. The proxy actively intercepts local tool calls, enforces DLP & prompt security, and serves the developer dashboard on loopback (`http://127.0.0.1:18080`).
-
-#### Step 3: Open the Local Developer Dashboard
-
-Open your web browser and navigate to:
-👉 **[http://127.0.0.1:18080](http://127.0.0.1:18080)**
-
-You will see the **"This Device"** dashboard displaying active listener health, loaded DLP patterns, and an event feed waiting for agent traffic.
-
-#### Step 4: Connect Your AI Coding Assistant
-
-In a **new terminal window**, connect the AI coding assistant(s) installed on your machine:
-
-```bash
-# Connect Cursor IDE:
+# Connect your preferred coding assistant
 agentcontrol connect cursor
-
-# Connect Claude Desktop (MCP stdio-proxy):
-agentcontrol connect claude
-
-# Connect Claude Code (CLI / terminal):
-agentcontrol connect claude-code
-
-# Connect Google Antigravity IDE:
-agentcontrol connect antigravity
-
-# Connect OpenAI Codex CLI:
-agentcontrol connect codex
-
-# Connect VS Code (Continue extension):
-agentcontrol connect vscode-continue
 ```
 
-*What happens behind the scenes:* Agent Control writes a safe, cryptographically hashed ownership manifest (`~/.agentcontrol/manifests/<client>.manifest.json`) and points your IDE's MCP and LLM routing to `127.0.0.1:18080`.
+### 3. Verify Enforcement
+Inspect real-time policy decisions, DLP redactions, and audit records in the local dashboard at:  
+👉 **`http://127.0.0.1:18080`**
 
-> [!TIP]
-> Each client is a distinct target. `claude` = Claude Desktop (stdio); `claude-code` = Claude Code CLI terminal; `vscode-continue` = VS Code Continue extension.
+---
 
-#### Step 5: Verify Active Posture & Live Telemetry
+## Architecture & Zero-Trust Boundary Model
 
-1. Check your connected assistants and gateway health:
-```bash
-agentcontrol status     # Inspect target capability vectors & LLM routing
-agentcontrol clients    # List all detected vs protected clients
-agentcontrol doctor     # Run read-only diagnostic checks (returns 0 if healthy)
+Vexa operates on **Zero Trust Architecture principles (NIST SP 800-207)**: the developer workstation is treated as an untrusted edge node, and the control plane / gateway functions as the Policy Enforcement Point (PEP).
+
 ```
-2. Now, prompt your AI assistant in Cursor, Claude, or Codex. Watch prompts, token counts, and DLP redactions immediately stream live across your open dashboard at `http://127.0.0.1:18080`!
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   VEXA ENTERPRISE TOPOLOGY                                       │
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                  │
+│  Developer Workstation (Windows / macOS / Linux)                                                 │
+│  ┌─────────────────────────┐          stdio / HTTP                                               │
+│  │ Coding Assistants       │ ──────────────────────────────┐                                     │
+│  │ (Cursor / Claude / MCP) │                               │                                     │
+│  └─────────────────────────┘                               ▼                                     │
+│                                           ┌──────────────────────────────────┐                   │
+│                                           │ Vexa Agent Control Local Sentry  │                   │
+│                                           │ • Inline Parameter DLP Scanner   │                   │
+│                                           │ • Prompt Injection Guard (Pass 6)│                   │
+│                                           │ • HMAC-SHA256 Audit Ledger       │                   │
+│                                           └──────────────────────────────────┘                   │
+│                                                            │                                     │
+│                                                            │ mTLS / Signed Sync                  │
+│                                                            ▼                                     │
+│  Customer Perimeter / Cloud Enclave       ┌──────────────────────────────────┐                   │
+│                                           │ Vexa Control Hub & Key Broker    │                   │
+│                                           │ • Central Policy Distribution    │                   │
+│                                           │ • Vault / KMS Credential Custody │                   │
+│                                           │ • Splunk / Datadog SIEM Streams  │                   │
+│                                           └──────────────────────────────────┘                   │
+│                                                            │                                     │
+│                                                            │ Upstream Provider Call              │
+│                                                            ▼                                     │
+│                                           ┌──────────────────────────────────┐                   │
+│                                           │ AI Foundation Model Providers    │                   │
+│                                           │ (Anthropic, OpenAI, Azure, Bedrock)                  │
+│                                           └──────────────────────────────────┘                   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-#### Truthful Protection Posture Model
+### Why Credential Custody Eliminates Proxy Bypasses
+In traditional proxy solutions, developers can bypass controls by pointing their tools directly at external endpoints. Vexa eliminates this bypass vector cryptographically:
+1. Master API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) reside exclusively in the **Vexa Control Hub** or corporate KMS/Vault.
+2. Developer workstations are only provisioned with short-lived, locally bound virtual credentials.
+3. If an unmanaged script or developer attempts to bypass the gateway and contact `api.anthropic.com` directly, the call is rejected by the provider (`401 Unauthorized`).
 
-Every connected client target reports its truthful real-time posture across a 7-state operational lifecycle:
+---
 
-| Posture State | Operational Meaning | Action Coverage & Guarantees |
-|---|---|---|
-| `CONFIGURED` | Configuration files updated to route through Agent Control. | Baseline configuration journaled to `.baseline.bak`. |
-| `CONNECTIVITY_VERIFIED` | Intercept channel and loopback port / IPC handshake active. | Transport operational; readiness probe confirmed. |
-| `TRAFFIC_OBSERVED` | Live MCP tool calls or LLM prompts actively flowing through gateway. | Active session established; telemetry recording. |
-| `ENFORCED_TESTED` | Active policy enforcement tested and verified via live probe. | Violations deterministically blocked; full DLP & spend caps active. |
-| `OBSERVED_ONLY` | Gateway running in shadow / observe mode. | Traffic inspected and logged to `audit.jsonl`; violations permitted. |
-| `UNCOVERED` | Route or execution path outside proxy control (e.g., direct cloud API without proxy). | **Explicit Boundary Disclosure**: Requires host or container isolation. |
-| `UNHEALTHY` | Proxy stopped, config drifted unexpectedly, or audit outbox offline. | Fail-closed alerting; immediate administrator notification. |
+## Enterprise MDM & Fleet Deployment
 
-| Client Assistant | Transport Adapter | Intercepted Vectors | Declared Blind Spots & Host Boundary |
+Turnkey packages for centralized, automated rollouts across your fleet:
+
+- 🪟 **Windows (Microsoft Intune / MECM):** [Intune-Install.ps1](enterprise/deploy/windows/Intune-Install.ps1) — installs as a resilient Windows System Service, configures proxy registry keys, and enables fail-safe recovery.
+- 🍏 **macOS (Jamf Pro / Kandji / Fleet):** [jamf-install.sh](enterprise/deploy/macos/jamf-install.sh) & [io.vexasec.agentcontrol.plist](enterprise/deploy/macos/io.vexasec.agentcontrol.plist) — registers a managed system LaunchDaemon with Keychain secret custody.
+- 🐧 **Linux (systemd):** [install-systemd.sh](enterprise/deploy/linux/install-systemd.sh) & [agentcontrol.service](enterprise/deploy/linux/agentcontrol.service) — installs a hardened systemd unit with `DynamicUser` and read-only system sandboxing.
+- ☸️ **Kubernetes & Cloud Ingress:** [Docker Compose](docker-compose.team.secure.yml) & [Helm Chart](chart/) — deploy high-throughput sidecars or reverse proxies for AI SaaS swarms.
+
+---
+
+## Capability Maturity Matrix
+
+To uphold total transparency, every engine capability is categorized by maturity level and verified by automated CI test suites:
+
+| Capability | Module Path | Maturity Level | Verification Test Suite |
 |---|---|---|---|
-| **Cursor IDE** | HTTP Proxy (`127.0.0.1:18080`) | LLM completions, prompt tokens, DLP | Direct terminal command execution |
-| **Claude Desktop** | stdio JSON-RPC wrapper | All registered MCP tool calls | Direct cloud completions bypassing local MCP |
-| **Claude Code** | stdio JSON-RPC wrapper | CLI tool calls, bash execution, file read/write | Child processes spawned outside agent context |
-| **Google Antigravity** | HTTP Proxy + stdio | LLM completions, MCP tool calls, agent tasks | Same-user OS memory inspection |
-| **OpenAI Codex** | CLI stdio wrapper | Tool execution, model prompts | Uninstrumented subprocesses |
-| **VS Code (Continue)** | HTTP Proxy (`127.0.0.1:18080`) | LLM chat, completions, edit requests | Native extensions with custom network egress |
-
-#### Step 6: Non-Destructive Disconnect & Cleanup
-
-Whenever you wish to return your IDE configurations to their pristine original state:
-
-```bash
-# Cleanly restore original client configurations anytime:
-agentcontrol disconnect cursor
-agentcontrol disconnect claude        # Claude Desktop
-agentcontrol disconnect claude-code  # Claude Code CLI
-agentcontrol disconnect antigravity
-agentcontrol disconnect codex
-agentcontrol disconnect vscode-continue
-```
+| **In-Line Parameter DLP Redaction** | `src/policy/dlp.rs` | **Stable (Production)** | Gates 0–4 Automated Tests (20+ pattern classes) |
+| **Tamper-Evident HMAC Audit Chain** | `src/audit/logger.rs` | **Stable (Production)** | Gate 1 Cryptographic Fsync & Continuity Tests |
+| **Exact-Action HITL Approval Machine** | `src/policy/hitl.rs` | **Stable (Production)** | Concurrency Double-Spend Prevention Tests |
+| **Tool Parameter Traversal Guard** | `src/policy/command_policy.rs`| **Stable (Production)** | UNC / Symlink / Traversal Test Suites |
+| **Multi-Turn Session Taint Engine** | `src/policy/taint.rs` | **Beta** | Multi-Turn Toxic Flow E2E Regression Suite |
+| **Virtual Key Credential Broker** | `control-plane/api/internal/broker/` | **Beta** | Cross-Platform Handshake & Spend Ledger Tests |
+| **Causal Threat Reasoning Analyzer** | `src/detector/mod.rs` | **Labs (Experimental)** | Out-of-band audit trace heuristic evaluator |
 
 ---
 
-### Option B: Universal LLM Gateway (OpenAI / Python / cURL)
+## Compliance & GRC Evidence Mappings
 
-Point your existing OpenAI SDK client directly to Vexa Agent Control to gain automatic DLP scanning, spend caps, and semantic vector caching:
+Export structured, audit-ready compliance evidence binders directly from the CLI:
 
-#### Python Example
-```python
-from openai import OpenAI
-
-# Point client to Vexa Agent Control Gateway
-client = OpenAI(
-    base_url="http://localhost:18080/v1",
-    api_key="your-vexa-virtual-key" # or provider key in local_compat mode
-)
-
-response = client.chat.completions.create(
-    model="anthropic/claude-3-7-sonnet-20250219", # Auto-translated & routed
-    messages=[
-        {"role": "system", "content": "You are a secure coding assistant."},
-        {"role": "user", "content": "Scan this repository for security risks."}
-    ],
-    temperature=0.2,
-    stream=True
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content
-    if content:
-        print(content, end="", flush=True)
-```
-
-#### cURL Example
-```bash
-curl -X POST http://localhost:18080/v1/chat/completions \
-  -H "Authorization: Bearer your-vexa-virtual-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/gpt-4o",
-    "messages": [{"role": "user", "content": "Review authorization policies."}],
-    "temperature": 0.0
-  }'
-```
+- 🏛️ **[NIST AI RMF 1.0 Mapping](enterprise/compliance/NIST-AI-RMF-MAPPING.md):** Full coverage across GOVERN, MAP, MEASURE, and MANAGE functions.
+- 📜 **[ISO/IEC 42001:2023 Mapping](enterprise/compliance/ISO-42001-MAPPING.md):** Annex A controls for AI Risk Management Systems (AIMS).
+- 🇪🇺 **[EU AI Act Mapping](enterprise/compliance/EU-AI-ACT-MAPPING.md):** Compliance crosswalk for Articles 12, 13, 14, 15, and 50.
+- 🛡️ **SOC 2 Type II:** Logical access controls (CC6.1, CC6.6, CC6.7) and change management tracking.
 
 ---
 
-### Option C: Team Hub & Web Console (Docker Compose)
+## Licensing & Tiers
 
-Deploy the complete centralized control plane (PostgreSQL, Go Control Plane API, React Management Console, and Security Gateway):
+| Capability | Local Workstation (Core) | Community / SMB Team | Enterprise Fleet |
+|---|:---:|:---:|:---:|
+| **License** | **Apache 2.0 (Open Source)** | **Free Community** | **Commercial** |
+| **Device Capacity** | Unlimited (Local) | Up to 50 Devices | Unlimited |
+| **Deterministic Gateway Core** | ✅ Included | ✅ Included | ✅ Included |
+| **In-Line DLP & Secret Redaction**| ✅ Included | ✅ Included | ✅ Included |
+| **HMAC Chained Audit Ledger** | ✅ Local JSONL | ✅ Aggregated | ✅ Central Splunk/Datadog Sync |
+| **Spend Caps & Budget Quotas** | Local Ledger | ✅ Central Management | ✅ Multi-Org Hierarchical Budgets |
+| **Identity & SSO** | Local OS Token | 2 OIDC IdPs | Unlimited SAML 2.0 / OIDC (Okta/Entra) |
+| **Credential Custody** | DPAPI / Keychain | Central SQLite Vault | HashiCorp Vault / AWS KMS / Azure CMK |
+| **Compliance Export Packages** | Basic Markdown | Included | Attested PDF / Registrars Dossiers |
+| **Deployment Support** | Community GitHub | Discord / Community | Dedicated Architect & 24/7 SLA |
 
-```bash
-git clone https://github.com/noviqtechnologies/Vexa-Agent-Control.git
-cd Vexa-Agent-Control
-
-# Configure local environment
-cp .env.team.example .env
-
-# Launch full team stack
-docker compose -f docker-compose.team.yml up -d
-```
-
-| Service | Endpoint | Description |
-|---|---|---|
-| **Web Console UI** | `http://localhost:18300` | Guardrail presets, model gateways, cost & budgets, audit logs |
-| **Control Plane API** | `http://localhost:18081` | Policy distribution, enrollment, audit checkpoint API |
-| **Security Gateway** | `http://localhost:18080` | High-throughput Rust LLM and MCP proxy |
-
-#### Developer Workstation Enrollment to Team Hub:
-```bash
-# Authenticate workstation via browser SSO and enroll machine identity with the Hub:
-agentcontrol login --hub http://localhost:18081
-agentcontrol connect cursor
-```
+Review [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md) for full terms.
 
 ---
 
-### Option D: Standalone Docker Proxy
+## Community & Security Reporting
 
-Run a zero-dependency, non-root (UID 10001) proxy bound strictly to loopback (`127.0.0.1:18080`):
-
-```bash
-docker compose -f docker-compose.standalone.yml up -d
-```
-
----
-
-## 🏛️ Architecture & Data Flow
-
-```mermaid
-graph TB
-    subgraph Workstation["Developer Workstation (Self-Hosted Local Profile — P0)"]
-        direction TB
-        subgraph DevAgents["AI Coding Assistants & Clients"]
-            IDE_WRAP["Wrapped Assistant (stdio / HTTP proxy)<br/>Cursor / Claude Code / Claude Desktop / Antigravity"]
-            IDE_DIRECT["Unwrapped / Direct Tool Calls<br/>(Tracked as UNCOVERED via Capability Manifest)"]
-        end
-        subgraph LocalGateway["Vexa Agent Control Gateway Engine (Rust 1.80+)"]
-            IPC_EP["OS-Native IPC Endpoint<br/>Windows Named Pipe / POSIX UDS 0600"]
-            HTTP_EP["Loopback HTTP/WS Listener<br/>127.0.0.1:18080 (Loopback & Anti-Rebinding)"]
-            subgraph GatewayPipeline["Execution Pipeline (ArcSwap Snapshot)"]
-                AUTHN["Local Identity & Session Validator<br/>OS Token / W3C traceparent"]
-                PRE_AUTH["Pre-Execution Policy Evaluator<br/>Deterministic Default-Deny"]
-                SCHEMA_PIN["Tool Identity & Schema Drift Guard<br/>SHA-256 Canonical Digest Pinning"]
-                ARG_CONSTR["Param & Path Traversal Guard<br/>Canonical Path / Egress Check"]
-                AUTONOMY["Bounded Autonomy & Loop Guard<br/>Rate / Duration / Call Budgets"]
-                DLP_SCAN["Inline DLP & Secret Redactor<br/>20+ Patterns / Shannon / Luhn"]
-                HITL_CAS["Exact-Action HITL Engine<br/>Atomic CAS Approval State Machine"]
-            end
-            subgraph LocalDataPlane["Local Durable Persistence & Outbox"]
-                LOCAL_STORE["Local Credential Vault<br/>DPAPI / Keychain / 0600 File"]
-                LOCAL_AUDIT[("audit.jsonl<br/>HMAC-SHA256 Chain + fsync")]
-                LOCAL_DB[("Local State (SQLite)<br/>traces.db & spend_ledger")]
-                OUTBOX_WORKER["Decoupled Durable Outbox<br/>Async SIEM / Telemetry Dispatch"]
-            end
-            JOURNAL["Configuration Journal & Rollback<br/>.baseline.bak & Manifest"]
-        end
-        CLI["agentcontrol CLI<br/>Status / Connect / Verify / Kill"]
-    end
-    subgraph ControlPlane["Customer-Operated Control Plane (Team / Enterprise Profile — P1)"]
-        direction TB
-        subgraph HubAPI["Vexa Control Hub API (Go 1.22+)"]
-            HUB_REST["REST Gateway API<br/>/bootstrap, /policies, /telemetry, /gateways"]
-            SSE_BROKER["SSE Policy & Event Broker<br/>Real-Time Delta Stream (Workspace-Scoped)"]
-            VIRTUAL_KEY_SVC["Scoped Virtual Key Broker<br/>Revocable Tokens & Provider Key Vault"]
-            POSTURE_SVC["Fleet Readiness & Health Engine<br/>Postures: ENFORCED, OBSERVED, UNHEALTHY"]
-            KILL_SWITCH["Emergency Stop & Revocation<br/>Targeted Agent/Session/Tool Kill"]
-        end
-        HUB_UI["Vexa Control Hub Web Console<br/>React 18 + TS (RBAC Role Separation)"]
-        subgraph CentralStore["Customer-Managed Central Persistence"]
-            DB_PG[("PostgreSQL 15+<br/>Policies, Keys (AES-256-GCM), Dossiers, Audit")]
-            VALKEY_STATE[("Valkey / Redis (Optional)<br/>Atomic Preflight Spend & Token Buckets")]
-        end
-    end
-    subgraph ExternalCustomerInfra["Customer-Controlled Enterprise Services"]
-        IDP["Corporate IdP (OIDC / OAuth 2.0 PKCE)<br/>Google Workspace / Entra ID / Okta"]
-        SIEM["Enterprise SIEM / WORM Storage<br/>Splunk HEC / Datadog / OpenSearch"]
-        MCP_SERVERS["External / Local MCP Servers<br/>Filesystem / Git / Postgres / Custom Tools"]
-    end
-    subgraph UpstreamLLMs["Upstream Model Endpoints (Connected Modes)"]
-        OAI["OpenAI API"]
-        ANTHROPIC["Anthropic Claude API"]
-        GEMINI["Google Gemini API"]
-        CUSTOM_LLM["Self-Hosted / Private VPC LLMs<br/>vLLM / Ollama / TGI (Air-Gapped Compatible)"]
-    end
-    IDE_WRAP -->|stdio JSON-RPC / HTTP:18080| LocalGateway
-    IDE_DIRECT -.->|Unmanaged Direct Path| MCP_SERVERS
-    CLI -->|Local IPC / Named Pipe / UDS| IPC_EP
-    IPC_EP --> GatewayPipeline
-    HTTP_EP --> GatewayPipeline
-    GatewayPipeline --> AUTHN --> PRE_AUTH --> SCHEMA_PIN --> ARG_CONSTR --> AUTONOMY --> DLP_SCAN --> HITL_CAS
-    HITL_CAS -->|Durable fsync before dispatch| LOCAL_AUDIT
-    HITL_CAS -->|Record session trace & spend| LOCAL_DB
-    LOCAL_AUDIT --> OUTBOX_WORKER
-    GatewayPipeline -->|Governed stdio / Streamable HTTP| MCP_SERVERS
-    GatewayPipeline -->|Key-Injected / Brokered Request| UpstreamLLMs
-    OUTBOX_WORKER -->|Batch Telemetry / Outbox| HUB_REST
-    LocalGateway -.->|SSE Delta Policy Stream| SSE_BROKER
-    LocalGateway -->|Initial State Bootstrap| HUB_REST
-    LocalGateway -->|Direct Local SIEM Export| SIEM
-    HUB_REST --> DB_PG
-    SSE_BROKER --> DB_PG
-    VIRTUAL_KEY_SVC --> DB_PG
-    VIRTUAL_KEY_SVC --> VALKEY_STATE
-```
-
-Vexa Agent Control operates across 4 coordinated architectural planes:
-
-1. **Edge Execution Plane (Developer Workstation):**
-   - Background daemon listens strictly on loopback (`127.0.0.1:18080`), zero elevation required.
-   - `stdio-proxy` child processes enforce memory RSS ceilings (< 64MB) and 60s timeouts per MCP server.
-   - Authoritative `OwnershipManifest` guarantees 100% non-destructive, reversible client config changes.
-   - OS-native authenticated IPC (Windows Named Pipe with SID DACL; POSIX unix socket `0600`).
-2. **Gateway Broker Plane (Rust Proxy Core):**
-   - High-throughput asynchronous Hyper 1.0 engine with sub-millisecond evaluation overhead per request.
-   - Dual-tier semantic vector cache resolves repeated queries in ~2.4ms (L1 SHA-256 + L2 Cosine Vector).
-   - Inline 21-pattern DLP scanner, prompt injection heuristics, and MCP tool path-traversal firewall.
-   - Forwards centrally brokered requests upstream to the **Go Control-Plane Broker** via scoped virtual keys.
-3. **Control-Plane Broker & Governance Plane (Go — 1-Region Topology):**
-   - **Authoritative LLM Router Engine:** Resolves active versioned `RouteProfile` for each brokered request (Primary + max 1 Fallback, max 2 attempts, configurable `deadline_ms`).
-   - **Bounded Retry Loop:** Classifies upstream errors (retryable: 502/503/504/429 within deadline; non-retryable: 400/401/403/spend denial) with full-jitter backoff. Retry is prohibited once the first downstream SSE byte is committed.
-   - **Preflight Spend Reservation:** Reserves microcent ceiling across all eligible route candidates before any egress; single idempotent settlement after completion.
-   - **Request Dossier Store:** Every brokered request and its ordered attempt records are persisted in PostgreSQL (`broker_requests`, `broker_attempts`) with W3C `traceparent` correlation and complete secret scrubbing.
-   - **Multi-factor `/readyz` Probe:** Validates DB, active route profile, spend service, audit outbox, and at least one eligible provider route before accepting live traffic.
-   - Multi-tenant PostgreSQL with BSD Valkey distributed state. OIDC identity binding (Google Workspace, Entra ID, Okta, Auth0, Keycloak). Cryptographically signed Ed25519 policy distributions.
-4. **Audit & Analytics Plane:**
-   - Sequential HMAC-SHA256 hash-chained tamper-evident audit ledger (`audit.jsonl`) — committed to disk via `sync_all()` before confirming each request.
-   - Non-blocking asynchronous fanout to enterprise SIEM platforms (Splunk HEC, Datadog, OpenSearch).
-   - Complete request dossiers queryable via `GET /api/v1/observability/request-logs/{id}/dossier`.
-
----
-
-## 📜 Declarative Policy Specification
-
-Policies are defined in standard GitOps-friendly YAML (`agentcontrol-policy.yaml`):
-
-```yaml
-version: "2"
-default_action: deny
-
-# LLM Provider Controls & Whitelisting
-llm:
-  providers:
-    - name: "openai"
-      action: "allow"
-      models: ["gpt-4o*", "o1*", "o3*"]
-      max_tokens_per_request: 4096
-    - name: "anthropic"
-      action: "allow"
-      models: ["claude-3-7*", "claude-3-5*"]
-  
-  # Inline Data Loss Prevention
-  dlp:
-    actions:
-      - entity: "AWS_KEY"
-        action: "deny"
-      - entity: "OPENAI_KEY"
-        action: "deny"
-      - entity: "SSH_KEY"
-        action: "deny"
-      - entity: "CREDIT_CARD"
-        action: "deny"
-
-  # Enterprise Semantic Vector Caching
-  semantic_cache:
-    enabled: true
-    similarity_threshold: 0.88
-    backend: "in_memory" # "in_memory" | "qdrant"
-    embedder:
-      engine: "local"
-
-# Microcent Budget Governance
-spend_caps:
-  enabled: true
-  concurrency_ceiling: 50
-  max_tokens_per_session: 100000
-
-# MCP Tool Sandboxing & Path Traversal Guards
-tools:
-  - name: "read_file"
-    action: allow
-    parameters:
-      - name: "path"
-        type: string
-        required: true
-        validators:
-          - path_traversal
-```
-
----
-
-## 🖥️ Unified UI Experience Across Workstation & Fleet
-
-Vexa Agent Control provides a seamless, unified governance interface designed for two distinct scopes:
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 VEXA AGENT CONTROL UI                                  │
-├───────────────────────────────────────────┬────────────────────────────────────────────┤
-│ 💻 THIS DEVICE (`127.0.0.1:18080`)        │ 🏢 TEAM HUB (`localhost:18300` / Cloud)    │
-│ • Local Workstation Developer Dashboard   │ • Multi-Workstation Fleet Governance       │
-│ • Zero External Dependencies (Embedded)   │ • Organization SSO & Policy Distribution   │
-│ • Live SSE Traffic & DLP Redactions       │ • Global Spend Caps & Virtual Key Vault    │
-│ • Interactive HITL Approval Prompts       │ • Multi-Agent Audits & SIEM Export         │
-│ • Client Connection & Port Posture        │ • Centralized SOC 2 / ISO 27001 Dossiers   │
-└───────────────────────────────────────────┴────────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ Complete CLI Reference & Operations
-
-The `agentcontrol` CLI conforms strictly to PRD §12, providing deterministic, cross-platform lifecycle commands:
-
-| Command | Arguments / Flags | Description |
-|---|---|---|
-| `agentcontrol start` | `[--listen <addr>] [--centralized] [--standalone]` | Launch local security gateway proxy daemon (`127.0.0.1:18080`). Add `--standalone` to run offline without remote Hub connections |
-| `agentcontrol stop` | `[--gateway <url>]` | Gracefully shut down active local gateway proxy |
-| `agentcontrol status` | `[--json]` | Display active target capability vectors, MCP routing, and traffic freshness |
-| `agentcontrol clients` | `[--json]` | List detected, connected, and protected IDE clients and MCP runtimes |
-| `agentcontrol connect <target>` | `[--mode local\|cloud-direct] [--key <k>]` | Connect an IDE assistant (Cursor, Claude, Codex, Antigravity, VS Code) |
-| `agentcontrol disconnect <target>` | — | Non-destructively disconnect an assistant and restore original configs |
-| `agentcontrol policy init` | `[-o <file>]` | Generate standard baseline security policy YAML |
-| `agentcontrol policy validate` | `[-p <file>]` | Validate policy YAML schema and security invariants |
-| `agentcontrol policy show` | `[--json]` | Inspect active effective policy rules (secrets automatically redacted) |
-| `agentcontrol policy test` | `[--policy <p>] [--dry-run]` | Test synthetic fixtures or calls against active policy |
-| `agentcontrol doctor` | `[--json]` | Read-only diagnostic health check (0: healthy, 1: critical, 2: degraded) |
-| `agentcontrol logs` | `[-n <limit>] [-f] [--format text\|json]` | Query or live-stream local audit events and security decisions |
-| `agentcontrol export-traces` | `[--format jsonl\|json] [-o <file>] [-n <limit>]` | Export execution traces in native JSON/JSONL format |
-| `agentcontrol approve <id>` | `[--session]` | Approve a pending Human-in-the-Loop (HITL) action request |
-| `agentcontrol deny <id>` | — | Deny a pending Human-in-the-Loop (HITL) action request |
-| `agentcontrol login` | `[--hub <url>]` | Authenticate via browser PKCE and enroll machine identity with Team Hub |
-| `agentcontrol logout` | — | Clear local session tokens and return to standalone offline mode |
-| `agentcontrol unenroll` | `[--force]` | Disconnect device from Control Hub and clear local identity state |
-| `agentcontrol verify` | `[--json]` | Run live 4-point security verification probe against gateway |
-| `agentcontrol scan` | `[--path <file>] [--format text\|json]` | Scan local MCP server configurations and tool definitions for vulnerabilities |
-| `agentcontrol cache` | `status \| clear` | Manage semantic vector cache, tokens saved, and prompt economics |
-| `agentcontrol spend` | `status \| set-cap \| export` | Enforce FinOps microcent rate caps, budgets, and token accounting |
-| `agentcontrol support-bundle` | `[--output-dir <dir>] [-y]` | Generate sanitized, secret-redacted diagnostic bundle (< 10MB) |
-| `agentcontrol verify-db` | — | Verify SQLite integrity and cryptographic HMAC-SHA256 audit log chain |
-
----
-
-## ☁️ Production & Cloud Deployment
-
-Deploy Vexa Agent Control to your production infrastructure using enterprise-grade infrastructure-as-code:
-
-### Multi-Cloud OpenTofu / Terraform
-Production blueprints with ~$0–$25/mo baseline cost:
-- **AWS ECS Fargate:** Spot task execution, ALB, AWS Secrets Manager ([`infra/aws`](infra/README.md))
-- **Azure Container Apps:** Scale-to-zero microservices with built-in Envoy ingress ([`infra/azure`](infra/README.md))
-### Deployment Support Matrix
-
-| Deployment Form | Target OS / Runtime | Binary Artifact | Security Verification | Fleet Status |
-|-----------------|---------------------|-----------------|-----------------------|--------------|
-| **Workstation Sidecar** | Windows 10/11, macOS, Linux | Native statically-linked binary (`agentcontrol`) | Gates 0–4 Test Suites (100% Pass) | Enterprise Pilot Ready |
-| **Team Gateway** | Docker Compose / Linux VM | Docker image (`ghcr.io/noviqtechnologies/agentcontrol`) | End-to-End Go Hub + Rust Gateway contracts | Enterprise Pilot Ready |
-| **Enterprise Fleet** | Kubernetes 1.26+ (Helm) | HAR OCI Distroless Sidecar (`Dockerfile.har`) | mTLS, Keyring Signed Ingestion, Anti-Rollback | Enterprise Pilot Ready |
-| **Serverless Containers** | AWS ECS Fargate, Azure ACA, Cloud Run | OpenTofu / Terraform Blueprints (`infra/`) | Cloud IAM & KMS Enclave validation | Reference Blueprints |
-
----
-
-## 🔒 Security, Privacy & Sovereign Independence
-
-- **100% Free & Open-Source Core:** Released under the permissive **[Apache 2.0 License](LICENSE)**.
-- **Zero Telemetry Guarantee:** Absolutely no tracking pings, metrics exfiltration, or cloud phone-home in standalone mode. Your prompts, code, and credentials remain 100% within your perimeter.
-- **Zero Private Key Ingestion:** Workstations generate Ed25519 device keypairs locally in OS hardware/secure storage (DPAPI/Keychain). Private keys never leave the host.
-- **Cryptographic Audit Chain:** Every single log entry in `audit.jsonl` is linked via HMAC-SHA256 hash chaining to guarantee tamper-evidence.
-- **Continuity Guarantee:** Read our [Continuity & Sovereign Guarantee](docs/CONTINUITY_GUARANTEE.md) detailing why your team will never be stranded or locked in.
-
----
-
-## 📚 Documentation Index
-
-Explore the complete [Documentation Hub](docs/README.md):
-
-- **Getting Started:** [10-Minute Developer Quickstart](docs/quickstart.md) · [Workstation Guide](docs/guides/workstation.md) · [Docker Deployment](docs/guides/docker-deployment.md)
-- **Integration Guides:** [Integrations Matrix](docs/integrations/README.md) · [Cursor](docs/integrations/cursor.md) · [Claude Desktop](docs/integrations/claude-desktop.md) · [Claude Code](docs/integrations/claude-desktop.md) · [Antigravity](docs/integrations/antigravity.md) · [Codex](docs/integrations/codex.md) · [Custom Python/TS Agents](docs/guides/custom-agent-http.md)
-- **Enterprise & Governance:** [Team Hub Guide](docs/team_hub_guide.md) · [Organization Admin & Virtual Keys](docs/organization_admin_guide.md) · [OIDC Identity Binding](docs/advanced/oidc.md) · [SIEM Forwarding](docs/advanced/siem.md) · [Kubernetes Helm](docs/advanced/kubernetes.md)
-- **Technical Reference:** [CLI Commands](docs/reference/cli.md) · [Policy Configuration](docs/reference/configuration.md) · [Host Threat Model](docs/security/threat_model.md) · [Audit Threat Model](docs/security/audit-threat-model.md) · [Troubleshooting](docs/reference/troubleshooting.md)
-
----
-
-## ⚠️ Public Preview Scope & Known Limitations
-
-Vexa Agent Control is provided as a **developer public preview**. While core security components are tested with automated regression suites across Windows, macOS, and Linux, prospective evaluators should be aware of the following operational boundaries:
-
-1. **Same-User Process Boundaries:** The workstation daemon binds to `127.0.0.1:18080`. Host processes running with the same local OS user account can access loopback connections. For hostile multi-tenant local environments, container bridge mode or dedicated OS user isolation is required.
-2. **Human-in-the-Loop (HITL) Guarantees:** 
-   - Approval requests write append-only state transitions to the durable WAL (`hitl_wal.jsonl`).
-   - If the daemon crashes during tool execution, recovery guarantees that uncertain side effects are marked `OUTCOME_UNKNOWN` rather than silently re-executed.
-   - `PERMANENT_ALLOW` is explicitly prohibited in preview builds; durable exceptions must be made via auditable policy configuration files in version control.
-3. **Hardware & Benchmark Evidence:** All release receipts (`target/benchmark_release_receipt.json`) are generated directly from live Criterion runs and security precision/recall evaluation.
-4. **Tested Platform Matrix:**
-   - **Linux:** Ubuntu 20.04 / 22.04 / 24.04 (x86_64, aarch64)
-   - **macOS:** macOS 13 / 14 / 15 (Apple Silicon M-series, Intel x86_64)
-   - **Windows:** Windows 10 / 11 / Server 2022 (x86_64)
-   - *Full specification:* [Cross-Platform Deployment Support Matrix](design/architecture/deployment-support-matrix.md)
-5. **Security Architecture Specifications:**
-   - [PDP / PEP Separation & Single-Forwarding Invariant](design/architecture/pdp-pep-separation.md)
-   - [5-Stage Decision Combining Algorithm](design/architecture/decision-combining-algorithm.md)
-   - [Policy Trust Model & Signed Distribution](design/architecture/policy-trust-model.md)
-   - [Coverage Verification Protocol](design/architecture/coverage-verification-protocol.md)
-   - [Result Boundary & Scanner Failure Matrix](design/architecture/result-boundary-model.md)
-
----
-
-## 📣 Public Preview Feedback
-
-> [!IMPORTANT]
-> **Vexa Agent Control is currently in public preview.** Your feedback directly influences what we build next.
-
-We want to hear about your experience — whether it's a missing integration, a policy edge case, a UX rough edge, or a feature you wish existed. Every submission is read by the core team.
-
-### 👉 [Share Feedback via the Public Preview Form](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues/new?template=preview-feedback.yml)
-
-Specifically we'd love to know:
-- **Integrations** — Are there coding assistants or LLM providers we should prioritize?
-- **Policies** — Are the default DLP patterns too aggressive or missing key patterns for your stack?
-- **Operations** — What's the hardest part of deploying or managing Vexa Agent Control in your team?
-- **Security** — Are there threat vectors or compliance requirements we should address sooner?
-
----
-
-## 💬 Community & Support
-
-- 💬 **Discord:** [Join the Vexa Community](https://discord.gg/vexasec)
-- 🐞 **GitHub Issues:** [Report Bugs & Request Features](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues)
-- 🔒 **Security Advisories:** [SECURITY.md](SECURITY.md) · [Report Vulnerability](https://github.com/noviqtechnologies/Vexa-Agent-Control/security/advisories/new)
-- 🏢 **Enterprise Inquiries:** [contact@vexasec.io](mailto:contact@vexasec.io) · [vexasec.io](https://vexasec.io)
+- 🐞 **Issue Tracker:** [GitHub Issues](https://github.com/noviqtechnologies/Vexa-Agent-Control/issues)
+- 🔒 **Security Disclosures:** Follow [SECURITY.md](SECURITY.md) to report vulnerabilities privately via GitHub Security Advisories or [`contact@vexasec.io`](mailto:contact@vexasec.io).
+- 🏢 **Commercial Inquiries:** Visit [vexasec.io](https://vexasec.io) or email [`contact@vexasec.io`](mailto:contact@vexasec.io).

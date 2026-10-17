@@ -266,10 +266,7 @@ pub fn durable_atomic_replace(target: &Path, bytes: &[u8]) -> std::io::Result<()
     if !success {
         let _ = fs::remove_file(&tmp_file);
         return Err(last_err.unwrap_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to replace file atomically across OS boundary",
-            )
+            std::io::Error::other("Failed to replace file atomically across OS boundary")
         }));
     }
 
