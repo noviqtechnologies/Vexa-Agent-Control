@@ -44,11 +44,11 @@
 
 ## 💡 Overview
 
-> **Vexa helps engineering teams govern the AI-agent traffic they route through it, with centrally managed policies and verifiable, per-surface enforcement evidence.**
+> **Vexa Agent Control helps engineering teams govern the AI-agent traffic they route through it, with centrally managed policies and verifiable, per-surface enforcement evidence.**
 
 > [!IMPORTANT]
 > **Enforcement Boundary & Non-Bypassability Limitation:**  
-> **Vexa does not by itself prevent a workstation owner or unmanaged process from bypassing a local proxy. Use managed endpoint (MDM/EDR) and network egress controls when mandatory, non-bypassable enforcement is required.**  
+> **Vexa Agent Control does not by itself prevent a workstation owner or unmanaged process from bypassing a local proxy. Use managed endpoint (MDM/EDR) and network egress controls when mandatory, non-bypassable enforcement is required.**  
 > A local proxy governs only traffic routed through it. Vexa does not claim universal containment, immunity against privileged host attackers, or non-bypassability from uncooperative local software without external controls.
 
 **Vexa Agent Control** is an evidence-first security gateway and transparent runtime proxy purpose-built for AI agents, developer IDEs, and enterprise platform teams. It intercepts Model Context Protocol (MCP) and HTTP/LLM communications to provide deterministic safety, secret protection, token economics, and tamper-evident auditability in sub-millisecond execution times.
