@@ -158,6 +158,14 @@ tools:
       - name: "path"
         type: string
         required: false
+      - name: "content"
+        type: string
+        required: false
+llm:
+  dlp:
+    actions:
+      - entity: "AWS Access Key"
+        action: "block"
 "#,
     )
     .expect("write test policy");

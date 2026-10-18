@@ -323,6 +323,174 @@ pub async fn evaluate_stdio_request(
             });
         }
 
+        // FR-12: Content-Aware DLP & Secret Detection on outbound tool call parameters
+        let params_str = arguments.to_string();
+        let dlp_findings = state.dlp_scanner.scan_content(&params_str);
+        if !dlp_findings.is_empty() {
+            if state.shadow_mode.load(Ordering::Relaxed) {
+                let f = &dlp_findings[0];
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &session.session_id,
+                        "dlp_warning",
+                        tool_name,
+                        None,
+                        Some(format!(
+                            "pattern={} category={} preview={}",
+                            f.pattern_name,
+                            f.category.as_str(),
+                            f.preview
+                        )),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+            } else {
+                let policy_opt = session.get_policy().or_else(|| state.get_policy());
+                let actions: Vec<crate::policy::dlp::DlpAction> = dlp_findings
+                    .iter()
+                    .map(|f| {
+                        if let Some(p) = policy_opt.as_ref() {
+                            if let Some(llm) = &p.llm {
+                                if let Some(dlp_cfg) = &llm.dlp {
+                                    if let Some(actions) = &dlp_cfg.actions {
+                                        for rule in actions {
+                                            let matches_entity =
+                                                rule.entity.eq_ignore_ascii_case(&f.pattern_name)
+                                                    || rule.entity.eq_ignore_ascii_case(f.category.as_str())
+                                                    || rule.entity.eq_ignore_ascii_case("default");
+                                            if matches_entity {
+                                                match rule.action.to_ascii_lowercase().as_str() {
+                                                    "block" => return crate::policy::dlp::DlpAction::Block,
+                                                    "redact" => return crate::policy::dlp::DlpAction::Redact,
+                                                    "warn" => return crate::policy::dlp::DlpAction::Warn,
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Default for tool call parameters is Redact (PRD §FR-7 / G1.4)
+                        crate::policy::dlp::DlpAction::Redact
+                    })
+                    .collect();
+
+                if actions.contains(&crate::policy::dlp::DlpAction::Block) {
+                    let block_finding = dlp_findings
+                        .iter()
+                        .zip(&actions)
+                        .find(|(_, a)| **a == crate::policy::dlp::DlpAction::Block)
+                        .map(|(f, _)| f)
+                        .unwrap_or(&dlp_findings[0]);
+
+                    state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                    let _ = state
+                        .audit_logger
+                        .write_entry(
+                            &session.session_id,
+                            "dlp_blocked",
+                            tool_name,
+                            None,
+                            Some(format!("dlp: {}", block_finding.pattern_name)),
+                            None,
+                            session.identity_sub.clone(),
+                            session.identity_email.clone(),
+                            None,
+                            session.request_ip.clone(),
+                            None,
+                        )
+                        .await;
+
+                    let decision = Decision::deny(
+                        "dlp_block",
+                        Some(format!("dlp: {}", block_finding.pattern_name)),
+                    );
+                    return Err(PepError::Denied {
+                        reason: format!("dlp: {}", block_finding.pattern_name),
+                        decision: Box::new(decision),
+                    });
+                } else if actions.contains(&crate::policy::dlp::DlpAction::Redact) {
+                    let mut redacted_args = arguments.clone();
+                    state.dlp_scanner.redact_value(&mut redacted_args);
+                    if let Some(p) = forwarded_request.get_mut("params") {
+                        if let Some(args) = p.get_mut("arguments") {
+                            *args = redacted_args;
+                        }
+                    }
+                }
+            }
+        }
+
+        // FR-13: Prompt Injection Scanning on outbound tool call parameters
+        let enforce_mode = !state.shadow_mode.load(Ordering::Relaxed);
+        let inj_scan_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            state.injection_scanner.scan_response(
+                &arguments,
+                tool_name,
+                &session.session_id,
+                enforce_mode,
+            )
+        }));
+
+        match inj_scan_result {
+            Ok(crate::policy::injection::ScanResult::Block { findings }) => {
+                let f = &findings[0];
+                state.metrics_deny_total.fetch_add(1, Ordering::Relaxed);
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &session.session_id,
+                        "injection_blocked",
+                        tool_name,
+                        None,
+                        Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+
+                let decision = Decision::deny(
+                    "injection_blocked",
+                    Some(format!("injection: {}", f.pattern_name)),
+                );
+                return Err(PepError::Denied {
+                    reason: format!("injection: {}", f.pattern_name),
+                    decision: Box::new(decision),
+                });
+            }
+            Ok(crate::policy::injection::ScanResult::Warn { findings }) => {
+                let f = &findings[0];
+                let _ = state
+                    .audit_logger
+                    .write_entry(
+                        &session.session_id,
+                        "injection_warning",
+                        tool_name,
+                        None,
+                        Some(format!("pattern={} preview={}", f.pattern_name, f.preview)),
+                        None,
+                        session.identity_sub.clone(),
+                        session.identity_email.clone(),
+                        None,
+                        session.request_ip.clone(),
+                        None,
+                    )
+                    .await;
+            }
+            _ => {}
+        }
+
         // ActionRequest & EvaluationContext
         let action = ActionRequest::McpToolCall {
             tool_name: tool_name.to_string(),

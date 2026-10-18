@@ -55,19 +55,35 @@ impl PepError {
     /// Convert PEP error state to standard JSON-RPC 2.0 error response object.
     pub fn to_jsonrpc_error(&self, id: &serde_json::Value) -> serde_json::Value {
         match self {
-            Self::Denied { reason, decision } => serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": {
-                    "code": -32001,
-                    "message": format!("Policy evaluation denied: {}", reason),
-                    "data": {
-                        "reason_code": reason,
-                        "verdict": "deny",
-                        "matched_group_id": decision.matched_group_id,
+            Self::Denied { reason, decision } => {
+                let rule_id = if reason.to_lowercase().contains("dlp")
+                    || reason.to_lowercase().contains("secret")
+                    || reason.to_lowercase().contains("access key")
+                {
+                    "DLP-01-HIGH-ENTROPY"
+                } else if reason.to_lowercase().contains("injection")
+                    || reason.to_lowercase().contains("jailbreak")
+                    || reason.to_lowercase().contains("override")
+                {
+                    "INJ-04-OVERRIDE"
+                } else {
+                    "tool_deny"
+                };
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32001,
+                        "message": format!("Policy evaluation denied: {}", reason),
+                        "data": {
+                            "reason_code": reason,
+                            "rule": rule_id,
+                            "verdict": "deny",
+                            "matched_group_id": decision.matched_group_id,
+                        }
                     }
-                }
-            }),
+                })
+            }
             Self::ApprovalRequired {
                 approval_id,
                 decision,
