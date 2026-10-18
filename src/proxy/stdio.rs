@@ -581,7 +581,7 @@ pub async fn run_stdio_bridge(
             // 2. Read from Agent (client)
             msg = agent_reader.next() => {
                 match msg {
-                    Some(Ok(mut json)) => {
+                    Some(Ok(json)) => {
                         // Protocol Check: Verify JSON nesting depth <= 32 levels
                         let depth = crate::mcp::policy::calculate_json_depth(&json);
                         if depth > crate::mcp::policy::MAX_JSON_DEPTH {
@@ -595,23 +595,6 @@ pub async fn run_stdio_bridge(
                             });
                             let _ = agent_writer.send(err_resp).await;
                             continue;
-                        }
-
-                        // Parameter DLP: Scan and redact sensitive tool call arguments in-place
-                        if let Some(params) = json.get_mut("params") {
-                            if let Some(args) = params.get_mut("arguments") {
-                                let findings = crate::mcp::policy::scan_and_redact_json(args);
-                                if !findings.is_empty() {
-                                    crate::logging::log_event(
-                                        crate::logging::Level::Info,
-                                        "mcp_parameter_dlp_redacted",
-                                        serde_json::json!({
-                                            "findings_count": findings.len(),
-                                            "pattern": findings[0].pattern_type
-                                        }),
-                                    );
-                                }
-                            }
                         }
 
                         // FR-303b: Extract tool name before forwarding
