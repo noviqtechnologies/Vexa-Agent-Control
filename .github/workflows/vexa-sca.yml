@@ -9,37 +9,44 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # Allows uploading SARIF alerts to GitHub Security tab
+  security-events: write
 
 jobs:
   security-scan:
-    name: Vexa SCA Security Gate
-    runs-on: windows-latest
+    name: Vexa SCA Quality Gate
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install Vexa SCA CLI
+        run: |
+          # Download latest release binary from your org's repository
+          curl -sSL "https://github.com/noviqtechnologies/vexa-sca/releases/latest/download/vexa-sca-linux-x86_64.tar.gz" | tar -xz
+          sudo mv vexa-sca /usr/local/bin/
+          vexa-sca --version
+
       - name: Execute Vexa SCA Quality Gate
         run: |
-          C:\vexa-sca\target\release\vexa-sca.exe scan . `
-            --fail-on critical `
-            --sarif-file results.sarif `
-            --html-file scan-dashboard.html `
-            --sbom cyclonedx `
+          vexa-sca scan . \
+            --fail-on critical \
+            --sarif-file results.sarif \
+            --html-file scan-dashboard.html \
+            --sbom cyclonedx \
             --sbom-file sbom.json
 
-      - name: Upload SARIF to GitHub Security Dashboard
+      - name: Upload SARIF to GitHub Security Alerts
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: results.sarif
 
-      - name: Archive HTML & SBOM Artifacts
+      - name: Archive HTML Dashboard & SBOM
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vexa-scan-reports
+          name: vexa-reports
           path: |
             scan-dashboard.html
             sbom.json
