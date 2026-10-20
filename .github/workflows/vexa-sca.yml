@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      create_fix_pr:
+        description: "Generate and open automated Security Fix PR"
+        type: boolean
+        default: false
+        required: false
 
 permissions:
-  contents: read
+  contents: write         # Needed to push fix branch
+  pull-requests: write    # Needed to open GitHub PR
   security-events: write
 
 jobs:
@@ -19,14 +26,16 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Vexa SCA CLI
         run: |
-          # Download latest release binary from your org's repository
           curl -sSL "https://github.com/noviqtechnologies/vexa-sca/releases/latest/download/vexa-sca-linux-x86_64.tar.gz" | tar -xz
           sudo mv vexa-sca /usr/local/bin/
           vexa-sca --version
 
+      # Standard Quality Gate Scan on Push / Pull Request
       - name: Execute Vexa SCA Quality Gate
         run: |
           vexa-sca scan . \
@@ -35,6 +44,18 @@ jobs:
             --html-file scan-dashboard.html \
             --sbom cyclonedx \
             --sbom-file sbom.json
+
+      # Automated Remediation PR Step (Executes when toggled on)
+      - name: Create Automated Fix PR
+        if: ${{ github.event.inputs.create_fix_pr == 'true' }}
+        run: |
+          git config --global user.name "vexa-sca-bot[bot]"
+          git config --global user.email "vexa-sca-bot@users.noreply.github.com"
+          vexa-sca fix . \
+            --create-pr \
+            --repo "${{ github.repository }}" \
+            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --base "main"
 
       - name: Upload SARIF to GitHub Security Alerts
         uses: github/codeql-action/upload-sarif@v3
