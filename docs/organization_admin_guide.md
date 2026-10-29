@@ -14,11 +14,11 @@ Under the **Single-Tenant Open-Core** model:
 
 Vexa operates on an **Open-Core** distribution model:
 
-| Edition | Capacity | Capabilities Included | Licensing & Availability |
+| Edition | Capacity / scope | Capabilities Included | Licensing & Availability |
 |---|---|---|---|
-| **Community Core (Open Source)** | Unlimited | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, safe-mode execution, prompt injection firewall, regex DLP | **Free & Open Source** (Apache 2.0 forever) |
-| **Team Control Hub** | Up to 5 devices (Early Access) / 50 devices (GA) | Centralized SSE policy push, OIDC identity binding, vault credential custody, live spend ledger, device compliance governance | **Free for 30 Days during Early Access** (Self-hosted via Docker Compose / Helm) |
-| **Enterprise / Sovereign** | Custom / Unlimited | Dedicated enterprise SLA, custom deployment support, sovereign air-gapped deployment assistance, SIEM streaming, custom DLP classifiers | **Commercial License / Design Partner Pilot** (Ed25519 Token) |
+| **Community Core (Open Source)** | Local workstation mode; no public organization-device cap | Core Rust Gateway, local proxy, MCP inspection, JSONL audit logs, safe-mode execution, prompt injection firewall, regex DLP | **Free & Open Source** under Apache-2.0 |
+| **Team Control Hub (Private Beta)** | Defined by the active beta cohort; no universal public cap or preview period | Only capabilities enabled and documented for the participating cohort | **Private beta; access, terms, limits, support, and duration are confirmed per cohort** |
+| **Enterprise / Sovereign (Future / Design Partner)** | Scoped individually; no standard public cap | Future capabilities only as validated and included in a written partner scope | **No generally available commercial tier or standard SLA is published** |
 
 ---
 
@@ -30,14 +30,14 @@ Vexa operates on an **Open-Core** distribution model:
 3. View your active organization details:
    - **Organization Name & Slug**
    - **Active License Tier** (`DEVELOPER`, `TEAM`, `ENTERPRISE`)
-   - **Device Quota & Capacity:** Real-time count of enrolled devices against your tier limit (e.g. `1/5`, `5/5`, or `Unlimited`).
-   - **Expiration Countdown:** Days remaining on your active license key or 30-day Early Access evaluation window.
+   - **Device Entitlement:** The active signed license or beta-cohort grant, if applicable, defines the current enrollment entitlement; the displayed count is not a general public cap.
+   - **Access Period:** The active license or cohort notice defines any expiration or review date; no universal beta evaluation period is published.
 
 ### Activating a License Key
-To upgrade or apply a commercial enterprise or design partner license (required after 30 days of Early Access or to connect > 5 devices):
+To activate access for a beta cohort or a separately scoped design-partner deployment:
 1. Obtain your cryptographically signed Ed25519 license JWT from your Vexa representative or design partner onboarding.
 2. In **Organization & License**, paste the JWT into the **Activate Design Partner / Enterprise License** input.
-3. Click **Activate License**. The control plane verifies the signature offline and immediately unlocks your new device capacity and capabilities.
+3. Click **Activate License**. The control plane verifies the signature offline and applies only the entitlements defined by that grant.
 
 Alternatively, set the environment variable on your Control Plane container:
 ```bash
@@ -46,12 +46,12 @@ export VEXA_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
 
 ---
 
-## 4. Device Enrollment Governance & Caps
+## 4. Device Enrollment & Cohort Entitlements
 
 When an agent workstation initiates enrollment via `agentcontrol login --hub <URL>` (interactive PKCE) or `agentcontrol enroll --token <TOKEN> --hub-url <URL>` (headless/MDM, requires admin-issued OTET):
-1. The Control Plane verifies that the 30-day Early Access evaluation window has not expired and that the active enrolled device count has not exceeded the license tier limit (`1` for Developer, `5` for Team during Early Access, `50` for Team at GA, unlimited for Enterprise).
-2. If the quota is full or the 30-day window has expired, enrollment is rejected with `429 Too Many Requests` (`device_limit_reached`) or `403 Forbidden` (`license_expired`). To request additional Early Access device capacity, reach out on the community Discord or email `contact@vexasec.io`.
-3. Revoking decommissioned devices in **Device Governance** immediately excludes them from the total enrolled count, freeing up capacity for new enrollments.
+1. The Control Plane validates the signed license/cohort grant and applies the enrollment entitlement and validity dates encoded for that deployment. There is no universal public device cap or beta duration.
+2. If the active grant's entitlement is exhausted or its validity has ended, enrollment can be rejected with the corresponding authorization/quota response. Request changes through the contact path supplied with the beta cohort or written agreement; do not infer a general allowance from this guide.
+3. Revoking decommissioned devices in **Device Governance** updates the enrolled-device count. Any resulting capacity is still governed by the active grant.
 
 > [!NOTE]
 > The primary developer onboarding path is `agentcontrol login`, which handles PKCE authentication, device registration, and background service installation in a single step. The `agentcontrol enroll --token` path requires an admin-issued one-time token and is reserved for future headless/MDM/CI fleet deployment workflows (Hub-side token generation not yet available).
@@ -187,6 +187,5 @@ Administrators can bind tool access and model permissions to Identity Provider g
 6. Click **Publish Version** to dynamically assemble and broadcast the active policy to all connected agent gateways.
 
 For complete details, step-by-step IdP token claim setup, and testing instructions, see the dedicated [Group Policies Guide](./guides/group_policies_guide.md).
-
 
 

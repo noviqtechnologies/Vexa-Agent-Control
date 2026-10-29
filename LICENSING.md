@@ -1,6 +1,6 @@
 # Vexa Agent Control Licensing
 
-**Last updated:** 4 October 2026  
+**Last updated:** 29 October 2026
 **Primary License:** [Apache License 2.0](LICENSE)
 
 ---
@@ -9,47 +9,41 @@
 
 The core Vexa Agent Control enforcement gateway, local workstation daemon, and developer CLI are licensed under the permissive **Apache License, Version 2.0**.
 
-### What is 100% Free and Open Source Forever:
-- **Local Workstation Protection:** Full runtime protection for developers using Cursor, Claude Desktop, Claude Code, OpenAI Codex, Windsurf, VS Code, and custom agent runtimes.
-- **Deterministic Out-of-Process Gateway:** Local proxy on `127.0.0.1:18080` intercepting MCP stdio, HTTP, HTTPS, and streaming tool executions.
-- **Security & DLP Scanners:** Safe Mode v1 rules, 6-pass prompt injection normalizer, response secret redaction, and cycle/loop prevention (`PivotError`).
-- **Cryptographic Audit Log:** Cryptographically chained HMAC-SHA256 audit ledger (`audit.jsonl` and local `events.db`).
-- **Developer CLI:** `agentcontrol start`, `stop`, `status`, `doctor`, `connect`, `disconnect`, `test`, and `verify`.
-- **Zero Telemetry:** Local-first operation with zero phone-home calls or external cloud dependencies.
+### What is covered by the Apache-2.0 core
 
-You may inspect, modify, run locally, and redistribute the core engine without payment, account creation, or proprietary licensing restrictions.
+- **Local Workstation Protection:** Local workstation use for supported runtimes and paths, within the limits documented by the product guides.
+- **Deterministic Gateway:** The local proxy and supported MCP/tool execution paths implemented by the release being used.
+- **Security & DLP Scanners:** Shipped scanner/rule behavior; do not infer universal interception from individual checks.
+- **Cryptographic Audit Log:** The local audit mechanisms shipped by the release.
+- **Developer CLI:** Commands documented in the current CLI reference.
+- **Local-first operation:** Verify the selected run mode and its network behavior using the applicable guide.
 
----
-
-## 2. Team Hub & Fleet Governance
-
-Team Hub provides centralized governance, policy distribution, fleet telemetry aggregation, and multi-device identity binding.
-
-### Community / Small-Team Mode (Free)
-- **Device Capacity:** Free for up to 50 enrolled developer devices during early access.
-- **Identity:** Up to 2 concurrent OIDC Identity Providers (e.g. Google Workspace and GitHub SSO).
-- **Central Management:** Web Console UI, dynamic policy push, shared spend budgets, and centralized audit search.
-
-### Enterprise Fleet Governance (Commercial)
-- Unlimited devices and agents across large enterprise organizations.
-- Unlimited federated SSO / IdPs (Okta, Microsoft Entra ID, Ping, Keycloak).
-- Automated compliance audit packages (SOC 2 Type II, ISO 27001, NIST AI RMF).
-- High-availability deployment configurations and enterprise SLAs.
+You may inspect, modify, run locally, and redistribute the core engine under Apache-2.0 without payment, account creation, or proprietary licensing restrictions.
 
 ---
 
-## 3. Summary Matrix
+## 2. Team Hub (Private Beta)
 
-| Capability | Local Workstation (Core) | Small Team (Community) | Enterprise Fleet |
-| :--- | :---: | :---: | :---: |
-| **License** | Apache-2.0 | Free Community | Commercial |
-| **Max Devices** | Unlimited (Local) | Up to 50 Devices | Unlimited |
-| **Local Proxy Interception** | ✅ Included | ✅ Included | ✅ Included |
-| **Deterministic Parameter DLP** | ✅ Included | ✅ Included | ✅ Included |
-| **HMAC Chained Audit Trail** | ✅ Included | ✅ Included | ✅ Included |
-| **CLI & Diagnostics (`doctor`)** | ✅ Included | ✅ Included | ✅ Included |
-| **Central Fleet Policy Push** | N/A | ✅ Included | ✅ Included |
-| **OIDC SSO Providers** | N/A | Up to 2 IdPs | Unlimited |
-| **Compliance Export Packages** | Basic JSON/Markdown | Included | Automated & Attested |
+Team Hub is in private beta. Availability, enabled capabilities, supported integrations, device entitlements, access duration, support, and any commercial terms are defined for each participating cohort. There is **no universal public device cap, evaluation period, or list price**.
 
-For licensing inquiries, enterprise deployment support, or commercial partnerships, visit [vexasec.io](https://vexasec.io) or open an issue on GitHub.
+Use only the signed entitlement and written cohort notice issued for your deployment. A value or feature supplied to one cohort does not establish a standard allowance for other organizations. Do not infer a free tier, generally available plan, or service-level commitment from this document.
+
+---
+
+## 3. Enterprise / Design-Partner Scope
+
+Enterprise fleet governance is available only as individually scoped design-partner work where explicitly agreed. Capacity, features, integrations, deployment model, support, and commercial terms are defined in the applicable written scope. There is no standard public enterprise device cap, unlimited-capacity promise, general availability commitment, or default SLA.
+
+---
+
+## 4. Summary Matrix
+
+| Capability | Local Workstation Core | Team Hub | Enterprise / Design Partner |
+|---|---|---|---|
+| Availability | Apache-2.0 core | Private beta by cohort | Individually scoped engagement only |
+| License and price | Apache-2.0; no charge for the core | Cohort terms; no public list price | Written scope; no standard public price |
+| Device capacity and access period | Local mode; no organization-tier entitlement stated | Defined by the active signed cohort grant; no universal public cap or period | Defined by written partner scope; no standard public cap |
+| Enabled features and integrations | As shipped and documented for the core release | Only capabilities explicitly enabled for the cohort | Only capabilities explicitly validated and included in the partner scope |
+| Support | Community channels; no enterprise SLA implied | As stated in the cohort notice; no general SLA implied | Only as expressly stated in the written agreement |
+
+For questions about a current Team Hub cohort or design-partner scope, use the contact path supplied for that program. This document does not create a service offer or override a signed cohort grant or written agreement.

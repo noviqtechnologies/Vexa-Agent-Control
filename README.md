@@ -7,6 +7,7 @@
 [![Release](https://img.shields.io/badge/release-v1.0.95-green.svg)](https://github.com/noviqtechnologies/Vexa-Agent-Control/releases)
 [![Build Status](https://img.shields.io/badge/CI-Gates%200--4%20PASS-brightgreen.svg)](.github/workflows/ci.yml)
 [![Security Policy](https://img.shields.io/badge/security-NIST%20AI%20RMF%20%7C%20ISO%2042001-blueviolet.svg)](enterprise/compliance/NIST-AI-RMF-MAPPING.md)
+<a href="https://vexasec.io" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Website-vexasec.io-blue" alt="Website" /></a>
 
 ---
 
@@ -207,18 +208,20 @@ Export structured, audit-ready compliance evidence binders directly from the CLI
 
 ## Licensing & Tiers
 
-| Capability | Local Workstation (Core) | Community / SMB Team | Enterprise Fleet |
+Team Hub is in private beta. Availability, enabled features, capacity, access period, support, and any applicable price are confirmed per cohort. There is no universal public device cap, evaluation period, or standard list price. Enterprise capabilities are individually scoped with design partners; the table does not create a generally available offer or default SLA.
+
+| Capability | Local Workstation (Core) | Team Hub (Private Beta) | Enterprise (Design Partner) |
 |---|:---:|:---:|:---:|
-| **License** | **Apache 2.0 (Open Source)** | **Free Community** | **Commercial** |
-| **Device Capacity** | Unlimited (Local) | Up to 50 Devices | Unlimited |
+| **License & availability** | **Apache 2.0 (Open Source)** | **Beta access; terms by cohort** | **Scoped by design-partner agreement** |
+| **Device capacity** | Local workstation mode | Defined by active beta entitlement; no universal public cap | Defined per partner scope; no standard public cap |
 | **Deterministic Gateway Core** | ✅ Included | ✅ Included | ✅ Included |
 | **In-Line DLP & Secret Redaction**| ✅ Included | ✅ Included | ✅ Included |
 | **HMAC Chained Audit Ledger** | ✅ Local JSONL | ✅ Aggregated | ✅ Central Splunk/Datadog Sync |
 | **Spend Caps & Budget Quotas** | Local Ledger | ✅ Central Management | ✅ Multi-Org Hierarchical Budgets |
-| **Identity & SSO** | Local OS Token | 2 OIDC IdPs | Unlimited SAML 2.0 / OIDC (Okta/Entra) |
+| **Identity & SSO** | Local OS Token | OIDC support defined per beta cohort | Partner-scoped SAML/OIDC integrations |
 | **Credential Custody** | DPAPI / Keychain | Central SQLite Vault | HashiCorp Vault / AWS KMS / Azure CMK |
 | **Compliance Export Packages** | Basic Markdown | Included | Attested PDF / Registrars Dossiers |
-| **Deployment Support** | Community GitHub | Discord / Community | Dedicated Architect & 24/7 SLA |
+| **Deployment Support** | Community channels | As specified per beta cohort; no general SLA | Partner-scoped; no default SLA |
 
 Review [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md) for full terms.
 
